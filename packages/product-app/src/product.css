@@ -1,0 +1,102 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.foundation-layout {
+  display: grid;
+  width: min(100%, 1280px);
+  min-height: calc(100vh - 176px);
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 0.9fr) minmax(480px, 1.1fr);
+  gap: clamp(48px, 7vw, 112px);
+  align-items: center;
+  padding-block: clamp(56px, 9vh, 116px);
+}
+
+.foundation-copy {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 26px;
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.foundation-copy h1 {
+  max-width: 720px;
+  margin: 0;
+  font-size: clamp(54px, 7vw, 104px);
+  font-weight: 620;
+  letter-spacing: -0.074em;
+  line-height: 0.91;
+}
+
+.foundation-lede {
+  max-width: 570px;
+  margin: 32px 0 0;
+  color: var(--muted);
+  font-size: clamp(16px, 1.45vw, 20px);
+  line-height: 1.55;
+}
+
+.address-preview {
+  display: inline-grid;
+  min-width: min(100%, 320px);
+  margin: 44px 0 28px;
+  grid-template-columns: auto 1fr;
+  gap: 20px;
+  align-items: baseline;
+}
+
+.address-kind {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.address-value {
+  color: var(--accent-ink);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(30px, 4vw, 48px);
+  font-weight: 720;
+  letter-spacing: -0.08em;
+}
+
+@media (max-width: 1020px) {
+  .foundation-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .foundation-copy h1 {
+    max-width: 820px;
+  }
+
+  .pairwise-boundary {
+    min-height: 390px;
+  }
+}
+
+@media (max-width: 760px) {
+  .foundation-layout {
+    min-height: auto;
+    gap: 44px;
+    padding-block: 48px 56px;
+  }
+
+  .foundation-copy h1 {
+    font-size: clamp(50px, 16vw, 76px);
+  }
+
+  .foundation-lede {
+    margin-top: 24px;
+  }
+
+  .address-preview {
+    margin-top: 34px;
+  }
+}

@@ -16,16 +16,13 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (python)
+    name: Analyze (JavaScript/TypeScript and Python)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: python
+          languages: javascript-typescript,python
       - name: Analyze
         uses: github/codeql-action/analyze@v4
-
-# Python is the only implementation language currently present in this bootstrap.
-# Add JavaScript/TypeScript when the first Web implementation source lands.

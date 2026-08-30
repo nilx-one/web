@@ -1,0 +1,18 @@
+{
+  "name": "@nilx-one/site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@nilx-one/core-wasm": "workspace:*",
+    "@nilx-one/host-browser": "workspace:*",
+    "@nilx-one/product-app": "workspace:*",
+    "@nilx-one/ui": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}
