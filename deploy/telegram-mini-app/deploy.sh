@@ -22,6 +22,11 @@ case "$RELEASE_SHA" in
     ;;
 esac
 
+if ! docker image inspect "$TELEGRAM_MINI_APP_IMAGE" >/dev/null 2>&1; then
+  echo "Immutable runtime image is not loaded: $TELEGRAM_MINI_APP_IMAGE" >&2
+  exit 1
+fi
+
 if ! docker network inspect "$EDGE_NETWORK" >/dev/null 2>&1; then
   docker network create "$EDGE_NETWORK" >/dev/null
 fi
@@ -29,7 +34,6 @@ fi
 export TELEGRAM_MINI_APP_IMAGE RELEASE_SHA EDGE_NETWORK
 
 docker compose config --quiet
-docker compose pull telegram-mini-app
 docker compose up -d --wait telegram-mini-app
 
 container_id="$(docker compose ps -q telegram-mini-app)"
