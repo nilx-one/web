@@ -1,0 +1,18 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+:8080 {
+	encode zstd gzip
+
+	@health path /health
+	respond @health 200
+
+	root * /srv
+	try_files {path} /index.html
+	file_server
+
+	log {
+		output stdout
+		format json
+	}
+}
