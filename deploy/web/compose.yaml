@@ -1,0 +1,46 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: nilx-one-web
+
+services:
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    restart: unless-stopped
+    init: true
+    labels:
+      one.nilx.product: 0x1
+      one.nilx.client: web
+      org.opencontainers.image.revision: ${RELEASE_SHA:?RELEASE_SHA is required}
+    expose:
+      - "8080"
+    networks:
+      edge:
+        aliases:
+          - ox1-web
+          - ox1-telegram-mini-app
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - "-"
+        - http://127.0.0.1:8080/health
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  edge:
+    name: ${EDGE_NETWORK:-nilx-edge}
+    external: true
