@@ -65,7 +65,7 @@ jobs:
               .workflow_runs
               | map(select(.head_sha == $sha))
               | first
-              | if . == null then "" else "\(.status)\t\(.conclusion // \"\")\t\(.html_url)" end
+              | if . == null then "" else [.status, (.conclusion // ""), .html_url] | @tsv end
             ' <<<"$response")"
 
             if [ -z "$package_state" ]; then
