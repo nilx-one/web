@@ -18,6 +18,14 @@ https://0x1.nilx.one/* -> ox1-web:8080/*
 
 `0x0sky/infra` owns the public HTTPS route. This repository owns the application build, immutable image, container identity and release lifecycle.
 
+The Web runtime proxies only the bounded Stage 1 identity surface to the registrar's private edge identity:
+
+```text
+/api/v1/identity* -> ox1-identity:8080
+```
+
+The registrar verifies Telegram Mini App authentication server-side. The browser bundle never treats `initData` as verified identity.
+
 During migration from the earlier Telegram-named runtime, the container also exposes the compatibility alias `ox1-telegram-mini-app`. This keeps the currently deployed edge contract functional until infra is updated to `ox1-web`.
 
 ## Image lifecycle

@@ -7,6 +7,9 @@
 	@health path /health
 	respond @health 200
 
+	@identity_api path /api/v1/identity /api/v1/identity/*
+	reverse_proxy @identity_api ox1-identity:8080
+
 	root * /srv
 	try_files {path} /index.html
 	file_server

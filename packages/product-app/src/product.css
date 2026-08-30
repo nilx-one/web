@@ -42,13 +42,11 @@
   line-height: 1.55;
 }
 
-.address-preview {
-  display: inline-grid;
-  min-width: min(100%, 320px);
+.registration-surface {
+  width: min(100%, 520px);
   margin: 44px 0 28px;
-  grid-template-columns: auto 1fr;
-  gap: 20px;
-  align-items: baseline;
+  padding: 24px 0;
+  border-top: 1px solid var(--line);
 }
 
 .address-kind {
@@ -60,11 +58,124 @@
 }
 
 .address-value {
+  display: block;
+  margin-top: 10px;
   color: var(--accent-ink);
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: clamp(30px, 4vw, 48px);
   font-weight: 720;
   letter-spacing: -0.08em;
+}
+
+.registered-address,
+.registration-message,
+.registration-form {
+  display: grid;
+  gap: 12px;
+}
+
+.registration-message p,
+.registration-note,
+.registration-error {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.registration-form label {
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.slug-field {
+  display: grid;
+  min-height: 62px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(24, 23, 27, 0.04);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.slug-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.discriminator-field {
+  display: grid;
+  height: 100%;
+  grid-template-columns: auto auto;
+  align-items: center;
+  border-right: 1px solid var(--line);
+  border-radius: 17px 0 0 17px;
+  background: var(--accent-soft);
+}
+
+.discriminator-field span,
+.discriminator-field select,
+.slug-field input {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 720;
+  letter-spacing: -0.06em;
+}
+
+.discriminator-field span {
+  padding-left: 18px;
+  color: var(--accent-ink);
+}
+
+.discriminator-field select {
+  height: 100%;
+  padding: 0 12px 0 2px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+.slug-field input {
+  min-width: 0;
+  padding: 12px 18px 12px 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.registration-form button {
+  width: fit-content;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.registration-form button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.registration-form button:disabled,
+.slug-field input:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.registration-error {
+  color: #9b2f3f;
 }
 
 @media (max-width: 1020px) {
@@ -96,7 +207,7 @@
     margin-top: 24px;
   }
 
-  .address-preview {
+  .registration-surface {
     margin-top: 34px;
   }
 }

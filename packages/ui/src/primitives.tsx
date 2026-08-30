@@ -86,7 +86,7 @@ export function PairwiseBoundary() {
       <div className="boundary-language">
         <span>intent</span>
         <span>reciprocal action</span>
-        <strong>bch</strong>
+        <strong>shared history</strong>
       </div>
       <div className="bond-node bond-node--one">
         <span className="bond-index">1</span>

@@ -6,6 +6,7 @@ import {
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
 import { createBrowserHost } from "@nilx-one/host-browser";
+import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import { StrictMode } from "react";
@@ -20,9 +21,12 @@ if (container === null) {
 const core = createCoreWasmClient({
   loadBindings: loadGeneratedCoreWasmBindings,
 });
+const identity = createIdentityHttpAdapter({
+  getTelegramInitData: () => undefined,
+});
 
 createRoot(container).render(
   <StrictMode>
-    <ProductApp core={core} host={createBrowserHost()} />
+    <ProductApp core={core} host={createBrowserHost()} identity={identity} />
   </StrictMode>,
 );

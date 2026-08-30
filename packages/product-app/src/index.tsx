@@ -2,13 +2,18 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  ReadIdentity,
   ReadRuntimeReadiness,
+  RegisterIdentity,
   type CoreRuntimePort,
+  type IdentityRegistrationPort,
+  type PubDressSelection,
 } from "@nilx-one/application";
 import type { HostPort, HostSnapshot } from "@nilx-one/host-contract";
 import {
   QueryClient,
   QueryClientProvider,
+  useMutation,
   useQuery,
 } from "@tanstack/react-query";
 import {
@@ -27,6 +32,7 @@ import "./product.css";
 export interface ProductAppDependencies {
   core: CoreRuntimePort;
   host: HostPort;
+  identity: IdentityRegistrationPort;
 }
 
 interface ProductRouterContext {
@@ -64,21 +70,44 @@ function FoundationRoute() {
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
+  const hasTelegramAuthentication =
+    host.kind === "telegram" &&
+    host.available &&
+    host.authentication.kind === "telegram-init-data" &&
+    host.authentication.initData.length > 0;
+  const identityQuery = useQuery({
+    queryKey: ["identity"],
+    queryFn: () => new ReadIdentity(dependencies.identity).execute(),
+    enabled: hasTelegramAuthentication,
+    retry: false,
+  });
+  const registrationMutation = useMutation({
+    mutationFn: (selection: PubDressSelection) =>
+      new RegisterIdentity(dependencies.identity).execute(selection),
+  });
   const viewModel = createIdentityFoundationViewModel(
     host,
     readinessQuery.data,
+    identityQuery.data,
+    registrationMutation.data,
+    registrationMutation.isPending,
   );
 
   useEffect(() => {
     document.documentElement.dataset.hostTheme = host.theme;
   }, [host.theme]);
 
-  return <IdentityFoundationView viewModel={viewModel} />;
+  return (
+    <IdentityFoundationView
+      viewModel={viewModel}
+      onRegister={(selection) => registrationMutation.mutate(selection)}
+    />
+  );
 }
 
 const routeTree = rootRoute.addChildren([foundationRoute]);
 
-export function ProductApp({ core, host }: ProductAppDependencies) {
+export function ProductApp({ core, host, identity }: ProductAppDependencies) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -93,7 +122,7 @@ export function ProductApp({ core, host }: ProductAppDependencies) {
     createRouter({
       routeTree,
       context: {
-        dependencies: { core, host },
+        dependencies: { core, host, identity },
       },
     }),
   );
