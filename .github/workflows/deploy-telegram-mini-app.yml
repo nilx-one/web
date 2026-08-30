@@ -55,8 +55,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify immutable package exists
-        run: docker buildx imagetools inspect "$TELEGRAM_MINI_APP_IMAGE" >/dev/null
+      - name: Verify and fetch immutable package
+        run: |
+          set -Eeuo pipefail
+          docker buildx imagetools inspect "$TELEGRAM_MINI_APP_IMAGE" >/dev/null
+          docker pull "$TELEGRAM_MINI_APP_IMAGE"
+          docker save "$TELEGRAM_MINI_APP_IMAGE" | gzip > "/tmp/0x1-telegram-mini-app-image-${RELEASE_SHA}.tar.gz"
 
       - name: Configure SSH
         run: |
@@ -68,13 +72,14 @@ jobs:
           test -s "$HOME/.ssh/known_hosts"
           ssh -o BatchMode=yes -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" true
 
-      - name: Upload deployment descriptors
+      - name: Upload immutable image and deployment descriptors
         run: |
           set -Eeuo pipefail
           archive="/tmp/0x1-telegram-mini-app-${RELEASE_SHA}.tar.gz"
           tar -czf "$archive" -C deploy/telegram-mini-app compose.yaml deploy.sh
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
-            "$archive" "$SSH_USER@$SSH_HOST:/tmp/"
+            "$archive" "/tmp/0x1-telegram-mini-app-image-${RELEASE_SHA}.tar.gz" \
+            "$SSH_USER@$SSH_HOST:/tmp/"
 
       - name: Activate immutable image
         run: |
@@ -85,9 +90,15 @@ jobs:
           set -Eeuo pipefail
 
           archive="/tmp/0x1-telegram-mini-app-${RELEASE_SHA}.tar.gz"
+          image_archive="/tmp/0x1-telegram-mini-app-image-${RELEASE_SHA}.tar.gz"
           release_dir="$DEPLOY_PATH/releases/$RELEASE_SHA"
           current_link="$DEPLOY_PATH/current"
           previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+
+          test -s "$image_archive"
+          gunzip -c "$image_archive" | docker load >/dev/null
+          rm -f "$image_archive"
+          docker image inspect "$TELEGRAM_MINI_APP_IMAGE" >/dev/null
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
