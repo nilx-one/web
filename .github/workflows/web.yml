@@ -36,8 +36,29 @@ jobs:
         run: pnpm typecheck
       - name: Test contracts and integration
         run: pnpm test
+      - name: Checkout pinned Core runtime source
+        uses: actions/checkout@v4
+        with:
+          repository: nilx-one/core
+          ref: e09a42184951b6f40ad4b11eedf6e48c5b6a0ac9
+          path: .core-source
+          persist-credentials: false
+      - name: Install matching wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - name: Prepare verified Core Wasm runtime
+        run: |
+          ./scripts/prepare_core_wasm_runtime.sh .core-source
+          rm -rf .core-source
       - name: Build every Web host
         run: pnpm build
+      - name: Verify Core runtime in every host artifact
+        run: |
+          expected=d55bd185a9ec108cf83c0394c350c094cae9c09e381a1c22b11e388b1cd93320
+          for host in site telegram-mini-app; do
+            runtime="apps/$host/dist/core/0.1.0/index_bg.wasm"
+            test -f "$runtime"
+            printf '%s  %s\n' "$expected" "$runtime" | sha256sum --check --status
+          done
       - name: Preserve Telegram build for deploy validation
         uses: actions/upload-artifact@v4
         with:
