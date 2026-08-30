@@ -1,22 +1,23 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: nilx-one-telegram-mini-app
+name: nilx-one-web
 
 services:
-  telegram-mini-app:
-    image: ${TELEGRAM_MINI_APP_IMAGE:?TELEGRAM_MINI_APP_IMAGE is required}
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
     restart: unless-stopped
     init: true
     labels:
       one.nilx.product: 0x1
-      one.nilx.host: telegram-mini-app
+      one.nilx.client: web
       org.opencontainers.image.revision: ${RELEASE_SHA:?RELEASE_SHA is required}
     expose:
       - "8080"
     networks:
       edge:
         aliases:
+          - ox1-web
           - ox1-telegram-mini-app
     security_opt:
       - no-new-privileges:true

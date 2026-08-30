@@ -3,12 +3,12 @@
 
 FROM caddy:2-alpine
 
-LABEL org.opencontainers.image.title="0x1 Telegram Mini App"
-LABEL org.opencontainers.image.description="Static Telegram Mini App runtime for 0x1"
+LABEL org.opencontainers.image.title="0x1 Web"
+LABEL org.opencontainers.image.description="Static canonical Web runtime for 0x1"
 
 WORKDIR /srv
-COPY apps/telegram-mini-app/dist/ /srv/
-COPY deploy/telegram-mini-app/Caddyfile /etc/caddy/Caddyfile
+COPY apps/site/dist/ /srv/
+COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 
 EXPOSE 8080
 

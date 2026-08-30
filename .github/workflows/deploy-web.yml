@@ -1,7 +1,7 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: Deploy Telegram Mini App
+name: Deploy Web
 
 on:
   workflow_dispatch:
@@ -11,11 +11,11 @@ permissions:
   packages: read
 
 concurrency:
-  group: deploy-0x1-telegram-mini-app-production
+  group: deploy-0x1-web-production
   cancel-in-progress: false
 
 env:
-  IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-telegram-mini-app
+  IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web
 
 jobs:
   deploy:
@@ -30,7 +30,7 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
-      SSH_DEPLOYMENT_PATH: ${{ vars.SSH_DEPLOYMENT_PATH || '/opt/nilx-one-web/telegram-mini-app' }}
+      SSH_DEPLOYMENT_PATH: ${{ vars.SSH_DEPLOYMENT_PATH || '.local/share/nilx-one/web' }}
 
     steps:
       - name: Validate deployment source
@@ -44,7 +44,7 @@ jobs:
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
           (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
           test -n "$SSH_DEPLOYMENT_PATH"
-          echo "TELEGRAM_MINI_APP_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
+          echo "WEB_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
 
       - uses: actions/checkout@v4
 
@@ -58,9 +58,9 @@ jobs:
       - name: Verify and fetch immutable package
         run: |
           set -Eeuo pipefail
-          docker buildx imagetools inspect "$TELEGRAM_MINI_APP_IMAGE" >/dev/null
-          docker pull "$TELEGRAM_MINI_APP_IMAGE"
-          docker save "$TELEGRAM_MINI_APP_IMAGE" | gzip > "/tmp/0x1-telegram-mini-app-image-${RELEASE_SHA}.tar.gz"
+          docker buildx imagetools inspect "$WEB_IMAGE" >/dev/null
+          docker pull "$WEB_IMAGE"
+          docker save "$WEB_IMAGE" | gzip > "/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz"
 
       - name: Configure SSH
         run: |
@@ -75,10 +75,10 @@ jobs:
       - name: Upload immutable image and deployment descriptors
         run: |
           set -Eeuo pipefail
-          archive="/tmp/0x1-telegram-mini-app-${RELEASE_SHA}.tar.gz"
-          tar -czf "$archive" -C deploy/telegram-mini-app compose.yaml deploy.sh
+          archive="/tmp/0x1-web-${RELEASE_SHA}.tar.gz"
+          tar -czf "$archive" -C deploy/web compose.yaml deploy.sh
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
-            "$archive" "/tmp/0x1-telegram-mini-app-image-${RELEASE_SHA}.tar.gz" \
+            "$archive" "/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz" \
             "$SSH_USER@$SSH_HOST:/tmp/"
 
       - name: Activate immutable image
@@ -86,29 +86,45 @@ jobs:
           set -Eeuo pipefail
           ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
             "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$SSH_DEPLOYMENT_PATH' RELEASE_SHA='$RELEASE_SHA' TELEGRAM_MINI_APP_IMAGE='$TELEGRAM_MINI_APP_IMAGE' bash -s" <<'REMOTE'
+            "DEPLOY_PATH='$SSH_DEPLOYMENT_PATH' RELEASE_SHA='$RELEASE_SHA' WEB_IMAGE='$WEB_IMAGE' bash -s" <<'REMOTE'
           set -Eeuo pipefail
 
-          archive="/tmp/0x1-telegram-mini-app-${RELEASE_SHA}.tar.gz"
-          image_archive="/tmp/0x1-telegram-mini-app-image-${RELEASE_SHA}.tar.gz"
-          release_dir="$DEPLOY_PATH/releases/$RELEASE_SHA"
-          current_link="$DEPLOY_PATH/current"
+          deploy_path="$DEPLOY_PATH"
+          case "$deploy_path" in
+            /*) ;;
+            *) deploy_path="$HOME/$deploy_path" ;;
+          esac
+
+          archive="/tmp/0x1-web-${RELEASE_SHA}.tar.gz"
+          image_archive="/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz"
+          releases_dir="$deploy_path/releases"
+          release_dir="$releases_dir/$RELEASE_SHA"
+          current_link="$deploy_path/current"
           previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+
+          if ! mkdir -p "$releases_dir"; then
+            echo "Deployment path is not writable by $(id -un): $deploy_path" >&2
+            exit 1
+          fi
+          if [ ! -w "$releases_dir" ]; then
+            echo "Deployment releases directory is not writable by $(id -un): $releases_dir" >&2
+            exit 1
+          fi
 
           test -s "$image_archive"
           gunzip -c "$image_archive" | docker load >/dev/null
           rm -f "$image_archive"
-          docker image inspect "$TELEGRAM_MINI_APP_IMAGE" >/dev/null
+          docker image inspect "$WEB_IMAGE" >/dev/null
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
           tar -xzf "$archive" -C "$release_dir"
           rm -f "$archive"
-          printf '%s\n' "$TELEGRAM_MINI_APP_IMAGE" >"$release_dir/.image"
+          printf '%s\n' "$WEB_IMAGE" >"$release_dir/.image"
 
           if ! (
             cd "$release_dir"
-            TELEGRAM_MINI_APP_IMAGE="$TELEGRAM_MINI_APP_IMAGE" \
+            WEB_IMAGE="$WEB_IMAGE" \
               RELEASE_SHA="$RELEASE_SHA" \
               sh ./deploy.sh
           ); then
@@ -117,7 +133,7 @@ jobs:
               previous_sha="$(basename "$previous_release")"
               (
                 cd "$previous_release"
-                TELEGRAM_MINI_APP_IMAGE="$previous_image" \
+                WEB_IMAGE="$previous_image" \
                   RELEASE_SHA="$previous_sha" \
                   sh ./deploy.sh
               ) || true
@@ -127,7 +143,7 @@ jobs:
 
           ln -sfn "$release_dir" "$current_link"
 
-          find "$DEPLOY_PATH/releases" \
+          find "$releases_dir" \
             -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
             | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf
           REMOTE
@@ -136,10 +152,10 @@ jobs:
         if: always()
         run: |
           {
-            echo "### 0x1 Telegram Mini App deployment"
+            echo "### 0x1 Web deployment"
             echo
             echo "- commit: \`$RELEASE_SHA\`"
-            echo "- image: \`$TELEGRAM_MINI_APP_IMAGE\`"
+            echo "- image: \`$WEB_IMAGE\`"
             echo "- target: \`production\`"
             echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"
