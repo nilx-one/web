@@ -6,8 +6,6 @@ name: Web
 on:
   pull_request:
     branches: [master]
-  push:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -40,3 +38,29 @@ jobs:
         run: pnpm test
       - name: Build every Web host
         run: pnpm build
+      - name: Preserve Telegram build for deploy validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-mini-app-dist-${{ github.sha }}
+          path: apps/telegram-mini-app/dist
+          retention-days: 1
+
+  deploy-validation:
+    name: Validate Telegram deploy package
+    if: github.event_name == 'pull_request'
+    needs: full-ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reuse verified Telegram build
+        uses: actions/download-artifact@v4
+        with:
+          name: telegram-mini-app-dist-${{ github.sha }}
+          path: apps/telegram-mini-app/dist
+      - name: Validate runtime image
+        run: docker build --file deploy/telegram-mini-app/Dockerfile --tag 0x1-telegram-mini-app:ci .
+      - name: Validate runtime Compose contract
+        env:
+          TELEGRAM_MINI_APP_IMAGE: ghcr.io/nilx-one/0x1-telegram-mini-app:sha-${{ github.sha }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: docker compose --file deploy/telegram-mini-app/compose.yaml config --quiet
