@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   packages: read
 
@@ -30,7 +31,7 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
-      SSH_DEPLOYMENT_PATH: ${{ vars.SSH_DEPLOYMENT_PATH || '.local/share/nilx-one/web' }}
+      WEB_DEPLOYMENT_PATH: ${{ vars.WEB_DEPLOYMENT_PATH || '.local/share/nilx-one/web' }}
 
     steps:
       - name: Validate deployment source
@@ -43,8 +44,58 @@ jobs:
           test -n "$SSH_PRIVATE_KEY"
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
           (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
-          test -n "$SSH_DEPLOYMENT_PATH"
+          test -n "$WEB_DEPLOYMENT_PATH"
           echo "WEB_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
+
+      - name: Wait for immutable package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+
+          package_ready=false
+          for attempt in $(seq 1 40); do
+            response="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/package-web.yml/runs" \
+              -f branch=master \
+              -f event=push \
+              -f per_page=20)"
+
+            package_state="$(jq -r --arg sha "$RELEASE_SHA" '
+              .workflow_runs
+              | map(select(.head_sha == $sha))
+              | first
+              | if . == null then "" else "\(.status)\t\(.conclusion // \"\")\t\(.html_url)" end
+            ' <<<"$response")"
+
+            if [ -z "$package_state" ]; then
+              echo "Package Web run for $RELEASE_SHA is not registered yet (attempt $attempt/40)."
+              sleep 10
+              continue
+            fi
+
+            IFS=$'\t' read -r package_status package_conclusion package_url <<<"$package_state"
+
+            if [ "$package_status" = completed ]; then
+              if [ "$package_conclusion" != success ]; then
+                echo "Package Web did not succeed for $RELEASE_SHA: $package_conclusion" >&2
+                echo "$package_url" >&2
+                exit 1
+              fi
+
+              echo "Package Web succeeded for $RELEASE_SHA."
+              package_ready=true
+              break
+            fi
+
+            echo "Package Web is $package_status for $RELEASE_SHA (attempt $attempt/40)."
+            sleep 10
+          done
+
+          if [ "$package_ready" != true ]; then
+            echo "Timed out waiting for Package Web to finish for $RELEASE_SHA." >&2
+            exit 1
+          fi
 
       - uses: actions/checkout@v4
 
@@ -86,7 +137,7 @@ jobs:
           set -Eeuo pipefail
           ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
             "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$SSH_DEPLOYMENT_PATH' RELEASE_SHA='$RELEASE_SHA' WEB_IMAGE='$WEB_IMAGE' bash -s" <<'REMOTE'
+            "DEPLOY_PATH='$WEB_DEPLOYMENT_PATH' RELEASE_SHA='$RELEASE_SHA' WEB_IMAGE='$WEB_IMAGE' bash -s" <<'REMOTE'
           set -Eeuo pipefail
 
           deploy_path="$DEPLOY_PATH"
