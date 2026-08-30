@@ -1,0 +1,161 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Deploy Web
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-0x1-web-production
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
+      SSH_DEPLOYMENT_PATH: ${{ vars.SSH_DEPLOYMENT_PATH || '.local/share/nilx-one/web' }}
+
+    steps:
+      - name: Validate deployment source
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = refs/heads/master
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_PRIVATE_KEY"
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
+          (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
+          test -n "$SSH_DEPLOYMENT_PATH"
+          echo "WEB_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify and fetch immutable package
+        run: |
+          set -Eeuo pipefail
+          docker buildx imagetools inspect "$WEB_IMAGE" >/dev/null
+          docker pull "$WEB_IMAGE"
+          docker save "$WEB_IMAGE" | gzip > "/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz"
+
+      - name: Configure SSH
+        run: |
+          set -Eeuo pipefail
+          install -m 0700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" >"$HOME/.ssh/id_ed25519"
+          chmod 0600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -T 10 -p "$SSH_PORT" -H "$SSH_HOST" >"$HOME/.ssh/known_hosts"
+          test -s "$HOME/.ssh/known_hosts"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" true
+
+      - name: Upload immutable image and deployment descriptors
+        run: |
+          set -Eeuo pipefail
+          archive="/tmp/0x1-web-${RELEASE_SHA}.tar.gz"
+          tar -czf "$archive" -C deploy/web compose.yaml deploy.sh
+          scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
+            "$archive" "/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz" \
+            "$SSH_USER@$SSH_HOST:/tmp/"
+
+      - name: Activate immutable image
+        run: |
+          set -Eeuo pipefail
+          ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
+            "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$SSH_DEPLOYMENT_PATH' RELEASE_SHA='$RELEASE_SHA' WEB_IMAGE='$WEB_IMAGE' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          deploy_path="$DEPLOY_PATH"
+          case "$deploy_path" in
+            /*) ;;
+            *) deploy_path="$HOME/$deploy_path" ;;
+          esac
+
+          archive="/tmp/0x1-web-${RELEASE_SHA}.tar.gz"
+          image_archive="/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz"
+          releases_dir="$deploy_path/releases"
+          release_dir="$releases_dir/$RELEASE_SHA"
+          current_link="$deploy_path/current"
+          previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+
+          if ! mkdir -p "$releases_dir"; then
+            echo "Deployment path is not writable by $(id -un): $deploy_path" >&2
+            exit 1
+          fi
+          if [ ! -w "$releases_dir" ]; then
+            echo "Deployment releases directory is not writable by $(id -un): $releases_dir" >&2
+            exit 1
+          fi
+
+          test -s "$image_archive"
+          gunzip -c "$image_archive" | docker load >/dev/null
+          rm -f "$image_archive"
+          docker image inspect "$WEB_IMAGE" >/dev/null
+
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir"
+          tar -xzf "$archive" -C "$release_dir"
+          rm -f "$archive"
+          printf '%s\n' "$WEB_IMAGE" >"$release_dir/.image"
+
+          if ! (
+            cd "$release_dir"
+            WEB_IMAGE="$WEB_IMAGE" \
+              RELEASE_SHA="$RELEASE_SHA" \
+              sh ./deploy.sh
+          ); then
+            if [[ -n "$previous_release" && -f "$previous_release/.image" ]]; then
+              previous_image="$(<"$previous_release/.image")"
+              previous_sha="$(basename "$previous_release")"
+              (
+                cd "$previous_release"
+                WEB_IMAGE="$previous_image" \
+                  RELEASE_SHA="$previous_sha" \
+                  sh ./deploy.sh
+              ) || true
+            fi
+            exit 1
+          fi
+
+          ln -sfn "$release_dir" "$current_link"
+
+          find "$releases_dir" \
+            -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf
+          REMOTE
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "### 0x1 Web deployment"
+            echo
+            echo "- commit: \`$RELEASE_SHA\`"
+            echo "- image: \`$WEB_IMAGE\`"
+            echo "- target: \`production\`"
+            echo "- result: \`${{ job.status }}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
