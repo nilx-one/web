@@ -42,11 +42,15 @@ Required GitHub Environment `production` settings:
 - secret `SSH_USER`;
 - secret `SSH_PRIVATE_KEY`;
 - optional variable `SSH_PORT` (default `22022`);
-- optional variable `SSH_DEPLOYMENT_PATH` (default `.local/share/nilx-one/web`).
+- optional variable `WEB_DEPLOYMENT_PATH` (default `.local/share/nilx-one/web`).
+
+The legacy `SSH_DEPLOYMENT_PATH` variable is intentionally ignored by the Web workflow. This prevents a stale Telegram-specific `/opt/...` value from overriding the canonical Web release path.
 
 Relative deployment paths are resolved against the SSH user's home directory. The default therefore requires no root-owned `/opt` directory and no `sudo` permission for the `deploy` user.
 
-The deploy workflow consumes the immutable image for the selected `master` commit, copies only deployment descriptors to the server, loads the image, activates it, verifies container health/revision/edge aliases and rolls back to the previous release if activation fails.
+A manual deploy may be started immediately after a merge. The workflow waits for the `Package Web` run for the exact same commit to finish. It proceeds only when that producer run succeeds, fails immediately when packaging fails, and then verifies the exact immutable GHCR image before any SSH activation.
+
+The deploy workflow copies only deployment descriptors to the server, loads the immutable image, activates it, verifies container health/revision/edge aliases and rolls back to the previous release if activation fails.
 
 The deployment does not build source, change DNS or mutate shared Caddy configuration.
 
