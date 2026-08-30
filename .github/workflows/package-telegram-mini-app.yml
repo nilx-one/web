@@ -34,6 +34,19 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Checkout pinned Core runtime source
+        uses: actions/checkout@v4
+        with:
+          repository: nilx-one/core
+          ref: e09a42184951b6f40ad4b11eedf6e48c5b6a0ac9
+          path: .core-source
+          persist-credentials: false
+      - name: Install matching wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+      - name: Prepare verified Core Wasm runtime
+        run: |
+          ./scripts/prepare_core_wasm_runtime.sh .core-source
+          rm -rf .core-source
       - name: Build Telegram host artifact
         run: pnpm --filter @nilx-one/telegram-mini-app build
       - uses: docker/setup-buildx-action@v3

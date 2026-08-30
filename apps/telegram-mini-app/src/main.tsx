@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { createCoreWasmClient } from "@nilx-one/core-wasm";
+import {
+  createCoreWasmClient,
+  loadGeneratedCoreWasmBindings,
+} from "@nilx-one/core-wasm";
 import {
   createTelegramHost,
   resolveTelegramWebApp,
@@ -18,9 +21,12 @@ if (container === null) {
 }
 
 const host = createTelegramHost(resolveTelegramWebApp(window));
+const core = createCoreWasmClient({
+  loadBindings: loadGeneratedCoreWasmBindings,
+});
 
 createRoot(container).render(
   <StrictMode>
-    <ProductApp core={createCoreWasmClient()} host={host} />
+    <ProductApp core={core} host={host} />
   </StrictMode>,
 );
