@@ -31,7 +31,9 @@ export interface CoreWasmClientOptions {
 }
 
 async function importGeneratedCoreWasmRuntime(): Promise<GeneratedCoreWasmModule> {
-  return (await import(/* @vite-ignore */ CORE_RUNTIME_MODULE_URL)) as GeneratedCoreWasmModule;
+  return (await import(
+    /* @vite-ignore */ CORE_RUNTIME_MODULE_URL
+  )) as GeneratedCoreWasmModule;
 }
 
 export async function loadGeneratedCoreWasmBindings(
