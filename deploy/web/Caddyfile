@@ -4,15 +4,28 @@
 :8080 {
 	encode zstd gzip
 
-	@health path /health
-	respond @health 200
+	route {
+		@health path /health
+		respond @health 200
 
-	@identity_api path /api/v1/identity /api/v1/identity/*
-	reverse_proxy @identity_api ox1-identity:8080
+		@identity_api path /api/v1/identity /api/v1/identity/*
+		reverse_proxy @identity_api ox1-identity:8080
 
-	root * /srv
-	try_files {path} /index.html
-	file_server
+		@telegram_root path /telegram
+		redir @telegram_root /telegram/ 308
+
+		handle_path /telegram/* {
+			root * /srv/telegram
+			try_files {path} /index.html
+			file_server
+		}
+
+		handle {
+			root * /srv/site
+			try_files {path} /index.html
+			file_server
+		}
+	}
 
 	log {
 		output stdout
