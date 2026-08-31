@@ -47,8 +47,8 @@ jobs:
         run: |
           ./scripts/prepare_core_wasm_runtime.sh .core-source
           rm -rf .core-source
-      - name: Build canonical Web artifact
-        run: pnpm --filter @nilx-one/site build
+      - name: Build production Web hosts
+        run: pnpm --filter @nilx-one/site --filter @nilx-one/telegram-mini-app build
       - uses: docker/setup-buildx-action@v3
       - name: Authenticate to GHCR
         uses: docker/login-action@v3
