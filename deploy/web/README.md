@@ -13,11 +13,14 @@ ox1-web:8080
 The intended public routes are:
 
 ```text
-https://0x1.nilx.one/*          -> canonical Browser host
-https://0x1.nilx.one/telegram/  -> Telegram Mini App host
+https://nilx.one/*                         -> canonical Browser host
+https://nilx.one/telegram/                 -> Telegram Mini App host
+https://nilx.one/auth?provider=telegram    -> browser Telegram sign-in and OIDC callback
 ```
 
 Both hosts are packaged into the same immutable `0x1-web` image and consume the same shared product and verified Core runtime. `/telegram` redirects to `/telegram/` so relative Vite assets remain inside the Telegram host path.
+
+Browser authentication uses one flat public route with an allowlisted `provider` selector. The current Stage 1 identity profile accepts only `provider=telegram`; a missing, repeated, or unknown provider value must fail closed. A request without an authorization response starts the provider flow; the same route handles the callback when Telegram returns a valid `code` and `state`. A future provider is added only with its own adapter contract rather than being inferred from arbitrary query input. The callback exchanges the code server-side and establishes a same-origin session; neither the code nor provider tokens belong in browser storage.
 
 `0x0sky/infra` owns the public HTTPS route. This repository owns the application build, immutable image, container identity and release lifecycle.
 
@@ -36,7 +39,14 @@ During migration from the earlier Telegram-named runtime, the container also exp
 The production Main Mini App URL is:
 
 ```text
-https://0x1.nilx.one/telegram/
+https://nilx.one/telegram/
+```
+
+Telegram Web Login configuration must allow both the application origin and the exact OIDC redirect URI:
+
+```text
+https://nilx.one
+https://nilx.one/auth?provider=telegram
 ```
 
 Telegram-side activation remains an external configuration step in BotFather. Configure the 0x1 bot's Main Mini App or menu button to use the URL above only after the corresponding `0x1-web` revision has been deployed. No bot token belongs in this static Web runtime.
