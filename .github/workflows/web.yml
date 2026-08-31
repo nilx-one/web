@@ -65,6 +65,12 @@ jobs:
           name: web-dist-${{ github.sha }}
           path: apps/site/dist
           retention-days: 1
+      - name: Preserve Telegram host build for deploy validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-mini-app-dist-${{ github.sha }}
+          path: apps/telegram-mini-app/dist
+          retention-days: 1
 
   deploy-validation:
     name: Validate Web deploy package
@@ -73,13 +79,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reuse verified Web build
+      - name: Reuse verified canonical Web build
         uses: actions/download-artifact@v4
         with:
           name: web-dist-${{ github.sha }}
           path: apps/site/dist
+      - name: Reuse verified Telegram host build
+        uses: actions/download-artifact@v4
+        with:
+          name: telegram-mini-app-dist-${{ github.sha }}
+          path: apps/telegram-mini-app/dist
       - name: Validate runtime image
         run: docker build --file deploy/web/Dockerfile --tag 0x1-web:ci .
+      - name: Verify runtime host routes
+        run: |
+          set -Eeuo pipefail
+          container_id="$(docker run --detach --publish 18080:8080 0x1-web:ci)"
+          trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
+
+          ready=false
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/health >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+
+          curl --fail --silent --show-error http://127.0.0.1:18080/ >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:18080/telegram/ \
+            | grep --fixed-strings --quiet 'telegram-web-app.js?63'
+
+          telegram_redirect="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/telegram)"
+          test "$telegram_redirect" = 308
       - name: Validate runtime Compose contract
         env:
           WEB_IMAGE: ghcr.io/nilx-one/0x1-web:sha-${{ github.sha }}
