@@ -7,7 +7,8 @@ LABEL org.opencontainers.image.title="0x1 Web"
 LABEL org.opencontainers.image.description="Static canonical Web runtime for 0x1"
 
 WORKDIR /srv
-COPY apps/site/dist/ /srv/
+COPY apps/site/dist/ /srv/site/
+COPY apps/telegram-mini-app/dist/ /srv/telegram/
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 
 EXPOSE 8080
