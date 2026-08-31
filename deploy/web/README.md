@@ -1,6 +1,6 @@
 # 0x1 Web runtime
 
-The production workload in this repository is the canonical 0x1 Web client, not a Telegram-specific application. Telegram and future messenger integrations remain host adapters around the shared product.
+The production workload in this repository is the canonical 0x1 Web client. Telegram and future messenger integrations are host adapters around the shared product, not separate product runtimes.
 
 ## Public contract
 
@@ -10,11 +10,14 @@ The canonical edge identity is:
 ox1-web:8080
 ```
 
-The intended public route is:
+The intended public routes are:
 
 ```text
-https://0x1.nilx.one/* -> ox1-web:8080/*
+https://0x1.nilx.one/*          -> canonical Browser host
+https://0x1.nilx.one/telegram/  -> Telegram Mini App host
 ```
+
+Both hosts are packaged into the same immutable `0x1-web` image and consume the same shared product and verified Core runtime. `/telegram` redirects to `/telegram/` so relative Vite assets remain inside the Telegram host path.
 
 `0x0sky/infra` owns the public HTTPS route. This repository owns the application build, immutable image, container identity and release lifecycle.
 
@@ -24,21 +27,31 @@ The Web runtime proxies only the bounded Stage 1 identity surface to the registr
 /api/v1/identity* -> ox1-identity:8080
 ```
 
-The registrar verifies Telegram Mini App authentication server-side. The browser bundle never treats `initData` as verified identity.
+The Telegram host loads Telegram's official Mini App bridge before application code. It forwards raw `Telegram.WebApp.initData` only to the identity adapter; the registrar verifies that authentication server-side. Neither the browser bundle nor the Telegram host treats `initData` as verified identity.
 
 During migration from the earlier Telegram-named runtime, the container also exposes the compatibility alias `ox1-telegram-mini-app`. This keeps the currently deployed edge contract functional until infra is updated to `ox1-web`.
+
+## Telegram configuration
+
+The production Main Mini App URL is:
+
+```text
+https://0x1.nilx.one/telegram/
+```
+
+Telegram-side activation remains an external configuration step in BotFather. Configure the 0x1 bot's Main Mini App or menu button to use the URL above only after the corresponding `0x1-web` revision has been deployed. No bot token belongs in this static Web runtime.
 
 ## Image lifecycle
 
 `package-web.yml` runs after changes reach `master`. It performs artifact packaging only:
 
-1. builds `@nilx-one/site` with the pinned verified Core Wasm runtime;
-2. builds the static production image;
+1. builds `@nilx-one/site` and `@nilx-one/telegram-mini-app` with the pinned verified Core Wasm runtime;
+2. builds one static production image containing both host artifacts;
 3. publishes `ghcr.io/nilx-one/0x1-web:sha-<commit>`.
 
 It does not repeat the repository's full CI suite and does not deploy.
 
-PR CI builds every Web host once. Deploy validation reuses the already-built browser `dist` artifact to validate the runtime image and Compose contract without rebuilding application source.
+PR CI builds every Web host once. Deploy validation reuses both verified host artifacts, validates the runtime image and Compose contract, and smoke-tests `/` plus `/telegram/` without rebuilding application source.
 
 ## Deployment
 
@@ -60,7 +73,7 @@ A manual deploy may be started immediately after a merge. The workflow waits for
 
 The deploy workflow copies only deployment descriptors to the server, loads the immutable image, activates it, verifies container health/revision/edge aliases and rolls back to the previous release if activation fails.
 
-The deployment does not build source, change DNS or mutate shared Caddy configuration.
+The deployment does not build source, change DNS, mutate shared Caddy configuration or configure BotFather.
 
 ## Runtime
 
@@ -71,6 +84,8 @@ alias:      ox1-web
 compat:     ox1-telegram-mini-app
 port:       8080
 health:     /health
+browser:    /
+telegram:   /telegram/
 ```
 
 Protocol truth stays outside the Web rendering and host layers.
