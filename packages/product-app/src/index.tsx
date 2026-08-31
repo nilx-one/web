@@ -35,6 +35,10 @@ export interface ProductAppDependencies {
   identity: IdentityRegistrationPort;
 }
 
+export interface ProductAppProps extends ProductAppDependencies {
+  routerBasepath?: string;
+}
+
 interface ProductRouterContext {
   dependencies: ProductAppDependencies;
 }
@@ -107,7 +111,12 @@ function FoundationRoute() {
 
 const routeTree = rootRoute.addChildren([foundationRoute]);
 
-export function ProductApp({ core, host, identity }: ProductAppDependencies) {
+export function ProductApp({
+  core,
+  host,
+  identity,
+  routerBasepath = "/",
+}: ProductAppProps) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -121,6 +130,7 @@ export function ProductApp({ core, host, identity }: ProductAppDependencies) {
   const [router] = useState(() =>
     createRouter({
       routeTree,
+      basepath: routerBasepath,
       context: {
         dependencies: { core, host, identity },
       },
