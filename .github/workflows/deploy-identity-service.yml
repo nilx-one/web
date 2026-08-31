@@ -1,0 +1,204 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Deploy Identity Service
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Optional packaged master SHA; latest successful package is used when empty
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-0x1-identity-production
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-identity
+
+jobs:
+  deploy:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+    env:
+      REQUESTED_RELEASE_SHA: ${{ inputs.release_sha }}
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
+      IDENTITY_DEPLOYMENT_PATH: ${{ vars.IDENTITY_DEPLOYMENT_PATH || '.local/share/nilx-one/identity' }}
+
+    steps:
+      - name: Resolve verified packaged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = refs/heads/master
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$TELOXIDE_TOKEN"
+          test -n "$IDENTITY_DEPLOYMENT_PATH"
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
+          (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
+
+          package_runs="$(
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/package-identity-service.yml/runs" \
+              -f branch=master \
+              -f status=success \
+              -f per_page=100
+          )"
+
+          release_sha="$REQUESTED_RELEASE_SHA"
+          if [ -z "$release_sha" ]; then
+            release_sha="$(
+              jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .head_sha // empty' \
+                <<<"$package_runs"
+            )"
+          fi
+
+          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+          package_run_id="$(
+            jq -r --arg sha "$release_sha" '
+              .workflow_runs
+              | map(select(.head_sha == $sha and .conclusion == "success"))
+              | first
+              | .id // empty
+            ' <<<"$package_runs"
+          )"
+          test -n "$package_run_id"
+
+          echo "RELEASE_SHA=$release_sha" >>"$GITHUB_ENV"
+          echo "IDENTITY_IMAGE=${IMAGE_REPOSITORY}:sha-${release_sha}" >>"$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify and fetch immutable package
+        run: |
+          set -Eeuo pipefail
+          docker buildx imagetools inspect "$IDENTITY_IMAGE" >/dev/null
+          docker pull "$IDENTITY_IMAGE"
+          docker save "$IDENTITY_IMAGE" | gzip > "/tmp/0x1-identity-image-${RELEASE_SHA}.tar.gz"
+
+      - name: Configure SSH
+        run: |
+          set -Eeuo pipefail
+          install -m 0700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" >"$HOME/.ssh/id_ed25519"
+          chmod 0600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -T 10 -p "$SSH_PORT" -H "$SSH_HOST" >"$HOME/.ssh/known_hosts"
+          test -s "$HOME/.ssh/known_hosts"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" true
+
+      - name: Upload immutable image, descriptors, and runtime secret
+        run: |
+          set -Eeuo pipefail
+          archive="/tmp/0x1-identity-${RELEASE_SHA}.tar.gz"
+          secret_file="/tmp/0x1-identity-runtime-${RELEASE_SHA}.env"
+          trap 'rm -f "$secret_file"' EXIT
+          tar -czf "$archive" -C services/identity/deploy compose.yaml deploy.sh
+          umask 077
+          printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN" >"$secret_file"
+          scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
+            "$archive" "/tmp/0x1-identity-image-${RELEASE_SHA}.tar.gz" "$secret_file" \
+            "$SSH_USER@$SSH_HOST:/tmp/"
+
+      - name: Activate immutable identity image
+        run: |
+          set -Eeuo pipefail
+          ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
+            "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$IDENTITY_DEPLOYMENT_PATH' RELEASE_SHA='$RELEASE_SHA' IDENTITY_IMAGE='$IDENTITY_IMAGE' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          deploy_path="$DEPLOY_PATH"
+          case "$deploy_path" in
+            /*) ;;
+            *) deploy_path="$HOME/$deploy_path" ;;
+          esac
+
+          archive="/tmp/0x1-identity-${RELEASE_SHA}.tar.gz"
+          image_archive="/tmp/0x1-identity-image-${RELEASE_SHA}.tar.gz"
+          uploaded_secret="/tmp/0x1-identity-runtime-${RELEASE_SHA}.env"
+          releases_dir="$deploy_path/releases"
+          release_dir="$releases_dir/$RELEASE_SHA"
+          current_link="$deploy_path/current"
+          secrets_dir="$deploy_path/secrets"
+          runtime_env="$secrets_dir/runtime.env"
+          previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+
+          mkdir -p "$releases_dir" "$secrets_dir"
+          chmod 0700 "$secrets_dir"
+          test -s "$uploaded_secret"
+          install -m 0600 "$uploaded_secret" "$runtime_env"
+          rm -f "$uploaded_secret"
+
+          test -s "$image_archive"
+          gunzip -c "$image_archive" | docker load >/dev/null
+          rm -f "$image_archive"
+          docker image inspect "$IDENTITY_IMAGE" >/dev/null
+
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir"
+          tar -xzf "$archive" -C "$release_dir"
+          rm -f "$archive"
+          printf '%s\n' "$IDENTITY_IMAGE" >"$release_dir/.image"
+
+          if ! (
+            cd "$release_dir"
+            IDENTITY_IMAGE="$IDENTITY_IMAGE" \
+              IDENTITY_ENV_FILE="$runtime_env" \
+              RELEASE_SHA="$RELEASE_SHA" \
+              sh ./deploy.sh
+          ); then
+            if [ -n "$previous_release" ] && [ -f "$previous_release/.image" ]; then
+              previous_image="$(cat "$previous_release/.image")"
+              previous_sha="$(basename "$previous_release")"
+              (
+                cd "$previous_release"
+                IDENTITY_IMAGE="$previous_image" \
+                  IDENTITY_ENV_FILE="$runtime_env" \
+                  RELEASE_SHA="$previous_sha" \
+                  sh ./deploy.sh
+              ) || true
+            fi
+            exit 1
+          fi
+
+          ln -sfn "$release_dir" "$current_link"
+          find "$releases_dir" \
+            -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf
+          REMOTE
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "### 0x1 identity deployment"
+            echo
+            echo "- commit: \`$RELEASE_SHA\`"
+            echo "- image: \`$IDENTITY_IMAGE\`"
+            echo "- target: \`production\`"
+            echo "- result: \`${{ job.status }}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
