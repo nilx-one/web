@@ -9,6 +9,7 @@ import {
   createTelegramHost,
   resolveTelegramWebApp,
 } from "@nilx-one/host-telegram";
+import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import { StrictMode } from "react";
@@ -24,9 +25,17 @@ const host = createTelegramHost(resolveTelegramWebApp(window));
 const core = createCoreWasmClient({
   loadBindings: loadGeneratedCoreWasmBindings,
 });
+const identity = createIdentityHttpAdapter({
+  getTelegramInitData: () => {
+    const authentication = host.getSnapshot().authentication;
+    return authentication.kind === "telegram-init-data"
+      ? authentication.initData
+      : undefined;
+  },
+});
 
 createRoot(container).render(
   <StrictMode>
-    <ProductApp core={core} host={host} />
+    <ProductApp core={core} host={host} identity={identity} />
   </StrictMode>,
 );

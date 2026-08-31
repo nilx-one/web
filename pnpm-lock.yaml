@@ -86,6 +86,9 @@ importers:
       '@nilx-one/host-browser':
         specifier: workspace:*
         version: link:../../packages/host-browser
+      '@nilx-one/identity-http':
+        specifier: workspace:*
+        version: link:../../packages/identity-http
       '@nilx-one/product-app':
         specifier: workspace:*
         version: link:../../packages/product-app
@@ -107,6 +110,9 @@ importers:
       '@nilx-one/host-telegram':
         specifier: workspace:*
         version: link:../../packages/host-telegram
+      '@nilx-one/identity-http':
+        specifier: workspace:*
+        version: link:../../packages/identity-http
       '@nilx-one/product-app':
         specifier: workspace:*
         version: link:../../packages/product-app
@@ -143,6 +149,12 @@ importers:
       '@nilx-one/host-contract':
         specifier: workspace:*
         version: link:../host-contract
+
+  packages/identity-http:
+    dependencies:
+      '@nilx-one/application':
+        specifier: workspace:*
+        version: link:../application
 
   packages/product-app:
     dependencies:

@@ -1,0 +1,10 @@
+{
+  "name": "@nilx-one/identity-http",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@nilx-one/application": "workspace:*"
+  }
+}

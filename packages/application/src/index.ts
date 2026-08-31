@@ -8,3 +8,12 @@ export {
   type CoreUnavailableReason,
   type RuntimeReadiness,
 } from "./core-runtime";
+export {
+  ReadIdentity,
+  RegisterIdentity,
+  type IdentityLookupResult,
+  type IdentityProjection,
+  type IdentityRegistrationPort,
+  type IdentityRegistrationResult,
+  type PubDressSelection,
+} from "./identity-registration";
