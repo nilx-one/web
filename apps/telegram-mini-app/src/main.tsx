@@ -36,6 +36,11 @@ const identity = createIdentityHttpAdapter({
 
 createRoot(container).render(
   <StrictMode>
-    <ProductApp core={core} host={host} identity={identity} />
+    <ProductApp
+      core={core}
+      host={host}
+      identity={identity}
+      routerBasepath="/telegram"
+    />
   </StrictMode>,
 );
