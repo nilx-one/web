@@ -6,11 +6,13 @@ The service is an adapter, not protocol authority. Canonical `pub_dress` validat
 
 ## Bot commands
 
-- `/start` begins registration and requests a `pub_dress` in the next message.
+- `/start` opens the canonical 0x1 Telegram Mini App registration surface at `https://nilx.one/telegram/`.
 - `/whoami` returns the stored provider-backed identity record.
 - `/recover` explains the current Telegram recovery boundary.
 
-Registration is the database insert. Exact-handle uniqueness and one-handle-per-Telegram-account are enforced by SQLite constraints.
+The bot does not accept a `pub_dress` candidate as chat text. Mini App and browser registration share the HTTP identity boundary; Telegram chat is an entry point, not a second registration implementation.
+
+Registration is the database insert performed through that authenticated API. Exact-handle uniqueness and one-handle-per-Telegram-account are enforced by SQLite constraints.
 
 ## Telegram Mini App API
 
@@ -45,6 +47,8 @@ The bot accepts identity actions only in private chats. The HTTP API accepts ide
 [`Dockerfile`](Dockerfile) builds the combined Telegram bot and identity API. [`deploy/compose.yaml`](deploy/compose.yaml) persists SQLite state in a named volume and exposes only the private `ox1-identity:8080` edge alias. The canonical Web runtime proxies the bounded `/api/v1/identity*` surface to that alias.
 
 CI validates the service and deployment contract. Packaging publishes an immutable GHCR image. Production activation is a separate manual workflow.
+
+Before activation commits a release, it verifies both public halves of registration: the Mini App shell must return `200`, and an unauthenticated identity lookup must reach the service and return the expected `401` boundary. A proxy `502` fails activation and enters the existing rollback path.
 
 ## Verify
 
