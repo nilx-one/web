@@ -5,10 +5,10 @@ FROM rust:1.98-bookworm AS build
 
 WORKDIR /source
 COPY services/identity/Cargo.toml ./Cargo.toml
-RUN cargo generate-lockfile
 COPY services/identity/migrations ./migrations
 COPY services/identity/src ./src
-RUN cargo build --locked --release
+RUN cargo generate-lockfile \
+    && cargo build --locked --release
 
 FROM debian:bookworm-slim
 
