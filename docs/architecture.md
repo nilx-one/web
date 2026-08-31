@@ -20,15 +20,15 @@ VIPER is not the default for React features. Its Router and Presenter roles over
 
 Dependencies point inward:
 
-| Scope         | May depend on                                      | Must not own                                                                     |
-| ------------- | -------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `application` | no Web package                                     | BondChain completion, Relationship derivation, gamification, or other Core rules |
-| `product-app` | `application`, `host-contract`, `ui`               | host SDK access or protocol decisions                                            |
-| `ui`          | React                                              | use cases, Core bindings, host behavior, or product state                        |
-| `core-wasm`   | `application` ports                                | presentation or host behavior                                                    |
-| host adapters | `host-contract`                                    | product flows or protocol authority                                              |
-| `apps/*`      | composition dependencies                           | copied screens or business logic                                                 |
-| `services/*`  | pinned Core contracts, provider SDKs, persistence  | protocol semantics, UI state, or browser-visible secrets                         |
+| Scope         | May depend on                                     | Must not own                                                                     |
+| ------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `application` | no Web package                                    | BondChain completion, Relationship derivation, gamification, or other Core rules |
+| `product-app` | `application`, `host-contract`, `ui`              | host SDK access or protocol decisions                                            |
+| `ui`          | React                                             | use cases, Core bindings, host behavior, or product state                        |
+| `core-wasm`   | `application` ports                               | presentation or host behavior                                                    |
+| host adapters | `host-contract`                                   | product flows or protocol authority                                              |
+| `apps/*`      | composition dependencies                          | copied screens or business logic                                                 |
+| `services/*`  | pinned Core contracts, provider SDKs, persistence | protocol semantics, UI state, or browser-visible secrets                         |
 
 The architecture test rejects forbidden internal imports and messenger-global access outside its adapter. Server-side services have their own language-level and deployment checks because they are not part of the browser dependency graph.
 
