@@ -1,0 +1,56 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: nilx-one-identity
+
+services:
+  identity:
+    image: ${IDENTITY_IMAGE:?IDENTITY_IMAGE is required}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${IDENTITY_ENV_FILE:?IDENTITY_ENV_FILE is required}
+    environment:
+      DATABASE_URL: sqlite:///data/identity.db
+      HTTP_BIND: 0.0.0.0:8080
+      TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
+    labels:
+      one.nilx.product: 0x1
+      one.nilx.service: identity
+      org.opencontainers.image.revision: ${RELEASE_SHA:?RELEASE_SHA is required}
+    expose:
+      - "8080"
+    volumes:
+      - identity-data:/data
+    networks:
+      edge:
+        aliases:
+          - ox1-identity
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - http://127.0.0.1:8080/health
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  identity-data:
+
+networks:
+  edge:
+    name: ${EDGE_NETWORK:-nilx-edge}
+    external: true
