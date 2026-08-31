@@ -42,6 +42,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate deployment scripts
+        run: |
+          sh -n \
+            services/identity/deploy/deploy.sh \
+            services/identity/deploy/check-public.sh \
+            services/identity/deploy/check-public.test.sh
+          sh services/identity/deploy/check-public.test.sh
       - name: Build runtime image
         run: docker build --file services/identity/Dockerfile --tag 0x1-identity:ci .
       - name: Validate runtime Compose contract

@@ -116,7 +116,7 @@ jobs:
           archive="/tmp/0x1-identity-${RELEASE_SHA}.tar.gz"
           secret_file="/tmp/0x1-identity-runtime-${RELEASE_SHA}.env"
           trap 'rm -f "$secret_file"' EXIT
-          tar -czf "$archive" -C services/identity/deploy compose.yaml deploy.sh
+          tar -czf "$archive" -C services/identity/deploy compose.yaml deploy.sh check-public.sh
           umask 077
           printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN" >"$secret_file"
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
@@ -170,6 +170,10 @@ jobs:
               IDENTITY_ENV_FILE="$runtime_env" \
               RELEASE_SHA="$RELEASE_SHA" \
               sh ./deploy.sh
+            PUBLIC_ORIGIN='https://nilx.one' \
+              HEALTH_RETRY=18 \
+              HEALTH_RETRY_DELAY=5 \
+              sh ./check-public.sh
           ); then
             if [ -n "$previous_release" ] && [ -f "$previous_release/.image" ]; then
               previous_image="$(cat "$previous_release/.image")"

@@ -1,19 +1,19 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{collections::HashSet, env, net::SocketAddr, str::FromStr, sync::Arc};
+use std::{env, net::SocketAddr, sync::Arc};
 
-use identity_bot::{
-    IdentityRepository, PubDress, RegistrationOutcome, TelegramInitDataVerifier, api,
+use identity_bot::{IdentityRepository, TelegramInitDataVerifier, api};
+use teloxide::{
+    prelude::*,
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo},
 };
-use teloxide::{prelude::*, types::Message};
-use tokio::sync::RwLock;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
+use url::Url;
 
-type PendingRegistrations = Arc<RwLock<HashSet<i64>>>;
-
-const HELP: &str = "Commands:\n/start — register a pub_dress\n/whoami — show your identity record\n/recover — explain the current recovery boundary";
+const MINI_APP_URL: &str = "https://nilx.one/telegram/";
+const HELP: &str = "Commands:\n/start — open pub_dress registration\n/whoami — show your identity record\n/recover — explain the current recovery boundary";
 
 #[tokio::main]
 async fn main() {
@@ -49,10 +49,7 @@ async fn main() {
     info!(%http_bind, "starting Stage 1 identity service");
     let mut dispatcher =
         Dispatcher::builder(bot, Update::filter_message().endpoint(handle_message))
-            .dependencies(dptree::deps![
-                Arc::new(repository),
-                PendingRegistrations::default()
-            ])
+            .dependencies(dptree::deps![Arc::new(repository)])
             .enable_ctrlc_handler()
             .build();
 
@@ -68,7 +65,6 @@ async fn handle_message(
     bot: Bot,
     message: Message,
     repository: Arc<IdentityRepository>,
-    pending: PendingRegistrations,
 ) -> ResponseResult<()> {
     if !message.chat.is_private() {
         bot.send_message(
@@ -104,14 +100,7 @@ async fn handle_message(
 
     match command {
         "/start" => {
-            start_registration(
-                &bot,
-                &message,
-                repository.as_ref(),
-                pending.as_ref(),
-                telegram_user_id,
-            )
-            .await?
+            start_registration(&bot, &message, repository.as_ref(), telegram_user_id).await?
         }
         "/whoami" => show_identity(&bot, &message, repository.as_ref(), telegram_user_id).await?,
         "/recover" => {
@@ -123,20 +112,6 @@ async fn handle_message(
         }
         "/help" => {
             bot.send_message(message.chat.id, HELP).await?;
-        }
-        value if value.starts_with('/') => {
-            bot.send_message(message.chat.id, HELP).await?;
-        }
-        _ if pending.read().await.contains(&telegram_user_id) => {
-            complete_registration(
-                &bot,
-                &message,
-                repository.as_ref(),
-                pending.as_ref(),
-                telegram_user_id,
-                text,
-            )
-            .await?;
         }
         _ => {
             bot.send_message(message.chat.id, HELP).await?;
@@ -150,7 +125,6 @@ async fn start_registration(
     bot: &Bot,
     message: &Message,
     repository: &IdentityRepository,
-    pending: &RwLock<HashSet<i64>>,
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
     match repository.find_by_telegram(telegram_user_id).await {
@@ -162,11 +136,11 @@ async fn start_registration(
             .await?;
         }
         Ok(None) => {
-            pending.write().await.insert(telegram_user_id);
             bot.send_message(
                 message.chat.id,
-                "Send the pub_dress you want to register: the literal 0x prefix, one lowercase hexadecimal discriminator, then a case-sensitive 2–32-character slug. Registration is final: a pub_dress cannot be renamed in place.",
+                "Open the 0x1 Mini App to choose and register your pub_dress.",
             )
+            .reply_markup(registration_keyboard())
             .await?;
         }
         Err(error) => {
@@ -181,57 +155,10 @@ async fn start_registration(
     Ok(())
 }
 
-async fn complete_registration(
-    bot: &Bot,
-    message: &Message,
-    repository: &IdentityRepository,
-    pending: &RwLock<HashSet<i64>>,
-    telegram_user_id: i64,
-    candidate: &str,
-) -> ResponseResult<()> {
-    let Ok(pub_dress) = PubDress::from_str(candidate) else {
-        bot.send_message(
-            message.chat.id,
-            "That value is not a canonical pub_dress. Use the literal 0x prefix, one lowercase hexadecimal discriminator, and a case-sensitive 2–32-character slug without spaces.",
-        )
-        .await?;
-        return Ok(());
-    };
-
-    match repository.register(&pub_dress, telegram_user_id).await {
-        Ok(RegistrationOutcome::Registered(identity)) => {
-            pending.write().await.remove(&telegram_user_id);
-            bot.send_message(
-                message.chat.id,
-                format!("Registered: {}", identity.pub_dress),
-            )
-            .await?;
-        }
-        Ok(RegistrationOutcome::AlreadyRegistered(identity)) => {
-            pending.write().await.remove(&telegram_user_id);
-            bot.send_message(
-                message.chat.id,
-                format!("You are already registered as {}.", identity.pub_dress),
-            )
-            .await?;
-        }
-        Ok(RegistrationOutcome::HandleUnavailable) => {
-            bot.send_message(
-                message.chat.id,
-                "That pub_dress cannot be registered. Send another canonical pub_dress.",
-            )
-            .await?;
-        }
-        Err(error) => {
-            error!(%error, "identity registration failed");
-            bot.send_message(
-                message.chat.id,
-                "Identity registration is temporarily unavailable.",
-            )
-            .await?;
-        }
-    }
-    Ok(())
+fn registration_keyboard() -> InlineKeyboardMarkup {
+    let url = Url::parse(MINI_APP_URL).expect("MINI_APP_URL must be a valid URL");
+    let button = InlineKeyboardButton::web_app("Open 0x1", WebAppInfo { url });
+    InlineKeyboardMarkup::new([[button]])
 }
 
 async fn show_identity(
@@ -268,4 +195,27 @@ async fn show_identity(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{MINI_APP_URL, registration_keyboard};
+
+    #[test]
+    fn registration_button_opens_the_canonical_mini_app() {
+        let keyboard = serde_json::to_value(registration_keyboard())
+            .expect("registration keyboard must serialize");
+
+        assert_eq!(
+            keyboard,
+            json!({
+                "inline_keyboard": [[{
+                    "text": "Open 0x1",
+                    "web_app": { "url": MINI_APP_URL }
+                }]]
+            })
+        );
+    }
 }
