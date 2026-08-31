@@ -10,7 +10,7 @@ import { ProductApp } from "@nilx-one/product-app";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 function createHost(): HostPort {
   return {
@@ -57,6 +57,10 @@ describe("ProductApp", () => {
     }),
   };
 
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
   it("renders the same honest Core boundary through the shared product", async () => {
     const core: CoreRuntimePort = {
       probe: async () => ({
@@ -93,7 +97,9 @@ describe("ProductApp", () => {
     expect(results.violations).toEqual([]);
   });
 
-  it("keeps the selected discriminator separate from the case-sensitive slug", async () => {
+  it("mounts Telegram registration under its production basepath without changing slug semantics", async () => {
+    window.history.replaceState({}, "", "/telegram/");
+
     const user = userEvent.setup();
     const core: CoreRuntimePort = {
       probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
@@ -115,6 +121,7 @@ describe("ProductApp", () => {
         core={core}
         host={createTelegramHost()}
         identity={telegramIdentity}
+        routerBasepath="/telegram"
       />,
     );
 
