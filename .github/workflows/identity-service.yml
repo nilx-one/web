@@ -21,16 +21,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          fetch-depth: 2
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Format identity service and restore CI workflow
+      - name: Format identity service
         run: |
           set -Eeuo pipefail
           cargo fmt --manifest-path services/identity/Cargo.toml --all
-          git checkout HEAD^ -- .github/workflows/identity-service.yml
-          git add services/identity/src .github/workflows/identity-service.yml
+          git add services/identity/src
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "style(identity): apply rustfmt"
