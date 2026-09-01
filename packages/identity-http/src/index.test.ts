@@ -24,12 +24,63 @@ describe("identity HTTP adapter", () => {
       kind: "authentication-required",
     });
     await expect(
+      adapter.checkAvailability({ discriminator: "0", slug: "sky" }),
+    ).resolves.toEqual({
+      kind: "rejected",
+      reason: "authentication-required",
+    });
+    await expect(
       adapter.register({ discriminator: "0", slug: "sky" }),
     ).resolves.toEqual({
       kind: "rejected",
       reason: "authentication-required",
     });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("checks exact case-sensitive availability without caching the result", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        response(200, { pub_dress: "0xaSky", available: true }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma signed",
+    });
+
+    await expect(
+      adapter.checkAvailability({ discriminator: "a", slug: "Sky" }),
+    ).resolves.toEqual({ kind: "available" });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/identity/availability?discriminator=a&slug=Sky",
+      {
+        cache: "no-store",
+        headers: { authorization: "tma signed" },
+      },
+    );
+  });
+
+  it("keeps occupied and invalid candidates distinct", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        response(200, { pub_dress: "0x0sky", available: false }),
+      )
+      .mockResolvedValueOnce(
+        response(422, { error: { code: "invalid_pub_dress_character" } }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma signed",
+    });
+
+    await expect(
+      adapter.checkAvailability({ discriminator: "0", slug: "sky" }),
+    ).resolves.toEqual({ kind: "unavailable" });
+    await expect(
+      adapter.checkAvailability({ discriminator: "0", slug: "sky space" }),
+    ).resolves.toEqual({ kind: "rejected", reason: "invalid-character" });
   });
 
   it("passes the exact slug and provider authorization to the server boundary", async () => {

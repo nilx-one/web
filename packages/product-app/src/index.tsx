@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  CheckPubDressAvailability,
   ReadIdentity,
   ReadRuntimeReadiness,
   RegisterIdentity,
@@ -30,7 +31,10 @@ import {
 import { useEffect, useState } from "react";
 
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
-import { createIdentityFoundationViewModel } from "./features/identity/identity-foundation-view-model";
+import {
+  createIdentityFoundationViewModel,
+  createPubDressAvailabilityViewState,
+} from "./features/identity/identity-foundation-view-model";
 import "./product.css";
 
 export interface ProductAppDependencies {
@@ -55,6 +59,17 @@ function useHostSnapshot(host: HostPort): HostSnapshot {
   return snapshot;
 }
 
+function useDebouncedSelection(selection: PubDressSelection) {
+  const [debounced, setDebounced] = useState(selection);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebounced(selection), 320);
+    return () => window.clearTimeout(timeout);
+  }, [selection]);
+
+  return debounced;
+}
+
 function RootRoute() {
   return <Outlet />;
 }
@@ -72,6 +87,11 @@ const foundationRoute = createRoute({
 function FoundationRoute() {
   const { dependencies } = foundationRoute.useRouteContext();
   const host = useHostSnapshot(dependencies.host);
+  const [selection, setSelection] = useState<PubDressSelection>({
+    discriminator: "0",
+    slug: "",
+  });
+  const debouncedSelection = useDebouncedSelection(selection);
   const readinessQuery = useQuery({
     queryKey: ["core-runtime-readiness"],
     queryFn: () => new ReadRuntimeReadiness(dependencies.core).execute(),
@@ -84,9 +104,34 @@ function FoundationRoute() {
     enabled: hasAuthenticatedProvider(host),
     retry: false,
   });
+  const availabilityEnabled =
+    hasAuthenticatedProvider(host) &&
+    identityQuery.data?.kind === "not-registered" &&
+    debouncedSelection.slug.length >= 2 &&
+    debouncedSelection.slug.length <= 32;
+  const availabilityQuery = useQuery({
+    queryKey: [
+      "pub-dress-availability",
+      host.kind,
+      debouncedSelection.discriminator,
+      debouncedSelection.slug,
+    ],
+    queryFn: () =>
+      new CheckPubDressAvailability(dependencies.identity).execute(
+        debouncedSelection,
+      ),
+    enabled: availabilityEnabled,
+    retry: false,
+    staleTime: 0,
+  });
   const registrationMutation = useMutation({
     mutationFn: (selection: PubDressSelection) =>
       new RegisterIdentity(dependencies.identity).execute(selection),
+    onSuccess: (result) => {
+      if (result.kind === "rejected" && result.reason === "unavailable") {
+        void availabilityQuery.refetch();
+      }
+    },
   });
   const viewModel = createIdentityFoundationViewModel(
     host,
@@ -95,14 +140,27 @@ function FoundationRoute() {
     registrationMutation.data,
     registrationMutation.isPending,
   );
+  const selectionIsDebounced =
+    selection.discriminator === debouncedSelection.discriminator &&
+    selection.slug === debouncedSelection.slug;
+  const availability = createPubDressAvailabilityViewState(
+    selection,
+    selection.slug.length >= 2 &&
+      (!selectionIsDebounced || availabilityQuery.isFetching),
+    selectionIsDebounced ? availabilityQuery.data : undefined,
+  );
 
   useEffect(() => {
     document.documentElement.dataset.hostTheme = host.theme;
-  }, [host.theme]);
+    document.documentElement.dataset.host = host.kind;
+  }, [host.kind, host.theme]);
 
   return (
     <IdentityFoundationView
+      availability={availability}
+      selection={selection}
       viewModel={viewModel}
+      onSelectionChange={setSelection}
       onRegister={(selection) => registrationMutation.mutate(selection)}
     />
   );

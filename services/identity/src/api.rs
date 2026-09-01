@@ -9,8 +9,11 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State},
-    http::{HeaderMap, StatusCode, header::AUTHORIZATION},
+    extract::{DefaultBodyLimit, Query, State},
+    http::{
+        HeaderMap, StatusCode,
+        header::{AUTHORIZATION, CACHE_CONTROL},
+    },
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -83,9 +86,43 @@ fn router_with_clock(
         .route("/api/v1/auth/discord/config", get(discord_config))
         .route("/api/v1/auth/discord/token", post(exchange_discord_code))
         .route("/api/v1/identity", get(read_identity))
+        .route(
+            "/api/v1/identity/availability",
+            get(check_pub_dress_availability),
+        )
         .route("/api/v1/identity/registration", post(register_identity))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(state)
+}
+
+async fn check_pub_dress_availability(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Query(request): Query<PubDressSelectionRequest>,
+) -> Response {
+    if let Err(error) = authenticate(&state, &headers).await {
+        return error.into_response();
+    }
+    let pub_dress = match parse_pub_dress(&request) {
+        Ok(value) => value,
+        Err(error) => return invalid_pub_dress(error),
+    };
+
+    match state.repository.is_pub_dress_available(&pub_dress).await {
+        Ok(available) => (
+            StatusCode::OK,
+            [(CACHE_CONTROL, "no-store")],
+            Json(AvailabilityResponse {
+                pub_dress: pub_dress.to_string(),
+                available,
+            }),
+        )
+            .into_response(),
+        Err(error) => {
+            tracing::error!(%error, "pub_dress availability lookup failed");
+            unavailable()
+        }
+    }
 }
 
 async fn health() -> StatusCode {
@@ -159,16 +196,9 @@ async fn register_identity(
         Ok(identity) => identity,
         Err(error) => return error.into_response(),
     };
-    let candidate = format!("0x{}{}", request.discriminator, request.slug);
-    let pub_dress = match PubDress::from_str(&candidate) {
+    let pub_dress = match parse_pub_dress(&request) {
         Ok(value) => value,
-        Err(error) => {
-            return api_error(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                error_code(error),
-                "Choose one hexadecimal discriminator and a case-sensitive 2–32-character slug.",
-            );
-        }
+        Err(error) => return invalid_pub_dress(error),
     };
 
     match state
@@ -200,6 +230,19 @@ async fn register_identity(
             unavailable()
         }
     }
+}
+
+fn parse_pub_dress(request: &PubDressSelectionRequest) -> Result<PubDress, crate::PubDressError> {
+    let candidate = format!("0x{}{}", request.discriminator, request.slug);
+    PubDress::from_str(&candidate)
+}
+
+fn invalid_pub_dress(error: crate::PubDressError) -> Response {
+    api_error(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        error_code(error),
+        "Choose one hexadecimal discriminator and a case-sensitive 2–32-character slug.",
+    )
 }
 
 async fn authenticate(
@@ -323,9 +366,17 @@ struct DiscordConfigResponse<'a> {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RegistrationRequest {
+struct PubDressSelectionRequest {
     discriminator: String,
     slug: String,
+}
+
+type RegistrationRequest = PubDressSelectionRequest;
+
+#[derive(Debug, Serialize)]
+struct AvailabilityResponse {
+    pub_dress: String,
+    available: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -371,7 +422,10 @@ mod tests {
 
     use axum::{
         body::{Body, to_bytes},
-        http::{Request, StatusCode, header::AUTHORIZATION},
+        http::{
+            Request, StatusCode,
+            header::{AUTHORIZATION, CACHE_CONTROL},
+        },
     };
     use hmac::{Hmac, Mac};
     use serde_json::Value;
@@ -459,6 +513,51 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["identity"]["pub_dress"], "0x0sky");
         assert!(body.to_string().find("provider_subject").is_none());
+    }
+
+    #[tokio::test]
+    async fn availability_reports_exact_candidates_without_reserving_them() {
+        let app = app().await;
+        let authorization = format!("tma {}", signed_init_data(42));
+        let availability = || {
+            Request::get("/api/v1/identity/availability?discriminator=0&slug=Sky")
+                .header(AUTHORIZATION, &authorization)
+                .body(Body::empty())
+                .expect("valid request")
+        };
+
+        let first = app.clone().oneshot(availability()).await.expect("response");
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(
+            first
+                .headers()
+                .get(CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok()),
+            Some("no-store")
+        );
+        let body = to_bytes(first.into_body(), 4096).await.expect("body");
+        let body: Value = serde_json::from_slice(&body).expect("JSON body");
+        assert_eq!(body["pub_dress"], "0x0Sky");
+        assert_eq!(body["available"], true);
+
+        let registration = Request::post("/api/v1/identity/registration")
+            .header(AUTHORIZATION, &authorization)
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"discriminator":"0","slug":"Sky"}"#))
+            .expect("valid request");
+        assert_eq!(
+            app.clone()
+                .oneshot(registration)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::CREATED
+        );
+
+        let second = app.oneshot(availability()).await.expect("response");
+        let body = to_bytes(second.into_body(), 4096).await.expect("body");
+        let body: Value = serde_json::from_slice(&body).expect("JSON body");
+        assert_eq!(body["available"], false);
     }
 
     #[tokio::test]

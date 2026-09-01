@@ -32,9 +32,36 @@ export type IdentityRegistrationResult =
     }
   | { kind: "service-unavailable" };
 
+export type PubDressAvailabilityResult =
+  | { kind: "available" }
+  | { kind: "unavailable" }
+  | {
+      kind: "rejected";
+      reason:
+        "authentication-required" | "invalid-length" | "invalid-character";
+    }
+  | { kind: "service-unavailable" };
+
 export interface IdentityRegistrationPort {
+  checkAvailability(
+    selection: PubDressSelection,
+  ): Promise<PubDressAvailabilityResult>;
   read(): Promise<IdentityLookupResult>;
   register(selection: PubDressSelection): Promise<IdentityRegistrationResult>;
+}
+
+export class CheckPubDressAvailability {
+  public constructor(private readonly identity: IdentityRegistrationPort) {}
+
+  public async execute(
+    selection: PubDressSelection,
+  ): Promise<PubDressAvailabilityResult> {
+    try {
+      return await this.identity.checkAvailability(selection);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
 }
 
 export class ReadIdentity {

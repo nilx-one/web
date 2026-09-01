@@ -9,6 +9,7 @@ export {
   type RuntimeReadiness,
 } from "./core-runtime";
 export {
+  CheckPubDressAvailability,
   ReadIdentity,
   RegisterIdentity,
   type IdentityLookupResult,
@@ -16,4 +17,5 @@ export {
   type IdentityRegistrationPort,
   type IdentityRegistrationResult,
   type PubDressSelection,
+  type PubDressAvailabilityResult,
 } from "./identity-registration";

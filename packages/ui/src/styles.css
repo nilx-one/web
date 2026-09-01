@@ -22,6 +22,7 @@
   --accent-ink: #453493;
   --accent-soft: #e6e0ff;
   --positive: #287a57;
+  --negative: #b83b54;
   --warning: #ad6d21;
 }
 
@@ -390,6 +391,7 @@ a {
   --accent-ink: #c9bcff;
   --accent-soft: rgba(168, 149, 255, 0.14);
   --positive: #63bd91;
+  --negative: #f27d93;
   --warning: #e1a85f;
 }
 
@@ -406,6 +408,7 @@ a {
     --accent-ink: #c9bcff;
     --accent-soft: rgba(168, 149, 255, 0.14);
     --positive: #63bd91;
+    --negative: #f27d93;
     --warning: #e1a85f;
   }
 }

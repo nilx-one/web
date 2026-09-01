@@ -83,15 +83,27 @@
   line-height: 1.5;
 }
 
-.registration-form label {
+.registration-label {
   font-size: 13px;
   font-weight: 720;
 }
 
-.slug-field {
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  margin: -1px;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.pub-dress-field {
   display: grid;
   min-height: 62px;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -102,52 +114,141 @@
     box-shadow 120ms ease;
 }
 
-.slug-field:focus-within {
+.pub-dress-field:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
-.discriminator-field {
-  display: grid;
-  height: 100%;
-  grid-template-columns: auto auto;
-  align-items: center;
-  border-right: 1px solid var(--line);
-  border-radius: 17px 0 0 17px;
-  background: var(--accent-soft);
-}
-
-.discriminator-field span,
-.discriminator-field select,
-.slug-field input {
+.pub-dress-prefix,
+.discriminator-selector,
+.pub-dress-field input {
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: clamp(24px, 3vw, 34px);
   font-weight: 720;
   letter-spacing: -0.06em;
 }
 
-.discriminator-field span {
-  padding-left: 18px;
+.pub-dress-prefix {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  padding: 0 13px 0 18px;
+  border-radius: 17px 0 0 17px;
+  background: color-mix(in srgb, var(--line) 28%, transparent);
+  color: var(--muted);
+  cursor: default;
+  user-select: none;
+}
+
+.discriminator-selector {
+  position: relative;
+  display: flex;
+  height: 100%;
+  min-width: 61px;
+  align-items: center;
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: var(--accent-soft);
   color: var(--accent-ink);
 }
 
-.discriminator-field select {
+.discriminator-selector select {
+  width: 100%;
   height: 100%;
-  padding: 0 12px 0 2px;
+  padding: 0 28px 0 13px;
   border: 0;
+  appearance: none;
   outline: 0;
   background: transparent;
   color: var(--accent-ink);
   cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
 }
 
-.slug-field input {
+.selector-chevron {
+  position: absolute;
+  right: 10px;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  pointer-events: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.pub-dress-field input {
   min-width: 0;
-  padding: 12px 18px 12px 14px;
+  padding: 12px 8px 12px 14px;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--ink);
+}
+
+.pub-dress-field input::placeholder {
+  color: color-mix(in srgb, var(--muted) 62%, transparent);
+}
+
+.availability-glyph {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  margin-right: 9px;
+  place-items: center;
+  color: var(--muted);
+}
+
+.availability-glyph svg {
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.availability-glyph--available {
+  color: var(--positive);
+}
+
+.availability-glyph--unavailable {
+  color: var(--negative);
+}
+
+.availability-glyph--invalid,
+.availability-glyph--service-unavailable {
+  color: var(--warning);
+}
+
+.availability-glyph--checking svg {
+  animation: availability-spin 0.8s linear infinite;
+  stroke-dasharray: 38 16;
+}
+
+.availability-detail {
+  min-height: 20px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.5;
+}
+
+.availability-detail--available {
+  color: var(--positive);
+}
+
+.availability-detail--unavailable {
+  color: var(--negative);
+}
+
+.availability-detail--invalid,
+.availability-detail--service-unavailable {
+  color: var(--warning);
 }
 
 .registration-form button {
@@ -169,13 +270,43 @@
 }
 
 .registration-form button:disabled,
-.slug-field input:disabled {
+.pub-dress-field input:disabled,
+.discriminator-selector select:disabled {
   cursor: wait;
   opacity: 0.58;
 }
 
 .registration-error {
-  color: #9b2f3f;
+  color: var(--negative);
+}
+
+@keyframes availability-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:root[data-host="telegram"] .foundation-layout {
+  width: min(100%, 620px);
+  min-height: calc(100vh - 90px - var(--safe-top) - var(--safe-bottom));
+  grid-template-columns: 1fr;
+  align-content: center;
+  padding-block: clamp(48px, 11vh, 112px);
+}
+
+:root[data-host="telegram"] .foundation-copy h1 {
+  font-size: clamp(46px, 13vw, 72px);
+}
+
+:root[data-host="telegram"] .pairwise-boundary,
+:root[data-host="telegram"] .runtime-status,
+:root[data-host="telegram"] .app-footer {
+  display: none;
+}
+
+:root[data-host="telegram"] .registration-surface {
+  width: 100%;
+  margin-bottom: 0;
 }
 
 @media (max-width: 1020px) {

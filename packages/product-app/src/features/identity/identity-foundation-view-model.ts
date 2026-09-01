@@ -4,6 +4,8 @@
 import type {
   IdentityLookupResult,
   IdentityRegistrationResult,
+  PubDressAvailabilityResult,
+  PubDressSelection,
   RuntimeReadiness,
 } from "@nilx-one/application";
 import {
@@ -33,6 +35,56 @@ export interface IdentityFoundationViewModel {
   registration: RegistrationViewState;
   runtime: RuntimeViewState;
   safeArea: HostSnapshot["safeArea"];
+}
+
+export type PubDressAvailabilityViewState =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "available"; detail: "Available" }
+  | { kind: "unavailable"; detail: "Already taken" }
+  | { kind: "invalid"; detail: string }
+  | { kind: "service-unavailable"; detail: "Couldn’t check availability" };
+
+export function createPubDressAvailabilityViewState(
+  selection: PubDressSelection,
+  pending: boolean,
+  result: PubDressAvailabilityResult | undefined,
+): PubDressAvailabilityViewState {
+  if (selection.slug.length === 0) {
+    return { kind: "idle" };
+  }
+  if (selection.slug.length < 2 || selection.slug.length > 32) {
+    return {
+      kind: "invalid",
+      detail: "Use 2–32 characters",
+    };
+  }
+  if (pending) {
+    return { kind: "checking" };
+  }
+
+  switch (result?.kind) {
+    case "available":
+      return { kind: "available", detail: "Available" };
+    case "unavailable":
+      return { kind: "unavailable", detail: "Already taken" };
+    case "rejected":
+      return result.reason === "invalid-length"
+        ? { kind: "invalid", detail: "Use 2–32 characters" }
+        : result.reason === "invalid-character"
+          ? { kind: "invalid", detail: "This character isn’t supported" }
+          : {
+              kind: "service-unavailable",
+              detail: "Couldn’t check availability",
+            };
+    case "service-unavailable":
+      return {
+        kind: "service-unavailable",
+        detail: "Couldn’t check availability",
+      };
+    case undefined:
+      return { kind: "idle" };
+  }
 }
 
 export type RegistrationViewState =
