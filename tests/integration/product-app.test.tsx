@@ -53,6 +53,26 @@ function createTelegramHost(): HostPort {
   };
 }
 
+function createNativeHost(authenticated = true): HostPort {
+  return {
+    getSnapshot: () => ({
+      kind: "native",
+      available: true,
+      theme: "dark",
+      safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+      authentication: {
+        kind: "native-app-session",
+        authenticated,
+        verification: "required",
+      },
+    }),
+    subscribe: () => () => undefined,
+    ready: vi.fn(),
+    openExternal: vi.fn(),
+    impact: vi.fn(),
+  };
+}
+
 function createIdentity(
   overrides: Partial<IdentityAccessPort> = {},
 ): IdentityAccessPort {
@@ -145,7 +165,7 @@ describe("ProductApp identity", () => {
     });
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
-    await screen.findByText("Available — create this Bond");
+    await screen.findByText("Available — create this identity");
     await user.type(
       await screen.findByLabelText("Password"),
       "a deliberately long password",
@@ -194,7 +214,7 @@ describe("ProductApp identity", () => {
     );
 
     await user.type(await screen.findByLabelText("pub_dress"), "sky");
-    await screen.findByText("Registered — enter your password");
+    await screen.findByText("Identity found — enter your password");
     await user.type(
       screen.getByLabelText("Password"),
       "correct password value",
@@ -205,6 +225,42 @@ describe("ProductApp identity", () => {
       "0x0sky",
       "correct password value",
     );
+  });
+
+  it("keeps the resolved identity valid while reporting rejected credentials in red", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          resolvePubDress: async () => ({
+            kind: "registered",
+            pubDress: "0x0sky",
+          }),
+          authenticateNative: async () => ({
+            kind: "rejected",
+            reason: "invalid-credentials",
+          }),
+        })}
+      />,
+    );
+
+    const slug = await screen.findByLabelText("pub_dress");
+    await user.type(slug, "sky");
+    await screen.findByText("Identity found — enter your password");
+    const password = await screen.findByLabelText("Password");
+    await user.type(password, "incorrect password");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(
+      await screen.findByText("The pub_dress or password is invalid."),
+    ).toBeInTheDocument();
+    expect(slug.closest("form")).toHaveAttribute(
+      "data-submission-error",
+      "true",
+    );
+    expect(password).toHaveAttribute("aria-invalid", "true");
   });
 
   it("accepts a full pub_dress paste and splits the selector from the slug", async () => {
@@ -222,6 +278,59 @@ describe("ProductApp identity", () => {
 
     expect(screen.getByRole("combobox")).toHaveValue("a");
     expect(slug).toHaveValue("Sky");
+  });
+
+  it("reveals password only after exact resolution and reflects the result on the form", async () => {
+    const user = userEvent.setup();
+    let resolveRegistered: (() => void) | undefined;
+    const resolution = new Promise<{
+      kind: "registered";
+      pubDress: string;
+    }>((resolve) => {
+      resolveRegistered = () =>
+        resolve({ kind: "registered", pubDress: "0x0sky" });
+    });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({ resolvePubDress: () => resolution })}
+      />,
+    );
+
+    const slug = await screen.findByLabelText("pub_dress");
+    await user.type(slug, "sky");
+    await screen.findByText("Checking availability…");
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+
+    resolveRegistered?.();
+    await screen.findByText("Identity found — enter your password");
+    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+    expect(slug.closest("form")).toHaveAttribute("data-status", "registered");
+    expect(slug).toHaveAttribute("aria-invalid", "false");
+  });
+
+  it("keeps an invalid exact identity red and does not reveal password", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          resolvePubDress: async () => ({
+            kind: "rejected",
+            reason: "invalid-character",
+          }),
+        })}
+      />,
+    );
+
+    const slug = await screen.findByLabelText("pub_dress");
+    await user.type(slug, "sk y");
+    await screen.findByText("Incorrect — this character isn’t supported");
+    expect(slug.closest("form")).toHaveAttribute("data-status", "invalid");
+    expect(slug).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
   });
 
   it("renders a password-only remembered flow with a shared-device escape", async () => {
@@ -286,5 +395,45 @@ describe("ProductApp identity", () => {
       discriminator: "a",
       slug: "Sky",
     });
+  });
+
+  it("accepts a backend-verified native host session without asking for a password", async () => {
+    const readProviderIdentity = vi
+      .fn<IdentityAccessPort["readProviderIdentity"]>()
+      .mockResolvedValue({
+        kind: "registered",
+        identity: { pubDress: "0x0sky" },
+      });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createNativeHost()}
+        identity={createIdentity({ readProviderIdentity })}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Authenticated as 0x0sky."),
+    ).toBeInTheDocument();
+    expect(readProviderIdentity).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  });
+
+  it("does not treat same-device native host presence as authentication", async () => {
+    const readProviderIdentity =
+      vi.fn<IdentityAccessPort["readProviderIdentity"]>();
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createNativeHost(false)}
+        identity={createIdentity({ readProviderIdentity })}
+      />,
+    );
+
+    expect(
+      await screen.findAllByText("Open 0x1 from 0x1 for iOS to continue."),
+    ).toHaveLength(2);
+    expect(readProviderIdentity).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
   });
 });

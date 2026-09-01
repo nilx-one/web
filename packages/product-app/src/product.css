@@ -3,21 +3,20 @@
 
 .foundation-layout {
   display: grid;
-  width: min(100%, 1280px);
+  width: min(100%, 820px);
   min-height: calc(100vh - 176px);
   margin-inline: auto;
-  grid-template-columns: minmax(0, 0.92fr) minmax(430px, 1.08fr);
-  gap: clamp(54px, 7vw, 112px);
   align-items: center;
   padding-block: clamp(44px, 7vh, 88px);
 }
 
 .identity-panel {
   min-width: 0;
+  width: 100%;
 }
 
 .identity-copy {
-  max-width: 590px;
+  max-width: 760px;
 }
 
 .eyebrow,
@@ -35,7 +34,8 @@
 
 .identity-copy h1 {
   margin: 0;
-  font-size: clamp(48px, 5.8vw, 82px);
+  max-width: 780px;
+  font-size: clamp(58px, 8.8vw, 96px);
   font-weight: 610;
   letter-spacing: -0.068em;
   line-height: 0.94;
@@ -51,30 +51,30 @@
 
 .identity-surface {
   position: relative;
-  width: min(100%, 560px);
-  margin-top: 34px;
+  width: 100%;
+  margin-top: 40px;
   overflow: hidden;
   border: 1px solid var(--glass-line);
-  border-radius: 30px;
+  border-radius: 34px;
   background:
-    linear-gradient(145deg, rgb(255 255 255 / 76%), rgb(239 248 255 / 48%)),
+    linear-gradient(145deg, rgb(255 255 255 / 78%), rgb(226 236 255 / 48%)),
     var(--glass-surface);
   box-shadow:
-    0 30px 80px rgb(41 110 167 / 12%),
+    0 34px 96px rgb(40 83 176 / 17%),
     inset 0 1px 0 rgb(255 255 255 / 88%);
-  backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(30px) saturate(1.35);
 }
 
 .identity-surface::before {
   position: absolute;
-  width: 260px;
-  height: 260px;
+  width: 420px;
+  height: 420px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgb(50 174 255 / 19%), transparent 68%);
+  background: radial-gradient(circle, rgb(99 92 255 / 25%), transparent 68%);
   content: "";
   pointer-events: none;
-  right: -130px;
-  top: -150px;
+  right: -170px;
+  top: -210px;
 }
 
 .identity-form,
@@ -84,11 +84,55 @@
   position: relative;
   z-index: 1;
   display: grid;
-  padding: 26px;
+  padding: 28px;
 }
 
 .identity-form {
+  margin: 0 24px 24px;
+  border: 1px solid transparent;
+  border-radius: 24px;
   gap: 11px;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.identity-form[data-status="available"],
+.identity-form[data-status="registered"] {
+  border-color: color-mix(in srgb, var(--positive) 42%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--positive) 11%, transparent),
+    color-mix(in srgb, var(--positive) 3%, transparent)
+  );
+  box-shadow:
+    0 18px 58px color-mix(in srgb, var(--positive) 12%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+
+.identity-form[data-status="invalid"],
+.identity-form[data-status="service-unavailable"] {
+  border-color: color-mix(in srgb, var(--negative) 48%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--negative) 11%, transparent),
+    color-mix(in srgb, var(--negative) 3%, transparent)
+  );
+}
+
+.identity-form[data-submission-error="true"] {
+  border-color: color-mix(in srgb, var(--negative) 48%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--negative) 11%, transparent),
+    color-mix(in srgb, var(--negative) 3%, transparent)
+  );
+}
+
+.identity-form[data-submission-error="true"] .password-field {
+  border-color: color-mix(in srgb, var(--negative) 72%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--negative) 12%, transparent);
 }
 
 .address-field,
@@ -125,6 +169,22 @@
     0 0 0 4px var(--accent-soft),
     0 18px 44px rgb(38 145 220 / 12%);
   transform: translateY(-1px);
+}
+
+.address-field[data-status="available"],
+.address-field[data-status="registered"] {
+  border-color: color-mix(in srgb, var(--positive) 70%, transparent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--positive) 12%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 16%);
+}
+
+.address-field[data-status="invalid"],
+.address-field[data-status="service-unavailable"] {
+  border-color: color-mix(in srgb, var(--negative) 72%, transparent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--negative) 12%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 10%);
 }
 
 .address-prefix,
@@ -239,17 +299,14 @@
   stroke-width: 1.7;
 }
 
-.status-glyph--available {
-  color: var(--positive);
-}
-
+.status-glyph--available,
 .status-glyph--registered {
-  color: var(--accent-ink);
+  color: var(--positive);
 }
 
 .status-glyph--invalid,
 .status-glyph--service-unavailable {
-  color: var(--warning);
+  color: var(--negative);
 }
 
 .status-glyph--checking svg {
@@ -313,17 +370,14 @@
   color: var(--muted);
 }
 
-.identity-status--available {
-  color: var(--positive);
-}
-
+.identity-status--available,
 .identity-status--registered {
-  color: var(--accent-ink);
+  color: var(--positive);
 }
 
 .identity-status--invalid,
 .identity-status--service-unavailable {
-  color: var(--warning);
+  color: var(--negative);
 }
 
 .identity-error {
@@ -347,8 +401,7 @@
   z-index: 1;
   display: grid;
   gap: 12px;
-  padding: 18px 26px 24px;
-  border-top: 1px solid var(--glass-line);
+  padding: 28px 28px 22px;
 }
 
 .provider-row > span {
@@ -367,16 +420,35 @@
 
 .provider-buttons button {
   display: grid;
-  min-height: 52px;
+  min-height: 64px;
   grid-template-columns: auto 1fr auto;
   gap: 9px;
   align-items: center;
   padding: 0 14px;
   border: 1px solid var(--field-line);
-  border-radius: 16px;
+  border-radius: 19px;
   background: rgb(255 255 255 / 38%);
   color: var(--muted);
   text-align: left;
+}
+
+.identity-divider {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 18px;
+  align-items: center;
+  padding: 0 28px 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.identity-divider::before,
+.identity-divider::after {
+  height: 1px;
+  background: var(--glass-line);
+  content: "";
 }
 
 .provider-buttons svg {
@@ -494,66 +566,6 @@
   margin-top: 24px;
 }
 
-.identity-art {
-  position: relative;
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 76%);
-  border-radius: clamp(30px, 4vw, 52px);
-  background: #f8fbff;
-  box-shadow:
-    0 38px 110px rgb(56 143 204 / 17%),
-    inset 0 1px 0 white;
-  isolation: isolate;
-}
-
-.identity-art img {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 1;
-  object-fit: cover;
-}
-
-.identity-art::after {
-  position: absolute;
-  border: 1px solid rgb(255 255 255 / 76%);
-  border-radius: inherit;
-  content: "";
-  inset: 1px;
-  pointer-events: none;
-}
-
-.art-halo {
-  position: absolute;
-  z-index: 1;
-  width: 46%;
-  height: 46%;
-  border-radius: 50%;
-  background: rgb(255 234 199 / 25%);
-  filter: blur(42px);
-  left: 4%;
-  pointer-events: none;
-  top: 2%;
-}
-
-.identity-art figcaption {
-  position: absolute;
-  z-index: 2;
-  right: 24px;
-  bottom: 20px;
-  padding: 8px 12px;
-  border: 1px solid rgb(255 255 255 / 68%);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 42%);
-  color: rgb(30 99 148 / 65%);
-  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 10px;
-  letter-spacing: 0.13em;
-  backdrop-filter: blur(14px);
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -568,11 +580,12 @@
 
 :root[data-host-theme="dark"] .identity-surface {
   background:
-    linear-gradient(145deg, rgb(30 56 75 / 78%), rgb(12 28 40 / 58%)),
+    linear-gradient(145deg, rgb(32 44 71 / 82%), rgb(13 19 36 / 72%)),
     var(--glass-surface);
   box-shadow:
-    0 30px 80px rgb(0 7 14 / 26%),
-    inset 0 1px 0 rgb(220 243 255 / 12%);
+    0 34px 100px rgb(0 5 20 / 44%),
+    0 0 80px rgb(82 92 255 / 12%),
+    inset 0 1px 0 rgb(220 228 255 / 18%);
 }
 
 :root[data-host-theme="dark"] .address-field,
@@ -604,7 +617,8 @@
 }
 
 :root[data-host="telegram"] .foundation-layout,
-:root[data-host="discord"] .foundation-layout {
+:root[data-host="discord"] .foundation-layout,
+:root[data-host="native"] .foundation-layout {
   width: min(100%, 620px);
   min-height: calc(100vh - 90px - var(--safe-top) - var(--safe-bottom));
   grid-template-columns: 1fr;
@@ -612,34 +626,24 @@
   padding-block: clamp(34px, 8vh, 72px);
 }
 
-:root[data-host="telegram"] .identity-art,
-:root[data-host="discord"] .identity-art,
 :root[data-host="telegram"] .runtime-status,
 :root[data-host="discord"] .runtime-status,
+:root[data-host="native"] .runtime-status,
 :root[data-host="telegram"] .app-footer,
-:root[data-host="discord"] .app-footer {
+:root[data-host="discord"] .app-footer,
+:root[data-host="native"] .app-footer {
   display: none;
 }
 
 :root[data-host="telegram"] .identity-copy h1,
-:root[data-host="discord"] .identity-copy h1 {
+:root[data-host="discord"] .identity-copy h1,
+:root[data-host="native"] .identity-copy h1 {
   font-size: clamp(42px, 12vw, 68px);
 }
 
 @media (max-width: 980px) {
   .foundation-layout {
     width: min(100%, 720px);
-    grid-template-columns: 1fr;
-  }
-
-  .identity-art {
-    order: -1;
-    max-height: 330px;
-  }
-
-  .identity-art img {
-    height: 330px;
-    object-position: 52% 56%;
   }
 }
 
@@ -670,8 +674,16 @@
     padding: 20px;
   }
 
+  .identity-form {
+    margin: 0 16px 16px;
+  }
+
   .provider-row {
-    padding: 17px 20px 20px;
+    padding: 20px 20px 17px;
+  }
+
+  .identity-divider {
+    padding: 0 20px 17px;
   }
 
   .provider-buttons {
@@ -682,10 +694,6 @@
   .digit-selector,
   .address-field input {
     font-size: clamp(21px, 7vw, 29px);
-  }
-
-  .identity-art {
-    display: none;
   }
 }
 

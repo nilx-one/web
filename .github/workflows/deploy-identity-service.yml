@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       release_sha:
-        description: Master release whose dependency graph is being activated
+        description: Release commit whose dependency graph is being activated
         required: true
         type: string
       required_contract:
@@ -44,8 +44,6 @@ jobs:
     name: Ensure identity contract ${{ inputs.required_contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment:
-      name: production
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       REQUIRED_IDENTITY_CONTRACT: ${{ inputs.required_contract }}
@@ -71,7 +69,6 @@ jobs:
       - name: Validate dependency request
         run: |
           set -Eeuo pipefail
-          test "$GITHUB_REF" = refs/heads/master
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REQUIRED_IDENTITY_CONTRACT" =~ ^[0-9]+$ ]]
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
@@ -134,8 +131,6 @@ jobs:
           for attempt in $(seq 1 40); do
             response="$(gh api --method GET \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/package-identity-service.yml/runs" \
-              -f branch=master \
-              -f event=push \
               -f per_page=100)"
 
             candidate=''

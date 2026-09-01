@@ -62,7 +62,7 @@ describe("identity foundation view state", () => {
     expect(
       createNativeIdentityViewState(
         { kind: "anonymous" },
-        { kind: "available", detail: "Available — create this Bond" },
+        { kind: "available", detail: "Available — create this identity" },
         {
           kind: "recovery-key-required",
           identity: { pubDress: "0x0sky" },
@@ -93,7 +93,7 @@ describe("identity foundation view state", () => {
         },
         { kind: "not-registered" },
         undefined,
-        { kind: "available", detail: "Available — create this Bond" },
+        { kind: "available", detail: "Available — create this identity" },
         false,
       ),
     ).toMatchObject({
@@ -110,7 +110,7 @@ describe("pub_dress status", () => {
   it("never claims availability before an exact server result", () => {
     expect(createPubDressStatusViewState(selection, true, undefined)).toEqual({
       kind: "checking",
-      detail: "Checking exact address…",
+      detail: "Checking availability…",
     });
     expect(createPubDressStatusViewState(selection, false, undefined)).toEqual({
       kind: "idle",

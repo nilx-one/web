@@ -19,7 +19,7 @@ on:
           - identity
 
 permissions:
-  actions: read
+  actions: write
   contents: read
   packages: read
 
@@ -33,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_sha: ${{ steps.plan.outputs.release_sha }}
+      source_ref: ${{ steps.plan.outputs.source_ref }}
+      is_master: ${{ steps.plan.outputs.is_master }}
       clients: ${{ steps.plan.outputs.clients }}
       has_clients: ${{ steps.plan.outputs.has_clients }}
       required_identity_contract: ${{ steps.plan.outputs.required_identity_contract }}
@@ -45,9 +47,16 @@ jobs:
           TARGET: ${{ inputs.target }}
         run: |
           set -Eeuo pipefail
-          test "$GITHUB_REF" = refs/heads/master
+          [[ "$GITHUB_REF" == refs/heads/* ]]
+          source_ref="${GITHUB_REF#refs/heads/}"
           release_sha="$GITHUB_SHA"
           [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+
+          if [ "$source_ref" = master ]; then
+            is_master=true
+          else
+            is_master=false
+          fi
 
           identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
           [[ "$identity_contract" =~ ^[0-9]+$ ]]
@@ -88,6 +97,8 @@ jobs:
           fi
 
           echo "release_sha=$release_sha" >>"$GITHUB_OUTPUT"
+          echo "source_ref=$source_ref" >>"$GITHUB_OUTPUT"
+          echo "is_master=$is_master" >>"$GITHUB_OUTPUT"
           echo "clients=$clients" >>"$GITHUB_OUTPUT"
           echo "has_clients=$has_clients" >>"$GITHUB_OUTPUT"
           echo "required_identity_contract=$required_identity_contract" >>"$GITHUB_OUTPUT"
@@ -96,6 +107,7 @@ jobs:
           {
             echo "### Deployment plan"
             echo
+            echo "- source branch: \`$source_ref\`"
             echo "- release: \`$release_sha\`"
             echo "- requested target: \`$TARGET\`"
             echo "- client targets: \`$clients\`"
@@ -103,9 +115,45 @@ jobs:
             echo "- force identity: \`$force_identity\`"
           } >>"$GITHUB_STEP_SUMMARY"
 
+  prepare-packages:
+    name: Prepare immutable packages
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reuse master push packages
+        if: needs.plan.outputs.is_master == 'true'
+        run: echo "Master packages are produced by the push packaging workflows."
+
+      - name: Dispatch packages for selected branch
+        if: needs.plan.outputs.is_master != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ needs.plan.outputs.source_ref }}
+          HAS_CLIENTS: ${{ needs.plan.outputs.has_clients }}
+        run: |
+          set -Eeuo pipefail
+          gh workflow run package-identity-service.yml --repo "$GITHUB_REPOSITORY" --ref "$SOURCE_REF"
+          if [ "$HAS_CLIENTS" = true ]; then
+            gh workflow run package-web.yml --repo "$GITHUB_REPOSITORY" --ref "$SOURCE_REF"
+          fi
+
+          {
+            echo "### Package preparation"
+            echo
+            echo "- source branch: \`$SOURCE_REF\`"
+            echo "- identity package: dispatched"
+            if [ "$HAS_CLIENTS" = true ]; then
+              echo "- client package: dispatched"
+            else
+              echo "- client package: not required"
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
   ensure-identity:
     name: Ensure Identity dependency
-    needs: plan
+    needs:
+      - plan
+      - prepare-packages
     uses: ./.github/workflows/deploy-identity-service.yml
     with:
       release_sha: ${{ needs.plan.outputs.release_sha }}
@@ -117,6 +165,7 @@ jobs:
     name: Deploy ${{ matrix.target }}
     needs:
       - plan
+      - prepare-packages
       - ensure-identity
     if: needs.plan.outputs.has_clients == 'true'
     strategy:
