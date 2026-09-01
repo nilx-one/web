@@ -79,7 +79,9 @@ function hostLabel(snapshot: HostSnapshot): string {
   return `${snapshot.kind} host`;
 }
 
-function providerLabel(host: HostSnapshot): "Telegram" | "Discord" | undefined {
+function providerLabel(
+  host: HostSnapshot,
+): "Telegram" | "Discord" | undefined {
   switch (host.kind) {
     case "telegram":
       return "Telegram";
@@ -199,9 +201,10 @@ function createRegistrationViewState(
     switch (registration.reason) {
       case "authentication-required": {
         const provider = providerLabel(host);
-        error = provider === undefined
-          ? "Reauthenticate with the provider and try again."
-          : `Reauthenticate with ${provider} and try again.`;
+        error =
+          provider === undefined
+            ? "Reauthenticate with the provider and try again."
+            : `Reauthenticate with ${provider} and try again.`;
         break;
       }
       case "invalid-length":
