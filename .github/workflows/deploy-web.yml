@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       release_sha:
-        description: Master commit whose immutable client package is activated
+        description: Commit whose immutable client package is activated
         required: true
         type: string
     secrets:
@@ -52,7 +52,6 @@ jobs:
       - name: Resolve client target contract
         run: |
           set -Eeuo pipefail
-          test "$GITHUB_REF" = refs/heads/master
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$CLIENT_NAME" =~ ^[a-z0-9-]+$ ]]
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
@@ -89,9 +88,7 @@ jobs:
           for attempt in $(seq 1 40); do
             response="$(gh api --method GET \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/package-web.yml/runs" \
-              -f branch=master \
-              -f event=push \
-              -f per_page=20)"
+              -f per_page=100)"
 
             package_state="$(jq -r --arg sha "$RELEASE_SHA" '
               .workflow_runs
