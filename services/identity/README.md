@@ -1,16 +1,40 @@
 # Identity Service
 
-The identity service is the server-side provider integration for Stage 1 registration in the canonical 0x1 Web product. It binds one immutable canonical `pub_dress` to a verified provider account without claiming native cryptographic identity or custodial recovery.
+The identity service owns phase-0 native Web credentials, one-time recovery
+keys, browser sessions, and remembered-Bond hints. A user can register and sign
+in with only an exact, case-sensitive `pub_dress` and password. Provider
+adapters remain isolated for later optional bindings.
 
 The service is an adapter, not protocol authority. Canonical `pub_dress` validation comes from a pinned `nilx-one/core` contract; provider identity, messenger transport, persistence, and provider verification stay outside `nilx-one/0x1`.
 
 Provider accounts are namespaced as `(provider, provider_subject)`. Telegram and Discord IDs therefore never collide merely because their numeric values happen to match. The storage model also permits multiple provider bindings to point at one identity when an explicit account-linking flow is introduced; this PR does not invent such a link without proof from both sides.
 
-## Telegram bot commands
+## Native Web API
 
-- `/start` opens the canonical 0x1 Telegram Mini App registration surface at `https://nilx.one/telegram/`.
-- `/whoami` returns the stored provider-backed identity record.
-- `/recover` explains the current Telegram recovery boundary.
+- `POST /api/v1/identity/resolve` resolves an exact public `pub_dress` candidate.
+- `GET /api/v1/auth/native/context` returns authenticated, remembered, or anonymous context.
+- `POST /api/v1/auth/native/registration` atomically claims an address and returns a one-time recovery challenge.
+- `POST /api/v1/auth/native/recovery/acknowledgement` acknowledges delivery and creates the session.
+- `POST /api/v1/auth/native/session` verifies a password and creates a session.
+- `POST /api/v1/auth/native/recovery` rotates the password and recovery key after valid recovery proof.
+- `POST /api/v1/auth/native/logout` revokes the active session.
+- `POST /api/v1/auth/native/remembered/forget` removes only the remembered hint.
+
+Registration requires an `Idempotency-Key`. State-changing endpoints require
+the same-origin `X-0x1-CSRF: 1` header. Session and remembered-Bond cookies
+are Secure, HttpOnly, SameSite=Lax; the signed remembered hint is never accepted
+as authentication.
+
+Passwords contain 15–128 Unicode scalar values after NFC normalization. The
+service blocks known compromised values and stores versioned Argon2id verifiers
+with 19 MiB memory, two iterations, and one lane. Authentication uses generic
+failures, a dummy hash path, and source/address/global rate limits.
+
+## Inactive provider adapters
+
+- Telegram and Discord code remains buildable for later binding work.
+- The Web surface renders both provider controls as visible but disabled.
+- No Telegram Mini App or Discord Activity route is published in phase 0.
 
 The bot does not accept a `pub_dress` candidate as chat text. Telegram chat is an entry point, not a second registration implementation.
 
@@ -31,13 +55,18 @@ Availability is advisory. The database insert remains the only collision boundar
 
 ## Secret boundary
 
-`TELOXIDE_TOKEN` and `DISCORD_CLIENT_SECRET` are server-only runtime secrets. They belong in the `nilx-one/web` production GitHub Environment and are delivered only to this service. Neither may be exposed through Vite, browser configuration, repository files, build output, Telegram Mini App JavaScript, or Discord Activity JavaScript.
+`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`, and
+`DISCORD_CLIENT_SECRET` are server-only runtime secrets. The first two must be
+independent values of at least 32 bytes. None may be exposed through Vite,
+browser configuration, repository files, build output, Telegram Mini App
+JavaScript, or Discord Activity JavaScript.
 
 `DISCORD_CLIENT_ID` is public OAuth configuration and is intentionally exposed through the bounded config endpoint so the Activity and service cannot drift between application IDs.
 
 ## Run
 
-Set `TELOXIDE_TOKEN`. To enable Discord Activity authentication, set both `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`. Optional runtime settings:
+Set `NATIVE_AUTH_SECRET` and `PASSWORD_PEPPER`. Provider credentials may remain
+unset while phase-0 provider controls are inactive. Optional runtime settings:
 
 - `DATABASE_URL` — default `sqlite://identity.db`;
 - `HTTP_BIND` — default `0.0.0.0:8080`;
@@ -49,7 +78,8 @@ Then run:
 cargo run --manifest-path services/identity/Cargo.toml
 ```
 
-If neither Discord environment value is present, Discord authentication remains unavailable while Telegram continues to operate. Supplying only one Discord credential is a configuration error.
+Supplying only one Discord credential is a configuration error. Provider
+credentials do not activate a public provider host by themselves.
 
 ## Runtime package
 
@@ -57,7 +87,10 @@ If neither Discord environment value is present, Discord authentication remains 
 
 CI validates the service and deployment contract. Packaging publishes an immutable GHCR image. Production activation is a separate manual workflow.
 
-Before activation commits a release, it verifies the public Telegram shell and the provider-neutral unauthenticated `401` identity boundary. A proxy `502` fails activation and enters the existing rollback path.
+Before activation commits a release, it verifies the public Web shell, the
+unpublished provider routes, and the provider-neutral unauthenticated `401`
+identity boundary. A proxy `502` fails activation and enters the existing
+rollback path.
 
 ## Verify
 

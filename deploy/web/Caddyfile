@@ -11,23 +11,8 @@
 		@identity_api path /api/v1/identity /api/v1/identity/* /api/v1/auth/*
 		reverse_proxy @identity_api ox1-identity:8080
 
-		@telegram_root path /telegram
-		redir @telegram_root /telegram/ 308
-
-		handle_path /telegram/* {
-			root * /srv/telegram
-			try_files {path} /index.html
-			file_server
-		}
-
-		@discord_root path /discord
-		redir @discord_root /discord/ 308
-
-		handle_path /discord/* {
-			root * /srv/discord
-			try_files {path} /index.html
-			file_server
-		}
+		@inactive_hosts path /telegram /telegram/* /discord /discord/*
+		respond @inactive_hosts 404
 
 		handle {
 			root * /srv/site

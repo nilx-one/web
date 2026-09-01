@@ -10,17 +10,18 @@ The canonical edge identity is:
 ox1-web:8080
 ```
 
-The intended public routes are:
+The phase-0 public routes are:
 
 ```text
 https://nilx.one/*                         -> canonical Browser host
-https://nilx.one/telegram/                 -> Telegram Mini App host
-https://nilx.one/auth?provider=telegram    -> browser Telegram sign-in and OIDC callback
+https://nilx.one/api/v1/identity/*         -> bounded identity API proxy
+https://nilx.one/api/v1/auth/native/*      -> bounded native-auth API proxy
 ```
 
-Both hosts are packaged into the same immutable `0x1-web` image and consume the same shared product and verified Core runtime. `/telegram` redirects to `/telegram/` so relative Vite assets remain inside the Telegram host path.
-
-Browser authentication uses one flat public route with an allowlisted `provider` selector. The current Stage 1 identity profile accepts only `provider=telegram`; a missing, repeated, or unknown provider value must fail closed. A request without an authorization response starts the provider flow; the same route handles the callback when Telegram returns a valid `code` and `state`. A future provider is added only with its own adapter contract rather than being inferred from arbitrary query input. The callback exchanges the code server-side and establishes a same-origin session; neither the code nor provider tokens belong in browser storage.
+Only the canonical Browser host is packaged into the production image. The
+shared Telegram and Discord compositions continue to compile in CI, but
+`/telegram`, `/telegram/*`, `/discord`, and `/discord/*` return `404` until an
+explicit later activation.
 
 `0x0sky/infra` owns the public HTTPS route. This repository owns the application build, immutable image, container identity and release lifecycle.
 
@@ -30,38 +31,26 @@ The Web runtime proxies only the bounded Stage 1 identity surface to the registr
 /api/v1/identity* -> ox1-identity:8080
 ```
 
-The Telegram host loads Telegram's official Mini App bridge before application code. It forwards raw `Telegram.WebApp.initData` only to the identity adapter; the registrar verifies that authentication server-side. Neither the browser bundle nor the Telegram host treats `initData` as verified identity.
+When later activated, the Telegram composition loads Telegram's official Mini
+App bridge before application code and forwards raw `Telegram.WebApp.initData`
+only to the identity adapter. The registrar verifies that authentication
+server-side; client code never treats `initData` as verified identity.
 
 During migration from the earlier Telegram-named runtime, the container also exposes the compatibility alias `ox1-telegram-mini-app`. This keeps the currently deployed edge contract functional until infra is updated to `ox1-web`.
-
-## Telegram configuration
-
-The production Main Mini App URL is:
-
-```text
-https://nilx.one/telegram/
-```
-
-Telegram Web Login configuration must allow both the application origin and the exact OIDC redirect URI:
-
-```text
-https://nilx.one
-https://nilx.one/auth?provider=telegram
-```
-
-Telegram-side activation remains an external configuration step in BotFather. Configure the 0x1 bot's Main Mini App or menu button to use the URL above only after the corresponding `0x1-web` revision has been deployed. No bot token belongs in this static Web runtime.
 
 ## Image lifecycle
 
 `package-web.yml` runs after changes reach `master`. It performs artifact packaging only:
 
-1. builds `@nilx-one/site` and `@nilx-one/telegram-mini-app` with the pinned verified Core Wasm runtime;
-2. builds one static production image containing both host artifacts;
+1. builds every host with the pinned verified Core Wasm runtime;
+2. builds one static production image containing only the canonical Web artifact;
 3. publishes `ghcr.io/nilx-one/0x1-web:sha-<commit>`.
 
 It does not repeat the repository's full CI suite and does not deploy.
 
-PR CI builds every Web host once. Deploy validation reuses both verified host artifacts, validates the runtime image and Compose contract, and smoke-tests `/` plus `/telegram/` without rebuilding application source.
+PR CI builds every composition root. Deploy validation reuses the verified Web
+artifact, validates the runtime image and Compose contract, smoke-tests `/`,
+and asserts that Telegram and Discord routes stay unpublished.
 
 ## Deployment
 
@@ -95,7 +84,8 @@ compat:     ox1-telegram-mini-app
 port:       8080
 health:     /health
 browser:    /
-telegram:   /telegram/
+telegram:   unpublished (404)
+discord:    unpublished (404)
 ```
 
 Protocol truth stays outside the Web rendering and host layers.

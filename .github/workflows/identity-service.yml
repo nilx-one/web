@@ -57,6 +57,8 @@ jobs:
           env_file="$(mktemp)"
           trap 'rm -f "$env_file"' EXIT
           printf '%s\n' 'TELOXIDE_TOKEN=ci-only-placeholder' >"$env_file"
+          printf '%s\n' 'NATIVE_AUTH_SECRET=ci-native-auth-secret-that-is-at-least-32-bytes' >>"$env_file"
+          printf '%s\n' 'PASSWORD_PEPPER=ci-password-pepper-that-is-at-least-32-bytes' >>"$env_file"
           IDENTITY_IMAGE=0x1-identity:ci \
           IDENTITY_ENV_FILE="$env_file" \
           RELEASE_SHA="${GITHUB_SHA}" \

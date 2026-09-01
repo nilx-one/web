@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
-  IdentityLookupResult,
-  IdentityRegistrationResult,
-  PubDressAvailabilityResult,
+  NativeAuthenticationResult,
+  NativeIdentityContextResult,
+  NativeRegistrationResult,
+  ProviderIdentityLookupResult,
+  ProviderRegistrationResult,
+  PubDressResolutionResult,
   PubDressSelection,
   RuntimeReadiness,
 } from "@nilx-one/application";
@@ -30,85 +33,328 @@ export type RuntimeViewState =
       detail: string;
     };
 
-export interface IdentityFoundationViewModel {
-  hostLabel: string;
-  registration: RegistrationViewState;
-  runtime: RuntimeViewState;
-  safeArea: HostSnapshot["safeArea"];
-}
+export type IdentityFormMode =
+  | "initial"
+  | "resolving"
+  | "sign-in"
+  | "register"
+  | "remembered"
+  | "provider-register";
 
-export type PubDressAvailabilityViewState =
-  | { kind: "idle" }
-  | { kind: "checking" }
-  | { kind: "available"; detail: "Available" }
-  | { kind: "unavailable"; detail: "Already taken" }
+export type PubDressStatusViewState =
+  | { kind: "idle"; detail: "Case-sensitive · 2–32 characters" }
+  | { kind: "checking"; detail: "Checking exact address…" }
+  | { kind: "available"; detail: "Available — create this Bond" }
+  | { kind: "registered"; detail: "Registered — enter your password" }
   | { kind: "invalid"; detail: string }
-  | { kind: "service-unavailable"; detail: "Couldn’t check availability" };
+  | { kind: "service-unavailable"; detail: "Couldn’t resolve this address" };
 
-export function createPubDressAvailabilityViewState(
-  selection: PubDressSelection,
-  pending: boolean,
-  result: PubDressAvailabilityResult | undefined,
-): PubDressAvailabilityViewState {
-  if (selection.slug.length === 0) {
-    return { kind: "idle" };
-  }
-  if (selection.slug.length < 2 || selection.slug.length > 32) {
-    return {
-      kind: "invalid",
-      detail: "Use 2–32 characters",
-    };
-  }
-  if (pending) {
-    return { kind: "checking" };
-  }
-
-  switch (result?.kind) {
-    case "available":
-      return { kind: "available", detail: "Available" };
-    case "unavailable":
-      return { kind: "unavailable", detail: "Already taken" };
-    case "rejected":
-      return result.reason === "invalid-length"
-        ? { kind: "invalid", detail: "Use 2–32 characters" }
-        : result.reason === "invalid-character"
-          ? { kind: "invalid", detail: "This character isn’t supported" }
-          : {
-              kind: "service-unavailable",
-              detail: "Couldn’t check availability",
-            };
-    case "service-unavailable":
-      return {
-        kind: "service-unavailable",
-        detail: "Couldn’t check availability",
-      };
-    case undefined:
-      return { kind: "idle" };
-  }
-}
-
-export type RegistrationViewState =
-  | {
-      kind: "provider-required";
-      detail: string;
-    }
-  | {
-      kind: "loading";
-      detail: string;
-    }
+export type IdentityViewState =
+  | { kind: "loading"; detail: string }
   | {
       kind: "form";
+      mode: IdentityFormMode;
+      status: PubDressStatusViewState;
+      busy: boolean;
+      error?: string;
+      rememberedPubDress?: string;
+    }
+  | {
+      kind: "recovery-key";
+      pubDress: string;
+      recoveryKey: string;
+      challenge: string;
       busy: boolean;
       error?: string;
     }
-  | {
-      kind: "registered";
-      pubDress: string;
-    }
-  | {
-      kind: "unavailable";
-      detail: "Identity registration is temporarily unavailable.";
+  | { kind: "authenticated"; pubDress: string; native: boolean }
+  | { kind: "unavailable"; detail: string }
+  | { kind: "provider-required"; detail: string };
+
+export interface IdentityFoundationViewModel {
+  hostLabel: string;
+  identity: IdentityViewState;
+  runtime: RuntimeViewState;
+  safeArea: HostSnapshot["safeArea"];
+  showProviderRow: boolean;
+}
+
+export function createPubDressStatusViewState(
+  selection: PubDressSelection,
+  pending: boolean,
+  result: PubDressResolutionResult | undefined,
+): PubDressStatusViewState {
+  if (selection.slug.length === 0) {
+    return { kind: "idle", detail: "Case-sensitive · 2–32 characters" };
+  }
+  if (selection.slug.length < 2 || selection.slug.length > 32) {
+    return { kind: "invalid", detail: "Use 2–32 characters" };
+  }
+  if (pending) {
+    return { kind: "checking", detail: "Checking exact address…" };
+  }
+  switch (result?.kind) {
+    case "available":
+      return { kind: "available", detail: "Available — create this Bond" };
+    case "registered":
+      return {
+        kind: "registered",
+        detail: "Registered — enter your password",
+      };
+    case "rejected":
+      return {
+        kind: "invalid",
+        detail:
+          result.reason === "invalid-length"
+            ? "Use 2–32 characters"
+            : "This character isn’t supported",
+      };
+    case "rate-limited":
+    case "service-unavailable":
+      return {
+        kind: "service-unavailable",
+        detail: "Couldn’t resolve this address",
+      };
+    case undefined:
+      return { kind: "idle", detail: "Case-sensitive · 2–32 characters" };
+  }
+}
+
+export function createNativeIdentityViewState(
+  context: NativeIdentityContextResult | undefined,
+  status: PubDressStatusViewState,
+  registration: NativeRegistrationResult | undefined,
+  authentication: NativeAuthenticationResult | undefined,
+  pending: boolean,
+): IdentityViewState {
+  if (authentication?.kind === "authenticated") {
+    return {
+      kind: "authenticated",
+      pubDress: authentication.identity.pubDress,
+      native: true,
     };
+  }
+  if (registration?.kind === "recovery-key-required") {
+    return {
+      kind: "recovery-key",
+      pubDress: registration.identity.pubDress,
+      recoveryKey: registration.recoveryKey,
+      challenge: registration.challenge,
+      busy: pending,
+      ...(authentication?.kind === "rejected"
+        ? { error: nativeAuthenticationError(authentication) }
+        : {}),
+    };
+  }
+  if (context === undefined) {
+    return { kind: "loading", detail: "Checking this browser…" };
+  }
+  if (context.kind === "service-unavailable") {
+    return {
+      kind: "unavailable",
+      detail: "Identity authentication is temporarily unavailable.",
+    };
+  }
+  if (context.kind === "authenticated") {
+    return {
+      kind: "authenticated",
+      pubDress: context.identity.pubDress,
+      native: true,
+    };
+  }
+  if (context.kind === "remembered") {
+    return {
+      kind: "form",
+      mode: "remembered",
+      status: {
+        kind: "registered",
+        detail: "Registered — enter your password",
+      },
+      busy: pending,
+      rememberedPubDress: context.pubDress,
+      ...nativeSubmissionError(registration, authentication),
+    };
+  }
+
+  const mode: IdentityFormMode =
+    status.kind === "checking"
+      ? "resolving"
+      : status.kind === "available"
+        ? "register"
+        : status.kind === "registered"
+          ? "sign-in"
+          : "initial";
+  return {
+    kind: "form",
+    mode,
+    status,
+    busy: pending,
+    ...nativeSubmissionError(registration, authentication),
+  };
+}
+
+export function createProviderIdentityViewState(
+  host: HostSnapshot,
+  identity: ProviderIdentityLookupResult | undefined,
+  registration: ProviderRegistrationResult | undefined,
+  status: PubDressStatusViewState,
+  pending: boolean,
+): IdentityViewState {
+  if (!hasAuthenticatedProvider(host)) {
+    return {
+      kind: "provider-required",
+      detail: `Open 0x1 from ${providerLabel(host) ?? "this provider"} to continue.`,
+    };
+  }
+  if (registration?.kind === "registered") {
+    return {
+      kind: "authenticated",
+      pubDress: registration.identity.pubDress,
+      native: false,
+    };
+  }
+  if (identity?.kind === "registered") {
+    return {
+      kind: "authenticated",
+      pubDress: identity.identity.pubDress,
+      native: false,
+    };
+  }
+  if (identity === undefined) {
+    return {
+      kind: "loading",
+      detail: `Checking this ${providerLabel(host) ?? "provider"} account…`,
+    };
+  }
+  if (identity.kind === "service-unavailable") {
+    return {
+      kind: "unavailable",
+      detail: "Identity registration is temporarily unavailable.",
+    };
+  }
+  if (identity.kind === "authentication-required") {
+    return {
+      kind: "provider-required",
+      detail: `Reopen 0x1 from ${providerLabel(host) ?? "the provider"}.`,
+    };
+  }
+
+  const error = providerRegistrationError(registration);
+  return {
+    kind: "form",
+    mode: "provider-register",
+    status,
+    busy: pending,
+    ...(error === undefined ? {} : { error }),
+  };
+}
+
+export function createIdentityFoundationViewModel(
+  host: HostSnapshot,
+  readiness: RuntimeReadiness | undefined,
+  identity: IdentityViewState,
+): IdentityFoundationViewModel {
+  return {
+    hostLabel: hostLabel(host),
+    identity,
+    safeArea: host.safeArea,
+    showProviderRow: host.kind === "browser",
+    runtime: createRuntimeViewState(readiness),
+  };
+}
+
+function nativeSubmissionError(
+  registration: NativeRegistrationResult | undefined,
+  authentication: NativeAuthenticationResult | undefined,
+): { error?: string } {
+  if (authentication?.kind === "rejected") {
+    return { error: nativeAuthenticationError(authentication) };
+  }
+  if (authentication?.kind === "service-unavailable") {
+    return { error: "Authentication is temporarily unavailable." };
+  }
+  if (registration?.kind === "service-unavailable") {
+    return { error: "Registration is temporarily unavailable." };
+  }
+  if (registration?.kind !== "rejected") {
+    return {};
+  }
+  switch (registration.reason) {
+    case "invalid-password-length":
+      return { error: "Use at least 15 characters." };
+    case "compromised-password":
+      return {
+        error: "Choose a password that hasn’t appeared in known leaks.",
+      };
+    case "unavailable":
+      return { error: "That pub_dress was just registered. Resolve it again." };
+    case "already-committed":
+      return {
+        error:
+          "Registration already committed and its recovery key can’t be shown again.",
+      };
+    case "rate-limited":
+      return { error: "Too many attempts. Wait before trying again." };
+  }
+}
+
+function nativeAuthenticationError(
+  authentication: Extract<NativeAuthenticationResult, { kind: "rejected" }>,
+): string {
+  switch (authentication.reason) {
+    case "invalid-credentials":
+      return "The pub_dress or password is invalid.";
+    case "invalid-challenge":
+      return "This registration acknowledgement expired. Start again.";
+    case "rate-limited":
+      return "Too many attempts. Wait before trying again.";
+  }
+}
+
+function providerRegistrationError(
+  registration: ProviderRegistrationResult | undefined,
+): string | undefined {
+  if (registration?.kind === "service-unavailable") {
+    return "Identity registration is temporarily unavailable.";
+  }
+  if (registration?.kind !== "rejected") {
+    return undefined;
+  }
+  switch (registration.reason) {
+    case "authentication-required":
+      return "Reauthenticate with the provider and try again.";
+    case "invalid-length":
+      return "Use 2–32 characters after 0x.";
+    case "invalid-character":
+      return "That slug contains a character 0x1 does not accept.";
+    case "unavailable":
+      return "That pub_dress cannot be registered. Choose another one.";
+  }
+}
+
+function createRuntimeViewState(
+  readiness: RuntimeReadiness | undefined,
+): RuntimeViewState {
+  if (readiness === undefined) {
+    return {
+      tone: "loading",
+      label: "Loading shared Core",
+      detail: "Checking the versioned WebAssembly boundary.",
+    };
+  }
+  if (readiness.kind === "ready") {
+    return {
+      tone: "ready",
+      label: "Shared Core ready",
+      detail: `Contract ${readiness.contractVersion} is available to the Web client.`,
+    };
+  }
+  return {
+    tone: "blocked",
+    label: "Shared Core required",
+    detail: blockedDetail(readiness.reason),
+  };
+}
 
 function blockedDetail(
   reason: Extract<RuntimeReadiness, { kind: "blocked" }>["reason"],
@@ -124,11 +370,9 @@ function blockedDetail(
 }
 
 function hostLabel(snapshot: HostSnapshot): string {
-  if (!snapshot.available) {
-    return `${snapshot.kind} unavailable`;
-  }
-
-  return `${snapshot.kind} host`;
+  return snapshot.available
+    ? `${snapshot.kind} host`
+    : `${snapshot.kind} unavailable`;
 }
 
 function providerLabel(host: HostSnapshot): "Telegram" | "Discord" | undefined {
@@ -140,138 +384,4 @@ function providerLabel(host: HostSnapshot): "Telegram" | "Discord" | undefined {
     case "browser":
       return undefined;
   }
-}
-
-function providerRequiredDetail(host: HostSnapshot): string {
-  const provider = providerLabel(host);
-  return provider === undefined
-    ? "Registration is currently available through a supported 0x1 messenger host."
-    : `Open 0x1 from ${provider} to authenticate and continue.`;
-}
-
-export function createIdentityFoundationViewModel(
-  host: HostSnapshot,
-  readiness: RuntimeReadiness | undefined,
-  identity: IdentityLookupResult | undefined = undefined,
-  registration: IdentityRegistrationResult | undefined = undefined,
-  registrationPending = false,
-): IdentityFoundationViewModel {
-  const registrationView = createRegistrationViewState(
-    host,
-    identity,
-    registration,
-    registrationPending,
-  );
-
-  if (readiness === undefined) {
-    return {
-      hostLabel: hostLabel(host),
-      registration: registrationView,
-      safeArea: host.safeArea,
-      runtime: {
-        tone: "loading",
-        label: "Loading shared Core",
-        detail: "Checking the versioned WebAssembly boundary.",
-      },
-    };
-  }
-
-  if (readiness.kind === "ready") {
-    return {
-      hostLabel: hostLabel(host),
-      registration: registrationView,
-      safeArea: host.safeArea,
-      runtime: {
-        tone: "ready",
-        label: "Shared Core ready",
-        detail: `Contract ${readiness.contractVersion} is available to the Web client.`,
-      },
-    };
-  }
-
-  return {
-    hostLabel: hostLabel(host),
-    registration: registrationView,
-    safeArea: host.safeArea,
-    runtime: {
-      tone: "blocked",
-      label: "Shared Core required",
-      detail: blockedDetail(readiness.reason),
-    },
-  };
-}
-
-function createRegistrationViewState(
-  host: HostSnapshot,
-  identity: IdentityLookupResult | undefined,
-  registration: IdentityRegistrationResult | undefined,
-  pending: boolean,
-): RegistrationViewState {
-  if (!hasAuthenticatedProvider(host)) {
-    return {
-      kind: "provider-required",
-      detail: providerRequiredDetail(host),
-    };
-  }
-
-  if (registration?.kind === "registered") {
-    return { kind: "registered", pubDress: registration.identity.pubDress };
-  }
-
-  if (identity?.kind === "registered") {
-    return { kind: "registered", pubDress: identity.identity.pubDress };
-  }
-
-  if (identity === undefined) {
-    const provider = providerLabel(host) ?? "provider";
-    return {
-      kind: "loading",
-      detail: `Checking whether this ${provider} account already has a pub_dress.`,
-    };
-  }
-
-  if (identity.kind === "service-unavailable") {
-    return {
-      kind: "unavailable",
-      detail: "Identity registration is temporarily unavailable.",
-    };
-  }
-
-  if (identity.kind === "authentication-required") {
-    return {
-      kind: "provider-required",
-      detail: providerRequiredDetail(host),
-    };
-  }
-
-  let error: string | undefined;
-  if (registration?.kind === "service-unavailable") {
-    error = "Identity registration is temporarily unavailable.";
-  } else if (registration?.kind === "rejected") {
-    switch (registration.reason) {
-      case "authentication-required": {
-        const provider = providerLabel(host);
-        error =
-          provider === undefined
-            ? "Reauthenticate with the provider and try again."
-            : `Reauthenticate with ${provider} and try again.`;
-        break;
-      }
-      case "invalid-length":
-        error = "Use 2–32 characters after 0x.";
-        break;
-      case "invalid-character":
-        error = "That slug contains a character 0x1 does not accept.";
-        break;
-      case "unavailable":
-        error = "That pub_dress cannot be registered. Choose another one.";
-        break;
-    }
-  }
-
-  return {
-    kind: "form",
-    busy: pending,
-    ...(error === undefined ? {} : { error }),
-  };
 }

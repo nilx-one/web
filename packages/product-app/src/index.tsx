@@ -2,12 +2,19 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
-  CheckPubDressAvailability,
-  ReadIdentity,
+  AcknowledgeRecoveryKey,
+  AuthenticateNativeIdentity,
+  ForgetRememberedBond,
+  LogoutNativeIdentity,
+  ReadNativeIdentityContext,
+  ReadProviderIdentity,
   ReadRuntimeReadiness,
-  RegisterIdentity,
+  RegisterNativeIdentity,
+  RegisterProviderIdentity,
+  ResolvePubDress,
+  formatPubDress,
   type CoreRuntimePort,
-  type IdentityRegistrationPort,
+  type IdentityAccessPort,
   type PubDressSelection,
 } from "@nilx-one/application";
 import {
@@ -20,6 +27,7 @@ import {
   QueryClientProvider,
   useMutation,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import {
   Outlet,
@@ -28,19 +36,21 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
 import {
   createIdentityFoundationViewModel,
-  createPubDressAvailabilityViewState,
+  createNativeIdentityViewState,
+  createProviderIdentityViewState,
+  createPubDressStatusViewState,
 } from "./features/identity/identity-foundation-view-model";
 import "./product.css";
 
 export interface ProductAppDependencies {
   core: CoreRuntimePort;
   host: HostPort;
-  identity: IdentityRegistrationPort;
+  identity: IdentityAccessPort;
 }
 
 export interface ProductAppProps extends ProductAppDependencies {
@@ -53,21 +63,24 @@ interface ProductRouterContext {
 
 function useHostSnapshot(host: HostPort): HostSnapshot {
   const [snapshot, setSnapshot] = useState(() => host.getSnapshot());
-
   useEffect(() => host.subscribe(setSnapshot), [host]);
-
   return snapshot;
 }
 
 function useDebouncedSelection(selection: PubDressSelection) {
   const [debounced, setDebounced] = useState(selection);
-
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebounced(selection), 320);
     return () => window.clearTimeout(timeout);
   }, [selection]);
-
   return debounced;
+}
+
+function newIdempotencyKey(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `0x1-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function RootRoute() {
@@ -86,82 +99,227 @@ const foundationRoute = createRoute({
 
 function FoundationRoute() {
   const { dependencies } = foundationRoute.useRouteContext();
+  const queryClient = useQueryClient();
   const host = useHostSnapshot(dependencies.host);
+  const nativeHost = host.kind === "browser";
   const [selection, setSelection] = useState<PubDressSelection>({
     discriminator: "0",
     slug: "",
   });
+  const [password, setPassword] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
   const debouncedSelection = useDebouncedSelection(selection);
+
   const readinessQuery = useQuery({
     queryKey: ["core-runtime-readiness"],
     queryFn: () => new ReadRuntimeReadiness(dependencies.core).execute(),
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
-  const identityQuery = useQuery({
-    queryKey: ["identity", host.kind],
-    queryFn: () => new ReadIdentity(dependencies.identity).execute(),
-    enabled: hasAuthenticatedProvider(host),
+  const nativeContextQuery = useQuery({
+    queryKey: ["native-identity-context"],
+    queryFn: () =>
+      new ReadNativeIdentityContext(dependencies.identity).execute(),
+    enabled: nativeHost,
+    retry: false,
+    staleTime: 0,
+  });
+  const providerIdentityQuery = useQuery({
+    queryKey: ["provider-identity", host.kind],
+    queryFn: () => new ReadProviderIdentity(dependencies.identity).execute(),
+    enabled: !nativeHost && hasAuthenticatedProvider(host),
     retry: false,
   });
-  const availabilityEnabled =
-    hasAuthenticatedProvider(host) &&
-    identityQuery.data?.kind === "not-registered" &&
+
+  const selectionIsDebounced =
+    selection.discriminator === debouncedSelection.discriminator &&
+    selection.slug === debouncedSelection.slug;
+  const nativeCanResolve = nativeContextQuery.data?.kind === "anonymous";
+  const providerCanResolve =
+    providerIdentityQuery.data?.kind === "not-registered";
+  const resolutionEnabled =
+    (nativeHost ? nativeCanResolve : providerCanResolve) &&
     debouncedSelection.slug.length >= 2 &&
     debouncedSelection.slug.length <= 32;
-  const availabilityQuery = useQuery({
+  const resolutionQuery = useQuery({
     queryKey: [
-      "pub-dress-availability",
-      host.kind,
+      "pub-dress-resolution",
       debouncedSelection.discriminator,
       debouncedSelection.slug,
     ],
     queryFn: () =>
-      new CheckPubDressAvailability(dependencies.identity).execute(
-        debouncedSelection,
-      ),
-    enabled: availabilityEnabled,
+      new ResolvePubDress(dependencies.identity).execute(debouncedSelection),
+    enabled: resolutionEnabled,
     retry: false,
     staleTime: 0,
   });
-  const registrationMutation = useMutation({
-    mutationFn: (selection: PubDressSelection) =>
-      new RegisterIdentity(dependencies.identity).execute(selection),
+  const status = createPubDressStatusViewState(
+    selection,
+    selection.slug.length >= 2 &&
+      (!selectionIsDebounced || resolutionQuery.isFetching),
+    selectionIsDebounced ? resolutionQuery.data : undefined,
+  );
+
+  const nativeRegistration = useMutation({
+    mutationFn: (input: { pubDress: string; password: string }) =>
+      new RegisterNativeIdentity(dependencies.identity).execute(
+        input.pubDress,
+        input.password,
+        idempotencyKey,
+      ),
     onSuccess: (result) => {
       if (result.kind === "rejected" && result.reason === "unavailable") {
-        void availabilityQuery.refetch();
+        void resolutionQuery.refetch();
       }
     },
   });
+  const nativeAuthentication = useMutation({
+    mutationFn: (input: { pubDress: string; password: string }) =>
+      new AuthenticateNativeIdentity(dependencies.identity).execute(
+        input.pubDress,
+        input.password,
+      ),
+  });
+  const recoveryAcknowledgement = useMutation({
+    mutationFn: (challenge: string) =>
+      new AcknowledgeRecoveryKey(dependencies.identity).execute(challenge),
+    onSuccess: (result) => {
+      if (result.kind === "authenticated") {
+        void queryClient.invalidateQueries({
+          queryKey: ["native-identity-context"],
+        });
+      }
+    },
+  });
+  const providerRegistration = useMutation({
+    mutationFn: (selection: PubDressSelection) =>
+      new RegisterProviderIdentity(dependencies.identity).execute(selection),
+    onSuccess: (result) => {
+      if (result.kind === "rejected" && result.reason === "unavailable") {
+        void resolutionQuery.refetch();
+      }
+    },
+  });
+  const forgetRemembered = useMutation({
+    mutationFn: () => new ForgetRememberedBond(dependencies.identity).execute(),
+    onSuccess: (result) => {
+      if (result.kind !== "completed") {
+        return;
+      }
+      queryClient.setQueryData(["native-identity-context"], {
+        kind: "anonymous",
+      });
+      nativeRegistration.reset();
+      nativeAuthentication.reset();
+      recoveryAcknowledgement.reset();
+      setSelection({ discriminator: "0", slug: "" });
+      setPassword("");
+      setIdempotencyKey(newIdempotencyKey());
+    },
+  });
+  const logout = useMutation({
+    mutationFn: () => new LogoutNativeIdentity(dependencies.identity).execute(),
+    onSuccess: async (result) => {
+      if (result.kind !== "completed") {
+        return;
+      }
+      nativeRegistration.reset();
+      nativeAuthentication.reset();
+      recoveryAcknowledgement.reset();
+      await queryClient.invalidateQueries({
+        queryKey: ["native-identity-context"],
+      });
+    },
+  });
+
+  const nativePending =
+    nativeRegistration.isPending ||
+    nativeAuthentication.isPending ||
+    recoveryAcknowledgement.isPending ||
+    forgetRemembered.isPending ||
+    logout.isPending;
+  const latestAuthentication =
+    recoveryAcknowledgement.data ?? nativeAuthentication.data;
+  const identityState = nativeHost
+    ? createNativeIdentityViewState(
+        nativeContextQuery.data,
+        status,
+        nativeRegistration.data,
+        latestAuthentication,
+        nativePending,
+      )
+    : createProviderIdentityViewState(
+        host,
+        providerIdentityQuery.data,
+        providerRegistration.data,
+        status,
+        providerRegistration.isPending,
+      );
   const viewModel = createIdentityFoundationViewModel(
     host,
     readinessQuery.data,
-    identityQuery.data,
-    registrationMutation.data,
-    registrationMutation.isPending,
+    identityState,
   );
-  const selectionIsDebounced =
-    selection.discriminator === debouncedSelection.discriminator &&
-    selection.slug === debouncedSelection.slug;
-  const availability = createPubDressAvailabilityViewState(
-    selection,
-    selection.slug.length >= 2 &&
-      (!selectionIsDebounced || availabilityQuery.isFetching),
-    selectionIsDebounced ? availabilityQuery.data : undefined,
-  );
+
+  const resolvedPubDress = useMemo(() => {
+    if (identityState.kind === "form" && identityState.mode === "remembered") {
+      return identityState.rememberedPubDress ?? formatPubDress(selection);
+    }
+    return formatPubDress(selection);
+  }, [identityState, selection]);
 
   useEffect(() => {
     document.documentElement.dataset.hostTheme = host.theme;
     document.documentElement.dataset.host = host.kind;
   }, [host.kind, host.theme]);
 
+  function changeSelection(next: PubDressSelection): void {
+    setSelection(next);
+    setPassword("");
+    setIdempotencyKey(newIdempotencyKey());
+    nativeRegistration.reset();
+    nativeAuthentication.reset();
+  }
+
+  function submitIdentity(): void {
+    if (identityState.kind !== "form" || identityState.busy) {
+      return;
+    }
+    switch (identityState.mode) {
+      case "sign-in":
+      case "remembered":
+        nativeAuthentication.reset();
+        recoveryAcknowledgement.reset();
+        nativeAuthentication.mutate({
+          pubDress: resolvedPubDress,
+          password,
+        });
+        break;
+      case "register":
+        nativeRegistration.mutate({ pubDress: resolvedPubDress, password });
+        break;
+      case "provider-register":
+        providerRegistration.mutate(selection);
+        break;
+      case "initial":
+      case "resolving":
+        break;
+    }
+  }
+
   return (
     <IdentityFoundationView
-      availability={availability}
+      password={password}
       selection={selection}
       viewModel={viewModel}
-      onSelectionChange={setSelection}
-      onRegister={(selection) => registrationMutation.mutate(selection)}
+      onAcknowledgeRecovery={(challenge) =>
+        recoveryAcknowledgement.mutate(challenge)
+      }
+      onForgetRemembered={() => forgetRemembered.mutate()}
+      onLogout={() => logout.mutate()}
+      onPasswordChange={setPassword}
+      onSelectionChange={changeSelection}
+      onSubmit={submitIdentity}
     />
   );
 }
@@ -188,9 +346,7 @@ export function ProductApp({
     createRouter({
       routeTree,
       basepath: routerBasepath,
-      context: {
-        dependencies: { core, host, identity },
-      },
+      context: { dependencies: { core, host, identity } },
     }),
   );
 

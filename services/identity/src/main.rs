@@ -3,7 +3,9 @@
 
 use std::{env, net::SocketAddr, sync::Arc};
 
-use identity_bot::{DiscordOAuthClient, IdentityRepository, TelegramInitDataVerifier, api};
+use identity_bot::{
+    DiscordOAuthClient, IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier, api,
+};
 use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo},
@@ -34,6 +36,11 @@ async fn main() {
     let init_data_max_age_seconds = env::var("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS")
         .map_or(Ok(300_u64), |value| value.parse::<u64>())
         .expect("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS must be an unsigned integer");
+    let native_auth = NativeAuthConfig::new(
+        env::var("NATIVE_AUTH_SECRET").expect("NATIVE_AUTH_SECRET must be configured"),
+        env::var("PASSWORD_PEPPER").expect("PASSWORD_PEPPER must be configured"),
+    )
+    .expect("native authentication secrets must satisfy the minimum length");
     let discord_oauth = discord_oauth_from_environment();
     let repository = IdentityRepository::connect(&database_url)
         .await
@@ -43,6 +50,7 @@ async fn main() {
         repository.clone(),
         TelegramInitDataVerifier::new(bot_token, init_data_max_age_seconds),
         discord_oauth,
+        native_auth,
     );
     let listener = tokio::net::TcpListener::bind(http_bind)
         .await

@@ -52,7 +52,9 @@ probe() {
         "$public_origin$path" || true
     )"
 
-    if [ "$status" = "$expected_status" ] && grep -Fq "$expected_body" "$body_file"; then
+    if [ "$status" = "$expected_status" ] && {
+      [ -z "$expected_body" ] || grep -Fq "$expected_body" "$body_file"
+    }; then
       echo "public boundary healthy: $label ($status)"
       return 0
     fi
@@ -67,5 +69,7 @@ probe() {
   return 1
 }
 
-probe telegram-mini-app /telegram/ 200 '<div id="root"></div>'
+probe canonical-web / 200 '<div id="root"></div>'
+probe telegram-unpublished /telegram/ 404 ''
+probe discord-unpublished /discord/ 404 ''
 probe identity-auth-boundary /api/v1/identity 401 '"code":"provider_authentication_required"'
