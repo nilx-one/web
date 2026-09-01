@@ -9,7 +9,11 @@ import {
   type IdentityRegistrationPort,
   type PubDressSelection,
 } from "@nilx-one/application";
-import type { HostPort, HostSnapshot } from "@nilx-one/host-contract";
+import {
+  hasAuthenticatedProvider,
+  type HostPort,
+  type HostSnapshot,
+} from "@nilx-one/host-contract";
 import {
   QueryClient,
   QueryClientProvider,
@@ -74,15 +78,10 @@ function FoundationRoute() {
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
-  const hasTelegramAuthentication =
-    host.kind === "telegram" &&
-    host.available &&
-    host.authentication.kind === "telegram-init-data" &&
-    host.authentication.initData.length > 0;
   const identityQuery = useQuery({
-    queryKey: ["identity"],
+    queryKey: ["identity", host.kind],
     queryFn: () => new ReadIdentity(dependencies.identity).execute(),
-    enabled: hasTelegramAuthentication,
+    enabled: hasAuthenticatedProvider(host),
     retry: false,
   });
   const registrationMutation = useMutation({
