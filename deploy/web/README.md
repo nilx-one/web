@@ -50,11 +50,11 @@ discord
 identity
 ```
 
-For a client target, the orchestrator reads `requiresIdentityContract` from the deployment manifest. The identity dependency workflow inspects the active production identity contract and performs no environment transition when the active contract is already sufficient. When a newer contract is required, it resolves the newest successful packaged identity image in the selected release ancestry, verifies the image contract label, activates identity first, and only then allows client deployment.
+For an individual client target, the orchestrator reads `requiresIdentityContract` from the deployment manifest. The identity dependency workflow inspects the active production identity contract and performs no environment transition when the active contract is already sufficient. When a newer contract is required, it resolves the newest successful packaged identity image in the selected release ancestry, verifies the image contract label, activates identity first, and only then allows client deployment.
 
 `identity` is an explicit maintenance target that forces activation of the newest verified identity package available in the selected master ancestry.
 
-`all` resolves the full client target list from the manifest, ensures the maximum required identity contract once, then activates each client host in deterministic order.
+`all` is the complete release path: it forces activation of the newest verified Identity package in the selected ancestry, then rolls out every client target from the manifest. Client activations are serialized and each target retains its own rollback boundary; `all` is coordinated but not a cross-target transactional rollback.
 
 Each client target has its own release directory under `${CLIENT_DEPLOYMENT_ROOT:-.local/share/nilx-one}/<target>` and its own Compose project. Updating one target does not move the others to a new image SHA.
 
