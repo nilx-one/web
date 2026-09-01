@@ -44,8 +44,6 @@ jobs:
     name: Ensure identity contract ${{ inputs.required_contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment:
-      name: production
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       REQUIRED_IDENTITY_CONTRACT: ${{ inputs.required_contract }}
