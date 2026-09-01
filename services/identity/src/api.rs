@@ -150,7 +150,7 @@ async fn resolve_pub_dress(
 ) -> Response {
     let now = match now(&state) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(_) => return unavailable(),
     };
     let source = request_source(&headers);
     if let Err(retry_after) = state
@@ -187,7 +187,7 @@ async fn resolve_pub_dress(
 async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) -> Response {
     let now = match now(&state) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(_) => return unavailable(),
     };
 
     if let Some(token) = read_cookie(&headers, SESSION_COOKIE) {
@@ -207,17 +207,16 @@ async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) 
         }
     }
 
-    if let Some(hint) = read_cookie(&headers, REMEMBERED_BOND_COOKIE) {
-        if let Some(pub_dress) = state
+    if let Some(hint) = read_cookie(&headers, REMEMBERED_BOND_COOKIE)
+        && let Some(pub_dress) = state
             .remembered_bond_signer
             .verify(&hint, now)
             .and_then(|candidate| PubDress::from_str(&candidate).ok())
-        {
-            return no_store_json(
-                StatusCode::OK,
-                NativeContextResponse::remembered(pub_dress.to_string()),
-            );
-        }
+    {
+        return no_store_json(
+            StatusCode::OK,
+            NativeContextResponse::remembered(pub_dress.to_string()),
+        );
     }
 
     let mut response = no_store_json(StatusCode::OK, NativeContextResponse::anonymous());
@@ -240,7 +239,7 @@ async fn register_native_identity(
     }
     let now = match now(&state) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(_) => return unavailable(),
     };
     let source = request_source(&headers);
     if let Err(retry_after) = state
@@ -359,7 +358,7 @@ async fn acknowledge_native_recovery_key(
     }
     let now = match now(&state) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(_) => return unavailable(),
     };
     let challenge_hash = state
         .secret_digester
@@ -392,7 +391,7 @@ async fn authenticate_native_identity(
     }
     let now = match now(&state) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(_) => return unavailable(),
     };
     let source_key = format!("auth:source:{}", request_source(&headers));
     let pub_dress_key = format!("auth:pub-dress:{}", request.pub_dress);
@@ -468,7 +467,7 @@ async fn logout_native_identity(State(state): State<ApiState>, headers: HeaderMa
     }
     let now = match now(&state) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(_) => return unavailable(),
     };
     if let Some(token) = read_cookie(&headers, SESSION_COOKIE) {
         let token_hash = state.secret_digester.digest("native-session", &token);
@@ -505,7 +504,7 @@ async fn recover_native_identity(
     }
     let now = match now(&state) {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(_) => return unavailable(),
     };
     let source = request_source(&headers);
     if let Err(retry_after) =
@@ -692,8 +691,10 @@ async fn rehash_credential_after_success(
     }
 }
 
-fn now(state: &ApiState) -> Result<u64, Response> {
-    state.clock.now_unix_seconds().map_err(|_| unavailable())
+fn now(state: &ApiState) -> Result<u64, ClockError> {
+    state.clock.now_unix_seconds().inspect_err(|error| {
+        tracing::error!(?error, "system clock is before unix epoch");
+    })
 }
 
 fn request_source(headers: &HeaderMap) -> String {

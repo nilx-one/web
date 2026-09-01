@@ -602,14 +602,13 @@ mod tests {
             .await
             .expect("native registration");
         assert!(matches!(outcome, NativeRegistrationOutcome::Registered(_)));
-        assert_eq!(
-            repository
+        assert!(
+            !repository
                 .find_native_credential(&address)
                 .await
                 .expect("credential lookup")
                 .expect("credential")
-                .active,
-            false
+                .active
         );
         assert_eq!(
             repository
