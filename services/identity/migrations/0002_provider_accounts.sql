@@ -2,6 +2,7 @@
 -- SPDX-License-Identifier: MPL-2.0
 
 PRAGMA foreign_keys = OFF;
+BEGIN IMMEDIATE;
 
 CREATE TABLE identities_v2 (
     pub_dress TEXT PRIMARY KEY COLLATE BINARY NOT NULL,
@@ -31,4 +32,5 @@ FROM identities;
 DROP TABLE identities;
 ALTER TABLE identities_v2 RENAME TO identities;
 
+COMMIT;
 PRAGMA foreign_keys = ON;
