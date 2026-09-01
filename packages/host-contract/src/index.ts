@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-export type HostKind = "browser" | "telegram" | "discord";
+export type HostKind = "browser" | "telegram" | "discord" | "native";
 export type HostTheme = "dark" | "light";
 
 export interface SafeAreaInsets {
@@ -22,6 +22,11 @@ export type HostAuthenticationEnvelope =
     }
   | {
       kind: "discord-oauth";
+      authenticated: boolean;
+      verification: "required";
+    }
+  | {
+      kind: "native-app-session";
       authenticated: boolean;
       verification: "required";
     };
@@ -45,7 +50,7 @@ export interface HostPort {
   impact(style: "light" | "medium" | "heavy"): void;
 }
 
-export function hasAuthenticatedProvider(snapshot: HostSnapshot): boolean {
+export function hasAuthenticatedHostSession(snapshot: HostSnapshot): boolean {
   if (!snapshot.available) {
     return false;
   }
@@ -56,9 +61,16 @@ export function hasAuthenticatedProvider(snapshot: HostSnapshot): boolean {
     case "telegram-init-data":
       return snapshot.authentication.initData.length > 0;
     case "discord-oauth":
+    case "native-app-session":
       return snapshot.authentication.authenticated;
   }
 }
+
+/**
+ * Compatibility name for consumers that still model Telegram and Discord as
+ * providers. New host compositions should use hasAuthenticatedHostSession.
+ */
+export const hasAuthenticatedProvider = hasAuthenticatedHostSession;
 
 export const ZERO_SAFE_AREA: SafeAreaInsets = Object.freeze({
   top: 0,

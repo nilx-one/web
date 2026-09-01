@@ -18,7 +18,7 @@ import {
   type PubDressSelection,
 } from "@nilx-one/application";
 import {
-  hasAuthenticatedProvider,
+  hasAuthenticatedHostSession,
   type HostPort,
   type HostSnapshot,
 } from "@nilx-one/host-contract";
@@ -101,7 +101,7 @@ function FoundationRoute() {
   const { dependencies } = foundationRoute.useRouteContext();
   const queryClient = useQueryClient();
   const host = useHostSnapshot(dependencies.host);
-  const nativeHost = host.kind === "browser";
+  const browserHost = host.kind === "browser";
   const [selection, setSelection] = useState<PubDressSelection>({
     discriminator: "0",
     slug: "",
@@ -120,14 +120,14 @@ function FoundationRoute() {
     queryKey: ["native-identity-context"],
     queryFn: () =>
       new ReadNativeIdentityContext(dependencies.identity).execute(),
-    enabled: nativeHost,
+    enabled: browserHost,
     retry: false,
     staleTime: 0,
   });
   const providerIdentityQuery = useQuery({
     queryKey: ["provider-identity", host.kind],
     queryFn: () => new ReadProviderIdentity(dependencies.identity).execute(),
-    enabled: !nativeHost && hasAuthenticatedProvider(host),
+    enabled: !browserHost && hasAuthenticatedHostSession(host),
     retry: false,
   });
 
@@ -138,9 +138,9 @@ function FoundationRoute() {
   const providerCanResolve =
     providerIdentityQuery.data?.kind === "not-registered";
   const resolutionEnabled =
-    (nativeHost ? nativeCanResolve : providerCanResolve) &&
-    debouncedSelection.slug.length >= 2 &&
-    debouncedSelection.slug.length <= 32;
+    (browserHost ? nativeCanResolve : providerCanResolve) &&
+    [...debouncedSelection.slug].length >= 2 &&
+    [...debouncedSelection.slug].length <= 32;
   const resolutionQuery = useQuery({
     queryKey: [
       "pub-dress-resolution",
@@ -155,7 +155,7 @@ function FoundationRoute() {
   });
   const status = createPubDressStatusViewState(
     selection,
-    selection.slug.length >= 2 &&
+    [...selection.slug].length >= 2 &&
       (!selectionIsDebounced || resolutionQuery.isFetching),
     selectionIsDebounced ? resolutionQuery.data : undefined,
   );
@@ -240,7 +240,7 @@ function FoundationRoute() {
     logout.isPending;
   const latestAuthentication =
     recoveryAcknowledgement.data ?? nativeAuthentication.data;
-  const identityState = nativeHost
+  const identityState = browserHost
     ? createNativeIdentityViewState(
         nativeContextQuery.data,
         status,

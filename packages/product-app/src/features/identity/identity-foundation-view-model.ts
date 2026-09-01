@@ -12,7 +12,7 @@ import type {
   RuntimeReadiness,
 } from "@nilx-one/application";
 import {
-  hasAuthenticatedProvider,
+  hasAuthenticatedHostSession,
   type HostSnapshot,
 } from "@nilx-one/host-contract";
 
@@ -43,11 +43,14 @@ export type IdentityFormMode =
 
 export type PubDressStatusViewState =
   | { kind: "idle"; detail: "Case-sensitive · 2–32 characters" }
-  | { kind: "checking"; detail: "Checking exact address…" }
-  | { kind: "available"; detail: "Available — create this Bond" }
-  | { kind: "registered"; detail: "Registered — enter your password" }
+  | { kind: "checking"; detail: "Checking availability…" }
+  | { kind: "available"; detail: "Available — create this identity" }
+  | { kind: "registered"; detail: "Identity found — enter your password" }
   | { kind: "invalid"; detail: string }
-  | { kind: "service-unavailable"; detail: "Couldn’t resolve this address" };
+  | {
+      kind: "service-unavailable";
+      detail: "Unavailable — couldn’t verify this identity";
+    };
 
 export type IdentityViewState =
   | { kind: "loading"; detail: string }
@@ -84,36 +87,40 @@ export function createPubDressStatusViewState(
   pending: boolean,
   result: PubDressResolutionResult | undefined,
 ): PubDressStatusViewState {
-  if (selection.slug.length === 0) {
+  const slugLength = [...selection.slug].length;
+  if (slugLength === 0) {
     return { kind: "idle", detail: "Case-sensitive · 2–32 characters" };
   }
-  if (selection.slug.length < 2 || selection.slug.length > 32) {
-    return { kind: "invalid", detail: "Use 2–32 characters" };
+  if (slugLength < 2 || slugLength > 32) {
+    return { kind: "invalid", detail: "Incorrect — use 2–32 characters" };
   }
   if (pending) {
-    return { kind: "checking", detail: "Checking exact address…" };
+    return { kind: "checking", detail: "Checking availability…" };
   }
   switch (result?.kind) {
     case "available":
-      return { kind: "available", detail: "Available — create this Bond" };
+      return {
+        kind: "available",
+        detail: "Available — create this identity",
+      };
     case "registered":
       return {
         kind: "registered",
-        detail: "Registered — enter your password",
+        detail: "Identity found — enter your password",
       };
     case "rejected":
       return {
         kind: "invalid",
         detail:
           result.reason === "invalid-length"
-            ? "Use 2–32 characters"
-            : "This character isn’t supported",
+            ? "Incorrect — use 2–32 characters"
+            : "Incorrect — this character isn’t supported",
       };
     case "rate-limited":
     case "service-unavailable":
       return {
         kind: "service-unavailable",
-        detail: "Couldn’t resolve this address",
+        detail: "Unavailable — couldn’t verify this identity",
       };
     case undefined:
       return { kind: "idle", detail: "Case-sensitive · 2–32 characters" };
@@ -168,7 +175,7 @@ export function createNativeIdentityViewState(
       mode: "remembered",
       status: {
         kind: "registered",
-        detail: "Registered — enter your password",
+        detail: "Identity found — enter your password",
       },
       busy: pending,
       rememberedPubDress: context.pubDress,
@@ -200,7 +207,7 @@ export function createProviderIdentityViewState(
   status: PubDressStatusViewState,
   pending: boolean,
 ): IdentityViewState {
-  if (!hasAuthenticatedProvider(host)) {
+  if (!hasAuthenticatedHostSession(host)) {
     return {
       kind: "provider-required",
       detail: `Open 0x1 from ${providerLabel(host) ?? "this provider"} to continue.`,
@@ -258,7 +265,7 @@ export function createIdentityFoundationViewModel(
     hostLabel: hostLabel(host),
     identity,
     safeArea: host.safeArea,
-    showProviderRow: host.kind === "browser",
+    showProviderRow: host.kind === "browser" && identity.kind === "form",
     runtime: createRuntimeViewState(readiness),
   };
 }
@@ -375,12 +382,16 @@ function hostLabel(snapshot: HostSnapshot): string {
     : `${snapshot.kind} unavailable`;
 }
 
-function providerLabel(host: HostSnapshot): "Telegram" | "Discord" | undefined {
+function providerLabel(
+  host: HostSnapshot,
+): "Telegram" | "Discord" | "0x1 for iOS" | undefined {
   switch (host.kind) {
     case "telegram":
       return "Telegram";
     case "discord":
       return "Discord";
+    case "native":
+      return "0x1 for iOS";
     case "browser":
       return undefined;
   }

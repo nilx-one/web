@@ -11,7 +11,6 @@ import {
   type FormEvent,
 } from "react";
 
-import identityArtwork from "../../assets/0x1-avatar.webp";
 import type {
   IdentityFormMode,
   IdentityFoundationViewModel,
@@ -298,7 +297,13 @@ function IdentityForm({
       : `Create 0x${displayedSelection.discriminator}${displayedSelection.slug}`;
 
   return (
-    <form className="identity-form" onSubmit={submit} noValidate>
+    <form
+      className="identity-form"
+      data-status={identity.status.kind}
+      data-submission-error={identity.error !== undefined}
+      onSubmit={submit}
+      noValidate
+    >
       <label className="surface-kicker" htmlFor="pub-dress-slug">
         pub_dress
       </label>
@@ -348,6 +353,11 @@ function IdentityForm({
           placeholder="slug"
           readOnly={remembered}
           disabled={identity.busy}
+          aria-busy={identity.status.kind === "checking"}
+          aria-invalid={
+            identity.status.kind === "invalid" ||
+            identity.status.kind === "service-unavailable"
+          }
           aria-describedby="pub-dress-status"
           onPaste={pastePubDress}
           onChange={(event) =>
@@ -392,6 +402,7 @@ function IdentityForm({
             }
             placeholder="password"
             aria-label="Password"
+            aria-invalid={identity.error !== undefined}
             disabled={identity.busy}
             onChange={(event) => onPasswordChange(event.currentTarget.value)}
           />
@@ -469,6 +480,14 @@ export function IdentityFoundationView({
           </div>
 
           <div className="identity-surface">
+            {viewModel.showProviderRow ? (
+              <>
+                <ProviderRow />
+                <div className="identity-divider" aria-hidden="true">
+                  <span>or</span>
+                </div>
+              </>
+            ) : null}
             {viewModel.identity.kind === "form" ? (
               <IdentityForm
                 identity={viewModel.identity}
@@ -500,18 +519,10 @@ export function IdentityFoundationView({
                 <p>{viewModel.identity.detail}</p>
               </section>
             )}
-
-            {viewModel.showProviderRow ? <ProviderRow /> : null}
           </div>
 
           <RuntimeStatus {...viewModel.runtime} />
         </section>
-
-        <figure className="identity-art" aria-hidden="true">
-          <span className="art-halo" />
-          <img src={identityArtwork} alt="" />
-          <figcaption>0 · x · 1</figcaption>
-        </figure>
       </div>
     </AppChrome>
   );
