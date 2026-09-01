@@ -8,28 +8,58 @@ on:
     paths:
       - "services/identity/**"
       - ".github/workflows/identity-service.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "services/identity/**"
+      - ".github/workflows/identity-service.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-rustfmt:
-    name: Apply rustfmt to PR branch
-    if: github.event.pull_request.head.repo.full_name == github.repository
+  full-ci:
+    name: Format, lint, and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
-      - name: Format identity service
+          components: clippy,rustfmt
+      - name: Resolve locked dependencies
+        run: cargo generate-lockfile --manifest-path services/identity/Cargo.toml
+      - name: Check formatting
+        run: cargo fmt --manifest-path services/identity/Cargo.toml --all -- --check
+      - name: Run Clippy
+        run: cargo clippy --manifest-path services/identity/Cargo.toml --locked --all-targets --all-features -- -D warnings
+      - name: Run tests
+        run: cargo test --manifest-path services/identity/Cargo.toml --locked --all-features
+
+  deploy-validation:
+    name: Validate identity runtime package
+    needs: full-ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment scripts
+        run: |
+          sh -n \
+            services/identity/deploy/deploy.sh \
+            services/identity/deploy/check-public.sh \
+            services/identity/deploy/check-public.test.sh
+          sh services/identity/deploy/check-public.test.sh
+      - name: Build runtime image
+        run: docker build --file services/identity/Dockerfile --tag 0x1-identity:ci .
+      - name: Validate runtime Compose contract
         run: |
           set -Eeuo pipefail
-          cargo fmt --manifest-path services/identity/Cargo.toml --all
-          git add services/identity/src
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "style(identity): apply rustfmt"
-          git push origin "HEAD:${GITHUB_HEAD_REF}"
+          env_file="$(mktemp)"
+          trap 'rm -f "$env_file"' EXIT
+          printf '%s\n' 'TELOXIDE_TOKEN=ci-only-placeholder' >"$env_file"
+          printf '%s\n' 'NATIVE_AUTH_SECRET=ci-native-auth-secret-that-is-at-least-32-bytes' >>"$env_file"
+          printf '%s\n' 'PASSWORD_PEPPER=ci-password-pepper-that-is-at-least-32-bytes' >>"$env_file"
+          IDENTITY_IMAGE=0x1-identity:ci \
+          IDENTITY_ENV_FILE="$env_file" \
+          RELEASE_SHA="${GITHUB_SHA}" \
+            docker compose --file services/identity/deploy/compose.yaml config --quiet
