@@ -13,11 +13,11 @@ function response(status: number, body: unknown): Response {
 }
 
 describe("identity HTTP adapter", () => {
-  it("never calls the identity API without Telegram initData", async () => {
+  it("never calls the identity API without provider authorization", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const adapter = createIdentityHttpAdapter({
       fetch,
-      getTelegramInitData: () => undefined,
+      getAuthorization: () => undefined,
     });
 
     await expect(adapter.read()).resolves.toEqual({
@@ -32,7 +32,7 @@ describe("identity HTTP adapter", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("passes the exact slug and raw initData to the server boundary", async () => {
+  it("passes the exact slug and provider authorization to the server boundary", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(201, {
         outcome: "registered",
@@ -41,7 +41,7 @@ describe("identity HTTP adapter", () => {
     );
     const adapter = createIdentityHttpAdapter({
       fetch,
-      getTelegramInitData: () => "auth_date=1&hash=abc",
+      getAuthorization: () => "discord access-token",
     });
 
     await expect(
@@ -56,7 +56,7 @@ describe("identity HTTP adapter", () => {
       expect.objectContaining({
         body: JSON.stringify({ discriminator: "0", slug: "sky" }),
         headers: expect.objectContaining({
-          authorization: "tma auth_date=1&hash=abc",
+          authorization: "discord access-token",
         }),
       }),
     );
@@ -70,7 +70,7 @@ describe("identity HTTP adapter", () => {
     );
     const adapter = createIdentityHttpAdapter({
       fetch,
-      getTelegramInitData: () => "signed",
+      getAuthorization: () => "tma signed",
     });
 
     await expect(
