@@ -5,11 +5,6 @@ name: Deploy Identity Service
 
 on:
   workflow_dispatch:
-    inputs:
-      release_sha:
-        description: Optional packaged master SHA; latest successful package is used when empty
-        required: false
-        type: string
 
 permissions:
   actions: read
@@ -31,7 +26,6 @@ jobs:
     environment:
       name: production
     env:
-      REQUESTED_RELEASE_SHA: ${{ inputs.release_sha }}
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -68,13 +62,10 @@ jobs:
               -f per_page=100
           )"
 
-          release_sha="$REQUESTED_RELEASE_SHA"
-          if [ -z "$release_sha" ]; then
-            release_sha="$(
-              jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .head_sha // empty' \
-                <<<"$package_runs"
-            )"
-          fi
+          release_sha="$(
+            jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .head_sha // empty' \
+              <<<"$package_runs"
+          )"
 
           [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
           package_run_id="$(
