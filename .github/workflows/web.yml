@@ -54,7 +54,7 @@ jobs:
       - name: Verify Core runtime in every host artifact
         run: |
           expected=d55bd185a9ec108cf83c0394c350c094cae9c09e381a1c22b11e388b1cd93320
-          for host in site telegram-mini-app; do
+          for host in site telegram-mini-app discord-activity; do
             runtime="apps/$host/dist/core/0.1.0/index_bg.wasm"
             test -f "$runtime"
             printf '%s  %s\n' "$expected" "$runtime" | sha256sum --check --status
@@ -70,6 +70,12 @@ jobs:
         with:
           name: telegram-mini-app-dist-${{ github.sha }}
           path: apps/telegram-mini-app/dist
+          retention-days: 1
+      - name: Preserve Discord host build for deploy validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: discord-activity-dist-${{ github.sha }}
+          path: apps/discord-activity/dist
           retention-days: 1
 
   deploy-validation:
@@ -89,6 +95,11 @@ jobs:
         with:
           name: telegram-mini-app-dist-${{ github.sha }}
           path: apps/telegram-mini-app/dist
+      - name: Reuse verified Discord host build
+        uses: actions/download-artifact@v4
+        with:
+          name: discord-activity-dist-${{ github.sha }}
+          path: apps/discord-activity/dist
       - name: Validate runtime image
         run: docker build --file deploy/web/Dockerfile --tag 0x1-web:ci .
       - name: Verify runtime host routes
@@ -110,9 +121,13 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:18080/ >/dev/null
           curl --fail --silent --show-error http://127.0.0.1:18080/telegram/ \
             | grep --fixed-strings --quiet 'telegram-web-app.js?63'
+          curl --fail --silent --show-error http://127.0.0.1:18080/discord/ \
+            | grep --fixed-strings --quiet 'The Discord-hosted 0x1 Web client.'
 
           telegram_redirect="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/telegram)"
+          discord_redirect="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/discord)"
           test "$telegram_redirect" = 308
+          test "$discord_redirect" = 308
       - name: Validate runtime Compose contract
         env:
           WEB_IMAGE: ghcr.io/nilx-one/0x1-web:sha-${{ github.sha }}
