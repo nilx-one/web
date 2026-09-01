@@ -42,13 +42,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate deployment scripts
+      - name: Validate deployment scripts and contract version
         run: |
           sh -n \
             services/identity/deploy/deploy.sh \
             services/identity/deploy/check-public.sh \
             services/identity/deploy/check-public.test.sh
           sh services/identity/deploy/check-public.test.sh
+          identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
+          [[ "$identity_contract" =~ ^[0-9]+$ ]]
       - name: Build runtime image
         run: docker build --file services/identity/Dockerfile --tag 0x1-identity:ci .
       - name: Validate runtime Compose contract
@@ -59,7 +61,9 @@ jobs:
           printf '%s\n' 'TELOXIDE_TOKEN=ci-only-placeholder' >"$env_file"
           printf '%s\n' 'NATIVE_AUTH_SECRET=ci-native-auth-secret-that-is-at-least-32-bytes' >>"$env_file"
           printf '%s\n' 'PASSWORD_PEPPER=ci-password-pepper-that-is-at-least-32-bytes' >>"$env_file"
+          identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
           IDENTITY_IMAGE=0x1-identity:ci \
           IDENTITY_ENV_FILE="$env_file" \
+          IDENTITY_CONTRACT="$identity_contract" \
           RELEASE_SHA="${GITHUB_SHA}" \
             docker compose --file services/identity/deploy/compose.yaml config --quiet

@@ -1,59 +1,91 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: Deploy Web
+name: Deploy Client Host
 
 on:
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      target:
+        description: Client host target declared in deploy/web/targets.json
+        required: true
+        type: string
+      release_sha:
+        description: Master commit whose immutable client package is activated
+        required: true
+        type: string
+    secrets:
+      SSH_HOST:
+        required: true
+      SSH_USER:
+        required: true
+      SSH_PRIVATE_KEY:
+        required: true
 
 permissions:
   actions: read
   contents: read
   packages: read
 
-concurrency:
-  group: deploy-0x1-web-production
-  cancel-in-progress: false
-
-env:
-  IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web
-
 jobs:
   deploy:
-    name: Deploy production
+    name: Activate ${{ inputs.target }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
       name: production
     env:
-      RELEASE_SHA: ${{ github.sha }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      CLIENT_NAME: ${{ inputs.target }}
+      IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web
       SSH_HOST: ${{ secrets.SSH_HOST }}
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
-      WEB_DEPLOYMENT_PATH: ${{ vars.WEB_DEPLOYMENT_PATH || '.local/share/nilx-one/web' }}
+      CLIENT_DEPLOYMENT_ROOT: ${{ vars.CLIENT_DEPLOYMENT_ROOT || '.local/share/nilx-one' }}
 
     steps:
-      - name: Validate deployment source
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+
+      - name: Resolve client target contract
         run: |
           set -Eeuo pipefail
           test "$GITHUB_REF" = refs/heads/master
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CLIENT_NAME" =~ ^[a-z0-9-]+$ ]]
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
+          (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
           test -n "$SSH_HOST"
           test -n "$SSH_USER"
           test -n "$SSH_PRIVATE_KEY"
-          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
-          (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
-          test -n "$WEB_DEPLOYMENT_PATH"
-          echo "WEB_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
+          test -n "$CLIENT_DEPLOYMENT_ROOT"
 
-      - name: Wait for immutable package
+          jq -e --arg target "$CLIENT_NAME" '.targets[$target]' deploy/web/targets.json >/dev/null
+          client_root="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].root' deploy/web/targets.json)"
+          edge_alias="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].edgeAlias' deploy/web/targets.json)"
+          compat_edge_alias="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].compatEdgeAlias' deploy/web/targets.json)"
+          compose_project="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].composeProject' deploy/web/targets.json)"
+
+          [[ "$client_root" == /srv/* ]]
+          [[ "$edge_alias" =~ ^[a-z0-9-]+$ ]]
+          [[ "$compat_edge_alias" =~ ^[a-z0-9-]+$ ]]
+          [[ "$compose_project" =~ ^[a-z0-9-]+$ ]]
+
+          echo "CLIENT_ROOT=$client_root" >>"$GITHUB_ENV"
+          echo "EDGE_ALIAS=$edge_alias" >>"$GITHUB_ENV"
+          echo "COMPAT_EDGE_ALIAS=$compat_edge_alias" >>"$GITHUB_ENV"
+          echo "COMPOSE_PROJECT_NAME=$compose_project" >>"$GITHUB_ENV"
+          echo "CLIENT_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
+
+      - name: Wait for immutable client package
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
-
           package_ready=false
+
           for attempt in $(seq 1 40); do
             response="$(gh api --method GET \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/package-web.yml/runs" \
@@ -69,35 +101,30 @@ jobs:
             ' <<<"$response")"
 
             if [ -z "$package_state" ]; then
-              echo "Package Web run for $RELEASE_SHA is not registered yet (attempt $attempt/40)."
+              echo "Package Clients run for $RELEASE_SHA is not registered yet (attempt $attempt/40)."
               sleep 10
               continue
             fi
 
             IFS=$'\t' read -r package_status package_conclusion package_url <<<"$package_state"
-
             if [ "$package_status" = completed ]; then
               if [ "$package_conclusion" != success ]; then
-                echo "Package Web did not succeed for $RELEASE_SHA: $package_conclusion" >&2
+                echo "Package Clients did not succeed for $RELEASE_SHA: $package_conclusion" >&2
                 echo "$package_url" >&2
                 exit 1
               fi
-
-              echo "Package Web succeeded for $RELEASE_SHA."
               package_ready=true
               break
             fi
 
-            echo "Package Web is $package_status for $RELEASE_SHA (attempt $attempt/40)."
+            echo "Package Clients is $package_status for $RELEASE_SHA (attempt $attempt/40)."
             sleep 10
           done
 
           if [ "$package_ready" != true ]; then
-            echo "Timed out waiting for Package Web to finish for $RELEASE_SHA." >&2
+            echo "Timed out waiting for Package Clients to finish for $RELEASE_SHA." >&2
             exit 1
           fi
-
-      - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
       - name: Authenticate to GHCR
@@ -106,12 +133,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify and fetch immutable package
+      - name: Verify and fetch immutable client package
         run: |
           set -Eeuo pipefail
-          docker buildx imagetools inspect "$WEB_IMAGE" >/dev/null
-          docker pull "$WEB_IMAGE"
-          docker save "$WEB_IMAGE" | gzip > "/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz"
+          docker buildx imagetools inspect "$CLIENT_IMAGE" >/dev/null
+          docker pull "$CLIENT_IMAGE"
+          docker save "$CLIENT_IMAGE" | gzip > "/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz"
 
       - name: Configure SSH
         run: |
@@ -123,77 +150,110 @@ jobs:
           test -s "$HOME/.ssh/known_hosts"
           ssh -o BatchMode=yes -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" true
 
-      - name: Upload immutable image and deployment descriptors
+      - name: Upload immutable package and deployment descriptors
         run: |
           set -Eeuo pipefail
-          archive="/tmp/0x1-web-${RELEASE_SHA}.tar.gz"
+          archive="/tmp/0x1-client-deploy-${RELEASE_SHA}.tar.gz"
           tar -czf "$archive" -C deploy/web compose.yaml deploy.sh
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
-            "$archive" "/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz" \
+            "$archive" "/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz" \
             "$SSH_USER@$SSH_HOST:/tmp/"
 
-      - name: Activate immutable image
+      - name: Activate client target
         run: |
           set -Eeuo pipefail
           ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
             "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$WEB_DEPLOYMENT_PATH' RELEASE_SHA='$RELEASE_SHA' WEB_IMAGE='$WEB_IMAGE' bash -s" <<'REMOTE'
+            "DEPLOY_ROOT='$CLIENT_DEPLOYMENT_ROOT' CLIENT_NAME='$CLIENT_NAME' CLIENT_ROOT='$CLIENT_ROOT' EDGE_ALIAS='$EDGE_ALIAS' COMPAT_EDGE_ALIAS='$COMPAT_EDGE_ALIAS' COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' RELEASE_SHA='$RELEASE_SHA' CLIENT_IMAGE='$CLIENT_IMAGE' bash -s" <<'REMOTE'
           set -Eeuo pipefail
 
-          deploy_path="$DEPLOY_PATH"
-          case "$deploy_path" in
+          deploy_root="$DEPLOY_ROOT"
+          case "$deploy_root" in
             /*) ;;
-            *) deploy_path="$HOME/$deploy_path" ;;
+            *) deploy_root="$HOME/$deploy_root" ;;
           esac
 
-          archive="/tmp/0x1-web-${RELEASE_SHA}.tar.gz"
-          image_archive="/tmp/0x1-web-image-${RELEASE_SHA}.tar.gz"
+          deploy_path="$deploy_root/$CLIENT_NAME"
           releases_dir="$deploy_path/releases"
           release_dir="$releases_dir/$RELEASE_SHA"
           current_link="$deploy_path/current"
           previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+          archive="/tmp/0x1-client-deploy-${RELEASE_SHA}.tar.gz"
+          image_archive="/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz"
 
-          if ! mkdir -p "$releases_dir"; then
-            echo "Deployment path is not writable by $(id -un): $deploy_path" >&2
-            exit 1
-          fi
-          if [ ! -w "$releases_dir" ]; then
-            echo "Deployment releases directory is not writable by $(id -un): $releases_dir" >&2
-            exit 1
-          fi
-
+          mkdir -p "$releases_dir"
+          test -w "$releases_dir"
           test -s "$image_archive"
           gunzip -c "$image_archive" | docker load >/dev/null
           rm -f "$image_archive"
-          docker image inspect "$WEB_IMAGE" >/dev/null
+          docker image inspect "$CLIENT_IMAGE" >/dev/null
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
           tar -xzf "$archive" -C "$release_dir"
           rm -f "$archive"
-          printf '%s\n' "$WEB_IMAGE" >"$release_dir/.image"
 
-          if ! (
+          printf '%s\n' "$CLIENT_IMAGE" >"$release_dir/.image"
+          printf '%s\n' "$CLIENT_NAME" >"$release_dir/.client-name"
+          printf '%s\n' "$CLIENT_ROOT" >"$release_dir/.client-root"
+          printf '%s\n' "$EDGE_ALIAS" >"$release_dir/.edge-alias"
+          printf '%s\n' "$COMPAT_EDGE_ALIAS" >"$release_dir/.compat-edge-alias"
+          printf '%s\n' "$COMPOSE_PROJECT_NAME" >"$release_dir/.compose-project"
+
+          activate_current() {
             cd "$release_dir"
-            WEB_IMAGE="$WEB_IMAGE" \
-              RELEASE_SHA="$RELEASE_SHA" \
+            CLIENT_NAME="$CLIENT_NAME" \
+            CLIENT_IMAGE="$CLIENT_IMAGE" \
+            CLIENT_ROOT="$CLIENT_ROOT" \
+            EDGE_ALIAS="$EDGE_ALIAS" \
+            COMPAT_EDGE_ALIAS="$COMPAT_EDGE_ALIAS" \
+            COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" \
+            RELEASE_SHA="$RELEASE_SHA" \
               sh ./deploy.sh
-          ); then
-            if [[ -n "$previous_release" && -f "$previous_release/.image" ]]; then
-              previous_image="$(<"$previous_release/.image")"
-              previous_sha="$(basename "$previous_release")"
+          }
+
+          rollback() {
+            [ -n "$previous_release" ] || return 0
+            [ -f "$previous_release/.image" ] || return 0
+
+            previous_image="$(cat "$previous_release/.image")"
+            previous_sha="$(basename "$previous_release")"
+            docker image inspect "$previous_image" >/dev/null 2>&1 || return 0
+
+            if [ -f "$previous_release/.client-name" ]; then
+              previous_name="$(cat "$previous_release/.client-name")"
+              previous_root="$(cat "$previous_release/.client-root")"
+              previous_alias="$(cat "$previous_release/.edge-alias")"
+              previous_compat_alias="$(cat "$previous_release/.compat-edge-alias")"
+              previous_project="$(cat "$previous_release/.compose-project")"
               (
                 cd "$previous_release"
-                WEB_IMAGE="$previous_image" \
-                  RELEASE_SHA="$previous_sha" \
+                CLIENT_NAME="$previous_name" \
+                CLIENT_IMAGE="$previous_image" \
+                CLIENT_ROOT="$previous_root" \
+                EDGE_ALIAS="$previous_alias" \
+                COMPAT_EDGE_ALIAS="$previous_compat_alias" \
+                COMPOSE_PROJECT_NAME="$previous_project" \
+                RELEASE_SHA="$previous_sha" \
                   sh ./deploy.sh
               ) || true
+              return 0
             fi
+
+            if [ "$CLIENT_NAME" = web ]; then
+              (
+                cd "$previous_release"
+                WEB_IMAGE="$previous_image" RELEASE_SHA="$previous_sha" sh ./deploy.sh
+              ) || true
+            fi
+          }
+
+          if ! activate_current; then
+            rollback
             exit 1
           fi
 
           ln -sfn "$release_dir" "$current_link"
-
           find "$releases_dir" \
             -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
             | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf
@@ -203,10 +263,11 @@ jobs:
         if: always()
         run: |
           {
-            echo "### 0x1 Web deployment"
+            echo "### 0x1 client deployment"
             echo
-            echo "- commit: \`$RELEASE_SHA\`"
-            echo "- image: \`$WEB_IMAGE\`"
-            echo "- target: \`production\`"
+            echo "- target: \`$CLIENT_NAME\`"
+            echo "- release: \`$RELEASE_SHA\`"
+            echo "- image: \`$CLIENT_IMAGE\`"
+            echo "- edge alias: \`$EDGE_ALIAS\`"
             echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"

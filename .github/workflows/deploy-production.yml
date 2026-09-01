@@ -1,0 +1,131 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Production target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - web
+          - telegram
+          - discord
+          - identity
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-0x1-production
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Resolve deployment plan
+    runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.plan.outputs.release_sha }}
+      clients: ${{ steps.plan.outputs.clients }}
+      has_clients: ${{ steps.plan.outputs.has_clients }}
+      required_identity_contract: ${{ steps.plan.outputs.required_identity_contract }}
+      force_identity: ${{ steps.plan.outputs.force_identity }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        name: Build deterministic target plan
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = refs/heads/master
+          release_sha="$GITHUB_SHA"
+          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+
+          identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
+          [[ "$identity_contract" =~ ^[0-9]+$ ]]
+
+          case "$TARGET" in
+            identity)
+              clients='[]'
+              force_identity=true
+              required_identity_contract="$identity_contract"
+              ;;
+            all)
+              clients="$(jq -c '.deployOrder' deploy/web/targets.json)"
+              force_identity=true
+              required_identity_contract="$(jq -r '[.deployOrder[] as $name | .targets[$name].requiresIdentityContract] | max' deploy/web/targets.json)"
+              ;;
+            web|telegram|discord)
+              jq -e --arg target "$TARGET" '.targets[$target]' deploy/web/targets.json >/dev/null
+              clients="$(jq -cn --arg target "$TARGET" '[$target]')"
+              force_identity=false
+              required_identity_contract="$(jq -r --arg target "$TARGET" '.targets[$target].requiresIdentityContract' deploy/web/targets.json)"
+              ;;
+            *)
+              echo "Unsupported deployment target: $TARGET" >&2
+              exit 1
+              ;;
+          esac
+
+          [[ "$required_identity_contract" =~ ^[0-9]+$ ]]
+          if (( required_identity_contract > identity_contract )); then
+            echo "Client requires identity contract $required_identity_contract but repository provides $identity_contract" >&2
+            exit 1
+          fi
+
+          if [ "$clients" = '[]' ]; then
+            has_clients=false
+          else
+            has_clients=true
+          fi
+
+          echo "release_sha=$release_sha" >>"$GITHUB_OUTPUT"
+          echo "clients=$clients" >>"$GITHUB_OUTPUT"
+          echo "has_clients=$has_clients" >>"$GITHUB_OUTPUT"
+          echo "required_identity_contract=$required_identity_contract" >>"$GITHUB_OUTPUT"
+          echo "force_identity=$force_identity" >>"$GITHUB_OUTPUT"
+
+          {
+            echo "### Deployment plan"
+            echo
+            echo "- release: \`$release_sha\`"
+            echo "- requested target: \`$TARGET\`"
+            echo "- client targets: \`$clients\`"
+            echo "- required identity contract: \`$required_identity_contract\`"
+            echo "- force identity: \`$force_identity\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  ensure-identity:
+    name: Ensure Identity dependency
+    needs: plan
+    uses: ./.github/workflows/deploy-identity-service.yml
+    with:
+      release_sha: ${{ needs.plan.outputs.release_sha }}
+      required_contract: ${{ fromJSON(needs.plan.outputs.required_identity_contract) }}
+      force: ${{ fromJSON(needs.plan.outputs.force_identity) }}
+    secrets: inherit
+
+  deploy-clients:
+    name: Deploy ${{ matrix.target }}
+    needs:
+      - plan
+      - ensure-identity
+    if: needs.plan.outputs.has_clients == 'true'
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.clients) }}
+    uses: ./.github/workflows/deploy-web.yml
+    with:
+      target: ${{ matrix.target }}
+      release_sha: ${{ needs.plan.outputs.release_sha }}
+    secrets: inherit

@@ -1,94 +1,74 @@
-# 0x1 Web runtime
+# 0x1 Web client runtime
 
-The production workload in this repository is the canonical 0x1 Web client. Telegram and future messenger integrations are host adapters around the shared product, not separate product runtimes.
+The production artifact in this repository is one immutable Web client image containing every built host composition. Browser, Telegram, Discord, and future messenger hosts are deployment targets of the same 0x1 Web client, not separate products.
 
-## Public contract
+## Host contract
 
-The canonical edge identity is:
+`deploy/web/targets.json` is the deployment manifest. Each target declares the built application, runtime root, edge alias, Compose project identity, public path, and minimum identity-service contract it requires.
 
-```text
-ox1-web:8080
-```
-
-The phase-0 public routes are:
+Current targets are:
 
 ```text
-https://nilx.one/*                         -> canonical Browser host
-https://nilx.one/api/v1/identity/*         -> bounded identity API proxy
-https://nilx.one/api/v1/auth/native/*      -> bounded native-auth API proxy
+web       -> /          -> ox1-web
+telegram  -> /telegram/ -> ox1-telegram
+discord   -> /discord/  -> ox1-discord
 ```
 
-Only the canonical Browser host is packaged into the production image. The
-shared Telegram and Discord compositions continue to compile in CI, but
-`/telegram`, `/telegram/*`, `/discord`, and `/discord/*` return `404` until an
-explicit later activation.
+The Browser host temporarily keeps the compatibility alias `ox1-telegram-mini-app` so the existing shared edge remains valid while public routing migrates to explicit host aliases.
 
-`0x0sky/infra` owns the public HTTPS route. This repository owns the application build, immutable image, container identity and release lifecycle.
+All host containers proxy only the bounded identity API surface to `ox1-identity:8080`. Protocol truth stays outside rendering and host layers.
 
-The Web runtime proxies only the bounded Stage 1 identity surface to the registrar's private edge identity:
+## Immutable package
+
+`package-web.yml` builds all host compositions with the pinned verified Core Wasm runtime and publishes one image:
 
 ```text
-/api/v1/identity* -> ox1-identity:8080
+ghcr.io/nilx-one/0x1-web:sha-<commit>
 ```
 
-When later activated, the Telegram composition loads Telegram's official Mini
-App bridge before application code and forwards raw `Telegram.WebApp.initData`
-only to the identity adapter. The registrar verifies that authentication
-server-side; client code never treats `initData` as verified identity.
+The image contains:
 
-During migration from the earlier Telegram-named runtime, the container also exposes the compatibility alias `ox1-telegram-mini-app`. This keeps the currently deployed edge contract functional until infra is updated to `ox1-web`.
+```text
+/srv/site
+/srv/telegram-mini-app
+/srv/discord-activity
+```
 
-## Image lifecycle
-
-`package-web.yml` runs after changes reach `master`. It performs artifact packaging only:
-
-1. builds every host with the pinned verified Core Wasm runtime;
-2. builds one static production image containing only the canonical Web artifact;
-3. publishes `ghcr.io/nilx-one/0x1-web:sha-<commit>`.
-
-It does not repeat the repository's full CI suite and does not deploy.
-
-PR CI builds every composition root. Deploy validation reuses the verified Web
-artifact, validates the runtime image and Compose contract, smoke-tests `/`,
-and asserts that Telegram and Discord routes stay unpublished.
+Each deployed host selects exactly one runtime root through `CLIENT_ROOT`. This allows `web`, `telegram`, and `discord` to advance independently while reusing the same verified artifact for a given commit.
 
 ## Deployment
 
-Production deployment is manual-only through `deploy-web.yml` and must run from `master`.
+`Deploy Production` is the only manual production entry point.
 
-Required GitHub Environment `production` settings:
-
-- secret `SSH_HOST`;
-- secret `SSH_USER`;
-- secret `SSH_PRIVATE_KEY`;
-- optional variable `SSH_PORT` (default `22022`);
-- optional variable `WEB_DEPLOYMENT_PATH` (default `.local/share/nilx-one/web`).
-
-The legacy `SSH_DEPLOYMENT_PATH` variable is intentionally ignored by the Web workflow. This prevents a stale Telegram-specific `/opt/...` value from overriding the canonical Web release path.
-
-Relative deployment paths are resolved against the SSH user's home directory. The default therefore requires no root-owned `/opt` directory and no `sudo` permission for the `deploy` user.
-
-A manual deploy may be started immediately after a merge. The workflow waits for the `Package Web` run for the exact same commit to finish. It proceeds only when that producer run succeeds, fails immediately when packaging fails, and then verifies the exact immutable GHCR image before any SSH activation.
-
-The deploy workflow copies only deployment descriptors to the server, loads the immutable image, activates it, verifies container health/revision/edge aliases and rolls back to the previous release if activation fails.
-
-The deployment does not build source, change DNS, mutate shared Caddy configuration or configure BotFather.
-
-## Runtime
+Available targets:
 
 ```text
-container:  nilx-one-web-web-1
-network:    nilx-edge
-alias:      ox1-web
-compat:     ox1-telegram-mini-app
-port:       8080
-health:     /health
-browser:    /
-telegram:   unpublished (404)
-discord:    unpublished (404)
+all
+web
+telegram
+discord
+identity
 ```
 
-Protocol truth stays outside the Web rendering and host layers.
+For an individual client target, the orchestrator reads `requiresIdentityContract` from the deployment manifest. The identity dependency workflow inspects the active production identity contract and performs no environment transition when the active contract is already sufficient. When a newer contract is required, it resolves the newest successful packaged identity image in the selected release ancestry, verifies the image contract label, activates identity first, and only then allows client deployment.
+
+`identity` is an explicit maintenance target that forces activation of the newest verified identity package available in the selected master ancestry.
+
+`all` is the complete release path: it forces activation of the newest verified Identity package in the selected ancestry, then rolls out every client target from the manifest. Client activations are serialized and each target retains its own rollback boundary; `all` is coordinated but not a cross-target transactional rollback.
+
+Each client target has its own release directory under `${CLIENT_DEPLOYMENT_ROOT:-.local/share/nilx-one}/<target>` and its own Compose project. Updating one target does not move the others to a new image SHA.
+
+Deployment consumes immutable GHCR packages. It does not rebuild source or rerun full CI.
+
+## Identity contract
+
+`services/identity/deploy/contract.version` is the monotonic runtime contract version provided by the identity service. Client targets declare only the minimum contract they require.
+
+A client-only change must not increase that requirement unless a verified identity package providing the new contract exists in the release ancestry.
+
+## Edge ownership
+
+`0x0sky/infra` owns public HTTPS route selection. This repository owns host builds, immutable packages, container aliases, dependency requirements, and release activation.
 
 ---
 
