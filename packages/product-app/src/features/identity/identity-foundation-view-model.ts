@@ -79,9 +79,7 @@ function hostLabel(snapshot: HostSnapshot): string {
   return `${snapshot.kind} host`;
 }
 
-function providerLabel(
-  host: HostSnapshot,
-): "Telegram" | "Discord" | undefined {
+function providerLabel(host: HostSnapshot): "Telegram" | "Discord" | undefined {
   switch (host.kind) {
     case "telegram":
       return "Telegram";
