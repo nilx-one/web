@@ -6,7 +6,10 @@ import type {
   IdentityRegistrationResult,
   RuntimeReadiness,
 } from "@nilx-one/application";
-import type { HostSnapshot } from "@nilx-one/host-contract";
+import {
+  hasAuthenticatedProvider,
+  type HostSnapshot,
+} from "@nilx-one/host-contract";
 
 export type RuntimeViewState =
   | {
@@ -34,12 +37,12 @@ export interface IdentityFoundationViewModel {
 
 export type RegistrationViewState =
   | {
-      kind: "telegram-required";
-      detail: "Registration is currently available through the 0x1 Telegram Mini App.";
+      kind: "provider-required";
+      detail: string;
     }
   | {
       kind: "loading";
-      detail: "Checking whether this Telegram account already has a pub_dress.";
+      detail: string;
     }
   | {
       kind: "form";
@@ -74,6 +77,24 @@ function hostLabel(snapshot: HostSnapshot): string {
   }
 
   return `${snapshot.kind} host`;
+}
+
+function providerLabel(host: HostSnapshot): "Telegram" | "Discord" | undefined {
+  switch (host.kind) {
+    case "telegram":
+      return "Telegram";
+    case "discord":
+      return "Discord";
+    case "browser":
+      return undefined;
+  }
+}
+
+function providerRequiredDetail(host: HostSnapshot): string {
+  const provider = providerLabel(host);
+  return provider === undefined
+    ? "Registration is currently available through a supported 0x1 messenger host."
+    : `Open 0x1 from ${provider} to authenticate and continue.`;
 }
 
 export function createIdentityFoundationViewModel(
@@ -134,16 +155,10 @@ function createRegistrationViewState(
   registration: IdentityRegistrationResult | undefined,
   pending: boolean,
 ): RegistrationViewState {
-  if (
-    host.kind !== "telegram" ||
-    !host.available ||
-    host.authentication.kind !== "telegram-init-data" ||
-    host.authentication.initData.length === 0
-  ) {
+  if (!hasAuthenticatedProvider(host)) {
     return {
-      kind: "telegram-required",
-      detail:
-        "Registration is currently available through the 0x1 Telegram Mini App.",
+      kind: "provider-required",
+      detail: providerRequiredDetail(host),
     };
   }
 
@@ -156,9 +171,10 @@ function createRegistrationViewState(
   }
 
   if (identity === undefined) {
+    const provider = providerLabel(host) ?? "provider";
     return {
       kind: "loading",
-      detail: "Checking whether this Telegram account already has a pub_dress.",
+      detail: `Checking whether this ${provider} account already has a pub_dress.`,
     };
   }
 
@@ -171,9 +187,8 @@ function createRegistrationViewState(
 
   if (identity.kind === "authentication-required") {
     return {
-      kind: "telegram-required",
-      detail:
-        "Registration is currently available through the 0x1 Telegram Mini App.",
+      kind: "provider-required",
+      detail: providerRequiredDetail(host),
     };
   }
 
@@ -182,9 +197,14 @@ function createRegistrationViewState(
     error = "Identity registration is temporarily unavailable.";
   } else if (registration?.kind === "rejected") {
     switch (registration.reason) {
-      case "authentication-required":
-        error = "Reopen 0x1 from Telegram and try again.";
+      case "authentication-required": {
+        const provider = providerLabel(host);
+        error =
+          provider === undefined
+            ? "Reauthenticate with the provider and try again."
+            : `Reauthenticate with ${provider} and try again.`;
         break;
+      }
       case "invalid-length":
         error = "Use 2–32 characters after 0x.";
         break;

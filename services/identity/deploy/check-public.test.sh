@@ -42,7 +42,7 @@ case "$url" in
     printf '%s' 200
     ;;
   https://nilx.one/api/v1/identity)
-    printf '%s\n' '{"error":{"code":"telegram_authentication_required"}}' >"$output_file"
+    printf '%s\n' '{"error":{"code":"provider_authentication_required"}}' >"$output_file"
     printf '%s' "${MOCK_IDENTITY_STATUS:-401}"
     ;;
   *)

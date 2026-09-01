@@ -26,10 +26,11 @@ const core = createCoreWasmClient({
   loadBindings: loadGeneratedCoreWasmBindings,
 });
 const identity = createIdentityHttpAdapter({
-  getTelegramInitData: () => {
+  getAuthorization: () => {
     const authentication = host.getSnapshot().authentication;
-    return authentication.kind === "telegram-init-data"
-      ? authentication.initData
+    return authentication.kind === "telegram-init-data" &&
+      authentication.initData.length > 0
+      ? `tma ${authentication.initData}`
       : undefined;
   },
 });

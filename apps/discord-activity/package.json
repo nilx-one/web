@@ -1,0 +1,19 @@
+{
+  "name": "@nilx-one/discord-activity",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@nilx-one/core-wasm": "workspace:*",
+    "@nilx-one/host-discord": "workspace:*",
+    "@nilx-one/identity-http": "workspace:*",
+    "@nilx-one/product-app": "workspace:*",
+    "@nilx-one/ui": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}

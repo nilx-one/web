@@ -3,7 +3,7 @@
 
 use std::{env, net::SocketAddr, sync::Arc};
 
-use identity_bot::{IdentityRepository, TelegramInitDataVerifier, api};
+use identity_bot::{DiscordOAuthClient, IdentityRepository, TelegramInitDataVerifier, api};
 use teloxide::{
     prelude::*,
     types::{InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo},
@@ -34,6 +34,7 @@ async fn main() {
     let init_data_max_age_seconds = env::var("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS")
         .map_or(Ok(300_u64), |value| value.parse::<u64>())
         .expect("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS must be an unsigned integer");
+    let discord_oauth = discord_oauth_from_environment();
     let repository = IdentityRepository::connect(&database_url)
         .await
         .expect("identity database must initialize");
@@ -41,6 +42,7 @@ async fn main() {
     let api = api::router(
         repository.clone(),
         TelegramInitDataVerifier::new(bot_token, init_data_max_age_seconds),
+        discord_oauth,
     );
     let listener = tokio::net::TcpListener::bind(http_bind)
         .await
@@ -58,6 +60,27 @@ async fn main() {
         result = axum::serve(listener, api) => {
             result.expect("identity HTTP server must remain available");
         }
+    }
+}
+
+fn discord_oauth_from_environment() -> Option<DiscordOAuthClient> {
+    let client_id = env::var("DISCORD_CLIENT_ID")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let client_secret = env::var("DISCORD_CLIENT_SECRET")
+        .ok()
+        .filter(|value| !value.is_empty());
+
+    match (client_id, client_secret) {
+        (Some(client_id), Some(client_secret)) => {
+            info!("Discord Activity authentication enabled");
+            Some(DiscordOAuthClient::new(client_id, client_secret))
+        }
+        (None, None) => {
+            info!("Discord Activity authentication is not configured");
+            None
+        }
+        _ => panic!("DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET must be configured together"),
     }
 }
 
@@ -171,7 +194,7 @@ async fn show_identity(
         Ok(Some(identity)) => {
             let identity_record = serde_json::json!({
                 "pub_dress": identity.pub_dress,
-                "identity_providers": [format!("tg:{}", identity.telegram_user_id)],
+                "identity_providers": [format!("tg:{telegram_user_id}")],
                 "stage": "provider-backed"
             });
             bot.send_message(

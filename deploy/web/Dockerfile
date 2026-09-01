@@ -9,6 +9,7 @@ LABEL org.opencontainers.image.description="Static canonical Web runtime for 0x1
 WORKDIR /srv
 COPY apps/site/dist/ /srv/site/
 COPY apps/telegram-mini-app/dist/ /srv/telegram/
+COPY apps/discord-activity/dist/ /srv/discord/
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 
 EXPOSE 8080

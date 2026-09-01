@@ -22,7 +22,7 @@ const core = createCoreWasmClient({
   loadBindings: loadGeneratedCoreWasmBindings,
 });
 const identity = createIdentityHttpAdapter({
-  getTelegramInitData: () => undefined,
+  getAuthorization: () => undefined,
 });
 
 createRoot(container).render(

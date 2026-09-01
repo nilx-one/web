@@ -34,7 +34,7 @@ cat >"$runtime_build/provenance.json" <<JSON
 }
 JSON
 
-for host in apps/site apps/telegram-mini-app; do
+for host in apps/site apps/telegram-mini-app apps/discord-activity; do
   destination="$host/public/core/$runtime_version"
   rm -rf "$destination"
   mkdir -p "$destination"

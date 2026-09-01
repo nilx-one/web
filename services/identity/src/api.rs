@@ -17,10 +17,12 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    IdentityRecord, IdentityRepository, PubDress, RegistrationOutcome, TelegramInitDataVerifier,
+    DiscordOAuthClient, DiscordOAuthError, IdentityRecord, IdentityRepository, ProviderIdentity,
+    PubDress, RegistrationOutcome, TelegramInitDataVerifier,
 };
 
-const AUTH_SCHEME: &str = "tma ";
+const TELEGRAM_AUTH_SCHEME: &str = "tma ";
+const DISCORD_AUTH_SCHEME: &str = "discord ";
 const MAX_REQUEST_BYTES: usize = 8 * 1024;
 
 pub trait Clock: Send + Sync {
@@ -45,27 +47,41 @@ impl Clock for SystemClock {
 #[derive(Clone)]
 struct ApiState {
     repository: IdentityRepository,
-    verifier: TelegramInitDataVerifier,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
     clock: Arc<dyn Clock>,
 }
 
-pub fn router(repository: IdentityRepository, verifier: TelegramInitDataVerifier) -> Router {
-    router_with_clock(repository, verifier, Arc::new(SystemClock))
+pub fn router(
+    repository: IdentityRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+) -> Router {
+    router_with_clock(
+        repository,
+        telegram_verifier,
+        discord_oauth,
+        Arc::new(SystemClock),
+    )
 }
 
 fn router_with_clock(
     repository: IdentityRepository,
-    verifier: TelegramInitDataVerifier,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
     clock: Arc<dyn Clock>,
 ) -> Router {
     let state = ApiState {
         repository,
-        verifier,
+        telegram_verifier,
+        discord_oauth,
         clock,
     };
 
     Router::new()
         .route("/health", get(health))
+        .route("/api/v1/auth/discord/config", get(discord_config))
+        .route("/api/v1/auth/discord/token", post(exchange_discord_code))
         .route("/api/v1/identity", get(read_identity))
         .route("/api/v1/identity/registration", post(register_identity))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
@@ -76,18 +92,56 @@ async fn health() -> StatusCode {
     StatusCode::OK
 }
 
+async fn discord_config(State(state): State<ApiState>) -> Response {
+    let Some(discord) = state.discord_oauth.as_ref() else {
+        return unavailable();
+    };
+
+    (
+        StatusCode::OK,
+        Json(DiscordConfigResponse {
+            client_id: discord.client_id(),
+        }),
+    )
+        .into_response()
+}
+
+async fn exchange_discord_code(
+    State(state): State<ApiState>,
+    Json(request): Json<DiscordTokenRequest>,
+) -> Response {
+    let Some(discord) = state.discord_oauth.as_ref() else {
+        return unavailable();
+    };
+
+    match discord.exchange_code(&request.code).await {
+        Ok(token) => (StatusCode::OK, Json(token)).into_response(),
+        Err(DiscordOAuthError::Rejected(status)) => {
+            tracing::warn!(
+                discord_status = status,
+                "Discord authorization code rejected"
+            );
+            unauthorized()
+        }
+        Err(error) => {
+            tracing::error!(%error, "Discord authorization code exchange failed");
+            unavailable()
+        }
+    }
+}
+
 async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Response {
-    let telegram_user_id = match authenticate(&state, &headers) {
-        Ok(id) => id,
+    let provider_identity = match authenticate(&state, &headers).await {
+        Ok(identity) => identity,
         Err(error) => return error.into_response(),
     };
 
-    match state.repository.find_by_telegram(telegram_user_id).await {
+    match state.repository.find_by_provider(&provider_identity).await {
         Ok(Some(identity)) => identity_response(StatusCode::OK, identity),
         Ok(None) => api_error(
             StatusCode::NOT_FOUND,
             "identity_not_registered",
-            "No pub_dress is registered for this Telegram account.",
+            "No pub_dress is registered for this provider account.",
         ),
         Err(error) => {
             tracing::error!(%error, "identity API lookup failed");
@@ -101,8 +155,8 @@ async fn register_identity(
     headers: HeaderMap,
     Json(request): Json<RegistrationRequest>,
 ) -> Response {
-    let telegram_user_id = match authenticate(&state, &headers) {
-        Ok(id) => id,
+    let provider_identity = match authenticate(&state, &headers).await {
+        Ok(identity) => identity,
         Err(error) => return error.into_response(),
     };
     let candidate = format!("0x{}{}", request.discriminator, request.slug);
@@ -119,7 +173,7 @@ async fn register_identity(
 
     match state
         .repository
-        .register(&pub_dress, telegram_user_id)
+        .register(&pub_dress, &provider_identity)
         .await
     {
         Ok(RegistrationOutcome::Registered(identity)) => registration_response(
@@ -148,22 +202,54 @@ async fn register_identity(
     }
 }
 
-fn authenticate(state: &ApiState, headers: &HeaderMap) -> Result<i64, AuthenticationFailure> {
-    let init_data = headers
+async fn authenticate(
+    state: &ApiState,
+    headers: &HeaderMap,
+) -> Result<ProviderIdentity, AuthenticationFailure> {
+    let authorization = headers
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix(AUTH_SCHEME))
-        .filter(|value| !value.is_empty())
         .ok_or(AuthenticationFailure::Unauthorized)?;
-    let now = state
-        .clock
-        .now_unix_seconds()
-        .map_err(|_| AuthenticationFailure::Unavailable)?;
-    let user = state.verifier.verify(init_data, now).map_err(|error| {
-        tracing::warn!(%error, "Telegram Mini App authentication rejected");
-        AuthenticationFailure::Unauthorized
-    })?;
-    Ok(user.id)
+
+    if let Some(init_data) = authorization
+        .strip_prefix(TELEGRAM_AUTH_SCHEME)
+        .filter(|value| !value.is_empty())
+    {
+        let now = state
+            .clock
+            .now_unix_seconds()
+            .map_err(|_| AuthenticationFailure::Unavailable)?;
+        let user = state
+            .telegram_verifier
+            .verify(init_data, now)
+            .map_err(|error| {
+                tracing::warn!(%error, "Telegram Mini App authentication rejected");
+                AuthenticationFailure::Unauthorized
+            })?;
+        return Ok(ProviderIdentity::telegram(user.id));
+    }
+
+    if let Some(access_token) = authorization
+        .strip_prefix(DISCORD_AUTH_SCHEME)
+        .filter(|value| !value.is_empty())
+    {
+        let discord = state
+            .discord_oauth
+            .as_ref()
+            .ok_or(AuthenticationFailure::Unavailable)?;
+        let user_id = discord.authenticate(access_token).await.map_err(|error| {
+            tracing::warn!(%error, "Discord Activity authentication rejected");
+            match error {
+                DiscordOAuthError::Rejected(_) | DiscordOAuthError::InvalidResponse => {
+                    AuthenticationFailure::Unauthorized
+                }
+                DiscordOAuthError::Transport(_) => AuthenticationFailure::Unavailable,
+            }
+        })?;
+        return Ok(ProviderIdentity::discord(user_id));
+    }
+
+    Err(AuthenticationFailure::Unauthorized)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -201,8 +287,8 @@ fn registration_response(status: StatusCode, response: RegistrationResponse) -> 
 fn unauthorized() -> Response {
     api_error(
         StatusCode::UNAUTHORIZED,
-        "telegram_authentication_required",
-        "Open 0x1 from Telegram to continue.",
+        "provider_authentication_required",
+        "Open 0x1 from a supported provider to continue.",
     )
 }
 
@@ -222,6 +308,17 @@ fn api_error(status: StatusCode, code: &'static str, message: &'static str) -> R
         }),
     )
         .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiscordTokenRequest {
+    code: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DiscordConfigResponse<'a> {
+    client_id: &'a str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -337,6 +434,7 @@ mod tests {
         router_with_clock(
             repository,
             TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
+            None,
             Arc::new(StaticClock),
         )
     }
@@ -360,7 +458,7 @@ mod tests {
         let body = to_bytes(second.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["identity"]["pub_dress"], "0x0sky");
-        assert!(body.to_string().find("tg_id").is_none());
+        assert!(body.to_string().find("provider_subject").is_none());
     }
 
     #[tokio::test]
@@ -370,14 +468,11 @@ mod tests {
             .header("content-type", "application/json")
             .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
             .expect("request");
-        assert_eq!(
-            app.clone()
-                .oneshot(unsigned)
-                .await
-                .expect("response")
-                .status(),
-            StatusCode::UNAUTHORIZED
-        );
+        let response = app.clone().oneshot(unsigned).await.expect("response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), 4096).await.expect("body");
+        let body: Value = serde_json::from_slice(&body).expect("JSON body");
+        assert_eq!(body["error"]["code"], "provider_authentication_required");
 
         let invalid = Request::post("/api/v1/identity/registration")
             .header(AUTHORIZATION, format!("tma {}", signed_init_data(42)))
@@ -388,5 +483,20 @@ mod tests {
             app.oneshot(invalid).await.expect("response").status(),
             StatusCode::UNPROCESSABLE_ENTITY
         );
+    }
+
+    #[tokio::test]
+    async fn reports_discord_as_unconfigured_without_credentials() {
+        let app = app().await;
+        let response = app
+            .oneshot(
+                Request::get("/api/v1/auth/discord/config")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

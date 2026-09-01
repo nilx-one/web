@@ -8,10 +8,11 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "pnpm --filter @nilx-one/site build && pnpm --filter @nilx-one/telegram-mini-app build",
+    "build": "pnpm --filter @nilx-one/site build && pnpm --filter @nilx-one/telegram-mini-app build && pnpm --filter @nilx-one/discord-activity build",
     "check": "pnpm policy && pnpm format && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "dev:site": "pnpm --filter @nilx-one/site dev",
     "dev:telegram": "pnpm --filter @nilx-one/telegram-mini-app dev",
+    "dev:discord": "pnpm --filter @nilx-one/discord-activity dev",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "lint": "eslint . --max-warnings=0",

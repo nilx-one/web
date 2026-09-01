@@ -11,7 +11,7 @@ import type {
 
 interface IdentityHttpAdapterOptions {
   fetch?: typeof globalThis.fetch;
-  getTelegramInitData(): string | undefined;
+  getAuthorization(): string | undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -101,6 +101,7 @@ class IdentityHttpAdapter implements IdentityRegistrationPort {
 
     const errorCode = parseErrorCode(body);
     switch (errorCode) {
+      case "provider_authentication_required":
       case "telegram_authentication_required":
         return { kind: "rejected", reason: "authentication-required" };
       case "invalid_pub_dress_length":
@@ -117,10 +118,10 @@ class IdentityHttpAdapter implements IdentityRegistrationPort {
   }
 
   private authorization(): string | undefined {
-    const initData = this.options.getTelegramInitData();
-    return initData === undefined || initData.length === 0
+    const authorization = this.options.getAuthorization();
+    return authorization === undefined || authorization.length === 0
       ? undefined
-      : `tma ${initData}`;
+      : authorization;
   }
 }
 
