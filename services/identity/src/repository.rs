@@ -113,12 +113,11 @@ impl IdentityRepository {
             return Ok(RegistrationOutcome::AlreadyRegistered(record));
         }
 
-        let identity_insert = sqlx::query(
-            "INSERT INTO identities (pub_dress) VALUES (?) ON CONFLICT DO NOTHING",
-        )
-        .bind(pub_dress.as_str())
-        .execute(&mut *transaction)
-        .await?;
+        let identity_insert =
+            sqlx::query("INSERT INTO identities (pub_dress) VALUES (?) ON CONFLICT DO NOTHING")
+                .bind(pub_dress.as_str())
+                .execute(&mut *transaction)
+                .await?;
 
         if identity_insert.rows_affected() == 0 {
             transaction.commit().await?;
