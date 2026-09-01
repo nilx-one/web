@@ -11,10 +11,46 @@ use thiserror::Error;
 
 use crate::PubDress;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityProvider {
+    Telegram,
+    Discord,
+}
+
+impl IdentityProvider {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Telegram => "telegram",
+            Self::Discord => "discord",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderIdentity {
+    pub provider: IdentityProvider,
+    pub subject: String,
+}
+
+impl ProviderIdentity {
+    pub fn telegram(user_id: i64) -> Self {
+        Self {
+            provider: IdentityProvider::Telegram,
+            subject: user_id.to_string(),
+        }
+    }
+
+    pub fn discord(user_id: impl Into<String>) -> Self {
+        Self {
+            provider: IdentityProvider::Discord,
+            subject: user_id.into(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentityRecord {
     pub pub_dress: String,
-    pub telegram_user_id: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -46,66 +82,110 @@ impl IdentityRepository {
         sqlx::query(include_str!("../migrations/0001_identities.sql"))
             .execute(&self.pool)
             .await?;
+
+        if self.has_legacy_telegram_column().await? {
+            sqlx::raw_sql(include_str!("../migrations/0002_provider_accounts.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
+
         Ok(())
+    }
+
+    async fn has_legacy_telegram_column(&self) -> Result<bool, RepositoryError> {
+        let columns = sqlx::query("PRAGMA table_info(identities)")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(columns
+            .iter()
+            .any(|column| column.get::<String, _>("name") == "tg_id"))
     }
 
     pub async fn register(
         &self,
         pub_dress: &PubDress,
-        telegram_user_id: i64,
+        provider_identity: &ProviderIdentity,
     ) -> Result<RegistrationOutcome, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let result = sqlx::query(
-            "INSERT INTO identities (pub_dress, tg_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+
+        if let Some(record) = find_by_provider_in(&mut transaction, provider_identity).await? {
+            transaction.commit().await?;
+            return Ok(RegistrationOutcome::AlreadyRegistered(record));
+        }
+
+        let identity_insert = sqlx::query(
+            "INSERT INTO identities (pub_dress) VALUES (?) ON CONFLICT DO NOTHING",
         )
         .bind(pub_dress.as_str())
-        .bind(telegram_user_id)
         .execute(&mut *transaction)
         .await?;
 
-        let outcome = if result.rows_affected() == 1 {
-            RegistrationOutcome::Registered(IdentityRecord {
-                pub_dress: pub_dress.to_string(),
-                telegram_user_id,
-            })
-        } else if let Some(record) = find_by_telegram_in(&mut transaction, telegram_user_id).await?
-        {
-            RegistrationOutcome::AlreadyRegistered(record)
-        } else {
-            RegistrationOutcome::HandleUnavailable
-        };
+        if identity_insert.rows_affected() == 0 {
+            transaction.commit().await?;
+            return Ok(RegistrationOutcome::HandleUnavailable);
+        }
+
+        sqlx::query(
+            "INSERT INTO identity_providers (provider, provider_subject, pub_dress) VALUES (?, ?, ?)",
+        )
+        .bind(provider_identity.provider.as_str())
+        .bind(&provider_identity.subject)
+        .bind(pub_dress.as_str())
+        .execute(&mut *transaction)
+        .await?;
 
         transaction.commit().await?;
-        Ok(outcome)
+        Ok(RegistrationOutcome::Registered(IdentityRecord {
+            pub_dress: pub_dress.to_string(),
+        }))
+    }
+
+    pub async fn find_by_provider(
+        &self,
+        provider_identity: &ProviderIdentity,
+    ) -> Result<Option<IdentityRecord>, RepositoryError> {
+        let row = sqlx::query(
+            "SELECT identities.pub_dress \
+             FROM identity_providers \
+             JOIN identities ON identities.pub_dress = identity_providers.pub_dress \
+             WHERE identity_providers.provider = ? AND identity_providers.provider_subject = ?",
+        )
+        .bind(provider_identity.provider.as_str())
+        .bind(&provider_identity.subject)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(identity_from_row))
     }
 
     pub async fn find_by_telegram(
         &self,
         telegram_user_id: i64,
     ) -> Result<Option<IdentityRecord>, RepositoryError> {
-        let row = sqlx::query("SELECT pub_dress, tg_id FROM identities WHERE tg_id = ?")
-            .bind(telegram_user_id)
-            .fetch_optional(&self.pool)
-            .await?;
-        Ok(row.map(identity_from_row))
+        self.find_by_provider(&ProviderIdentity::telegram(telegram_user_id))
+            .await
     }
 }
 
-async fn find_by_telegram_in(
+async fn find_by_provider_in(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    telegram_user_id: i64,
+    provider_identity: &ProviderIdentity,
 ) -> Result<Option<IdentityRecord>, sqlx::Error> {
-    let row = sqlx::query("SELECT pub_dress, tg_id FROM identities WHERE tg_id = ?")
-        .bind(telegram_user_id)
-        .fetch_optional(&mut **transaction)
-        .await?;
+    let row = sqlx::query(
+        "SELECT identities.pub_dress \
+         FROM identity_providers \
+         JOIN identities ON identities.pub_dress = identity_providers.pub_dress \
+         WHERE identity_providers.provider = ? AND identity_providers.provider_subject = ?",
+    )
+    .bind(provider_identity.provider.as_str())
+    .bind(&provider_identity.subject)
+    .fetch_optional(&mut **transaction)
+    .await?;
     Ok(row.map(identity_from_row))
 }
 
 fn identity_from_row(row: sqlx::sqlite::SqliteRow) -> IdentityRecord {
     IdentityRecord {
         pub_dress: row.get("pub_dress"),
-        telegram_user_id: row.get("tg_id"),
     }
 }
 
@@ -126,48 +206,58 @@ pub enum RepositoryError {
 mod tests {
     use std::str::FromStr;
 
-    use super::{IdentityRepository, RegistrationOutcome};
+    use super::{IdentityRepository, ProviderIdentity, RegistrationOutcome};
     use crate::PubDress;
 
     #[tokio::test]
-    async fn insert_is_the_registration_and_collision_boundary() {
+    async fn insert_is_the_registration_and_collision_boundary_across_providers() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
         let first = PubDress::from_str("0x0sky").expect("valid pub_dress");
         let second = PubDress::from_str("0x1sky").expect("valid pub_dress");
+        let telegram = ProviderIdentity::telegram(10);
+        let other_telegram = ProviderIdentity::telegram(11);
+        let discord = ProviderIdentity::discord("42");
 
         assert!(matches!(
-            repository.register(&first, 10).await,
+            repository.register(&first, &telegram).await,
             Ok(RegistrationOutcome::Registered(_))
         ));
         assert!(matches!(
-            repository.register(&first, 11).await,
+            repository.register(&first, &other_telegram).await,
             Ok(RegistrationOutcome::HandleUnavailable)
         ));
         assert!(matches!(
-            repository.register(&second, 10).await,
+            repository.register(&second, &telegram).await,
             Ok(RegistrationOutcome::AlreadyRegistered(record)) if record.pub_dress == "0x0sky"
+        ));
+        assert!(matches!(
+            repository.register(&second, &discord).await,
+            Ok(RegistrationOutcome::Registered(record)) if record.pub_dress == "0x1sky"
         ));
     }
 
     #[tokio::test]
-    async fn exact_handles_remain_distinct() {
+    async fn provider_subjects_remain_namespaced() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let first = PubDress::from_str("0x0sky").expect("valid pub_dress");
-        let second = PubDress::from_str("0x7sky").expect("valid pub_dress");
+        let telegram_address = PubDress::from_str("0x0sky").expect("valid pub_dress");
+        let discord_address = PubDress::from_str("0x7sky").expect("valid pub_dress");
 
-        repository.register(&first, 10).await.expect("first insert");
         repository
-            .register(&second, 11)
+            .register(&telegram_address, &ProviderIdentity::telegram(42))
             .await
-            .expect("second insert");
+            .expect("telegram insert");
+        repository
+            .register(&discord_address, &ProviderIdentity::discord("42"))
+            .await
+            .expect("discord insert");
 
         assert_eq!(
             repository
-                .find_by_telegram(11)
+                .find_by_provider(&ProviderIdentity::discord("42"))
                 .await
                 .expect("lookup must succeed")
                 .expect("identity must exist")
