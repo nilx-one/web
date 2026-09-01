@@ -47,8 +47,11 @@ jobs:
           sh -n \
             services/identity/deploy/deploy.sh \
             services/identity/deploy/check-public.sh \
-            services/identity/deploy/check-public.test.sh
+            services/identity/deploy/check-public.test.sh \
+            services/identity/deploy/prepare-runtime-env.sh \
+            services/identity/deploy/prepare-runtime-env.test.sh
           sh services/identity/deploy/check-public.test.sh
+          sh services/identity/deploy/prepare-runtime-env.test.sh
           identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
           [[ "$identity_contract" =~ ^[0-9]+$ ]]
       - name: Build runtime image

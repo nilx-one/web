@@ -56,17 +56,25 @@ Availability is advisory. The database insert remains the only collision boundar
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`, and
-`DISCORD_CLIENT_SECRET` are server-only runtime secrets. The first two must be
-independent values of at least 32 bytes. None may be exposed through Vite,
-browser configuration, repository files, build output, Telegram Mini App
-JavaScript, or Discord Activity JavaScript.
+`DISCORD_CLIENT_SECRET` are server-only runtime secrets. The native authentication
+secret and password pepper must be independent values of at least 32 bytes. None
+may be exposed through Vite, browser configuration, repository files, build
+output, Telegram Mini App JavaScript, or Discord Activity JavaScript.
+
+Production keeps `NATIVE_AUTH_SECRET` and `PASSWORD_PEPPER` server-owned. On the
+first production activation the deploy layer creates independent random values
+inside the persistent identity secrets directory; later activations preserve
+those exact values. This prevents a deployment from accidentally rotating the
+password pepper or invalidating native authentication state. Provider credentials
+remain supplied by the production environment and may be updated independently.
 
 `DISCORD_CLIENT_ID` is public OAuth configuration and is intentionally exposed through the bounded config endpoint so the Activity and service cannot drift between application IDs.
 
 ## Run
 
-Set `NATIVE_AUTH_SECRET` and `PASSWORD_PEPPER`. Provider credentials may remain
-unset while phase-0 provider controls are inactive. Optional runtime settings:
+For local or manual execution, set `NATIVE_AUTH_SECRET` and `PASSWORD_PEPPER`.
+Provider credentials may remain unset while phase-0 provider controls are inactive.
+Optional runtime settings:
 
 - `DATABASE_URL` — default `sqlite://identity.db`;
 - `HTTP_BIND` — default `0.0.0.0:8080`;
@@ -85,7 +93,7 @@ credentials do not activate a public provider host by themselves.
 
 [`Dockerfile`](Dockerfile) builds the combined Telegram bot and identity API. [`deploy/compose.yaml`](deploy/compose.yaml) persists SQLite state in a named volume and exposes only the private `ox1-identity:8080` edge alias. The canonical Web runtime proxies the bounded `/api/v1/identity*` and `/api/v1/auth/*` surfaces to that alias.
 
-CI validates the service and deployment contract. Packaging publishes an immutable GHCR image. Production activation is a separate manual workflow.
+CI validates the service and deployment contract. Packaging publishes an immutable GHCR image. Production activation is a separate manual workflow. The production deploy composes provider credentials with the persistent server-owned native secrets into a `0600` runtime environment file.
 
 Before activation commits a release, it verifies the public Web shell, the
 unpublished provider routes, and the provider-neutral unauthenticated `401`
