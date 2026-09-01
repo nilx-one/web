@@ -60,7 +60,7 @@ jobs:
               ;;
             all)
               clients="$(jq -c '.deployOrder' deploy/web/targets.json)"
-              force_identity=false
+              force_identity=true
               required_identity_contract="$(jq -r '[.deployOrder[] as $name | .targets[$name].requiresIdentityContract] | max' deploy/web/targets.json)"
               ;;
             web|telegram|discord)
