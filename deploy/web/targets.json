@@ -1,10 +1,6 @@
 {
   "schema": 1,
-  "deployOrder": [
-    "web",
-    "telegram",
-    "discord"
-  ],
+  "deployOrder": ["web", "telegram", "discord"],
   "targets": {
     "web": {
       "app": "site",
