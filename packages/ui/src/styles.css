@@ -2,8 +2,8 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 
 :root {
-  color: #18171b;
-  background: #f5f4ef;
+  color: #152331;
+  background: #f3f8fc;
   font-family:
     Inter,
     ui-sans-serif,
@@ -13,17 +13,39 @@
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --background: #f5f4ef;
-  --surface: #fffef9;
-  --ink: #18171b;
-  --muted: #6f6b76;
-  --line: rgba(24, 23, 27, 0.14);
-  --accent: #7765c6;
-  --accent-ink: #453493;
-  --accent-soft: #e6e0ff;
-  --positive: #287a57;
-  --negative: #b83b54;
-  --warning: #ad6d21;
+  --background: #f3f8fc;
+  --surface: #fbfdff;
+  --ink: #152331;
+  --muted: #647486;
+  --line: rgb(39 83 119 / 13%);
+  --accent: #1c9fe9;
+  --accent-ink: #12699f;
+  --accent-soft: rgb(47 171 239 / 14%);
+  --positive: #168666;
+  --negative: #bd4261;
+  --warning: #a96f25;
+  --glass-surface: rgb(246 251 255 / 64%);
+  --glass-line: rgb(58 126 175 / 15%);
+  --field-line: rgb(42 102 146 / 17%);
+}
+
+:root[data-host-theme="dark"] {
+  color: #ecf7ff;
+  background: #0d1923;
+  --background: #0d1923;
+  --surface: #132331;
+  --ink: #ecf7ff;
+  --muted: #96aaba;
+  --line: rgb(180 220 245 / 16%);
+  --accent: #43baff;
+  --accent-ink: #8cd5ff;
+  --accent-soft: rgb(67 186 255 / 16%);
+  --positive: #5ed5ad;
+  --negative: #ff86a3;
+  --warning: #f2ba69;
+  --glass-surface: rgb(18 36 50 / 74%);
+  --glass-line: rgb(171 220 250 / 16%);
+  --field-line: rgb(171 220 250 / 17%);
 }
 
 * {
@@ -40,8 +62,18 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: var(--background);
+  background:
+    radial-gradient(circle at 78% 16%, rgb(128 211 255 / 20%), transparent 34%),
+    radial-gradient(circle at 12% 82%, rgb(255 224 184 / 18%), transparent 30%),
+    var(--background);
   color: var(--ink);
+}
+
+:root[data-host-theme="dark"] body {
+  background:
+    radial-gradient(circle at 78% 16%, rgb(35 142 205 / 19%), transparent 34%),
+    radial-gradient(circle at 12% 82%, rgb(132 91 55 / 13%), transparent 30%),
+    var(--background);
 }
 
 button,

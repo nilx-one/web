@@ -1,9 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type {
-  CoreRuntimePort,
-  IdentityRegistrationPort,
+import {
+  formatPubDress,
+  type CoreRuntimePort,
+  type IdentityAccessPort,
 } from "@nilx-one/application";
 import type { HostPort } from "@nilx-one/host-contract";
 import { ProductApp } from "@nilx-one/product-app";
@@ -11,6 +12,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const readyCore: CoreRuntimePort = {
+  probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
+};
 
 function createHost(): HostPort {
   return {
@@ -48,111 +53,221 @@ function createTelegramHost(): HostPort {
   };
 }
 
-describe("ProductApp", () => {
-  const identity: IdentityRegistrationPort = {
-    checkAvailability: async () => ({
-      kind: "rejected",
-      reason: "authentication-required",
+function createIdentity(
+  overrides: Partial<IdentityAccessPort> = {},
+): IdentityAccessPort {
+  return {
+    acknowledgeRecoveryKey: async () => ({ kind: "service-unavailable" }),
+    authenticateNative: async () => ({ kind: "service-unavailable" }),
+    forgetRememberedBond: async () => ({ kind: "completed" }),
+    logoutNative: async () => ({ kind: "completed" }),
+    readNativeContext: async () => ({ kind: "anonymous" }),
+    readProviderIdentity: async () => ({ kind: "not-registered" }),
+    recoverNative: async () => ({ kind: "service-unavailable" }),
+    registerNative: async () => ({ kind: "service-unavailable" }),
+    registerProvider: async () => ({ kind: "service-unavailable" }),
+    resolvePubDress: async (selection) => ({
+      kind: "available",
+      pubDress: formatPubDress(selection),
     }),
-    read: async () => ({ kind: "authentication-required" }),
-    register: async () => ({
-      kind: "rejected",
-      reason: "authentication-required",
-    }),
+    ...overrides,
   };
+}
 
+describe("ProductApp identity", () => {
   afterEach(() => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("renders the same honest Core boundary through the shared product", async () => {
+  it("renders native identity and visible inactive provider choices on Web", async () => {
     const core: CoreRuntimePort = {
-      probe: async () => ({
-        kind: "unavailable",
-        reason: "artifact-missing",
-      }),
+      probe: async () => ({ kind: "unavailable", reason: "artifact-missing" }),
     };
-
-    render(<ProductApp core={core} host={createHost()} identity={identity} />);
+    render(
+      <ProductApp
+        core={core}
+        host={createHost()}
+        identity={createIdentity()}
+      />,
+    );
 
     expect(
-      await screen.findByRole("heading", { name: "Choose your pub_dress." }),
+      await screen.findByRole("heading", { name: "Enter your pub_dress." }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Telegram — coming next/i }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /Discord — coming later/i }),
+    ).toBeDisabled();
     expect(await screen.findByText("Shared Core required")).toBeInTheDocument();
-    expect(
-      screen.getByText(/will not invent its behavior in TypeScript/i),
-    ).toBeInTheDocument();
   });
 
   it("has no automatically detectable accessibility violations", async () => {
-    const core: CoreRuntimePort = {
-      probe: async () => ({
-        kind: "unavailable",
-        reason: "artifact-missing",
-      }),
-    };
-
-    const { container } = render(
-      <ProductApp core={core} host={createHost()} identity={identity} />,
-    );
-    await screen.findByText("Shared Core required");
-
-    const results = await act(() => axe.run(container));
-    expect(results.violations).toEqual([]);
-  });
-
-  it("keeps the compound Telegram registration field accessible", async () => {
-    window.history.replaceState({}, "", "/telegram/");
-    const core: CoreRuntimePort = {
-      probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
-    };
-    const telegramIdentity: IdentityRegistrationPort = {
-      checkAvailability: async () => ({ kind: "available" }),
-      read: async () => ({ kind: "not-registered" }),
-      register: async () => ({ kind: "service-unavailable" }),
-    };
-
     const { container } = render(
       <ProductApp
-        core={core}
-        host={createTelegramHost()}
-        identity={telegramIdentity}
-        routerBasepath="/telegram"
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity()}
       />,
     );
-    await screen.findByRole("combobox", {
-      name: "pub_dress hexadecimal discriminator",
-    });
-
+    await screen.findByLabelText("pub_dress");
     const results = await act(() => axe.run(container));
     expect(results.violations).toEqual([]);
   });
 
-  it("mounts Telegram registration under its production basepath without changing slug semantics", async () => {
-    window.history.replaceState({}, "", "/telegram/");
-
+  it("adapts one browser form from availability to registration and recovery acknowledgement", async () => {
     const user = userEvent.setup();
-    const core: CoreRuntimePort = {
-      probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
-    };
-    const register = vi
-      .fn<IdentityRegistrationPort["register"]>()
+    const registerNative = vi
+      .fn<IdentityAccessPort["registerNative"]>()
+      .mockResolvedValue({
+        kind: "recovery-key-required",
+        identity: { pubDress: "0xaSky" },
+        recoveryKey: "0x1-rk-once-only",
+        challenge: "0x1c-registration",
+      });
+    const acknowledgeRecoveryKey = vi
+      .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
+      .mockResolvedValue({
+        kind: "authenticated",
+        identity: { pubDress: "0xaSky" },
+      });
+    const identity = createIdentity({
+      registerNative,
+      acknowledgeRecoveryKey,
+    });
+
+    render(
+      <ProductApp core={readyCore} host={createHost()} identity={identity} />,
+    );
+    const discriminator = await screen.findByRole("combobox", {
+      name: "pub_dress hexadecimal discriminator",
+    });
+    await user.selectOptions(discriminator, "a");
+    await user.type(screen.getByLabelText("pub_dress"), "Sky");
+    await screen.findByText("Available — create this Bond");
+    await user.type(
+      await screen.findByLabelText("Password"),
+      "a deliberately long password",
+    );
+    const create = screen.getByRole("button", { name: "Create 0xaSky" });
+    expect(create).toBeEnabled();
+    await user.click(create);
+
+    expect(registerNative).toHaveBeenCalledWith(
+      "0xaSky",
+      "a deliberately long password",
+      expect.any(String),
+    );
+    expect(await screen.findByText("0x1-rk-once-only")).toBeInTheDocument();
+    expect(screen.getByText(/only native recovery proof/i)).toBeInTheDocument();
+    const continueButton = screen.getByRole("button", {
+      name: "Continue to 0x1",
+    });
+    expect(continueButton).toBeDisabled();
+    await user.click(screen.getByLabelText("I saved this recovery key"));
+    await user.click(continueButton);
+
+    expect(acknowledgeRecoveryKey).toHaveBeenCalledWith("0x1c-registration");
+    expect(
+      await screen.findByText("Authenticated as 0xaSky."),
+    ).toBeInTheDocument();
+  });
+
+  it("switches an existing exact address to native sign-in", async () => {
+    const user = userEvent.setup();
+    const authenticateNative = vi
+      .fn<IdentityAccessPort["authenticateNative"]>()
+      .mockResolvedValue({
+        kind: "authenticated",
+        identity: { pubDress: "0x0sky" },
+      });
+    const identity = createIdentity({
+      resolvePubDress: async () => ({
+        kind: "registered",
+        pubDress: "0x0sky",
+      }),
+      authenticateNative,
+    });
+    render(
+      <ProductApp core={readyCore} host={createHost()} identity={identity} />,
+    );
+
+    await user.type(await screen.findByLabelText("pub_dress"), "sky");
+    await screen.findByText("Registered — enter your password");
+    await user.type(
+      screen.getByLabelText("Password"),
+      "correct password value",
+    );
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(authenticateNative).toHaveBeenCalledWith(
+      "0x0sky",
+      "correct password value",
+    );
+  });
+
+  it("accepts a full pub_dress paste and splits the selector from the slug", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity()}
+      />,
+    );
+    const slug = await screen.findByLabelText("pub_dress");
+    await user.click(slug);
+    await user.paste("0xaSky");
+
+    expect(screen.getByRole("combobox")).toHaveValue("a");
+    expect(slug).toHaveValue("Sky");
+  });
+
+  it("renders a password-only remembered flow with a shared-device escape", async () => {
+    const forgetRememberedBond = vi
+      .fn<IdentityAccessPort["forgetRememberedBond"]>()
+      .mockResolvedValue({ kind: "completed" });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          readNativeContext: async () => ({
+            kind: "remembered",
+            pubDress: "0x0sky",
+          }),
+          forgetRememberedBond,
+        })}
+      />,
+    );
+
+    expect(await screen.findByLabelText("Password")).toHaveFocus();
+    expect(screen.getByLabelText("pub_dress")).toHaveAttribute("readonly");
+    await userEvent.click(screen.getByRole("button", { name: "Not you?" }));
+    expect(forgetRememberedBond).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(screen.getByLabelText("pub_dress")).not.toHaveAttribute(
+        "readonly",
+      ),
+    );
+  });
+
+  it("reuses the address primitive in Telegram without native password or provider row", async () => {
+    window.history.replaceState({}, "", "/telegram/");
+    const user = userEvent.setup();
+    const registerProvider = vi
+      .fn<IdentityAccessPort["registerProvider"]>()
       .mockResolvedValue({
         kind: "registered",
         outcome: "created",
         identity: { pubDress: "0xaSky" },
       });
-    const telegramIdentity: IdentityRegistrationPort = {
-      checkAvailability: async () => ({ kind: "available" }),
-      read: async () => ({ kind: "not-registered" }),
-      register,
-    };
-
     render(
       <ProductApp
-        core={core}
+        core={readyCore}
         host={createTelegramHost()}
-        identity={telegramIdentity}
+        identity={createIdentity({ registerProvider })}
         routerBasepath="/telegram"
       />,
     );
@@ -160,22 +275,16 @@ describe("ProductApp", () => {
     const discriminator = await screen.findByRole("combobox", {
       name: "pub_dress hexadecimal discriminator",
     });
-    expect(discriminator).toHaveValue("0");
-    expect(screen.getAllByRole("option")).toHaveLength(16);
-
     await user.selectOptions(discriminator, "a");
-    await user.type(screen.getByLabelText("Choose your pub_dress"), "Sky");
-    const registrationButton = screen.getByRole("button", {
-      name: "Register pub_dress",
-    });
-    await waitFor(() => expect(registrationButton).toBeEnabled());
-    expect(screen.getByText("Available")).toBeInTheDocument();
-    await user.click(registrationButton);
-
-    expect(register).toHaveBeenCalledWith({
+    await user.type(screen.getByLabelText("pub_dress"), "Sky");
+    const create = await screen.findByRole("button", { name: "Create 0xaSky" });
+    await waitFor(() => expect(create).toBeEnabled());
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sign in with")).not.toBeInTheDocument();
+    await user.click(create);
+    expect(registerProvider).toHaveBeenCalledWith({
       discriminator: "a",
       slug: "Sky",
     });
-    expect(await screen.findByText("0xaSky")).toBeInTheDocument();
   });
 });

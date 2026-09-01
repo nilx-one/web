@@ -37,9 +37,13 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$url" in
-  https://nilx.one/telegram/)
+  https://nilx.one/)
     printf '%s\n' '<div id="root"></div>' >"$output_file"
     printf '%s' 200
+    ;;
+  https://nilx.one/telegram/|https://nilx.one/discord/)
+    printf '%s\n' 'not found' >"$output_file"
+    printf '%s' 404
     ;;
   https://nilx.one/api/v1/identity)
     printf '%s\n' '{"error":{"code":"provider_authentication_required"}}' >"$output_file"

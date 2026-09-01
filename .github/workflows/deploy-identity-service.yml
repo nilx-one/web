@@ -30,6 +30,8 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+      NATIVE_AUTH_SECRET: ${{ secrets.NATIVE_AUTH_SECRET }}
+      PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
       DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
       DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
@@ -46,6 +48,8 @@ jobs:
           test -n "$SSH_USER"
           test -n "$SSH_PRIVATE_KEY"
           test -n "$TELOXIDE_TOKEN"
+          test "${#NATIVE_AUTH_SECRET}" -ge 32
+          test "${#PASSWORD_PEPPER}" -ge 32
           test -n "$IDENTITY_DEPLOYMENT_PATH"
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
           (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
@@ -116,6 +120,8 @@ jobs:
           tar -czf "$archive" -C services/identity/deploy compose.yaml deploy.sh check-public.sh
           umask 077
           printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN" >"$secret_file"
+          printf 'NATIVE_AUTH_SECRET=%s\n' "$NATIVE_AUTH_SECRET" >>"$secret_file"
+          printf 'PASSWORD_PEPPER=%s\n' "$PASSWORD_PEPPER" >>"$secret_file"
           if [ -n "$DISCORD_CLIENT_ID" ] && [ -n "$DISCORD_CLIENT_SECRET" ]; then
             printf 'DISCORD_CLIENT_ID=%s\n' "$DISCORD_CLIENT_ID" >>"$secret_file"
             printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET" >>"$secret_file"

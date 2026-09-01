@@ -1,6 +1,8 @@
 # 0x1 Web
 
-The canonical Web client family for 0x1.
+The canonical Web client family for 0x1. Phase 0 publishes native Web
+registration and authentication at `https://nilx.one/`; Telegram and Discord
+composition roots remain in the build graph but are not public hosts.
 
 This monorepository contains one shared product application, thin entry points for browser and messenger Mini Apps, and bounded server-side adapters required by those hosts. It consumes versioned behavior from [`nilx-one/core`](https://github.com/nilx-one/core); React, host SDKs, provider services, and browser APIs do not define protocol truth.
 
@@ -26,13 +28,16 @@ services/identity -> pinned Core contracts
 ## Applications
 
 - `apps/site` — official browser client;
-- `apps/telegram-mini-app` — Telegram WebView composition root.
+- `apps/telegram-mini-app` — inactive Telegram WebView composition root;
+- `apps/discord-activity` — inactive Discord composition root.
 
 Both applications render the same `product-app` package. Host-specific code stays in adapters.
 
 ## Runtime services
 
-- `services/identity` — server-side Telegram identity adapter and bot transport. It validates Telegram Mini App `initData`, persists the provider binding, and consumes `TELOXIDE_TOKEN` only at runtime. It does not own `pub_dress` semantics or protocol identity rules.
+- `services/identity` — native credentials, recovery, sessions, and isolated
+  provider adapters. Native passwords are normalized and stored only as
+  Argon2id verifiers; Telegram and Discord remain optional future bindings.
 
 The browser and Mini App never receive the Telegram bot token.
 

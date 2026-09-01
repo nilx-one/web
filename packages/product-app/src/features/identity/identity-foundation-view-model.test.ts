@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   createIdentityFoundationViewModel,
-  createPubDressAvailabilityViewState,
+  createNativeIdentityViewState,
+  createProviderIdentityViewState,
+  createPubDressStatusViewState,
 } from "./identity-foundation-view-model";
 
 const browserHost = {
@@ -16,99 +18,118 @@ const browserHost = {
   authentication: { kind: "browser-session" as const },
 };
 
-describe("createIdentityFoundationViewModel", () => {
-  it("maps infrastructure absence to a visible product boundary", () => {
+describe("identity foundation view state", () => {
+  it("maps runtime absence independently from native identity state", () => {
+    const identity = createNativeIdentityViewState(
+      { kind: "anonymous" },
+      { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+      undefined,
+      undefined,
+      false,
+    );
     expect(
-      createIdentityFoundationViewModel(browserHost, {
-        kind: "blocked",
-        reason: "artifact-missing",
-      }),
+      createIdentityFoundationViewModel(
+        browserHost,
+        { kind: "blocked", reason: "artifact-missing" },
+        identity,
+      ),
     ).toMatchObject({
       hostLabel: "browser host",
-      runtime: {
-        tone: "blocked",
-        label: "Shared Core required",
-      },
+      identity: { kind: "form", mode: "initial" },
+      runtime: { tone: "blocked", label: "Shared Core required" },
+      showProviderRow: true,
     });
   });
 
-  it("keeps Telegram host absence distinct from Core readiness", () => {
+  it("turns remembered public identity into a password-only state", () => {
     expect(
-      createIdentityFoundationViewModel(
+      createNativeIdentityViewState(
+        { kind: "remembered", pubDress: "0x0sky" },
+        { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+        undefined,
+        undefined,
+        false,
+      ),
+    ).toMatchObject({
+      kind: "form",
+      mode: "remembered",
+      rememberedPubDress: "0x0sky",
+      status: { kind: "registered" },
+    });
+  });
+
+  it("does not authenticate a registration before recovery acknowledgement", () => {
+    expect(
+      createNativeIdentityViewState(
+        { kind: "anonymous" },
+        { kind: "available", detail: "Available — create this Bond" },
+        {
+          kind: "recovery-key-required",
+          identity: { pubDress: "0x0sky" },
+          recoveryKey: "0x1-rk-secret",
+          challenge: "0x1c-secret",
+        },
+        undefined,
+        false,
+      ),
+    ).toMatchObject({
+      kind: "recovery-key",
+      pubDress: "0x0sky",
+      recoveryKey: "0x1-rk-secret",
+    });
+  });
+
+  it("reuses the shared address form for an authenticated provider", () => {
+    expect(
+      createProviderIdentityViewState(
         {
           ...browserHost,
           kind: "telegram",
-          available: false,
           authentication: {
             kind: "telegram-init-data",
-            initData: "",
+            initData: "signed",
             verification: "required",
           },
         },
-        undefined,
-      ),
-    ).toMatchObject({
-      hostLabel: "telegram unavailable",
-      registration: { kind: "provider-required" },
-      runtime: {
-        tone: "loading",
-      },
-    });
-  });
-
-  it("allows an authenticated Discord Activity to use the shared registration surface", () => {
-    expect(
-      createIdentityFoundationViewModel(
-        {
-          ...browserHost,
-          kind: "discord",
-          authentication: {
-            kind: "discord-oauth",
-            authenticated: true,
-            verification: "required",
-          },
-        },
-        { kind: "ready", contractVersion: "0.1.0" },
         { kind: "not-registered" },
+        undefined,
+        { kind: "available", detail: "Available — create this Bond" },
+        false,
       ),
     ).toMatchObject({
-      hostLabel: "discord host",
-      registration: { kind: "form" },
+      kind: "form",
+      mode: "provider-register",
+      status: { kind: "available" },
     });
   });
 });
 
-describe("createPubDressAvailabilityViewState", () => {
+describe("pub_dress status", () => {
   const selection = { discriminator: "0", slug: "sky" };
 
-  it("does not claim availability before the server answers", () => {
-    expect(
-      createPubDressAvailabilityViewState(selection, true, undefined),
-    ).toEqual({ kind: "checking" });
-    expect(
-      createPubDressAvailabilityViewState(selection, false, undefined),
-    ).toEqual({ kind: "idle" });
+  it("never claims availability before an exact server result", () => {
+    expect(createPubDressStatusViewState(selection, true, undefined)).toEqual({
+      kind: "checking",
+      detail: "Checking exact address…",
+    });
+    expect(createPubDressStatusViewState(selection, false, undefined)).toEqual({
+      kind: "idle",
+      detail: "Case-sensitive · 2–32 characters",
+    });
   });
 
-  it("keeps available, occupied, and invalid states distinct", () => {
+  it("keeps registered and available facts distinct", () => {
     expect(
-      createPubDressAvailabilityViewState(selection, false, {
+      createPubDressStatusViewState(selection, false, {
         kind: "available",
+        pubDress: "0x0sky",
       }),
-    ).toEqual({ kind: "available", detail: "Available" });
+    ).toMatchObject({ kind: "available" });
     expect(
-      createPubDressAvailabilityViewState(selection, false, {
-        kind: "unavailable",
+      createPubDressStatusViewState(selection, false, {
+        kind: "registered",
+        pubDress: "0x0sky",
       }),
-    ).toEqual({ kind: "unavailable", detail: "Already taken" });
-    expect(
-      createPubDressAvailabilityViewState(selection, false, {
-        kind: "rejected",
-        reason: "invalid-character",
-      }),
-    ).toEqual({
-      kind: "invalid",
-      detail: "This character isn’t supported",
-    });
+    ).toMatchObject({ kind: "registered" });
   });
 });
