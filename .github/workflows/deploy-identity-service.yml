@@ -20,17 +20,17 @@ on:
         type: boolean
     secrets:
       SSH_HOST:
-        required: true
+        required: false
       SSH_USER:
-        required: true
+        required: false
       SSH_PRIVATE_KEY:
-        required: true
+        required: false
       TELOXIDE_TOKEN:
-        required: true
+        required: false
       NATIVE_AUTH_SECRET:
-        required: true
+        required: false
       PASSWORD_PEPPER:
-        required: true
+        required: false
       DISCORD_CLIENT_SECRET:
         required: false
 
@@ -44,6 +44,8 @@ jobs:
     name: Ensure identity contract ${{ inputs.required_contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: production
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       REQUIRED_IDENTITY_CONTRACT: ${{ inputs.required_contract }}
