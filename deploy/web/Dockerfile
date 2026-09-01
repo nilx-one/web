@@ -3,12 +3,16 @@
 
 FROM caddy:2-alpine
 
-LABEL org.opencontainers.image.title="0x1 Web"
-LABEL org.opencontainers.image.description="Static canonical Web runtime for 0x1"
+LABEL org.opencontainers.image.title="0x1 Web Clients"
+LABEL org.opencontainers.image.description="Immutable static runtime containing every 0x1 Web host composition"
 
 WORKDIR /srv
 COPY apps/site/dist/ /srv/site/
+COPY apps/telegram-mini-app/dist/ /srv/telegram-mini-app/
+COPY apps/discord-activity/dist/ /srv/discord-activity/
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
+
+ENV CLIENT_ROOT=/srv/site
 
 EXPOSE 8080
 

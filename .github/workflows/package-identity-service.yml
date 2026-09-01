@@ -28,6 +28,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: contract
+        name: Resolve identity contract version
+        run: |
+          set -Eeuo pipefail
+          value="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
+          [[ "$value" =~ ^[0-9]+$ ]]
+          echo "value=$value" >>"$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - name: Authenticate to GHCR
         uses: docker/login-action@v3
@@ -45,5 +52,6 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            one.nilx.identity.contract=${{ steps.contract.outputs.value }}
           provenance: true
           sbom: true

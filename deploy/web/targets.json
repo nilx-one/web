@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "deployOrder": [
+    "web",
+    "telegram",
+    "discord"
+  ],
+  "targets": {
+    "web": {
+      "app": "site",
+      "root": "/srv/site",
+      "edgeAlias": "ox1-web",
+      "compatEdgeAlias": "ox1-telegram-mini-app",
+      "composeProject": "nilx-one-web",
+      "publicPath": "/",
+      "requiresIdentityContract": 1
+    },
+    "telegram": {
+      "app": "telegram-mini-app",
+      "root": "/srv/telegram-mini-app",
+      "edgeAlias": "ox1-telegram",
+      "compatEdgeAlias": "ox1-telegram",
+      "composeProject": "nilx-one-telegram",
+      "publicPath": "/telegram/",
+      "requiresIdentityContract": 1
+    },
+    "discord": {
+      "app": "discord-activity",
+      "root": "/srv/discord-activity",
+      "edgeAlias": "ox1-discord",
+      "compatEdgeAlias": "ox1-discord",
+      "composeProject": "nilx-one-discord",
+      "publicPath": "/discord/",
+      "requiresIdentityContract": 1
+    }
+  }
+}

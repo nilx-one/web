@@ -17,6 +17,7 @@ services:
     labels:
       one.nilx.product: 0x1
       one.nilx.service: identity
+      one.nilx.identity.contract: ${IDENTITY_CONTRACT:?IDENTITY_CONTRACT is required}
       org.opencontainers.image.revision: ${RELEASE_SHA:?RELEASE_SHA is required}
     expose:
       - "8080"

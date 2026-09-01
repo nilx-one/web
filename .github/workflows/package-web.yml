@@ -1,7 +1,7 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: Package Web
+name: Package Clients
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: package-web-${{ github.sha }}
+  group: package-clients-${{ github.sha }}
   cancel-in-progress: false
 
 env:
@@ -21,7 +21,7 @@ env:
 
 jobs:
   package:
-    name: Package immutable image
+    name: Package immutable client image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +49,13 @@ jobs:
           rm -rf .core-source
       - name: Build production Web hosts
         run: pnpm --filter @nilx-one/site --filter @nilx-one/telegram-mini-app --filter @nilx-one/discord-activity build
+      - name: Validate client target manifest
+        run: |
+          jq -e '
+            .schema == 1
+            and (.deployOrder | type == "array" and length > 0)
+            and ([.deployOrder[] as $name | .targets[$name] != null] | all)
+          ' deploy/web/targets.json >/dev/null
       - uses: docker/setup-buildx-action@v3
       - name: Authenticate to GHCR
         uses: docker/login-action@v3
@@ -56,7 +63,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and publish immutable runtime
+      - name: Build and publish immutable client runtime
         uses: docker/build-push-action@v6
         with:
           context: .

@@ -59,50 +59,84 @@ jobs:
             test -f "$runtime"
             printf '%s  %s\n' "$expected" "$runtime" | sha256sum --check --status
           done
-      - name: Preserve canonical Web build for deploy validation
+      - name: Validate deploy target contract
+        run: |
+          set -Eeuo pipefail
+          identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
+          [[ "$identity_contract" =~ ^[0-9]+$ ]]
+          jq -e --argjson identity "$identity_contract" '
+            .schema == 1
+            and (.deployOrder == ["web", "telegram", "discord"])
+            and ([.deployOrder[] as $name | .targets[$name]] | all(. != null))
+            and ([.targets[] | .requiresIdentityContract <= $identity] | all)
+            and (.targets.web.app == "site")
+            and (.targets.telegram.app == "telegram-mini-app")
+            and (.targets.discord.app == "discord-activity")
+          ' deploy/web/targets.json >/dev/null
+      - name: Preserve verified host builds for deploy validation
         uses: actions/upload-artifact@v4
         with:
-          name: web-dist-${{ github.sha }}
-          path: apps/site/dist
+          name: web-host-dist-${{ github.sha }}
+          path: |
+            apps/site/dist
+            apps/telegram-mini-app/dist
+            apps/discord-activity/dist
           retention-days: 1
 
   deploy-validation:
-    name: Validate Web deploy package
+    name: Validate client deploy package
     if: github.event_name == 'pull_request'
     needs: full-ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reuse verified canonical Web build
+      - name: Reuse verified Web host builds
         uses: actions/download-artifact@v4
         with:
-          name: web-dist-${{ github.sha }}
-          path: apps/site/dist
-      - name: Validate runtime image
-        run: docker build --file deploy/web/Dockerfile --tag 0x1-web:ci .
-      - name: Verify runtime host routes
+          name: web-host-dist-${{ github.sha }}
+          path: .
+      - name: Restore artifact paths
         run: |
           set -Eeuo pipefail
-          container_id="$(docker run --detach --publish 18080:8080 0x1-web:ci)"
-          trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
-
-          ready=false
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error http://127.0.0.1:18080/health >/dev/null; then
-              ready=true
-              break
-            fi
-            sleep 1
-          done
-          test "$ready" = true
-
-          curl --fail --silent --show-error http://127.0.0.1:18080/ >/dev/null
-          telegram_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/telegram/)"
-          discord_status="$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/discord/)"
-          test "$telegram_status" = 404
-          test "$discord_status" = 404
-      - name: Validate runtime Compose contract
-        env:
-          WEB_IMAGE: ghcr.io/nilx-one/0x1-web:sha-${{ github.sha }}
-          RELEASE_SHA: ${{ github.sha }}
-        run: docker compose --file deploy/web/compose.yaml config --quiet
+          test -d site/dist
+          test -d telegram-mini-app/dist
+          test -d discord-activity/dist
+          mkdir -p apps/site apps/telegram-mini-app apps/discord-activity
+          mv site/dist apps/site/dist
+          mv telegram-mini-app/dist apps/telegram-mini-app/dist
+          mv discord-activity/dist apps/discord-activity/dist
+      - name: Validate immutable multi-host runtime image
+        run: docker build --file deploy/web/Dockerfile --tag 0x1-clients:ci .
+      - name: Verify every host runtime
+        run: |
+          set -Eeuo pipefail
+          port=18080
+          while IFS=$'\t' read -r target root; do
+            container_id="$(docker run --detach --env "CLIENT_ROOT=$root" --publish "$port:8080" 0x1-clients:ci)"
+            trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' RETURN
+            ready=false
+            for attempt in $(seq 1 20); do
+              if curl --fail --silent --show-error "http://127.0.0.1:$port/health" >/dev/null; then
+                ready=true
+                break
+              fi
+              sleep 1
+            done
+            test "$ready" = true
+            curl --fail --silent --show-error "http://127.0.0.1:$port/" >/dev/null
+            docker exec "$container_id" test -f "$root/index.html"
+            docker rm --force "$container_id" >/dev/null
+            trap - RETURN
+            port=$((port + 1))
+          done < <(jq -r '.deployOrder[] as $name | [$name, .targets[$name].root] | @tsv' deploy/web/targets.json)
+      - name: Validate generic client Compose contract
+        run: |
+          set -Eeuo pipefail
+          COMPOSE_PROJECT_NAME=nilx-one-web \
+          CLIENT_NAME=web \
+          CLIENT_IMAGE=ghcr.io/nilx-one/0x1-web:sha-${GITHUB_SHA} \
+          CLIENT_ROOT=/srv/site \
+          EDGE_ALIAS=ox1-web \
+          COMPAT_EDGE_ALIAS=ox1-telegram-mini-app \
+          RELEASE_SHA="${GITHUB_SHA}" \
+            docker compose --file deploy/web/compose.yaml config --quiet
