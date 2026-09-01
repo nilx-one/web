@@ -46,9 +46,31 @@ describe("createIdentityFoundationViewModel", () => {
       ),
     ).toMatchObject({
       hostLabel: "telegram unavailable",
+      registration: { kind: "provider-required" },
       runtime: {
         tone: "loading",
       },
+    });
+  });
+
+  it("allows an authenticated Discord Activity to use the shared registration surface", () => {
+    expect(
+      createIdentityFoundationViewModel(
+        {
+          ...browserHost,
+          kind: "discord",
+          authentication: {
+            kind: "discord-oauth",
+            authenticated: true,
+            verification: "required",
+          },
+        },
+        { kind: "ready", contractVersion: "0.1.0" },
+        { kind: "not-registered" },
+      ),
+    ).toMatchObject({
+      hostLabel: "discord host",
+      registration: { kind: "form" },
     });
   });
 });
