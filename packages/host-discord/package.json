@@ -1,0 +1,11 @@
+{
+  "name": "@nilx-one/host-discord",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
+    "@nilx-one/host-contract": "workspace:*"
+  }
+}
