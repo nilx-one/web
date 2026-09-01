@@ -17,6 +17,7 @@ The bot does not accept a `pub_dress` candidate as chat text. Telegram chat is a
 ## Provider API
 
 - `GET /api/v1/identity` returns the registered public identity projection for the authenticated provider account.
+- `GET /api/v1/identity/availability?discriminator=0&slug=sky` checks exact, case-sensitive availability for the authenticated provider without reserving the address.
 - `POST /api/v1/identity/registration` accepts `{"discriminator":"0","slug":"sky"}` and registers `0x0sky`.
 - `GET /api/v1/auth/discord/config` exposes only the public Discord application/client ID required by the Activity SDK.
 - `POST /api/v1/auth/discord/token` exchanges a Discord Activity authorization code server-side; the Discord client secret never reaches JavaScript.
@@ -25,6 +26,8 @@ The bot does not accept a `pub_dress` candidate as chat text. Telegram chat is a
 Telegram identity requests use `Authorization: tma <Telegram.WebApp.initData>`. The service verifies the Telegram HMAC, rejects duplicate fields, enforces a bounded `auth_date`, and derives the provider subject only from the verified `user` object.
 
 Discord identity requests use `Authorization: discord <access_token>`. The Activity obtains its authorization code through Discord's Embedded App SDK, exchanges that code through the server endpoint, and then the identity service resolves the provider subject from Discord's authenticated `/users/@me` response. A collision response never discloses another provider binding.
+
+Availability is advisory. The database insert remains the only collision boundary, so a client must still handle a candidate becoming unavailable between the check and registration.
 
 ## Secret boundary
 

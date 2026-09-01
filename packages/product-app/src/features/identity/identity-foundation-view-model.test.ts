@@ -3,7 +3,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import { createIdentityFoundationViewModel } from "./identity-foundation-view-model";
+import {
+  createIdentityFoundationViewModel,
+  createPubDressAvailabilityViewState,
+} from "./identity-foundation-view-model";
 
 const browserHost = {
   kind: "browser" as const,
@@ -71,6 +74,41 @@ describe("createIdentityFoundationViewModel", () => {
     ).toMatchObject({
       hostLabel: "discord host",
       registration: { kind: "form" },
+    });
+  });
+});
+
+describe("createPubDressAvailabilityViewState", () => {
+  const selection = { discriminator: "0", slug: "sky" };
+
+  it("does not claim availability before the server answers", () => {
+    expect(
+      createPubDressAvailabilityViewState(selection, true, undefined),
+    ).toEqual({ kind: "checking" });
+    expect(
+      createPubDressAvailabilityViewState(selection, false, undefined),
+    ).toEqual({ kind: "idle" });
+  });
+
+  it("keeps available, occupied, and invalid states distinct", () => {
+    expect(
+      createPubDressAvailabilityViewState(selection, false, {
+        kind: "available",
+      }),
+    ).toEqual({ kind: "available", detail: "Available" });
+    expect(
+      createPubDressAvailabilityViewState(selection, false, {
+        kind: "unavailable",
+      }),
+    ).toEqual({ kind: "unavailable", detail: "Already taken" });
+    expect(
+      createPubDressAvailabilityViewState(selection, false, {
+        kind: "rejected",
+        reason: "invalid-character",
+      }),
+    ).toEqual({
+      kind: "invalid",
+      detail: "This character isn’t supported",
     });
   });
 });

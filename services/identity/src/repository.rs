@@ -156,6 +156,19 @@ impl IdentityRepository {
         Ok(row.map(identity_from_row))
     }
 
+    pub async fn is_pub_dress_available(
+        &self,
+        pub_dress: &PubDress,
+    ) -> Result<bool, RepositoryError> {
+        let occupied = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identities WHERE pub_dress = ?)",
+        )
+        .bind(pub_dress.as_str())
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(!occupied)
+    }
+
     pub async fn find_by_telegram(
         &self,
         telegram_user_id: i64,
@@ -262,6 +275,38 @@ mod tests {
                 .expect("identity must exist")
                 .pub_dress,
             "0x7sky"
+        );
+    }
+
+    #[tokio::test]
+    async fn availability_is_an_exact_case_sensitive_read_without_reservation() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let lower = PubDress::from_str("0x0sky").expect("valid pub_dress");
+        let title = PubDress::from_str("0x0Sky").expect("valid pub_dress");
+
+        assert!(
+            repository
+                .is_pub_dress_available(&lower)
+                .await
+                .expect("availability lookup")
+        );
+        repository
+            .register(&lower, &ProviderIdentity::telegram(42))
+            .await
+            .expect("registration");
+        assert!(
+            !repository
+                .is_pub_dress_available(&lower)
+                .await
+                .expect("availability lookup")
+        );
+        assert!(
+            repository
+                .is_pub_dress_available(&title)
+                .await
+                .expect("case-sensitive availability lookup")
         );
     }
 }

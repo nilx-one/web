@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CheckPubDressAvailability,
   ReadIdentity,
   RegisterIdentity,
   type IdentityRegistrationPort,
@@ -12,6 +13,7 @@ import {
 describe("identity registration use cases", () => {
   it("preserves adapter results without creating identity client-side", async () => {
     const adapter: IdentityRegistrationPort = {
+      checkAvailability: async () => ({ kind: "available" }),
       read: async () => ({ kind: "not-registered" }),
       register: async ({ discriminator, slug }) => ({
         kind: "registered",
@@ -23,6 +25,12 @@ describe("identity registration use cases", () => {
     await expect(new ReadIdentity(adapter).execute()).resolves.toEqual({
       kind: "not-registered",
     });
+    await expect(
+      new CheckPubDressAvailability(adapter).execute({
+        discriminator: "0",
+        slug: "sky",
+      }),
+    ).resolves.toEqual({ kind: "available" });
     await expect(
       new RegisterIdentity(adapter).execute({
         discriminator: "0",
@@ -37,6 +45,7 @@ describe("identity registration use cases", () => {
 
   it("maps transport exceptions to an observable unavailable state", async () => {
     const adapter: IdentityRegistrationPort = {
+      checkAvailability: () => Promise.reject(new Error("offline")),
       read: () => Promise.reject(new Error("offline")),
       register: () => Promise.reject(new Error("offline")),
     };
@@ -44,6 +53,12 @@ describe("identity registration use cases", () => {
     await expect(new ReadIdentity(adapter).execute()).resolves.toEqual({
       kind: "service-unavailable",
     });
+    await expect(
+      new CheckPubDressAvailability(adapter).execute({
+        discriminator: "0",
+        slug: "sky",
+      }),
+    ).resolves.toEqual({ kind: "service-unavailable" });
     await expect(
       new RegisterIdentity(adapter).execute({
         discriminator: "0",

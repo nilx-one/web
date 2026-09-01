@@ -7,7 +7,7 @@ import type {
 } from "@nilx-one/application";
 import type { HostPort } from "@nilx-one/host-contract";
 import { ProductApp } from "@nilx-one/product-app";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -50,6 +50,10 @@ function createTelegramHost(): HostPort {
 
 describe("ProductApp", () => {
   const identity: IdentityRegistrationPort = {
+    checkAvailability: async () => ({
+      kind: "rejected",
+      reason: "authentication-required",
+    }),
     read: async () => ({ kind: "authentication-required" }),
     register: async () => ({
       kind: "rejected",
@@ -72,7 +76,7 @@ describe("ProductApp", () => {
     render(<ProductApp core={core} host={createHost()} identity={identity} />);
 
     expect(
-      await screen.findByRole("heading", { name: "Identity is continuity." }),
+      await screen.findByRole("heading", { name: "Choose your pub_dress." }),
     ).toBeInTheDocument();
     expect(await screen.findByText("Shared Core required")).toBeInTheDocument();
     expect(
@@ -97,6 +101,33 @@ describe("ProductApp", () => {
     expect(results.violations).toEqual([]);
   });
 
+  it("keeps the compound Telegram registration field accessible", async () => {
+    window.history.replaceState({}, "", "/telegram/");
+    const core: CoreRuntimePort = {
+      probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
+    };
+    const telegramIdentity: IdentityRegistrationPort = {
+      checkAvailability: async () => ({ kind: "available" }),
+      read: async () => ({ kind: "not-registered" }),
+      register: async () => ({ kind: "service-unavailable" }),
+    };
+
+    const { container } = render(
+      <ProductApp
+        core={core}
+        host={createTelegramHost()}
+        identity={telegramIdentity}
+        routerBasepath="/telegram"
+      />,
+    );
+    await screen.findByRole("combobox", {
+      name: "pub_dress hexadecimal discriminator",
+    });
+
+    const results = await act(() => axe.run(container));
+    expect(results.violations).toEqual([]);
+  });
+
   it("mounts Telegram registration under its production basepath without changing slug semantics", async () => {
     window.history.replaceState({}, "", "/telegram/");
 
@@ -112,6 +143,7 @@ describe("ProductApp", () => {
         identity: { pubDress: "0xaSky" },
       });
     const telegramIdentity: IdentityRegistrationPort = {
+      checkAvailability: async () => ({ kind: "available" }),
       read: async () => ({ kind: "not-registered" }),
       register,
     };
@@ -133,9 +165,12 @@ describe("ProductApp", () => {
 
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("Choose your pub_dress"), "Sky");
-    await user.click(
-      screen.getByRole("button", { name: "Register pub_dress" }),
-    );
+    const registrationButton = screen.getByRole("button", {
+      name: "Register pub_dress",
+    });
+    await waitFor(() => expect(registrationButton).toBeEnabled());
+    expect(screen.getByText("Available")).toBeInTheDocument();
+    await user.click(registrationButton);
 
     expect(register).toHaveBeenCalledWith({
       discriminator: "a",

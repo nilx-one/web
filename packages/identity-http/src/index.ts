@@ -6,6 +6,7 @@ import type {
   IdentityProjection,
   IdentityRegistrationPort,
   IdentityRegistrationResult,
+  PubDressAvailabilityResult,
   PubDressSelection,
 } from "@nilx-one/application";
 
@@ -37,6 +38,46 @@ class IdentityHttpAdapter implements IdentityRegistrationPort {
 
   public constructor(private readonly options: IdentityHttpAdapterOptions) {
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  public async checkAvailability(
+    selection: PubDressSelection,
+  ): Promise<PubDressAvailabilityResult> {
+    const authorization = this.authorization();
+    if (authorization === undefined) {
+      return { kind: "rejected", reason: "authentication-required" };
+    }
+
+    const query = new URLSearchParams([
+      ["discriminator", selection.discriminator],
+      ["slug", selection.slug],
+    ]);
+    const response = await this.fetch(
+      `/api/v1/identity/availability?${query.toString()}`,
+      {
+        cache: "no-store",
+        headers: { authorization },
+      },
+    );
+    const body: unknown = await response.json().catch(() => undefined);
+
+    if (response.ok && isRecord(body) && typeof body.available === "boolean") {
+      return { kind: body.available ? "available" : "unavailable" };
+    }
+
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+      case "telegram_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "invalid_pub_dress_length":
+        return { kind: "rejected", reason: "invalid-length" };
+      case "invalid_pub_dress_discriminator":
+      case "invalid_pub_dress_character":
+      case "invalid_pub_dress_prefix":
+        return { kind: "rejected", reason: "invalid-character" };
+      default:
+        return { kind: "service-unavailable" };
+    }
   }
 
   public async read(): Promise<IdentityLookupResult> {
