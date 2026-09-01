@@ -291,13 +291,11 @@ impl IdentityRepository {
             return Ok(None);
         };
         let pub_dress: String = challenge.get("pub_dress");
-        sqlx::query(
-            "UPDATE native_credentials SET active = 1, updated_at = ? WHERE pub_dress = ?",
-        )
-        .bind(now as i64)
-        .bind(&pub_dress)
-        .execute(&mut *transaction)
-        .await?;
+        sqlx::query("UPDATE native_credentials SET active = 1, updated_at = ? WHERE pub_dress = ?")
+            .bind(now as i64)
+            .bind(&pub_dress)
+            .execute(&mut *transaction)
+            .await?;
         sqlx::query("DELETE FROM native_registration_challenges WHERE challenge_hash = ?")
             .bind(challenge_hash)
             .execute(&mut *transaction)

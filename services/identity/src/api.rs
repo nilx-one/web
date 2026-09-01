@@ -128,7 +128,10 @@ fn router_with_clock(
             "/api/v1/auth/native/remembered/forget",
             post(forget_remembered_bond),
         )
-        .route("/api/v1/auth/native/recovery", post(recover_native_identity))
+        .route(
+            "/api/v1/auth/native/recovery",
+            post(recover_native_identity),
+        )
         .route("/api/v1/identity/resolve", post(resolve_pub_dress))
         .route("/api/v1/identity", get(read_identity))
         .route(
@@ -181,10 +184,7 @@ async fn resolve_pub_dress(
     }
 }
 
-async fn read_native_context(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-) -> Response {
+async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) -> Response {
     let now = match now(&state) {
         Ok(value) => value,
         Err(response) => return response,
@@ -270,21 +270,19 @@ async fn register_native_identity(
         Err(error) => return password_policy_error(error),
     };
     let password_engine = state.password_engine.clone();
-    let password_hash = match tokio::task::spawn_blocking(move || {
-        password_engine.hash(&normalized_password)
-    })
-    .await
-    {
-        Ok(Ok(value)) => value,
-        Ok(Err(error)) => {
-            tracing::error!(%error, "native password hashing failed");
-            return unavailable();
-        }
-        Err(error) => {
-            tracing::error!(%error, "native password hashing task failed");
-            return unavailable();
-        }
-    };
+    let password_hash =
+        match tokio::task::spawn_blocking(move || password_engine.hash(&normalized_password)).await
+        {
+            Ok(Ok(value)) => value,
+            Ok(Err(error)) => {
+                tracing::error!(%error, "native password hashing failed");
+                return unavailable();
+            }
+            Err(error) => {
+                tracing::error!(%error, "native password hashing task failed");
+                return unavailable();
+            }
+        };
     let recovery_key = match TokenFactory::recovery_key() {
         Ok(value) => value,
         Err(error) => {
@@ -418,31 +416,29 @@ async fn authenticate_native_identity(
         },
         None => None,
     };
-    let encoded_hash = credential
-        .as_ref()
-        .map_or_else(|| state.dummy_password_hash.clone(), |value| value.password_hash.clone());
+    let encoded_hash = credential.as_ref().map_or_else(
+        || state.dummy_password_hash.clone(),
+        |value| value.password_hash.clone(),
+    );
     let password = request.password;
     let password_for_rehash = password.clone();
     let password_engine = state.password_engine.clone();
-    let password_matches = match tokio::task::spawn_blocking(move || {
-        password_engine.verify(&password, &encoded_hash)
-    })
-    .await
-    {
-        Ok(value) => value,
-        Err(error) => {
-            tracing::error!(%error, "native password verification task failed");
-            return unavailable();
-        }
-    };
+    let password_matches =
+        match tokio::task::spawn_blocking(move || password_engine.verify(&password, &encoded_hash))
+            .await
+        {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::error!(%error, "native password verification task failed");
+                return unavailable();
+            }
+        };
 
     let authenticated = password_matches
         && credential.as_ref().is_some_and(|value| value.active)
         && pub_dress.is_some();
     if !authenticated {
-        state
-            .limiter
-            .record_authentication_failure(source_key, now);
+        state.limiter.record_authentication_failure(source_key, now);
         state
             .limiter
             .record_authentication_failure(pub_dress_key, now);
@@ -466,10 +462,7 @@ async fn authenticate_native_identity(
     .await
 }
 
-async fn logout_native_identity(
-    State(state): State<ApiState>,
-    headers: HeaderMap,
-) -> Response {
+async fn logout_native_identity(State(state): State<ApiState>, headers: HeaderMap) -> Response {
     if let Some(response) = reject_missing_csrf(&headers) {
         return response;
     }
@@ -515,9 +508,10 @@ async fn recover_native_identity(
         Err(response) => return response,
     };
     let source = request_source(&headers);
-    if let Err(retry_after) = state
-        .limiter
-        .consume(format!("recovery:source:{source}"), now, 5, 60 * 60)
+    if let Err(retry_after) =
+        state
+            .limiter
+            .consume(format!("recovery:source:{source}"), now, 5, 60 * 60)
     {
         return rate_limited(retry_after);
     }
@@ -549,21 +543,19 @@ async fn recover_native_identity(
         return invalid_recovery_material();
     }
     let password_engine = state.password_engine.clone();
-    let password_hash = match tokio::task::spawn_blocking(move || {
-        password_engine.hash(&normalized_password)
-    })
-    .await
-    {
-        Ok(Ok(value)) => value,
-        Ok(Err(error)) => {
-            tracing::error!(%error, "recovery password hashing failed");
-            return unavailable();
-        }
-        Err(error) => {
-            tracing::error!(%error, "recovery password hashing task failed");
-            return unavailable();
-        }
-    };
+    let password_hash =
+        match tokio::task::spawn_blocking(move || password_engine.hash(&normalized_password)).await
+        {
+            Ok(Ok(value)) => value,
+            Ok(Err(error)) => {
+                tracing::error!(%error, "recovery password hashing failed");
+                return unavailable();
+            }
+            Err(error) => {
+                tracing::error!(%error, "recovery password hashing task failed");
+                return unavailable();
+            }
+        };
     let replacement_recovery_key = match TokenFactory::recovery_key() {
         Ok(value) => value,
         Err(error) => {
@@ -624,19 +616,13 @@ async fn authenticated_response(
         .digest("native-session", &session_token);
     if let Err(error) = state
         .repository
-        .create_native_session(
-            &token_hash,
-            &identity.pub_dress,
-            now,
-            session_expires_at,
-        )
+        .create_native_session(&token_hash, &identity.pub_dress, now, session_expires_at)
         .await
     {
         tracing::error!(%error, "native session creation failed");
         return unavailable();
     }
-    let remembered_expires_at =
-        now.saturating_add(state.native_auth.remembered_bond_ttl_seconds);
+    let remembered_expires_at = now.saturating_add(state.native_auth.remembered_bond_ttl_seconds);
     let remembered_hint = match state
         .remembered_bond_signer
         .issue(&identity.pub_dress, remembered_expires_at)
@@ -685,10 +671,8 @@ async fn rehash_credential_after_success(
         return;
     };
     let password_engine = state.password_engine.clone();
-    let Ok(Ok(password_hash)) = tokio::task::spawn_blocking(move || {
-        password_engine.hash(&normalized_password)
-    })
-    .await
+    let Ok(Ok(password_hash)) =
+        tokio::task::spawn_blocking(move || password_engine.hash(&normalized_password)).await
     else {
         tracing::warn!("native credential rehash could not complete");
         return;
@@ -742,9 +726,7 @@ fn read_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
 }
 
 fn secure_cookie(name: &str, value: &str, max_age_seconds: u64) -> String {
-    format!(
-        "{name}={value}; Path=/; Max-Age={max_age_seconds}; Secure; HttpOnly; SameSite=Lax"
-    )
+    format!("{name}={value}; Path=/; Max-Age={max_age_seconds}; Secure; HttpOnly; SameSite=Lax")
 }
 
 fn clear_cookie(name: &str) -> String {
@@ -789,12 +771,13 @@ fn no_store_empty(status: StatusCode) -> Response {
     response
 }
 
-fn no_store_error(
-    status: StatusCode,
-    code: &'static str,
-    message: &'static str,
-) -> Response {
-    no_store_json(status, ErrorEnvelope { error: ApiError { code, message } })
+fn no_store_error(status: StatusCode, code: &'static str, message: &'static str) -> Response {
+    no_store_json(
+        status,
+        ErrorEnvelope {
+            error: ApiError { code, message },
+        },
+    )
 }
 
 fn rate_limited(retry_after: u64) -> Response {
@@ -1465,10 +1448,12 @@ mod tests {
         let body = to_bytes(response.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["state"], "recovery_key_required");
-        assert!(body["recovery_key"]
-            .as_str()
-            .expect("recovery key")
-            .starts_with("0x1-rk-"));
+        assert!(
+            body["recovery_key"]
+                .as_str()
+                .expect("recovery key")
+                .starts_with("0x1-rk-")
+        );
 
         let context = Request::get("/api/v1/auth/native/context")
             .body(Body::empty())
@@ -1478,15 +1463,13 @@ mod tests {
         let context: Value = serde_json::from_slice(&context).expect("JSON body");
         assert_eq!(context["state"], "anonymous");
 
-        let acknowledgement = Request::post(
-            "/api/v1/auth/native/recovery/acknowledgement",
-        )
-        .header("content-type", "application/json")
-        .header(super::CSRF_HEADER, "1")
-        .body(Body::from(
-            serde_json::json!({ "challenge": body["challenge"] }).to_string(),
-        ))
-        .expect("acknowledgement request");
+        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
+            .header("content-type", "application/json")
+            .header(super::CSRF_HEADER, "1")
+            .body(Body::from(
+                serde_json::json!({ "challenge": body["challenge"] }).to_string(),
+            ))
+            .expect("acknowledgement request");
         let acknowledgement = app
             .clone()
             .oneshot(acknowledgement)
@@ -1537,15 +1520,13 @@ mod tests {
             .expect("registration");
         let body = to_bytes(response.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
-        let acknowledgement = Request::post(
-            "/api/v1/auth/native/recovery/acknowledgement",
-        )
-        .header("content-type", "application/json")
-        .header(super::CSRF_HEADER, "1")
-        .body(Body::from(
-            serde_json::json!({ "challenge": body["challenge"] }).to_string(),
-        ))
-        .expect("acknowledgement request");
+        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
+            .header("content-type", "application/json")
+            .header(super::CSRF_HEADER, "1")
+            .body(Body::from(
+                serde_json::json!({ "challenge": body["challenge"] }).to_string(),
+            ))
+            .expect("acknowledgement request");
         let acknowledgement = app
             .clone()
             .oneshot(acknowledgement)
@@ -1608,8 +1589,10 @@ mod tests {
         let wrong_password = to_bytes(wrong_password.into_body(), 4096)
             .await
             .expect("body");
-        let wrong_password: Value =
-            serde_json::from_slice(&wrong_password).expect("JSON body");
-        assert_eq!(wrong_password["error"]["code"], "invalid_native_credentials");
+        let wrong_password: Value = serde_json::from_slice(&wrong_password).expect("JSON body");
+        assert_eq!(
+            wrong_password["error"]["code"],
+            "invalid_native_credentials"
+        );
     }
 }

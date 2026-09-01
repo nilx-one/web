@@ -234,7 +234,13 @@ impl RememberedBondSigner {
 
     pub fn verify(&self, value: &str, now: u64) -> Option<String> {
         let fields = value.split('.').collect::<Vec<_>>();
-        let ["v1", expires_at, hint_id, encoded_pub_dress, encoded_signature] = fields.as_slice()
+        let [
+            "v1",
+            expires_at,
+            hint_id,
+            encoded_pub_dress,
+            encoded_signature,
+        ] = fields.as_slice()
         else {
             return None;
         };
@@ -259,9 +265,7 @@ impl RememberedBondSigner {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        NativeAuthConfig, PasswordPolicyError, RememberedBondSigner, TokenFactory,
-    };
+    use super::{NativeAuthConfig, PasswordPolicyError, RememberedBondSigner, TokenFactory};
 
     fn config() -> NativeAuthConfig {
         NativeAuthConfig::new(
@@ -296,7 +300,11 @@ mod tests {
 
     #[test]
     fn secret_tokens_use_distinct_explicit_prefixes() {
-        assert!(TokenFactory::session().expect("session").starts_with("0x1s_"));
+        assert!(
+            TokenFactory::session()
+                .expect("session")
+                .starts_with("0x1s_")
+        );
         assert!(
             TokenFactory::registration_challenge()
                 .expect("challenge")
