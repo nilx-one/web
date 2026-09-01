@@ -16,6 +16,7 @@ const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   "identity-http": ["@nilx-one/application"],
   "host-browser": ["@nilx-one/host-contract"],
   "host-contract": [],
+  "host-discord": ["@nilx-one/host-contract"],
   "host-telegram": ["@nilx-one/host-contract"],
   "product-app": [
     "@nilx-one/application",
@@ -86,6 +87,28 @@ describe("Clean Architecture boundaries", () => {
         const source = readFileSync(file, "utf8");
 
         if (/Telegram\.WebApp|window\.Telegram/.test(source)) {
+          violations.push(normalized);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("isolates the Discord SDK in the Discord host adapter", () => {
+    const violations: string[] = [];
+
+    for (const scope of ["apps", "packages"] as const) {
+      for (const file of sourceFiles(join(ROOT, scope))) {
+        const normalized = relative(ROOT, file);
+
+        if (normalized.startsWith("packages/host-discord/")) {
+          continue;
+        }
+
+        const source = readFileSync(file, "utf8");
+
+        if (source.includes("@discord/embedded-app-sdk")) {
           violations.push(normalized);
         }
       }
