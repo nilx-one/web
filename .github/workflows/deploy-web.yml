@@ -32,8 +32,6 @@ jobs:
     name: Activate ${{ inputs.target }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment:
-      name: production
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       CLIENT_NAME: ${{ inputs.target }}
