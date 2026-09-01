@@ -117,7 +117,10 @@ async fn exchange_discord_code(
     match discord.exchange_code(&request.code).await {
         Ok(token) => (StatusCode::OK, Json(token)).into_response(),
         Err(DiscordOAuthError::Rejected(status)) => {
-            tracing::warn!(discord_status = status, "Discord authorization code rejected");
+            tracing::warn!(
+                discord_status = status,
+                "Discord authorization code rejected"
+            );
             unauthorized()
         }
         Err(error) => {
