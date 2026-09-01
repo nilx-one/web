@@ -18,6 +18,8 @@ if (container === null) {
   throw new Error("0x1 root element is missing");
 }
 
+const root = createRoot(container);
+
 async function main(): Promise<void> {
   const session = await bootstrapDiscordActivity();
   const core = createCoreWasmClient({
@@ -27,7 +29,7 @@ async function main(): Promise<void> {
     getAuthorization: () => session.authorization,
   });
 
-  createRoot(container).render(
+  root.render(
     <StrictMode>
       <ProductApp core={core} host={session.host} identity={identity} />
     </StrictMode>,
