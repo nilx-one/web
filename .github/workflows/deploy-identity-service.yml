@@ -36,7 +36,7 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
-      DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+      DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
       DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
       IDENTITY_DEPLOYMENT_PATH: ${{ vars.IDENTITY_DEPLOYMENT_PATH || '.local/share/nilx-one/identity' }}
