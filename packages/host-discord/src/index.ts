@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { DiscordSDK } from "@discord/embedded-app-sdk";
+import {
+  DiscordSDK,
+  type IDiscordSDK,
+} from "@discord/embedded-app-sdk";
 import {
   ZERO_SAFE_AREA,
   type HostChangeListener,
@@ -9,21 +12,15 @@ import {
   type HostSnapshot,
 } from "@nilx-one/host-contract";
 
-interface DiscordActivityBridge {
-  ready(): Promise<void>;
-  commands: {
-    authorize(options: {
-      client_id: string;
-      response_type: "code";
-      state: string;
-      prompt: "none";
-      scope: string[];
-    }): Promise<{ code: string }>;
-    authenticate(options: { access_token: string }): Promise<unknown>;
-    encourageHardwareAcceleration(): Promise<{ enabled: boolean }>;
-    openExternalLink(options: { url: string }): Promise<unknown>;
-  };
-}
+type DiscordActivityBridge = Pick<IDiscordSDK, "ready"> & {
+  commands: Pick<
+    IDiscordSDK["commands"],
+    | "authorize"
+    | "authenticate"
+    | "encourageHardwareAcceleration"
+    | "openExternalLink"
+  >;
+};
 
 export interface DiscordHostEnvironment {
   matchMedia(query: string): MediaQueryList;
