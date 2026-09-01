@@ -36,6 +36,8 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+      DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+      DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
       IDENTITY_DEPLOYMENT_PATH: ${{ vars.IDENTITY_DEPLOYMENT_PATH || '.local/share/nilx-one/identity' }}
 
@@ -53,6 +55,10 @@ jobs:
           test -n "$IDENTITY_DEPLOYMENT_PATH"
           [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
           (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
+          if [ -n "$DISCORD_CLIENT_ID" ] || [ -n "$DISCORD_CLIENT_SECRET" ]; then
+            test -n "$DISCORD_CLIENT_ID"
+            test -n "$DISCORD_CLIENT_SECRET"
+          fi
 
           package_runs="$(
             gh api --method GET \
@@ -119,6 +125,10 @@ jobs:
           tar -czf "$archive" -C services/identity/deploy compose.yaml deploy.sh check-public.sh
           umask 077
           printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN" >"$secret_file"
+          if [ -n "$DISCORD_CLIENT_ID" ] && [ -n "$DISCORD_CLIENT_SECRET" ]; then
+            printf 'DISCORD_CLIENT_ID=%s\n' "$DISCORD_CLIENT_ID" >>"$secret_file"
+            printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET" >>"$secret_file"
+          fi
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
             "$archive" "/tmp/0x1-identity-image-${RELEASE_SHA}.tar.gz" "$secret_file" \
             "$SSH_USER@$SSH_HOST:/tmp/"
