@@ -68,4 +68,4 @@ probe() {
 }
 
 probe telegram-mini-app /telegram/ 200 '<div id="root"></div>'
-probe identity-auth-boundary /api/v1/identity 401 '"code":"telegram_authentication_required"'
+probe identity-auth-boundary /api/v1/identity 401 '"code":"provider_authentication_required"'
