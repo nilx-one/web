@@ -1,10 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  DiscordSDK,
-  type IDiscordSDK,
-} from "@discord/embedded-app-sdk";
+import { DiscordSDK, type IDiscordSDK } from "@discord/embedded-app-sdk";
 import {
   ZERO_SAFE_AREA,
   type HostChangeListener,
