@@ -69,14 +69,7 @@ function useHostSnapshot(host: HostPort): HostSnapshot {
   return snapshot;
 }
 
-function useDebouncedSelection(selection: PubDressSelection) {
-  const [debounced, setDebounced] = useState(selection);
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setDebounced(selection), 320);
-    return () => window.clearTimeout(timeout);
-  }, [selection]);
-  return debounced;
-}
+const PUB_DRESS_RESOLUTION_DELAY_MS = 1_000;
 
 function newIdempotencyKey(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
@@ -110,7 +103,8 @@ function FoundationRoute() {
   });
   const [password, setPassword] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
-  const debouncedSelection = useDebouncedSelection(selection);
+  const [resolutionSelection, setResolutionSelection] = useState(selection);
+  const [resolutionArmed, setResolutionArmed] = useState(false);
 
   const readinessQuery = useQuery({
     queryKey: ["core-runtime-readiness"],
@@ -133,34 +127,50 @@ function FoundationRoute() {
     retry: false,
   });
 
-  const selectionIsDebounced =
-    selection.discriminator === debouncedSelection.discriminator &&
-    selection.slug === debouncedSelection.slug;
   const nativeCanResolve = nativeContextQuery.data?.kind === "anonymous";
   const providerCanResolve =
     providerIdentityQuery.data?.kind === "not-registered";
+  const canResolve = browserHost ? nativeCanResolve : providerCanResolve;
+  const selectionMatchesResolution =
+    selection.discriminator === resolutionSelection.discriminator &&
+    selection.slug === resolutionSelection.slug;
+  const resolutionSlugLength = [...resolutionSelection.slug].length;
   const resolutionEnabled =
-    (browserHost ? nativeCanResolve : providerCanResolve) &&
-    [...debouncedSelection.slug].length >= 2 &&
-    [...debouncedSelection.slug].length <= 32;
+    resolutionArmed &&
+    canResolve &&
+    resolutionSlugLength >= 2 &&
+    resolutionSlugLength <= 32;
   const resolutionQuery = useQuery({
     queryKey: [
       "pub-dress-resolution",
-      debouncedSelection.discriminator,
-      debouncedSelection.slug,
+      resolutionSelection.discriminator,
+      resolutionSelection.slug,
     ],
     queryFn: () =>
-      new ResolvePubDress(dependencies.identity).execute(debouncedSelection),
+      new ResolvePubDress(dependencies.identity).execute(resolutionSelection),
     enabled: resolutionEnabled,
     retry: false,
     staleTime: 0,
   });
   const status = createPubDressStatusViewState(
     selection,
-    [...selection.slug].length >= 2 &&
-      (!selectionIsDebounced || resolutionQuery.isFetching),
-    selectionIsDebounced ? resolutionQuery.data : undefined,
+    resolutionArmed && selectionMatchesResolution && resolutionQuery.isFetching,
+    resolutionArmed && selectionMatchesResolution
+      ? resolutionQuery.data
+      : undefined,
   );
+
+  useEffect(() => {
+    const slugLength = [...selection.slug].length;
+    if (!canResolve || slugLength < 2 || slugLength > 32) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setResolutionSelection(selection);
+      setResolutionArmed(true);
+    }, PUB_DRESS_RESOLUTION_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [canResolve, selection]);
 
   const nativeRegistration = useMutation({
     mutationFn: (input: { pubDress: string; password: string }) =>
@@ -276,11 +286,25 @@ function FoundationRoute() {
   }, [host.kind, host.theme]);
 
   function changeSelection(next: PubDressSelection): void {
+    setResolutionArmed(false);
     setSelection(normalizePubDressCredentialInput(next, selection));
     setPassword("");
     setIdempotencyKey(newIdempotencyKey());
     nativeRegistration.reset();
     nativeAuthentication.reset();
+  }
+
+  function resolvePubDressNow(): void {
+    const slugLength = [...selection.slug].length;
+    if (!canResolve || slugLength < 2 || slugLength > 32) {
+      return;
+    }
+    if (selectionMatchesResolution && resolutionArmed) {
+      void resolutionQuery.refetch();
+      return;
+    }
+    setResolutionSelection(selection);
+    setResolutionArmed(true);
   }
 
   function submitIdentity(): void {
@@ -320,6 +344,7 @@ function FoundationRoute() {
       onForgetRemembered={() => forgetRemembered.mutate()}
       onLogout={() => logout.mutate()}
       onPasswordChange={setPassword}
+      onResolvePubDress={resolvePubDressNow}
       onSelectionChange={changeSelection}
       onSubmit={submitIdentity}
     />
