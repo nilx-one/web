@@ -66,16 +66,19 @@ jobs:
           edge_alias="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].edgeAlias' deploy/web/targets.json)"
           compat_edge_alias="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].compatEdgeAlias' deploy/web/targets.json)"
           compose_project="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].composeProject' deploy/web/targets.json)"
+          public_path="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].publicPath' deploy/web/targets.json)"
 
           [[ "$client_root" == /srv/* ]]
           [[ "$edge_alias" =~ ^[a-z0-9-]+$ ]]
           [[ "$compat_edge_alias" =~ ^[a-z0-9-]+$ ]]
           [[ "$compose_project" =~ ^[a-z0-9-]+$ ]]
+          [[ "$public_path" == /* ]]
 
           echo "CLIENT_ROOT=$client_root" >>"$GITHUB_ENV"
           echo "EDGE_ALIAS=$edge_alias" >>"$GITHUB_ENV"
           echo "COMPAT_EDGE_ALIAS=$compat_edge_alias" >>"$GITHUB_ENV"
           echo "COMPOSE_PROJECT_NAME=$compose_project" >>"$GITHUB_ENV"
+          echo "PUBLIC_PATH=$public_path" >>"$GITHUB_ENV"
           echo "CLIENT_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
 
       - name: Wait for immutable client package
@@ -151,7 +154,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           archive="/tmp/0x1-client-deploy-${RELEASE_SHA}.tar.gz"
-          tar -czf "$archive" -C deploy/web compose.yaml deploy.sh
+          tar -czf "$archive" -C deploy/web compose.yaml deploy.sh check-public.sh
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
             "$archive" "/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz" \
             "$SSH_USER@$SSH_HOST:/tmp/"
@@ -161,7 +164,7 @@ jobs:
           set -Eeuo pipefail
           ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
             "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_ROOT='$CLIENT_DEPLOYMENT_ROOT' CLIENT_NAME='$CLIENT_NAME' CLIENT_ROOT='$CLIENT_ROOT' EDGE_ALIAS='$EDGE_ALIAS' COMPAT_EDGE_ALIAS='$COMPAT_EDGE_ALIAS' COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' RELEASE_SHA='$RELEASE_SHA' CLIENT_IMAGE='$CLIENT_IMAGE' bash -s" <<'REMOTE'
+            "DEPLOY_ROOT='$CLIENT_DEPLOYMENT_ROOT' CLIENT_NAME='$CLIENT_NAME' CLIENT_ROOT='$CLIENT_ROOT' EDGE_ALIAS='$EDGE_ALIAS' COMPAT_EDGE_ALIAS='$COMPAT_EDGE_ALIAS' COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' PUBLIC_PATH='$PUBLIC_PATH' RELEASE_SHA='$RELEASE_SHA' CLIENT_IMAGE='$CLIENT_IMAGE' bash -s" <<'REMOTE'
           set -Eeuo pipefail
 
           deploy_root="$DEPLOY_ROOT"
@@ -196,6 +199,7 @@ jobs:
           printf '%s\n' "$EDGE_ALIAS" >"$release_dir/.edge-alias"
           printf '%s\n' "$COMPAT_EDGE_ALIAS" >"$release_dir/.compat-edge-alias"
           printf '%s\n' "$COMPOSE_PROJECT_NAME" >"$release_dir/.compose-project"
+          printf '%s\n' "$PUBLIC_PATH" >"$release_dir/.public-path"
 
           activate_current() {
             cd "$release_dir"
@@ -207,6 +211,12 @@ jobs:
             COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" \
             RELEASE_SHA="$RELEASE_SHA" \
               sh ./deploy.sh
+            CLIENT_NAME="$CLIENT_NAME" \
+            PUBLIC_ORIGIN='https://nilx.one' \
+            PUBLIC_PATH="$PUBLIC_PATH" \
+            HEALTH_RETRY=18 \
+            HEALTH_RETRY_DELAY=5 \
+              sh ./check-public.sh
           }
 
           rollback() {
@@ -266,5 +276,6 @@ jobs:
             echo "- release: \`$RELEASE_SHA\`"
             echo "- image: \`$CLIENT_IMAGE\`"
             echo "- edge alias: \`$EDGE_ALIAS\`"
+            echo "- public path: \`$PUBLIC_PATH\`"
             echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"
