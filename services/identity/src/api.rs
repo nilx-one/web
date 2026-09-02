@@ -798,7 +798,7 @@ fn password_policy_error(error: PasswordPolicyError) -> Response {
         PasswordPolicyError::InvalidLength => no_store_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_password_length",
-            "Use a password containing 15–128 Unicode code points.",
+            "Use a password containing 8–128 Unicode code points.",
         ),
         PasswordPolicyError::Compromised => no_store_error(
             StatusCode::UNPROCESSABLE_ENTITY,

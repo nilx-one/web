@@ -14,8 +14,9 @@ afterEach(() => {
 });
 
 describe("progressive native identity form", () => {
-  it("pulses availability before collapsing without moving focus", () => {
+  it("keeps an automatically resolved address editable until keyboard confirmation", () => {
     vi.useFakeTimers();
+    const onResolvePubDress = vi.fn();
 
     render(
       <IdentityFoundationView
@@ -44,7 +45,7 @@ describe("progressive native identity form", () => {
         onForgetRemembered={vi.fn()}
         onLogout={vi.fn()}
         onPasswordChange={vi.fn()}
-        onResolvePubDress={vi.fn()}
+        onResolvePubDress={onResolvePubDress}
         onSelectionChange={vi.fn()}
         onSubmit={vi.fn()}
       />,
@@ -57,9 +58,18 @@ describe("progressive native identity form", () => {
 
     act(() => vi.advanceTimersByTime(900));
 
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit 0x0sky" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByLabelText("pub_dress"), { key: "Enter" });
+    expect(onResolvePubDress).toHaveBeenCalledOnce();
+    act(() => vi.advanceTimersByTime(900));
+
     const password = screen.getByLabelText("Password");
     expect(screen.getByRole("button", { name: "Edit 0x0sky" })).toBeVisible();
-    expect(password).not.toHaveFocus();
+    expect(password).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit 0x0sky" }));
 
@@ -136,6 +146,55 @@ describe("progressive native identity form", () => {
     act(() => vi.advanceTimersByTime(900));
 
     expect(screen.getByLabelText("Password")).toHaveFocus();
+  });
+
+  it("does not change explicit password validation when visibility changes", () => {
+    vi.useFakeTimers();
+    const sharedProps = {
+      selection: { discriminator: "0", slug: "sky" },
+      onAcknowledgeRecovery: vi.fn(),
+      onForgetRemembered: vi.fn(),
+      onLogout: vi.fn(),
+      onPasswordChange: vi.fn(),
+      onResolvePubDress: vi.fn(),
+      onSelectionChange: vi.fn(),
+      onSubmit: vi.fn(),
+      viewModel: {
+        hostLabel: "browser host",
+        safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+        showProviderRow: true,
+        runtime: {
+          tone: "ready" as const,
+          label: "Shared Core ready" as const,
+          detail: "Contract 1 is available to the Web client.",
+        },
+        identity: {
+          kind: "form" as const,
+          mode: "register" as const,
+          status: {
+            kind: "available" as const,
+            detail: "Available — create this identity" as const,
+          },
+          busy: false,
+        },
+      },
+    };
+
+    render(<IdentityFoundationView {...sharedProps} password="short" />);
+    fireEvent.keyDown(screen.getByLabelText("pub_dress"), { key: "Enter" });
+    act(() => vi.advanceTimersByTime(900));
+
+    const password = screen.getByLabelText("Password");
+    expect(password.parentElement).toHaveAttribute(
+      "data-validation",
+      "invalid",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show password" }));
+    expect(password).toHaveAttribute("type", "text");
+    expect(password.parentElement).toHaveAttribute(
+      "data-validation",
+      "invalid",
+    );
   });
 
   it("attenuates reflected light with distance and widens its footprint", () => {
