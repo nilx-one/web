@@ -320,7 +320,7 @@ function IdentityForm({
   const normalizedPasswordLength = [...password.normalize("NFC")].length;
   const passwordReady =
     identity.mode === "register"
-      ? normalizedPasswordLength >= 15 && normalizedPasswordLength <= 128
+      ? normalizedPasswordLength >= 8 && normalizedPasswordLength <= 128
       : password.length > 0;
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
@@ -512,7 +512,7 @@ function IdentityForm({
             name="slug"
             value={displayedSelection.slug}
             minLength={2}
-            maxLength={32}
+            maxLength={35}
             autoCapitalize="none"
             autoComplete="username"
             autoCorrect="off"
@@ -570,7 +570,7 @@ function IdentityForm({
             type={passwordVisible ? "text" : "password"}
             name="password"
             value={password}
-            minLength={identity.mode === "register" ? 15 : undefined}
+            minLength={identity.mode === "register" ? 8 : undefined}
             maxLength={128}
             autoComplete={
               identity.mode === "register" ? "new-password" : "current-password"
@@ -602,7 +602,7 @@ function IdentityForm({
 
       {identity.mode === "register" ? (
         <p className="password-note">
-          15–128 characters · spaces and Unicode welcome
+          8–128 characters · spaces and Unicode welcome
         </p>
       ) : null}
       {remembered ? (
