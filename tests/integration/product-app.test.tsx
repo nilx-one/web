@@ -270,25 +270,23 @@ describe("ProductApp identity", () => {
     );
 
     const slug = await screen.findByLabelText("pub_dress");
-    const discriminator = screen.getByRole("combobox", {
-      name: "pub_dress hexadecimal discriminator",
-    });
     const password = await screen.findByLabelText("Password");
     const credentialUsername = container.querySelector<HTMLInputElement>(
       'input[name="username"]',
     );
 
-    expect(slug).toHaveValue("sk");
-    expect(discriminator).toHaveValue("0");
+    expect(slug).toHaveValue("0x0sk");
     expect(credentialUsername).not.toBeNull();
     expect(credentialUsername).toHaveValue("0x0sk");
 
+    fireEvent.input(password, {
+      target: { value: "stored-secret" },
+      inputType: "insertReplacementText",
+    });
     fireEvent.input(credentialUsername!, {
       target: { value: "0xfrSb2" },
+      inputType: "insertReplacementText",
     });
-    expect(slug).toHaveValue("sk");
-
-    fireEvent.change(password, { target: { value: "stored-secret" } });
 
     await waitFor(() =>
       expect(resolvePubDress).toHaveBeenCalledWith({
@@ -306,6 +304,95 @@ describe("ProductApp identity", () => {
     expect(
       await screen.findByText("Authenticated as 0xfrSb2."),
     ).toBeInTheDocument();
+  });
+
+  it("submits saved-password autofill for the already entered pub_dress", async () => {
+    const user = userEvent.setup();
+    const authenticateNative = vi
+      .fn<IdentityAccessPort["authenticateNative"]>()
+      .mockResolvedValue({
+        kind: "authenticated",
+        identity: { pubDress: "0x0sky" },
+      });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          resolvePubDress: async () => ({
+            kind: "registered",
+            pubDress: "0x0sky",
+          }),
+          authenticateNative,
+        })}
+      />,
+    );
+
+    await user.type(await screen.findByLabelText("pub_dress"), "sky");
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+    await user.keyboard("{Enter}");
+    expect(screen.getByLabelText("pub_dress")).toHaveValue("0x0sky");
+
+    fireEvent.input(screen.getByLabelText("Password"), {
+      target: { value: "stored-secret" },
+      inputType: "insertReplacementText",
+    });
+
+    await waitFor(() =>
+      expect(authenticateNative).toHaveBeenCalledWith(
+        "0x0sky",
+        "stored-secret",
+      ),
+    );
+  });
+
+  it("resolves and registers a saved credential selected from an empty form", async () => {
+    const registerNative = vi
+      .fn<IdentityAccessPort["registerNative"]>()
+      .mockResolvedValue({
+        kind: "recovery-key-required",
+        identity: { pubDress: "0xaSky" },
+        recoveryKey: "0x1-rk-autofill",
+        challenge: "0x1c-autofill-registration",
+      });
+    const { container } = render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          resolvePubDress: async (selection) => ({
+            kind: "available",
+            pubDress: formatPubDress(selection),
+          }),
+          registerNative,
+        })}
+      />,
+    );
+
+    const username = await screen.findByLabelText("pub_dress");
+    const password = container.querySelector<HTMLInputElement>(
+      'input[name="password"]',
+    );
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(password).not.toBeNull();
+
+    fireEvent.input(username, {
+      target: { value: "0xaSky" },
+      inputType: "insertReplacementText",
+    });
+    fireEvent.input(password!, {
+      target: { value: "stored-secret" },
+      inputType: "insertReplacementText",
+    });
+
+    await waitFor(() =>
+      expect(registerNative).toHaveBeenCalledWith(
+        "0xaSky",
+        "stored-secret",
+        expect.any(String),
+      ),
+    );
+    expect(await screen.findByText("0x1-rk-autofill")).toBeInTheDocument();
   });
 
   it("waits for a typing pause unless the mobile go action resolves now", async () => {
@@ -364,7 +451,7 @@ describe("ProductApp identity", () => {
     expect(
       await screen.findByText("The pub_dress or password is invalid."),
     ).toBeInTheDocument();
-    expect(slug.closest("form")).toHaveAttribute(
+    expect(screen.getByLabelText("pub_dress").closest("form")).toHaveAttribute(
       "data-submission-error",
       "true",
     );
@@ -516,12 +603,9 @@ describe("ProductApp identity", () => {
     );
 
     expect(await screen.findByLabelText("Password")).not.toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Edit 0x0sky" }));
     const slug = screen.getByLabelText("pub_dress");
-    const discriminator = screen.getByRole("combobox");
-    expect(slug).not.toHaveAttribute("readonly");
-    expect(discriminator).toBeEnabled();
-
-    await user.click(slug);
+    screen.getByRole("combobox");
     expect(slug).toHaveFocus();
     await user.clear(slug);
     await user.type(slug, "rain");
