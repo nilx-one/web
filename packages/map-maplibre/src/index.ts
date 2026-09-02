@@ -23,7 +23,8 @@ export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapRenderer {
   const styleUrl = options.styleUrl ?? MAP_STYLE_URL;
-  const createMap = options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
+  const createMap =
+    options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
   let status: MapRendererStatus = { kind: "unmounted" };
   let map: MapLibreMap | undefined;
   const listeners = new Set<(next: MapRendererStatus) => void>();
