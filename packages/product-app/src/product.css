@@ -338,6 +338,7 @@
 }
 
 .status-glyph,
+.status-action,
 .integrated-action,
 .visibility-action {
   display: grid;
@@ -353,6 +354,7 @@
 }
 
 .status-glyph svg,
+.status-action svg,
 .integrated-action svg,
 .visibility-action svg,
 .provider-buttons svg {
@@ -382,10 +384,17 @@
 }
 
 .integrated-action,
+.status-action,
 .visibility-action {
   border: 0;
   border-radius: 15px;
   cursor: pointer;
+}
+
+.status-action {
+  border: 1px solid color-mix(in srgb, var(--positive) 38%, transparent);
+  background: color-mix(in srgb, var(--positive) 11%, transparent);
+  color: var(--positive);
 }
 
 .integrated-action {
@@ -404,6 +413,7 @@
 }
 
 .integrated-action:disabled,
+.status-action:disabled,
 .provider-buttons button:disabled,
 .recovery-continue:disabled {
   cursor: not-allowed;
@@ -412,6 +422,7 @@
 }
 
 .integrated-action:focus-visible,
+.status-action:focus-visible,
 .visibility-action:focus-visible,
 .text-action:focus-visible,
 .provider-buttons button:focus-visible,

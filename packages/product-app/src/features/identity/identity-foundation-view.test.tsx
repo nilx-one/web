@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("progressive native identity form", () => {
-  it("keeps an automatically resolved address editable until keyboard confirmation", () => {
+  it("offers explicit confirmation after automatic address resolution", () => {
     vi.useFakeTimers();
     const onResolvePubDress = vi.fn();
 
@@ -63,7 +63,9 @@ describe("progressive native identity form", () => {
       screen.queryByRole("button", { name: "Edit 0x0sky" }),
     ).not.toBeInTheDocument();
 
-    fireEvent.keyDown(screen.getByLabelText("pub_dress"), { key: "Enter" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with 0x0sky" }),
+    );
     expect(onResolvePubDress).toHaveBeenCalledOnce();
     act(() => vi.advanceTimersByTime(900));
 
