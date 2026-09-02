@@ -13,7 +13,9 @@ export interface MapFoundationViewProps {
 
 export function MapFoundationView({ renderer }: MapFoundationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState<MapRendererStatus>(() => renderer.getStatus());
+  const [status, setStatus] = useState<MapRendererStatus>(() =>
+    renderer.getStatus(),
+  );
 
   useEffect(() => renderer.subscribe(setStatus), [renderer]);
 

@@ -7,7 +7,10 @@ import {
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
-import maplibregl, { type Map as MapLibreMap, type MapOptions } from "maplibre-gl";
+import maplibregl, {
+  type Map as MapLibreMap,
+  type MapOptions,
+} from "maplibre-gl";
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
 export const MAP_STYLE_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/style.json`;
@@ -23,7 +26,8 @@ export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapRenderer {
   const styleUrl = options.styleUrl ?? MAP_STYLE_URL;
-  const createMap = options.createMap ?? ((mapOptions) => new maplibregl.Map(mapOptions));
+  const createMap =
+    options.createMap ?? ((mapOptions) => new maplibregl.Map(mapOptions));
   let status: MapRendererStatus = { kind: "unmounted" };
   let map: MapLibreMap | undefined;
   const listeners = new Set<(next: MapRendererStatus) => void>();

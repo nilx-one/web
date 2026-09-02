@@ -34,7 +34,9 @@ describe("createMapLibreRenderer", () => {
   it("publishes loading then ready and owns renderer cleanup", () => {
     const fakeMap = makeFakeMap();
     const statuses: string[] = [];
-    const createMap = vi.fn((_options: MapOptions) => fakeMap as unknown as MapLibreMap);
+    const createMap = vi.fn(
+      (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+    );
     const renderer = createMapLibreRenderer({ createMap });
     renderer.subscribe((status) => statuses.push(status.kind));
 

@@ -10,10 +10,7 @@ import {
   resolveTelegramWebApp,
 } from "@nilx-one/host-telegram";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
-import {
-  MAP_STYLE_URL,
-  createMapLibreRenderer,
-} from "@nilx-one/map-maplibre";
+import { MAP_STYLE_URL, createMapLibreRenderer } from "@nilx-one/map-maplibre";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
