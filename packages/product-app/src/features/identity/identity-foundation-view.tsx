@@ -320,12 +320,18 @@ function IdentityForm({
       identity.mode === "register" &&
       availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
-  const normalizedPasswordLength = [...password.normalize("NFC")].length;
+  const normalizedPassword = password.normalize("NFC");
+  const normalizedPasswordLength = [...normalizedPassword].length;
+  const passwordHasForbiddenFormat =
+    normalizedPassword.trim() !== normalizedPassword ||
+    /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(normalizedPassword);
   const slugLength = [...displayedSelection.slug].length;
   const canResolveAddress =
     !identity.busy && slugLength >= 2 && slugLength <= 32;
   const passwordReady =
-    normalizedPasswordLength >= 8 && normalizedPasswordLength <= 128;
+    normalizedPasswordLength >= 8 &&
+    normalizedPasswordLength <= 128 &&
+    !passwordHasForbiddenFormat;
   const passwordValidation =
     password.length === 0
       ? "idle"
@@ -665,7 +671,8 @@ function IdentityForm({
 
       {identity.mode === "register" ? (
         <p className="password-note">
-          8–128 characters · spaces count · Unicode welcome
+          8–128 Unicode characters · no leading/trailing whitespace · no line
+          breaks
         </p>
       ) : null}
       {remembered ? (
