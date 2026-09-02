@@ -7,10 +7,7 @@ import {
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
-import maplibregl, {
-  type Map as MapLibreMap,
-  type MapOptions,
-} from "maplibre-gl";
+import { Map as MapLibreMap, type MapOptions } from "maplibre-gl";
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
 export const MAP_STYLE_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/style.json`;
@@ -26,8 +23,7 @@ export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapRenderer {
   const styleUrl = options.styleUrl ?? MAP_STYLE_URL;
-  const createMap =
-    options.createMap ?? ((mapOptions) => new maplibregl.Map(mapOptions));
+  const createMap = options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
   let status: MapRendererStatus = { kind: "unmounted" };
   let map: MapLibreMap | undefined;
   const listeners = new Set<(next: MapRendererStatus) => void>();
@@ -48,7 +44,7 @@ export function createMapLibreRenderer(
       publish({ kind: "loading" });
 
       try {
-        map = createMap({
+        const mountedMap = createMap({
           container,
           style: styleUrl,
           center: [...DEFAULT_MAP_CAMERA.center],
@@ -56,9 +52,10 @@ export function createMapLibreRenderer(
           bearing: DEFAULT_MAP_CAMERA.bearing,
           pitch: DEFAULT_MAP_CAMERA.pitch,
         });
+        map = mountedMap;
 
-        map.once("load", () => publish({ kind: "ready" }));
-        map.once("error", () =>
+        mountedMap.once("load", () => publish({ kind: "ready" }));
+        mountedMap.once("error", () =>
           publish({ kind: "unavailable", reason: "style-load-failed" }),
         );
       } catch {
