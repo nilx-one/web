@@ -10,8 +10,13 @@ import {
   resolveTelegramWebApp,
 } from "@nilx-one/host-telegram";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
+import {
+  MAP_STYLE_URL,
+  createMapLibreRenderer,
+} from "@nilx-one/map-maplibre";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -34,6 +39,7 @@ const identity = createIdentityHttpAdapter({
       : undefined;
   },
 });
+const mapRenderer = createMapLibreRenderer({ styleUrl: MAP_STYLE_URL });
 
 createRoot(container).render(
   <StrictMode>
@@ -41,6 +47,7 @@ createRoot(container).render(
       core={core}
       host={host}
       identity={identity}
+      mapRenderer={mapRenderer}
       routerBasepath="/telegram"
     />
   </StrictMode>,
