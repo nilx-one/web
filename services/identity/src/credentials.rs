@@ -18,8 +18,17 @@ const ARGON2_ITERATIONS: u32 = 2;
 const ARGON2_PARALLELISM: u32 = 1;
 const PASSWORD_HASH_VERSION: i64 = 1;
 const MIN_SECRET_BYTES: usize = 32;
+const MIN_PASSWORD_CODE_POINTS: usize = 8;
+const MAX_PASSWORD_CODE_POINTS: usize = 128;
 
 const COMPROMISED_PASSWORDS: &[&str] = &[
+    "12345678",
+    "123456789",
+    "password",
+    "password1",
+    "qwerty123",
+    "iloveyou",
+    "admin123",
     "123456789012345",
     "111111111111111",
     "passwordpassword",
@@ -100,7 +109,7 @@ impl PasswordEngine {
     pub fn validate(&self, password: &str) -> Result<String, PasswordPolicyError> {
         let normalized = password.nfc().collect::<String>();
         let code_points = normalized.chars().count();
-        if !(15..=128).contains(&code_points) {
+        if !(MIN_PASSWORD_CODE_POINTS..=MAX_PASSWORD_CODE_POINTS).contains(&code_points) {
             return Err(PasswordPolicyError::InvalidLength);
         }
         if COMPROMISED_PASSWORDS.contains(&normalized.as_str()) {
@@ -287,6 +296,14 @@ mod tests {
             engine.validate("passwordpassword"),
             Err(PasswordPolicyError::Compromised)
         );
+    }
+
+    #[test]
+    fn password_policy_accepts_eight_code_points_and_rejects_seven() {
+        let engine = config().password_engine();
+        assert_eq!(engine.validate("1234567"), Err(PasswordPolicyError::InvalidLength));
+        assert_eq!(engine.validate("eight-ok").as_deref(), Ok("eight-ok"));
+        assert_eq!(engine.validate("password"), Err(PasswordPolicyError::Compromised));
     }
 
     #[test]
