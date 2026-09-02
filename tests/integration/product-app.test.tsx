@@ -214,7 +214,7 @@ describe("ProductApp identity", () => {
     );
 
     await user.type(await screen.findByLabelText("pub_dress"), "sky");
-    await screen.findByText("Identity found — enter your password");
+    await screen.findByText("Unavailable — this Bond already exists");
     await user.type(
       screen.getByLabelText("Password"),
       "correct password value",
@@ -248,7 +248,7 @@ describe("ProductApp identity", () => {
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
-    await screen.findByText("Identity found — enter your password");
+    await screen.findByText("Unavailable — this Bond already exists");
     const password = await screen.findByLabelText("Password");
     await user.type(password, "incorrect password");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
@@ -304,10 +304,14 @@ describe("ProductApp identity", () => {
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 
     resolveRegistered?.();
-    await screen.findByText("Identity found — enter your password");
+    await screen.findByText("Unavailable — this Bond already exists");
     expect(await screen.findByLabelText("Password")).toBeInTheDocument();
-    expect(slug.closest("form")).toHaveAttribute("data-status", "registered");
-    expect(slug).toHaveAttribute("aria-invalid", "false");
+    expect(slug.closest("form")).toHaveAttribute("data-status", "unavailable");
+    expect(slug).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Password").parentElement).toHaveAttribute(
+      "data-reflection",
+      "negative",
+    );
   });
 
   it("keeps an invalid exact identity red and does not reveal password", async () => {

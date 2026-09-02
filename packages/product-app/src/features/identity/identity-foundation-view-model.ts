@@ -38,7 +38,6 @@ export type IdentityFormMode =
   | "resolving"
   | "sign-in"
   | "register"
-  | "unavailable"
   | "remembered"
   | "provider-register";
 
@@ -191,7 +190,7 @@ export function createNativeIdentityViewState(
       : status.kind === "available"
         ? "register"
         : status.kind === "unavailable"
-          ? "unavailable"
+          ? "sign-in"
           : "initial";
   return {
     kind: "form",

@@ -136,7 +136,7 @@ describe("pub_dress status", () => {
     });
   });
 
-  it("blocks native creation when the exact address already exists", () => {
+  it("routes an occupied creation address into native sign-in", () => {
     expect(
       createNativeIdentityViewState(
         { kind: "anonymous" },
@@ -150,7 +150,7 @@ describe("pub_dress status", () => {
       ),
     ).toMatchObject({
       kind: "form",
-      mode: "unavailable",
+      mode: "sign-in",
       status: { kind: "unavailable" },
     });
   });

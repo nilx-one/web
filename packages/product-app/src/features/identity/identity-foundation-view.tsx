@@ -137,7 +137,6 @@ function heading(identity: IdentityViewState): string {
     case "form":
       switch (identity.mode) {
         case "register":
-        case "unavailable":
           return "Create your Bond.";
         case "sign-in":
         case "remembered":
@@ -163,7 +162,7 @@ function lede(identity: IdentityViewState): string {
     case "authenticated":
       return `Authenticated as ${identity.pubDress}.`;
     case "form":
-      if (identity.mode === "register" || identity.mode === "unavailable") {
+      if (identity.mode === "register") {
         return "No provider required. Your exact, case-sensitive address belongs to this Bond.";
       }
       if (identity.mode === "remembered") {
@@ -315,7 +314,6 @@ function IdentityForm({
   const addressCollapsed = currentAvailableTransition?.collapsed ?? false;
   const showsPassword =
     identity.mode === "sign-in" ||
-    identity.mode === "unavailable" ||
     remembered ||
     (identity.mode === "register" && availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
@@ -326,7 +324,7 @@ function IdentityForm({
       : password.length > 0;
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
-    : identity.mode !== "unavailable" && showsPassword && passwordReady;
+    : showsPassword && passwordReady;
   const reflectionTone =
     identity.error !== undefined
       ? "negative"
@@ -580,14 +578,13 @@ function IdentityForm({
             placeholder="password"
             aria-label="Password"
             aria-invalid={identity.error !== undefined}
-            disabled={identity.busy || identity.mode === "unavailable"}
+            disabled={identity.busy}
             onChange={(event) => onPasswordChange(event.currentTarget.value)}
           />
           <button
             className="visibility-action"
             type="button"
             aria-label={passwordVisible ? "Hide password" : "Show password"}
-            disabled={identity.mode === "unavailable"}
             onClick={() => setPasswordVisible((visible) => !visible)}
           >
             <VisibilityGlyph visible={passwordVisible} />
