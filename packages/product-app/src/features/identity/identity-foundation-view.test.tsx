@@ -150,7 +150,7 @@ describe("progressive native identity form", () => {
     expect(screen.getByLabelText("Password")).toHaveFocus();
   });
 
-  it("keeps explicit password validation stable and counts whitespace", () => {
+  it("keeps explicit password validation stable and rejects malformed whitespace", () => {
     vi.useFakeTimers();
     const sharedProps = {
       selection: { discriminator: "0", slug: "sky" },
@@ -200,10 +200,25 @@ describe("progressive native identity form", () => {
       "invalid",
     );
 
-    rerender(
-      <IdentityFoundationView {...sharedProps} password={" ".repeat(8)} />,
-    );
-    expect(password).toHaveValue(" ".repeat(8));
+    for (const invalidPassword of [
+      "        ",
+      "        12345678",
+      "1234568\n78",
+    ]) {
+      rerender(
+        <IdentityFoundationView {...sharedProps} password={invalidPassword} />,
+      );
+      expect(password.parentElement).toHaveAttribute(
+        "data-validation",
+        "invalid",
+      );
+      expect(
+        screen.getByRole("button", { name: "Create 0x0sky" }),
+      ).toBeDisabled();
+    }
+
+    rerender(<IdentityFoundationView {...sharedProps} password="four four" />);
+    expect(password).toHaveValue("four four");
     expect(password.parentElement).toHaveAttribute("data-validation", "valid");
     expect(screen.getByRole("button", { name: "Create 0x0sky" })).toBeEnabled();
   });
