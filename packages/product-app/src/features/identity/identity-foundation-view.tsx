@@ -320,6 +320,7 @@ function IdentityForm({
       identity.mode === "register" &&
       availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
+  const credentialUsername = `0x${displayedSelection.discriminator}${displayedSelection.slug}`;
   const normalizedPasswordLength = [...password.normalize("NFC")].length;
   const slugLength = [...displayedSelection.slug].length;
   const canResolveAddress =
@@ -565,7 +566,7 @@ function IdentityForm({
             minLength={2}
             maxLength={32}
             autoCapitalize="none"
-            autoComplete="username"
+            autoComplete={showsPassword ? "off" : "username"}
             autoCorrect="off"
             enterKeyHint="go"
             spellCheck={false}
@@ -620,6 +621,19 @@ function IdentityForm({
       >
         {identity.status.detail}
       </p>
+
+      {showsPassword ? (
+        <input
+          key={credentialUsername}
+          className="visually-hidden"
+          type="text"
+          name="username"
+          defaultValue={credentialUsername}
+          autoComplete="username"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+      ) : null}
 
       {showsPassword ? (
         <div
