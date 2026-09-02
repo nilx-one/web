@@ -308,7 +308,6 @@ function IdentityForm({
     complete: boolean;
     collapsed: boolean;
   }>();
-  const [credentialSwitchKey, setCredentialSwitchKey] = useState<string>();
   const passwordRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
   const credentialUsernameRef = useRef<HTMLInputElement>(null);
@@ -317,6 +316,7 @@ function IdentityForm({
   const editAddressRequested = useRef(false);
   const focusPasswordAfterResolution = useRef(false);
   const credentialAutofill = useRef(false);
+  const credentialSwitchKey = useRef<string | undefined>(undefined);
   const submitPasswordAfterAutofill = useRef<string | undefined>(undefined);
   const [confirmedAddressKey, setConfirmedAddressKey] = useState<string>();
   const remembered = identity.mode === "remembered";
@@ -325,7 +325,7 @@ function IdentityForm({
     : selection;
   const addressKey = `${displayedSelection.discriminator}\u0000${displayedSelection.slug}`;
   const addressConfirmed = confirmedAddressKey === addressKey;
-  const credentialSwitchActive = credentialSwitchKey === addressKey;
+  const credentialSwitchActive = credentialSwitchKey.current === addressKey;
   const availableKey =
     addressConfirmed &&
     identity.mode === "register" &&
@@ -431,8 +431,8 @@ function IdentityForm({
 
   useEffect(() => {
     if (
-      credentialSwitchKey === undefined ||
-      credentialSwitchKey !== addressKey
+      credentialSwitchKey.current === undefined ||
+      credentialSwitchKey.current !== addressKey
     ) {
       return;
     }
@@ -441,7 +441,6 @@ function IdentityForm({
       return;
     }
     if (identity.mode === "sign-in") {
-      setCredentialSwitchKey(undefined);
       return;
     }
     if (
@@ -450,15 +449,13 @@ function IdentityForm({
       identity.status.kind === "unavailable" ||
       identity.status.kind === "service-unavailable"
     ) {
-      setCredentialSwitchKey(undefined);
-      setConfirmedAddressKey(undefined);
+      credentialSwitchKey.current = undefined;
       credentialAutofill.current = false;
       submitPasswordAfterAutofill.current = undefined;
       onPasswordChange("");
     }
   }, [
     addressKey,
-    credentialSwitchKey,
     identity.mode,
     identity.status.kind,
     onPasswordChange,
@@ -540,8 +537,8 @@ function IdentityForm({
     }
     focusPasswordAfterResolution.current = false;
     credentialAutofill.current = false;
+    credentialSwitchKey.current = undefined;
     submitPasswordAfterAutofill.current = undefined;
-    setCredentialSwitchKey(undefined);
     setConfirmedAddressKey(undefined);
     setAvailableTransition(undefined);
     onSelectionChange(next);
@@ -576,9 +573,9 @@ function IdentityForm({
   function editAddress(): void {
     focusPasswordAfterResolution.current = false;
     credentialAutofill.current = false;
+    credentialSwitchKey.current = undefined;
     submitPasswordAfterAutofill.current = undefined;
     editAddressRequested.current = true;
-    setCredentialSwitchKey(undefined);
     setConfirmedAddressKey(undefined);
     setAvailableTransition(undefined);
     onPasswordChange("");
@@ -801,8 +798,7 @@ function IdentityForm({
 
                 if (nextCredentialKey !== addressKey) {
                   focusPasswordAfterResolution.current = false;
-                  setCredentialSwitchKey(nextCredentialKey);
-                  setConfirmedAddressKey(nextCredentialKey);
+                  credentialSwitchKey.current = nextCredentialKey;
                   setAvailableTransition(undefined);
                   onSelectionChange(credentialSelection);
                 }
