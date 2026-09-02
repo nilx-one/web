@@ -150,6 +150,67 @@ describe("progressive native identity form", () => {
     expect(screen.getByLabelText("Password")).toHaveFocus();
   });
 
+  it("keeps resolved pub_dress stable when a password manager autofills username", () => {
+    const onPasswordChange = vi.fn();
+    const onSelectionChange = vi.fn();
+    const { container } = render(
+      <IdentityFoundationView
+        password=""
+        selection={{ discriminator: "f", slug: "rSb2" }}
+        viewModel={{
+          hostLabel: "browser host",
+          safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+          showProviderRow: true,
+          runtime: {
+            tone: "ready",
+            label: "Shared Core ready",
+            detail: "Contract 1 is available to the Web client.",
+          },
+          identity: {
+            kind: "form",
+            mode: "sign-in",
+            status: {
+              kind: "registered",
+              detail: "Bond found — sign in",
+            },
+            busy: false,
+          },
+        }}
+        onAcknowledgeRecovery={vi.fn()}
+        onForgetRemembered={vi.fn()}
+        onLogout={vi.fn()}
+        onPasswordChange={onPasswordChange}
+        onResolvePubDress={vi.fn()}
+        onSelectionChange={onSelectionChange}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with 0xfrSb2" }),
+    );
+
+    const slug = screen.getByRole("textbox", { name: "pub_dress" });
+    const password = screen.getByLabelText("Password");
+    const credentialUsername = container.querySelector<HTMLInputElement>(
+      'input[name="username"]',
+    );
+
+    expect(slug).toHaveValue("rSb2");
+    expect(slug).toHaveAttribute("autocomplete", "off");
+    expect(credentialUsername).not.toBeNull();
+    expect(credentialUsername).toHaveValue("0xfrSb2");
+
+    fireEvent.change(credentialUsername!, {
+      target: { value: "0x0frSb" },
+    });
+    fireEvent.change(password, { target: { value: "stored-secret" } });
+
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(onPasswordChange).toHaveBeenCalledWith("stored-secret");
+    expect(slug).toHaveValue("rSb2");
+  });
+
   it("keeps explicit password validation stable and counts whitespace", () => {
     vi.useFakeTimers();
     const sharedProps = {
