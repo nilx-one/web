@@ -22,6 +22,8 @@ function isReplacement(previous: string, next: string): boolean {
  * - `sky` -> keep the selected discriminator, slug `sky`
  * - `0sky` -> discriminator `0`, slug `sky` when inserted as a replacement
  *
+ * Canonical input is parsed before discriminator-change shortcuts so a full
+ * `pub_dress` can never survive as the literal slug of another selection.
  * Compact numeric input is deliberately treated as a discriminator only for a
  * replacement/autofill-sized edit. This keeps manually typed slugs such as
  * `012` representable instead of reinterpreting them while the user types.
@@ -30,13 +32,13 @@ export function normalizePubDressCredentialInput(
   next: PubDressSelection,
   previous: PubDressSelection,
 ): PubDressSelection {
-  if (next.discriminator !== previous.discriminator) {
-    return next;
-  }
-
   const canonical = parsePubDress(next.slug);
   if (canonical !== undefined) {
     return canonical;
+  }
+
+  if (next.discriminator !== previous.discriminator) {
+    return next;
   }
 
   const characters = [...next.slug];
