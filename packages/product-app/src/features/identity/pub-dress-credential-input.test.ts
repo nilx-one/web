@@ -42,6 +42,15 @@ describe("pub_dress credential input", () => {
     ).toEqual({ discriminator: "0", slug: "sky" });
   });
 
+  it("splits a compact hexadecimal discriminator plus slug autofill", () => {
+    expect(
+      normalizePubDressCredentialInput(
+        { discriminator: "0", slug: "fsky" },
+        { discriminator: "0", slug: "" },
+      ),
+    ).toEqual({ discriminator: "f", slug: "sky" });
+  });
+
   it("does not steal a manually typed numeric-leading slug", () => {
     expect(
       normalizePubDressCredentialInput(
