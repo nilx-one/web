@@ -25,10 +25,12 @@ the same-origin `X-0x1-CSRF: 1` header. Session and remembered-Bond cookies
 are Secure, HttpOnly, SameSite=Lax; the signed remembered hint is never accepted
 as authentication.
 
-Passwords contain 8–128 Unicode scalar values after NFC normalization. The
-service blocks known compromised values and stores versioned Argon2id verifiers
-with 19 MiB memory, two iterations, and one lane. Authentication uses generic
-failures, a dummy hash path, and source/address/global rate limits.
+Passwords contain 8–128 Unicode scalar values after NFC normalization. Leading
+or trailing whitespace and control/line-separator characters are rejected;
+ordinary spaces inside the password remain valid. The service blocks known
+compromised values and stores versioned Argon2id verifiers with 19 MiB memory,
+two iterations, and one lane. Authentication uses generic failures, a dummy
+hash path, and source/address/global rate limits.
 
 ## Inactive provider adapters
 
