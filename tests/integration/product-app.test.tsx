@@ -239,6 +239,77 @@ describe("ProductApp identity", () => {
     );
   });
 
+  it("keeps the resolved Bond immutable during saved-credential autofill", async () => {
+    const authenticateNative = vi
+      .fn<IdentityAccessPort["authenticateNative"]>()
+      .mockResolvedValue({
+        kind: "authenticated",
+        identity: { pubDress: "0xfrSb2" },
+      });
+    const registerNative = vi.fn<IdentityAccessPort["registerNative"]>();
+    const { container } = render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          resolvePubDress: async (selection) => ({
+            kind: "registered",
+            pubDress: formatPubDress(selection),
+          }),
+          authenticateNative,
+          registerNative,
+        })}
+      />,
+    );
+
+    fireEvent.change(
+      await screen.findByRole("combobox", {
+        name: "pub_dress hexadecimal discriminator",
+      }),
+      { target: { value: "f" } },
+    );
+    fireEvent.change(screen.getByLabelText("pub_dress"), {
+      target: { value: "rSb2" },
+    });
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with 0xfrSb2" }),
+    );
+
+    const slug = await screen.findByLabelText("pub_dress");
+    const discriminator = screen.getByRole("combobox", {
+      name: "pub_dress hexadecimal discriminator",
+    });
+    const password = screen.getByLabelText("Password");
+    const credentialUsername = container.querySelector<HTMLInputElement>(
+      'input[name="username"]',
+    );
+
+    expect(slug).toHaveAttribute("readonly");
+    expect(discriminator).toBeDisabled();
+    expect(credentialUsername).not.toBeNull();
+    expect(credentialUsername).toHaveValue("0xfrSb2");
+
+    fireEvent.input(credentialUsername!, {
+      target: { value: "0x0frSb2" },
+    });
+    fireEvent.input(slug, { target: { value: "0x0frSb2" } });
+    fireEvent.change(slug, { target: { value: "0x0frSb2" } });
+
+    expect(slug).toHaveValue("rSb2");
+    expect(discriminator).toHaveValue("f");
+
+    fireEvent.change(password, { target: { value: "stored-secret" } });
+
+    await waitFor(() =>
+      expect(authenticateNative).toHaveBeenCalledWith(
+        "0xfrSb2",
+        "stored-secret",
+      ),
+    );
+    expect(registerNative).not.toHaveBeenCalled();
+  });
+
   it("waits for a typing pause unless the mobile go action resolves now", async () => {
     const user = userEvent.setup();
     const resolvePubDress = vi
@@ -416,7 +487,7 @@ describe("ProductApp identity", () => {
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
   });
 
-  it("keeps a remembered Bond editable so another Bond can sign in", async () => {
+  it("keeps a remembered Bond stable until explicit editing", async () => {
     const user = userEvent.setup();
     const forgetRememberedBond = vi
       .fn<IdentityAccessPort["forgetRememberedBond"]>()
@@ -448,8 +519,16 @@ describe("ProductApp identity", () => {
 
     expect(await screen.findByLabelText("Password")).not.toHaveFocus();
     const slug = screen.getByLabelText("pub_dress");
-    expect(slug).not.toHaveAttribute("readonly");
-    expect(screen.getByRole("combobox")).toBeEnabled();
+    const discriminator = screen.getByRole("combobox");
+    expect(slug).toHaveAttribute("readonly");
+    expect(discriminator).toBeDisabled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Change Bond from 0x0sky" }),
+    );
+    await waitFor(() => expect(slug).not.toHaveAttribute("readonly"));
+    expect(discriminator).toBeEnabled();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 
     await user.clear(slug);
     await user.type(slug, "rain");
