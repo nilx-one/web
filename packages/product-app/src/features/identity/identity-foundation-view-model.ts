@@ -289,7 +289,7 @@ function nativeSubmissionError(
   }
   switch (registration.reason) {
     case "invalid-password-length":
-      return { error: "Use at least 15 characters." };
+      return { error: "Use at least 8 characters." };
     case "compromised-password":
       return {
         error: "Choose a password that hasn’t appeared in known leaks.",
