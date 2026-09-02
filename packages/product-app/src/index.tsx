@@ -12,7 +12,6 @@ import {
   RegisterNativeIdentity,
   RegisterProviderIdentity,
   ResolvePubDress,
-  formatPubDress,
   type CoreRuntimePort,
   type IdentityAccessPort,
   type PubDressSelection,
