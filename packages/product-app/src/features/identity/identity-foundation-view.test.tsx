@@ -148,7 +148,7 @@ describe("progressive native identity form", () => {
     expect(screen.getByLabelText("Password")).toHaveFocus();
   });
 
-  it("does not change explicit password validation when visibility changes", () => {
+  it("keeps explicit password validation stable and counts whitespace", () => {
     vi.useFakeTimers();
     const sharedProps = {
       selection: { discriminator: "0", slug: "sky" },
@@ -180,7 +180,9 @@ describe("progressive native identity form", () => {
       },
     };
 
-    render(<IdentityFoundationView {...sharedProps} password="short" />);
+    const { rerender } = render(
+      <IdentityFoundationView {...sharedProps} password="short" />,
+    );
     fireEvent.keyDown(screen.getByLabelText("pub_dress"), { key: "Enter" });
     act(() => vi.advanceTimersByTime(900));
 
@@ -195,6 +197,13 @@ describe("progressive native identity form", () => {
       "data-validation",
       "invalid",
     );
+
+    rerender(
+      <IdentityFoundationView {...sharedProps} password={" ".repeat(8)} />,
+    );
+    expect(password).toHaveValue(" ".repeat(8));
+    expect(password.parentElement).toHaveAttribute("data-validation", "valid");
+    expect(screen.getByRole("button", { name: "Create 0x0sky" })).toBeEnabled();
   });
 
   it("attenuates reflected light with distance and widens its footprint", () => {

@@ -643,7 +643,7 @@ function IdentityForm({
 
       {identity.mode === "register" ? (
         <p className="password-note">
-          8–128 characters · spaces and Unicode welcome
+          8–128 characters · spaces count · Unicode welcome
         </p>
       ) : null}
       {remembered ? (
