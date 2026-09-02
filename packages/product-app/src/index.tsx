@@ -22,6 +22,7 @@ import {
   type HostPort,
   type HostSnapshot,
 } from "@nilx-one/host-contract";
+import type { MapRenderer } from "@nilx-one/map-contract";
 import {
   QueryClient,
   QueryClientProvider,
@@ -30,6 +31,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  Link,
   Outlet,
   RouterProvider,
   createRootRouteWithContext,
@@ -48,11 +50,13 @@ import {
   createPubDressStatusViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
+import { MapFoundationView } from "./features/map/map-foundation-view";
 
 export interface ProductAppDependencies {
   core: CoreRuntimePort;
   host: HostPort;
   identity: IdentityAccessPort;
+  mapRenderer: MapRenderer;
 }
 
 export interface ProductAppProps extends ProductAppDependencies {
@@ -79,7 +83,16 @@ function newIdempotencyKey(): string {
 }
 
 function RootRoute() {
-  return <Outlet />;
+  return (
+    <>
+      <nav aria-label="0x1 sections">
+        <Link to="/">Bond</Link>
+        {" · "}
+        <Link to="/map">Map</Link>
+      </nav>
+      <Outlet />
+    </>
+  );
 }
 
 const rootRoute = createRootRouteWithContext<ProductRouterContext>()({
@@ -91,6 +104,17 @@ const foundationRoute = createRoute({
   path: "/",
   component: FoundationRoute,
 });
+
+const mapRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/map",
+  component: MapRoute,
+});
+
+function MapRoute() {
+  const { dependencies } = mapRoute.useRouteContext();
+  return <MapFoundationView renderer={dependencies.mapRenderer} />;
+}
 
 function FoundationRoute() {
   const { dependencies } = foundationRoute.useRouteContext();
@@ -361,12 +385,13 @@ function FoundationRoute() {
   );
 }
 
-const routeTree = rootRoute.addChildren([foundationRoute]);
+const routeTree = rootRoute.addChildren([foundationRoute, mapRoute]);
 
 export function ProductApp({
   core,
   host,
   identity,
+  mapRenderer,
   routerBasepath = "/",
 }: ProductAppProps) {
   const [queryClient] = useState(
@@ -383,7 +408,7 @@ export function ProductApp({
     createRouter({
       routeTree,
       basepath: routerBasepath,
-      context: { dependencies: { core, host, identity } },
+      context: { dependencies: { core, host, identity, mapRenderer } },
     }),
   );
 
