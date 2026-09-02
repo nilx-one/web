@@ -37,11 +37,11 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$url" in
-  https://nilx.one/)
+  https://nilx.one/|https://nilx.one/telegram/)
     printf '%s\n' '<div id="root"></div>' >"$output_file"
     printf '%s' 200
     ;;
-  https://nilx.one/telegram/|https://nilx.one/discord/)
+  https://nilx.one/discord/)
     printf '%s\n' 'not found' >"$output_file"
     printf '%s' 404
     ;;
