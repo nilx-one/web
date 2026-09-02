@@ -69,6 +69,7 @@ jobs:
             and (.deployOrder == ["web", "telegram", "discord"])
             and ([.deployOrder[] as $name | .targets[$name]] | all(. != null))
             and ([.targets[] | .requiresIdentityContract <= $identity] | all)
+            and ([.targets[] | (.publicPath | startswith("/"))] | all)
             and (.targets.web.app == "site")
             and (.targets.telegram.app == "telegram-mini-app")
             and (.targets.discord.app == "discord-activity")
@@ -90,6 +91,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate client deployment scripts
+        run: |
+          sh -n deploy/web/deploy.sh deploy/web/check-public.sh deploy/web/check-public.test.sh
+          sh deploy/web/check-public.test.sh
       - name: Reuse verified Web host builds
         uses: actions/download-artifact@v4
         with:

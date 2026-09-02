@@ -5,6 +5,8 @@
 set -eu
 
 public_origin="${PUBLIC_ORIGIN:-https://nilx.one}"
+public_path="${PUBLIC_PATH:?PUBLIC_PATH is required}"
+client_name="${CLIENT_NAME:?CLIENT_NAME is required}"
 health_retry="${HEALTH_RETRY:-12}"
 health_retry_delay="${HEALTH_RETRY_DELAY:-2}"
 
@@ -12,6 +14,21 @@ case "$public_origin" in
   https://*) ;;
   *)
     echo "PUBLIC_ORIGIN must use HTTPS" >&2
+    exit 2
+    ;;
+esac
+
+case "$public_path" in
+  /*) ;;
+  *)
+    echo "PUBLIC_PATH must start with /" >&2
+    exit 2
+    ;;
+esac
+
+case "$client_name" in
+  *[!a-z0-9-]*|'')
+    echo "CLIENT_NAME must contain only lowercase letters, digits, and hyphens" >&2
     exit 2
     ;;
 esac
@@ -33,7 +50,7 @@ esac
 public_origin="${public_origin%/}"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
-body_file="$work_dir/identity-auth-boundary.body"
+body_file="$work_dir/$client_name.body"
 attempt=1
 
 while [ "$attempt" -le "$health_retry" ]; do
@@ -43,11 +60,11 @@ while [ "$attempt" -le "$health_retry" ]; do
       --max-time 15 \
       --output "$body_file" \
       --write-out '%{http_code}' \
-      "$public_origin/api/v1/identity" || true
+      "$public_origin$public_path" || true
   )"
 
-  if [ "$status" = 401 ] && grep -Fq '"code":"provider_authentication_required"' "$body_file"; then
-    echo "public boundary healthy: identity-auth-boundary ($status)"
+  if [ "$status" = 200 ] && grep -Fq '<div id="root"></div>' "$body_file"; then
+    echo "public boundary healthy: $client_name ($status)"
     exit 0
   fi
 
@@ -57,5 +74,5 @@ while [ "$attempt" -le "$health_retry" ]; do
   attempt=$((attempt + 1))
 done
 
-echo "public boundary failed: identity-auth-boundary expected 401 from $public_origin/api/v1/identity, got ${status:-request-failed}" >&2
+echo "public boundary failed: $client_name expected 200 from $public_origin$public_path, got ${status:-request-failed}" >&2
 exit 1

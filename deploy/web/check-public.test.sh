@@ -37,9 +37,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$url" in
-  https://nilx.one/api/v1/identity)
-    printf '%s\n' '{"error":{"code":"provider_authentication_required"}}' >"$output_file"
-    printf '%s' "${MOCK_IDENTITY_STATUS:-401}"
+  https://nilx.one/|https://nilx.one/telegram/|https://nilx.one/discord/)
+    printf '%s\n' '<div id="root"></div>' >"$output_file"
+    printf '%s' "${MOCK_CLIENT_STATUS:-200}"
     ;;
   *)
     printf '%s\n' 'unexpected URL' >"$output_file"
@@ -49,17 +49,24 @@ esac
 MOCK
 chmod +x "$mock_bin/curl"
 
-PATH="$mock_bin:$PATH" \
-  HEALTH_RETRY=1 \
-  sh "$(dirname "$0")/check-public.sh"
+for target_path in 'web /' 'telegram /telegram/' 'discord /discord/'; do
+  set -- $target_path
+  PATH="$mock_bin:$PATH" \
+    CLIENT_NAME="$1" \
+    PUBLIC_PATH="$2" \
+    HEALTH_RETRY=1 \
+    sh "$(dirname "$0")/check-public.sh"
+done
 
 failure_log="$test_dir/failure.log"
 if PATH="$mock_bin:$PATH" \
-  MOCK_IDENTITY_STATUS=502 \
+  CLIENT_NAME=discord \
+  PUBLIC_PATH=/discord/ \
+  MOCK_CLIENT_STATUS=502 \
   HEALTH_RETRY=1 \
   sh "$(dirname "$0")/check-public.sh" >"$failure_log" 2>&1; then
-  echo "public smoke unexpectedly accepted identity 502" >&2
+  echo "client public smoke unexpectedly accepted 502" >&2
   exit 1
 fi
 
-grep -Fq 'identity-auth-boundary expected 401' "$failure_log"
+grep -Fq 'discord expected 200' "$failure_log"
