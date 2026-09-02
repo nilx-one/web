@@ -150,7 +150,7 @@ describe("progressive native identity form", () => {
     expect(screen.getByLabelText("Password")).toHaveFocus();
   });
 
-  it("keeps resolved pub_dress stable and submits after password-manager autofill", () => {
+  it("keeps pub_dress editable and submits same-identity password-manager autofill", () => {
     const onPasswordChange = vi.fn();
     const onSelectionChange = vi.fn();
     const onSubmit = vi.fn();
@@ -200,34 +200,35 @@ describe("progressive native identity form", () => {
     );
 
     expect(slug).toHaveValue("rSb2");
+    expect(slug).not.toHaveAttribute("readonly");
     expect(slug).toHaveAttribute("autocomplete", "off");
     expect(credentialUsername).not.toBeNull();
     expect(credentialUsername).toHaveValue("0xfrSb2");
 
     fireEvent.input(slug, {
-      target: { value: "0x0frSb" },
-      inputType: "insertReplacementText",
+      target: { value: "other" },
+      inputType: "insertText",
     });
-    expect(slug).toHaveValue("rSb2");
-    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(onSelectionChange).toHaveBeenCalledWith({
+      discriminator: "f",
+      slug: "other",
+    });
+    onSelectionChange.mockClear();
 
     fireEvent.input(credentialUsername!, {
-      target: { value: "0x0frSb" },
+      target: { value: "0xfrSb2" },
     });
     fireEvent.change(password, { target: { value: "stored-secret" } });
 
     expect(onSelectionChange).not.toHaveBeenCalled();
     expect(onPasswordChange).toHaveBeenCalledWith("stored-secret");
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(slug).toHaveValue("rSb2");
 
     rerender(
       <IdentityFoundationView {...sharedProps} password="stored-secret" />,
     );
 
     expect(onSubmit).toHaveBeenCalledOnce();
-    expect(onSelectionChange).not.toHaveBeenCalled();
-    expect(slug).toHaveValue("rSb2");
   });
 
   it("does not auto-submit a manually typed sign-in password", () => {
