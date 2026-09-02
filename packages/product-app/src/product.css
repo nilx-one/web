@@ -158,6 +158,34 @@
   grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
 
+.address-field--collapsed {
+  width: 100%;
+  grid-template-columns: 1fr;
+  padding: 0 18px;
+  border: 1px solid var(--field-line);
+  color: var(--ink);
+  cursor: text;
+  text-align: left;
+}
+
+.address-value {
+  display: flex;
+  align-items: baseline;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(23px, 2.7vw, 32px);
+  font-weight: 720;
+  letter-spacing: -0.07em;
+}
+
+.address-value > span:first-child {
+  color: var(--muted);
+}
+
+.address-value strong {
+  color: var(--accent-ink);
+  font: inherit;
+}
+
 .password-field {
   grid-template-columns: minmax(0, 1fr) auto auto;
   margin-top: 2px;

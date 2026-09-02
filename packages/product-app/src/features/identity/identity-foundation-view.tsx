@@ -256,7 +256,10 @@ function IdentityForm({
 }) {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [availablePulseComplete, setAvailablePulseComplete] = useState(false);
+  const [addressCollapsed, setAddressCollapsed] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const slugRef = useRef<HTMLInputElement>(null);
+  const editAddressRequested = useRef(false);
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
     ? (parsePubDress(identity.rememberedPubDress ?? "") ?? selection)
@@ -279,11 +282,13 @@ function IdentityForm({
   useEffect(() => {
     if (identity.mode !== "register" || identity.status.kind !== "available") {
       setAvailablePulseComplete(false);
+      setAddressCollapsed(false);
       return;
     }
 
     const timeout = window.setTimeout(() => {
       setAvailablePulseComplete(true);
+      setAddressCollapsed(true);
     }, 900);
     return () => window.clearTimeout(timeout);
   }, [identity.mode, identity.status.kind]);
@@ -293,6 +298,13 @@ function IdentityForm({
       passwordRef.current?.focus({ preventScroll: true });
     }
   }, [showsPassword, identity.mode]);
+
+  useEffect(() => {
+    if (!addressCollapsed && editAddressRequested.current) {
+      editAddressRequested.current = false;
+      slugRef.current?.focus({ preventScroll: true });
+    }
+  }, [addressCollapsed]);
 
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -308,6 +320,11 @@ function IdentityForm({
     }
     event.preventDefault();
     onSelectionChange(parsed);
+  }
+
+  function editAddress(): void {
+    editAddressRequested.current = true;
+    setAddressCollapsed(false);
   }
 
   const actionLabel =
@@ -326,80 +343,98 @@ function IdentityForm({
       <label className="surface-kicker" htmlFor="pub-dress-slug">
         pub_dress
       </label>
-      <div className="address-field" data-status={identity.status.kind}>
-        <span className="address-prefix" aria-hidden="true">
-          0x
-        </span>
-        <label className="digit-selector">
-          <span className="visually-hidden">
-            pub_dress hexadecimal discriminator
+      {addressCollapsed ? (
+        <button
+          className="address-field address-field--collapsed"
+          type="button"
+          data-status={identity.status.kind}
+          disabled={identity.busy}
+          aria-label={`Edit 0x${displayedSelection.discriminator}${displayedSelection.slug}`}
+          onClick={editAddress}
+        >
+          <span className="address-value" aria-hidden="true">
+            <span>0x</span>
+            <strong>{displayedSelection.discriminator}</strong>
+            <span>{displayedSelection.slug}</span>
           </span>
-          <select
-            value={displayedSelection.discriminator}
-            aria-label="pub_dress hexadecimal discriminator"
+        </button>
+      ) : (
+        <div className="address-field" data-status={identity.status.kind}>
+          <span className="address-prefix" aria-hidden="true">
+            0x
+          </span>
+          <label className="digit-selector">
+            <span className="visually-hidden">
+              pub_dress hexadecimal discriminator
+            </span>
+            <select
+              value={displayedSelection.discriminator}
+              aria-label="pub_dress hexadecimal discriminator"
+              onChange={(event) =>
+                onSelectionChange({
+                  ...displayedSelection,
+                  discriminator: event.currentTarget.value,
+                })
+              }
+              disabled={identity.busy || remembered}
+            >
+              {"0123456789abcdef".split("").map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <svg
+              className="selector-chevron"
+              viewBox="0 0 12 12"
+              aria-hidden="true"
+            >
+              <path d="m2.5 4.5 3.5 3 3.5-3" />
+            </svg>
+          </label>
+          <input
+            ref={slugRef}
+            id="pub-dress-slug"
+            name="slug"
+            value={displayedSelection.slug}
+            minLength={2}
+            maxLength={32}
+            autoCapitalize="none"
+            autoComplete="username"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="slug"
+            readOnly={remembered}
+            disabled={identity.busy}
+            aria-busy={identity.status.kind === "checking"}
+            aria-invalid={
+              identity.status.kind === "unavailable" ||
+              identity.status.kind === "invalid" ||
+              identity.status.kind === "service-unavailable"
+            }
+            aria-describedby="pub-dress-status"
+            onPaste={pastePubDress}
             onChange={(event) =>
               onSelectionChange({
                 ...displayedSelection,
-                discriminator: event.currentTarget.value,
+                slug: event.currentTarget.value,
               })
             }
-            disabled={identity.busy || remembered}
-          >
-            {"0123456789abcdef".split("").map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          <svg
-            className="selector-chevron"
-            viewBox="0 0 12 12"
-            aria-hidden="true"
-          >
-            <path d="m2.5 4.5 3.5 3 3.5-3" />
-          </svg>
-        </label>
-        <input
-          id="pub-dress-slug"
-          name="slug"
-          value={displayedSelection.slug}
-          minLength={2}
-          maxLength={32}
-          autoCapitalize="none"
-          autoComplete="username"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="slug"
-          readOnly={remembered}
-          disabled={identity.busy}
-          aria-busy={identity.status.kind === "checking"}
-          aria-invalid={
-            identity.status.kind === "unavailable" ||
-            identity.status.kind === "invalid" ||
-            identity.status.kind === "service-unavailable"
-          }
-          aria-describedby="pub-dress-status"
-          onPaste={pastePubDress}
-          onChange={(event) =>
-            onSelectionChange({
-              ...displayedSelection,
-              slug: event.currentTarget.value,
-            })
-          }
-        />
-        {providerRegistration ? (
-          <button
-            className="integrated-action"
-            type="submit"
-            disabled={!canSubmit || identity.busy}
-            aria-label={actionLabel}
-          >
-            <ActionGlyph mode={identity.mode} />
-          </button>
-        ) : (
-          <StatusGlyph status={identity.status} />
-        )}
-      </div>
+          />
+          {providerRegistration ? (
+            <button
+              className="integrated-action"
+              type="submit"
+              disabled={!canSubmit || identity.busy}
+              aria-label={actionLabel}
+            >
+              <ActionGlyph mode={identity.mode} />
+            </button>
+          ) : (
+            <StatusGlyph status={identity.status} />
+          )}
+        </div>
+      )}
       <p
         id="pub-dress-status"
         className={`identity-status identity-status--${identity.status.kind}${
