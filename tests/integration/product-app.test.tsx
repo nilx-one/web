@@ -8,7 +8,13 @@ import {
 } from "@nilx-one/application";
 import type { HostPort } from "@nilx-one/host-contract";
 import { ProductApp } from "@nilx-one/product-app";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -347,6 +353,40 @@ describe("ProductApp identity", () => {
       "data-reflection",
       "positive",
     );
+  });
+
+  it("offers an on-screen continuation after saved-credential autofill", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          resolvePubDress: async (selection) => ({
+            kind: "registered",
+            pubDress: formatPubDress(selection),
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.change(
+      await screen.findByRole("combobox", {
+        name: "pub_dress hexadecimal discriminator",
+      }),
+      { target: { value: "f" } },
+    );
+    fireEvent.change(screen.getByLabelText("pub_dress"), {
+      target: { value: "rSb" },
+    });
+
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Continue with 0xfrSb" }),
+    );
+
+    expect(await screen.findByLabelText("Password")).toHaveFocus();
   });
 
   it("keeps an invalid exact identity red and does not reveal password", async () => {

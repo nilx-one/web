@@ -335,6 +335,12 @@ function IdentityForm({
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
     : showsPassword && passwordReady;
+  const canConfirmAddress =
+    !providerRegistration &&
+    !showsPassword &&
+    canResolveAddress &&
+    (identity.status.kind === "available" ||
+      identity.status.kind === "registered");
   const reflectionTone =
     identity.error !== undefined
       ? "negative"
@@ -442,11 +448,7 @@ function IdentityForm({
     onSelectionChange(next);
   }
 
-  function confirmAddress(event: KeyboardEvent<HTMLInputElement>): void {
-    if (event.key !== "Enter") {
-      return;
-    }
-    event.preventDefault();
+  function confirmAddress(): void {
     if (providerRegistration && canSubmit) {
       onSubmit();
       return;
@@ -460,6 +462,16 @@ function IdentityForm({
       focusPasswordAfterResolution.current = true;
       onResolvePubDress();
     }
+  }
+
+  function confirmAddressFromKeyboard(
+    event: KeyboardEvent<HTMLInputElement>,
+  ): void {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    confirmAddress();
   }
 
   function editAddress(): void {
@@ -567,7 +579,7 @@ function IdentityForm({
             }
             aria-describedby="pub-dress-status"
             onPaste={pastePubDress}
-            onKeyDown={confirmAddress}
+            onKeyDown={confirmAddressFromKeyboard}
             onChange={(event) =>
               changeSelection({
                 ...displayedSelection,
@@ -581,6 +593,16 @@ function IdentityForm({
               type="submit"
               disabled={!canSubmit || identity.busy}
               aria-label={actionLabel}
+            >
+              <ActionGlyph />
+            </button>
+          ) : canConfirmAddress ? (
+            <button
+              className="status-action"
+              type="button"
+              disabled={identity.busy}
+              aria-label={`Continue with 0x${displayedSelection.discriminator}${displayedSelection.slug}`}
+              onClick={confirmAddress}
             >
               <ActionGlyph />
             </button>
@@ -643,7 +665,7 @@ function IdentityForm({
 
       {identity.mode === "register" ? (
         <p className="password-note">
-          8–128 characters · spaces and Unicode welcome
+          8–128 characters · spaces count · Unicode welcome
         </p>
       ) : null}
       {remembered ? (
