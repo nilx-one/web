@@ -112,6 +112,7 @@
 }
 
 .identity-form[data-status="invalid"],
+.identity-form[data-status="unavailable"],
 .identity-form[data-status="service-unavailable"] {
   border-color: color-mix(in srgb, var(--negative) 48%, transparent);
   background: linear-gradient(
@@ -180,6 +181,7 @@
 }
 
 .address-field[data-status="invalid"],
+.address-field[data-status="unavailable"],
 .address-field[data-status="service-unavailable"] {
   border-color: color-mix(in srgb, var(--negative) 72%, transparent);
   box-shadow:
@@ -305,6 +307,7 @@
 }
 
 .status-glyph--invalid,
+.status-glyph--unavailable,
 .status-glyph--service-unavailable {
   color: var(--negative);
 }
@@ -376,6 +379,7 @@
 }
 
 .identity-status--invalid,
+.identity-status--unavailable,
 .identity-status--service-unavailable {
   color: var(--negative);
 }

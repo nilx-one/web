@@ -50,7 +50,9 @@ function StatusGlyph({ status }: { status: PubDressStatusViewState }) {
           <circle cx="12" cy="12" r="8.7" />
           <path d="M9.2 12.2h5.6m-2.8-2.8v5.6" />
         </svg>
-      ) : status.kind === "invalid" || status.kind === "service-unavailable" ? (
+      ) : status.kind === "unavailable" ||
+        status.kind === "invalid" ||
+        status.kind === "service-unavailable" ? (
         <svg viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7.8v5.3m0 3.1h.01" />
@@ -99,6 +101,7 @@ function heading(identity: IdentityViewState): string {
     case "form":
       switch (identity.mode) {
         case "register":
+        case "unavailable":
           return "Create your Bond.";
         case "sign-in":
         case "remembered":
@@ -124,7 +127,7 @@ function lede(identity: IdentityViewState): string {
     case "authenticated":
       return `Authenticated as ${identity.pubDress}.`;
     case "form":
-      if (identity.mode === "register") {
+      if (identity.mode === "register" || identity.mode === "unavailable") {
         return "No provider required. Your exact, case-sensitive address belongs to this Bond.";
       }
       if (identity.mode === "remembered") {
@@ -260,6 +263,7 @@ function IdentityForm({
     : selection;
   const showsPassword =
     identity.mode === "sign-in" ||
+    identity.mode === "unavailable" ||
     remembered ||
     (identity.mode === "register" && availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
@@ -270,7 +274,7 @@ function IdentityForm({
       : password.length > 0;
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
-    : showsPassword && passwordReady;
+    : identity.mode !== "unavailable" && showsPassword && passwordReady;
 
   useEffect(() => {
     if (identity.mode !== "register" || identity.status.kind !== "available") {
@@ -370,6 +374,7 @@ function IdentityForm({
           disabled={identity.busy}
           aria-busy={identity.status.kind === "checking"}
           aria-invalid={
+            identity.status.kind === "unavailable" ||
             identity.status.kind === "invalid" ||
             identity.status.kind === "service-unavailable"
           }
@@ -420,13 +425,14 @@ function IdentityForm({
             placeholder="password"
             aria-label="Password"
             aria-invalid={identity.error !== undefined}
-            disabled={identity.busy}
+            disabled={identity.busy || identity.mode === "unavailable"}
             onChange={(event) => onPasswordChange(event.currentTarget.value)}
           />
           <button
             className="visibility-action"
             type="button"
             aria-label={passwordVisible ? "Hide password" : "Show password"}
+            disabled={identity.mode === "unavailable"}
             onClick={() => setPasswordVisible((visible) => !visible)}
           >
             <VisibilityGlyph visible={passwordVisible} />
