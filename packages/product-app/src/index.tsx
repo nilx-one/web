@@ -38,6 +38,8 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
+import "./product.css";
+import "./features/identity/identity-field-feedback.css";
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
 import {
   createIdentityFoundationViewModel,
@@ -45,7 +47,7 @@ import {
   createProviderIdentityViewState,
   createPubDressStatusViewState,
 } from "./features/identity/identity-foundation-view-model";
-import "./product.css";
+import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
 
 export interface ProductAppDependencies {
   core: CoreRuntimePort;
@@ -274,7 +276,7 @@ function FoundationRoute() {
   }, [host.kind, host.theme]);
 
   function changeSelection(next: PubDressSelection): void {
-    setSelection(next);
+    setSelection(normalizePubDressCredentialInput(next, selection));
     setPassword("");
     setIdempotencyKey(newIdempotencyKey());
     nativeRegistration.reset();
