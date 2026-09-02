@@ -324,7 +324,7 @@ function IdentityForm({
   const normalizedPasswordLength = [...normalizedPassword].length;
   const passwordHasForbiddenFormat =
     normalizedPassword.trim() !== normalizedPassword ||
-    /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(normalizedPassword);
+    /[\p{Cc}\u2028\u2029]/u.test(normalizedPassword);
   const slugLength = [...displayedSelection.slug].length;
   const canResolveAddress =
     !identity.busy && slugLength >= 2 && slugLength <= 32;
