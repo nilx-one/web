@@ -75,17 +75,6 @@ function isBrowserAutofilled(input: HTMLInputElement): boolean {
   }
 }
 
-function isCredentialReplacement(
-  input: HTMLInputElement,
-  nativeEvent: Event,
-): boolean {
-  const inputType =
-    "inputType" in nativeEvent
-      ? (nativeEvent as InputEvent).inputType
-      : undefined;
-  return isBrowserAutofilled(input) || inputType === "insertReplacementText";
-}
-
 function StatusGlyph({ status }: { status: PubDressStatusViewState }) {
   return (
     <span
@@ -123,6 +112,15 @@ function ActionGlyph() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="M7.5 12h9m-3.5-3.5 3.5 3.5-3.5 3.5" />
+    </svg>
+  );
+}
+
+function EditGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.2 15.8.6-3.1 5.6-5.6 2.5 2.5-5.6 5.6-3.1.6Z" />
     </svg>
   );
 }
@@ -427,11 +425,11 @@ function IdentityForm({
   ]);
 
   useEffect(() => {
-    if (!addressCollapsed && editAddressRequested.current) {
+    if (!showsPassword && !addressCollapsed && editAddressRequested.current) {
       editAddressRequested.current = false;
       slugRef.current?.focus({ preventScroll: true });
     }
-  }, [addressCollapsed]);
+  }, [addressCollapsed, showsPassword]);
 
   useLayoutEffect(() => {
     const addressField = addressFieldRef.current;
@@ -484,6 +482,10 @@ function IdentityForm({
   }
 
   function pastePubDress(event: ClipboardEvent<HTMLInputElement>): void {
+    if (showsPassword) {
+      event.preventDefault();
+      return;
+    }
     const parsed = parsePubDress(event.clipboardData.getData("text").trim());
     if (parsed === undefined) {
       return;
@@ -493,6 +495,9 @@ function IdentityForm({
   }
 
   function changeSelection(next: PubDressSelection): void {
+    if (showsPassword) {
+      return;
+    }
     if (
       next.discriminator === displayedSelection.discriminator &&
       next.slug === displayedSelection.slug
@@ -534,12 +539,16 @@ function IdentityForm({
   }
 
   function editAddress(): void {
+    focusPasswordAfterResolution.current = false;
+    credentialAutofill.current = false;
+    submitPasswordAfterAutofill.current = undefined;
     editAddressRequested.current = true;
-    setAvailableTransition((transition) =>
-      transition !== undefined && transition.key === availableKey
-        ? { ...transition, collapsed: false }
-        : transition,
-    );
+    setConfirmedAddressKey(undefined);
+    setAvailableTransition(undefined);
+    onPasswordChange("");
+    if (remembered) {
+      onSelectionChange(displayedSelection);
+    }
   }
 
   const actionLabel =
@@ -600,7 +609,7 @@ function IdentityForm({
                   discriminator: event.currentTarget.value,
                 })
               }
-              disabled={identity.busy}
+              disabled={identity.busy || showsPassword}
             >
               {"0123456789abcdef".split("").map((value) => (
                 <option key={value} value={value}>
@@ -630,6 +639,7 @@ function IdentityForm({
             spellCheck={false}
             placeholder="slug"
             disabled={identity.busy}
+            readOnly={showsPassword}
             aria-busy={identity.status.kind === "checking"}
             aria-invalid={
               identity.status.kind === "unavailable" ||
@@ -640,20 +650,12 @@ function IdentityForm({
             onPaste={pastePubDress}
             onKeyDown={confirmAddressFromKeyboard}
             onInput={(event) => {
-              if (
-                showsPassword &&
-                parsePubDress(event.currentTarget.value) !== undefined &&
-                isCredentialReplacement(event.currentTarget, event.nativeEvent)
-              ) {
+              if (showsPassword) {
                 event.currentTarget.value = displayedSelection.slug;
               }
             }}
             onChange={(event) => {
-              if (
-                showsPassword &&
-                parsePubDress(event.currentTarget.value) !== undefined &&
-                isCredentialReplacement(event.currentTarget, event.nativeEvent)
-              ) {
+              if (showsPassword) {
                 event.currentTarget.value = displayedSelection.slug;
                 return;
               }
@@ -671,6 +673,16 @@ function IdentityForm({
               aria-label={actionLabel}
             >
               <ActionGlyph />
+            </button>
+          ) : showsPassword ? (
+            <button
+              className="status-action"
+              type="button"
+              disabled={identity.busy}
+              aria-label={`Change Bond from ${credentialUsername}`}
+              onClick={editAddress}
+            >
+              <EditGlyph />
             </button>
           ) : canConfirmAddress ? (
             <button
