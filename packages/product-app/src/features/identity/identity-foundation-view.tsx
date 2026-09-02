@@ -793,8 +793,10 @@ function IdentityForm({
                   },
                   displayedSelection,
                 );
-                const nextCredentialKey =
-                  `${credentialSelection.discriminator}\u0000${credentialSelection.slug}`;
+                const nextCredentialKey = [
+                  credentialSelection.discriminator,
+                  credentialSelection.slug,
+                ].join("\u0000");
                 submitPasswordAfterAutofill.current = nextPassword;
 
                 if (nextCredentialKey !== addressKey) {
