@@ -4,7 +4,10 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { IdentityFoundationView } from "./identity-foundation-view";
+import {
+  IdentityFoundationView,
+  calculateFieldReflection,
+} from "./identity-foundation-view";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -63,5 +66,35 @@ describe("progressive native identity form", () => {
       screen.getByLabelText("pub_dress hexadecimal discriminator"),
     ).toBeVisible();
     expect(screen.getByRole("textbox", { name: "pub_dress" })).toHaveFocus();
+  });
+
+  it("attenuates reflected light with distance and widens its footprint", () => {
+    const source = {
+      top: 0,
+      right: 300,
+      bottom: 66,
+      left: 0,
+      width: 300,
+      height: 66,
+    };
+    const receiver = {
+      top: 82,
+      right: 300,
+      bottom: 148,
+      left: 0,
+      width: 300,
+      height: 66,
+    };
+
+    const near = calculateFieldReflection(source, receiver);
+    const far = calculateFieldReflection(source, {
+      ...receiver,
+      top: 210,
+      bottom: 276,
+    });
+
+    expect(near.x).toBe(150);
+    expect(near.energy).toBeGreaterThan(far.energy);
+    expect(near.spread).toBeLessThan(far.spread);
   });
 });

@@ -5,6 +5,7 @@ import { parsePubDress, type PubDressSelection } from "@nilx-one/application";
 import { AppChrome, RuntimeStatus } from "@nilx-one/ui";
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -28,6 +29,41 @@ export interface IdentityFoundationViewProps {
   onPasswordChange(password: string): void;
   onSelectionChange(selection: PubDressSelection): void;
   onSubmit(): void;
+}
+
+interface FieldRect {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+export function calculateFieldReflection(
+  source: FieldRect,
+  receiver: FieldRect,
+): { energy: number; spread: number; x: number } {
+  const sourceX = source.left + source.width / 2;
+  const receiverWidth = Math.max(receiver.width, 1);
+  const receiverX = Math.min(
+    receiverWidth,
+    Math.max(0, sourceX - receiver.left),
+  );
+  const impactX = receiver.left + receiverX;
+  const verticalDistance = Math.max(1, receiver.top - source.bottom);
+  const horizontalDistance = sourceX - impactX;
+  const distance = Math.hypot(horizontalDistance, verticalDistance);
+  const incidence = verticalDistance / distance;
+  const falloffDistance = Math.max(96, receiver.height * 1.7);
+  const inverseSquare = 1 / (1 + (distance / falloffDistance) ** 2);
+  const energy = Math.min(1, Math.max(0.12, incidence * inverseSquare));
+  const spread = Math.min(
+    receiverWidth * 0.78,
+    Math.max(72, receiverWidth * (0.28 + (1 - energy) * 0.38)),
+  );
+
+  return { energy, spread, x: receiverX };
 }
 
 function StatusGlyph({ status }: { status: PubDressStatusViewState }) {
@@ -255,15 +291,28 @@ function IdentityForm({
   onSubmit(): void;
 }) {
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [availablePulseComplete, setAvailablePulseComplete] = useState(false);
-  const [addressCollapsed, setAddressCollapsed] = useState(false);
+  const [availableTransition, setAvailableTransition] = useState<{
+    key: string;
+    complete: boolean;
+    collapsed: boolean;
+  }>();
   const passwordRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
+  const addressFieldRef = useRef<HTMLElement>(null);
+  const passwordFieldRef = useRef<HTMLDivElement>(null);
   const editAddressRequested = useRef(false);
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
     ? (parsePubDress(identity.rememberedPubDress ?? "") ?? selection)
     : selection;
+  const availableKey =
+    identity.mode === "register" && identity.status.kind === "available"
+      ? `${displayedSelection.discriminator}\u0000${displayedSelection.slug}`
+      : undefined;
+  const currentAvailableTransition =
+    availableTransition?.key === availableKey ? availableTransition : undefined;
+  const availablePulseComplete = currentAvailableTransition?.complete ?? false;
+  const addressCollapsed = currentAvailableTransition?.collapsed ?? false;
   const showsPassword =
     identity.mode === "sign-in" ||
     identity.mode === "unavailable" ||
@@ -278,20 +327,31 @@ function IdentityForm({
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
     : identity.mode !== "unavailable" && showsPassword && passwordReady;
+  const reflectionTone =
+    identity.error !== undefined
+      ? "negative"
+      : identity.status.kind === "available"
+        ? "positive"
+        : identity.status.kind === "unavailable" ||
+            identity.status.kind === "invalid" ||
+            identity.status.kind === "service-unavailable"
+          ? "negative"
+          : undefined;
 
   useEffect(() => {
-    if (identity.mode !== "register" || identity.status.kind !== "available") {
-      setAvailablePulseComplete(false);
-      setAddressCollapsed(false);
+    if (availableKey === undefined) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
-      setAvailablePulseComplete(true);
-      setAddressCollapsed(true);
+      setAvailableTransition({
+        key: availableKey,
+        complete: true,
+        collapsed: true,
+      });
     }, 900);
     return () => window.clearTimeout(timeout);
-  }, [identity.mode, identity.status.kind]);
+  }, [availableKey]);
 
   useEffect(() => {
     if (showsPassword) {
@@ -305,6 +365,49 @@ function IdentityForm({
       slugRef.current?.focus({ preventScroll: true });
     }
   }, [addressCollapsed]);
+
+  useLayoutEffect(() => {
+    const addressField = addressFieldRef.current;
+    const passwordField = passwordFieldRef.current;
+    if (
+      addressField === null ||
+      passwordField === null ||
+      reflectionTone === undefined
+    ) {
+      return;
+    }
+
+    const updateReflection = () => {
+      const reflection = calculateFieldReflection(
+        addressField.getBoundingClientRect(),
+        passwordField.getBoundingClientRect(),
+      );
+      passwordField.style.setProperty("--reflection-x", `${reflection.x}px`);
+      passwordField.style.setProperty(
+        "--reflection-spread",
+        `${reflection.spread}px`,
+      );
+      passwordField.style.setProperty(
+        "--reflection-energy",
+        reflection.energy.toFixed(3),
+      );
+    };
+
+    updateReflection();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(updateReflection);
+    observer?.observe(addressField);
+    observer?.observe(passwordField);
+    window.addEventListener("resize", updateReflection);
+    window.addEventListener("scroll", updateReflection, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateReflection);
+      window.removeEventListener("scroll", updateReflection, true);
+    };
+  }, [addressCollapsed, reflectionTone, showsPassword]);
 
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -324,7 +427,11 @@ function IdentityForm({
 
   function editAddress(): void {
     editAddressRequested.current = true;
-    setAddressCollapsed(false);
+    setAvailableTransition((transition) =>
+      transition !== undefined && transition.key === availableKey
+        ? { ...transition, collapsed: false }
+        : transition,
+    );
   }
 
   const actionLabel =
@@ -345,6 +452,9 @@ function IdentityForm({
       </label>
       {addressCollapsed ? (
         <button
+          ref={(element) => {
+            addressFieldRef.current = element;
+          }}
           className="address-field address-field--collapsed"
           type="button"
           data-status={identity.status.kind}
@@ -359,7 +469,13 @@ function IdentityForm({
           </span>
         </button>
       ) : (
-        <div className="address-field" data-status={identity.status.kind}>
+        <div
+          ref={(element) => {
+            addressFieldRef.current = element;
+          }}
+          className="address-field"
+          data-status={identity.status.kind}
+        >
           <span className="address-prefix" aria-hidden="true">
             0x
           </span>
@@ -446,7 +562,11 @@ function IdentityForm({
       </p>
 
       {showsPassword ? (
-        <div className="password-field">
+        <div
+          ref={passwordFieldRef}
+          className="password-field"
+          data-reflection={reflectionTone}
+        >
           <input
             ref={passwordRef}
             type={passwordVisible ? "text" : "password"}
