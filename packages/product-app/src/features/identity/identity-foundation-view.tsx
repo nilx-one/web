@@ -643,10 +643,7 @@ function IdentityForm({
               if (
                 showsPassword &&
                 parsePubDress(event.currentTarget.value) !== undefined &&
-                isCredentialReplacement(
-                  event.currentTarget,
-                  event.nativeEvent,
-                )
+                isCredentialReplacement(event.currentTarget, event.nativeEvent)
               ) {
                 event.currentTarget.value = displayedSelection.slug;
               }
@@ -655,10 +652,7 @@ function IdentityForm({
               if (
                 showsPassword &&
                 parsePubDress(event.currentTarget.value) !== undefined &&
-                isCredentialReplacement(
-                  event.currentTarget,
-                  event.nativeEvent,
-                )
+                isCredentialReplacement(event.currentTarget, event.nativeEvent)
               ) {
                 event.currentTarget.value = displayedSelection.slug;
                 return;
@@ -734,9 +728,7 @@ function IdentityForm({
             minLength={8}
             maxLength={128}
             autoComplete={
-              identity.mode === "register"
-                ? "new-password"
-                : "current-password"
+              identity.mode === "register" ? "new-password" : "current-password"
             }
             placeholder="password"
             aria-label="Password"
