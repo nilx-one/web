@@ -4,6 +4,7 @@
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import { useEffect, useRef, useState } from "react";
 
+import "./map-foundation-view.css";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
 
 export interface MapFoundationViewProps {
