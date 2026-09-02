@@ -206,10 +206,7 @@ describe("progressive native identity form", () => {
       "1234568\n78",
     ]) {
       rerender(
-        <IdentityFoundationView
-          {...sharedProps}
-          password={invalidPassword}
-        />,
+        <IdentityFoundationView {...sharedProps} password={invalidPassword} />,
       );
       expect(password).toHaveValue(invalidPassword);
       expect(password.parentElement).toHaveAttribute(
