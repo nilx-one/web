@@ -316,7 +316,7 @@ function IdentityForm({
   const editAddressRequested = useRef(false);
   const focusPasswordAfterResolution = useRef(false);
   const credentialAutofill = useRef(false);
-  const submitPasswordAfterAutofill = useRef<string>();
+  const submitPasswordAfterAutofill = useRef<string | undefined>(undefined);
   const [confirmedAddressKey, setConfirmedAddressKey] = useState<string>();
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
