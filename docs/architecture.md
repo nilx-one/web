@@ -23,7 +23,9 @@ Dependencies point inward:
 | Scope         | May depend on                                     | Must not own                                                                     |
 | ------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `application` | no Web package                                    | BondChain completion, Relationship derivation, gamification, or other Core rules |
-| `product-app` | `application`, `host-contract`, `ui`              | host SDK access or protocol decisions                                            |
+| `map-contract` | no Web package                                   | MapLibre types, map assets, or world/protocol truth                              |
+| `map-maplibre` | `map-contract`, MapLibre GL JS                  | visibility, clustering, interaction, or Relationship semantics                  |
+| `product-app` | `application`, `host-contract`, `map-contract`, `ui` | host SDK access, renderer implementation details, or protocol decisions       |
 | `ui`          | React                                             | use cases, Core bindings, host behavior, or product state                        |
 | `core-wasm`   | `application` ports                               | presentation or host behavior                                                    |
 | host adapters | `host-contract`                                   | product flows or protocol authority                                              |
@@ -72,7 +74,11 @@ The bounded identity API remains same-origin under `/api/v1/*`. A separate API o
 
 Custom graphics select WebGPU by capability. Failure to acquire an adapter falls back to WebGL2. If neither is available, the feature exposes an unsupported state. There is no `CanvasRenderingContext2D` fallback.
 
-MapLibre will own geographic rendering when the map vertical slice begins. Shared spatial and visibility decisions must arrive as Core projections rather than TypeScript rules.
+Geographic rendering enters the product through `@nilx-one/map-contract`. `@nilx-one/map-maplibre` implements that port with MapLibre GL JS and is constructed only in the host composition roots. Product code never imports MapLibre directly.
+
+The baseline style contract is the same-origin, versioned `/map/0.1.0/style.json`. The renderer reports an explicit unavailable state when that artifact is not published; it never falls back to a third-party style or tile host. Shared spatial state, visibility, clustering, permissions, and interaction projections must arrive from Core-facing contracts rather than being invented by MapLibre or React.
+
+Camera synchronization with future custom world renderers may cross an explicit client-side coordination boundary, but no renderer may treat camera synchronization as authority over shared world state. Ownership, update direction, frame lifecycle, and versioning for that coordination remain an explicit architecture open item in the canonical 0x1 specification.
 
 ## Feature shape
 
