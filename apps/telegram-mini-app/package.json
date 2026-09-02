@@ -11,8 +11,10 @@
     "@nilx-one/core-wasm": "workspace:*",
     "@nilx-one/host-telegram": "workspace:*",
     "@nilx-one/identity-http": "workspace:*",
+    "@nilx-one/map-maplibre": "workspace:*",
     "@nilx-one/product-app": "workspace:*",
     "@nilx-one/ui": "workspace:*",
+    "maplibre-gl": "^6.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   }
