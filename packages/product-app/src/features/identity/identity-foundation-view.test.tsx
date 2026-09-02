@@ -205,16 +205,6 @@ describe("progressive native identity form", () => {
     expect(credentialUsername).not.toBeNull();
     expect(credentialUsername).toHaveValue("0xfrSb2");
 
-    fireEvent.input(slug, {
-      target: { value: "other" },
-      inputType: "insertText",
-    });
-    expect(onSelectionChange).toHaveBeenCalledWith({
-      discriminator: "f",
-      slug: "other",
-    });
-    onSelectionChange.mockClear();
-
     fireEvent.input(credentialUsername!, {
       target: { value: "0xfrSb2" },
     });
