@@ -75,6 +75,17 @@ function isBrowserAutofilled(input: HTMLInputElement): boolean {
   }
 }
 
+function isCredentialReplacement(
+  input: HTMLInputElement,
+  nativeEvent: Event,
+): boolean {
+  const inputType =
+    "inputType" in nativeEvent
+      ? (nativeEvent as InputEvent).inputType
+      : undefined;
+  return isBrowserAutofilled(input) || inputType === "insertReplacementText";
+}
+
 function StatusGlyph({ status }: { status: PubDressStatusViewState }) {
   return (
     <span
@@ -400,7 +411,14 @@ function IdentityForm({
     submitPasswordAfterAutofill.current = undefined;
     credentialAutofill.current = false;
     onSubmit();
-  }, [identity.busy, identity.mode, onSubmit, password, passwordReady, remembered]);
+  }, [
+    identity.busy,
+    identity.mode,
+    onSubmit,
+    password,
+    passwordReady,
+    remembered,
+  ]);
 
   useEffect(() => {
     if (!addressCollapsed && editAddressRequested.current) {
@@ -469,6 +487,12 @@ function IdentityForm({
   }
 
   function changeSelection(next: PubDressSelection): void {
+    if (
+      next.discriminator === displayedSelection.discriminator &&
+      next.slug === displayedSelection.slug
+    ) {
+      return;
+    }
     focusPasswordAfterResolution.current = false;
     credentialAutofill.current = false;
     submitPasswordAfterAutofill.current = undefined;
@@ -609,12 +633,35 @@ function IdentityForm({
             aria-describedby="pub-dress-status"
             onPaste={pastePubDress}
             onKeyDown={confirmAddressFromKeyboard}
-            onChange={(event) =>
+            onInput={(event) => {
+              if (
+                showsPassword &&
+                parsePubDress(event.currentTarget.value) !== undefined &&
+                isCredentialReplacement(
+                  event.currentTarget,
+                  event.nativeEvent,
+                )
+              ) {
+                event.currentTarget.value = displayedSelection.slug;
+              }
+            }}
+            onChange={(event) => {
+              if (
+                showsPassword &&
+                parsePubDress(event.currentTarget.value) !== undefined &&
+                isCredentialReplacement(
+                  event.currentTarget,
+                  event.nativeEvent,
+                )
+              ) {
+                event.currentTarget.value = displayedSelection.slug;
+                return;
+              }
               changeSelection({
                 ...displayedSelection,
                 slug: event.currentTarget.value,
-              })
-            }
+              });
+            }}
           />
           {providerRegistration ? (
             <button
