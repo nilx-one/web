@@ -430,7 +430,10 @@ function IdentityForm({
   ]);
 
   useEffect(() => {
-    if (credentialSwitchKey === undefined || credentialSwitchKey !== addressKey) {
+    if (
+      credentialSwitchKey === undefined ||
+      credentialSwitchKey !== addressKey
+    ) {
       return;
     }
     if (identity.mode === "initial") {
@@ -777,7 +780,8 @@ function IdentityForm({
                 (identity.mode === "sign-in" || remembered) &&
                 (credentialAutofill.current ||
                   isBrowserAutofilled(event.currentTarget) ||
-                  (usernameInput !== null && isBrowserAutofilled(usernameInput)));
+                  (usernameInput !== null &&
+                    isBrowserAutofilled(usernameInput)));
 
               if (credentialWasAutofilled) {
                 const rawUsername =
@@ -789,7 +793,8 @@ function IdentityForm({
                   },
                   displayedSelection,
                 );
-                const nextCredentialKey = `${credentialSelection.discriminator}\u0000${credentialSelection.slug}`;
+                const nextCredentialKey =
+                  `${credentialSelection.discriminator}\u0000${credentialSelection.slug}`;
                 submitPasswordAfterAutofill.current = nextPassword;
 
                 if (nextCredentialKey !== addressKey) {
