@@ -301,9 +301,15 @@ mod tests {
     #[test]
     fn password_policy_accepts_eight_code_points_and_rejects_seven() {
         let engine = config().password_engine();
-        assert_eq!(engine.validate("1234567"), Err(PasswordPolicyError::InvalidLength));
+        assert_eq!(
+            engine.validate("1234567"),
+            Err(PasswordPolicyError::InvalidLength)
+        );
         assert_eq!(engine.validate("eight-ok").as_deref(), Ok("eight-ok"));
-        assert_eq!(engine.validate("password"), Err(PasswordPolicyError::Compromised));
+        assert_eq!(
+            engine.validate("password"),
+            Err(PasswordPolicyError::Compromised)
+        );
     }
 
     #[test]
