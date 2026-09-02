@@ -105,6 +105,7 @@ function FoundationRoute() {
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
   const [resolutionSelection, setResolutionSelection] = useState(selection);
   const [resolutionArmed, setResolutionArmed] = useState(false);
+  const [useRememberedHint, setUseRememberedHint] = useState(true);
 
   const readinessQuery = useQuery({
     queryKey: ["core-runtime-readiness"],
@@ -127,7 +128,9 @@ function FoundationRoute() {
     retry: false,
   });
 
-  const nativeCanResolve = nativeContextQuery.data?.kind === "anonymous";
+  const nativeCanResolve =
+    nativeContextQuery.data?.kind === "anonymous" ||
+    (nativeContextQuery.data?.kind === "remembered" && !useRememberedHint);
   const providerCanResolve =
     providerIdentityQuery.data?.kind === "not-registered";
   const canResolve = browserHost ? nativeCanResolve : providerCanResolve;
@@ -227,6 +230,7 @@ function FoundationRoute() {
       setSelection({ discriminator: "0", slug: "" });
       setPassword("");
       setIdempotencyKey(newIdempotencyKey());
+      setUseRememberedHint(false);
     },
   });
   const logout = useMutation({
@@ -238,6 +242,7 @@ function FoundationRoute() {
       nativeRegistration.reset();
       nativeAuthentication.reset();
       recoveryAcknowledgement.reset();
+      setUseRememberedHint(true);
       await queryClient.invalidateQueries({
         queryKey: ["native-identity-context"],
       });
@@ -254,7 +259,9 @@ function FoundationRoute() {
     recoveryAcknowledgement.data ?? nativeAuthentication.data;
   const identityState = browserHost
     ? createNativeIdentityViewState(
-        nativeContextQuery.data,
+        nativeContextQuery.data?.kind === "remembered" && !useRememberedHint
+          ? { kind: "anonymous" }
+          : nativeContextQuery.data,
         status,
         nativeRegistration.data,
         latestAuthentication,
@@ -286,6 +293,9 @@ function FoundationRoute() {
   }, [host.kind, host.theme]);
 
   function changeSelection(next: PubDressSelection): void {
+    if (nativeContextQuery.data?.kind === "remembered") {
+      setUseRememberedHint(false);
+    }
     setResolutionArmed(false);
     setSelection(normalizePubDressCredentialInput(next, selection));
     setPassword("");

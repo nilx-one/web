@@ -170,6 +170,7 @@ describe("ProductApp identity", () => {
       {},
       { timeout: 2_000 },
     );
+    await user.keyboard("{Enter}");
     await user.type(
       await screen.findByLabelText("Password"),
       "a deliberately long password",
@@ -219,6 +220,7 @@ describe("ProductApp identity", () => {
 
     await user.type(await screen.findByLabelText("pub_dress"), "sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+    await user.keyboard("{Enter}");
     await user.type(
       screen.getByLabelText("Password"),
       "correct password value",
@@ -279,6 +281,7 @@ describe("ProductApp identity", () => {
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+    await user.keyboard("{Enter}");
     const password = await screen.findByLabelText("Password");
     await user.type(password, "incorrect password");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
@@ -335,9 +338,11 @@ describe("ProductApp identity", () => {
 
     resolveRegistered?.();
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
-    expect(await screen.findByLabelText("Password")).not.toHaveFocus();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
     expect(slug.closest("form")).toHaveAttribute("data-status", "registered");
     expect(slug).toHaveAttribute("aria-invalid", "false");
+    await user.keyboard("{Enter}");
+    expect(await screen.findByLabelText("Password")).toHaveFocus();
     expect(screen.getByLabelText("Password").parentElement).toHaveAttribute(
       "data-reflection",
       "positive",
@@ -371,10 +376,17 @@ describe("ProductApp identity", () => {
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
   });
 
-  it("renders a password-only remembered flow with a shared-device escape", async () => {
+  it("keeps a remembered Bond editable so another Bond can sign in", async () => {
+    const user = userEvent.setup();
     const forgetRememberedBond = vi
       .fn<IdentityAccessPort["forgetRememberedBond"]>()
       .mockResolvedValue({ kind: "completed" });
+    const authenticateNative = vi
+      .fn<IdentityAccessPort["authenticateNative"]>()
+      .mockResolvedValue({
+        kind: "authenticated",
+        identity: { pubDress: "0x0rain" },
+      });
     render(
       <ProductApp
         core={readyCore}
@@ -385,19 +397,36 @@ describe("ProductApp identity", () => {
             pubDress: "0x0sky",
           }),
           forgetRememberedBond,
+          resolvePubDress: async (selection) => ({
+            kind: "registered",
+            pubDress: formatPubDress(selection),
+          }),
+          authenticateNative,
         })}
       />,
     );
 
     expect(await screen.findByLabelText("Password")).not.toHaveFocus();
-    expect(screen.getByLabelText("pub_dress")).toHaveAttribute("readonly");
-    await userEvent.click(screen.getByRole("button", { name: "Not you?" }));
-    expect(forgetRememberedBond).toHaveBeenCalledOnce();
-    await waitFor(() =>
-      expect(screen.getByLabelText("pub_dress")).not.toHaveAttribute(
-        "readonly",
-      ),
+    const slug = screen.getByLabelText("pub_dress");
+    expect(slug).not.toHaveAttribute("readonly");
+    expect(screen.getByRole("combobox")).toBeEnabled();
+
+    await user.clear(slug);
+    await user.type(slug, "rain");
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    await user.type(
+      await screen.findByLabelText("Password"),
+      "correct password value",
     );
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(authenticateNative).toHaveBeenCalledWith(
+      "0x0rain",
+      "correct password value",
+    );
+    expect(forgetRememberedBond).not.toHaveBeenCalled();
   });
 
   it("reuses the address primitive in Telegram without native password or provider row", async () => {
@@ -424,6 +453,11 @@ describe("ProductApp identity", () => {
     });
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
+    await screen.findByText(
+      "Available — create this identity",
+      {},
+      { timeout: 2_000 },
+    );
     const create = await screen.findByRole("button", { name: "Create 0xaSky" });
     await waitFor(() => expect(create).toBeEnabled());
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();

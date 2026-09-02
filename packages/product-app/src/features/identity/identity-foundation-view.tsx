@@ -14,7 +14,6 @@ import {
 } from "react";
 
 import type {
-  IdentityFormMode,
   IdentityFoundationViewModel,
   IdentityViewState,
   PubDressStatusViewState,
@@ -100,19 +99,11 @@ function StatusGlyph({ status }: { status: PubDressStatusViewState }) {
   );
 }
 
-function ActionGlyph({ mode }: { mode: IdentityFormMode }) {
-  if (mode === "sign-in" || mode === "remembered") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M13 5h5a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-5" />
-        <path d="m10 8 4 4-4 4m4-4H4" />
-      </svg>
-    );
-  }
+function ActionGlyph() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="10" cy="12" r="6" />
-      <path d="M17 8v8m-4-4h8" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M7.5 12h9m-3.5-3.5 3.5 3.5-3.5 3.5" />
     </svg>
   );
 }
@@ -305,31 +296,42 @@ function IdentityForm({
   const passwordFieldRef = useRef<HTMLDivElement>(null);
   const editAddressRequested = useRef(false);
   const focusPasswordAfterResolution = useRef(false);
+  const [confirmedAddressKey, setConfirmedAddressKey] = useState<string>();
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
     ? (parsePubDress(identity.rememberedPubDress ?? "") ?? selection)
     : selection;
+  const addressKey = `${displayedSelection.discriminator}\u0000${displayedSelection.slug}`;
+  const addressConfirmed = confirmedAddressKey === addressKey;
   const availableKey =
-    identity.mode === "register" && identity.status.kind === "available"
-      ? `${displayedSelection.discriminator}\u0000${displayedSelection.slug}`
+    addressConfirmed &&
+    identity.mode === "register" &&
+    identity.status.kind === "available"
+      ? addressKey
       : undefined;
   const currentAvailableTransition =
     availableTransition?.key === availableKey ? availableTransition : undefined;
   const availablePulseComplete = currentAvailableTransition?.complete ?? false;
   const addressCollapsed = currentAvailableTransition?.collapsed ?? false;
   const showsPassword =
-    identity.mode === "sign-in" ||
     remembered ||
-    (identity.mode === "register" && availablePulseComplete);
+    (addressConfirmed && identity.mode === "sign-in") ||
+    (addressConfirmed &&
+      identity.mode === "register" &&
+      availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
   const normalizedPasswordLength = [...password.normalize("NFC")].length;
   const slugLength = [...displayedSelection.slug].length;
   const canResolveAddress =
-    !remembered && !identity.busy && slugLength >= 2 && slugLength <= 32;
+    !identity.busy && slugLength >= 2 && slugLength <= 32;
   const passwordReady =
-    identity.mode === "register"
-      ? normalizedPasswordLength >= 8 && normalizedPasswordLength <= 128
-      : password.length > 0;
+    normalizedPasswordLength >= 8 && normalizedPasswordLength <= 128;
+  const passwordValidation =
+    password.length === 0
+      ? "idle"
+      : identity.error !== undefined || !passwordReady
+        ? "invalid"
+        : "valid";
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
     : showsPassword && passwordReady;
@@ -435,6 +437,8 @@ function IdentityForm({
 
   function changeSelection(next: PubDressSelection): void {
     focusPasswordAfterResolution.current = false;
+    setConfirmedAddressKey(undefined);
+    setAvailableTransition(undefined);
     onSelectionChange(next);
   }
 
@@ -447,7 +451,12 @@ function IdentityForm({
       onSubmit();
       return;
     }
-    if (!showsPassword && canResolveAddress) {
+    if (showsPassword) {
+      passwordRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (canResolveAddress) {
+      setConfirmedAddressKey(addressKey);
       focusPasswordAfterResolution.current = true;
       onResolvePubDress();
     }
@@ -520,7 +529,7 @@ function IdentityForm({
                   discriminator: event.currentTarget.value,
                 })
               }
-              disabled={identity.busy || remembered}
+              disabled={identity.busy}
             >
               {"0123456789abcdef".split("").map((value) => (
                 <option key={value} value={value}>
@@ -549,7 +558,6 @@ function IdentityForm({
             enterKeyHint="go"
             spellCheck={false}
             placeholder="slug"
-            readOnly={remembered}
             disabled={identity.busy}
             aria-busy={identity.status.kind === "checking"}
             aria-invalid={
@@ -574,7 +582,7 @@ function IdentityForm({
               disabled={!canSubmit || identity.busy}
               aria-label={actionLabel}
             >
-              <ActionGlyph mode={identity.mode} />
+              <ActionGlyph />
             </button>
           ) : (
             <StatusGlyph status={identity.status} />
@@ -596,13 +604,14 @@ function IdentityForm({
           ref={passwordFieldRef}
           className="password-field"
           data-reflection={reflectionTone}
+          data-validation={passwordValidation}
         >
           <input
             ref={passwordRef}
             type={passwordVisible ? "text" : "password"}
             name="password"
             value={password}
-            minLength={identity.mode === "register" ? 8 : undefined}
+            minLength={8}
             maxLength={128}
             autoComplete={
               identity.mode === "register" ? "new-password" : "current-password"
@@ -627,7 +636,7 @@ function IdentityForm({
             disabled={!canSubmit || identity.busy}
             aria-label={actionLabel}
           >
-            <ActionGlyph mode={identity.mode} />
+            <ActionGlyph />
           </button>
         </div>
       ) : null}
