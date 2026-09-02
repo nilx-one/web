@@ -45,7 +45,7 @@ export type PubDressStatusViewState =
   | { kind: "idle"; detail: "Case-sensitive · 2–32 characters" }
   | { kind: "checking"; detail: "Checking availability…" }
   | { kind: "available"; detail: "Available — create this identity" }
-  | { kind: "registered"; detail: "Identity found — enter your password" }
+  | { kind: "registered"; detail: "Bond found — sign in" }
   | { kind: "unavailable"; detail: "Unavailable — this Bond already exists" }
   | { kind: "invalid"; detail: string }
   | {
@@ -106,8 +106,8 @@ export function createPubDressStatusViewState(
       };
     case "registered":
       return {
-        kind: "unavailable",
-        detail: "Unavailable — this Bond already exists",
+        kind: "registered",
+        detail: "Bond found — sign in",
       };
     case "rejected":
       return {
@@ -176,7 +176,7 @@ export function createNativeIdentityViewState(
       mode: "remembered",
       status: {
         kind: "registered",
-        detail: "Identity found — enter your password",
+        detail: "Bond found — sign in",
       },
       busy: pending,
       rememberedPubDress: context.pubDress,
@@ -189,7 +189,7 @@ export function createNativeIdentityViewState(
       ? "resolving"
       : status.kind === "available"
         ? "register"
-        : status.kind === "unavailable"
+        : status.kind === "registered"
           ? "sign-in"
           : "initial";
   return {

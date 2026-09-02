@@ -10,6 +10,7 @@ import {
   useState,
   type ClipboardEvent,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 
 import type {
@@ -27,6 +28,7 @@ export interface IdentityFoundationViewProps {
   onForgetRemembered(): void;
   onLogout(): void;
   onPasswordChange(password: string): void;
+  onResolvePubDress(): void;
   onSelectionChange(selection: PubDressSelection): void;
   onSubmit(): void;
 }
@@ -278,6 +280,7 @@ function IdentityForm({
   selection,
   onForgetRemembered,
   onPasswordChange,
+  onResolvePubDress,
   onSelectionChange,
   onSubmit,
 }: {
@@ -286,6 +289,7 @@ function IdentityForm({
   selection: PubDressSelection;
   onForgetRemembered(): void;
   onPasswordChange(password: string): void;
+  onResolvePubDress(): void;
   onSelectionChange(selection: PubDressSelection): void;
   onSubmit(): void;
 }) {
@@ -300,6 +304,7 @@ function IdentityForm({
   const addressFieldRef = useRef<HTMLElement>(null);
   const passwordFieldRef = useRef<HTMLDivElement>(null);
   const editAddressRequested = useRef(false);
+  const focusPasswordAfterResolution = useRef(false);
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
     ? (parsePubDress(identity.rememberedPubDress ?? "") ?? selection)
@@ -318,6 +323,9 @@ function IdentityForm({
     (identity.mode === "register" && availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
   const normalizedPasswordLength = [...password.normalize("NFC")].length;
+  const slugLength = [...displayedSelection.slug].length;
+  const canResolveAddress =
+    !remembered && !identity.busy && slugLength >= 2 && slugLength <= 32;
   const passwordReady =
     identity.mode === "register"
       ? normalizedPasswordLength >= 8 && normalizedPasswordLength <= 128
@@ -328,7 +336,8 @@ function IdentityForm({
   const reflectionTone =
     identity.error !== undefined
       ? "negative"
-      : identity.status.kind === "available"
+      : identity.status.kind === "available" ||
+          identity.status.kind === "registered"
         ? "positive"
         : identity.status.kind === "unavailable" ||
             identity.status.kind === "invalid" ||
@@ -352,7 +361,8 @@ function IdentityForm({
   }, [availableKey]);
 
   useEffect(() => {
-    if (showsPassword) {
+    if (showsPassword && focusPasswordAfterResolution.current) {
+      focusPasswordAfterResolution.current = false;
       passwordRef.current?.focus({ preventScroll: true });
     }
   }, [showsPassword, identity.mode]);
@@ -420,7 +430,27 @@ function IdentityForm({
       return;
     }
     event.preventDefault();
-    onSelectionChange(parsed);
+    changeSelection(parsed);
+  }
+
+  function changeSelection(next: PubDressSelection): void {
+    focusPasswordAfterResolution.current = false;
+    onSelectionChange(next);
+  }
+
+  function confirmAddress(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    if (providerRegistration && canSubmit) {
+      onSubmit();
+      return;
+    }
+    if (!showsPassword && canResolveAddress) {
+      focusPasswordAfterResolution.current = true;
+      onResolvePubDress();
+    }
   }
 
   function editAddress(): void {
@@ -485,7 +515,7 @@ function IdentityForm({
               value={displayedSelection.discriminator}
               aria-label="pub_dress hexadecimal discriminator"
               onChange={(event) =>
-                onSelectionChange({
+                changeSelection({
                   ...displayedSelection,
                   discriminator: event.currentTarget.value,
                 })
@@ -512,10 +542,11 @@ function IdentityForm({
             name="slug"
             value={displayedSelection.slug}
             minLength={2}
-            maxLength={35}
+            maxLength={32}
             autoCapitalize="none"
             autoComplete="username"
             autoCorrect="off"
+            enterKeyHint="go"
             spellCheck={false}
             placeholder="slug"
             readOnly={remembered}
@@ -528,8 +559,9 @@ function IdentityForm({
             }
             aria-describedby="pub-dress-status"
             onPaste={pastePubDress}
+            onKeyDown={confirmAddress}
             onChange={(event) =>
-              onSelectionChange({
+              changeSelection({
                 ...displayedSelection,
                 slug: event.currentTarget.value,
               })
@@ -632,6 +664,7 @@ export function IdentityFoundationView({
   onForgetRemembered,
   onLogout,
   onPasswordChange,
+  onResolvePubDress,
   onSelectionChange,
   onSubmit,
 }: IdentityFoundationViewProps) {
@@ -670,6 +703,7 @@ export function IdentityFoundationView({
                 selection={selection}
                 onForgetRemembered={onForgetRemembered}
                 onPasswordChange={onPasswordChange}
+                onResolvePubDress={onResolvePubDress}
                 onSelectionChange={onSelectionChange}
                 onSubmit={onSubmit}
               />

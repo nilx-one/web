@@ -165,7 +165,11 @@ describe("ProductApp identity", () => {
     });
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
-    await screen.findByText("Available — create this identity");
+    await screen.findByText(
+      "Available — create this identity",
+      {},
+      { timeout: 2_000 },
+    );
     await user.type(
       await screen.findByLabelText("Password"),
       "a deliberately long password",
@@ -214,7 +218,7 @@ describe("ProductApp identity", () => {
     );
 
     await user.type(await screen.findByLabelText("pub_dress"), "sky");
-    await screen.findByText("Unavailable — this Bond already exists");
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
     await user.type(
       screen.getByLabelText("Password"),
       "correct password value",
@@ -225,6 +229,32 @@ describe("ProductApp identity", () => {
       "0x0sky",
       "correct password value",
     );
+  });
+
+  it("waits for a typing pause unless the mobile go action resolves now", async () => {
+    const user = userEvent.setup();
+    const resolvePubDress = vi
+      .fn<IdentityAccessPort["resolvePubDress"]>()
+      .mockResolvedValue({ kind: "available", pubDress: "0x0sky" });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({ resolvePubDress })}
+      />,
+    );
+
+    const slug = await screen.findByLabelText("pub_dress");
+    await user.type(slug, "sky");
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    expect(resolvePubDress).not.toHaveBeenCalled();
+
+    await user.keyboard("{Enter}");
+    await screen.findByText("Available — create this identity");
+    expect(resolvePubDress).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByLabelText("Password", {}, { timeout: 2_000 }),
+    ).toHaveFocus();
   });
 
   it("keeps the resolved identity valid while reporting rejected credentials in red", async () => {
@@ -248,7 +278,7 @@ describe("ProductApp identity", () => {
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
-    await screen.findByText("Unavailable — this Bond already exists");
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
     const password = await screen.findByLabelText("Password");
     await user.type(password, "incorrect password");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
@@ -304,13 +334,13 @@ describe("ProductApp identity", () => {
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 
     resolveRegistered?.();
-    await screen.findByText("Unavailable — this Bond already exists");
-    expect(await screen.findByLabelText("Password")).toBeInTheDocument();
-    expect(slug.closest("form")).toHaveAttribute("data-status", "unavailable");
-    expect(slug).toHaveAttribute("aria-invalid", "true");
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+    expect(await screen.findByLabelText("Password")).not.toHaveFocus();
+    expect(slug.closest("form")).toHaveAttribute("data-status", "registered");
+    expect(slug).toHaveAttribute("aria-invalid", "false");
     expect(screen.getByLabelText("Password").parentElement).toHaveAttribute(
       "data-reflection",
-      "negative",
+      "positive",
     );
   });
 
@@ -331,7 +361,11 @@ describe("ProductApp identity", () => {
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sk y");
-    await screen.findByText("Incorrect — this character isn’t supported");
+    await screen.findByText(
+      "Incorrect — this character isn’t supported",
+      {},
+      { timeout: 2_000 },
+    );
     expect(slug.closest("form")).toHaveAttribute("data-status", "invalid");
     expect(slug).toHaveAttribute("aria-invalid", "true");
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
@@ -355,7 +389,7 @@ describe("ProductApp identity", () => {
       />,
     );
 
-    expect(await screen.findByLabelText("Password")).toHaveFocus();
+    expect(await screen.findByLabelText("Password")).not.toHaveFocus();
     expect(screen.getByLabelText("pub_dress")).toHaveAttribute("readonly");
     await userEvent.click(screen.getByRole("button", { name: "Not you?" }));
     expect(forgetRememberedBond).toHaveBeenCalledOnce();

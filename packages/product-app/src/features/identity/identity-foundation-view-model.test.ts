@@ -131,8 +131,8 @@ describe("pub_dress status", () => {
         pubDress: "0x0sky",
       }),
     ).toEqual({
-      kind: "unavailable",
-      detail: "Unavailable — this Bond already exists",
+      kind: "registered",
+      detail: "Bond found — sign in",
     });
   });
 
@@ -141,8 +141,8 @@ describe("pub_dress status", () => {
       createNativeIdentityViewState(
         { kind: "anonymous" },
         {
-          kind: "unavailable",
-          detail: "Unavailable — this Bond already exists",
+          kind: "registered",
+          detail: "Bond found — sign in",
         },
         undefined,
         undefined,
@@ -151,7 +151,7 @@ describe("pub_dress status", () => {
     ).toMatchObject({
       kind: "form",
       mode: "sign-in",
-      status: { kind: "unavailable" },
+      status: { kind: "registered" },
     });
   });
 });
