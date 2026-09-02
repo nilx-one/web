@@ -70,6 +70,6 @@ probe() {
 }
 
 probe canonical-web / 200 '<div id="root"></div>'
-probe telegram-unpublished /telegram/ 404 ''
+probe telegram-published /telegram/ 200 '<div id="root"></div>'
 probe discord-unpublished /discord/ 404 ''
 probe identity-auth-boundary /api/v1/identity 401 '"code":"provider_authentication_required"'
