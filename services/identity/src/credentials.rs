@@ -112,6 +112,13 @@ impl PasswordEngine {
         if !(MIN_PASSWORD_CODE_POINTS..=MAX_PASSWORD_CODE_POINTS).contains(&code_points) {
             return Err(PasswordPolicyError::InvalidLength);
         }
+        if normalized.trim() != normalized
+            || normalized.chars().any(|character| {
+                character.is_control() || matches!(character, '\u{2028}' | '\u{2029}')
+            })
+        {
+            return Err(PasswordPolicyError::InvalidLength);
+        }
         if COMPROMISED_PASSWORDS.contains(&normalized.as_str()) {
             return Err(PasswordPolicyError::Compromised);
         }
@@ -310,6 +317,19 @@ mod tests {
             engine.validate("password"),
             Err(PasswordPolicyError::Compromised)
         );
+    }
+
+    #[test]
+    fn password_policy_rejects_boundary_whitespace_and_control_characters() {
+        let engine = config().password_engine();
+        for password in ["        ", "        12345678", "1234568\n78"] {
+            assert_eq!(
+                engine.validate(password),
+                Err(PasswordPolicyError::InvalidLength),
+                "password should be rejected: {password:?}"
+            );
+        }
+        assert_eq!(engine.validate("four four").as_deref(), Ok("four four"));
     }
 
     #[test]

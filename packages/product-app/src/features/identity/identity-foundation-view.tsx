@@ -342,12 +342,18 @@ function IdentityForm({
       availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
   const credentialUsername = `0x${displayedSelection.discriminator}${displayedSelection.slug}`;
-  const normalizedPasswordLength = [...password.normalize("NFC")].length;
+  const normalizedPassword = password.normalize("NFC");
+  const normalizedPasswordLength = [...normalizedPassword].length;
+  const passwordHasForbiddenFormat =
+    normalizedPassword.trim() !== normalizedPassword ||
+    /[\p{Cc}\u2028\u2029]/u.test(normalizedPassword);
   const slugLength = [...displayedSelection.slug].length;
   const canResolveAddress =
     !identity.busy && slugLength >= 2 && slugLength <= 32;
   const passwordReady =
-    normalizedPasswordLength >= 8 && normalizedPasswordLength <= 128;
+    normalizedPasswordLength >= 8 &&
+    normalizedPasswordLength <= 128 &&
+    !passwordHasForbiddenFormat;
   const passwordValidation =
     password.length === 0
       ? "idle"
@@ -728,7 +734,9 @@ function IdentityForm({
             minLength={8}
             maxLength={128}
             autoComplete={
-              identity.mode === "register" ? "new-password" : "current-password"
+              identity.mode === "register"
+                ? "new-password"
+                : "current-password"
             }
             placeholder="password"
             aria-label="Password"
@@ -767,7 +775,8 @@ function IdentityForm({
 
       {identity.mode === "register" ? (
         <p className="password-note">
-          8–128 characters · spaces count · Unicode welcome
+          8–128 Unicode characters · no leading/trailing whitespace · no line
+          breaks
         </p>
       ) : null}
       {remembered ? (
