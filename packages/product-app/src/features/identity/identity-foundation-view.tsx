@@ -252,13 +252,16 @@ function IdentityForm({
   onSubmit(): void;
 }) {
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [availablePulseComplete, setAvailablePulseComplete] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
     ? (parsePubDress(identity.rememberedPubDress ?? "") ?? selection)
     : selection;
   const showsPassword =
-    identity.mode === "sign-in" || identity.mode === "register" || remembered;
+    identity.mode === "sign-in" ||
+    remembered ||
+    (identity.mode === "register" && availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
   const normalizedPasswordLength = [...password.normalize("NFC")].length;
   const passwordReady =
@@ -268,6 +271,18 @@ function IdentityForm({
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
     : showsPassword && passwordReady;
+
+  useEffect(() => {
+    if (identity.mode !== "register" || identity.status.kind !== "available") {
+      setAvailablePulseComplete(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setAvailablePulseComplete(true);
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [identity.mode, identity.status.kind]);
 
   useEffect(() => {
     if (showsPassword) {
@@ -382,7 +397,9 @@ function IdentityForm({
       </div>
       <p
         id="pub-dress-status"
-        className={`identity-status identity-status--${identity.status.kind}`}
+        className={`identity-status identity-status--${identity.status.kind}${
+          identity.status.kind === "available" ? " visually-hidden" : ""
+        }`}
         aria-live="polite"
       >
         {identity.status.detail}
