@@ -36,7 +36,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import "./product.css";
 import "./features/identity/identity-field-feedback.css";
@@ -280,13 +280,6 @@ function FoundationRoute() {
     identityState,
   );
 
-  const resolvedPubDress = useMemo(() => {
-    if (identityState.kind === "form" && identityState.mode === "remembered") {
-      return identityState.rememberedPubDress ?? formatPubDress(selection);
-    }
-    return formatPubDress(selection);
-  }, [identityState, selection]);
-
   useEffect(() => {
     document.documentElement.dataset.hostTheme = host.theme;
     document.documentElement.dataset.host = host.kind;
@@ -317,23 +310,55 @@ function FoundationRoute() {
     setResolutionArmed(true);
   }
 
+  function resolvedNativePubDress(): string | undefined {
+    if (identityState.kind !== "form") {
+      return undefined;
+    }
+    if (identityState.mode === "remembered") {
+      return identityState.rememberedPubDress;
+    }
+    if (!selectionMatchesResolution) {
+      return undefined;
+    }
+    if (
+      identityState.mode === "sign-in" &&
+      resolutionQuery.data?.kind === "registered"
+    ) {
+      return resolutionQuery.data.pubDress;
+    }
+    if (
+      identityState.mode === "register" &&
+      resolutionQuery.data?.kind === "available"
+    ) {
+      return resolutionQuery.data.pubDress;
+    }
+    return undefined;
+  }
+
   function submitIdentity(): void {
     if (identityState.kind !== "form" || identityState.busy) {
       return;
     }
     switch (identityState.mode) {
       case "sign-in":
-      case "remembered":
+      case "remembered": {
+        const pubDress = resolvedNativePubDress();
+        if (pubDress === undefined) {
+          return;
+        }
         nativeAuthentication.reset();
         recoveryAcknowledgement.reset();
-        nativeAuthentication.mutate({
-          pubDress: resolvedPubDress,
-          password,
-        });
+        nativeAuthentication.mutate({ pubDress, password });
         break;
-      case "register":
-        nativeRegistration.mutate({ pubDress: resolvedPubDress, password });
+      }
+      case "register": {
+        const pubDress = resolvedNativePubDress();
+        if (pubDress === undefined) {
+          return;
+        }
+        nativeRegistration.mutate({ pubDress, password });
         break;
+      }
       case "provider-register":
         providerRegistration.mutate(selection);
         break;
