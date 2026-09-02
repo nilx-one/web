@@ -204,6 +204,13 @@ describe("progressive native identity form", () => {
     expect(credentialUsername).not.toBeNull();
     expect(credentialUsername).toHaveValue("0xfrSb2");
 
+    fireEvent.input(slug, {
+      target: { value: "0x0frSb" },
+      inputType: "insertReplacementText",
+    });
+    expect(slug).toHaveValue("rSb2");
+    expect(onSelectionChange).not.toHaveBeenCalled();
+
     fireEvent.input(credentialUsername!, {
       target: { value: "0x0frSb" },
     });
@@ -267,7 +274,9 @@ describe("progressive native identity form", () => {
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "typed-secret" },
     });
-    rerender(<IdentityFoundationView {...sharedProps} password="typed-secret" />);
+    rerender(
+      <IdentityFoundationView {...sharedProps} password="typed-secret" />,
+    );
 
     expect(onPasswordChange).toHaveBeenCalledWith("typed-secret");
     expect(onSubmit).not.toHaveBeenCalled();
