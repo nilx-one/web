@@ -5,6 +5,7 @@ import { parsePubDress, type PubDressSelection } from "@nilx-one/application";
 import { AppChrome, RuntimeStatus } from "@nilx-one/ui";
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -30,6 +31,41 @@ export interface IdentityFoundationViewProps {
   onSubmit(): void;
 }
 
+interface FieldRect {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+export function calculateFieldReflection(
+  source: FieldRect,
+  receiver: FieldRect,
+): { energy: number; spread: number; x: number } {
+  const sourceX = source.left + source.width / 2;
+  const receiverWidth = Math.max(receiver.width, 1);
+  const receiverX = Math.min(
+    receiverWidth,
+    Math.max(0, sourceX - receiver.left),
+  );
+  const impactX = receiver.left + receiverX;
+  const verticalDistance = Math.max(1, receiver.top - source.bottom);
+  const horizontalDistance = sourceX - impactX;
+  const distance = Math.hypot(horizontalDistance, verticalDistance);
+  const incidence = verticalDistance / distance;
+  const falloffDistance = Math.max(96, receiver.height * 1.7);
+  const inverseSquare = 1 / (1 + (distance / falloffDistance) ** 2);
+  const energy = Math.min(1, Math.max(0.12, incidence * inverseSquare));
+  const spread = Math.min(
+    receiverWidth * 0.78,
+    Math.max(72, receiverWidth * (0.28 + (1 - energy) * 0.38)),
+  );
+
+  return { energy, spread, x: receiverX };
+}
+
 function StatusGlyph({ status }: { status: PubDressStatusViewState }) {
   return (
     <span
@@ -50,7 +86,9 @@ function StatusGlyph({ status }: { status: PubDressStatusViewState }) {
           <circle cx="12" cy="12" r="8.7" />
           <path d="M9.2 12.2h5.6m-2.8-2.8v5.6" />
         </svg>
-      ) : status.kind === "invalid" || status.kind === "service-unavailable" ? (
+      ) : status.kind === "unavailable" ||
+        status.kind === "invalid" ||
+        status.kind === "service-unavailable" ? (
         <svg viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7.8v5.3m0 3.1h.01" />
@@ -252,13 +290,32 @@ function IdentityForm({
   onSubmit(): void;
 }) {
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [availableTransition, setAvailableTransition] = useState<{
+    key: string;
+    complete: boolean;
+    collapsed: boolean;
+  }>();
   const passwordRef = useRef<HTMLInputElement>(null);
+  const slugRef = useRef<HTMLInputElement>(null);
+  const addressFieldRef = useRef<HTMLElement>(null);
+  const passwordFieldRef = useRef<HTMLDivElement>(null);
+  const editAddressRequested = useRef(false);
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
     ? (parsePubDress(identity.rememberedPubDress ?? "") ?? selection)
     : selection;
+  const availableKey =
+    identity.mode === "register" && identity.status.kind === "available"
+      ? `${displayedSelection.discriminator}\u0000${displayedSelection.slug}`
+      : undefined;
+  const currentAvailableTransition =
+    availableTransition?.key === availableKey ? availableTransition : undefined;
+  const availablePulseComplete = currentAvailableTransition?.complete ?? false;
+  const addressCollapsed = currentAvailableTransition?.collapsed ?? false;
   const showsPassword =
-    identity.mode === "sign-in" || identity.mode === "register" || remembered;
+    identity.mode === "sign-in" ||
+    remembered ||
+    (identity.mode === "register" && availablePulseComplete);
   const providerRegistration = identity.mode === "provider-register";
   const normalizedPasswordLength = [...password.normalize("NFC")].length;
   const passwordReady =
@@ -268,12 +325,87 @@ function IdentityForm({
   const canSubmit = providerRegistration
     ? identity.status.kind === "available"
     : showsPassword && passwordReady;
+  const reflectionTone =
+    identity.error !== undefined
+      ? "negative"
+      : identity.status.kind === "available"
+        ? "positive"
+        : identity.status.kind === "unavailable" ||
+            identity.status.kind === "invalid" ||
+            identity.status.kind === "service-unavailable"
+          ? "negative"
+          : undefined;
+
+  useEffect(() => {
+    if (availableKey === undefined) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setAvailableTransition({
+        key: availableKey,
+        complete: true,
+        collapsed: true,
+      });
+    }, 900);
+    return () => window.clearTimeout(timeout);
+  }, [availableKey]);
 
   useEffect(() => {
     if (showsPassword) {
       passwordRef.current?.focus({ preventScroll: true });
     }
   }, [showsPassword, identity.mode]);
+
+  useEffect(() => {
+    if (!addressCollapsed && editAddressRequested.current) {
+      editAddressRequested.current = false;
+      slugRef.current?.focus({ preventScroll: true });
+    }
+  }, [addressCollapsed]);
+
+  useLayoutEffect(() => {
+    const addressField = addressFieldRef.current;
+    const passwordField = passwordFieldRef.current;
+    if (
+      addressField === null ||
+      passwordField === null ||
+      reflectionTone === undefined
+    ) {
+      return;
+    }
+
+    const updateReflection = () => {
+      const reflection = calculateFieldReflection(
+        addressField.getBoundingClientRect(),
+        passwordField.getBoundingClientRect(),
+      );
+      passwordField.style.setProperty("--reflection-x", `${reflection.x}px`);
+      passwordField.style.setProperty(
+        "--reflection-spread",
+        `${reflection.spread}px`,
+      );
+      passwordField.style.setProperty(
+        "--reflection-energy",
+        reflection.energy.toFixed(3),
+      );
+    };
+
+    updateReflection();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(updateReflection);
+    observer?.observe(addressField);
+    observer?.observe(passwordField);
+    window.addEventListener("resize", updateReflection);
+    window.addEventListener("scroll", updateReflection, true);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateReflection);
+      window.removeEventListener("scroll", updateReflection, true);
+    };
+  }, [addressCollapsed, reflectionTone, showsPassword]);
 
   function submit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -289,6 +421,15 @@ function IdentityForm({
     }
     event.preventDefault();
     onSelectionChange(parsed);
+  }
+
+  function editAddress(): void {
+    editAddressRequested.current = true;
+    setAvailableTransition((transition) =>
+      transition !== undefined && transition.key === availableKey
+        ? { ...transition, collapsed: false }
+        : transition,
+    );
   }
 
   const actionLabel =
@@ -307,89 +448,123 @@ function IdentityForm({
       <label className="surface-kicker" htmlFor="pub-dress-slug">
         pub_dress
       </label>
-      <div className="address-field" data-status={identity.status.kind}>
-        <span className="address-prefix" aria-hidden="true">
-          0x
-        </span>
-        <label className="digit-selector">
-          <span className="visually-hidden">
-            pub_dress hexadecimal discriminator
+      {addressCollapsed ? (
+        <button
+          ref={(element) => {
+            addressFieldRef.current = element;
+          }}
+          className="address-field address-field--collapsed"
+          type="button"
+          data-status={identity.status.kind}
+          disabled={identity.busy}
+          aria-label={`Edit 0x${displayedSelection.discriminator}${displayedSelection.slug}`}
+          onClick={editAddress}
+        >
+          <span className="address-value" aria-hidden="true">
+            <span>0x</span>
+            <strong>{displayedSelection.discriminator}</strong>
+            <span>{displayedSelection.slug}</span>
           </span>
-          <select
-            value={displayedSelection.discriminator}
-            aria-label="pub_dress hexadecimal discriminator"
+        </button>
+      ) : (
+        <div
+          ref={(element) => {
+            addressFieldRef.current = element;
+          }}
+          className="address-field"
+          data-status={identity.status.kind}
+        >
+          <span className="address-prefix" aria-hidden="true">
+            0x
+          </span>
+          <label className="digit-selector">
+            <span className="visually-hidden">
+              pub_dress hexadecimal discriminator
+            </span>
+            <select
+              value={displayedSelection.discriminator}
+              aria-label="pub_dress hexadecimal discriminator"
+              onChange={(event) =>
+                onSelectionChange({
+                  ...displayedSelection,
+                  discriminator: event.currentTarget.value,
+                })
+              }
+              disabled={identity.busy || remembered}
+            >
+              {"0123456789abcdef".split("").map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+            <svg
+              className="selector-chevron"
+              viewBox="0 0 12 12"
+              aria-hidden="true"
+            >
+              <path d="m2.5 4.5 3.5 3 3.5-3" />
+            </svg>
+          </label>
+          <input
+            ref={slugRef}
+            id="pub-dress-slug"
+            name="slug"
+            value={displayedSelection.slug}
+            minLength={2}
+            maxLength={32}
+            autoCapitalize="none"
+            autoComplete="username"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="slug"
+            readOnly={remembered}
+            disabled={identity.busy}
+            aria-busy={identity.status.kind === "checking"}
+            aria-invalid={
+              identity.status.kind === "unavailable" ||
+              identity.status.kind === "invalid" ||
+              identity.status.kind === "service-unavailable"
+            }
+            aria-describedby="pub-dress-status"
+            onPaste={pastePubDress}
             onChange={(event) =>
               onSelectionChange({
                 ...displayedSelection,
-                discriminator: event.currentTarget.value,
+                slug: event.currentTarget.value,
               })
             }
-            disabled={identity.busy || remembered}
-          >
-            {"0123456789abcdef".split("").map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          <svg
-            className="selector-chevron"
-            viewBox="0 0 12 12"
-            aria-hidden="true"
-          >
-            <path d="m2.5 4.5 3.5 3 3.5-3" />
-          </svg>
-        </label>
-        <input
-          id="pub-dress-slug"
-          name="slug"
-          value={displayedSelection.slug}
-          minLength={2}
-          maxLength={32}
-          autoCapitalize="none"
-          autoComplete="username"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="slug"
-          readOnly={remembered}
-          disabled={identity.busy}
-          aria-busy={identity.status.kind === "checking"}
-          aria-invalid={
-            identity.status.kind === "invalid" ||
-            identity.status.kind === "service-unavailable"
-          }
-          aria-describedby="pub-dress-status"
-          onPaste={pastePubDress}
-          onChange={(event) =>
-            onSelectionChange({
-              ...displayedSelection,
-              slug: event.currentTarget.value,
-            })
-          }
-        />
-        {providerRegistration ? (
-          <button
-            className="integrated-action"
-            type="submit"
-            disabled={!canSubmit || identity.busy}
-            aria-label={actionLabel}
-          >
-            <ActionGlyph mode={identity.mode} />
-          </button>
-        ) : (
-          <StatusGlyph status={identity.status} />
-        )}
-      </div>
+          />
+          {providerRegistration ? (
+            <button
+              className="integrated-action"
+              type="submit"
+              disabled={!canSubmit || identity.busy}
+              aria-label={actionLabel}
+            >
+              <ActionGlyph mode={identity.mode} />
+            </button>
+          ) : (
+            <StatusGlyph status={identity.status} />
+          )}
+        </div>
+      )}
       <p
         id="pub-dress-status"
-        className={`identity-status identity-status--${identity.status.kind}`}
+        className={`identity-status identity-status--${identity.status.kind}${
+          identity.status.kind === "available" ? " visually-hidden" : ""
+        }`}
         aria-live="polite"
       >
         {identity.status.detail}
       </p>
 
       {showsPassword ? (
-        <div className="password-field">
+        <div
+          ref={passwordFieldRef}
+          className="password-field"
+          data-reflection={reflectionTone}
+        >
           <input
             ref={passwordRef}
             type={passwordVisible ? "text" : "password"}

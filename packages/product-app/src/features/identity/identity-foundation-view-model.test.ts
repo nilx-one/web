@@ -130,6 +130,28 @@ describe("pub_dress status", () => {
         kind: "registered",
         pubDress: "0x0sky",
       }),
-    ).toMatchObject({ kind: "registered" });
+    ).toEqual({
+      kind: "unavailable",
+      detail: "Unavailable — this Bond already exists",
+    });
+  });
+
+  it("routes an occupied creation address into native sign-in", () => {
+    expect(
+      createNativeIdentityViewState(
+        { kind: "anonymous" },
+        {
+          kind: "unavailable",
+          detail: "Unavailable — this Bond already exists",
+        },
+        undefined,
+        undefined,
+        false,
+      ),
+    ).toMatchObject({
+      kind: "form",
+      mode: "sign-in",
+      status: { kind: "unavailable" },
+    });
   });
 });

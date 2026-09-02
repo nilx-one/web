@@ -46,6 +46,7 @@ export type PubDressStatusViewState =
   | { kind: "checking"; detail: "Checking availability…" }
   | { kind: "available"; detail: "Available — create this identity" }
   | { kind: "registered"; detail: "Identity found — enter your password" }
+  | { kind: "unavailable"; detail: "Unavailable — this Bond already exists" }
   | { kind: "invalid"; detail: string }
   | {
       kind: "service-unavailable";
@@ -105,8 +106,8 @@ export function createPubDressStatusViewState(
       };
     case "registered":
       return {
-        kind: "registered",
-        detail: "Identity found — enter your password",
+        kind: "unavailable",
+        detail: "Unavailable — this Bond already exists",
       };
     case "rejected":
       return {
@@ -188,7 +189,7 @@ export function createNativeIdentityViewState(
       ? "resolving"
       : status.kind === "available"
         ? "register"
-        : status.kind === "registered"
+        : status.kind === "unavailable"
           ? "sign-in"
           : "initial";
   return {
