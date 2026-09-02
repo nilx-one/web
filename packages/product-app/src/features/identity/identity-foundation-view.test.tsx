@@ -150,40 +150,43 @@ describe("progressive native identity form", () => {
     expect(screen.getByLabelText("Password")).toHaveFocus();
   });
 
-  it("keeps resolved pub_dress stable when a password manager autofills username", () => {
+  it("keeps resolved pub_dress stable and submits after password-manager autofill", () => {
     const onPasswordChange = vi.fn();
     const onSelectionChange = vi.fn();
-    const { container } = render(
-      <IdentityFoundationView
-        password=""
-        selection={{ discriminator: "f", slug: "rSb2" }}
-        viewModel={{
-          hostLabel: "browser host",
-          safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
-          showProviderRow: true,
-          runtime: {
-            tone: "ready",
-            label: "Shared Core ready",
-            detail: "Contract 1 is available to the Web client.",
-          },
-          identity: {
-            kind: "form",
-            mode: "sign-in",
-            status: {
-              kind: "registered",
-              detail: "Bond found — sign in",
-            },
-            busy: false,
-          },
-        }}
-        onAcknowledgeRecovery={vi.fn()}
-        onForgetRemembered={vi.fn()}
-        onLogout={vi.fn()}
-        onPasswordChange={onPasswordChange}
-        onResolvePubDress={vi.fn()}
-        onSelectionChange={onSelectionChange}
-        onSubmit={vi.fn()}
-      />,
+    const onSubmit = vi.fn();
+    const selection = { discriminator: "f", slug: "rSb2" };
+    const viewModel = {
+      hostLabel: "browser host",
+      safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+      showProviderRow: true,
+      runtime: {
+        tone: "ready" as const,
+        label: "Shared Core ready" as const,
+        detail: "Contract 1 is available to the Web client.",
+      },
+      identity: {
+        kind: "form" as const,
+        mode: "sign-in" as const,
+        status: {
+          kind: "registered" as const,
+          detail: "Bond found — sign in" as const,
+        },
+        busy: false,
+      },
+    };
+    const sharedProps = {
+      selection,
+      viewModel,
+      onAcknowledgeRecovery: vi.fn(),
+      onForgetRemembered: vi.fn(),
+      onLogout: vi.fn(),
+      onPasswordChange,
+      onResolvePubDress: vi.fn(),
+      onSelectionChange,
+      onSubmit,
+    };
+    const { container, rerender } = render(
+      <IdentityFoundationView {...sharedProps} password="" />,
     );
 
     fireEvent.click(
@@ -201,14 +204,73 @@ describe("progressive native identity form", () => {
     expect(credentialUsername).not.toBeNull();
     expect(credentialUsername).toHaveValue("0xfrSb2");
 
-    fireEvent.change(credentialUsername!, {
+    fireEvent.input(credentialUsername!, {
       target: { value: "0x0frSb" },
     });
     fireEvent.change(password, { target: { value: "stored-secret" } });
 
     expect(onSelectionChange).not.toHaveBeenCalled();
     expect(onPasswordChange).toHaveBeenCalledWith("stored-secret");
+    expect(onSubmit).not.toHaveBeenCalled();
     expect(slug).toHaveValue("rSb2");
+
+    rerender(
+      <IdentityFoundationView {...sharedProps} password="stored-secret" />,
+    );
+
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(slug).toHaveValue("rSb2");
+  });
+
+  it("does not auto-submit a manually typed sign-in password", () => {
+    const onPasswordChange = vi.fn();
+    const onSubmit = vi.fn();
+    const selection = { discriminator: "f", slug: "rSb2" };
+    const viewModel = {
+      hostLabel: "browser host",
+      safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+      showProviderRow: true,
+      runtime: {
+        tone: "ready" as const,
+        label: "Shared Core ready" as const,
+        detail: "Contract 1 is available to the Web client.",
+      },
+      identity: {
+        kind: "form" as const,
+        mode: "sign-in" as const,
+        status: {
+          kind: "registered" as const,
+          detail: "Bond found — sign in" as const,
+        },
+        busy: false,
+      },
+    };
+    const sharedProps = {
+      selection,
+      viewModel,
+      onAcknowledgeRecovery: vi.fn(),
+      onForgetRemembered: vi.fn(),
+      onLogout: vi.fn(),
+      onPasswordChange,
+      onResolvePubDress: vi.fn(),
+      onSelectionChange: vi.fn(),
+      onSubmit,
+    };
+    const { rerender } = render(
+      <IdentityFoundationView {...sharedProps} password="" />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with 0xfrSb2" }),
+    );
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "typed-secret" },
+    });
+    rerender(<IdentityFoundationView {...sharedProps} password="typed-secret" />);
+
+    expect(onPasswordChange).toHaveBeenCalledWith("typed-secret");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("keeps explicit password validation stable and counts whitespace", () => {
