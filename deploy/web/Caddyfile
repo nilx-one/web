@@ -11,6 +11,12 @@
 		@identity_api path /api/v1/identity /api/v1/identity/* /api/v1/auth/*
 		reverse_proxy @identity_api ox1-identity:8080
 
+		@map_assets path /map/*
+		handle @map_assets {
+			root * /srv
+			file_server
+		}
+
 		handle {
 			root * {$CLIENT_ROOT:/srv/site}
 			try_files {path} /index.html

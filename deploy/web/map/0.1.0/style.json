@@ -1,0 +1,19 @@
+{
+  "version": 8,
+  "name": "0x1 map 0.1.0",
+  "metadata": {
+    "nilx-one:contract-version": "0.1.0",
+    "nilx-one:basemap-url": "/map/0.1.0/basemap.pmtiles",
+    "nilx-one:basemap-state": "not-published"
+  },
+  "sources": {},
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#f4f4f2"
+      }
+    }
+  ]
+}

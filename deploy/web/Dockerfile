@@ -10,6 +10,7 @@ WORKDIR /srv
 COPY apps/site/dist/ /srv/site/
 COPY apps/telegram-mini-app/dist/ /srv/telegram-mini-app/
 COPY apps/discord-activity/dist/ /srv/discord-activity/
+COPY deploy/web/map/ /srv/map/
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 
 ENV CLIENT_ROOT=/srv/site

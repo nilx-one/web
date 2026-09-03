@@ -7,16 +7,30 @@ import {
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
-import { Map as MapLibreMap, type MapOptions } from "maplibre-gl";
+import { Map as MapLibreMap, addProtocol, type MapOptions } from "maplibre-gl";
+import { Protocol } from "pmtiles";
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
 export const MAP_STYLE_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/style.json`;
+export const MAP_BASEMAP_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/basemap.pmtiles`;
+
+const pmtilesProtocol = new Protocol();
+let pmtilesProtocolRegistered = false;
 
 type MapFactory = (options: MapOptions) => MapLibreMap;
 
 export interface MapLibreRendererOptions {
   readonly styleUrl?: string;
   readonly createMap?: MapFactory;
+}
+
+function ensurePmtilesProtocol(): void {
+  if (pmtilesProtocolRegistered) {
+    return;
+  }
+
+  addProtocol("pmtiles", pmtilesProtocol.tile);
+  pmtilesProtocolRegistered = true;
 }
 
 export function createMapLibreRenderer(
@@ -45,6 +59,7 @@ export function createMapLibreRenderer(
       publish({ kind: "loading" });
 
       try {
+        ensurePmtilesProtocol();
         const mountedMap = createMap({
           container,
           style: styleUrl,
