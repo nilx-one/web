@@ -98,10 +98,7 @@
   z-index: 4;
   left: calc(1rem + var(--safe-left));
   bottom: calc(1rem + var(--safe-bottom));
-  width: min(
-    30rem,
-    calc(100vw - 2rem - var(--safe-left) - var(--safe-right))
-  );
+  width: min(30rem, calc(100vw - 2rem - var(--safe-left) - var(--safe-right)));
   padding: 1rem;
   border: 1px solid var(--map-night-border);
   border-radius: 1.35rem;
