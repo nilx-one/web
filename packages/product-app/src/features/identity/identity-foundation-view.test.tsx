@@ -1,7 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -42,6 +48,7 @@ describe("progressive native identity form", () => {
           },
         }}
         onAcknowledgeRecovery={vi.fn()}
+        onCredentialAutofill={vi.fn()}
         onForgetRemembered={vi.fn()}
         onLogout={vi.fn()}
         onPasswordChange={vi.fn()}
@@ -88,6 +95,7 @@ describe("progressive native identity form", () => {
       password: "",
       selection: { discriminator: "0", slug: "sky" },
       onAcknowledgeRecovery: vi.fn(),
+      onCredentialAutofill: vi.fn(),
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
       onPasswordChange: vi.fn(),
@@ -150,9 +158,10 @@ describe("progressive native identity form", () => {
     expect(screen.getByLabelText("Password")).toHaveFocus();
   });
 
-  it("keeps resolved pub_dress stable and submits after password-manager autofill", () => {
+  it("emits one credential pair for same-identity password-manager autofill", async () => {
     const onPasswordChange = vi.fn();
     const onSelectionChange = vi.fn();
+    const onCredentialAutofill = vi.fn();
     const onSubmit = vi.fn();
     const selection = { discriminator: "f", slug: "rSb2" };
     const viewModel = {
@@ -178,6 +187,7 @@ describe("progressive native identity form", () => {
       selection,
       viewModel,
       onAcknowledgeRecovery: vi.fn(),
+      onCredentialAutofill,
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
       onPasswordChange,
@@ -185,7 +195,7 @@ describe("progressive native identity form", () => {
       onSelectionChange,
       onSubmit,
     };
-    const { container, rerender } = render(
+    const { container } = render(
       <IdentityFoundationView {...sharedProps} password="" />,
     );
 
@@ -199,35 +209,30 @@ describe("progressive native identity form", () => {
       'input[name="username"]',
     );
 
-    expect(slug).toHaveValue("rSb2");
-    expect(slug).toHaveAttribute("autocomplete", "off");
+    expect(slug).toHaveValue("0xfrSb2");
+    expect(slug).not.toHaveAttribute("readonly");
+    expect(slug).toHaveAttribute("autocomplete", "username");
     expect(credentialUsername).not.toBeNull();
     expect(credentialUsername).toHaveValue("0xfrSb2");
 
-    fireEvent.input(slug, {
-      target: { value: "0x0frSb" },
+    fireEvent.input(credentialUsername!, {
+      target: { value: "0xfrSb2" },
       inputType: "insertReplacementText",
     });
-    expect(slug).toHaveValue("rSb2");
-    expect(onSelectionChange).not.toHaveBeenCalled();
-
-    fireEvent.input(credentialUsername!, {
-      target: { value: "0x0frSb" },
+    fireEvent.input(password, {
+      target: { value: "stored-secret" },
+      inputType: "insertReplacementText",
     });
-    fireEvent.change(password, { target: { value: "stored-secret" } });
 
     expect(onSelectionChange).not.toHaveBeenCalled();
-    expect(onPasswordChange).toHaveBeenCalledWith("stored-secret");
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(slug).toHaveValue("rSb2");
-
-    rerender(
-      <IdentityFoundationView {...sharedProps} password="stored-secret" />,
+    expect(onPasswordChange).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(onCredentialAutofill).toHaveBeenCalledWith(
+        selection,
+        "stored-secret",
+      ),
     );
-
-    expect(onSubmit).toHaveBeenCalledOnce();
-    expect(onSelectionChange).not.toHaveBeenCalled();
-    expect(slug).toHaveValue("rSb2");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("does not auto-submit a manually typed sign-in password", () => {
@@ -257,6 +262,7 @@ describe("progressive native identity form", () => {
       selection,
       viewModel,
       onAcknowledgeRecovery: vi.fn(),
+      onCredentialAutofill: vi.fn(),
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
       onPasswordChange,
@@ -287,6 +293,7 @@ describe("progressive native identity form", () => {
     const sharedProps = {
       selection: { discriminator: "0", slug: "sky" },
       onAcknowledgeRecovery: vi.fn(),
+      onCredentialAutofill: vi.fn(),
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
       onPasswordChange: vi.fn(),

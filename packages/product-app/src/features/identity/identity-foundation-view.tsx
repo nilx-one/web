@@ -10,6 +10,7 @@ import {
   useState,
   type ClipboardEvent,
   type FormEvent,
+  type FormEventHandler,
   type KeyboardEvent,
 } from "react";
 
@@ -18,12 +19,14 @@ import type {
   IdentityViewState,
   PubDressStatusViewState,
 } from "./identity-foundation-view-model";
+import { normalizePubDressCredentialInput } from "./pub-dress-credential-input";
 
 export interface IdentityFoundationViewProps {
   password: string;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
   onAcknowledgeRecovery(challenge: string): void;
+  onCredentialAutofill(selection: PubDressSelection, password: string): void;
   onForgetRemembered(): void;
   onLogout(): void;
   onPasswordChange(password: string): void;
@@ -123,6 +126,15 @@ function ActionGlyph() {
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="M7.5 12h9m-3.5-3.5 3.5 3.5-3.5 3.5" />
+    </svg>
+  );
+}
+
+function EditGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.2 15.8.6-3.1 5.6-5.6 2.5 2.5-5.6 5.6-3.1.6Z" />
     </svg>
   );
 }
@@ -288,6 +300,7 @@ function IdentityForm({
   identity,
   password,
   selection,
+  onCredentialAutofill,
   onForgetRemembered,
   onPasswordChange,
   onResolvePubDress,
@@ -297,6 +310,7 @@ function IdentityForm({
   identity: Extract<IdentityViewState, { kind: "form" }>;
   password: string;
   selection: PubDressSelection;
+  onCredentialAutofill(selection: PubDressSelection, password: string): void;
   onForgetRemembered(): void;
   onPasswordChange(password: string): void;
   onResolvePubDress(): void;
@@ -311,12 +325,19 @@ function IdentityForm({
   }>();
   const passwordRef = useRef<HTMLInputElement>(null);
   const slugRef = useRef<HTMLInputElement>(null);
+  const credentialUsernameRef = useRef<HTMLInputElement>(null);
   const addressFieldRef = useRef<HTMLElement>(null);
   const passwordFieldRef = useRef<HTMLDivElement>(null);
   const editAddressRequested = useRef(false);
   const focusPasswordAfterResolution = useRef(false);
   const credentialAutofill = useRef(false);
-  const submitPasswordAfterAutofill = useRef<string | undefined>(undefined);
+  const credentialAutofillSnapshot = useRef<{
+    password?: string;
+    username?: string;
+  }>({});
+  const credentialAutofillTimer = useRef<number | undefined>(undefined);
+  const lastAppliedCredential = useRef<string | undefined>(undefined);
+  const credentialSwitchKey = useRef<string | undefined>(undefined);
   const [confirmedAddressKey, setConfirmedAddressKey] = useState<string>();
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
@@ -324,6 +345,7 @@ function IdentityForm({
     : selection;
   const addressKey = `${displayedSelection.discriminator}\u0000${displayedSelection.slug}`;
   const addressConfirmed = confirmedAddressKey === addressKey;
+  const credentialSwitchActive = credentialSwitchKey.current === addressKey;
   const availableKey =
     addressConfirmed &&
     identity.mode === "register" &&
@@ -333,13 +355,14 @@ function IdentityForm({
   const currentAvailableTransition =
     availableTransition?.key === availableKey ? availableTransition : undefined;
   const availablePulseComplete = currentAvailableTransition?.complete ?? false;
-  const addressCollapsed = currentAvailableTransition?.collapsed ?? false;
   const showsPassword =
     remembered ||
+    credentialSwitchActive ||
     (addressConfirmed && identity.mode === "sign-in") ||
     (addressConfirmed &&
       identity.mode === "register" &&
       availablePulseComplete);
+  const addressCollapsed = showsPassword;
   const providerRegistration = identity.mode === "provider-register";
   const credentialUsername = `0x${displayedSelection.discriminator}${displayedSelection.slug}`;
   const normalizedPassword = password.normalize("NFC");
@@ -396,6 +419,15 @@ function IdentityForm({
     return () => window.clearTimeout(timeout);
   }, [availableKey]);
 
+  useEffect(
+    () => () => {
+      if (credentialAutofillTimer.current !== undefined) {
+        window.clearTimeout(credentialAutofillTimer.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (showsPassword && focusPasswordAfterResolution.current) {
       focusPasswordAfterResolution.current = false;
@@ -404,34 +436,43 @@ function IdentityForm({
   }, [showsPassword, identity.mode]);
 
   useEffect(() => {
-    const pendingPassword = submitPasswordAfterAutofill.current;
     if (
-      pendingPassword === undefined ||
-      password !== pendingPassword ||
-      !passwordReady ||
-      identity.busy ||
-      (identity.mode !== "sign-in" && !remembered)
+      credentialSwitchKey.current === undefined ||
+      credentialSwitchKey.current !== addressKey
     ) {
       return;
     }
-    submitPasswordAfterAutofill.current = undefined;
-    credentialAutofill.current = false;
-    onSubmit();
+    if (identity.mode === "initial") {
+      onResolvePubDress();
+      return;
+    }
+    if (identity.mode === "sign-in" || identity.mode === "register") {
+      return;
+    }
+    if (
+      identity.status.kind === "invalid" ||
+      identity.status.kind === "unavailable" ||
+      identity.status.kind === "service-unavailable"
+    ) {
+      credentialSwitchKey.current = undefined;
+      credentialAutofill.current = false;
+      credentialAutofillSnapshot.current = {};
+      onPasswordChange("");
+    }
   }, [
-    identity.busy,
+    addressKey,
     identity.mode,
-    onSubmit,
-    password,
-    passwordReady,
-    remembered,
+    identity.status.kind,
+    onPasswordChange,
+    onResolvePubDress,
   ]);
 
   useEffect(() => {
-    if (!addressCollapsed && editAddressRequested.current) {
+    if (!showsPassword && !addressCollapsed && editAddressRequested.current) {
       editAddressRequested.current = false;
       slugRef.current?.focus({ preventScroll: true });
     }
-  }, [addressCollapsed]);
+  }, [addressCollapsed, showsPassword]);
 
   useLayoutEffect(() => {
     const addressField = addressFieldRef.current;
@@ -439,7 +480,8 @@ function IdentityForm({
     if (
       addressField === null ||
       passwordField === null ||
-      reflectionTone === undefined
+      reflectionTone === undefined ||
+      !showsPassword
     ) {
       return;
     }
@@ -501,10 +543,102 @@ function IdentityForm({
     }
     focusPasswordAfterResolution.current = false;
     credentialAutofill.current = false;
-    submitPasswordAfterAutofill.current = undefined;
+    credentialAutofillSnapshot.current = {};
+    lastAppliedCredential.current = undefined;
+    credentialSwitchKey.current = undefined;
     setConfirmedAddressKey(undefined);
     setAvailableTransition(undefined);
     onSelectionChange(next);
+  }
+
+  function selectionFromCredentialUsername(
+    rawUsername: string,
+  ): PubDressSelection {
+    return normalizePubDressCredentialInput(
+      {
+        discriminator: displayedSelection.discriminator,
+        slug: rawUsername.trim(),
+      },
+      displayedSelection,
+    );
+  }
+
+  function tryApplyAutofilledCredential(): void {
+    if (!credentialAutofill.current) {
+      return;
+    }
+    const rawUsername =
+      credentialAutofillSnapshot.current.username ??
+      credentialUsernameRef.current?.value ??
+      displayedSelection.slug;
+    const nextPassword =
+      credentialAutofillSnapshot.current.password ??
+      passwordRef.current?.value ??
+      "";
+    if (nextPassword.length === 0) {
+      return;
+    }
+
+    const credentialSelection = selectionFromCredentialUsername(rawUsername);
+    const nextCredentialKey = `${credentialSelection.discriminator}\u0000${credentialSelection.slug}`;
+    const signature = `${nextCredentialKey}\u0000${nextPassword}`;
+    if (lastAppliedCredential.current === signature) {
+      return;
+    }
+
+    lastAppliedCredential.current = signature;
+    setConfirmedAddressKey(nextCredentialKey);
+    setAvailableTransition(undefined);
+    credentialSwitchKey.current = nextCredentialKey;
+    onCredentialAutofill(credentialSelection, nextPassword);
+  }
+
+  function recordCredentialAutofill(
+    field: "password" | "username",
+    value: string,
+  ): void {
+    credentialAutofill.current = true;
+    credentialAutofillSnapshot.current[field] = value;
+    if (credentialAutofillTimer.current !== undefined) {
+      window.clearTimeout(credentialAutofillTimer.current);
+    }
+    credentialAutofillTimer.current = window.setTimeout(() => {
+      credentialAutofillTimer.current = undefined;
+      tryApplyAutofilledCredential();
+    }, 50);
+  }
+
+  function handleAutofillAnimation(
+    field: "password" | "username",
+  ): FormEventHandler<HTMLInputElement> {
+    return (event) => {
+      const animationEvent = event.nativeEvent as AnimationEvent;
+      if (animationEvent.animationName !== "credential-autofill-start") {
+        return;
+      }
+      recordCredentialAutofill(field, event.currentTarget.value);
+    };
+  }
+
+  function manualSelectionFromCanonical(
+    rawUsername: string,
+  ): PubDressSelection {
+    const canonical = rawUsername.trim();
+    if (canonical.startsWith("0x")) {
+      const discriminator = canonical[2];
+      return {
+        discriminator:
+          discriminator !== undefined &&
+          "0123456789abcdef".includes(discriminator)
+            ? discriminator
+            : displayedSelection.discriminator,
+        slug: canonical.length > 3 ? canonical.slice(3) : "",
+      };
+    }
+    return {
+      discriminator: displayedSelection.discriminator,
+      slug: canonical,
+    };
   }
 
   function confirmAddress(): void {
@@ -534,12 +668,18 @@ function IdentityForm({
   }
 
   function editAddress(): void {
+    focusPasswordAfterResolution.current = false;
+    credentialAutofill.current = false;
+    credentialAutofillSnapshot.current = {};
+    lastAppliedCredential.current = undefined;
+    credentialSwitchKey.current = undefined;
     editAddressRequested.current = true;
-    setAvailableTransition((transition) =>
-      transition !== undefined && transition.key === availableKey
-        ? { ...transition, collapsed: false }
-        : transition,
-    );
+    setConfirmedAddressKey(undefined);
+    setAvailableTransition(undefined);
+    onPasswordChange("");
+    if (remembered) {
+      onSelectionChange(displayedSelection);
+    }
   }
 
   const actionLabel =
@@ -559,23 +699,57 @@ function IdentityForm({
         pub_dress
       </label>
       {addressCollapsed ? (
-        <button
+        <div
           ref={(element) => {
             addressFieldRef.current = element;
           }}
           className="address-field address-field--collapsed"
-          type="button"
           data-status={identity.status.kind}
-          disabled={identity.busy}
-          aria-label={`Edit 0x${displayedSelection.discriminator}${displayedSelection.slug}`}
-          onClick={editAddress}
         >
-          <span className="address-value" aria-hidden="true">
-            <span>0x</span>
-            <strong>{displayedSelection.discriminator}</strong>
-            <span>{displayedSelection.slug}</span>
-          </span>
-        </button>
+          <input
+            ref={credentialUsernameRef}
+            key={credentialUsername}
+            id="pub-dress-slug"
+            type="text"
+            name="username"
+            value={credentialUsername}
+            autoCapitalize="none"
+            autoComplete="username"
+            autoCorrect="off"
+            spellCheck={false}
+            disabled={identity.busy}
+            aria-label="pub_dress"
+            onAnimationStart={handleAutofillAnimation("username")}
+            onInput={(event) => {
+              if (
+                isCredentialReplacement(event.currentTarget, event.nativeEvent)
+              ) {
+                recordCredentialAutofill("username", event.currentTarget.value);
+              }
+            }}
+            onChange={(event) => {
+              const rawUsername = event.currentTarget.value;
+              if (
+                credentialAutofillSnapshot.current.username === rawUsername ||
+                isCredentialReplacement(event.currentTarget, event.nativeEvent)
+              ) {
+                recordCredentialAutofill("username", rawUsername);
+                return;
+              }
+              editAddress();
+              onSelectionChange(manualSelectionFromCanonical(rawUsername));
+            }}
+          />
+          <button
+            className="status-action"
+            type="button"
+            disabled={identity.busy}
+            aria-label={`Edit ${credentialUsername}`}
+            onClick={editAddress}
+          >
+            <EditGlyph />
+          </button>
+        </div>
       ) : (
         <div
           ref={(element) => {
@@ -619,12 +793,12 @@ function IdentityForm({
           <input
             ref={slugRef}
             id="pub-dress-slug"
-            name="slug"
+            name="username"
             value={displayedSelection.slug}
             minLength={2}
             maxLength={32}
             autoCapitalize="none"
-            autoComplete={showsPassword ? "off" : "username"}
+            autoComplete="username"
             autoCorrect="off"
             enterKeyHint="go"
             spellCheck={false}
@@ -639,27 +813,29 @@ function IdentityForm({
             aria-describedby="pub-dress-status"
             onPaste={pastePubDress}
             onKeyDown={confirmAddressFromKeyboard}
+            onAnimationStart={handleAutofillAnimation("username")}
             onInput={(event) => {
+              const rawUsername = event.currentTarget.value;
               if (
-                showsPassword &&
-                parsePubDress(event.currentTarget.value) !== undefined &&
+                parsePubDress(rawUsername.trim()) !== undefined ||
                 isCredentialReplacement(event.currentTarget, event.nativeEvent)
               ) {
-                event.currentTarget.value = displayedSelection.slug;
+                recordCredentialAutofill("username", rawUsername);
               }
             }}
             onChange={(event) => {
+              const rawUsername = event.currentTarget.value;
               if (
-                showsPassword &&
-                parsePubDress(event.currentTarget.value) !== undefined &&
+                credentialAutofillSnapshot.current.username === rawUsername ||
+                parsePubDress(rawUsername.trim()) !== undefined ||
                 isCredentialReplacement(event.currentTarget, event.nativeEvent)
               ) {
-                event.currentTarget.value = displayedSelection.slug;
+                recordCredentialAutofill("username", rawUsername);
                 return;
               }
               changeSelection({
                 ...displayedSelection,
-                slug: event.currentTarget.value,
+                slug: rawUsername,
               });
             }}
           />
@@ -697,55 +873,53 @@ function IdentityForm({
         {identity.status.detail}
       </p>
 
-      {showsPassword ? (
+      <div
+        ref={passwordFieldRef}
+        className={`password-field${showsPassword ? "" : " password-field--autofill-proxy"}`}
+        data-reflection={reflectionTone}
+        data-validation={passwordValidation}
+        aria-hidden={!showsPassword}
+      >
         <input
-          key={credentialUsername}
-          className="visually-hidden"
-          type="text"
-          name="username"
-          defaultValue={credentialUsername}
-          autoComplete="username"
-          tabIndex={-1}
-          aria-hidden="true"
-          onInput={() => {
-            credentialAutofill.current = true;
+          ref={passwordRef}
+          type={passwordVisible ? "text" : "password"}
+          name="password"
+          value={password}
+          minLength={8}
+          maxLength={128}
+          autoComplete={
+            showsPassword && identity.mode === "register"
+              ? "new-password"
+              : "current-password"
+          }
+          placeholder={showsPassword ? "password" : undefined}
+          aria-label={showsPassword ? "Password" : undefined}
+          aria-invalid={identity.error !== undefined}
+          disabled={identity.busy}
+          tabIndex={showsPassword ? undefined : -1}
+          onAnimationStart={handleAutofillAnimation("password")}
+          onInput={(event) => {
+            if (
+              !showsPassword ||
+              isCredentialReplacement(event.currentTarget, event.nativeEvent)
+            ) {
+              recordCredentialAutofill("password", event.currentTarget.value);
+            }
+          }}
+          onChange={(event) => {
+            const nextPassword = event.currentTarget.value;
+            if (
+              credentialAutofillSnapshot.current.password === nextPassword ||
+              !showsPassword ||
+              isCredentialReplacement(event.currentTarget, event.nativeEvent)
+            ) {
+              recordCredentialAutofill("password", nextPassword);
+              return;
+            }
+            onPasswordChange(nextPassword);
           }}
         />
-      ) : null}
-
-      {showsPassword ? (
-        <div
-          ref={passwordFieldRef}
-          className="password-field"
-          data-reflection={reflectionTone}
-          data-validation={passwordValidation}
-        >
-          <input
-            ref={passwordRef}
-            type={passwordVisible ? "text" : "password"}
-            name="password"
-            value={password}
-            minLength={8}
-            maxLength={128}
-            autoComplete={
-              identity.mode === "register" ? "new-password" : "current-password"
-            }
-            placeholder="password"
-            aria-label="Password"
-            aria-invalid={identity.error !== undefined}
-            disabled={identity.busy}
-            onChange={(event) => {
-              const nextPassword = event.currentTarget.value;
-              if (
-                (identity.mode === "sign-in" || remembered) &&
-                (credentialAutofill.current ||
-                  isBrowserAutofilled(event.currentTarget))
-              ) {
-                submitPasswordAfterAutofill.current = nextPassword;
-              }
-              onPasswordChange(nextPassword);
-            }}
-          />
+        {showsPassword ? (
           <button
             className="visibility-action"
             type="button"
@@ -754,6 +928,8 @@ function IdentityForm({
           >
             <VisibilityGlyph visible={passwordVisible} />
           </button>
+        ) : null}
+        {showsPassword ? (
           <button
             className="integrated-action"
             type="submit"
@@ -762,10 +938,10 @@ function IdentityForm({
           >
             <ActionGlyph />
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
-      {identity.mode === "register" ? (
+      {showsPassword && identity.mode === "register" ? (
         <p className="password-note">
           8–128 Unicode characters · no leading/trailing whitespace · no line
           breaks
@@ -795,6 +971,7 @@ export function IdentityFoundationView({
   selection,
   viewModel,
   onAcknowledgeRecovery,
+  onCredentialAutofill,
   onForgetRemembered,
   onLogout,
   onPasswordChange,
@@ -835,6 +1012,7 @@ export function IdentityFoundationView({
                 identity={viewModel.identity}
                 password={password}
                 selection={selection}
+                onCredentialAutofill={onCredentialAutofill}
                 onForgetRemembered={onForgetRemembered}
                 onPasswordChange={onPasswordChange}
                 onResolvePubDress={onResolvePubDress}

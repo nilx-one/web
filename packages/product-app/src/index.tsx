@@ -12,7 +12,6 @@ import {
   RegisterNativeIdentity,
   RegisterProviderIdentity,
   ResolvePubDress,
-  formatPubDress,
   type CoreRuntimePort,
   type IdentityAccessPort,
   type PubDressSelection,
@@ -36,7 +35,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import "./product.css";
 import "./features/identity/identity-field-feedback.css";
@@ -63,6 +62,11 @@ interface ProductRouterContext {
   dependencies: ProductAppDependencies;
 }
 
+interface PendingAutofillCredential {
+  password: string;
+  selection: PubDressSelection;
+}
+
 function useHostSnapshot(host: HostPort): HostSnapshot {
   const [snapshot, setSnapshot] = useState(() => host.getSnapshot());
   useEffect(() => host.subscribe(setSnapshot), [host]);
@@ -76,6 +80,17 @@ function newIdempotencyKey(): string {
     return globalThis.crypto.randomUUID();
   }
   return `0x1-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function validNativePassword(password: string): boolean {
+  const normalized = password.normalize("NFC");
+  const length = [...normalized].length;
+  return (
+    length >= 8 &&
+    length <= 128 &&
+    normalized.trim() === normalized &&
+    !/[\p{Cc}\u2028\u2029]/u.test(normalized)
+  );
 }
 
 function RootRoute() {
@@ -106,6 +121,9 @@ function FoundationRoute() {
   const [resolutionSelection, setResolutionSelection] = useState(selection);
   const [resolutionArmed, setResolutionArmed] = useState(false);
   const [useRememberedHint, setUseRememberedHint] = useState(true);
+  const pendingAutofillCredential = useRef<
+    PendingAutofillCredential | undefined
+  >(undefined);
 
   const readinessQuery = useQuery({
     queryKey: ["core-runtime-readiness"],
@@ -231,6 +249,7 @@ function FoundationRoute() {
       setPassword("");
       setIdempotencyKey(newIdempotencyKey());
       setUseRememberedHint(false);
+      pendingAutofillCredential.current = undefined;
     },
   });
   const logout = useMutation({
@@ -243,6 +262,7 @@ function FoundationRoute() {
       nativeAuthentication.reset();
       recoveryAcknowledgement.reset();
       setUseRememberedHint(true);
+      pendingAutofillCredential.current = undefined;
       await queryClient.invalidateQueries({
         queryKey: ["native-identity-context"],
       });
@@ -280,13 +300,6 @@ function FoundationRoute() {
     identityState,
   );
 
-  const resolvedPubDress = useMemo(() => {
-    if (identityState.kind === "form" && identityState.mode === "remembered") {
-      return identityState.rememberedPubDress ?? formatPubDress(selection);
-    }
-    return formatPubDress(selection);
-  }, [identityState, selection]);
-
   useEffect(() => {
     document.documentElement.dataset.hostTheme = host.theme;
     document.documentElement.dataset.host = host.kind;
@@ -299,9 +312,33 @@ function FoundationRoute() {
     setResolutionArmed(false);
     setSelection(normalizePubDressCredentialInput(next, selection));
     setPassword("");
+    pendingAutofillCredential.current = undefined;
     setIdempotencyKey(newIdempotencyKey());
     nativeRegistration.reset();
     nativeAuthentication.reset();
+  }
+
+  function applyAutofilledCredential(
+    nextSelection: PubDressSelection,
+    nextPassword: string,
+  ): void {
+    const normalizedSelection = normalizePubDressCredentialInput(
+      nextSelection,
+      selection,
+    );
+    setUseRememberedHint(false);
+    setSelection(normalizedSelection);
+    setPassword(nextPassword);
+    setIdempotencyKey(newIdempotencyKey());
+    setResolutionSelection(normalizedSelection);
+    setResolutionArmed(true);
+    pendingAutofillCredential.current = {
+      password: nextPassword,
+      selection: normalizedSelection,
+    };
+    nativeRegistration.reset();
+    nativeAuthentication.reset();
+    recoveryAcknowledgement.reset();
   }
 
   function resolvePubDressNow(): void {
@@ -317,23 +354,55 @@ function FoundationRoute() {
     setResolutionArmed(true);
   }
 
+  function resolvedNativePubDress(): string | undefined {
+    if (identityState.kind !== "form") {
+      return undefined;
+    }
+    if (identityState.mode === "remembered") {
+      return identityState.rememberedPubDress;
+    }
+    if (!selectionMatchesResolution) {
+      return undefined;
+    }
+    if (
+      identityState.mode === "sign-in" &&
+      resolutionQuery.data?.kind === "registered"
+    ) {
+      return resolutionQuery.data.pubDress;
+    }
+    if (
+      identityState.mode === "register" &&
+      resolutionQuery.data?.kind === "available"
+    ) {
+      return resolutionQuery.data.pubDress;
+    }
+    return undefined;
+  }
+
   function submitIdentity(): void {
     if (identityState.kind !== "form" || identityState.busy) {
       return;
     }
     switch (identityState.mode) {
       case "sign-in":
-      case "remembered":
+      case "remembered": {
+        const pubDress = resolvedNativePubDress();
+        if (pubDress === undefined) {
+          return;
+        }
         nativeAuthentication.reset();
         recoveryAcknowledgement.reset();
-        nativeAuthentication.mutate({
-          pubDress: resolvedPubDress,
-          password,
-        });
+        nativeAuthentication.mutate({ pubDress, password });
         break;
-      case "register":
-        nativeRegistration.mutate({ pubDress: resolvedPubDress, password });
+      }
+      case "register": {
+        const pubDress = resolvedNativePubDress();
+        if (pubDress === undefined) {
+          return;
+        }
+        nativeRegistration.mutate({ pubDress, password });
         break;
+      }
       case "provider-register":
         providerRegistration.mutate(selection);
         break;
@@ -343,17 +412,77 @@ function FoundationRoute() {
     }
   }
 
+  useEffect(() => {
+    if (
+      pendingAutofillCredential.current === undefined ||
+      nativePending ||
+      resolutionQuery.isFetching ||
+      !validNativePassword(pendingAutofillCredential.current.password) ||
+      pendingAutofillCredential.current.selection.discriminator !==
+        resolutionSelection.discriminator ||
+      pendingAutofillCredential.current.selection.slug !==
+        resolutionSelection.slug ||
+      !selectionMatchesResolution
+    ) {
+      return;
+    }
+
+    const credential = pendingAutofillCredential.current;
+    const resolution = resolutionQuery.data;
+    if (resolution?.kind === "registered") {
+      pendingAutofillCredential.current = undefined;
+      nativeAuthentication.reset();
+      recoveryAcknowledgement.reset();
+      nativeAuthentication.mutate({
+        pubDress: resolution.pubDress,
+        password: credential.password,
+      });
+      return;
+    }
+    if (resolution?.kind === "available") {
+      pendingAutofillCredential.current = undefined;
+      nativeRegistration.reset();
+      nativeRegistration.mutate({
+        pubDress: resolution.pubDress,
+        password: credential.password,
+      });
+      return;
+    }
+    if (
+      resolution?.kind === "rejected" ||
+      resolution?.kind === "rate-limited" ||
+      resolution?.kind === "service-unavailable"
+    ) {
+      pendingAutofillCredential.current = undefined;
+    }
+  }, [
+    nativeAuthentication,
+    nativePending,
+    nativeRegistration,
+    password,
+    recoveryAcknowledgement,
+    resolutionQuery.data,
+    resolutionQuery.isFetching,
+    resolutionSelection.discriminator,
+    resolutionSelection.slug,
+    selectionMatchesResolution,
+  ]);
+
   return (
     <IdentityFoundationView
       password={password}
       selection={selection}
       viewModel={viewModel}
+      onCredentialAutofill={applyAutofilledCredential}
       onAcknowledgeRecovery={(challenge) =>
         recoveryAcknowledgement.mutate(challenge)
       }
       onForgetRemembered={() => forgetRemembered.mutate()}
       onLogout={() => logout.mutate()}
-      onPasswordChange={setPassword}
+      onPasswordChange={(nextPassword) => {
+        pendingAutofillCredential.current = undefined;
+        setPassword(nextPassword);
+      }}
       onResolvePubDress={resolvePubDressNow}
       onSelectionChange={changeSelection}
       onSubmit={submitIdentity}

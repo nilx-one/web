@@ -160,12 +160,16 @@
 
 .address-field--collapsed {
   width: 100%;
-  grid-template-columns: 1fr;
-  padding: 0 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
   border: 1px solid var(--field-line);
   color: var(--ink);
   cursor: text;
   text-align: left;
+}
+
+.address-field--collapsed input {
+  padding-right: 8px;
+  padding-left: 18px;
 }
 
 .address-value {
@@ -194,6 +198,38 @@
   position: relative;
   grid-template-columns: minmax(0, 1fr) auto auto;
   margin-top: 2px;
+}
+
+/* Keep the password control in the login form before the progressive password
+   stage is visible. Password managers can therefore fill username + password
+   as one credential pair even when the page starts with an empty pub_dress. */
+.password-field--autofill-proxy {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  min-height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.password-field--autofill-proxy input {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+}
+
+@keyframes credential-autofill-start {
+  from {
+    opacity: 0.99;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.identity-form input:-webkit-autofill {
+  animation: credential-autofill-start 1ms both;
 }
 
 .password-field::before {

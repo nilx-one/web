@@ -15,6 +15,15 @@ describe("pub_dress credential input", () => {
     ).toEqual({ discriminator: "0", slug: "sky" });
   });
 
+  it("parses a canonical username before discriminator-change shortcuts", () => {
+    expect(
+      normalizePubDressCredentialInput(
+        { discriminator: "f", slug: "0x0frSb2" },
+        { discriminator: "0", slug: "frSb2" },
+      ),
+    ).toEqual({ discriminator: "0", slug: "frSb2" });
+  });
+
   it("keeps the selected discriminator for slug-only credentials", () => {
     expect(
       normalizePubDressCredentialInput(
@@ -31,6 +40,15 @@ describe("pub_dress credential input", () => {
         { discriminator: "f", slug: "" },
       ),
     ).toEqual({ discriminator: "0", slug: "sky" });
+  });
+
+  it("splits a compact hexadecimal discriminator plus slug autofill", () => {
+    expect(
+      normalizePubDressCredentialInput(
+        { discriminator: "0", slug: "fsky" },
+        { discriminator: "0", slug: "" },
+      ),
+    ).toEqual({ discriminator: "f", slug: "sky" });
   });
 
   it("does not steal a manually typed numeric-leading slug", () => {
