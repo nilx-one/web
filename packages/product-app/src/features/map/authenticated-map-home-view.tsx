@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { MapRenderer } from "@nilx-one/map-contract";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import "./authenticated-map-home-view.css";
@@ -41,6 +46,7 @@ export function AuthenticatedMapHomeView({
 }: AuthenticatedMapHomeViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [focusState, setFocusState] = useState<FocusState>("idle");
+  const [menuOpen, setMenuOpen] = useState(false);
   const contractVersion = runtimeContract(runtime);
 
   useEffect(() => {
@@ -95,9 +101,6 @@ export function AuthenticatedMapHomeView({
         aria-hidden="true"
       />
       <div className="authenticated-map-home__shade" aria-hidden="true" />
-      <span className="visually-hidden" aria-live="polite">
-        Authenticated as {pubDress}.
-      </span>
 
       <header className="authenticated-map-home__topbar">
         <a
@@ -107,11 +110,42 @@ export function AuthenticatedMapHomeView({
         >
           0x1
         </a>
-        <span className="authenticated-map-home__host">
-          <i aria-hidden="true" />
-          {hostLabel}
-        </span>
+        <div className="authenticated-map-home__host-area">
+          <span className="authenticated-map-home__host">
+            <i aria-hidden="true" />
+            {hostLabel}
+          </span>
+          <button
+            className="authenticated-map-home__menu-trigger"
+            type="button"
+            aria-label="Open host menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span aria-hidden="true">•••</span>
+          </button>
+          {menuOpen ? (
+            <div className="authenticated-map-home__menu" role="menu">
+              <span>{hostLabel}</span>
+              {onLogout === undefined ? null : (
+                <button type="button" role="menuitem" onClick={onLogout}>
+                  Sign out
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
       </header>
+
+      <section className="authenticated-map-home__hero" aria-labelledby="identity-title">
+        <span className="authenticated-map-home__eyebrow">
+          <b>0x1</b> identity
+        </span>
+        <h1 id="identity-title">You’re in.</h1>
+        <p>
+          Authenticated as <strong>{pubDress}</strong>
+        </p>
+      </section>
 
       <section className="bond-dock" aria-labelledby="bond-dock-title">
         <span className="bond-dock__kicker" id="bond-dock-title">
@@ -127,6 +161,9 @@ export function AuthenticatedMapHomeView({
           >
             <span className="bond-dock__glyph">0x0</span>
             <strong>{pubDress}</strong>
+            <small>
+              You <i className="bond-dock__status-dot bond-dock__status-dot--authenticated" aria-hidden="true" /> Authenticated
+            </small>
           </button>
           <span className="bond-dock__link" aria-hidden="true">
             ←→
@@ -139,27 +176,27 @@ export function AuthenticatedMapHomeView({
           >
             <span className="bond-dock__glyph">x0</span>
             <strong>x0skai</strong>
+            <small>
+              <i className="bond-dock__status-dot" aria-hidden="true" /> Unavailable
+            </small>
           </button>
         </div>
-        <span className="visually-hidden" aria-live="polite">
-          {focusState === "locating"
-            ? `Locating this device for ${pubDress}.`
-            : focusState === "focused"
-              ? `Map focused on this device for ${pubDress}.`
-              : focusState === "unavailable"
-                ? "Device location is unavailable."
-                : ""}
-        </span>
-        {onLogout === undefined ? null : (
-          <button
-            className="bond-dock__logout"
-            type="button"
-            onClick={onLogout}
-          >
-            Sign out
-          </button>
-        )}
       </section>
+
+      <span className="visually-hidden" aria-live="polite">
+        {focusState === "locating"
+          ? `Locating this device for ${pubDress}.`
+          : focusState === "focused"
+            ? `Map focused on this device for ${pubDress}.`
+            : focusState === "unavailable"
+              ? "Device location is unavailable."
+              : `Authenticated as ${pubDress}.`}
+      </span>
+
+      <footer className="authenticated-map-home__footer">
+        <span>0x1 · pre-alpha</span>
+        <span>© 2026 aiaiaiai · nilx.one</span>
+      </footer>
 
       <section
         className={`core-chip core-chip--${runtime.tone}`}
