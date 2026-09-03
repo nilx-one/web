@@ -281,7 +281,9 @@ export function AuthenticatedMapHomeView({
               </button>
               <div>
                 <span className="interface-settings__eyebrow">
-                  {screen === "profile" ? "Personal Bond" : "0x1 interface"}
+                  {screen === "profile"
+                    ? "Personal Bond"
+                    : "0x1 interface"}
                 </span>
                 <h2 id="bond-dock-title">
                   {screen === "profile" ? pubDress : "Appearance"}
