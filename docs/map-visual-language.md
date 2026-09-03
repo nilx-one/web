@@ -6,14 +6,12 @@ This is presentation state only. Cyan and orange do not encode `Bond_0`, `Bond_1
 
 ## Palette
 
-| Role                   | Value     | Use                                            |
-| ---------------------- | --------- | ---------------------------------------------- |
-| surface background     | `#f7f8f6` | land/background material                       |
-| raised surface         | `#eef0ef` | glass and elevated map UI                      |
-| surface shadow         | `#c8cdcc` | relief, depth, soft occlusion                  |
-| geography graphite     | `#545b5c` | roads, boundaries, labels, neutral geography   |
-| primary accent         | `#00d8f2` | selected/active presentation light             |
-| counterpart accent     | `#ff7a1a` | contrasting counterpart presentation light    |
+- surface background: `#f7f8f6` — land/background material;
+- raised surface: `#eef0ef` — glass and elevated map UI;
+- surface shadow: `#c8cdcc` — relief, depth, soft occlusion;
+- geography graphite: `#545b5c` — roads, boundaries, labels, neutral geography;
+- primary accent: `#00d8f2` — selected/active presentation light;
+- counterpart accent: `#ff7a1a` — contrasting counterpart presentation light.
 
 The accents should behave as light rather than broad flat fills: a saturated core may be accompanied by a softer translucent halo or reflected light. Neutral geography should remain visually subordinate to Bonds and Interactions projected from authoritative application state.
 
