@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { MapRenderer } from "@nilx-one/map-contract";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import "./authenticated-map-home-view.css";
@@ -137,7 +132,10 @@ export function AuthenticatedMapHomeView({
         </div>
       </header>
 
-      <section className="authenticated-map-home__hero" aria-labelledby="identity-title">
+      <section
+        className="authenticated-map-home__hero"
+        aria-labelledby="identity-title"
+      >
         <span className="authenticated-map-home__eyebrow">
           <b>0x1</b> identity
         </span>
@@ -162,7 +160,12 @@ export function AuthenticatedMapHomeView({
             <span className="bond-dock__glyph">0x0</span>
             <strong>{pubDress}</strong>
             <small>
-              You <i className="bond-dock__status-dot bond-dock__status-dot--authenticated" aria-hidden="true" /> Authenticated
+              You
+              <i
+                className="bond-dock__status-dot bond-dock__status-dot--authenticated"
+                aria-hidden="true"
+              />
+              Authenticated
             </small>
           </button>
           <span className="bond-dock__link" aria-hidden="true">
@@ -177,7 +180,8 @@ export function AuthenticatedMapHomeView({
             <span className="bond-dock__glyph">x0</span>
             <strong>x0skai</strong>
             <small>
-              <i className="bond-dock__status-dot" aria-hidden="true" /> Unavailable
+              <i className="bond-dock__status-dot" aria-hidden="true" />
+              Unavailable
             </small>
           </button>
         </div>
