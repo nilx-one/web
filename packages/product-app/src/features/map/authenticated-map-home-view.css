@@ -1,6 +1,10 @@
 /* © 2026 aiaiaiai · aiaiaiai.org */
 /* SPDX-License-Identifier: MPL-2.0 */
 
+:root:has(.authenticated-map-home) nav[aria-label="0x1 sections"] {
+  display: none;
+}
+
 .authenticated-map-home {
   --map-accent-primary: #00d8f2;
   --map-accent-counterpart: #ff7a1a;
