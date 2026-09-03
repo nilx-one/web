@@ -31,6 +31,23 @@ describe("map deployment assets", () => {
     expect(style.layers.length).toBeGreaterThan(0);
   });
 
+  it("locks the mineral-light presentation palette without protocol semantics", () => {
+    const style = JSON.parse(
+      readFileSync(stylePath, "utf8"),
+    ) as MapStyleContract;
+
+    expect(style.metadata?.["nilx-one:visual-language"]).toBe("mineral-light");
+    expect(style.metadata?.["nilx-one:surface-background"]).toBe("#f7f8f6");
+    expect(style.metadata?.["nilx-one:surface-raised"]).toBe("#eef0ef");
+    expect(style.metadata?.["nilx-one:surface-shadow"]).toBe("#c8cdcc");
+    expect(style.metadata?.["nilx-one:geography-graphite"]).toBe("#545b5c");
+    expect(style.metadata?.["nilx-one:accent-primary"]).toBe("#00d8f2");
+    expect(style.metadata?.["nilx-one:accent-counterpart"]).toBe("#ff7a1a");
+    expect(style.metadata?.["nilx-one:accent-semantics"]).toBe(
+      "presentation-only",
+    );
+  });
+
   it("keeps the versioned map boundary same-origin", () => {
     const style = readFileSync(stylePath, "utf8");
 
