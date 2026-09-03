@@ -8,6 +8,8 @@ import type { RuntimeViewState } from "../identity/identity-foundation-view-mode
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
 
+export type ConnectedProvider = "telegram" | "discord";
+
 export interface AuthenticatedMapHomeViewProps {
   readonly hostLabel: string;
   readonly pubDress: string;
@@ -19,11 +21,18 @@ export interface AuthenticatedMapHomeViewProps {
     readonly bottom: number;
     readonly left: number;
   };
+  readonly connectedProviders?: readonly ConnectedProvider[];
   readonly onLogout?: () => void;
 }
 
 type FocusState = "idle" | "locating" | "focused" | "unavailable";
-type HomeScreen = "home" | "profile" | "settings";
+type HomeScreen =
+  | "home"
+  | "profile"
+  | "profile-edit"
+  | "map-settings"
+  | "add-hosts"
+  | "providers-edit";
 type AppearancePreference = "light" | "dark" | "auto";
 type ResolvedAppearance = "light" | "dark";
 
@@ -61,12 +70,25 @@ function resolveAppearance(
   return preference === "auto" ? systemAppearance() : preference;
 }
 
+function providerLabel(provider: ConnectedProvider): string {
+  return provider === "telegram" ? "Telegram" : "Discord";
+}
+
+function providerAbbreviation(provider: ConnectedProvider): string {
+  return provider === "telegram" ? "TG" : "DC";
+}
+
+function providerConnectHref(provider: ConnectedProvider): string {
+  return `/auth?provider=${provider}&intent=connect`;
+}
+
 export function AuthenticatedMapHomeView({
   hostLabel,
   pubDress,
   renderer,
   runtime,
   safeArea,
+  connectedProviders = [],
   onLogout,
 }: AuthenticatedMapHomeViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -77,7 +99,9 @@ export function AuthenticatedMapHomeView({
     readAppearancePreference,
   );
   const [resolvedAppearance, setResolvedAppearance] =
-    useState<ResolvedAppearance>(() => resolveAppearance(readAppearancePreference()));
+    useState<ResolvedAppearance>(() =>
+      resolveAppearance(readAppearancePreference()),
+    );
   const contractVersion = runtimeContract(runtime);
 
   useEffect(() => {
@@ -102,7 +126,8 @@ export function AuthenticatedMapHomeView({
     }
 
     const media = window.matchMedia("(prefers-color-scheme: light)");
-    const update = () => setResolvedAppearance(media.matches ? "light" : "dark");
+    const update = () =>
+      setResolvedAppearance(media.matches ? "light" : "dark");
     media.addEventListener?.("change", update);
     return () => media.removeEventListener?.("change", update);
   }, [appearance]);
@@ -132,9 +157,53 @@ export function AuthenticatedMapHomeView({
     );
   }
 
-  function openSettings(): void {
+  function openMapSettings(): void {
     setMenuOpen(false);
-    setScreen("settings");
+    setScreen("map-settings");
+  }
+
+  function detailBackTarget(): HomeScreen {
+    switch (screen) {
+      case "profile-edit":
+      case "add-hosts":
+      case "providers-edit":
+        return "profile";
+      case "profile":
+      case "map-settings":
+      case "home":
+        return "home";
+    }
+  }
+
+  function detailEyebrow(): string {
+    switch (screen) {
+      case "profile":
+      case "profile-edit":
+      case "add-hosts":
+      case "providers-edit":
+        return "Personal Bond";
+      case "map-settings":
+        return "Map settings";
+      case "home":
+        return "Bond";
+    }
+  }
+
+  function detailTitle(): string {
+    switch (screen) {
+      case "profile":
+        return pubDress;
+      case "profile-edit":
+        return "Edit profile";
+      case "add-hosts":
+        return "Add hosts";
+      case "providers-edit":
+        return "Providers";
+      case "map-settings":
+        return "Appearance";
+      case "home":
+        return "Bond";
+    }
   }
 
   return (
@@ -182,8 +251,8 @@ export function AuthenticatedMapHomeView({
           {menuOpen ? (
             <div className="authenticated-map-home__menu" role="menu">
               <span>{hostLabel}</span>
-              <button type="button" role="menuitem" onClick={openSettings}>
-                Interface settings
+              <button type="button" role="menuitem" onClick={openMapSettings}>
+                Map settings
               </button>
               {onLogout === undefined ? null : (
                 <button type="button" role="menuitem" onClick={onLogout}>
@@ -222,8 +291,8 @@ export function AuthenticatedMapHomeView({
               <button
                 className="bond-dock__settings"
                 type="button"
-                aria-label="Open interface settings"
-                onClick={openSettings}
+                aria-label="Open map settings"
+                onClick={openMapSettings}
               >
                 <span aria-hidden="true">⚙︎</span>
               </button>
@@ -274,29 +343,24 @@ export function AuthenticatedMapHomeView({
               <button
                 className="interface-settings__back"
                 type="button"
-                aria-label="Back to Bond"
-                onClick={() => setScreen("home")}
+                aria-label="Back"
+                onClick={() => setScreen(detailBackTarget())}
               >
                 <span aria-hidden="true">←</span>
               </button>
               <div>
                 <span className="interface-settings__eyebrow">
-                  {screen === "profile"
-                    ? "Personal Bond"
-                    : "0x1 interface"}
+                  {detailEyebrow()}
                 </span>
-                <h2 id="bond-dock-title">
-                  {screen === "profile" ? pubDress : "Appearance"}
-                </h2>
+                <h2 id="bond-dock-title">{detailTitle()}</h2>
               </div>
               {screen === "profile" ? (
                 <button
-                  className="bond-dock__settings"
+                  className="bond-dock__edit"
                   type="button"
-                  aria-label="Open interface settings"
-                  onClick={openSettings}
+                  onClick={() => setScreen("profile-edit")}
                 >
-                  <span aria-hidden="true">⚙︎</span>
+                  Edit
                 </button>
               ) : null}
             </div>
@@ -313,12 +377,41 @@ export function AuthenticatedMapHomeView({
                     <dd>Not set</dd>
                   </div>
                   <div>
-                    <dt>Phone</dt>
-                    <dd>Not available yet</dd>
-                  </div>
-                  <div>
                     <dt>Providers</dt>
-                    <dd>Profile projection not available yet</dd>
+                    <dd>
+                      <span className="provider-controls">
+                        {connectedProviders.length === 0 ? (
+                          <button
+                            className="provider-control provider-control--add"
+                            type="button"
+                            aria-label="Add host"
+                            onClick={() => setScreen("add-hosts")}
+                          >
+                            +
+                          </button>
+                        ) : (
+                          <>
+                            {connectedProviders.map((provider) => (
+                              <span
+                                className="provider-control provider-control--connected"
+                                key={provider}
+                                aria-label={`${providerLabel(provider)} connected`}
+                                title={providerLabel(provider)}
+                              >
+                                {providerAbbreviation(provider)}
+                              </span>
+                            ))}
+                            <button
+                              className="provider-control provider-control--edit"
+                              type="button"
+                              onClick={() => setScreen("providers-edit")}
+                            >
+                              Edit
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    </dd>
                   </div>
                   <div>
                     <dt>Home</dt>
@@ -351,13 +444,37 @@ export function AuthenticatedMapHomeView({
                         ? "Location unavailable"
                         : "Focus map near this device"}
                 </button>
+              </div>
+            ) : null}
+
+            {screen === "profile-edit" ? (
+              <div className="profile-edit">
+                <dl className="bond-profile__rows">
+                  <div>
+                    <dt>pub_dress</dt>
+                    <dd>{pubDress}</dd>
+                  </div>
+                  <div>
+                    <dt>Age</dt>
+                    <dd>Not set</dd>
+                  </div>
+                  <div>
+                    <dt>Home</dt>
+                    <dd>Not set</dd>
+                  </div>
+                  <div>
+                    <dt>Family</dt>
+                    <dd>Not set</dd>
+                  </div>
+                </dl>
                 <p className="interface-settings__note">
-                  Profile rows only present known state. Relationship and
-                  provider truth stay outside the UI until their projections are
-                  available.
+                  Provider connections are managed separately and are never
+                  changed by profile editing.
                 </p>
               </div>
-            ) : (
+            ) : null}
+
+            {screen === "map-settings" ? (
               <>
                 <fieldset className="interface-settings__appearance">
                   <legend>Mode</legend>
@@ -368,7 +485,7 @@ export function AuthenticatedMapHomeView({
                         <small>
                           {mode === "auto"
                             ? "Follow this device"
-                            : `Keep the interface ${mode}`}
+                            : `Keep the map ${mode}`}
                         </small>
                       </span>
                       <input
@@ -382,11 +499,76 @@ export function AuthenticatedMapHomeView({
                   ))}
                 </fieldset>
                 <p className="interface-settings__note">
-                  This is a local interface preference. It does not change Bond,
+                  This is local map presentation state. It does not change Bond,
                   BondChain, or shared Core state.
                 </p>
               </>
-            )}
+            ) : null}
+
+            {screen === "add-hosts" ? (
+              <div className="host-connect-list">
+                {(["telegram", "discord"] as const).map((provider) => (
+                  <a
+                    className="host-connect-button"
+                    href={providerConnectHref(provider)}
+                    key={provider}
+                  >
+                    <span
+                      className="provider-control provider-control--connected"
+                      aria-hidden="true"
+                    >
+                      {providerAbbreviation(provider)}
+                    </span>
+                    <span>
+                      <strong>Connect with {providerLabel(provider)}</strong>
+                      <small>
+                        Authorize this Bond with your {providerLabel(provider)}
+                        account
+                      </small>
+                    </span>
+                    <span aria-hidden="true">→</span>
+                  </a>
+                ))}
+                <p className="interface-settings__note">
+                  Hosts are authentication bindings for this Bond. Telegram Mini
+                  App and Discord Activity are host environments, not additional
+                  provider identities.
+                </p>
+              </div>
+            ) : null}
+
+            {screen === "providers-edit" ? (
+              <div className="provider-management">
+                <div className="provider-management__connected">
+                  {connectedProviders.map((provider) => (
+                    <div key={provider}>
+                      <span
+                        className="provider-control provider-control--connected"
+                        aria-hidden="true"
+                      >
+                        {providerAbbreviation(provider)}
+                      </span>
+                      <span>
+                        <strong>{providerLabel(provider)}</strong>
+                        <small>Connected</small>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {connectedProviders.length < 2 ? (
+                  <button
+                    className="bond-profile__action"
+                    type="button"
+                    onClick={() => setScreen("add-hosts")}
+                  >
+                    + Add host
+                  </button>
+                ) : null}
+                <p className="interface-settings__note">
+                  Provider changes are separate from Bond profile editing.
+                </p>
+              </div>
+            ) : null}
           </div>
         )}
       </section>
