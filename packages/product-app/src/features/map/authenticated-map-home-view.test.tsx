@@ -3,7 +3,7 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthenticatedMapHomeView } from "./authenticated-map-home-view";
 
@@ -18,6 +18,10 @@ function renderer(): MapRenderer {
     setCamera: vi.fn(),
   };
 }
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -58,6 +62,43 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
+  });
+
+  it("opens interface settings from the Bond panel and persists appearance locally", () => {
+    const { container } = render(
+      <AuthenticatedMapHomeView
+        hostLabel="browser host"
+        pubDress="0x0sky"
+        renderer={renderer()}
+        runtime={{
+          tone: "ready",
+          label: "Shared Core ready",
+          detail: "Contract 0.1.0 is available to the Web client.",
+        }}
+        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open interface settings" }),
+    );
+
+    expect(screen.getByRole("heading", { name: "Appearance" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: /Auto/i })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
+
+    expect(screen.getByRole("radio", { name: /Light/i })).toBeChecked();
+    expect(container.querySelector(".authenticated-map-home")).toHaveAttribute(
+      "data-theme",
+      "light",
+    );
+    expect(window.localStorage.getItem("nilx-one.interface.appearance")).toBe(
+      "light",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Bond" }));
+    expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
   });
 
   it("exposes host actions through the compact menu", () => {
