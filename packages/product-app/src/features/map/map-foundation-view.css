@@ -52,11 +52,17 @@
   gap: 0.25rem;
   max-width: min(28rem, calc(100% - 2rem));
   padding: 0.75rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--map-geography-graphite) 18%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--map-geography-graphite) 18%, transparent);
   border-radius: 0.85rem;
-  background: color-mix(in srgb, var(--map-surface-raised) 84%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--map-surface-raised) 84%,
+    transparent
+  );
   box-shadow:
-    0 0.5rem 1.5rem color-mix(in srgb, var(--map-surface-shadow) 22%, transparent),
+    0 0.5rem 1.5rem
+      color-mix(in srgb, var(--map-surface-shadow) 22%, transparent),
     inset 0 1px color-mix(in srgb, white 74%, transparent);
   backdrop-filter: blur(18px);
 }
