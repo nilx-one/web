@@ -80,21 +80,31 @@ export function AuthenticatedMapHomeView({
   return (
     <main
       className="authenticated-map-home"
-      style={{
-        "--safe-top": `${safeArea.top}px`,
-        "--safe-right": `${safeArea.right}px`,
-        "--safe-bottom": `${safeArea.bottom}px`,
-        "--safe-left": `${safeArea.left}px`,
-      } as CSSProperties}
+      style={
+        {
+          "--safe-top": `${safeArea.top}px`,
+          "--safe-right": `${safeArea.right}px`,
+          "--safe-bottom": `${safeArea.bottom}px`,
+          "--safe-left": `${safeArea.left}px`,
+        } as CSSProperties
+      }
     >
-      <div className="authenticated-map-home__map" ref={mapRef} aria-hidden="true" />
+      <div
+        className="authenticated-map-home__map"
+        ref={mapRef}
+        aria-hidden="true"
+      />
       <div className="authenticated-map-home__shade" aria-hidden="true" />
       <span className="visually-hidden" aria-live="polite">
         Authenticated as {pubDress}.
       </span>
 
       <header className="authenticated-map-home__topbar">
-        <a className="authenticated-map-home__wordmark" href="/" aria-label="0x1 home">
+        <a
+          className="authenticated-map-home__wordmark"
+          href="/"
+          aria-label="0x1 home"
+        >
           0x1
         </a>
         <span className="authenticated-map-home__host">
@@ -141,13 +151,20 @@ export function AuthenticatedMapHomeView({
                 : ""}
         </span>
         {onLogout === undefined ? null : (
-          <button className="bond-dock__logout" type="button" onClick={onLogout}>
+          <button
+            className="bond-dock__logout"
+            type="button"
+            onClick={onLogout}
+          >
             Sign out
           </button>
         )}
       </section>
 
-      <section className={`core-chip core-chip--${runtime.tone}`} aria-live="polite">
+      <section
+        className={`core-chip core-chip--${runtime.tone}`}
+        aria-live="polite"
+      >
         <i aria-hidden="true" />
         <span>
           <strong>{runtime.label}</strong>
