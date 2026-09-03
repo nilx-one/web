@@ -20,8 +20,13 @@
   color: #f5f3f7;
   background: var(--map-night);
   font-family:
-    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display",
-    "Segoe UI", sans-serif;
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Display",
+    "Segoe UI",
+    sans-serif;
 }
 
 .authenticated-map-home__map,
@@ -236,10 +241,7 @@
   z-index: 4;
   left: calc(2rem + var(--safe-left));
   bottom: calc(5.6rem + var(--safe-bottom));
-  width: min(
-    42rem,
-    calc(100vw - 4rem - var(--safe-left) - var(--safe-right))
-  );
+  width: min(42rem, calc(100vw - 4rem - var(--safe-left) - var(--safe-right)));
   padding: 1.35rem 1.55rem 1.5rem;
   border: 1px solid var(--map-night-border);
   border-radius: 2rem;
