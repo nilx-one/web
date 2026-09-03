@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@nilx-one/map-contract": "workspace:*",
-    "maplibre-gl": "^6.6.0"
+    "maplibre-gl": "^6.6.0",
+    "pmtiles": "^4.5.0"
   }
 }
