@@ -23,7 +23,7 @@ export interface AuthenticatedMapHomeViewProps {
 }
 
 type FocusState = "idle" | "locating" | "focused" | "unavailable";
-type HomeScreen = "home" | "settings";
+type HomeScreen = "home" | "profile" | "settings";
 type AppearancePreference = "light" | "dark" | "auto";
 type ResolvedAppearance = "light" | "dark";
 
@@ -195,70 +195,26 @@ export function AuthenticatedMapHomeView({
         </div>
       </header>
 
-      {screen === "settings" ? (
-        <section
-          className="interface-settings"
-          aria-labelledby="interface-settings-title"
-        >
-          <div className="interface-settings__header">
-            <button
-              className="interface-settings__back"
-              type="button"
-              aria-label="Back to Bond"
-              onClick={() => setScreen("home")}
-            >
-              <span aria-hidden="true">←</span>
-            </button>
-            <div>
-              <span className="interface-settings__eyebrow">0x1 interface</span>
-              <h1 id="interface-settings-title">Appearance</h1>
-            </div>
-          </div>
+      <section
+        className="authenticated-map-home__hero"
+        aria-labelledby="identity-title"
+      >
+        <span className="authenticated-map-home__eyebrow">
+          <b>0x1</b> identity
+        </span>
+        <h1 id="identity-title">You’re in.</h1>
+        <p>
+          Authenticated as <strong>{pubDress}</strong>
+        </p>
+      </section>
 
-          <fieldset className="interface-settings__appearance">
-            <legend>Mode</legend>
-            {(["light", "dark", "auto"] as const).map((mode) => (
-              <label key={mode} className="interface-settings__option">
-                <span>
-                  <strong>{mode[0].toUpperCase() + mode.slice(1)}</strong>
-                  <small>
-                    {mode === "auto"
-                      ? "Follow this device"
-                      : `Keep the interface ${mode}`}
-                  </small>
-                </span>
-                <input
-                  type="radio"
-                  name="appearance"
-                  value={mode}
-                  checked={appearance === mode}
-                  onChange={() => setAppearance(mode)}
-                />
-              </label>
-            ))}
-          </fieldset>
-
-          <p className="interface-settings__note">
-            This is a local interface preference. It does not change Bond,
-            BondChain, or shared Core state.
-          </p>
-        </section>
-      ) : (
-        <>
-          <section
-            className="authenticated-map-home__hero"
-            aria-labelledby="identity-title"
-          >
-            <span className="authenticated-map-home__eyebrow">
-              <b>0x1</b> identity
-            </span>
-            <h1 id="identity-title">You’re in.</h1>
-            <p>
-              Authenticated as <strong>{pubDress}</strong>
-            </p>
-          </section>
-
-          <section className="bond-dock" aria-labelledby="bond-dock-title">
+      <section
+        className="bond-dock"
+        data-screen={screen}
+        aria-labelledby="bond-dock-title"
+      >
+        {screen === "home" ? (
+          <>
             <div className="bond-dock__header">
               <span className="bond-dock__kicker" id="bond-dock-title">
                 Bond
@@ -276,9 +232,8 @@ export function AuthenticatedMapHomeView({
               <button
                 className="bond-dock__bond bond-dock__bond--active"
                 type="button"
-                data-focus-state={focusState}
-                onClick={focusMapNearDevice}
-                aria-label="Focus map near this device"
+                onClick={() => setScreen("profile")}
+                aria-label={`Open Bond profile for ${pubDress}`}
               >
                 <span className="bond-dock__glyph">0x0</span>
                 <strong>{pubDress}</strong>
@@ -288,7 +243,7 @@ export function AuthenticatedMapHomeView({
                     className="bond-dock__status-dot bond-dock__status-dot--authenticated"
                     aria-hidden="true"
                   />
-                  Authenticated
+                  spectate
                 </small>
               </button>
               <span
@@ -301,19 +256,138 @@ export function AuthenticatedMapHomeView({
                 className="bond-dock__bond bond-dock__bond--unavailable"
                 type="button"
                 disabled
-                aria-label="x0skai unavailable"
+                aria-label="x0skai AI runtime unavailable on this host"
               >
                 <span className="bond-dock__glyph">x0</span>
                 <strong>x0skai</strong>
                 <small>
+                  AI
                   <i className="bond-dock__status-dot" aria-hidden="true" />
-                  Unavailable
+                  unavailable
                 </small>
               </button>
             </div>
-          </section>
-        </>
-      )}
+          </>
+        ) : (
+          <div className="bond-dock__detail">
+            <div className="bond-dock__detail-header">
+              <button
+                className="interface-settings__back"
+                type="button"
+                aria-label="Back to Bond"
+                onClick={() => setScreen("home")}
+              >
+                <span aria-hidden="true">←</span>
+              </button>
+              <div>
+                <span className="interface-settings__eyebrow">
+                  {screen === "profile" ? "Personal Bond" : "0x1 interface"}
+                </span>
+                <h2 id="bond-dock-title">
+                  {screen === "profile" ? pubDress : "Appearance"}
+                </h2>
+              </div>
+              {screen === "profile" ? (
+                <button
+                  className="bond-dock__settings"
+                  type="button"
+                  aria-label="Open interface settings"
+                  onClick={openSettings}
+                >
+                  <span aria-hidden="true">⚙︎</span>
+                </button>
+              ) : null}
+            </div>
+
+            {screen === "profile" ? (
+              <div className="bond-profile">
+                <dl className="bond-profile__rows">
+                  <div>
+                    <dt>pub_dress</dt>
+                    <dd>{pubDress}</dd>
+                  </div>
+                  <div>
+                    <dt>Age</dt>
+                    <dd>Not set</dd>
+                  </div>
+                  <div>
+                    <dt>Phone</dt>
+                    <dd>Not available yet</dd>
+                  </div>
+                  <div>
+                    <dt>Providers</dt>
+                    <dd>Profile projection not available yet</dd>
+                  </div>
+                  <div>
+                    <dt>Home</dt>
+                    <dd>Not set · map selection later</dd>
+                  </div>
+                  <div>
+                    <dt>Family</dt>
+                    <dd>Not set</dd>
+                  </div>
+                  <div>
+                    <dt>Closest Bond</dt>
+                    <dd>No Relationship projection yet</dd>
+                  </div>
+                  <div>
+                    <dt>BondChains</dt>
+                    <dd>No projection available yet</dd>
+                  </div>
+                </dl>
+                <button
+                  className="bond-profile__action"
+                  type="button"
+                  onClick={focusMapNearDevice}
+                  disabled={focusState === "locating"}
+                >
+                  {focusState === "locating"
+                    ? "Locating…"
+                    : focusState === "focused"
+                      ? "Focused on this device"
+                      : focusState === "unavailable"
+                        ? "Location unavailable"
+                        : "Focus map near this device"}
+                </button>
+                <p className="interface-settings__note">
+                  Profile rows only present known state. Relationship and
+                  provider truth stay outside the UI until their projections are
+                  available.
+                </p>
+              </div>
+            ) : (
+              <>
+                <fieldset className="interface-settings__appearance">
+                  <legend>Mode</legend>
+                  {(["light", "dark", "auto"] as const).map((mode) => (
+                    <label key={mode} className="interface-settings__option">
+                      <span>
+                        <strong>{mode[0].toUpperCase() + mode.slice(1)}</strong>
+                        <small>
+                          {mode === "auto"
+                            ? "Follow this device"
+                            : `Keep the interface ${mode}`}
+                        </small>
+                      </span>
+                      <input
+                        type="radio"
+                        name="appearance"
+                        value={mode}
+                        checked={appearance === mode}
+                        onChange={() => setAppearance(mode)}
+                      />
+                    </label>
+                  ))}
+                </fieldset>
+                <p className="interface-settings__note">
+                  This is a local interface preference. It does not change Bond,
+                  BondChain, or shared Core state.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+      </section>
 
       <span className="visually-hidden" aria-live="polite">
         {focusState === "locating"
