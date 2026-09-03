@@ -21,19 +21,8 @@
   z-index: 1;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(
-      circle at 18% 12%,
-      color-mix(in srgb, white 72%, transparent),
-      transparent 34%
-    ),
-    radial-gradient(
-      circle at 78% 76%,
-      color-mix(in srgb, var(--map-surface-shadow) 18%, transparent),
-      transparent 42%
-    );
-  box-shadow: inset 0 0 5rem
-    color-mix(in srgb, var(--map-surface-shadow) 16%, transparent);
+  background: linear-gradient(145deg, #ffffffb8, #c8cdcc26);
+  box-shadow: inset 0 0 5rem #c8cdcc29;
 }
 
 .map-foundation__canvas {
@@ -52,18 +41,10 @@
   gap: 0.25rem;
   max-width: min(28rem, calc(100% - 2rem));
   padding: 0.75rem 0.9rem;
-  border: 1px solid
-    color-mix(in srgb, var(--map-geography-graphite) 18%, transparent);
+  border: 1px solid #545b5c2e;
   border-radius: 0.85rem;
-  background: color-mix(
-    in srgb,
-    var(--map-surface-raised) 84%,
-    transparent
-  );
-  box-shadow:
-    0 0.5rem 1.5rem
-      color-mix(in srgb, var(--map-surface-shadow) 22%, transparent),
-    inset 0 1px color-mix(in srgb, white 74%, transparent);
+  background: #eef0efd6;
+  box-shadow: 0 0.5rem 1.5rem #c8cdcc38, inset 0 1px #ffffffbd;
   backdrop-filter: blur(18px);
 }
 
