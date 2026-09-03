@@ -4,7 +4,15 @@
   "metadata": {
     "nilx-one:contract-version": "0.1.0",
     "nilx-one:basemap-url": "/map/0.1.0/basemap.pmtiles",
-    "nilx-one:basemap-state": "not-published"
+    "nilx-one:basemap-state": "not-published",
+    "nilx-one:visual-language": "mineral-light",
+    "nilx-one:surface-background": "#f7f8f6",
+    "nilx-one:surface-raised": "#eef0ef",
+    "nilx-one:surface-shadow": "#c8cdcc",
+    "nilx-one:geography-graphite": "#545b5c",
+    "nilx-one:accent-primary": "#00d8f2",
+    "nilx-one:accent-counterpart": "#ff7a1a",
+    "nilx-one:accent-semantics": "presentation-only"
   },
   "sources": {},
   "layers": [
@@ -12,7 +20,7 @@
       "id": "background",
       "type": "background",
       "paint": {
-        "background-color": "#f4f4f2"
+        "background-color": "#f7f8f6"
       }
     }
   ]
