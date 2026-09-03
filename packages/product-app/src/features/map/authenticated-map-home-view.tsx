@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { MapRenderer } from "@nilx-one/map-contract";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import "./authenticated-map-home-view.css";
@@ -85,7 +85,7 @@ export function AuthenticatedMapHomeView({
         "--safe-right": `${safeArea.right}px`,
         "--safe-bottom": `${safeArea.bottom}px`,
         "--safe-left": `${safeArea.left}px`,
-      } as React.CSSProperties}
+      } as CSSProperties}
     >
       <div className="authenticated-map-home__map" ref={mapRef} aria-hidden="true" />
       <div className="authenticated-map-home__shade" aria-hidden="true" />
@@ -101,7 +101,9 @@ export function AuthenticatedMapHomeView({
       </header>
 
       <section className="bond-dock" aria-labelledby="bond-dock-title">
-        <span className="bond-dock__kicker" id="bond-dock-title">Bond</span>
+        <span className="bond-dock__kicker" id="bond-dock-title">
+          Bond
+        </span>
         <div className="bond-dock__pair">
           <button
             className="bond-dock__bond bond-dock__bond--active"
@@ -113,7 +115,9 @@ export function AuthenticatedMapHomeView({
             <span className="bond-dock__glyph">0x0</span>
             <strong>{pubDress}</strong>
           </button>
-          <span className="bond-dock__link" aria-hidden="true">←→</span>
+          <span className="bond-dock__link" aria-hidden="true">
+            ←→
+          </span>
           <button
             className="bond-dock__bond bond-dock__bond--unavailable"
             type="button"
@@ -144,7 +148,9 @@ export function AuthenticatedMapHomeView({
         <i aria-hidden="true" />
         <span>
           <strong>{runtime.label}</strong>
-          {contractVersion === undefined ? null : <small>contract {contractVersion}</small>}
+          {contractVersion === undefined ? null : (
+            <small>contract {contractVersion}</small>
+          )}
         </span>
       </section>
     </main>
