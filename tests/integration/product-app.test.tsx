@@ -7,7 +7,11 @@ import {
   type IdentityAccessPort,
 } from "@nilx-one/application";
 import type { HostPort } from "@nilx-one/host-contract";
-import { ProductApp } from "@nilx-one/product-app";
+import type { MapRenderer } from "@nilx-one/map-contract";
+import {
+  ProductApp as ProductAppRuntime,
+  type ProductAppProps,
+} from "@nilx-one/product-app";
 import {
   act,
   fireEvent,
@@ -22,6 +26,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const readyCore: CoreRuntimePort = {
   probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
 };
+
+function createMapRenderer(): MapRenderer {
+  return {
+    mount: vi.fn(),
+    unmount: vi.fn(),
+    getStatus: () => ({ kind: "unmounted" }),
+    subscribe: () => () => undefined,
+    setCamera: vi.fn(),
+  };
+}
+
+function ProductApp(props: Omit<ProductAppProps, "mapRenderer">) {
+  return <ProductAppRuntime {...props} mapRenderer={createMapRenderer()} />;
+}
 
 function createHost(): HostPort {
   return {

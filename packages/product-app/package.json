@@ -7,6 +7,7 @@
   "dependencies": {
     "@nilx-one/application": "workspace:*",
     "@nilx-one/host-contract": "workspace:*",
+    "@nilx-one/map-contract": "workspace:*",
     "@nilx-one/ui": "workspace:*",
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-router": "^1.170.32"
