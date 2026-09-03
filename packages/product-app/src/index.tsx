@@ -49,6 +49,7 @@ import {
   createPubDressStatusViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
+import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { MapFoundationView } from "./features/map/map-foundation-view";
 
 export interface ProductAppDependencies {
@@ -491,6 +492,21 @@ function FoundationRoute() {
     resolutionSelection.slug,
     selectionMatchesResolution,
   ]);
+
+  if (viewModel.identity.kind === "authenticated") {
+    return (
+      <AuthenticatedMapHomeView
+        hostLabel={viewModel.hostLabel}
+        pubDress={viewModel.identity.pubDress}
+        renderer={dependencies.mapRenderer}
+        runtime={viewModel.runtime}
+        safeArea={viewModel.safeArea}
+        {...(viewModel.identity.native
+          ? { onLogout: () => logout.mutate() }
+          : {})}
+      />
+    );
+  }
 
   return (
     <IdentityFoundationView
