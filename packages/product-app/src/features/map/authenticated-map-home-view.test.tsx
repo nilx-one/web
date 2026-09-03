@@ -43,7 +43,11 @@ describe("AuthenticatedMapHomeView", () => {
 
     expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
     expect(screen.getAllByText("0x0sky").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Authenticated")).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Focus map on this device for 0x0sky",
+      }),
+    ).toHaveTextContent("Authenticated");
     expect(
       screen.getByRole("button", { name: "x0skai unavailable" }),
     ).toBeDisabled();
