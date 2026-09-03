@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 export {
+  createAvaiaMovementController,
+  type AvaiaMovementController,
+  type AvaiaMovementControllerOptions,
+  type MovementState,
+  type WorldPosition,
+} from "./avaia-movement-controller";
+export {
   ReadRuntimeReadiness,
   type CoreRuntimePort,
   type CoreRuntimeStatus,
