@@ -19,6 +19,25 @@ function renderer(): MapRenderer {
   };
 }
 
+function renderView(
+  overrides: Partial<React.ComponentProps<typeof AuthenticatedMapHomeView>> = {},
+) {
+  return render(
+    <AuthenticatedMapHomeView
+      hostLabel="browser host"
+      pubDress="0x0sky"
+      renderer={renderer()}
+      runtime={{
+        tone: "ready",
+        label: "Shared Core ready",
+        detail: "Contract 0.1.0 is available to the Web client.",
+      }}
+      safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+      {...overrides}
+    />,
+  );
+}
+
 beforeEach(() => {
   window.localStorage.clear();
 });
@@ -28,62 +47,36 @@ afterEach(() => {
 });
 
 describe("AuthenticatedMapHomeView", () => {
-  it("presents authenticated identity without inventing counterpart presence or reciprocity", () => {
+  it("presents the compact Bond pair without inventing reciprocity", () => {
     const mapRenderer = renderer();
 
-    render(
-      <AuthenticatedMapHomeView
-        hostLabel="browser host"
-        pubDress="0x0sky"
-        renderer={mapRenderer}
-        runtime={{
-          tone: "ready",
-          label: "Shared Core ready",
-          detail: "Contract 0.1.0 is available to the Web client.",
-        }}
-        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
-      />,
-    );
+    renderView({ renderer: mapRenderer });
 
     expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
     expect(screen.getAllByText("0x0sky").length).toBeGreaterThanOrEqual(2);
     expect(
-      screen.getByRole("button", { name: "Focus map near this device" }),
-    ).toHaveTextContent("Authenticated");
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+    ).toHaveTextContent("spectate");
     expect(
       screen.getByLabelText("No reciprocal relationship asserted"),
     ).toHaveTextContent("—");
     expect(
-      screen.getByRole("button", { name: "x0skai unavailable" }),
+      screen.getByRole("button", {
+        name: "x0skai AI runtime unavailable on this host",
+      }),
     ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Focus map near this device" }),
-    ).toBeEnabled();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
   });
 
-  it("opens interface settings from the Bond panel and persists appearance locally", () => {
-    const { container } = render(
-      <AuthenticatedMapHomeView
-        hostLabel="browser host"
-        pubDress="0x0sky"
-        renderer={renderer()}
-        runtime={{
-          tone: "ready",
-          label: "Shared Core ready",
-          detail: "Contract 0.1.0 is available to the Web client.",
-        }}
-        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
-      />,
-    );
+  it("opens map settings from the gear and persists appearance locally", () => {
+    const { container } = renderView();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open interface settings" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Open map settings" }));
 
     expect(screen.getByRole("heading", { name: "Appearance" })).toBeVisible();
+    expect(screen.getByText("Map settings")).toBeVisible();
     expect(screen.getByRole("radio", { name: /Auto/i })).toBeChecked();
 
     fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
@@ -96,28 +89,78 @@ describe("AuthenticatedMapHomeView", () => {
     expect(window.localStorage.getItem("nilx-one.interface.appearance")).toBe(
       "light",
     );
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Back to Bond" }));
-    expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
+  it("opens the Bond profile without rendering a phone field", () => {
+    renderView();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+    );
+
+    expect(screen.getByRole("heading", { name: "0x0sky" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
+    expect(screen.getByText("pub_dress")).toBeVisible();
+    expect(screen.getByText("Providers")).toBeVisible();
+    expect(screen.queryByText("Phone")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add host" })).toBeVisible();
+  });
+
+  it("opens Add hosts and exposes provider authorization redirects", () => {
+    renderView();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add host" }));
+
+    expect(screen.getByRole("heading", { name: "Add hosts" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Connect with Telegram/i }),
+    ).toHaveAttribute("href", "/auth?provider=telegram&intent=connect");
+    expect(
+      screen.getByRole("link", { name: /Connect with Discord/i }),
+    ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
+  });
+
+  it("shows connected provider controls and keeps provider management separate from profile edit", () => {
+    renderView({ connectedProviders: ["telegram", "discord"] });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+    );
+
+    expect(screen.getByLabelText("Telegram connected")).toBeVisible();
+    expect(screen.getByLabelText("Discord connected")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]!);
+
+    expect(screen.getByRole("heading", { name: "Edit profile" })).toBeVisible();
+    expect(screen.queryByText("Providers")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Provider connections are managed separately/i),
+    ).toBeVisible();
+  });
+
+  it("opens provider management from the Providers row", () => {
+    renderView({ connectedProviders: ["telegram"] });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[1]!);
+
+    expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
+    expect(screen.getByText("Telegram")).toBeVisible();
+    expect(screen.getByText("Connected")).toBeVisible();
+    expect(screen.getByRole("button", { name: "+ Add host" })).toBeVisible();
   });
 
   it("exposes host actions through the compact menu", () => {
     const onLogout = vi.fn();
 
-    render(
-      <AuthenticatedMapHomeView
-        hostLabel="browser host"
-        pubDress="0x0sky"
-        renderer={renderer()}
-        runtime={{
-          tone: "ready",
-          label: "Shared Core ready",
-          detail: "Contract 0.1.0 is available to the Web client.",
-        }}
-        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
-        onLogout={onLogout}
-      />,
-    );
+    renderView({ onLogout });
 
     fireEvent.click(screen.getByRole("button", { name: "Open host menu" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
@@ -125,7 +168,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
-  it("focuses the camera on user-approved device coordinates without asserting Bond presence", () => {
+  it("focuses the camera from the Bond profile on user-approved device coordinates", () => {
     const mapRenderer = renderer();
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
@@ -148,20 +191,10 @@ describe("AuthenticatedMapHomeView", () => {
       value: { getCurrentPosition },
     });
 
-    render(
-      <AuthenticatedMapHomeView
-        hostLabel="browser host"
-        pubDress="0x0sky"
-        renderer={mapRenderer}
-        runtime={{
-          tone: "ready",
-          label: "Shared Core ready",
-          detail: "Contract 0.1.0 is available to the Web client.",
-        }}
-        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
-      />,
+    renderView({ renderer: mapRenderer });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
     );
-
     fireEvent.click(
       screen.getByRole("button", { name: "Focus map near this device" }),
     );
