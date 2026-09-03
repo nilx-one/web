@@ -53,7 +53,7 @@ export function AuthenticatedMapHomeView({
     return () => renderer.unmount();
   }, [renderer]);
 
-  function focusAuthenticatedBond(): void {
+  function focusMapNearDevice(): void {
     if (focusState === "locating") {
       return;
     }
@@ -154,8 +154,8 @@ export function AuthenticatedMapHomeView({
             className="bond-dock__bond bond-dock__bond--active"
             type="button"
             data-focus-state={focusState}
-            onClick={focusAuthenticatedBond}
-            aria-label={`Focus map on this device for ${pubDress}`}
+            onClick={focusMapNearDevice}
+            aria-label="Focus map near this device"
           >
             <span className="bond-dock__glyph">0x0</span>
             <strong>{pubDress}</strong>
@@ -168,8 +168,11 @@ export function AuthenticatedMapHomeView({
               Authenticated
             </small>
           </button>
-          <span className="bond-dock__link" aria-hidden="true">
-            ←→
+          <span
+            className="bond-dock__link"
+            aria-label="No reciprocal relationship asserted"
+          >
+            —
           </span>
           <button
             className="bond-dock__bond bond-dock__bond--unavailable"
@@ -189,9 +192,9 @@ export function AuthenticatedMapHomeView({
 
       <span className="visually-hidden" aria-live="polite">
         {focusState === "locating"
-          ? `Locating this device for ${pubDress}.`
+          ? "Locating this device for local map focus."
           : focusState === "focused"
-            ? `Map focused on this device for ${pubDress}.`
+            ? "Map camera focused near this device."
             : focusState === "unavailable"
               ? "Device location is unavailable."
               : `Authenticated as ${pubDress}.`}
