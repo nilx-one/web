@@ -1,0 +1,152 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+import type { MapRenderer } from "@nilx-one/map-contract";
+import { useEffect, useRef, useState } from "react";
+
+import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
+import "./authenticated-map-home-view.css";
+
+export interface AuthenticatedMapHomeViewProps {
+  readonly hostLabel: string;
+  readonly pubDress: string;
+  readonly renderer: MapRenderer;
+  readonly runtime: RuntimeViewState;
+  readonly safeArea: {
+    readonly top: number;
+    readonly right: number;
+    readonly bottom: number;
+    readonly left: number;
+  };
+  readonly onLogout?: () => void;
+}
+
+type FocusState = "idle" | "locating" | "focused" | "unavailable";
+
+function runtimeContract(runtime: RuntimeViewState): string | undefined {
+  if (runtime.tone !== "ready") {
+    return undefined;
+  }
+  const match = runtime.detail.match(/Contract\s+([^\s]+)\s+/i);
+  return match?.[1];
+}
+
+export function AuthenticatedMapHomeView({
+  hostLabel,
+  pubDress,
+  renderer,
+  runtime,
+  safeArea,
+  onLogout,
+}: AuthenticatedMapHomeViewProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [focusState, setFocusState] = useState<FocusState>("idle");
+  const contractVersion = runtimeContract(runtime);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map === null) {
+      return;
+    }
+    renderer.mount(map);
+    return () => renderer.unmount();
+  }, [renderer]);
+
+  function focusAuthenticatedBond(): void {
+    if (focusState === "locating") {
+      return;
+    }
+    if (navigator.geolocation === undefined) {
+      setFocusState("unavailable");
+      return;
+    }
+
+    setFocusState("locating");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        renderer.setCamera({
+          center: [position.coords.longitude, position.coords.latitude],
+          zoom: 13,
+          bearing: 0,
+          pitch: 42,
+        });
+        setFocusState("focused");
+      },
+      () => setFocusState("unavailable"),
+      { enableHighAccuracy: false, maximumAge: 30_000, timeout: 8_000 },
+    );
+  }
+
+  return (
+    <main
+      className="authenticated-map-home"
+      style={{
+        "--safe-top": `${safeArea.top}px`,
+        "--safe-right": `${safeArea.right}px`,
+        "--safe-bottom": `${safeArea.bottom}px`,
+        "--safe-left": `${safeArea.left}px`,
+      } as React.CSSProperties}
+    >
+      <div className="authenticated-map-home__map" ref={mapRef} aria-hidden="true" />
+      <div className="authenticated-map-home__shade" aria-hidden="true" />
+
+      <header className="authenticated-map-home__topbar">
+        <a className="authenticated-map-home__wordmark" href="/" aria-label="0x1 home">
+          0x1
+        </a>
+        <span className="authenticated-map-home__host">
+          <i aria-hidden="true" />
+          {hostLabel}
+        </span>
+      </header>
+
+      <section className="bond-dock" aria-labelledby="bond-dock-title">
+        <span className="bond-dock__kicker" id="bond-dock-title">Bond</span>
+        <div className="bond-dock__pair">
+          <button
+            className="bond-dock__bond bond-dock__bond--active"
+            type="button"
+            data-focus-state={focusState}
+            onClick={focusAuthenticatedBond}
+            aria-label={`Focus map on this device for ${pubDress}`}
+          >
+            <span className="bond-dock__glyph">0x0</span>
+            <strong>{pubDress}</strong>
+          </button>
+          <span className="bond-dock__link" aria-hidden="true">←→</span>
+          <button
+            className="bond-dock__bond bond-dock__bond--unavailable"
+            type="button"
+            disabled
+            aria-label="x0skai unavailable"
+          >
+            <span className="bond-dock__glyph">x0</span>
+            <strong>x0skai</strong>
+          </button>
+        </div>
+        <span className="visually-hidden" aria-live="polite">
+          {focusState === "locating"
+            ? `Locating this device for ${pubDress}.`
+            : focusState === "focused"
+              ? `Map focused on this device for ${pubDress}.`
+              : focusState === "unavailable"
+                ? "Device location is unavailable."
+                : ""}
+        </span>
+        {onLogout === undefined ? null : (
+          <button className="bond-dock__logout" type="button" onClick={onLogout}>
+            Sign out
+          </button>
+        )}
+      </section>
+
+      <section className={`core-chip core-chip--${runtime.tone}`} aria-live="polite">
+        <i aria-hidden="true" />
+        <span>
+          <strong>{runtime.label}</strong>
+          {contractVersion === undefined ? null : <small>contract {contractVersion}</small>}
+        </span>
+      </section>
+    </main>
+  );
+}
