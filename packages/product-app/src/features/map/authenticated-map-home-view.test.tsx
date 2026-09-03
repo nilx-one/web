@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe("AuthenticatedMapHomeView", () => {
-  it("presents authenticated identity without inventing counterpart presence", () => {
+  it("presents authenticated identity without inventing counterpart presence or reciprocity", () => {
     const mapRenderer = renderer();
 
     render(
@@ -44,17 +44,16 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
     expect(screen.getAllByText("0x0sky").length).toBeGreaterThanOrEqual(2);
     expect(
-      screen.getByRole("button", {
-        name: "Focus map on this device for 0x0sky",
-      }),
+      screen.getByRole("button", { name: "Focus map near this device" }),
     ).toHaveTextContent("Authenticated");
+    expect(
+      screen.getByLabelText("No reciprocal relationship asserted"),
+    ).toHaveTextContent("—");
     expect(
       screen.getByRole("button", { name: "x0skai unavailable" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("button", {
-        name: "Focus map on this device for 0x0sky",
-      }),
+      screen.getByRole("button", { name: "Focus map near this device" }),
     ).toBeEnabled();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
@@ -85,7 +84,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
-  it("focuses the map on user-approved device coordinates without asserting protocol presence", () => {
+  it("focuses the camera on user-approved device coordinates without asserting Bond presence", () => {
     const mapRenderer = renderer();
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
@@ -123,9 +122,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", {
-        name: "Focus map on this device for 0x0sky",
-      }),
+      screen.getByRole("button", { name: "Focus map near this device" }),
     );
 
     expect(getCurrentPosition).toHaveBeenCalledOnce();
@@ -136,7 +133,7 @@ describe("AuthenticatedMapHomeView", () => {
       pitch: 42,
     });
     expect(
-      screen.getByText("Map focused on this device for 0x0sky."),
+      screen.getByText("Map camera focused near this device."),
     ).toBeInTheDocument();
   });
 });
