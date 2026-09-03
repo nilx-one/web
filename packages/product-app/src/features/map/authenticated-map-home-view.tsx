@@ -89,6 +89,9 @@ export function AuthenticatedMapHomeView({
     >
       <div className="authenticated-map-home__map" ref={mapRef} aria-hidden="true" />
       <div className="authenticated-map-home__shade" aria-hidden="true" />
+      <span className="visually-hidden" aria-live="polite">
+        Authenticated as {pubDress}.
+      </span>
 
       <header className="authenticated-map-home__topbar">
         <a className="authenticated-map-home__wordmark" href="/" aria-label="0x1 home">
