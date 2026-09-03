@@ -34,8 +34,16 @@
 .authenticated-map-home__shade {
   pointer-events: none;
   background:
-    radial-gradient(circle at 68% 42%, rgba(0, 216, 242, 0.06), transparent 32%),
-    radial-gradient(circle at 38% 62%, rgba(255, 122, 26, 0.05), transparent 28%),
+    radial-gradient(
+      circle at 68% 42%,
+      rgba(0, 216, 242, 0.06),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 38% 62%,
+      rgba(255, 122, 26, 0.05),
+      transparent 28%
+    ),
     linear-gradient(180deg, rgba(2, 4, 8, 0.22), rgba(2, 4, 8, 0.48));
 }
 
@@ -90,7 +98,10 @@
   z-index: 4;
   left: calc(1rem + var(--safe-left));
   bottom: calc(1rem + var(--safe-bottom));
-  width: min(30rem, calc(100vw - 2rem - var(--safe-left) - var(--safe-right)));
+  width: min(
+    30rem,
+    calc(100vw - 2rem - var(--safe-left) - var(--safe-right))
+  );
   padding: 1rem;
   border: 1px solid var(--map-night-border);
   border-radius: 1.35rem;
