@@ -50,8 +50,14 @@
 
 .bond-dock[data-screen="profile"],
 .bond-dock[data-screen="settings"] {
-  width: min(34rem, calc(100vw - 4rem - var(--safe-left) - var(--safe-right)));
-  max-height: min(72vh, calc(100vh - 8rem - var(--safe-top) - var(--safe-bottom)));
+  width: min(
+    34rem,
+    calc(100vw - 4rem - var(--safe-left) - var(--safe-right))
+  );
+  max-height: min(
+    72vh,
+    calc(100vh - 8rem - var(--safe-top) - var(--safe-bottom))
+  );
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -316,7 +322,10 @@
     right: calc(1rem + var(--safe-right));
     left: calc(1rem + var(--safe-left));
     width: auto;
-    max-height: min(68vh, calc(100vh - 7rem - var(--safe-top) - var(--safe-bottom)));
+    max-height: min(
+      68vh,
+      calc(100vh - 7rem - var(--safe-top) - var(--safe-bottom))
+    );
   }
 
   .bond-profile__rows > div {
