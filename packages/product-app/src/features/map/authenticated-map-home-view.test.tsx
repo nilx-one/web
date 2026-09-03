@@ -5,7 +5,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AuthenticatedMapHomeView } from "./authenticated-map-home-view";
+import {
+  AuthenticatedMapHomeView,
+  type ConnectedProvider,
+} from "./authenticated-map-home-view";
 
 function renderer(): MapRenderer {
   const readyStatus: MapRendererStatus = { kind: "ready" };
@@ -19,21 +22,26 @@ function renderer(): MapRenderer {
   };
 }
 
-function renderView(
-  overrides: Partial<React.ComponentProps<typeof AuthenticatedMapHomeView>> = {},
-) {
+interface ViewOverrides {
+  connectedProviders?: readonly ConnectedProvider[];
+  mapRenderer?: MapRenderer;
+  onLogout?: () => void;
+}
+
+function renderView(overrides: ViewOverrides = {}) {
   return render(
     <AuthenticatedMapHomeView
       hostLabel="browser host"
       pubDress="0x0sky"
-      renderer={renderer()}
+      renderer={overrides.mapRenderer ?? renderer()}
       runtime={{
         tone: "ready",
         label: "Shared Core ready",
         detail: "Contract 0.1.0 is available to the Web client.",
       }}
       safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
-      {...overrides}
+      connectedProviders={overrides.connectedProviders}
+      onLogout={overrides.onLogout}
     />,
   );
 }
@@ -50,7 +58,7 @@ describe("AuthenticatedMapHomeView", () => {
   it("presents the compact Bond pair without inventing reciprocity", () => {
     const mapRenderer = renderer();
 
-    renderView({ renderer: mapRenderer });
+    renderView({ mapRenderer });
 
     expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
     expect(screen.getAllByText("0x0sky").length).toBeGreaterThanOrEqual(2);
@@ -70,7 +78,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
   });
 
-  it("opens map settings from the gear and persists appearance locally", () => {
+  it("opens map settings and persists appearance locally", () => {
     const { container } = renderView();
 
     fireEvent.click(screen.getByRole("button", { name: "Open map settings" }));
@@ -106,7 +114,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByRole("button", { name: "Add host" })).toBeVisible();
   });
 
-  it("opens Add hosts and exposes provider authorization redirects", () => {
+  it("opens Add hosts with provider authorization redirects", () => {
     renderView();
 
     fireEvent.click(
@@ -123,7 +131,7 @@ describe("AuthenticatedMapHomeView", () => {
     ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
   });
 
-  it("shows connected provider controls and keeps provider management separate from profile edit", () => {
+  it("keeps provider management separate from profile edit", () => {
     renderView({ connectedProviders: ["telegram", "discord"] });
 
     fireEvent.click(
@@ -168,7 +176,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
-  it("focuses the camera from the Bond profile on user-approved device coordinates", () => {
+  it("focuses the camera from the Bond profile", () => {
     const mapRenderer = renderer();
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
@@ -191,7 +199,7 @@ describe("AuthenticatedMapHomeView", () => {
       value: { getCurrentPosition },
     });
 
-    renderView({ renderer: mapRenderer });
+    renderView({ mapRenderer });
     fireEvent.click(
       screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
     );
