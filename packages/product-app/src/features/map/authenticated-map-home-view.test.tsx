@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe("AuthenticatedMapHomeView", () => {
-  it("keeps the counterpart unavailable and renders compact Core readiness", () => {
+  it("presents authenticated identity without inventing counterpart presence", () => {
     const mapRenderer = renderer();
 
     render(
@@ -41,6 +41,9 @@ describe("AuthenticatedMapHomeView", () => {
       />,
     );
 
+    expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
+    expect(screen.getAllByText("0x0sky").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Authenticated")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "x0skai unavailable" }),
     ).toBeDisabled();
@@ -52,6 +55,30 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
+  });
+
+  it("exposes host actions through the compact menu", () => {
+    const onLogout = vi.fn();
+
+    render(
+      <AuthenticatedMapHomeView
+        hostLabel="browser host"
+        pubDress="0x0sky"
+        renderer={renderer()}
+        runtime={{
+          tone: "ready",
+          label: "Shared Core ready",
+          detail: "Contract 0.1.0 is available to the Web client.",
+        }}
+        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+        onLogout={onLogout}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open host menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+
+    expect(onLogout).toHaveBeenCalledOnce();
   });
 
   it("focuses the map on user-approved device coordinates without asserting protocol presence", () => {
