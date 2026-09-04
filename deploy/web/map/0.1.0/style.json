@@ -57,7 +57,17 @@
       "minzoom": 8,
       "paint": {
         "line-color": "#d5d9d8",
-        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.8, 14, 4, 18, 12]
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8,
+          0.8,
+          14,
+          4,
+          18,
+          12
+        ]
       }
     },
     {
@@ -68,7 +78,17 @@
       "minzoom": 8,
       "paint": {
         "line-color": "#ffffff",
-        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.45, 14, 2.4, 18, 8]
+        "line-width": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          8,
+          0.45,
+          14,
+          2.4,
+          18,
+          8
+        ]
       }
     },
     {
@@ -91,7 +111,15 @@
       "source-layer": "pois",
       "minzoom": 14,
       "paint": {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 1.5, 18, 3.5],
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14,
+          1.5,
+          18,
+          3.5
+        ],
         "circle-color": "#545b5c",
         "circle-opacity": 0.58
       }
