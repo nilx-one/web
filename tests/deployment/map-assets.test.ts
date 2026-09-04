@@ -68,9 +68,9 @@ describe("map deployment assets", () => {
       ]),
     );
 
-    expect(
-      style.layers.find((layer) => layer.id === "buildings")?.type,
-    ).toBe("fill-extrusion");
+    expect(style.layers.find((layer) => layer.id === "buildings")?.type).toBe(
+      "fill-extrusion",
+    );
     expect(
       style.layers.find((layer) => layer.id === "roads")?.["source-layer"],
     ).toBe("roads");
