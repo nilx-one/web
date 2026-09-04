@@ -14,6 +14,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+import "./bond-dock-motion.css";
+
 const container = document.querySelector<HTMLElement>("#root");
 
 if (container === null) {
