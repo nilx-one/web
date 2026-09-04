@@ -444,3 +444,140 @@ a {
     --warning: #e1a85f;
   }
 }
+
+.toast-region {
+  position: fixed;
+  z-index: 20;
+  right: calc(16px + var(--safe-right, env(safe-area-inset-right, 0px)));
+  bottom: calc(16px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  left: calc(16px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.toast-region__list {
+  display: grid;
+  width: min(100%, 420px);
+  padding: 0;
+  gap: 10px;
+  margin: 0;
+  list-style: none;
+}
+
+.toast-region__item {
+  pointer-events: auto;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgb(24 23 27 / 12%);
+}
+
+.toast__marker {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.toast--attention .toast__marker {
+  background: var(--accent);
+  box-shadow: 0 0 0 5px var(--accent-soft);
+}
+
+.toast--critical .toast__marker {
+  background: var(--negative);
+}
+
+.toast__title,
+.toast__description {
+  margin: 0;
+}
+
+.toast__title {
+  font-size: 13px;
+  font-weight: 720;
+  letter-spacing: 0.02em;
+}
+
+.toast__description {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.toast__details {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.toast__details summary {
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toast__details p {
+  margin: 6px 0 0;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.toast__controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.toast__action,
+.toast__dismiss {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.toast__action {
+  padding: 6px 13px;
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.toast__dismiss {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-content: center;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.toast__action:focus-visible,
+.toast__dismiss:focus-visible,
+.toast__details summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .toast-region {
+    right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
+    bottom: calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+    left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  }
+}
