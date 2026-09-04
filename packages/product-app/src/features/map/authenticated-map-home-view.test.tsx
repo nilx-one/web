@@ -33,7 +33,9 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.connectedProviders === undefined
       ? {}
       : { connectedProviders: overrides.connectedProviders }),
-    ...(overrides.onLogout === undefined ? {} : { onLogout: overrides.onLogout }),
+    ...(overrides.onLogout === undefined
+      ? {}
+      : { onLogout: overrides.onLogout }),
   };
 
   return render(
