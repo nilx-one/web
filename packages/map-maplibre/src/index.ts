@@ -1,11 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  DEFAULT_MAP_CAMERA,
-  type MapCamera,
-  type MapRenderer,
-  type MapRendererStatus,
+import type {
+  MapCamera,
+  MapRenderer,
+  MapRendererStatus,
 } from "@nilx-one/map-contract";
 import { Map as MapLibreMap, addProtocol, type MapOptions } from "maplibre-gl";
 import { Protocol } from "pmtiles";
@@ -116,5 +115,3 @@ export function createMapLibreRenderer(
     },
   };
 }
-
-export { DEFAULT_MAP_CAMERA };
