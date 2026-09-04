@@ -344,11 +344,14 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .interface-settings__note,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows dt,
 .authenticated-map-home[data-theme="light"] .host-connect-button small,
-.authenticated-map-home[data-theme="light"] .provider-management__connected small {
+.authenticated-map-home[data-theme="light"]
+  .provider-management__connected
+  small {
   color: rgba(17, 19, 26, 0.62);
 }
 
-.authenticated-map-home[data-theme="light"] .authenticated-map-home__menu-trigger,
+.authenticated-map-home[data-theme="light"]
+  .authenticated-map-home__menu-trigger,
 .authenticated-map-home[data-theme="light"] .bond-dock__settings,
 .authenticated-map-home[data-theme="light"] .bond-dock__edit,
 .authenticated-map-home[data-theme="light"] .interface-settings__back {
@@ -364,7 +367,9 @@ button.provider-control {
   box-shadow: 0 1rem 3rem rgba(38, 42, 57, 0.16);
 }
 
-.authenticated-map-home[data-theme="light"] .authenticated-map-home__menu button {
+.authenticated-map-home[data-theme="light"]
+  .authenticated-map-home__menu
+  button {
   color: #11131a;
   background: rgba(28, 33, 50, 0.06);
 }
@@ -386,14 +391,18 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .interface-settings__option strong,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows dd,
 .authenticated-map-home[data-theme="light"] .host-connect-button,
-.authenticated-map-home[data-theme="light"] .provider-management__connected strong {
+.authenticated-map-home[data-theme="light"]
+  .provider-management__connected
+  strong {
   color: #11131a;
 }
 
 .authenticated-map-home[data-theme="light"] .interface-settings__option,
 .authenticated-map-home[data-theme="light"] .bond-profile__action,
 .authenticated-map-home[data-theme="light"] .host-connect-button,
-.authenticated-map-home[data-theme="light"] .provider-management__connected > div,
+.authenticated-map-home[data-theme="light"]
+  .provider-management__connected
+  > div,
 .authenticated-map-home[data-theme="light"] .provider-control {
   border-color: rgba(28, 33, 50, 0.12);
   color: rgba(17, 19, 26, 0.82);
@@ -406,7 +415,8 @@ button.provider-control {
   background: rgba(128, 91, 235, 0.08);
 }
 
-.authenticated-map-home[data-theme="light"] .interface-settings__option:has(input:checked) {
+.authenticated-map-home[data-theme="light"]
+  .interface-settings__option:has(input:checked) {
   border-color: rgba(111, 75, 224, 0.55);
   background: rgba(128, 91, 235, 0.08);
 }
