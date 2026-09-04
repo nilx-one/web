@@ -1,11 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  DEFAULT_MAP_CAMERA,
-  type MapCamera,
-  type MapRenderer,
-  type MapRendererStatus,
+import type {
+  MapCamera,
+  MapRenderer,
+  MapRendererStatus,
 } from "@nilx-one/map-contract";
 import { Map as MapLibreMap, addProtocol, type MapOptions } from "maplibre-gl";
 import { Protocol } from "pmtiles";
@@ -14,6 +13,15 @@ export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
 export const MAP_STYLE_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/style.json`;
 export const MAP_BASEMAP_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/basemap.pmtiles`;
 
+// Presentation bootstrap only. Keep temporary regional coverage in the
+// MapLibre adapter rather than leaking deployment geography into MapRenderer.
+export const MAP_BOOTSTRAP_CAMERA: MapCamera = {
+  center: [30.5234, 50.4501],
+  zoom: 10,
+  bearing: 0,
+  pitch: 32,
+};
+
 const pmtilesProtocol = new Protocol();
 let pmtilesProtocolRegistered = false;
 
@@ -21,6 +29,7 @@ type MapFactory = (options: MapOptions) => MapLibreMap;
 
 export interface MapLibreRendererOptions {
   readonly styleUrl?: string;
+  readonly initialCamera?: MapCamera;
   readonly createMap?: MapFactory;
 }
 
@@ -37,6 +46,7 @@ export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapRenderer {
   const styleUrl = options.styleUrl ?? MAP_STYLE_URL;
+  const initialCamera = options.initialCamera ?? MAP_BOOTSTRAP_CAMERA;
   const createMap =
     options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
   let status: MapRendererStatus = { kind: "unmounted" };
@@ -63,10 +73,10 @@ export function createMapLibreRenderer(
         const mountedMap = createMap({
           container,
           style: styleUrl,
-          center: [...DEFAULT_MAP_CAMERA.center],
-          zoom: DEFAULT_MAP_CAMERA.zoom,
-          bearing: DEFAULT_MAP_CAMERA.bearing,
-          pitch: DEFAULT_MAP_CAMERA.pitch,
+          center: [...initialCamera.center],
+          zoom: initialCamera.zoom,
+          bearing: initialCamera.bearing,
+          pitch: initialCamera.pitch,
         });
         map = mountedMap;
 

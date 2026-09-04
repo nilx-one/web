@@ -14,6 +14,8 @@ services:
       one.nilx.product: 0x1
       one.nilx.client: ${CLIENT_NAME:?CLIENT_NAME is required}
       org.opencontainers.image.revision: ${RELEASE_SHA:?RELEASE_SHA is required}
+    volumes:
+      - ${MAP_BASEMAP_PATH:?MAP_BASEMAP_PATH is required}:/srv/map/0.1.0/basemap.pmtiles:ro
     expose:
       - "8080"
     networks:
