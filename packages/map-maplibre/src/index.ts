@@ -1,16 +1,26 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type {
-  MapCamera,
-  MapRenderer,
-  MapRendererStatus,
+import {
+  DEFAULT_MAP_APPEARANCE,
+  type MapAppearance,
+  type MapCamera,
+  type MapRenderer,
+  type MapRendererStatus,
 } from "@nilx-one/map-contract";
 import { Map as MapLibreMap, addProtocol, type MapOptions } from "maplibre-gl";
 import { Protocol } from "pmtiles";
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
-export const MAP_STYLE_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/style.json`;
+
+// One published style document per appearance. Both variants share the same
+// layer structure so appearance stays a presentation swap, not a map redesign.
+export const MAP_STYLE_URLS: Readonly<Record<MapAppearance, string>> = {
+  light: `/map/${MAP_STYLE_CONTRACT_VERSION}/style.json`,
+  dark: `/map/${MAP_STYLE_CONTRACT_VERSION}/style-dark.json`,
+};
+
+export const MAP_STYLE_URL = MAP_STYLE_URLS[DEFAULT_MAP_APPEARANCE];
 export const MAP_BASEMAP_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/basemap.pmtiles`;
 
 // Presentation bootstrap only. Keep temporary regional coverage in the
@@ -28,7 +38,8 @@ let pmtilesProtocolRegistered = false;
 type MapFactory = (options: MapOptions) => MapLibreMap;
 
 export interface MapLibreRendererOptions {
-  readonly styleUrl?: string;
+  readonly styleUrls?: Readonly<Record<MapAppearance, string>>;
+  readonly initialAppearance?: MapAppearance;
   readonly initialCamera?: MapCamera;
   readonly createMap?: MapFactory;
 }
@@ -69,18 +80,39 @@ function ensurePmtilesProtocol(): void {
 export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapRenderer {
-  const styleUrl = options.styleUrl ?? MAP_STYLE_URL;
+  const styleUrls = options.styleUrls ?? MAP_STYLE_URLS;
   const initialCamera = options.initialCamera ?? MAP_BOOTSTRAP_CAMERA;
   const createMap =
     options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
+  let appearance = options.initialAppearance ?? DEFAULT_MAP_APPEARANCE;
   let status: MapRendererStatus = { kind: "unmounted" };
   let map: MapLibreMap | undefined;
+  // Style documents resolve before sources and tiles do, so the phase a
+  // failure arrives in is what distinguishes a missing style from a missing
+  // basemap from ordinary tile noise on a map that already renders.
+  let styleResolved = false;
+  let firstPaintDone = false;
   const listeners = new Set<(next: MapRendererStatus) => void>();
 
   function publish(next: MapRendererStatus): void {
     status = next;
     for (const listener of listeners) {
       listener(next);
+    }
+  }
+
+  function reportRendererError(): void {
+    if (status.kind === "unavailable") {
+      return;
+    }
+
+    if (!styleResolved) {
+      publish({ kind: "unavailable", reason: "style-load-failed" });
+      return;
+    }
+
+    if (!firstPaintDone) {
+      publish({ kind: "unavailable", reason: "basemap-load-failed" });
     }
   }
 
@@ -96,18 +128,25 @@ export function createMapLibreRenderer(
         ensurePmtilesProtocol();
         const mountedMap = createMap({
           container,
-          style: styleUrl,
+          style: styleUrls[appearance],
           center: [...initialCamera.center],
           zoom: initialCamera.zoom,
           bearing: initialCamera.bearing,
           pitch: initialCamera.pitch,
         });
         map = mountedMap;
+        styleResolved = false;
+        firstPaintDone = false;
 
-        mountedMap.once("load", () => publish({ kind: "ready" }));
-        mountedMap.once("error", () =>
-          publish({ kind: "unavailable", reason: "style-load-failed" }),
-        );
+        mountedMap.on("styledata", () => {
+          styleResolved = true;
+        });
+        mountedMap.on("error", reportRendererError);
+        mountedMap.once("load", () => {
+          styleResolved = true;
+          firstPaintDone = true;
+          publish({ kind: "ready" });
+        });
       } catch {
         map = undefined;
         publish({ kind: "unavailable", reason: "renderer-init-failed" });
@@ -117,6 +156,8 @@ export function createMapLibreRenderer(
     unmount() {
       map?.remove();
       map = undefined;
+      styleResolved = false;
+      firstPaintDone = false;
       publish({ kind: "unmounted" });
     },
 
@@ -136,6 +177,23 @@ export function createMapLibreRenderer(
         bearing: camera.bearing,
         pitch: camera.pitch,
       });
+    },
+
+    setAppearance(next: MapAppearance) {
+      if (next === appearance) {
+        return;
+      }
+
+      appearance = next;
+
+      if (map === undefined) {
+        return;
+      }
+
+      // A style swap keeps the current camera and reopens the style phase so a
+      // missing appearance variant is reported instead of blanking the map.
+      styleResolved = false;
+      map.setStyle(styleUrls[next]);
     },
   };
 }

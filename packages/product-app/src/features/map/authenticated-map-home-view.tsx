@@ -94,6 +94,12 @@ export function AuthenticatedMapHomeView({
   const resolvedAppearance = appearance === "auto" ? systemTheme : appearance;
   const contractVersion = runtimeContract(runtime);
 
+  // Appearance is applied before mounting so the first paint already uses the
+  // resolved style variant instead of loading light and swapping to dark.
+  useEffect(() => {
+    renderer.setAppearance(resolvedAppearance);
+  }, [renderer, resolvedAppearance]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (map === null) return;
@@ -192,6 +198,7 @@ export function AuthenticatedMapHomeView({
     <main
       className="authenticated-map-home"
       data-theme={resolvedAppearance}
+      data-focus-state={focusState}
       style={
         {
           "--safe-top": `${safeArea.top}px`,

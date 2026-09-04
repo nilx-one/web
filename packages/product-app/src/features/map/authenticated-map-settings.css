@@ -319,20 +319,41 @@ button.provider-control {
 }
 
 .authenticated-map-home[data-theme="light"] {
-  --map-night: #eef0f7;
-  --map-night-raised: rgba(247, 248, 252, 0.78);
+  --map-substrate: #f7f9fa;
+  --map-night: #f7f9fa;
+  --map-night-raised: rgba(247, 249, 250, 0.78);
   --map-night-border: rgba(28, 33, 50, 0.16);
   color: #11131a;
   background: var(--map-night);
 }
 
-.authenticated-map-home[data-theme="light"] .authenticated-map-home__map {
-  background: #dfe3ec;
-  filter: brightness(1.35) saturate(0.7) contrast(0.78);
+/* The light style is published near-white, so the renderer surface stays
+   uncorrected: no filter, no transform, no compositing tricks. */
+.authenticated-map-home[data-theme="light"] .authenticated-map-home__shade {
+  background:
+    radial-gradient(
+      circle at 62% 42%,
+      rgba(55, 215, 229, 0.05),
+      transparent 32%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(247, 249, 250, 0.58) 0%,
+      rgba(247, 249, 250, 0.1) 48%,
+      rgba(247, 249, 250, 0.32) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(247, 249, 250, 0.26),
+      rgba(247, 249, 250, 0.64)
+    );
 }
 
-.authenticated-map-home[data-theme="light"] .authenticated-map-home__shade {
-  background: rgba(236, 238, 246, 0.42);
+.authenticated-map-home[data-theme="light"][data-focus-state="focused"]
+  .authenticated-map-home__shade {
+  box-shadow:
+    inset 0 0 0 1px rgba(55, 215, 229, 0.34),
+    inset 0 0 9rem rgba(55, 215, 229, 0.08);
 }
 
 .authenticated-map-home[data-theme="light"] .authenticated-map-home__host,

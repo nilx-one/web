@@ -34,6 +34,7 @@ function createMapRenderer(): MapRenderer {
     getStatus: () => ({ kind: "unmounted" }),
     subscribe: () => () => undefined,
     setCamera: vi.fn(),
+    setAppearance: vi.fn(),
   };
 }
 

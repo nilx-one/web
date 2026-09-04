@@ -9,6 +9,17 @@ export interface MapFoundationViewModel {
   readonly detail: string;
 }
 
+function unavailableDetail(reason: string): string {
+  switch (reason) {
+    case "style-load-failed":
+      return "The versioned self-hosted map style is not published yet.";
+    case "basemap-load-failed":
+      return "The versioned self-hosted basemap archive could not be read.";
+    default:
+      return "The geographic renderer could not start on this client.";
+  }
+}
+
 export function createMapFoundationViewModel(
   status: MapRendererStatus,
 ): MapFoundationViewModel {
@@ -35,10 +46,7 @@ export function createMapFoundationViewModel(
       return {
         tone: "negative",
         label: "Map unavailable",
-        detail:
-          status.reason === "style-load-failed"
-            ? "The versioned self-hosted map style is not published yet."
-            : "The geographic renderer could not start on this client.",
+        detail: unavailableDetail(status.reason),
       };
   }
 }
