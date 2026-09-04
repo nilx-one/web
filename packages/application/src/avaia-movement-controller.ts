@@ -53,14 +53,8 @@ function distanceMeters(from: WorldPosition, to: WorldPosition): number {
   const deltaLon = (to.longitude - from.longitude) * toRadians;
   const sinLat = Math.sin(deltaLat / 2);
   const sinLon = Math.sin(deltaLon / 2);
-  const a =
-    sinLat * sinLat +
-    Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
-  return (
-    2 *
-    EARTH_RADIUS_METERS *
-    Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  );
+  const a = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+  return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function interpolate(
