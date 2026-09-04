@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import "./authenticated-map-home-view.css";
+import "./authenticated-map-settings.css";
 
 export interface AuthenticatedMapHomeViewProps {
   readonly hostLabel: string;
@@ -22,6 +23,11 @@ export interface AuthenticatedMapHomeViewProps {
 }
 
 type FocusState = "idle" | "locating" | "focused" | "unavailable";
+type HomeScreen = "home" | "settings";
+type AppearancePreference = "light" | "dark" | "auto";
+type ResolvedAppearance = "light" | "dark";
+
+const APPEARANCE_STORAGE_KEY = "nilx-one.interface.appearance";
 
 function runtimeContract(runtime: RuntimeViewState): string | undefined {
   if (runtime.tone !== "ready") {
@@ -29,6 +35,30 @@ function runtimeContract(runtime: RuntimeViewState): string | undefined {
   }
   const match = runtime.detail.match(/Contract\s+([^\s]+)\s+/i);
   return match?.[1];
+}
+
+function readAppearancePreference(): AppearancePreference {
+  try {
+    const stored = window.localStorage.getItem(APPEARANCE_STORAGE_KEY);
+    if (stored === "light" || stored === "dark" || stored === "auto") {
+      return stored;
+    }
+  } catch {
+    // Storage is optional. The interface remains usable with an in-memory preference.
+  }
+  return "auto";
+}
+
+function systemAppearance(): ResolvedAppearance {
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
+}
+
+function resolveAppearance(
+  preference: AppearancePreference,
+): ResolvedAppearance {
+  return preference === "auto" ? systemAppearance() : preference;
 }
 
 export function AuthenticatedMapHomeView({
@@ -42,6 +72,14 @@ export function AuthenticatedMapHomeView({
   const mapRef = useRef<HTMLDivElement>(null);
   const [focusState, setFocusState] = useState<FocusState>("idle");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [screen, setScreen] = useState<HomeScreen>("home");
+  const [appearance, setAppearance] = useState<AppearancePreference>(
+    readAppearancePreference,
+  );
+  const [resolvedAppearance, setResolvedAppearance] =
+    useState<ResolvedAppearance>(() =>
+      resolveAppearance(readAppearancePreference()),
+    );
   const contractVersion = runtimeContract(runtime);
 
   useEffect(() => {
@@ -52,6 +90,24 @@ export function AuthenticatedMapHomeView({
     renderer.mount(map);
     return () => renderer.unmount();
   }, [renderer]);
+
+  useEffect(() => {
+    setResolvedAppearance(resolveAppearance(appearance));
+    try {
+      window.localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance);
+    } catch {
+      // Persistence is best-effort only.
+    }
+
+    if (appearance !== "auto" || window.matchMedia === undefined) {
+      return;
+    }
+
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const update = () => setResolvedAppearance(media.matches ? "light" : "dark");
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, [appearance]);
 
   function focusMapNearDevice(): void {
     if (focusState === "locating") {
@@ -78,9 +134,15 @@ export function AuthenticatedMapHomeView({
     );
   }
 
+  function openSettings(): void {
+    setMenuOpen(false);
+    setScreen("settings");
+  }
+
   return (
     <main
       className="authenticated-map-home"
+      data-theme={resolvedAppearance}
       style={
         {
           "--safe-top": `${safeArea.top}px`,
@@ -122,6 +184,9 @@ export function AuthenticatedMapHomeView({
           {menuOpen ? (
             <div className="authenticated-map-home__menu" role="menu">
               <span>{hostLabel}</span>
+              <button type="button" role="menuitem" onClick={openSettings}>
+                Interface settings
+              </button>
               {onLogout === undefined ? null : (
                 <button type="button" role="menuitem" onClick={onLogout}>
                   Sign out
@@ -132,63 +197,125 @@ export function AuthenticatedMapHomeView({
         </div>
       </header>
 
-      <section
-        className="authenticated-map-home__hero"
-        aria-labelledby="identity-title"
-      >
-        <span className="authenticated-map-home__eyebrow">
-          <b>0x1</b> identity
-        </span>
-        <h1 id="identity-title">You’re in.</h1>
-        <p>
-          Authenticated as <strong>{pubDress}</strong>
-        </p>
-      </section>
+      {screen === "settings" ? (
+        <section
+          className="interface-settings"
+          aria-labelledby="interface-settings-title"
+        >
+          <div className="interface-settings__header">
+            <button
+              className="interface-settings__back"
+              type="button"
+              aria-label="Back to Bond"
+              onClick={() => setScreen("home")}
+            >
+              <span aria-hidden="true">←</span>
+            </button>
+            <div>
+              <span className="interface-settings__eyebrow">0x1 interface</span>
+              <h1 id="interface-settings-title">Appearance</h1>
+            </div>
+          </div>
 
-      <section className="bond-dock" aria-labelledby="bond-dock-title">
-        <span className="bond-dock__kicker" id="bond-dock-title">
-          Bond
-        </span>
-        <div className="bond-dock__pair">
-          <button
-            className="bond-dock__bond bond-dock__bond--active"
-            type="button"
-            data-focus-state={focusState}
-            onClick={focusMapNearDevice}
-            aria-label="Focus map near this device"
+          <fieldset className="interface-settings__appearance">
+            <legend>Mode</legend>
+            {(["light", "dark", "auto"] as const).map((mode) => (
+              <label key={mode} className="interface-settings__option">
+                <span>
+                  <strong>{mode[0].toUpperCase() + mode.slice(1)}</strong>
+                  <small>
+                    {mode === "auto"
+                      ? "Follow this device"
+                      : `Keep the interface ${mode}`}
+                  </small>
+                </span>
+                <input
+                  type="radio"
+                  name="appearance"
+                  value={mode}
+                  checked={appearance === mode}
+                  onChange={() => setAppearance(mode)}
+                />
+              </label>
+            ))}
+          </fieldset>
+
+          <p className="interface-settings__note">
+            This is a local interface preference. It does not change Bond,
+            BondChain, or shared Core state.
+          </p>
+        </section>
+      ) : (
+        <>
+          <section
+            className="authenticated-map-home__hero"
+            aria-labelledby="identity-title"
           >
-            <span className="bond-dock__glyph">0x0</span>
-            <strong>{pubDress}</strong>
-            <small>
-              You
-              <i
-                className="bond-dock__status-dot bond-dock__status-dot--authenticated"
-                aria-hidden="true"
-              />
-              Authenticated
-            </small>
-          </button>
-          <span
-            className="bond-dock__link"
-            aria-label="No reciprocal relationship asserted"
-          >
-            —
-          </span>
-          <button
-            className="bond-dock__bond bond-dock__bond--unavailable"
-            type="button"
-            disabled
-            aria-label="x0skai unavailable"
-          >
-            <span className="bond-dock__glyph">x0</span>
-            <strong>x0skai</strong>
-            <small>
-              <i className="bond-dock__status-dot" aria-hidden="true" />
-              Unavailable
-            </small>
-          </button>
-        </div>
-      </section>
+            <span className="authenticated-map-home__eyebrow">
+              <b>0x1</b> identity
+            </span>
+            <h1 id="identity-title">You’re in.</h1>
+            <p>
+              Authenticated as <strong>{pubDress}</strong>
+            </p>
+          </section>
+
+          <section className="bond-dock" aria-labelledby="bond-dock-title">
+            <div className="bond-dock__header">
+              <span className="bond-dock__kicker" id="bond-dock-title">
+                Bond
+              </span>
+              <button
+                className="bond-dock__settings"
+                type="button"
+                aria-label="Open interface settings"
+                onClick={openSettings}
+              >
+                <span aria-hidden="true">⚙︎</span>
+              </button>
+            </div>
+            <div className="bond-dock__pair">
+              <button
+                className="bond-dock__bond bond-dock__bond--active"
+                type="button"
+                data-focus-state={focusState}
+                onClick={focusMapNearDevice}
+                aria-label="Focus map near this device"
+              >
+                <span className="bond-dock__glyph">0x0</span>
+                <strong>{pubDress}</strong>
+                <small>
+                  You
+                  <i
+                    className="bond-dock__status-dot bond-dock__status-dot--authenticated"
+                    aria-hidden="true"
+                  />
+                  Authenticated
+                </small>
+              </button>
+              <span
+                className="bond-dock__link"
+                aria-label="No reciprocal relationship asserted"
+              >
+                —
+              </span>
+              <button
+                className="bond-dock__bond bond-dock__bond--unavailable"
+                type="button"
+                disabled
+                aria-label="x0skai unavailable"
+              >
+                <span className="bond-dock__glyph">x0</span>
+                <strong>x0skai</strong>
+                <small>
+                  <i className="bond-dock__status-dot" aria-hidden="true" />
+                  Unavailable
+                </small>
+              </button>
+            </div>
+          </section>
+        </>
+      )}
 
       <span className="visually-hidden" aria-live="polite">
         {focusState === "locating"
