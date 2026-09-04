@@ -4,7 +4,11 @@
 import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
 
-import { MAP_BOOTSTRAP_CAMERA, MAP_STYLE_URL, createMapLibreRenderer } from "./index";
+import {
+  MAP_BOOTSTRAP_CAMERA,
+  MAP_STYLE_URL,
+  createMapLibreRenderer,
+} from "./index";
 
 interface FakeMap {
   readonly once: (event: string, listener: () => void) => FakeMap;
