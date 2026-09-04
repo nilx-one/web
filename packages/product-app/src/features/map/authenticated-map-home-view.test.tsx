@@ -29,6 +29,13 @@ interface ViewOverrides {
 }
 
 function renderView(overrides: ViewOverrides = {}) {
+  const optionalProps = {
+    ...(overrides.connectedProviders === undefined
+      ? {}
+      : { connectedProviders: overrides.connectedProviders }),
+    ...(overrides.onLogout === undefined ? {} : { onLogout: overrides.onLogout }),
+  };
+
   return render(
     <AuthenticatedMapHomeView
       hostLabel="browser host"
@@ -40,8 +47,7 @@ function renderView(overrides: ViewOverrides = {}) {
         detail: "Contract 0.1.0 is available to the Web client.",
       }}
       safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
-      connectedProviders={overrides.connectedProviders}
-      onLogout={overrides.onLogout}
+      {...optionalProps}
     />,
   );
 }
