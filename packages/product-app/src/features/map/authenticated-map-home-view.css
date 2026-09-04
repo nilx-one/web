@@ -43,8 +43,6 @@
       transparent 34%
     ),
     #080b14;
-  filter: brightness(0.42) saturate(0.82) contrast(1.16) hue-rotate(14deg);
-  transform: scale(1.015);
 }
 
 .authenticated-map-home__shade {
@@ -62,11 +60,11 @@
     ),
     linear-gradient(
       90deg,
-      rgba(2, 4, 10, 0.48) 0%,
-      rgba(2, 4, 10, 0.14) 52%,
-      rgba(2, 4, 10, 0.28) 100%
+      rgba(2, 4, 10, 0.62) 0%,
+      rgba(2, 4, 10, 0.24) 52%,
+      rgba(2, 4, 10, 0.4) 100%
     ),
-    linear-gradient(180deg, rgba(1, 3, 8, 0.12), rgba(1, 3, 8, 0.5));
+    linear-gradient(180deg, rgba(1, 3, 8, 0.2), rgba(1, 3, 8, 0.58));
 }
 
 .authenticated-map-home__topbar {
