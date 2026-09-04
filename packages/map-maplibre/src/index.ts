@@ -33,12 +33,33 @@ export interface MapLibreRendererOptions {
   readonly createMap?: MapFactory;
 }
 
+export function resolvePmtilesProtocolUrl(url: string, baseUrl: string): string {
+  if (!url.startsWith("pmtiles:///")) {
+    return url;
+  }
+
+  const transportUrl = new URL(url.slice("pmtiles://".length), baseUrl).href;
+  return `pmtiles://${transportUrl}`;
+}
+
 function ensurePmtilesProtocol(): void {
   if (pmtilesProtocolRegistered) {
     return;
   }
 
-  addProtocol("pmtiles", pmtilesProtocol.tile);
+  const loadPmtiles: Parameters<typeof addProtocol>[1] = (
+    request,
+    abortController,
+  ) =>
+    pmtilesProtocol.tile(
+      {
+        ...request,
+        url: resolvePmtilesProtocolUrl(request.url, globalThis.location.href),
+      },
+      abortController,
+    );
+
+  addProtocol("pmtiles", loadPmtiles);
   pmtilesProtocolRegistered = true;
 }
 
