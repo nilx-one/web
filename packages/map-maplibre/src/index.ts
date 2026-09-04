@@ -33,7 +33,10 @@ export interface MapLibreRendererOptions {
   readonly createMap?: MapFactory;
 }
 
-export function resolvePmtilesProtocolUrl(url: string, baseUrl: string): string {
+export function resolvePmtilesProtocolUrl(
+  url: string,
+  baseUrl: string,
+): string {
   if (!url.startsWith("pmtiles:///")) {
     return url;
   }
