@@ -22,9 +22,11 @@ export interface MapRenderer {
   setCamera(camera: MapCamera): void;
 }
 
+// Presentation bootstrap only: keep the initial camera inside the currently
+// published regional dataset until global basemap coverage is available.
 export const DEFAULT_MAP_CAMERA: MapCamera = {
-  center: [0, 0],
-  zoom: 1,
+  center: [30.5234, 50.4501],
+  zoom: 10,
   bearing: 0,
-  pitch: 0,
+  pitch: 32,
 };
