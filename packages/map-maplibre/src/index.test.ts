@@ -8,6 +8,7 @@ import {
   MAP_BOOTSTRAP_CAMERA,
   MAP_STYLE_URL,
   createMapLibreRenderer,
+  resolvePmtilesProtocolUrl,
 } from "./index";
 
 interface FakeMap {
@@ -33,6 +34,22 @@ function makeFakeMap(): FakeMap {
   };
   return fake;
 }
+
+describe("resolvePmtilesProtocolUrl", () => {
+  it("resolves the portable same-origin PMTiles URL to an absolute browser transport URL", () => {
+    expect(
+      resolvePmtilesProtocolUrl(
+        "pmtiles:///map/0.1.0/basemap.pmtiles",
+        "https://nilx.one/",
+      ),
+    ).toBe("pmtiles://https://nilx.one/map/0.1.0/basemap.pmtiles");
+  });
+
+  it("leaves already absolute PMTiles transport URLs unchanged", () => {
+    const url = "pmtiles://https://cdn.example/map.pmtiles";
+    expect(resolvePmtilesProtocolUrl(url, "https://nilx.one/")).toBe(url);
+  });
+});
 
 describe("createMapLibreRenderer", () => {
   it("boots the regional presentation camera without changing the shared map contract", () => {
