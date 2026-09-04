@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const authenticatedMapCss = readFileSync(
-  new URL(
-    "../../packages/product-app/src/features/map/authenticated-map-home-view.css",
-    import.meta.url,
+  resolve(
+    process.cwd(),
+    "packages/product-app/src/features/map/authenticated-map-home-view.css",
   ),
   "utf8",
 );
