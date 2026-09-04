@@ -9,6 +9,78 @@
   gap: 1rem;
 }
 
+.bond-dock {
+  transition:
+    width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 320ms ease;
+}
+
+.bond-dock__header,
+.bond-dock__pair,
+.bond-dock__detail {
+  transform-origin: 0 100%;
+}
+
+.bond-dock[data-screen="home"] .bond-dock__header,
+.bond-dock[data-screen="home"] .bond-dock__pair {
+  animation: bond-dock-to-home 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bond-dock:not([data-screen="home"]) .bond-dock__detail {
+  animation: bond-dock-to-detail 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bond-dock__detail > * {
+  animation: bond-dock-detail-content 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bond-dock__detail > :nth-child(2) {
+  animation-delay: 35ms;
+}
+
+@keyframes bond-dock-to-detail {
+  from {
+    opacity: 0;
+    transform: translate3d(-0.55rem, 0.65rem, 0) scale(0.985);
+    filter: blur(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes bond-dock-detail-content {
+  from {
+    opacity: 0;
+    transform: translateY(0.45rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bond-dock-to-home {
+  from {
+    opacity: 0;
+    transform: translate3d(0.45rem, -0.35rem, 0) scale(0.99);
+    filter: blur(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
 .bond-dock__header {
   margin-bottom: 1.1rem;
 }
@@ -424,6 +496,17 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .bond-profile__rows,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows > div {
   border-color: rgba(28, 33, 50, 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bond-dock,
+  .bond-dock__header,
+  .bond-dock__pair,
+  .bond-dock__detail,
+  .bond-dock__detail > * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 @media (max-width: 720px) {
