@@ -9,6 +9,14 @@ export {
   type WorldPosition,
 } from "./avaia-movement-controller";
 export {
+  createFailureNotice,
+  type FailureKind,
+  type FailureNotice,
+  type FailureNoticeAction,
+  type FailureNoticeTone,
+  type FailureReport,
+} from "./failure-notice";
+export {
   ReadRuntimeReadiness,
   type CoreRuntimePort,
   type CoreRuntimeStatus,

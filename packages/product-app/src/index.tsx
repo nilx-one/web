@@ -41,6 +41,7 @@ import { useEffect, useRef, useState } from "react";
 
 import "./product.css";
 import "./features/identity/identity-field-feedback.css";
+import { FailureNoticeProvider } from "./features/failures/failure-toast-region";
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
 import {
   createIdentityFoundationViewModel,
@@ -51,6 +52,12 @@ import {
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { MapFoundationView } from "./features/map/map-foundation-view";
+
+export {
+  usePublishFailure,
+  type PublishFailure,
+  type PublishFailureOptions,
+} from "./features/failures/failure-toast-region";
 
 export interface ProductAppDependencies {
   core: CoreRuntimePort;
@@ -563,7 +570,9 @@ export function ProductApp({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <FailureNoticeProvider>
+        <RouterProvider router={router} />
+      </FailureNoticeProvider>
     </QueryClientProvider>
   );
 }
