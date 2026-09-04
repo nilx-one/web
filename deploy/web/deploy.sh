@@ -12,6 +12,7 @@ cd "$(dirname "$0")"
 : "${COMPAT_EDGE_ALIAS:?COMPAT_EDGE_ALIAS is required}"
 : "${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}"
 : "${RELEASE_SHA:?RELEASE_SHA is required}"
+: "${MAP_BASEMAP_PATH:?MAP_BASEMAP_PATH is required}"
 
 EDGE_NETWORK="${EDGE_NETWORK:-nilx-edge}"
 
@@ -51,6 +52,19 @@ case "$CLIENT_ROOT" in
     ;;
 esac
 
+case "$MAP_BASEMAP_PATH" in
+  /*) ;;
+  *)
+    echo "MAP_BASEMAP_PATH must be absolute" >&2
+    exit 1
+    ;;
+esac
+
+test -s "$MAP_BASEMAP_PATH" || {
+  echo "Basemap is missing or empty: $MAP_BASEMAP_PATH" >&2
+  exit 1
+}
+
 if [ "$EDGE_NETWORK" != "nilx-edge" ]; then
   echo "EDGE_NETWORK must be nilx-edge" >&2
   exit 1
@@ -65,7 +79,7 @@ if ! docker network inspect "$EDGE_NETWORK" >/dev/null 2>&1; then
   docker network create "$EDGE_NETWORK" >/dev/null
 fi
 
-export CLIENT_NAME CLIENT_IMAGE CLIENT_ROOT EDGE_ALIAS COMPAT_EDGE_ALIAS COMPOSE_PROJECT_NAME RELEASE_SHA EDGE_NETWORK
+export CLIENT_NAME CLIENT_IMAGE CLIENT_ROOT EDGE_ALIAS COMPAT_EDGE_ALIAS COMPOSE_PROJECT_NAME RELEASE_SHA MAP_BASEMAP_PATH EDGE_NETWORK
 
 docker compose config --quiet
 docker compose up -d --wait --remove-orphans client
@@ -101,7 +115,9 @@ if [ "$COMPAT_EDGE_ALIAS" != "$EDGE_ALIAS" ]; then
 fi
 
 docker compose exec -T client test -f "$CLIENT_ROOT/index.html"
+docker compose exec -T client test -s /srv/map/0.1.0/basemap.pmtiles
 docker compose exec -T client wget -q -O - http://127.0.0.1:8080/health >/dev/null
 
 echo "0x1 $CLIENT_NAME $RELEASE_SHA is healthy"
 echo "Edge alias verified: $EDGE_ALIAS"
+echo "Basemap mounted: $MAP_BASEMAP_PATH"
