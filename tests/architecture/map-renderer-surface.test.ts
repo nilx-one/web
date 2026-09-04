@@ -16,7 +16,7 @@ const authenticatedMapCss = readFileSync(
 function cssRule(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = authenticatedMapCss.match(
-    new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\}`),
+    new RegExp(`(?:^|})\\s*${escapedSelector}\\s*\\{([\\s\\S]*?)\\}`),
   );
 
   expect(match, `${selector} rule is required`).not.toBeNull();
