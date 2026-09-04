@@ -1,0 +1,197 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+:root {
+  --bond-motion-fast: 160ms;
+  --bond-motion-medium: 280ms;
+  --bond-motion-surface: 340ms;
+  --bond-motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --bond-motion-enter-y: 10px;
+}
+
+.bond-dock {
+  transform-origin: left bottom;
+  transition:
+    width var(--bond-motion-surface) var(--bond-motion-ease),
+    max-height var(--bond-motion-surface) var(--bond-motion-ease),
+    padding var(--bond-motion-medium) var(--bond-motion-ease),
+    border-radius var(--bond-motion-medium) var(--bond-motion-ease),
+    box-shadow var(--bond-motion-medium) var(--bond-motion-ease);
+}
+
+.bond-dock__header,
+.bond-dock__pair {
+  animation: bond-dock-home-enter var(--bond-motion-surface)
+    var(--bond-motion-ease) both;
+}
+
+.bond-dock__pair {
+  animation-delay: 34ms;
+}
+
+.bond-dock__detail-header {
+  animation: bond-dock-detail-header-enter var(--bond-motion-medium)
+    var(--bond-motion-ease) both;
+}
+
+.bond-profile,
+.profile-edit,
+.host-connect-list,
+.provider-management,
+.interface-settings__appearance,
+.bond-dock__detail > .interface-settings__note {
+  animation: bond-dock-detail-content-enter var(--bond-motion-surface)
+    var(--bond-motion-ease) both;
+}
+
+.bond-profile__rows > div,
+.provider-management__connected > div,
+.host-connect-button,
+.interface-settings__option {
+  animation: bond-dock-row-enter var(--bond-motion-medium)
+    var(--bond-motion-ease) both;
+}
+
+.bond-profile__rows > div:nth-child(2),
+.provider-management__connected > div:nth-child(2),
+.host-connect-button:nth-child(2),
+.interface-settings__option:nth-of-type(2) {
+  animation-delay: 24ms;
+}
+
+.bond-profile__rows > div:nth-child(3),
+.provider-management__connected > div:nth-child(3),
+.host-connect-button:nth-child(3),
+.interface-settings__option:nth-of-type(3) {
+  animation-delay: 48ms;
+}
+
+.bond-profile__rows > div:nth-child(n + 4) {
+  animation-delay: 64ms;
+}
+
+.bond-dock__settings,
+.bond-dock__edit,
+.interface-settings__back,
+.provider-control,
+.bond-profile__action,
+.host-connect-button {
+  transition:
+    transform var(--bond-motion-fast) var(--bond-motion-ease),
+    border-color var(--bond-motion-fast) ease,
+    background-color var(--bond-motion-fast) ease,
+    color var(--bond-motion-fast) ease,
+    opacity var(--bond-motion-fast) ease,
+    box-shadow var(--bond-motion-fast) ease;
+}
+
+.bond-dock__settings:active,
+.bond-dock__edit:active,
+.interface-settings__back:active,
+.provider-control:active,
+.bond-profile__action:active,
+.host-connect-button:active {
+  transform: scale(0.965);
+}
+
+.bond-dock__bond--active .bond-dock__glyph,
+.bond-dock__bond--active strong,
+.bond-dock__bond--active small {
+  transition:
+    transform var(--bond-motion-fast) var(--bond-motion-ease),
+    color var(--bond-motion-fast) ease,
+    text-shadow var(--bond-motion-fast) ease,
+    box-shadow var(--bond-motion-fast) ease,
+    opacity var(--bond-motion-fast) ease;
+}
+
+.bond-dock__bond--active:hover .bond-dock__glyph,
+.bond-dock__bond--active:focus-visible .bond-dock__glyph {
+  transform: translateY(-2px) scale(1.015);
+}
+
+.bond-dock__bond--active:active .bond-dock__glyph {
+  transform: translateY(0) scale(0.985);
+}
+
+@keyframes bond-dock-home-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bond-dock-detail-header-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bond-dock-detail-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--bond-motion-enter-y)) scale(0.994);
+    filter: blur(3px);
+  }
+
+  55% {
+    filter: blur(0.5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes bond-dock-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --bond-motion-surface: 300ms;
+    --bond-motion-medium: 240ms;
+    --bond-motion-enter-y: 7px;
+  }
+
+  .bond-dock {
+    transition:
+      max-height var(--bond-motion-surface) var(--bond-motion-ease),
+      border-radius var(--bond-motion-medium) var(--bond-motion-ease),
+      box-shadow var(--bond-motion-medium) var(--bond-motion-ease);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bond-dock,
+  .bond-dock *,
+  .bond-dock *::before,
+  .bond-dock *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
