@@ -20,6 +20,10 @@ rm -rf "$runtime_build"
 (
   cd "$core_dir"
   cargo generate-lockfile
+  # Keep the pinned Core revision reproducible even when a newer compatible
+  # tinyvec release appears on crates.io. tinyvec 1.13.0 currently fails the
+  # wasm/no_std build used by this runtime boundary.
+  cargo update -p tinyvec --precise 1.12.0
   ./scripts/build_wasm_package.sh "$runtime_build"
 )
 

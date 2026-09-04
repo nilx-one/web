@@ -55,12 +55,6 @@ function systemAppearance(): ResolvedAppearance {
     : "dark";
 }
 
-function resolveAppearance(
-  preference: AppearancePreference,
-): ResolvedAppearance {
-  return preference === "auto" ? systemAppearance() : preference;
-}
-
 export function AuthenticatedMapHomeView({
   hostLabel,
   pubDress,
@@ -76,8 +70,9 @@ export function AuthenticatedMapHomeView({
   const [appearance, setAppearance] = useState<AppearancePreference>(
     readAppearancePreference,
   );
-  const [resolvedAppearance, setResolvedAppearance] =
-    useState<ResolvedAppearance>(() => resolveAppearance(readAppearancePreference()));
+  const [systemTheme, setSystemTheme] =
+    useState<ResolvedAppearance>(systemAppearance);
+  const resolvedAppearance = appearance === "auto" ? systemTheme : appearance;
   const contractVersion = runtimeContract(runtime);
 
   useEffect(() => {
@@ -90,22 +85,23 @@ export function AuthenticatedMapHomeView({
   }, [renderer]);
 
   useEffect(() => {
-    setResolvedAppearance(resolveAppearance(appearance));
     try {
       window.localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance);
     } catch {
       // Persistence is best-effort only.
     }
+  }, [appearance]);
 
-    if (appearance !== "auto" || window.matchMedia === undefined) {
+  useEffect(() => {
+    if (window.matchMedia === undefined) {
       return;
     }
 
     const media = window.matchMedia("(prefers-color-scheme: light)");
-    const update = () => setResolvedAppearance(media.matches ? "light" : "dark");
+    const update = () => setSystemTheme(media.matches ? "light" : "dark");
     media.addEventListener?.("change", update);
     return () => media.removeEventListener?.("change", update);
-  }, [appearance]);
+  }, []);
 
   function focusMapNearDevice(): void {
     if (focusState === "locating") {
@@ -220,7 +216,9 @@ export function AuthenticatedMapHomeView({
             {(["light", "dark", "auto"] as const).map((mode) => (
               <label key={mode} className="interface-settings__option">
                 <span>
-                  <strong>{mode[0].toUpperCase() + mode.slice(1)}</strong>
+                  <strong>
+                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                  </strong>
                   <small>
                     {mode === "auto"
                       ? "Follow this device"
