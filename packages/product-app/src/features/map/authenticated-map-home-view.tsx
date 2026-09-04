@@ -216,7 +216,9 @@ export function AuthenticatedMapHomeView({
             {(["light", "dark", "auto"] as const).map((mode) => (
               <label key={mode} className="interface-settings__option">
                 <span>
-                  <strong>{mode.charAt(0).toUpperCase() + mode.slice(1)}</strong>
+                  <strong>
+                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                  </strong>
                   <small>
                     {mode === "auto"
                       ? "Follow this device"
