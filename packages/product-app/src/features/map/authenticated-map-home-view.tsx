@@ -104,7 +104,8 @@ export function AuthenticatedMapHomeView({
     }
 
     const media = window.matchMedia("(prefers-color-scheme: light)");
-    const update = () => setResolvedAppearance(media.matches ? "light" : "dark");
+    const update = () =>
+      setResolvedAppearance(media.matches ? "light" : "dark");
     media.addEventListener?.("change", update);
     return () => media.removeEventListener?.("change", update);
   }, [appearance]);
