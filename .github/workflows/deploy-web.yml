@@ -154,7 +154,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           archive="/tmp/0x1-client-deploy-${RELEASE_SHA}.tar.gz"
-          tar -czf "$archive" -C deploy/web compose.yaml deploy.sh bootstrap-basemap.sh check-public.sh
+          tar -czf "$archive" -C deploy/web compose.yaml deploy.sh bootstrap-basemap.sh check-public.sh check-map-public.sh
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
             "$archive" "/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz" \
             "$SSH_USER@$SSH_HOST:/tmp/"
@@ -223,6 +223,12 @@ jobs:
             HEALTH_RETRY=18 \
             HEALTH_RETRY_DELAY=5 \
               sh ./check-public.sh
+            if [ "$CLIENT_NAME" = web ]; then
+              PUBLIC_ORIGIN='https://nilx.one' \
+              MAP_RETRY=18 \
+              MAP_RETRY_DELAY=5 \
+                sh ./check-map-public.sh
+            fi
           }
 
           rollback() {
