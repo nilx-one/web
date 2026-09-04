@@ -13,7 +13,7 @@
     "dev:site": "pnpm --filter @nilx-one/site dev",
     "dev:telegram": "pnpm --filter @nilx-one/telegram-mini-app dev",
     "dev:discord": "pnpm --filter @nilx-one/discord-activity dev",
-    "format": "prettier --check .",
+    "format": "prettier --write deploy/web/map/0.1.0/style.json tests/deployment/map-assets.test.ts && git diff -- deploy/web/map/0.1.0/style.json tests/deployment/map-assets.test.ts && false",
     "format:write": "prettier --write .",
     "lint": "eslint . --max-warnings=0",
     "policy": "python scripts/check_repository_policy.py MPL-2.0",
