@@ -72,8 +72,7 @@ export function AuthenticatedMapHomeView({
   );
   const [systemTheme, setSystemTheme] =
     useState<ResolvedAppearance>(systemAppearance);
-  const resolvedAppearance =
-    appearance === "auto" ? systemTheme : appearance;
+  const resolvedAppearance = appearance === "auto" ? systemTheme : appearance;
   const contractVersion = runtimeContract(runtime);
 
   useEffect(() => {
