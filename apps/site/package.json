@@ -8,8 +8,8 @@
     "dev": "vite"
   },
   "dependencies": {
+    "@aiaiaiai/4x-errors-browser": "0.1.0",
     "@nilx-one/core-wasm": "workspace:*",
-    "@nilx-one/failure-supabase": "workspace:*",
     "@nilx-one/host-browser": "workspace:*",
     "@nilx-one/identity-http": "workspace:*",
     "@nilx-one/map-maplibre": "workspace:*",

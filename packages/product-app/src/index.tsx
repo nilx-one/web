@@ -12,9 +12,7 @@ import {
   RegisterNativeIdentity,
   RegisterProviderIdentity,
   ResolvePubDress,
-  createFailureRecord,
   type CoreRuntimePort,
-  type FailureSinkPort,
   type IdentityAccessPort,
   type PubDressSelection,
 } from "@nilx-one/application";
@@ -44,7 +42,6 @@ import { useEffect, useRef, useState } from "react";
 import "./product.css";
 import "./features/identity/identity-field-feedback.css";
 import { FailureNoticeProvider } from "./features/failures/failure-toast-region";
-import { mapRendererFailureReport } from "./features/map/map-failure-report";
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
 import {
   createIdentityFoundationViewModel,
@@ -67,13 +64,6 @@ export interface ProductAppDependencies {
   host: HostPort;
   identity: IdentityAccessPort;
   mapRenderer: MapRenderer;
-  /**
-   * Where renderer failures are recorded. Optional: a host without a
-   * configured sink keeps working and simply keeps no durable record.
-   */
-  failureSink?: FailureSinkPort;
-  /** Release identifier stamped onto records, when the host knows one. */
-  release?: string;
 }
 
 export interface ProductAppProps extends ProductAppDependencies {
@@ -554,32 +544,8 @@ export function ProductApp({
   host,
   identity,
   mapRenderer,
-  failureSink,
-  release,
   routerBasepath = "/",
 }: ProductAppProps) {
-  // Recording lives in the composition root, not in a view: a renderer failure
-  // is worth a durable row whichever surface happens to be mounted, and a view
-  // that unmounted mid-failure would otherwise take the record with it.
-  useEffect(() => {
-    if (failureSink === undefined) return;
-
-    return mapRenderer.subscribe((status) => {
-      const report = mapRendererFailureReport(status);
-      if (report === undefined) return;
-
-      failureSink.record(
-        createFailureRecord({
-          report,
-          surface: "web-client",
-          component: "map-renderer",
-          recordedAtUnixMs: Date.now(),
-          ...(release === undefined ? {} : { release }),
-        }),
-      );
-    });
-  }, [mapRenderer, failureSink, release]);
-
   const [queryClient] = useState(
     () =>
       new QueryClient({

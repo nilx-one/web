@@ -13,7 +13,6 @@ const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   application: [],
   "core-wasm": ["@nilx-one/application"],
   graphics: [],
-  "failure-supabase": ["@nilx-one/application"],
   "identity-http": ["@nilx-one/application"],
   "host-browser": ["@nilx-one/host-contract"],
   "host-contract": [],
