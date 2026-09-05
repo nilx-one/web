@@ -46,6 +46,10 @@ case "$url" in
     printf '%s\n' '{"sources":{"basemap":{"url":"pmtiles:///map/0.1.0/basemap.pmtiles"}}}' >"$output_file"
     printf '%s' "${MOCK_STYLE_STATUS:-200}"
     ;;
+  https://nilx.one/map/0.1.0/style-dark.json)
+    printf '%s\n' '{"sources":{"basemap":{"url":"pmtiles:///map/0.1.0/basemap.pmtiles"}}}' >"$output_file"
+    printf '%s' "${MOCK_DARK_STYLE_STATUS:-200}"
+    ;;
   https://nilx.one/map/0.1.0/basemap.pmtiles)
     if [ "$range_request" = true ]; then
       printf 'PMTilesfixture' >"$output_file"
@@ -87,3 +91,13 @@ if PATH="$mock_bin:$PATH" \
 fi
 
 grep -Fq 'map style public smoke failed' "$failure_log"
+
+if PATH="$mock_bin:$PATH" \
+  MOCK_DARK_STYLE_STATUS=404 \
+  MAP_RETRY=1 \
+  sh "$(dirname "$0")/check-map-public.sh" >"$failure_log" 2>&1; then
+  echo "map public smoke unexpectedly accepted a missing dark appearance style" >&2
+  exit 1
+fi
+
+grep -Fq 'style-dark.json' "$failure_log"

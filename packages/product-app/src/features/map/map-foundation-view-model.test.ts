@@ -19,6 +19,19 @@ describe("createMapFoundationViewModel", () => {
     });
   });
 
+  it("separates an unreadable basemap archive from an unpublished style", () => {
+    expect(
+      createMapFoundationViewModel({
+        kind: "unavailable",
+        reason: "basemap-load-failed",
+      }),
+    ).toEqual({
+      tone: "negative",
+      label: "Map unavailable",
+      detail: "The versioned self-hosted basemap archive could not be read.",
+    });
+  });
+
   it("projects ready renderer state", () => {
     expect(createMapFoundationViewModel({ kind: "ready" })).toMatchObject({
       tone: "positive",

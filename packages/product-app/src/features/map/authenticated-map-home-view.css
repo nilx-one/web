@@ -9,6 +9,10 @@
   --map-accent-primary: #8a63ff;
   --map-accent-primary-soft: #d6c9ff;
   --map-accent-counterpart: #ff735f;
+  /* Spatial accent. Cyan marks activity, focus and living system state; it is
+     never a global fill. */
+  --map-accent-spatial: #37d7e5;
+  --map-substrate: #070c0e;
   --map-night: #03050a;
   --map-night-raised: rgba(7, 12, 24, 0.72);
   --map-night-border: rgba(178, 195, 255, 0.24);
@@ -35,36 +39,45 @@
   inset: 0;
 }
 
+/* The published map style owns the substrate. This background is only visible
+   before the renderer's first paint, so it stays a flat matte surface. */
 .authenticated-map-home__map {
-  background:
-    radial-gradient(
-      circle at 68% 45%,
-      rgba(50, 34, 112, 0.22),
-      transparent 34%
-    ),
-    #080b14;
+  background: var(--map-substrate);
 }
 
 .authenticated-map-home__shade {
   pointer-events: none;
+  transition: box-shadow 420ms ease;
   background:
     radial-gradient(
-      circle at 55% 34%,
-      rgba(112, 77, 255, 0.09),
-      transparent 26%
-    ),
-    radial-gradient(
-      circle at 76% 61%,
-      rgba(255, 105, 85, 0.07),
-      transparent 23%
+      circle at 62% 42%,
+      rgba(55, 215, 229, 0.06),
+      transparent 30%
     ),
     linear-gradient(
       90deg,
-      rgba(2, 4, 10, 0.62) 0%,
-      rgba(2, 4, 10, 0.24) 52%,
-      rgba(2, 4, 10, 0.4) 100%
+      rgba(3, 7, 9, 0.6) 0%,
+      rgba(3, 7, 9, 0.2) 52%,
+      rgba(3, 7, 9, 0.38) 100%
     ),
-    linear-gradient(180deg, rgba(1, 3, 8, 0.2), rgba(1, 3, 8, 0.58));
+    linear-gradient(180deg, rgba(3, 7, 9, 0.2), rgba(3, 7, 9, 0.56));
+}
+
+/* Focus is map state, not Bond truth: the camera moved, nothing was asserted. */
+.authenticated-map-home[data-focus-state="focused"]
+  .authenticated-map-home__shade {
+  box-shadow:
+    inset 0 0 0 1px rgba(55, 215, 229, 0.26),
+    inset 0 0 9rem rgba(55, 215, 229, 0.06);
+}
+
+.authenticated-map-home[data-focus-state="focused"]
+  .bond-dock__bond--active
+  .bond-dock__glyph {
+  color: var(--map-accent-spatial);
+  box-shadow:
+    inset 0 0 1.25rem rgba(55, 215, 229, 0.1),
+    0 0 1.1rem rgba(55, 215, 229, 0.18);
 }
 
 .authenticated-map-home__topbar {
@@ -535,16 +548,18 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .bond-dock__bond--active[data-focus-state="locating"] .bond-dock__glyph {
+  .authenticated-map-home[data-focus-state="locating"]
+    .bond-dock__bond--active
+    .bond-dock__glyph {
     animation: authenticated-bond-locate 1s ease-in-out infinite alternate;
   }
 }
 
 @keyframes authenticated-bond-locate {
   from {
-    box-shadow: 0 0 0 rgba(138, 99, 255, 0);
+    box-shadow: 0 0 0 rgba(55, 215, 229, 0);
   }
   to {
-    box-shadow: 0 0 1.8rem rgba(138, 99, 255, 0.42);
+    box-shadow: 0 0 1.8rem rgba(55, 215, 229, 0.45);
   }
 }

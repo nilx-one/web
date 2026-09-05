@@ -33,10 +33,12 @@ esac
 
 public_origin="${public_origin%/}"
 style_url="$public_origin/map/$map_version/style.json"
+dark_style_url="$public_origin/map/$map_version/style-dark.json"
 basemap_url="$public_origin/map/$map_version/basemap.pmtiles"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 style_file="$work_dir/style.json"
+dark_style_file="$work_dir/style-dark.json"
 range_file="$work_dir/basemap.range"
 
 attempt=1
@@ -64,6 +66,21 @@ while [ "$attempt" -le "$retry" ]; do
   attempt=$((attempt + 1))
 done
 
+dark_style_status="$(
+  curl --silent --show-error \
+    --connect-timeout 5 \
+    --max-time 15 \
+    --output "$dark_style_file" \
+    --write-out '%{http_code}' \
+    "$dark_style_url" || true
+)"
+
+if [ "$dark_style_status" != 200 ] \
+  || ! grep -Fq "pmtiles:///map/$map_version/basemap.pmtiles" "$dark_style_file"; then
+  echo "map style public smoke failed: expected versioned PMTiles source from $dark_style_url, got ${dark_style_status:-request-failed}" >&2
+  exit 1
+fi
+
 range_status="$(
   curl --silent --show-error \
     --connect-timeout 5 \
@@ -89,4 +106,4 @@ printf 'PMTiles' | cmp -n 7 - "$range_file" >/dev/null 2>&1 || {
   exit 1
 }
 
-echo "map public boundary healthy: style 200, PMTiles Range 206"
+echo "map public boundary healthy: light style 200, dark style 200, PMTiles Range 206"

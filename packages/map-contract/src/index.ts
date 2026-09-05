@@ -8,6 +8,10 @@ export interface MapCamera {
   readonly pitch: number;
 }
 
+// Presentation appearance only. Appearance selects a published map style
+// variant; it never carries Bond, Relationship, or shared world meaning.
+export type MapAppearance = "light" | "dark";
+
 export type MapRendererStatus =
   | { readonly kind: "unmounted" }
   | { readonly kind: "loading" }
@@ -20,6 +24,7 @@ export interface MapRenderer {
   getStatus(): MapRendererStatus;
   subscribe(listener: (status: MapRendererStatus) => void): () => void;
   setCamera(camera: MapCamera): void;
+  setAppearance(appearance: MapAppearance): void;
 }
 
 export const DEFAULT_MAP_CAMERA: MapCamera = {
@@ -28,3 +33,5 @@ export const DEFAULT_MAP_CAMERA: MapCamera = {
   bearing: 0,
   pitch: 0,
 };
+
+export const DEFAULT_MAP_APPEARANCE: MapAppearance = "light";

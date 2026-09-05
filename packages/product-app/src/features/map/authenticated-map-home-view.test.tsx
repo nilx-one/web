@@ -19,6 +19,7 @@ function renderer(): MapRenderer {
     getStatus: vi.fn(() => readyStatus),
     subscribe: vi.fn(() => () => undefined),
     setCamera: vi.fn(),
+    setAppearance: vi.fn(),
   };
 }
 
@@ -105,6 +106,33 @@ describe("AuthenticatedMapHomeView", () => {
     expect(window.localStorage.getItem("nilx-one.interface.appearance")).toBe(
       "light",
     );
+  });
+
+  it("resolves the appearance before the renderer paints its first style", () => {
+    const mapRenderer = renderer();
+
+    renderView({ mapRenderer });
+
+    expect(mapRenderer.setAppearance).toHaveBeenCalledWith("dark");
+
+    const [appearanceCall] = vi.mocked(mapRenderer.setAppearance).mock
+      .invocationCallOrder;
+    const [mountCall] = vi.mocked(mapRenderer.mount).mock.invocationCallOrder;
+    expect(appearanceCall).toBeDefined();
+    expect(mountCall).toBeDefined();
+    expect(appearanceCall ?? 0).toBeLessThan(mountCall ?? 0);
+  });
+
+  it("forwards an appearance change as renderer presentation state", () => {
+    const mapRenderer = renderer();
+
+    renderView({ mapRenderer });
+    fireEvent.click(screen.getByRole("button", { name: "Open map settings" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
+
+    expect(mapRenderer.setAppearance).toHaveBeenLastCalledWith("light");
+    expect(mapRenderer.mount).toHaveBeenCalledOnce();
+    expect(mapRenderer.unmount).not.toHaveBeenCalled();
   });
 
   it("opens the Bond profile without rendering a phone field", () => {
