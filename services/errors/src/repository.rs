@@ -50,11 +50,12 @@ impl ErrorTrashRepository {
     pub async fn connect(database_url: &str) -> Result<Self, RepositoryError> {
         sqlx::any::install_default_drivers();
         let backend = StorageBackend::from_database_url(database_url)?;
-        let max_connections = if backend == StorageBackend::Sqlite && database_url.contains(":memory:") {
-            1
-        } else {
-            5
-        };
+        let max_connections =
+            if backend == StorageBackend::Sqlite && database_url.contains(":memory:") {
+                1
+            } else {
+                5
+            };
         let pool = AnyPoolOptions::new()
             .max_connections(max_connections)
             .connect(database_url)
