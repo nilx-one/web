@@ -168,6 +168,12 @@ describe("map deployment assets", () => {
       );
       expect(style.metadata?.["nilx-one:coverage"]).toBe("kyiv-bootstrap");
       expect(style.metadata?.["nilx-one:appearance"]).toBe(appearance);
+      // The visual language and its direction describe the system, so they
+      // read the same in every appearance; only the palette differs.
+      expect(style.metadata?.["nilx-one:visual-language"]).toBe("0x1-spatial");
+      expect(style.metadata?.["nilx-one:visual-direction"]).toBe(
+        "0x1 spatial map with restrained cyan accents",
+      );
       expect(style.sources.basemap).toEqual({
         type: "vector",
         url: "pmtiles:///map/0.1.0/basemap.pmtiles",
@@ -274,12 +280,6 @@ describe("map deployment assets", () => {
     const style = readStyle("light");
 
     expect(style.metadata?.["nilx-one:visual-language"]).toBe("0x1-spatial");
-    expect(style.metadata?.["nilx-one:visual-direction"]).toBe(
-      "near-white spatial map with restrained cyan accents",
-    );
-    expect(readStyle("dark").metadata?.["nilx-one:visual-direction"]).toBe(
-      "near-black spatial map with restrained cyan accents",
-    );
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#f7f9fa");
     expect(style.metadata?.["nilx-one:surface-land"]).toBe("#f3f6f7");
     expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#edf4f1");
