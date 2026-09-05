@@ -48,7 +48,7 @@ jobs:
           error_trash_contract="$(tr -d '[:space:]' < services/errors/deploy/contract.version)"
           [[ "$error_trash_contract" =~ ^[0-9]+$ ]]
       - name: Build runtime image
-        run: docker build --file services/errors/Dockerfile --tag 0x1-error-trash:ci .
+        run: docker build --file services/errors/Dockerfile --tag aiaiaiai-errors:ci .
       - name: Validate runtime Compose contract
         run: |
           set -Eeuo pipefail
@@ -56,21 +56,30 @@ jobs:
           trap 'rm -f "$env_file"' EXIT
           printf '%s\n' 'ERROR_TRASH_INGEST_TOKENS=nilx-one/web:ci-only-ingest-token-that-is-long-enough' >"$env_file"
           error_trash_contract="$(tr -d '[:space:]' < services/errors/deploy/contract.version)"
-          ERROR_TRASH_IMAGE=0x1-error-trash:ci \
+          ERROR_TRASH_IMAGE=aiaiaiai-errors:ci \
           ERROR_TRASH_ENV_FILE="$env_file" \
+          ERROR_TRASH_DATABASE_URL='postgresql://postgres:postgres@database:5432/postgres' \
           ERROR_TRASH_CONTRACT="$error_trash_contract" \
           RELEASE_SHA="${GITHUB_SHA}" \
             docker compose --file services/errors/deploy/compose.yaml config --quiet
-      - name: Verify ingest and read boundaries on the built image
+      - name: Verify ingest and read boundaries on PostgreSQL
         run: |
           set -Eeuo pipefail
+          docker network create error-trash-ci >/dev/null
+          docker run --detach --name error-trash-postgres \
+            --network error-trash-ci \
+            --env POSTGRES_PASSWORD=postgres \
+            --env POSTGRES_DB=error_trash \
+            postgres:17-bookworm >/dev/null
           docker run --detach --name error-trash-ci \
+            --network error-trash-ci \
             --publish 127.0.0.1:8099:8080 \
+            --env DATABASE_URL='postgresql://postgres:postgres@error-trash-postgres:5432/error_trash' \
             --env ERROR_TRASH_INGEST_TOKENS='nilx-one/web:ci-only-ingest-token-that-is-long-enough' \
             --env ERROR_TRASH_READ_TOKEN='ci-only-read-token-that-is-long-enough-too' \
-            0x1-error-trash:ci
-          trap 'docker rm --force error-trash-ci >/dev/null 2>&1 || true' EXIT
-          for _ in $(seq 1 30); do
+            aiaiaiai-errors:ci >/dev/null
+          trap 'docker rm --force error-trash-ci error-trash-postgres >/dev/null 2>&1 || true; docker network rm error-trash-ci >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:8099/health >/dev/null; then break; fi
             sleep 1
           done
