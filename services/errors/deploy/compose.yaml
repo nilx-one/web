@@ -1,7 +1,7 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: nilx-one-error-trash
+name: aiaiaiai-errors
 
 services:
   error-trash:
@@ -11,23 +11,20 @@ services:
     env_file:
       - ${ERROR_TRASH_ENV_FILE:?ERROR_TRASH_ENV_FILE is required}
     environment:
-      DATABASE_URL: sqlite:///data/error-trash.db
+      DATABASE_URL: ${ERROR_TRASH_DATABASE_URL:?ERROR_TRASH_DATABASE_URL is required}
       HTTP_BIND: 0.0.0.0:8080
       ERROR_TRASH_RETENTION_DAYS: ${ERROR_TRASH_RETENTION_DAYS:-90}
       ERROR_TRASH_MAX_ROWS: ${ERROR_TRASH_MAX_ROWS:-1000000}
     labels:
-      one.nilx.product: 0x1
-      one.nilx.service: error-trash
-      one.nilx.error-trash.contract: ${ERROR_TRASH_CONTRACT:?ERROR_TRASH_CONTRACT is required}
+      org.aiaiaiai.service: errors
+      org.aiaiaiai.error-trash.contract: ${ERROR_TRASH_CONTRACT:?ERROR_TRASH_CONTRACT is required}
       org.opencontainers.image.revision: ${RELEASE_SHA:?RELEASE_SHA is required}
     expose:
       - "8080"
-    volumes:
-      - error-trash-data:/data
     networks:
       edge:
         aliases:
-          - ox1-error-trash
+          - aiaiaiai-errors
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 20s
@@ -48,9 +45,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-volumes:
-  error-trash-data:
 
 networks:
   edge:
