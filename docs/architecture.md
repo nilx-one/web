@@ -51,6 +51,13 @@ flowchart TD
 
 The arrow into WebAssembly is an adapter boundary. Until a versioned Core artifact exists, the adapter returns an explicit unavailable projection. The UI must not replace the missing behavior with TypeScript rules or sample relationship truth.
 
+The error trash (`services/errors`) is a cross-project sink, not a product
+boundary. It accepts what a reporter states about a failure and stores it
+verbatim under the project its ingest token names. It must not classify,
+deduplicate, or infer failure meaning, and no product or protocol behavior may
+read from it: a client that changed its own semantics from dumped error text
+would make the trash an authority it is not.
+
 The server-side identity service is also an adapter boundary. It may verify Telegram evidence and persist a provider binding, but it may not redefine canonical `pub_dress` validation or infer protocol identity facts beyond the contract it consumes from Core.
 
 ## Host boundary

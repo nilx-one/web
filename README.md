@@ -38,6 +38,9 @@ Both applications render the same `product-app` package. Host-specific code stay
 - `services/identity` — native credentials, recovery, sessions, and isolated
   provider adapters. Native passwords are normalized and stored only as
   Argon2id verifiers; Telegram and Discord remain optional future bindings.
+- `services/errors` — the shared error trash: one token-scoped table
+  (`project`, `type`, `full_text`, `observed_at`, `received_at`) that this
+  repository and other 0x1 and aiaiaiai projects dump their failures into.
 
 The browser and Mini App never receive the Telegram bot token.
 

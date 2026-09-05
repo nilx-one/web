@@ -1,0 +1,89 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Error Trash Service CI
+
+on:
+  pull_request:
+    paths:
+      - "services/errors/**"
+      - ".github/workflows/error-trash-service.yml"
+  push:
+    branches:
+      - master
+    paths:
+      - "services/errors/**"
+      - ".github/workflows/error-trash-service.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  full-ci:
+    name: Format, lint, and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - name: Resolve locked dependencies
+        run: cargo generate-lockfile --manifest-path services/errors/Cargo.toml
+      - name: Check formatting
+        run: cargo fmt --manifest-path services/errors/Cargo.toml --all -- --check
+      - name: Run Clippy
+        run: cargo clippy --manifest-path services/errors/Cargo.toml --locked --all-targets --all-features -- -D warnings
+      - name: Run tests
+        run: cargo test --manifest-path services/errors/Cargo.toml --locked --all-features
+
+  deploy-validation:
+    name: Validate error trash runtime package
+    needs: full-ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate contract version
+        run: |
+          set -Eeuo pipefail
+          error_trash_contract="$(tr -d '[:space:]' < services/errors/deploy/contract.version)"
+          [[ "$error_trash_contract" =~ ^[0-9]+$ ]]
+      - name: Build runtime image
+        run: docker build --file services/errors/Dockerfile --tag 0x1-error-trash:ci .
+      - name: Validate runtime Compose contract
+        run: |
+          set -Eeuo pipefail
+          env_file="$(mktemp)"
+          trap 'rm -f "$env_file"' EXIT
+          printf '%s\n' 'ERROR_TRASH_INGEST_TOKENS=nilx-one/web:ci-only-ingest-token-that-is-long-enough' >"$env_file"
+          error_trash_contract="$(tr -d '[:space:]' < services/errors/deploy/contract.version)"
+          ERROR_TRASH_IMAGE=0x1-error-trash:ci \
+          ERROR_TRASH_ENV_FILE="$env_file" \
+          ERROR_TRASH_CONTRACT="$error_trash_contract" \
+          RELEASE_SHA="${GITHUB_SHA}" \
+            docker compose --file services/errors/deploy/compose.yaml config --quiet
+      - name: Verify ingest and read boundaries on the built image
+        run: |
+          set -Eeuo pipefail
+          docker run --detach --name error-trash-ci \
+            --publish 127.0.0.1:8099:8080 \
+            --env ERROR_TRASH_INGEST_TOKENS='nilx-one/web:ci-only-ingest-token-that-is-long-enough' \
+            --env ERROR_TRASH_READ_TOKEN='ci-only-read-token-that-is-long-enough-too' \
+            0x1-error-trash:ci
+          trap 'docker rm --force error-trash-ci >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8099/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8099/health >/dev/null
+          [ "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --request POST http://127.0.0.1:8099/api/v1/errors \
+            --header 'content-type: application/json' \
+            --data '{"type":"ci","full_text":"unauthenticated dump"}')" = 401 ]
+          [ "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --request POST http://127.0.0.1:8099/api/v1/errors \
+            --header 'authorization: Bearer ci-only-ingest-token-that-is-long-enough' \
+            --header 'content-type: application/json' \
+            --data '{"type":"ci","full_text":"packaged runtime dump"}')" = 201 ]
+          curl --fail --silent http://127.0.0.1:8099/api/v1/errors \
+            --header 'authorization: Bearer ci-only-read-token-that-is-long-enough-too' \
+            | grep -Fq 'packaged runtime dump'

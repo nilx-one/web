@@ -1,0 +1,57 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Package Error Trash Service
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "services/errors/**"
+      - ".github/workflows/package-error-trash-service.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: package-error-trash-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/nilx-one/0x1-error-trash
+
+jobs:
+  package:
+    name: Package immutable image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: contract
+        name: Resolve error trash contract version
+        run: |
+          set -Eeuo pipefail
+          value="$(tr -d '[:space:]' < services/errors/deploy/contract.version)"
+          [[ "$value" =~ ^[0-9]+$ ]]
+          echo "value=$value" >>"$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish immutable runtime
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/errors/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            one.nilx.error-trash.contract=${{ steps.contract.outputs.value }}
+          provenance: true
+          sbom: true
