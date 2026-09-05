@@ -44,6 +44,20 @@ describe("createSupabaseFailureSink", () => {
     expect(JSON.parse(init.body)).toEqual(record);
   });
 
+  it("builds one endpoint however many trailing slashes the URL carries", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 201 }));
+
+    createSupabaseFailureSink({
+      url: "https://project.supabase.co//////",
+      apiKey: "anon-key",
+      fetch: fetchImpl as never,
+    }).record(record);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string];
+    expect(url).toBe("https://project.supabase.co/rest/v1/failure_records");
+  });
+
   it("survives a page the failure is about to take down", async () => {
     const fetchImpl = vi.fn(async () => ({ ok: true, status: 201 }));
 

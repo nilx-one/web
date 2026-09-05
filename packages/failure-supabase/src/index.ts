@@ -37,11 +37,22 @@ export interface SupabaseFailureSinkOptions {
  * would turn one failure into two, and the surface calling it is already
  * handling something that went wrong.
  */
+// Scanned from the end rather than matched with an anchored `/+$`, which
+// backtracks on a long run of slashes. The project URL is configuration, not
+// hostile input, but a library has no way to know that about its own argument.
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charAt(end - 1) === "/") {
+    end -= 1;
+  }
+  return url.slice(0, end);
+}
+
 export function createSupabaseFailureSink(
   options: SupabaseFailureSinkOptions,
 ): FailureSinkPort {
   const table = options.table ?? DEFAULT_FAILURE_TABLE;
-  const endpoint = `${options.url.replace(/\/+$/, "")}/rest/v1/${table}`;
+  const endpoint = `${withoutTrailingSlashes(options.url)}/rest/v1/${table}`;
   const send: FetchLike =
     options.fetch ?? ((input, init) => globalThis.fetch(input, init));
 
