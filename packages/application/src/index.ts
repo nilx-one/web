@@ -17,6 +17,14 @@ export {
   type FailureReport,
 } from "./failure-notice";
 export {
+  createFailureRecord,
+  FAILURE_RECORD_CONTRACT_VERSION,
+  type FailureRecord,
+  type FailureRecordInput,
+  type FailureSinkPort,
+  type FailureSurface,
+} from "./failure-record";
+export {
   ReadRuntimeReadiness,
   type CoreRuntimePort,
   type CoreRuntimeStatus,
