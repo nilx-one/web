@@ -1,12 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-use std::str::FromStr;
-
-use sqlx::{
-    Row, SqlitePool,
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
-};
+use sqlx::{AnyPool, Row, any::AnyPoolOptions, any::AnyRow};
 use thiserror::Error;
 
 use crate::{report::ErrorReport, time::Timestamp};
@@ -14,40 +9,67 @@ use crate::{report::ErrorReport, time::Timestamp};
 pub const MAX_PAGE_SIZE: u32 = 500;
 pub const DEFAULT_PAGE_SIZE: u32 = 50;
 
+const SQLITE_SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS errors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    full_text TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    CHECK (length(project) BETWEEN 1 AND 64),
+    CHECK (length("type") BETWEEN 1 AND 128),
+    CHECK (length(full_text) BETWEEN 1 AND 32768),
+    CHECK (length(observed_at) = 20),
+    CHECK (length(received_at) = 20)
+) STRICT;
+CREATE INDEX IF NOT EXISTS errors_by_observed_at ON errors (observed_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS errors_by_project_observed_at ON errors (project, observed_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS errors_by_type_observed_at ON errors ("type", observed_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS errors_by_received_at ON errors (received_at);
+"#;
+
 /// Append-only storage for dumped errors.
 ///
-/// Every project writes into one table so that a single query answers "what
-/// broke, where, and when" across `nilx-one`, `aiaiaiai-tech`, and any other
-/// project holding an ingest token.
+/// The service owns only a SQL storage contract. Production may point
+/// `DATABASE_URL` at Supabase or any compatible PostgreSQL deployment; product
+/// identities and child organizations never become database authority.
 #[derive(Clone, Debug)]
 pub struct ErrorTrashRepository {
-    pool: SqlitePool,
+    pool: AnyPool,
+    backend: StorageBackend,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StorageBackend {
+    Postgres,
+    Sqlite,
 }
 
 impl ErrorTrashRepository {
     pub async fn connect(database_url: &str) -> Result<Self, RepositoryError> {
-        let max_connections = if database_url.contains(":memory:") {
+        sqlx::any::install_default_drivers();
+        let backend = StorageBackend::from_database_url(database_url)?;
+        let max_connections = if backend == StorageBackend::Sqlite && database_url.contains(":memory:") {
             1
         } else {
             5
         };
-        let options = SqliteConnectOptions::from_str(database_url)?
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal);
-        let pool = SqlitePoolOptions::new()
+        let pool = AnyPoolOptions::new()
             .max_connections(max_connections)
-            .connect_with(options)
+            .connect(database_url)
             .await?;
-        let repository = Self { pool };
+        let repository = Self { pool, backend };
         repository.initialize().await?;
         Ok(repository)
     }
 
     async fn initialize(&self) -> Result<(), RepositoryError> {
-        sqlx::raw_sql(include_str!("../migrations/0001_error_trash.sql"))
-            .execute(&self.pool)
-            .await?;
+        let schema = match self.backend {
+            StorageBackend::Postgres => include_str!("../migrations/0001_error_trash.sql"),
+            StorageBackend::Sqlite => SQLITE_SCHEMA,
+        };
+        sqlx::raw_sql(schema).execute(&self.pool).await?;
         Ok(())
     }
 
@@ -60,7 +82,7 @@ impl ErrorTrashRepository {
         for report in reports {
             let identifier = sqlx::query_scalar::<_, i64>(
                 "INSERT INTO errors (project, \"type\", full_text, observed_at, received_at) \
-                 VALUES (?, ?, ?, ?, ?) RETURNING id",
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id",
             )
             .bind(report.project())
             .bind(report.error_type())
@@ -82,12 +104,12 @@ impl ErrorTrashRepository {
         let rows = sqlx::query(
             "SELECT id, project, \"type\", full_text, observed_at, received_at \
              FROM errors \
-             WHERE (?1 IS NULL OR project = ?1) \
-               AND (?2 IS NULL OR \"type\" = ?2) \
-               AND (?3 IS NULL OR observed_at >= ?3) \
-               AND (?4 IS NULL OR observed_at <= ?4) \
+             WHERE ($1 IS NULL OR project = $1) \
+               AND ($2 IS NULL OR \"type\" = $2) \
+               AND ($3 IS NULL OR observed_at >= $3) \
+               AND ($4 IS NULL OR observed_at <= $4) \
              ORDER BY observed_at DESC, id DESC \
-             LIMIT ?5",
+             LIMIT $5",
         )
         .bind(query.project.as_deref())
         .bind(query.error_type.as_deref())
@@ -113,7 +135,7 @@ impl ErrorTrashRepository {
         let mut removed = 0;
 
         if let Some(cutoff) = policy.cutoff(now) {
-            removed += sqlx::query("DELETE FROM errors WHERE received_at < ?")
+            removed += sqlx::query("DELETE FROM errors WHERE received_at < $1")
                 .bind(cutoff.as_str())
                 .execute(&self.pool)
                 .await?
@@ -121,12 +143,14 @@ impl ErrorTrashRepository {
         }
 
         if let Some(max_rows) = policy.max_rows {
-            removed +=
-                sqlx::query("DELETE FROM errors WHERE id <= (SELECT MAX(id) FROM errors) - ?")
-                    .bind(i64::try_from(max_rows).unwrap_or(i64::MAX))
-                    .execute(&self.pool)
-                    .await?
-                    .rows_affected();
+            let max_rows = i64::try_from(max_rows).unwrap_or(i64::MAX);
+            removed += sqlx::query(
+                "DELETE FROM errors WHERE id <= (SELECT COALESCE(MAX(id), 0) FROM errors) - $1",
+            )
+            .bind(max_rows)
+            .execute(&self.pool)
+            .await?
+            .rows_affected();
         }
 
         Ok(removed)
@@ -136,6 +160,18 @@ impl ErrorTrashRepository {
         Ok(sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM errors")
             .fetch_one(&self.pool)
             .await?)
+    }
+}
+
+impl StorageBackend {
+    fn from_database_url(database_url: &str) -> Result<Self, RepositoryError> {
+        if database_url.starts_with("postgres://") || database_url.starts_with("postgresql://") {
+            return Ok(Self::Postgres);
+        }
+        if database_url.starts_with("sqlite:") {
+            return Ok(Self::Sqlite);
+        }
+        Err(RepositoryError::UnsupportedDatabaseUrl)
     }
 }
 
@@ -213,7 +249,7 @@ fn days_from_civil(year: u64, month: u64, day: u64) -> Option<u64> {
     (era * 146_097 + day_of_era).checked_sub(719_468)
 }
 
-fn stored_error_from_row(row: sqlx::sqlite::SqliteRow) -> StoredError {
+fn stored_error_from_row(row: AnyRow) -> StoredError {
     StoredError {
         id: row.get("id"),
         project: row.get("project"),
@@ -226,6 +262,8 @@ fn stored_error_from_row(row: sqlx::sqlite::SqliteRow) -> StoredError {
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
+    #[error("DATABASE_URL must use PostgreSQL or SQLite")]
+    UnsupportedDatabaseUrl,
     #[error("error trash storage failed: {0}")]
     Storage(#[from] sqlx::Error),
 }
@@ -270,7 +308,7 @@ mod tests {
         repository
             .record(&[
                 report("nilx-one/web", "panic", NOW - 60),
-                report("aiaiaiai-tech/core", "http_500", NOW - 30),
+                report("aiaiaiai/core", "http_500", NOW - 30),
                 report("nilx-one/web", "http_500", NOW),
             ])
             .await
@@ -293,7 +331,7 @@ mod tests {
         repository
             .record(&[
                 report("nilx-one/web", "panic", NOW - 600),
-                report("aiaiaiai-tech/core", "panic", NOW),
+                report("aiaiaiai/core", "panic", NOW),
                 report("nilx-one/web", "http_500", NOW),
             ])
             .await
