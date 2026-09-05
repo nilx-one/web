@@ -113,6 +113,9 @@ importers:
 
   apps/site:
     dependencies:
+      '@aiaiaiai/4x-errors-browser':
+        specifier: 0.1.0
+        version: 0.1.0
       '@nilx-one/core-wasm':
         specifier: workspace:*
         version: link:../../packages/core-wasm
@@ -261,6 +264,10 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
+
+  '@aiaiaiai/4x-errors-browser@0.1.0':
+    resolution: {integrity: sha512-enyPr7OK468H29rLb2VogIm8bSl4my4pU+vjZ/et4qbUD2JNHnPtm9Os5kqbtILjSXRNlFB4M0V+ZmE+m3GfRg==}
+    engines: {node: '>=24'}
 
   '@asamuzakjp/css-color@6.0.7':
     resolution: {integrity: sha512-vC/bk1Lz7Tn/EfU9/apOTBk80/8dyGyWMowPoV1tJ52muDGsDqt2HPT2klrFUiY60MQmQv9q8yIht15JnBgDGw==}
@@ -1683,6 +1690,8 @@ packages:
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
+
+  '@aiaiaiai/4x-errors-browser@0.1.0': {}
 
   '@asamuzakjp/css-color@6.0.7':
     dependencies:

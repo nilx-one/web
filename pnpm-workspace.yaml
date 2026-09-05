@@ -4,3 +4,5 @@
 packages:
   - apps/*
   - packages/*
+minimumReleaseAgeExclude:
+  - "@aiaiaiai/4x-errors-browser@0.1.0"

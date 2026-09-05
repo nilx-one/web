@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { createBrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import {
   createCoreWasmClient,
   loadGeneratedCoreWasmBindings,
@@ -15,6 +16,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./bond-dock-motion.css";
+import { reportMapRendererStatus } from "./error-reporting";
 
 const container = document.querySelector<HTMLElement>("#root");
 
@@ -22,6 +24,14 @@ if (container === null) {
   throw new Error("0x1 root element is missing");
 }
 
+// Omitted rather than passed as undefined: the reporter's own default endpoint
+// is a different thing from an endpoint explicitly configured as nothing.
+const collectorEndpoint = import.meta.env.VITE_ERRORS_COLLECTOR_ENDPOINT;
+const reporter = createBrowserReporter({
+  project: "nilx-one/web",
+  source: "browser",
+  ...(collectorEndpoint === undefined ? {} : { collectorEndpoint }),
+});
 const core = createCoreWasmClient({
   loadBindings: loadGeneratedCoreWasmBindings,
 });
@@ -29,6 +39,9 @@ const identity = createIdentityHttpAdapter({
   getAuthorization: () => undefined,
 });
 const mapRenderer = createMapLibreRenderer();
+
+reportMapRendererStatus(reporter, mapRenderer.getStatus());
+mapRenderer.subscribe((status) => reportMapRendererStatus(reporter, status));
 
 createRoot(container).render(
   <StrictMode>
