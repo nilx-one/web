@@ -1,44 +1,40 @@
 # Error Trash
 
-A shared sink for errors. `nilx-one`, `aiaiaiai-tech`, `0xda-market`, and any
-other project holding an ingest token dump their failures into one table
-instead of into per-project logs nobody reads.
+A shared, product-agnostic sink for errors. Production storage is PostgreSQL/Supabase owned by the parent `aiaiaiai` organization. `nilx-one`, `0xda-market`, and future child projects are reporters; they do not own the database or its schema.
 
-The trash stores what a reporter says. It does not deduplicate, group,
-symbolicate, alert, or decide what an error means; anything that classifies
-failures belongs above this boundary, not inside it.
+The sink stores what a reporter says. It does not deduplicate, group, symbolicate, alert, or decide what an error means. Anything that classifies failures belongs above this boundary.
 
-## Table
+## Storage
 
-One table, `errors`, holds every project's dumps:
+Production requires `DATABASE_URL` and fails fast when it is missing. The intended production backend is the parent-owned Supabase project `aiaiaiai-errors`. SQLite remains supported by the repository abstraction for local/test use only.
 
-| Column        | Meaning                                                           |
-| ------------- | ----------------------------------------------------------------- |
-| `id`          | Insertion order, and the only identity a dump has.                |
-| `project`     | Which project reported, resolved from the ingest token.           |
-| `type`        | The reporter's own label: `panic`, `http_500`, `TypeError`, …     |
-| `full_text`   | The whole error text: message, stack trace, context, as reported. |
-| `observed_at` | When the reporter noticed the error (client-stated).              |
-| `received_at` | When the trash accepted it (server clock).                        |
+One table, `errors`, stores all reports:
 
-Both instants are stored as `YYYY-MM-DDTHH:MM:SSZ`, so lexicographic order is
-chronological order and a range filter is a string comparison.
+| Column | Meaning |
+| --- | --- |
+| `id` | Insertion order and the only identity a report has. |
+| `project` | Reporter identity resolved from the ingest token. |
+| `type` | Reporter-provided label such as `panic`, `http_500`, or `TypeError`. |
+| `full_text` | Full error text, stack trace, and context as reported. |
+| `observed_at` | Client-stated observation time. |
+| `received_at` | Server-side receive time. |
 
-`observed_at` and `received_at` are separate on purpose. A reporter that
-batches, retries, or runs with a wrong clock still lands one honest column: the
-trash never rewrites a reported instant, and never lets a reported instant
-decide retention.
+Indexes support observation-time, project/time, type/time, and retention queries.
+
+The Supabase table has RLS enabled and explicitly revokes table access from `anon` and `authenticated`. No browser-facing RLS policy is intended. The service writes through direct PostgreSQL credentials only; privileged credentials and ingest/read tokens must remain server-side.
 
 ## API
 
-- `POST /api/v1/errors` — dump one error object or an array of up to 50;
-- `GET /api/v1/errors` — read the newest dumps back;
-- `GET /health` — process health, without a token.
+- `POST /api/v1/errors` — store one error or an atomic batch of up to 50;
+- `GET /api/v1/errors` — read newest reports with optional `project`, `type`, `since`, `until`, and `limit` filters;
+- `GET /health` — process health without a token.
 
-Dump a single error:
+A project-bound ingest token determines the stored `project`. A shared `*` token requires the request to name its own project. Cross-project writes are rejected.
+
+Example:
 
 ```bash
-curl --request POST https://<error-trash-host>/api/v1/errors \
+curl --request POST https://<error-sink-host>/api/v1/errors \
   --header "authorization: Bearer $ERROR_TRASH_TOKEN" \
   --header 'content-type: application/json' \
   --data '{
@@ -48,99 +44,36 @@ curl --request POST https://<error-trash-host>/api/v1/errors \
   }'
 ```
 
-`type` and `full_text` are required. `observed_at` is optional and defaults to
-the trash clock. `project` is optional for a project-bound token and required
-for a shared one. The response is `201` with `{"stored":1,"ids":[1]}`.
+The response is `201` with `{"stored":1,"ids":[1]}` when accepted.
 
-An array in the same endpoint stores a batch atomically, so a reporter retries
-the whole request or none of it:
-
-```json
-[
-  {
-    "project": "aiaiaiai-tech/core",
-    "type": "panic",
-    "full_text": "thread 'main' panicked at …"
-  },
-  {
-    "project": "0xda-market/api",
-    "type": "http_500",
-    "full_text": "upstream timeout"
-  }
-]
-```
-
-Reads take `project`, `type`, `since`, `until`, and `limit` (default 50,
-maximum 500), newest first:
-
-```bash
-curl "https://<error-trash-host>/api/v1/errors?project=nilx-one/web&type=panic&since=2026-09-01T00:00:00Z" \
-  --header "authorization: Bearer $ERROR_TRASH_READ_TOKEN"
-```
-
-Rejections carry a stable code: `invalid_token`, `foreign_project`,
-`project_required`, `invalid_request_body`, `invalid_project`, `invalid_type`,
-`empty_full_text`, `invalid_observed_at`, `empty_batch`, `batch_too_large`,
-`invalid_query`, `rate_limited`, `read_disabled`, `error_trash_unavailable`.
-
-## Token boundary
-
-A token decides which project a dump is written under, so no project can dump
-errors in another project's name:
-
-- `project:token` binds a token to exactly one project;
-- `*:token` is a shared organization token whose reports must name their own
-  project.
-
-Ingest is closed without a configured token, and reading is closed until
-`ERROR_TRASH_READ_TOKEN` is set — dumped text routinely contains internal
-detail that no anonymous caller should see. Tokens are at least 32 characters,
-are held only as SHA-256 digests, and are compared in constant time.
-
-An ingest token is not a browser secret. A browser client reports through a
-server-side proxy that holds the token; shipping an ingest token in JavaScript
-would publish it to everyone who loads the page.
+Reads remain disabled until `ERROR_TRASH_READ_TOKEN` is configured. An ingest token is never a browser secret: browser clients must report through a server-side boundary that holds it.
 
 ## Limits and retention
 
-- 512 KiB per request, 50 errors per batch;
-- `full_text` is truncated at 32 768 characters with a visible marker rather
-  than rejected, because a truncated dump is worth more than a lost one;
+- 512 KiB per request;
+- 50 reports per batch;
+- `full_text` is truncated at 32 768 characters with a visible marker;
 - 600 requests per minute per source and 3 000 per minute per project;
-- retention runs hourly and drops dumps older than
-  `ERROR_TRASH_RETENTION_DAYS` (default 90) or beyond `ERROR_TRASH_MAX_ROWS`
-  (default 1 000 000). Age is measured on `received_at`, so a reporter cannot
-  extend its own retention with a wrong clock. `0` disables either bound.
+- retention runs hourly and defaults to 90 days / 1 000 000 rows;
+- retention age is measured from `received_at`, not the reporter-controlled clock.
 
-## Run
+## Runtime
 
-```bash
-ERROR_TRASH_INGEST_TOKENS='nilx-one/web:local-ingest-token-that-is-long-enough' \
-ERROR_TRASH_READ_TOKEN='local-read-token-that-is-long-enough-here' \
-  cargo run --manifest-path services/errors/Cargo.toml
-```
+Required server-side variables:
 
-Runtime settings:
+- `DATABASE_URL` — PostgreSQL/Supabase in production;
+- `ERROR_TRASH_INGEST_TOKENS` — comma-separated `project:token` entries.
 
-- `ERROR_TRASH_INGEST_TOKENS` — required, comma-separated `project:token`;
-- `ERROR_TRASH_READ_TOKEN` — optional; reads stay disabled while it is unset;
-- `DATABASE_URL` — default `sqlite://error-trash.db`;
-- `HTTP_BIND` — default `0.0.0.0:8080`;
-- `ERROR_TRASH_RETENTION_DAYS` — default `90`, `0` keeps everything;
-- `ERROR_TRASH_MAX_ROWS` — default `1000000`, `0` keeps everything.
+Optional variables:
 
-## Runtime package
+- `ERROR_TRASH_READ_TOKEN` — enables reads when present;
+- `HTTP_BIND` — defaults to `0.0.0.0:8080`;
+- `ERROR_TRASH_RETENTION_DAYS` — defaults to `90`, `0` disables the age bound;
+- `ERROR_TRASH_MAX_ROWS` — defaults to `1000000`, `0` disables the row-count bound.
 
-[`Dockerfile`](Dockerfile) builds the service. [`deploy/compose.yaml`](deploy/compose.yaml)
-persists SQLite state in a named volume and exposes only the private
-`ox1-error-trash:8080` edge alias, so CI validates the same runtime an operator
-activates.
+[`Dockerfile`](Dockerfile) builds the service. [`deploy/compose.yaml`](deploy/compose.yaml) requires the production database URL through `ERROR_TRASH_DATABASE_URL`, exposes only the internal `aiaiaiai-errors:8080` edge alias, and does not persist a local SQLite volume.
 
-The public route is a separate activation decision and is not published yet:
-the trash is reachable inside the edge network only. Publishing it for projects
-outside this host means adding one proxy route to that alias — under a
-dedicated origin, or as `/api/v1/errors` on an existing one — after the image is
-deployed.
+A public route is a separate deployment decision. No privileged token or database credential belongs in frontend code.
 
 ## Verify
 
