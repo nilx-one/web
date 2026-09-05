@@ -10,13 +10,11 @@ import {
   type ConnectedProvider,
 } from "./authenticated-map-home-view";
 
-function renderer(): MapRenderer {
-  const readyStatus: MapRendererStatus = { kind: "ready" };
-
+function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
   return {
     mount: vi.fn(),
     unmount: vi.fn(),
-    getStatus: vi.fn(() => readyStatus),
+    getStatus: vi.fn(() => status),
     subscribe: vi.fn(() => () => undefined),
     setCamera: vi.fn(),
     setAppearance: vi.fn(),
@@ -133,6 +131,42 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.setAppearance).toHaveBeenLastCalledWith("light");
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
+  });
+
+  it("keeps a rendering map free of status chrome", () => {
+    renderView({ mapRenderer: renderer({ kind: "ready" }) });
+
+    expect(screen.queryByText("Map unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading map")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "style-load-failed",
+      "The versioned self-hosted map style is not published yet.",
+    ],
+    [
+      "basemap-load-failed",
+      "The versioned self-hosted basemap archive could not be read.",
+    ],
+    [
+      "renderer-init-failed",
+      "The geographic renderer could not start on this client.",
+    ],
+  ])("names a %s failure instead of showing an empty map", (reason, detail) => {
+    renderView({ mapRenderer: renderer({ kind: "unavailable", reason }) });
+
+    expect(screen.getByText("Map unavailable")).toBeVisible();
+    expect(screen.getByText(detail)).toBeVisible();
+  });
+
+  it("subscribes to renderer status so a late failure still surfaces", () => {
+    const mapRenderer = renderer({ kind: "loading" });
+
+    renderView({ mapRenderer });
+
+    expect(mapRenderer.subscribe).toHaveBeenCalledOnce();
+    expect(screen.getByText("Loading map")).toBeVisible();
   });
 
   it("opens the Bond profile without rendering a phone field", () => {
