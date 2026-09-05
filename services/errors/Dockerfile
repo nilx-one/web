@@ -15,16 +15,13 @@ FROM debian:bookworm-slim
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 10002 errors \
-    && install --directory --owner errors --group errors /data
+    && useradd --create-home --uid 10002 errors
 
 COPY --from=build /source/target/release/error-trash /usr/local/bin/error-trash
 
 USER errors
-ENV DATABASE_URL=sqlite:///data/error-trash.db
 ENV HTTP_BIND=0.0.0.0:8080
 EXPOSE 8080
-VOLUME ["/data"]
 
 HEALTHCHECK --interval=15s --timeout=5s --retries=6 --start-period=5s \
     CMD curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null || exit 1
