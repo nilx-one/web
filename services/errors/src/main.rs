@@ -20,8 +20,8 @@ async fn main() {
         )
         .init();
 
-    let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://error-trash.db".to_owned());
+    let database_url = env::var("DATABASE_URL")
+        .expect("DATABASE_URL must point to PostgreSQL (Supabase is supported)");
     let http_bind = env::var("HTTP_BIND")
         .unwrap_or_else(|_| "0.0.0.0:8080".to_owned())
         .parse::<SocketAddr>()
@@ -52,7 +52,7 @@ async fn main() {
         reads_enabled = read_token.is_some(),
         retention_days = retention.retention_days,
         max_rows = retention.max_rows,
-        "starting the 0x1 error trash"
+        "starting the shared aiaiaiai error sink"
     );
 
     tokio::spawn(prune_periodically(repository, retention));
