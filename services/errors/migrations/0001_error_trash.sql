@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS errors (
     CONSTRAINT errors_received_at_length CHECK (char_length(received_at) = 20)
 );
 
+ALTER TABLE errors ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE errors FROM anon, authenticated;
+
 CREATE INDEX IF NOT EXISTS errors_by_observed_at
 ON errors (observed_at DESC, id DESC);
 
