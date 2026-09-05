@@ -1,12 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapRenderer } from "@nilx-one/map-contract";
+import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
+import { createMapFoundationViewModel } from "./map-foundation-view-model";
 
 export type ConnectedProvider = "telegram" | "discord";
 
@@ -91,8 +92,17 @@ export function AuthenticatedMapHomeView({
   );
   const [systemTheme, setSystemTheme] =
     useState<ResolvedAppearance>(systemAppearance);
+  const [mapStatus, setMapStatus] = useState<MapRendererStatus>(() =>
+    renderer.getStatus(),
+  );
   const resolvedAppearance = appearance === "auto" ? systemTheme : appearance;
   const contractVersion = runtimeContract(runtime);
+  const mapViewModel = createMapFoundationViewModel(mapStatus);
+
+  // A map that never paints must say so. Without this the shell shows an empty
+  // surface and a renderer, asset, or basemap failure is indistinguishable
+  // from an ordinary dark map.
+  useEffect(() => renderer.subscribe(setMapStatus), [renderer]);
 
   // Appearance is applied before mounting so the first paint already uses the
   // resolved style variant instead of loading light and swapping to dark.
@@ -576,6 +586,18 @@ export function AuthenticatedMapHomeView({
         <span>0x1 · pre-alpha</span>
         <span>© 2026 aiaiaiai · nilx.one</span>
       </footer>
+      {mapStatus.kind === "ready" ? null : (
+        <section
+          className={`map-chip map-chip--${mapViewModel.tone}`}
+          aria-live="polite"
+        >
+          <i aria-hidden="true" />
+          <span>
+            <strong>{mapViewModel.label}</strong>
+            <small>{mapViewModel.detail}</small>
+          </span>
+        </section>
+      )}
       <section
         className={`core-chip core-chip--${runtime.tone}`}
         aria-live="polite"
