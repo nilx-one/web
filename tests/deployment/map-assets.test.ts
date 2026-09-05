@@ -17,6 +17,8 @@ interface MapStyleLayer {
   readonly type?: string;
   readonly source?: string;
   readonly "source-layer"?: string;
+  readonly minzoom?: number;
+  readonly maxzoom?: number;
   readonly paint?: Record<string, unknown>;
 }
 
@@ -62,6 +64,94 @@ function structure(style: MapStyleContract): readonly string[] {
   );
 }
 
+const OPACITY_PROPERTY: Readonly<Record<string, string>> = {
+  background: "background-opacity",
+  fill: "fill-opacity",
+  line: "line-opacity",
+  "fill-extrusion": "fill-extrusion-opacity",
+  circle: "circle-opacity",
+};
+
+// Schema validation proves a style is well formed, not that it paints. These
+// evaluate the published zoom ramps so a layer cannot go silently invisible.
+function interpolateOpacity(stops: readonly unknown[], zoom: number): number {
+  const points: { zoom: number; value: number }[] = [];
+  for (let index = 0; index < stops.length; index += 2) {
+    const stopZoom = stops[index];
+    const stopValue = stops[index + 1];
+    if (typeof stopZoom !== "number" || typeof stopValue !== "number") {
+      throw new Error("opacity stops must be numeric");
+    }
+    points.push({ zoom: stopZoom, value: stopValue });
+  }
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (first === undefined || last === undefined) {
+    throw new Error("an interpolation needs at least one stop");
+  }
+  if (zoom <= first.zoom) return first.value;
+  if (zoom >= last.zoom) return last.value;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const low = points[index];
+    const high = points[index + 1];
+    if (low === undefined || high === undefined) continue;
+    if (zoom >= low.zoom && zoom <= high.zoom) {
+      const span = high.zoom - low.zoom;
+      const progress = span === 0 ? 0 : (zoom - low.zoom) / span;
+      return low.value + (high.value - low.value) * progress;
+    }
+  }
+
+  return last.value;
+}
+
+function evaluateOpacity(value: unknown, zoom: number): number {
+  if (value === undefined) return 1;
+  if (typeof value === "number") return value;
+  if (!Array.isArray(value)) {
+    throw new Error(`unsupported opacity value: ${JSON.stringify(value)}`);
+  }
+
+  const [operator, interpolation] = value;
+  if (operator === "interpolate") {
+    expect(interpolation).toEqual(["linear"]);
+    return interpolateOpacity(value.slice(3), zoom);
+  }
+  if (operator === "match") {
+    // Data driven per feature: the layer paints wherever any branch is opaque.
+    const outputs = value
+      .slice(2)
+      .filter((entry): entry is number => typeof entry === "number");
+    return Math.max(...outputs);
+  }
+
+  throw new Error(`unsupported opacity expression: ${String(operator)}`);
+}
+
+function paintsAt(layer: MapStyleLayer, zoom: number): boolean {
+  if (zoom < (layer.minzoom ?? 0) || zoom >= (layer.maxzoom ?? 24)) {
+    return false;
+  }
+
+  const property = OPACITY_PROPERTY[layer.type ?? ""];
+  if (property === undefined) {
+    throw new Error(`unknown layer type: ${String(layer.type)}`);
+  }
+
+  return evaluateOpacity(layer.paint?.[property], zoom) > 0;
+}
+
+function layersPaintingAt(
+  style: MapStyleContract,
+  zoom: number,
+): readonly string[] {
+  return style.layers
+    .filter((layer) => paintsAt(layer, zoom))
+    .map((layer) => String(layer.id));
+}
+
 describe("map deployment assets", () => {
   it.each(["light", "dark"] as const)(
     "publishes the versioned same-origin regional basemap contract (%s)",
@@ -103,6 +193,56 @@ describe("map deployment assets", () => {
     },
   );
 
+  it.each(["light", "dark"] as const)(
+    "leaves no published layer permanently invisible (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      const zooms = Array.from({ length: 49 }, (_, step) => step * 0.5);
+
+      const neverPainted = style.layers
+        .filter((layer) => !zooms.some((zoom) => paintsAt(layer, zoom)))
+        .map((layer) => layer.id);
+
+      expect(neverPainted).toEqual([]);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "makes Kyiv readable at the bootstrap camera zoom (%s)",
+    (appearance) => {
+      const painted = layersPaintingAt(readStyle(appearance), 10);
+
+      // Geography, the Dnipro and its accent, and the major road frame.
+      expect(painted).toEqual(
+        expect.arrayContaining([
+          "background",
+          "earth",
+          "parks",
+          "landuse-urban",
+          "water",
+          "water-accent",
+          "rivers",
+          "roads-primary",
+        ]),
+      );
+
+      // Close-zoom detail stays out of the first paint.
+      expect(painted).not.toContain("buildings");
+      expect(painted).not.toContain("buildings-flat");
+      expect(painted).not.toContain("pois");
+    },
+  );
+
+  it("raises urban depth only as the camera closes in", () => {
+    const style = readStyle("light");
+    const extrusion = style.layers.find((layer) => layer.id === "buildings");
+
+    expect(extrusion).toBeDefined();
+    expect(paintsAt(extrusion as MapStyleLayer, 14)).toBe(false);
+    expect(paintsAt(extrusion as MapStyleLayer, 16)).toBe(true);
+    expect(layersPaintingAt(style, 13)).toContain("buildings-flat");
+  });
+
   it("orders geography, roads, urban depth, and minor detail by visual priority", () => {
     const layerIds = readStyle("light").layers.map((layer) => layer.id);
 
@@ -136,6 +276,9 @@ describe("map deployment assets", () => {
     expect(style.metadata?.["nilx-one:visual-language"]).toBe("0x1-spatial");
     expect(style.metadata?.["nilx-one:visual-direction"]).toBe(
       "near-white spatial map with restrained cyan accents",
+    );
+    expect(readStyle("dark").metadata?.["nilx-one:visual-direction"]).toBe(
+      "near-black spatial map with restrained cyan accents",
     );
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#f7f9fa");
     expect(style.metadata?.["nilx-one:surface-land"]).toBe("#f3f6f7");

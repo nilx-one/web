@@ -7,7 +7,7 @@
     "nilx-one:basemap-state": "regional-server-published",
     "nilx-one:coverage": "kyiv-bootstrap",
     "nilx-one:visual-language": "0x1-spatial",
-    "nilx-one:visual-direction": "near-white spatial map with restrained cyan accents",
+    "nilx-one:visual-direction": "near-black spatial map with restrained cyan accents",
     "nilx-one:appearance": "dark",
     "nilx-one:appearance-light-url": "/map/0.1.0/style.json",
     "nilx-one:appearance-dark-url": "/map/0.1.0/style-dark.json",
