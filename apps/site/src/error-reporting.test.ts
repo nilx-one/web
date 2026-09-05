@@ -15,6 +15,19 @@ function reporter(): BrowserReporter {
 }
 
 describe("reportMapRendererStatus", () => {
+  it("still reports a reason the table has not learned yet", () => {
+    const target = reporter();
+
+    reportMapRendererStatus(target, {
+      kind: "unavailable",
+      reason: "webgl2-unsupported",
+    });
+
+    expect(target.report).toHaveBeenCalledWith(
+      expect.objectContaining({ errorId: "map.renderer.unavailable" }),
+    );
+  });
+
   it("does not report healthy renderer states", () => {
     const target = reporter();
 

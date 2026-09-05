@@ -24,10 +24,13 @@ if (container === null) {
   throw new Error("0x1 root element is missing");
 }
 
+// Omitted rather than passed as undefined: the reporter's own default endpoint
+// is a different thing from an endpoint explicitly configured as nothing.
+const collectorEndpoint = import.meta.env.VITE_ERRORS_COLLECTOR_ENDPOINT;
 const reporter = createBrowserReporter({
   project: "nilx-one/web",
   source: "browser",
-  collectorEndpoint: import.meta.env.VITE_ERRORS_COLLECTOR_ENDPOINT,
+  ...(collectorEndpoint === undefined ? {} : { collectorEndpoint }),
 });
 const core = createCoreWasmClient({
   loadBindings: loadGeneratedCoreWasmBindings,
