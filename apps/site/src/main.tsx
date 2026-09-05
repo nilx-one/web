@@ -6,6 +6,7 @@ import {
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
 import { createBrowserHost } from "@nilx-one/host-browser";
+import { createSupabaseFailureSink } from "@nilx-one/failure-supabase";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
 import { createMapLibreRenderer } from "@nilx-one/map-maplibre";
 import { ProductApp } from "@nilx-one/product-app";
@@ -30,6 +31,19 @@ const identity = createIdentityHttpAdapter({
 });
 const mapRenderer = createMapLibreRenderer();
 
+// Optional by design: a build without Supabase configured keeps every surface
+// working and simply keeps no durable failure record.
+const failureSinkUrl = import.meta.env.VITE_SUPABASE_URL;
+const failureSinkKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const failureSink =
+  failureSinkUrl === undefined || failureSinkKey === undefined
+    ? undefined
+    : createSupabaseFailureSink({
+        url: failureSinkUrl,
+        apiKey: failureSinkKey,
+      });
+const release = import.meta.env.VITE_RELEASE_SHA;
+
 createRoot(container).render(
   <StrictMode>
     <ProductApp
@@ -37,6 +51,8 @@ createRoot(container).render(
       host={createBrowserHost()}
       identity={identity}
       mapRenderer={mapRenderer}
+      {...(failureSink === undefined ? {} : { failureSink })}
+      {...(release === undefined ? {} : { release })}
     />
   </StrictMode>,
 );

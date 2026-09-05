@@ -116,6 +116,9 @@ importers:
       '@nilx-one/core-wasm':
         specifier: workspace:*
         version: link:../../packages/core-wasm
+      '@nilx-one/failure-supabase':
+        specifier: workspace:*
+        version: link:../../packages/failure-supabase
       '@nilx-one/host-browser':
         specifier: workspace:*
         version: link:../../packages/host-browser
@@ -174,6 +177,12 @@ importers:
   packages/application: {}
 
   packages/core-wasm:
+    dependencies:
+      '@nilx-one/application':
+        specifier: workspace:*
+        version: link:../application
+
+  packages/failure-supabase:
     dependencies:
       '@nilx-one/application':
         specifier: workspace:*
