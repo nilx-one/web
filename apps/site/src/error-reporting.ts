@@ -8,6 +8,9 @@ const MAP_ERROR_IDS: Readonly<Record<string, string>> = {
   "style-load-failed": "map.renderer.style.load.failed",
   "basemap-load-failed": "map.renderer.basemap.load.failed",
   "renderer-init-failed": "map.renderer.init.failed",
+  "load-timeout": "map.renderer.load.timeout",
+  "container-zero-size": "map.renderer.container.zero_size",
+  "webgl-context-lost": "map.renderer.webgl.context_lost",
 };
 
 // A renderer reason is a plain string in the contract, so the adapter may name

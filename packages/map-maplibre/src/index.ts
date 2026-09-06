@@ -12,6 +12,7 @@ import { Map as MapLibreMap, addProtocol, type MapOptions } from "maplibre-gl";
 import { Protocol } from "pmtiles";
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
+export const MAP_RENDER_LOAD_TIMEOUT_MS = 10_000;
 
 // One published style document per appearance. Both variants share the same
 // layer structure so appearance stays a presentation swap, not a map redesign.
@@ -42,6 +43,7 @@ export interface MapLibreRendererOptions {
   readonly initialAppearance?: MapAppearance;
   readonly initialCamera?: MapCamera;
   readonly createMap?: MapFactory;
+  readonly loadTimeoutMs?: number;
 }
 
 export function resolvePmtilesProtocolUrl(
@@ -82,11 +84,13 @@ export function createMapLibreRenderer(
 ): MapRenderer {
   const styleUrls = options.styleUrls ?? MAP_STYLE_URLS;
   const initialCamera = options.initialCamera ?? MAP_BOOTSTRAP_CAMERA;
+  const loadTimeoutMs = options.loadTimeoutMs ?? MAP_RENDER_LOAD_TIMEOUT_MS;
   const createMap =
     options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
   let appearance = options.initialAppearance ?? DEFAULT_MAP_APPEARANCE;
   let status: MapRendererStatus = { kind: "unmounted" };
   let map: MapLibreMap | undefined;
+  let loadTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   // Style documents resolve before sources and tiles do, so the phase a
   // failure arrives in is what distinguishes a missing style from a missing
   // basemap from ordinary tile noise on a map that already renders.
@@ -94,8 +98,19 @@ export function createMapLibreRenderer(
   let firstPaintDone = false;
   const listeners = new Set<(next: MapRendererStatus) => void>();
 
+  function clearLoadTimer(): void {
+    if (loadTimer === undefined) {
+      return;
+    }
+    globalThis.clearTimeout(loadTimer);
+    loadTimer = undefined;
+  }
+
   function publish(next: MapRendererStatus): void {
     status = next;
+    if (next.kind === "ready" || next.kind === "unavailable" || next.kind === "unmounted") {
+      clearLoadTimer();
+    }
     for (const listener of listeners) {
       listener(next);
     }
@@ -138,6 +153,17 @@ export function createMapLibreRenderer(
         styleResolved = false;
         firstPaintDone = false;
 
+        loadTimer = globalThis.setTimeout(() => {
+          if (status.kind === "loading") {
+            publish({ kind: "unavailable", reason: "load-timeout" });
+          }
+        }, loadTimeoutMs);
+
+        const canvas = mountedMap.getCanvas?.();
+        canvas?.addEventListener("webglcontextlost", () => {
+          publish({ kind: "unavailable", reason: "webgl-context-lost" });
+        });
+
         mountedMap.on("styledata", () => {
           styleResolved = true;
         });
@@ -145,6 +171,15 @@ export function createMapLibreRenderer(
         mountedMap.once("load", () => {
           styleResolved = true;
           firstPaintDone = true;
+
+          if (container.isConnected) {
+            const bounds = container.getBoundingClientRect();
+            if (bounds.width <= 0 || bounds.height <= 0) {
+              publish({ kind: "unavailable", reason: "container-zero-size" });
+              return;
+            }
+          }
+
           publish({ kind: "ready" });
         });
       } catch {
