@@ -15,6 +15,7 @@ function stylesheet(relativePath: string): string {
 }
 
 const shellCss = stylesheet("packages/product-app/src/shell/app-shell.css");
+const shellSource = read("packages/product-app/src/shell/app-shell.tsx");
 const toastCss = stylesheet("packages/ui/src/styles.css");
 const worldView = read(
   "packages/product-app/src/features/map/authenticated-map-home-view.tsx",
@@ -65,11 +66,19 @@ describe("shell layout contract", () => {
     expect(toasts).not.toMatch(/(^|\n)\s*bottom:/);
   });
 
+  it("uses the measured bottom layer as the toast ceiling", () => {
+    const toasts = rule(shellCss, ".app-shell__toasts");
+
+    expect(shellSource).toContain('"--shell-bottom-height"');
+    expect(toasts).toContain("--shell-bottom-height");
+    expect(toasts).not.toContain("--shell-dock-height");
+    expect(toasts).toContain("--shell-dock-reserve");
+  });
+
   it("bounds the toast stack before it can reach the Dock", () => {
     const toasts = rule(shellCss, ".app-shell__toasts");
 
     expect(toasts).toMatch(/max-height:\s*max\(/);
-    expect(toasts).toContain("--shell-dock-reserve");
     expect(toasts).toContain("overflow-y: auto");
   });
 
