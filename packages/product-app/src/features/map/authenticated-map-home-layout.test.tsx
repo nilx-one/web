@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { render } from "@testing-library/react";
-import type { MapRenderer } from "@nilx-one/map-contract";
+import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuthenticatedMapHomeView } from "./authenticated-map-home-view";
@@ -11,7 +11,7 @@ function renderer(): MapRenderer {
   return {
     mount: vi.fn(),
     unmount: vi.fn(),
-    getStatus: vi.fn(() => ({ kind: "ready" })),
+    getStatus: vi.fn((): MapRendererStatus => ({ kind: "ready" })),
     subscribe: vi.fn(() => () => undefined),
     setCamera: vi.fn(),
     setAppearance: vi.fn(),
