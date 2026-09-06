@@ -77,7 +77,7 @@
     calc(
       100dvh - var(--safe-top, 0px) - var(--safe-bottom, 0px) -
         var(--shell-header-block) - var(--shell-gap) * 2 - var(--shell-inset) *
-        2 - var(--shell-dock-height, var(--shell-dock-reserve))
+        2 - var(--shell-bottom-height, var(--shell-dock-reserve))
     )
   );
   overflow-x: hidden;
