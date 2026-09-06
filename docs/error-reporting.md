@@ -8,9 +8,21 @@ The SDK owns privacy sanitisation, the durable IndexedDB queue, bounded batching
 
 Map renderer failures are additionally translated at the composition root into semantic `errors.v1` identifiers:
 
-- `style-load-failed` → `map.renderer.style_load.failed`
-- `basemap-load-failed` → `map.renderer.basemap_load.failed`
+- `style-load-failed` → `map.renderer.style.load.failed`
+- `basemap-load-failed` → `map.renderer.basemap.load.failed`
 - `renderer-init-failed` → `map.renderer.init.failed`
+- `style-load-timeout` → `map.renderer.style.load.timeout`
+- `first-paint-timeout` → `map.renderer.first_paint.timeout`
+- `container-zero-size` → `map.renderer.container.zero_size`
+- `webgl-unavailable` → `map.renderer.webgl.unavailable`
+- `webgl-context-lost` → `map.renderer.webgl.context_lost`
+
+A renderer startup failure must arrive as its own identifier: a style document
+that never answered, a style that resolved but never painted, a client without a
+WebGL2 context, and a surface with no size are different production problems,
+and collapsing them into one generic map failure makes the next one unreadable.
+A reason this table has not learned is still reported, under
+`map.renderer.unavailable`.
 
 The UI remains responsible for person-facing failure notices. Error reporting is observability only and must never redefine 0x1 domain state or make a host failure worse.
 

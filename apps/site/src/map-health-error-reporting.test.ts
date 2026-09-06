@@ -16,8 +16,10 @@ function reporter(): BrowserReporter {
 
 describe("map health error reporting", () => {
   it.each([
-    ["load-timeout", "map.renderer.load.timeout"],
+    ["style-load-timeout", "map.renderer.style.load.timeout"],
+    ["first-paint-timeout", "map.renderer.first_paint.timeout"],
     ["container-zero-size", "map.renderer.container.zero_size"],
+    ["webgl-unavailable", "map.renderer.webgl.unavailable"],
     ["webgl-context-lost", "map.renderer.webgl.context_lost"],
   ] as const)("maps %s into %s", (reason, errorId) => {
     const target = reporter();
@@ -33,5 +35,28 @@ describe("map health error reporting", () => {
         tags: ["map", "renderer"],
       }),
     );
+  });
+
+  it("gives every startup cause its own identifier", () => {
+    const reported = (
+      [
+        "style-load-failed",
+        "basemap-load-failed",
+        "renderer-init-failed",
+        "style-load-timeout",
+        "first-paint-timeout",
+        "container-zero-size",
+        "webgl-unavailable",
+        "webgl-context-lost",
+      ] as const
+    ).map((reason) => {
+      const target = reporter();
+      reportMapRendererStatus(target, { kind: "unavailable", reason });
+      return (target.report as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+        .errorId as string;
+    });
+
+    expect(new Set(reported).size).toBe(reported.length);
+    expect(reported).not.toContain("map.renderer.unavailable");
   });
 });

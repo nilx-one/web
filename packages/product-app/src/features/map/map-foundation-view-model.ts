@@ -9,12 +9,27 @@ export interface MapFoundationViewModel {
   readonly detail: string;
 }
 
+// A person reading a failed map deserves the cause the renderer actually
+// reported. The generic sentence stays for reasons this surface has not learned
+// yet, so a new renderer failure is never presented as a known one.
 function unavailableDetail(reason: string): string {
   switch (reason) {
     case "style-load-failed":
       return "The versioned self-hosted map style is not published yet.";
     case "basemap-load-failed":
       return "The versioned self-hosted basemap archive could not be read.";
+    case "style-load-timeout":
+      return "The self-hosted map style did not answer in time.";
+    case "first-paint-timeout":
+      return "The map style loaded, but the renderer never drew a first frame.";
+    case "webgl-unavailable":
+      return "This browser could not create the WebGL2 context the map needs.";
+    case "webgl-context-lost":
+      return "This browser dropped the map's WebGL context.";
+    case "container-zero-size":
+      return "The map surface resolved to zero size on this client.";
+    case "renderer-init-failed":
+      return "The map renderer could not be created on this client.";
     default:
       return "The geographic renderer could not start on this client.";
   }

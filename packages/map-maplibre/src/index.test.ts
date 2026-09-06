@@ -12,18 +12,20 @@ import {
   resolvePmtilesProtocolUrl,
 } from "./index";
 
+type FakeListener = (event: { readonly error?: unknown }) => void;
+
 interface FakeMap {
-  readonly on: (event: string, listener: () => void) => FakeMap;
-  readonly once: (event: string, listener: () => void) => FakeMap;
+  readonly on: (event: string, listener: FakeListener) => FakeMap;
+  readonly once: (event: string, listener: FakeListener) => FakeMap;
   readonly remove: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
-  emit(event: string): void;
+  emit(event: string, error?: unknown): void;
 }
 
 function makeFakeMap(): FakeMap {
-  const listeners = new Map<string, (() => void)[]>();
-  const remember = (event: string, listener: () => void) => {
+  const listeners = new Map<string, FakeListener[]>();
+  const remember = (event: string, listener: FakeListener) => {
     listeners.set(event, [...(listeners.get(event) ?? []), listener]);
   };
   const fake: FakeMap = {
@@ -32,21 +34,21 @@ function makeFakeMap(): FakeMap {
       return fake;
     },
     once(event, listener) {
-      remember(event, () => {
+      remember(event, (payload) => {
         listeners.set(
           event,
           (listeners.get(event) ?? []).filter((entry) => entry !== listener),
         );
-        listener();
+        listener(payload);
       });
       return fake;
     },
     remove: vi.fn(),
     jumpTo: vi.fn(),
     setStyle: vi.fn(),
-    emit(event) {
+    emit(event, error) {
       for (const listener of [...(listeners.get(event) ?? [])]) {
-        listener();
+        listener({ error });
       }
     },
   };

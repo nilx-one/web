@@ -270,7 +270,15 @@ describe("AuthenticatedMapHomeView", () => {
     ],
     [
       "renderer-init-failed",
-      "The geographic renderer could not start on this client.",
+      "The map renderer could not be created on this client.",
+    ],
+    [
+      "first-paint-timeout",
+      "The map style loaded, but the renderer never drew a first frame.",
+    ],
+    [
+      "webgl-unavailable",
+      "This browser could not create the WebGL2 context the map needs.",
     ],
   ])("names a %s failure instead of showing an empty map", (reason, detail) => {
     renderView({ mapRenderer: renderer({ kind: "unavailable", reason }) });
