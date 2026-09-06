@@ -26,8 +26,6 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Print formatted status toast
-        run: pnpm exec prettier packages/ui/src/status-toast.tsx
       - name: Verify repository policy
         run: pnpm policy
       - name: Verify formatting
