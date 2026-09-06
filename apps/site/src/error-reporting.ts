@@ -5,8 +5,8 @@ import type { BrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import type { MapRendererStatus } from "@nilx-one/map-contract";
 
 const MAP_ERROR_IDS: Readonly<Record<string, string>> = {
-  "style-load-failed": "map.renderer.style_load.failed",
-  "basemap-load-failed": "map.renderer.basemap_load.failed",
+  "style-load-failed": "map.renderer.style.load.failed",
+  "basemap-load-failed": "map.renderer.basemap.load.failed",
   "renderer-init-failed": "map.renderer.init.failed",
 };
 
