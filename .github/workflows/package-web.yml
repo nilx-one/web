@@ -18,6 +18,7 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/nilx-one/0x1-web
+  VITE_ERRORS_COLLECTOR_ENDPOINT: https://errors.aiaiaiai.org
 
 jobs:
   package:
@@ -49,6 +50,8 @@ jobs:
           rm -rf .core-source
       - name: Build production Web hosts
         run: pnpm --filter @nilx-one/site --filter @nilx-one/telegram-mini-app --filter @nilx-one/discord-activity build
+      - name: Verify browser error collector configuration
+        run: grep -R --fixed-strings "$VITE_ERRORS_COLLECTOR_ENDPOINT" apps/site/dist/assets >/dev/null
       - name: Validate client target manifest
         run: |
           jq -e '

@@ -37,8 +37,8 @@ describe("reportMapRendererStatus", () => {
   });
 
   it.each([
-    ["style-load-failed", "map.renderer.style_load.failed"],
-    ["basemap-load-failed", "map.renderer.basemap_load.failed"],
+    ["style-load-failed", "map.renderer.style.load.failed"],
+    ["basemap-load-failed", "map.renderer.basemap.load.failed"],
     ["renderer-init-failed", "map.renderer.init.failed"],
   ] as const)("maps %s into errors.v1 semantic id %s", (reason, errorId) => {
     const target = reporter();
