@@ -35,6 +35,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  useMatchRoute,
   useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -113,10 +114,7 @@ function validNativePassword(password: string): boolean {
   );
 }
 
-/**
- * The world is the environment every route is presented over, so the root
- * renders no navigation chrome of its own: the shell header owns navigation.
- */
+/** The root only selects between the persistent product foundation and diagnostics. */
 function RootRoute() {
   return <Outlet />;
 }
@@ -125,22 +123,54 @@ const rootRoute = createRootRouteWithContext<ProductRouterContext>()({
   component: RootRoute,
 });
 
-const worldRoute = createRoute({
+/**
+ * `/`, `/identity`, and `/settings` are presentation states of one foundation.
+ * Keeping their shared owner on this pathless route prevents route selection
+ * from becoming accidental ownership of the authenticated world lifecycle.
+ */
+function FoundationRouteView() {
+  const { dependencies } = foundationRoute.useRouteContext();
+  const matchRoute = useMatchRoute();
+  const section: ShellSection = matchRoute({ to: SETTINGS_ROUTE })
+    ? "settings"
+    : matchRoute({ to: IDENTITY_ROUTE })
+      ? "identity"
+      : "world";
+
+  return (
+    <>
+      <FoundationSurface dependencies={dependencies} section={section} />
+      <Outlet />
+    </>
+  );
+}
+
+function ShellSectionRoute() {
+  return null;
+}
+
+const foundationRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: "foundation",
+  component: FoundationRouteView,
+});
+
+const worldRoute = createRoute({
+  getParentRoute: () => foundationRoute,
   path: WORLD_ROUTE,
-  component: WorldRoute,
+  component: ShellSectionRoute,
 });
 
 const identityRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => foundationRoute,
   path: IDENTITY_ROUTE,
-  component: IdentityRoute,
+  component: ShellSectionRoute,
 });
 
 const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => foundationRoute,
   path: SETTINGS_ROUTE,
-  component: SettingsRoute,
+  component: ShellSectionRoute,
 });
 
 // Renderer diagnostics. Never navigation: the map is the world, not a tab.
@@ -153,21 +183,6 @@ const mapRoute = createRoute({
 function MapRoute() {
   const { dependencies } = mapRoute.useRouteContext();
   return <MapFoundationView renderer={dependencies.mapRenderer} />;
-}
-
-function WorldRoute() {
-  const { dependencies } = worldRoute.useRouteContext();
-  return <FoundationSurface dependencies={dependencies} section="world" />;
-}
-
-function IdentityRoute() {
-  const { dependencies } = identityRoute.useRouteContext();
-  return <FoundationSurface dependencies={dependencies} section="identity" />;
-}
-
-function SettingsRoute() {
-  const { dependencies } = settingsRoute.useRouteContext();
-  return <FoundationSurface dependencies={dependencies} section="settings" />;
 }
 
 interface FoundationSurfaceProps {
@@ -577,12 +592,13 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   );
 }
 
-const routeTree = rootRoute.addChildren([
+const foundationRouteTree = foundationRoute.addChildren([
   worldRoute,
   identityRoute,
   settingsRoute,
-  mapRoute,
 ]);
+
+const routeTree = rootRoute.addChildren([foundationRouteTree, mapRoute]);
 
 export function ProductApp({
   core,
