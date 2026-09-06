@@ -156,8 +156,6 @@ function heading(identity: IdentityViewState): string {
   switch (identity.kind) {
     case "recovery-key":
       return "Save your recovery key.";
-    case "authenticated":
-      return "You’re in.";
     case "form":
       switch (identity.mode) {
         case "register":
@@ -172,6 +170,7 @@ function heading(identity: IdentityViewState): string {
           return "Enter your pub_dress.";
       }
       return "Enter your pub_dress.";
+    case "authenticated":
     case "loading":
     case "provider-required":
     case "unavailable":
@@ -184,7 +183,7 @@ function lede(identity: IdentityViewState): string {
     case "recovery-key":
       return "This is the only native recovery proof. It appears once.";
     case "authenticated":
-      return `Authenticated as ${identity.pubDress}.`;
+      return "The world is loading behind this surface.";
     case "form":
       if (identity.mode === "register") {
         return "No provider required. Your exact, case-sensitive address belongs to this Bond.";

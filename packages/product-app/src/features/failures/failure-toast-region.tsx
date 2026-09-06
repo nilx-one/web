@@ -16,6 +16,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+
+import { useToastViewportNode } from "../../shell/toast-viewport";
 
 export interface PublishFailureOptions {
   /**
@@ -108,13 +111,33 @@ export function FailureNoticeProvider({
   return (
     <FailureNoticeContext.Provider value={publish}>
       {children}
-      <ToastRegion
-        toasts={toasts}
-        label="Failure notices"
-        onDismiss={dismiss}
-      />
+      <FailureToastRegion toasts={toasts} onDismiss={dismiss} />
     </FailureNoticeContext.Provider>
   );
+}
+
+interface FailureToastRegionProps {
+  readonly toasts: readonly ToastRegionItem[];
+  onDismiss(id: string): void;
+}
+
+/**
+ * Notices join the shell's single toast stack whenever a shell is mounted, so
+ * transient feedback never opens a second competing column. Without a shell —
+ * the pre-authentication surface — the region anchors itself.
+ */
+function FailureToastRegion({ toasts, onDismiss }: FailureToastRegionProps) {
+  const viewport = useToastViewportNode();
+  const region = (
+    <ToastRegion
+      toasts={toasts}
+      label="Failure notices"
+      placement={viewport === undefined ? "viewport" : "inline"}
+      onDismiss={onDismiss}
+    />
+  );
+
+  return viewport === undefined ? region : createPortal(region, viewport);
 }
 
 /**

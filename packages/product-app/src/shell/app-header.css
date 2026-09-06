@@ -1,0 +1,221 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.app-header {
+  --header-ink: #f5f3f7;
+  --header-ink-muted: rgba(245, 243, 247, 0.66);
+  --header-line: rgba(245, 243, 247, 0.16);
+  --header-surface: rgba(8, 11, 19, 0.42);
+  --header-accent: #9d6cff;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--shell-gap, 1rem);
+  min-height: var(--shell-header-block, 3.25rem);
+  color: var(--header-ink);
+}
+
+.app-header__zone {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 2vw, 1.75rem);
+  min-width: 0;
+}
+
+.app-header__zone--lead {
+  flex: 1 1 auto;
+}
+
+.app-header__zone--trail {
+  flex: 0 1 auto;
+  gap: clamp(0.6rem, 1.4vw, 1rem);
+}
+
+.app-header__brand {
+  flex: 0 0 auto;
+  color: inherit;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: clamp(1.3rem, 2vw, 1.65rem);
+  font-weight: 800;
+  letter-spacing: -0.1em;
+  text-decoration: none;
+}
+
+.app-header__routes {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 1.6vw, 1.5rem);
+  min-width: 0;
+}
+
+.app-header__route,
+.app-header__identity {
+  /* A block box so a long pub_dress truncates with an ellipsis instead of
+     being cut mid-glyph. */
+  display: block;
+  /* Identity stays legible while the secondary host label gives way first. */
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 2.25rem;
+  max-width: 16ch;
+  line-height: 2.25rem;
+  overflow: hidden;
+  border-radius: 0.65rem;
+  color: var(--header-ink-muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.92rem;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header__identity {
+  color: #c8b4ff;
+}
+
+.app-header__route:hover,
+.app-header__identity:hover {
+  color: var(--header-ink);
+}
+
+.app-header__route[aria-current="page"],
+.app-header__identity[aria-current="page"] {
+  color: var(--header-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--header-accent);
+  text-underline-offset: 0.45rem;
+  text-decoration-thickness: 2px;
+}
+
+.app-header__host {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  /* Uppercase tracking makes the label wider than its character count, so it
+     is given room to render in full and only ellipsises under real pressure. */
+  flex: 0 3 auto;
+  min-width: 0;
+  max-width: 22ch;
+  overflow: hidden;
+  color: var(--header-ink-muted);
+  font-size: 0.7rem;
+  font-weight: 760;
+  letter-spacing: 0.18em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.app-header__host > i {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--header-accent);
+  box-shadow: 0 0 0.9rem rgba(157, 108, 255, 0.9);
+}
+
+.app-header__settings,
+.app-header__overflow-trigger {
+  display: grid;
+  place-items: center;
+  width: var(--shell-control-size, 3.25rem);
+  height: var(--shell-control-size, 3.25rem);
+  padding: 0;
+  border: 1px solid var(--header-line);
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: rgba(245, 243, 247, 0.9);
+  background: var(--header-surface);
+  backdrop-filter: blur(18px);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.app-header__overflow-trigger span {
+  transform: translateY(-0.12rem);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+}
+
+.app-header__settings[aria-current="page"] {
+  border-color: rgba(157, 108, 255, 0.58);
+  color: var(--header-ink);
+}
+
+.app-header__settings:hover,
+.app-header__settings:focus-visible,
+.app-header__overflow-trigger:hover,
+.app-header__overflow-trigger:focus-visible {
+  border-color: rgba(157, 108, 255, 0.58);
+}
+
+.app-header :focus-visible {
+  outline: 2px solid var(--header-accent);
+  outline-offset: 3px;
+}
+
+.app-header__overflow {
+  position: relative;
+}
+
+.app-header__menu {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  display: grid;
+  gap: 0.4rem;
+  min-width: 11rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(245, 243, 247, 0.14);
+  border-radius: 1rem;
+  background: rgba(6, 9, 17, 0.86);
+  backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.32);
+}
+
+.app-header__menu-context {
+  margin: 0 0 0.25rem;
+  padding: 0 0.65rem;
+  color: var(--header-ink-muted);
+  font-size: 0.62rem;
+  font-weight: 760;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.app-header__menu-item {
+  display: block;
+  min-height: 2.5rem;
+  padding: 0.62rem 0.65rem;
+  border: 0;
+  border-radius: 0.65rem;
+  color: var(--header-ink);
+  background: rgba(245, 243, 247, 0.08);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.app-header__menu-item:hover,
+.app-header__menu-item:focus-visible {
+  background: rgba(245, 243, 247, 0.14);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-header__settings,
+  .app-header__overflow-trigger,
+  .app-header__route,
+  .app-header__identity,
+  .app-header__menu-item {
+    transition:
+      color 160ms ease,
+      border-color 160ms ease,
+      background-color 160ms ease;
+  }
+}

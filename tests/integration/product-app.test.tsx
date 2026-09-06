@@ -220,8 +220,11 @@ describe("ProductApp identity", () => {
 
     expect(acknowledgeRecoveryKey).toHaveBeenCalledWith("0x1c-registration");
     expect(
-      await screen.findByText("Authenticated as 0xaSky."),
+      await screen.findByRole("button", {
+        name: "Open Bond profile for 0xaSky",
+      }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Authenticated as/)).toBeNull();
   });
 
   it("switches an existing exact address to native sign-in", async () => {
@@ -321,8 +324,11 @@ describe("ProductApp identity", () => {
     );
     expect(registerNative).not.toHaveBeenCalled();
     expect(
-      await screen.findByText("Authenticated as 0xfrSb2."),
+      await screen.findByRole("button", {
+        name: "Open Bond profile for 0xfrSb2",
+      }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Authenticated as/)).toBeNull();
   });
 
   it("submits saved-password autofill for the already entered pub_dress", async () => {
@@ -700,8 +706,11 @@ describe("ProductApp identity", () => {
     );
 
     expect(
-      await screen.findByText("Authenticated as 0x0sky."),
+      await screen.findByRole("button", {
+        name: "Open Bond profile for 0x0sky",
+      }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Authenticated as/)).toBeNull();
     expect(readProviderIdentity).toHaveBeenCalledOnce();
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
   });

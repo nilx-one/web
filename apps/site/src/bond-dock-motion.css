@@ -70,7 +70,6 @@
   animation-delay: 64ms;
 }
 
-.bond-dock__settings,
 .bond-dock__edit,
 .interface-settings__back,
 .provider-control,
@@ -85,7 +84,6 @@
     box-shadow var(--bond-motion-fast) ease;
 }
 
-.bond-dock__settings:active,
 .bond-dock__edit:active,
 .interface-settings__back:active,
 .provider-control:active,

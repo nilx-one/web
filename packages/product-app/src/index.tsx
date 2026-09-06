@@ -30,12 +30,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
-  Link,
   Outlet,
   RouterProvider,
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
@@ -52,6 +52,14 @@ import {
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { MapFoundationView } from "./features/map/map-foundation-view";
+import {
+  IDENTITY_ROUTE,
+  SETTINGS_ROUTE,
+  WORLD_ROUTE,
+  type ShellRoute,
+  type ShellSection,
+} from "./shell/routes";
+import { ToastViewportProvider } from "./shell/toast-viewport";
 
 export {
   usePublishFailure,
@@ -105,29 +113,37 @@ function validNativePassword(password: string): boolean {
   );
 }
 
+/**
+ * The world is the environment every route is presented over, so the root
+ * renders no navigation chrome of its own: the shell header owns navigation.
+ */
 function RootRoute() {
-  return (
-    <>
-      <nav aria-label="0x1 sections">
-        <Link to="/">Bond</Link>
-        {" · "}
-        <Link to="/map">Map</Link>
-      </nav>
-      <Outlet />
-    </>
-  );
+  return <Outlet />;
 }
 
 const rootRoute = createRootRouteWithContext<ProductRouterContext>()({
   component: RootRoute,
 });
 
-const foundationRoute = createRoute({
+const worldRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/",
-  component: FoundationRoute,
+  path: WORLD_ROUTE,
+  component: WorldRoute,
 });
 
+const identityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: IDENTITY_ROUTE,
+  component: IdentityRoute,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: SETTINGS_ROUTE,
+  component: SettingsRoute,
+});
+
+// Renderer diagnostics. Never navigation: the map is the world, not a tab.
 const mapRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/map",
@@ -139,8 +155,28 @@ function MapRoute() {
   return <MapFoundationView renderer={dependencies.mapRenderer} />;
 }
 
-function FoundationRoute() {
-  const { dependencies } = foundationRoute.useRouteContext();
+function WorldRoute() {
+  const { dependencies } = worldRoute.useRouteContext();
+  return <FoundationSurface dependencies={dependencies} section="world" />;
+}
+
+function IdentityRoute() {
+  const { dependencies } = identityRoute.useRouteContext();
+  return <FoundationSurface dependencies={dependencies} section="identity" />;
+}
+
+function SettingsRoute() {
+  const { dependencies } = settingsRoute.useRouteContext();
+  return <FoundationSurface dependencies={dependencies} section="settings" />;
+}
+
+interface FoundationSurfaceProps {
+  readonly dependencies: ProductAppDependencies;
+  readonly section: ShellSection;
+}
+
+function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const host = useHostSnapshot(dependencies.host);
   const browserHost = host.kind === "browser";
@@ -508,6 +544,10 @@ function FoundationRoute() {
         renderer={dependencies.mapRenderer}
         runtime={viewModel.runtime}
         safeArea={viewModel.safeArea}
+        section={section}
+        onNavigate={(route: ShellRoute) => {
+          void navigate({ to: route });
+        }}
         {...(viewModel.identity.native
           ? { onLogout: () => logout.mutate() }
           : {})}
@@ -537,7 +577,12 @@ function FoundationRoute() {
   );
 }
 
-const routeTree = rootRoute.addChildren([foundationRoute, mapRoute]);
+const routeTree = rootRoute.addChildren([
+  worldRoute,
+  identityRoute,
+  settingsRoute,
+  mapRoute,
+]);
 
 export function ProductApp({
   core,
@@ -570,9 +615,11 @@ export function ProductApp({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <FailureNoticeProvider>
-        <RouterProvider router={router} />
-      </FailureNoticeProvider>
+      <ToastViewportProvider>
+        <FailureNoticeProvider>
+          <RouterProvider router={router} />
+        </FailureNoticeProvider>
+      </ToastViewportProvider>
     </QueryClientProvider>
   );
 }

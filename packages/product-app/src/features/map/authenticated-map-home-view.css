@@ -1,9 +1,8 @@
 /* © 2026 aiaiaiai · aiaiaiai.org */
 /* SPDX-License-Identifier: MPL-2.0 */
 
-:root:has(.authenticated-map-home) nav[aria-label="0x1 sections"] {
-  display: none;
-}
+/* Material and colour for the authenticated world surface. Spatial semantics
+   belong to the shell stylesheet. */
 
 .authenticated-map-home {
   --map-accent-primary: #8a63ff;
@@ -17,10 +16,6 @@
   --map-night-raised: rgba(7, 12, 24, 0.72);
   --map-night-border: rgba(178, 195, 255, 0.24);
 
-  position: fixed;
-  inset: 0;
-  min-height: 100dvh;
-  overflow: hidden;
   color: #f5f3f7;
   background: var(--map-night);
   font-family:
@@ -80,179 +75,13 @@
     0 0 1.1rem rgba(55, 215, 229, 0.18);
 }
 
-.authenticated-map-home__topbar {
-  position: fixed;
-  z-index: 5;
-  top: calc(1.8rem + var(--safe-top));
-  right: calc(2rem + var(--safe-right));
-  left: calc(2rem + var(--safe-left));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  pointer-events: none;
-}
-
-.authenticated-map-home__wordmark,
-.authenticated-map-home__host-area {
-  pointer-events: auto;
-}
-
-.authenticated-map-home__wordmark {
-  color: inherit;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-  font-size: clamp(1.3rem, 2vw, 1.65rem);
-  font-weight: 800;
-  letter-spacing: -0.1em;
-  text-decoration: none;
-}
-
-.authenticated-map-home__host-area {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.authenticated-map-home__host {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  font-size: 0.7rem;
-  font-weight: 760;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: rgba(245, 243, 247, 0.78);
-}
-
-.authenticated-map-home__host i,
-.core-chip > i {
-  width: 0.42rem;
-  height: 0.42rem;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: #9d6cff;
-  box-shadow: 0 0 0.9rem rgba(157, 108, 255, 0.9);
-}
-
-.authenticated-map-home__menu-trigger {
-  display: grid;
-  place-items: center;
-  width: 3.25rem;
-  height: 3.25rem;
-  padding: 0;
-  border: 1px solid rgba(245, 243, 247, 0.16);
-  border-radius: 999px;
-  color: rgba(245, 243, 247, 0.9);
-  background: rgba(8, 11, 19, 0.42);
-  backdrop-filter: blur(18px);
-  cursor: pointer;
-}
-
-.authenticated-map-home__menu-trigger span {
-  transform: translateY(-0.12rem);
-  font-size: 0.95rem;
-  letter-spacing: 0.12em;
-}
-
-.authenticated-map-home__menu-trigger:hover,
-.authenticated-map-home__menu-trigger:focus-visible {
-  border-color: rgba(157, 108, 255, 0.58);
-  outline: 0;
-}
-
-.authenticated-map-home__menu {
-  position: absolute;
-  top: calc(100% + 0.6rem);
-  right: 0;
-  display: grid;
-  gap: 0.55rem;
-  min-width: 10rem;
-  padding: 0.75rem;
-  border: 1px solid rgba(245, 243, 247, 0.14);
-  border-radius: 1rem;
-  color: rgba(245, 243, 247, 0.68);
-  background: rgba(6, 9, 17, 0.86);
-  backdrop-filter: blur(24px) saturate(1.2);
-  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.32);
-  font-size: 0.72rem;
-}
-
-.authenticated-map-home__menu button {
-  padding: 0.55rem 0.65rem;
-  border: 0;
-  border-radius: 0.65rem;
-  color: #f5f3f7;
-  background: rgba(245, 243, 247, 0.08);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.authenticated-map-home__hero {
-  position: fixed;
-  z-index: 4;
-  top: clamp(7.5rem, 15vh, 10.5rem);
-  left: calc(2.2rem + var(--safe-left));
-  width: min(
-    34rem,
-    calc(100vw - 4.4rem - var(--safe-left) - var(--safe-right))
-  );
-  pointer-events: none;
-}
-
-.authenticated-map-home__eyebrow {
-  display: inline-flex;
-  gap: 0.6rem;
-  align-items: center;
-  margin-bottom: 1rem;
-  color: #dcd3ff;
-  font-size: 0.73rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.authenticated-map-home__eyebrow b {
-  color: #ff536d;
-}
-
-.authenticated-map-home__hero h1 {
-  margin: 0;
-  max-width: 8ch;
-  font-size: clamp(3rem, 8.6vw, 6.2rem);
-  font-weight: 760;
-  line-height: 0.92;
-  letter-spacing: -0.075em;
-  background: linear-gradient(
-    95deg,
-    #e1b8ff 2%,
-    #ff4469 42%,
-    #ff9580 63%,
-    #ffffff 82%
-  );
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  text-wrap: balance;
-}
-
-.authenticated-map-home__hero p {
-  margin: 1.4rem 0 0;
-  color: rgba(245, 243, 247, 0.78);
-  font-size: clamp(1rem, 2.5vw, 1.35rem);
-}
-
-.authenticated-map-home__hero strong {
-  color: #f1a4d7;
-  font-weight: 560;
-}
-
+/* The Dock. Its lower edge is anchored by the shell; this rule only describes
+   the surface itself. */
 .bond-dock {
-  position: fixed;
-  z-index: 4;
-  left: calc(2rem + var(--safe-left));
-  bottom: calc(5.6rem + var(--safe-bottom));
-  width: min(42rem, calc(100vw - 4rem - var(--safe-left) - var(--safe-right)));
+  width: min(var(--shell-dock-width, 42rem), 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1.35rem 1.55rem 1.5rem;
   border: 1px solid var(--map-night-border);
   border-radius: 2rem;
@@ -306,7 +135,9 @@
 }
 
 .bond-dock__bond--active:focus-visible {
-  outline: 0;
+  outline: 2px solid var(--map-accent-primary);
+  outline-offset: 6px;
+  border-radius: 1rem;
 }
 
 .bond-dock__bond--unavailable {
@@ -383,28 +214,13 @@
   box-shadow: 0 0 0.7rem rgba(82, 219, 167, 0.62);
 }
 
-.authenticated-map-home__footer {
-  position: fixed;
-  z-index: 4;
-  left: calc(2rem + var(--safe-left));
-  bottom: calc(1.8rem + var(--safe-bottom));
-  display: grid;
-  gap: 0.3rem;
-  color: rgba(245, 243, 247, 0.45);
-  font-size: 0.66rem;
-  font-weight: 590;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
+/* Persistent system status. Low priority by contract: compact, quiet, and
+   never mistaken for a toast. */
 .core-chip {
-  position: fixed;
-  z-index: 4;
-  right: calc(2rem + var(--safe-right));
-  bottom: calc(1.8rem + var(--safe-bottom));
   display: inline-flex;
   align-items: flex-start;
   gap: 0.56rem;
+  max-width: 100%;
   padding: 0.68rem 0.82rem;
   border: 1px solid rgba(139, 226, 183, 0.24);
   border-radius: 1rem;
@@ -414,13 +230,26 @@
   box-shadow: inset 0 0 1.2rem rgba(89, 213, 162, 0.035);
 }
 
+.core-chip > i {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+  border-radius: 999px;
+  background: #9d6cff;
+  box-shadow: 0 0 0.9rem rgba(157, 108, 255, 0.9);
+}
+
 .core-chip > span {
   display: grid;
   gap: 0.18rem;
+  min-width: 0;
 }
 
 .core-chip strong,
 .core-chip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -448,102 +277,75 @@
   box-shadow: 0 0 0.8rem rgba(255, 115, 95, 0.54);
 }
 
-@media (max-width: 720px) {
-  .authenticated-map-home__topbar {
-    top: calc(1rem + var(--safe-top));
-    right: calc(1rem + var(--safe-right));
-    left: calc(1rem + var(--safe-left));
-  }
+/* A detail surface reads better narrow; the Bond pair wants the full width. */
+.authenticated-map-home[data-section="identity"],
+.authenticated-map-home[data-section="settings"] {
+  --shell-dock-width: 34rem;
+}
 
-  .authenticated-map-home__host {
-    font-size: 0.58rem;
-    letter-spacing: 0.14em;
-  }
+.authenticated-map-home[data-presentation="compact"] .bond-dock {
+  padding: 1rem 1rem 1.1rem;
+  border-radius: 1.55rem;
+}
 
-  .authenticated-map-home__menu-trigger {
-    width: 2.85rem;
-    height: 2.85rem;
-  }
+.authenticated-map-home[data-presentation="compact"] .bond-dock__kicker {
+  margin-bottom: 0.8rem;
+}
 
-  .authenticated-map-home__hero {
-    top: calc(6rem + var(--safe-top));
-    left: calc(1.4rem + var(--safe-left));
-    width: calc(100vw - 2.8rem - var(--safe-left) - var(--safe-right));
-  }
+.authenticated-map-home[data-presentation="compact"] .bond-dock__pair {
+  grid-template-columns: minmax(0, 1fr) 2rem minmax(0, 1fr);
+  gap: 0.65rem;
+}
 
-  .authenticated-map-home__eyebrow {
-    margin-bottom: 0.7rem;
-    font-size: 0.61rem;
-  }
+.authenticated-map-home[data-presentation="compact"] .bond-dock__glyph {
+  min-width: 3.2rem;
+  min-height: 3.2rem;
+  border-radius: 1rem;
+  font-size: 0.82rem;
+}
 
-  .authenticated-map-home__hero h1 {
-    font-size: clamp(3rem, 14vw, 4.7rem);
-  }
+.authenticated-map-home[data-presentation="compact"] .bond-dock__bond strong {
+  font-size: clamp(1.02rem, 5vw, 1.38rem);
+}
 
-  .authenticated-map-home__hero p {
-    margin-top: 0.95rem;
-    font-size: 1rem;
-  }
+.authenticated-map-home[data-presentation="compact"] .bond-dock__bond small {
+  gap: 0.3rem;
+  font-size: 0.64rem;
+}
 
+.authenticated-map-home[data-presentation="compact"] .bond-dock__link {
+  font-size: 1.45rem;
+}
+
+/* Density follows the space that exists, not only the width: a landscape
+   phone keeps the Dock compact so the world and the toast stack stay legible. */
+@media (max-height: 520px) {
   .bond-dock {
-    right: calc(1rem + var(--safe-right));
-    left: calc(1rem + var(--safe-left));
-    bottom: calc(4.65rem + var(--safe-bottom));
-    width: auto;
-    padding: 1rem 1rem 1.1rem;
+    padding: 0.9rem 1.1rem 1rem;
     border-radius: 1.55rem;
   }
 
   .bond-dock__kicker {
-    margin-bottom: 0.8rem;
+    margin-bottom: 0.7rem;
   }
 
   .bond-dock__pair {
-    grid-template-columns: minmax(0, 1fr) 2rem minmax(0, 1fr);
-    gap: 0.65rem;
+    gap: 0.7rem;
   }
 
   .bond-dock__glyph {
-    min-width: 3.2rem;
-    min-height: 3.2rem;
+    min-width: 3rem;
+    min-height: 3rem;
     border-radius: 1rem;
     font-size: 0.82rem;
   }
 
   .bond-dock__bond strong {
-    font-size: clamp(1.02rem, 5vw, 1.38rem);
-  }
-
-  .bond-dock__bond small {
-    gap: 0.3rem;
-    font-size: 0.64rem;
+    font-size: clamp(1.05rem, 3vw, 1.45rem);
   }
 
   .bond-dock__link {
     font-size: 1.45rem;
-  }
-
-  .authenticated-map-home__footer {
-    display: none;
-  }
-
-  .core-chip {
-    right: calc(1rem + var(--safe-right));
-    bottom: calc(0.9rem + var(--safe-bottom));
-  }
-}
-
-@media (max-height: 720px) and (max-width: 720px) {
-  .authenticated-map-home__hero {
-    top: calc(4.9rem + var(--safe-top));
-  }
-
-  .authenticated-map-home__hero h1 {
-    font-size: clamp(2.65rem, 12vw, 3.9rem);
-  }
-
-  .bond-dock {
-    bottom: calc(4rem + var(--safe-bottom));
   }
 }
 
