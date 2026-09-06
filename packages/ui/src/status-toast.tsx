@@ -74,9 +74,7 @@ function StatusToast({
   const markerStyle: CSSProperties = {
     background: markerByKind[toast.kind],
     boxShadow:
-      toast.kind === "loading"
-        ? "0 0 0 5px rgb(34 211 238 / 14%)"
-        : undefined,
+      toast.kind === "loading" ? "0 0 0 5px rgb(34 211 238 / 14%)" : undefined,
   };
 
   return (
