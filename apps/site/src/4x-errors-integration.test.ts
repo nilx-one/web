@@ -33,7 +33,7 @@ describe("@aiaiaiai/4x-errors-browser integration", () => {
       expect.objectContaining({
         protocol_version: "errors.v1",
         event_id: "00000000-0000-4000-8000-000000000001",
-        error_id: "map.renderer.style_load.failed",
+        error_id: "map.renderer.style.load.failed",
         project: "nilx-one/web",
         source: "browser",
         severity: "error",
