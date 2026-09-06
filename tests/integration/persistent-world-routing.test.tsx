@@ -146,26 +146,29 @@ describe("persistent authenticated world routing", () => {
   it.each([
     ["/identity", "0x0sky"],
     ["/settings", "Settings"],
-  ])("initializes the shared world for a direct %s navigation", async (path, heading) => {
-    window.history.replaceState({}, "", path);
-    const renderer = createMapRenderer();
+  ])(
+    "initializes the shared world for a direct %s navigation",
+    async (path, heading) => {
+      window.history.replaceState({}, "", path);
+      const renderer = createMapRenderer();
 
-    render(
-      <ProductApp
-        core={readyCore}
-        host={createHost()}
-        identity={createAuthenticatedIdentity()}
-        mapRenderer={renderer}
-      />,
-    );
+      render(
+        <ProductApp
+          core={readyCore}
+          host={createHost()}
+          identity={createAuthenticatedIdentity()}
+          mapRenderer={renderer}
+        />,
+      );
 
-    expect(
-      await screen.findByRole("heading", { name: heading }),
-    ).toBeVisible();
-    expect(mapContainer()).toBeInTheDocument();
-    expect(renderer.mount).toHaveBeenCalledOnce();
-    expect(renderer.unmount).not.toHaveBeenCalled();
-  });
+      expect(
+        await screen.findByRole("heading", { name: heading }),
+      ).toBeVisible();
+      expect(mapContainer()).toBeInTheDocument();
+      expect(renderer.mount).toHaveBeenCalledOnce();
+      expect(renderer.unmount).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps section matching inside a host basepath", async () => {
     window.history.replaceState({}, "", "/embedded/settings");
