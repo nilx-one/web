@@ -10,9 +10,6 @@ export interface StatusToastItem {
   readonly kind: StatusToastKind;
   readonly title: string;
   readonly description?: string;
-  /**
-   * Loading is intentionally never dismissible. Other notices default to true.
-   */
   readonly dismissible?: boolean;
 }
 
@@ -42,14 +39,6 @@ const listStyle: CSSProperties = {
   width: "min(calc(100vw - 32px), 420px)",
 };
 
-const toastStyle: CSSProperties = {
-  minHeight: 64,
-};
-
-const markerStyle: CSSProperties = {
-  flex: "0 0 auto",
-};
-
 const descriptionCollapsedStyle: CSSProperties = {
   display: "-webkit-box",
   overflow: "hidden",
@@ -72,10 +61,6 @@ function isDismissible(toast: StatusToastItem): boolean {
   return toast.kind !== "loading" && toast.dismissible !== false;
 }
 
-function descriptionCanOverflow(description: string): boolean {
-  return description.length > 88;
-}
-
 function StatusToast({
   toast,
   onDismiss,
@@ -85,26 +70,21 @@ function StatusToast({
 }) {
   const [expanded, setExpanded] = useState(false);
   const canExpand =
-    toast.description !== undefined && descriptionCanOverflow(toast.description);
+    toast.description !== undefined && toast.description.length > 88;
+  const markerStyle: CSSProperties = {
+    background: markerByKind[toast.kind],
+    boxShadow:
+      toast.kind === "loading"
+        ? "0 0 0 5px rgb(34 211 238 / 14%)"
+        : undefined,
+  };
 
   return (
     <div
       className={`toast status-toast status-toast--${toast.kind}`}
       data-status-toast-kind={toast.kind}
-      style={toastStyle}
     >
-      <span
-        className="toast__marker"
-        aria-hidden="true"
-        style={{
-          ...markerStyle,
-          background: markerByKind[toast.kind],
-          boxShadow:
-            toast.kind === "loading"
-              ? "0 0 0 5px rgb(34 211 238 / 14%)"
-              : undefined,
-        }}
-      />
+      <span className="toast__marker" aria-hidden="true" style={markerStyle} />
       <div className="toast__body">
         <p className="toast__title">{toast.title}</p>
         {toast.description === undefined ? null : (
@@ -144,11 +124,6 @@ function StatusToast({
   );
 }
 
-/**
- * Status surface for transient client observations. Newest notices are shown
- * first and only the bounded tail remains visible; this is presentation state,
- * never protocol or Relationship truth.
- */
 export function StatusToastStack({
   toasts,
   label = "Status notifications",
