@@ -14,7 +14,7 @@ The repository composes three scopes:
 2. **Feature-level MVVM** separates React views from presentation state and application use cases.
 3. **Host adapters** translate browser, Telegram, and future messenger capabilities behind explicit contracts.
 
-Telegram is a host of the shared product, not an independent feature implementation. Server-side Telegram integration is isolated from browser bundles and remains an adapter to canonical Core contracts. See [Architecture](docs/architecture.md).
+Telegram is a host of the shared product, not an independent feature implementation. Server-side Telegram integration is isolated from browser bundles and remains an adapter to canonical Core contracts. See [Architecture](docs/architecture.md) and the [Web UI Shell](docs/web-ui-shell.md) layout contract.
 
 ```text
 apps -> product-app -> application

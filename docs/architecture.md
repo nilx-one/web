@@ -93,6 +93,10 @@ features/<feature>/
 
 Use cases and ports that are shared across presentation features live in `application`. Host-specific branches do not live in feature views or view models.
 
+## Application shell
+
+`product-app/src/shell` owns the viewport layout every feature is presented in: the world surface, the header, the single toast stack, the bottom-anchored Dock, and the overlay layer. It carries no domain state and no host branches, so a feature never re-implements navigation, anchoring, or safe-area handling. See [Web UI Shell](web-ui-shell.md) for the layout and navigation contract.
+
 ## Delivery
 
 Every browser and Mini App entry point must pass the same formatting, lint, type, contract, integration, accessibility, and production-build gates. Server-side services pass their own full CI and deployability validation. Packaging produces immutable artifacts; merge and deployment remain separate, and production deployment is manual.
