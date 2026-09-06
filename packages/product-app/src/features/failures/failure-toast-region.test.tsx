@@ -7,6 +7,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ToastViewport,
+  ToastViewportProvider,
+} from "../../shell/toast-viewport";
+import {
   FailureNoticeProvider,
   usePublishFailure,
   type PublishFailureOptions,
@@ -149,6 +153,32 @@ describe("FailureNoticeProvider", () => {
     );
 
     expect(screen.getAllByText("Limit reached")).toHaveLength(1);
+  });
+
+  it("joins the shell's single toast stack instead of opening a second one", async () => {
+    const user = userEvent.setup();
+
+    const { container } = render(
+      <ToastViewportProvider>
+        <FailureNoticeProvider>
+          <Producer
+            report={{
+              code: "authority_withheld",
+              kind: "withheld",
+              retryable: false,
+            }}
+          />
+          <ToastViewport />
+        </FailureNoticeProvider>
+      </ToastViewportProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Publish failure" }));
+
+    const stack = container.querySelector(".app-shell__notices");
+    expect(stack?.querySelector(".toast-region--inline")).not.toBeNull();
+    expect(stack?.textContent?.includes("Declined by authority")).toBe(true);
+    expect(container.querySelectorAll(".toast-region")).toHaveLength(1);
   });
 
   it("refuses to publish without a provider rather than swallowing the failure", () => {

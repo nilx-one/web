@@ -3,6 +3,12 @@
 
 export type ToastTone = "attention" | "critical" | "neutral";
 
+/**
+ * `viewport` anchors the region itself. `inline` hands anchoring to a shell
+ * that already owns the toast stack's place in the layout.
+ */
+export type ToastPlacement = "viewport" | "inline";
+
 export interface ToastAction {
   readonly label: string;
   onPerform(): void;
@@ -73,16 +79,26 @@ export interface ToastRegionItem extends ToastContent {
 export interface ToastRegionProps {
   readonly toasts: readonly ToastRegionItem[];
   readonly label?: string;
+  readonly placement?: ToastPlacement;
   onDismiss(id: string): void;
 }
 
 export function ToastRegion({
   toasts,
   label = "Notifications",
+  placement = "viewport",
   onDismiss,
 }: ToastRegionProps) {
   return (
-    <div className="toast-region" role="region" aria-label={label}>
+    <div
+      className={
+        placement === "inline"
+          ? "toast-region toast-region--inline"
+          : "toast-region"
+      }
+      role="region"
+      aria-label={label}
+    >
       <ol
         className="toast-region__list"
         aria-live="polite"
