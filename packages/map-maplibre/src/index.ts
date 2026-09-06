@@ -108,7 +108,11 @@ export function createMapLibreRenderer(
 
   function publish(next: MapRendererStatus): void {
     status = next;
-    if (next.kind === "ready" || next.kind === "unavailable" || next.kind === "unmounted") {
+    if (
+      next.kind === "ready" ||
+      next.kind === "unavailable" ||
+      next.kind === "unmounted"
+    ) {
       clearLoadTimer();
     }
     for (const listener of listeners) {
