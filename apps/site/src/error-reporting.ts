@@ -8,8 +8,10 @@ const MAP_ERROR_IDS: Readonly<Record<string, string>> = {
   "style-load-failed": "map.renderer.style.load.failed",
   "basemap-load-failed": "map.renderer.basemap.load.failed",
   "renderer-init-failed": "map.renderer.init.failed",
-  "load-timeout": "map.renderer.load.timeout",
+  "style-load-timeout": "map.renderer.style.load.timeout",
+  "first-paint-timeout": "map.renderer.first_paint.timeout",
   "container-zero-size": "map.renderer.container.zero_size",
+  "webgl-unavailable": "map.renderer.webgl.unavailable",
   "webgl-context-lost": "map.renderer.webgl.context_lost",
 };
 

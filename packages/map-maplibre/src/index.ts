@@ -8,7 +8,21 @@ import {
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
-import { Map as MapLibreMap, addProtocol, type MapOptions } from "maplibre-gl";
+import {
+  GPUInitializationError,
+  Map as MapLibreMap,
+  addProtocol,
+  getWorkerUrl,
+  setWorkerUrl,
+  type MapOptions,
+} from "maplibre-gl";
+// MapLibre resolves its worker from its own module URL. An application build
+// inlines the library into an application chunk, so that URL names a file the
+// deployment never publishes: the worker never starts, every source stalls
+// behind it, and the map dies on the load timeout instead of on a cause. The
+// application bundler emits the worker as its own asset here and the renderer
+// binds that published URL before the first map is created.
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Protocol } from "pmtiles";
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
@@ -35,6 +49,7 @@ export const MAP_BOOTSTRAP_CAMERA: MapCamera = {
 
 const pmtilesProtocol = new Protocol();
 let pmtilesProtocolRegistered = false;
+let workerUrlBound = false;
 
 type MapFactory = (options: MapOptions) => MapLibreMap;
 
@@ -79,6 +94,21 @@ function ensurePmtilesProtocol(): void {
   pmtilesProtocolRegistered = true;
 }
 
+// A host that publishes the worker somewhere else has already said so; this
+// only replaces MapLibre's module-relative default, which no bundled build can
+// resolve.
+function ensureWorkerUrl(): void {
+  if (workerUrlBound) {
+    return;
+  }
+
+  if (getWorkerUrl() === "") {
+    setWorkerUrl(maplibreWorkerUrl);
+  }
+
+  workerUrlBound = true;
+}
+
 export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapRenderer {
@@ -120,8 +150,16 @@ export function createMapLibreRenderer(
     }
   }
 
-  function reportRendererError(): void {
+  function reportRendererError(error?: unknown): void {
     if (status.kind === "unavailable") {
+      return;
+    }
+
+    // A client without a WebGL2 context is a capability answer, not a data
+    // answer: MapLibre reports it through the same error channel as a missing
+    // style, so it has to be read off the error before the load phases are.
+    if (error instanceof GPUInitializationError) {
+      publish({ kind: "unavailable", reason: "webgl-unavailable" });
       return;
     }
 
@@ -144,6 +182,7 @@ export function createMapLibreRenderer(
       publish({ kind: "loading" });
 
       try {
+        ensureWorkerUrl();
         ensurePmtilesProtocol();
         const mountedMap = createMap({
           container,
@@ -157,9 +196,18 @@ export function createMapLibreRenderer(
         styleResolved = false;
         firstPaintDone = false;
 
+        // A timeout still has to say which phase never finished: a style
+        // document that never resolved is a publication problem, while a
+        // resolved style with no first frame is the tile pipeline — the worker,
+        // the basemap archive, or the paint itself.
         loadTimer = globalThis.setTimeout(() => {
           if (status.kind === "loading") {
-            publish({ kind: "unavailable", reason: "load-timeout" });
+            publish({
+              kind: "unavailable",
+              reason: styleResolved
+                ? "first-paint-timeout"
+                : "style-load-timeout",
+            });
           }
         }, loadTimeoutMs);
 
@@ -171,7 +219,9 @@ export function createMapLibreRenderer(
         mountedMap.on("styledata", () => {
           styleResolved = true;
         });
-        mountedMap.on("error", reportRendererError);
+        mountedMap.on("error", (event) => {
+          reportRendererError(event.error);
+        });
         mountedMap.once("load", () => {
           styleResolved = true;
           firstPaintDone = true;

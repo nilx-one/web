@@ -64,6 +64,22 @@ beneath the road network to restrained `fill-extrusion` depth above it around
 zoom 15, using OSM `height` where the data has it and a conservative fallback
 where it does not.
 
+### Renderer worker
+
+MapLibre parses tiles in a Web Worker and, by default, resolves that worker
+from its own module URL. An application build inlines MapLibre into an
+application chunk, so the default resolves to a file no client image publishes:
+the worker never starts, every source waits behind it, and the map fails on the
+load timeout without an error of its own. Because the site handler answers an
+unknown path with `index.html`, that missing worker is even served as HTML with
+`200`, which is why the failure looked like a client capability problem.
+
+The renderer therefore binds a worker URL the application build emits
+(`maplibre-gl-worker-<hash>.js`, published beside the application chunk) before
+it creates the first map, and `tests/deployment/map-worker-asset.test.ts` keeps
+every Web client publishing and referencing that asset. A host that already
+configured its own MapLibre worker URL keeps it.
+
 ### Appearance selection
 
 `MapRenderer.setAppearance` selects the published variant. It is renderer

@@ -1,25 +1,28 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { GPUInitializationError, getWorkerUrl } from "maplibre-gl";
 import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMapLibreRenderer } from "./index";
 
+type FakeListener = (event: { readonly error?: unknown }) => void;
+
 interface FakeMap {
-  readonly on: (event: string, listener: () => void) => FakeMap;
-  readonly once: (event: string, listener: () => void) => FakeMap;
+  readonly on: (event: string, listener: FakeListener) => FakeMap;
+  readonly once: (event: string, listener: FakeListener) => FakeMap;
   readonly remove: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
   readonly getCanvas: () => HTMLCanvasElement;
-  emit(event: string): void;
+  emit(event: string, error?: unknown): void;
 }
 
 function makeFakeMap(): FakeMap {
-  const listeners = new Map<string, (() => void)[]>();
+  const listeners = new Map<string, FakeListener[]>();
   const canvas = document.createElement("canvas");
-  const remember = (event: string, listener: () => void) => {
+  const remember = (event: string, listener: FakeListener) => {
     listeners.set(event, [...(listeners.get(event) ?? []), listener]);
   };
   const fake: FakeMap = {
@@ -35,9 +38,9 @@ function makeFakeMap(): FakeMap {
     jumpTo: vi.fn(),
     setStyle: vi.fn(),
     getCanvas: () => canvas,
-    emit(event) {
+    emit(event, error) {
       for (const listener of [...(listeners.get(event) ?? [])]) {
-        listener();
+        listener({ error });
       }
     },
   };
@@ -57,7 +60,33 @@ afterEach(() => {
 });
 
 describe("MapLibre renderer health invariants", () => {
-  it("turns a silent loading state into an explicit timeout failure", () => {
+  // The published worker is what an application build breaks: MapLibre resolves
+  // it from its own module URL, which no bundled application chunk can answer,
+  // and the map then stalls until the load timeout with no error of its own.
+  it("binds a published worker url instead of MapLibre's module-relative default", () => {
+    const renderer = rendererFor(makeFakeMap());
+
+    renderer.mount(document.createElement("div"));
+
+    expect(getWorkerUrl()).not.toBe("");
+  });
+
+  it("names the stalled phase when a style resolves but never paints", () => {
+    vi.useFakeTimers();
+    const fakeMap = makeFakeMap();
+    const renderer = rendererFor(fakeMap);
+
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("styledata");
+    vi.advanceTimersByTime(50);
+
+    expect(renderer.getStatus()).toEqual({
+      kind: "unavailable",
+      reason: "first-paint-timeout",
+    });
+  });
+
+  it("turns a silent loading state into an explicit style timeout failure", () => {
     vi.useFakeTimers();
     const fakeMap = makeFakeMap();
     const renderer = rendererFor(fakeMap);
@@ -67,7 +96,20 @@ describe("MapLibre renderer health invariants", () => {
 
     expect(renderer.getStatus()).toEqual({
       kind: "unavailable",
-      reason: "load-timeout",
+      reason: "style-load-timeout",
+    });
+  });
+
+  it("reports a missing WebGL2 context as a client capability, not a missing style", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = rendererFor(fakeMap);
+
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("error", new GPUInitializationError({}, null));
+
+    expect(renderer.getStatus()).toEqual({
+      kind: "unavailable",
+      reason: "webgl-unavailable",
     });
   });
 
