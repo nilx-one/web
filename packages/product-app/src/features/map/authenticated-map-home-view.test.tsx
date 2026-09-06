@@ -1,10 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ShellRoute, ShellSection } from "../../shell/routes";
 import {
   AuthenticatedMapHomeView,
   type ConnectedProvider,
@@ -24,7 +25,9 @@ function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
 interface ViewOverrides {
   connectedProviders?: readonly ConnectedProvider[];
   mapRenderer?: MapRenderer;
+  section?: ShellSection;
   onLogout?: () => void;
+  onNavigate?: (route: ShellRoute) => void;
 }
 
 function renderView(overrides: ViewOverrides = {}) {
@@ -35,6 +38,9 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.onLogout === undefined
       ? {}
       : { onLogout: overrides.onLogout }),
+    ...(overrides.onNavigate === undefined
+      ? {}
+      : { onNavigate: overrides.onNavigate }),
   };
 
   return render(
@@ -48,9 +54,16 @@ function renderView(overrides: ViewOverrides = {}) {
         detail: "Contract 0.1.0 is available to the Web client.",
       }}
       safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+      section={overrides.section ?? "world"}
       {...optionalProps}
     />,
   );
+}
+
+function dock(container: HTMLElement): HTMLElement {
+  const surface = container.querySelector<HTMLElement>(".bond-dock");
+  expect(surface).not.toBeNull();
+  return surface as HTMLElement;
 }
 
 beforeEach(() => {
@@ -67,8 +80,6 @@ describe("AuthenticatedMapHomeView", () => {
 
     renderView({ mapRenderer });
 
-    expect(screen.getByRole("heading", { name: "You’re in." })).toBeVisible();
-    expect(screen.getAllByText("0x0sky").length).toBeGreaterThanOrEqual(2);
     expect(
       screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
     ).toHaveTextContent("spectate");
@@ -85,13 +96,122 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
   });
 
-  it("opens map settings and persists appearance locally", () => {
+  it("drops the authenticated success hero from the world surface", () => {
+    renderView();
+
+    expect(screen.queryByText("You’re in.")).toBeNull();
+    expect(screen.queryByText(/Authenticated as/)).toBeNull();
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+  });
+
+  it("keeps application settings out of the Bond surface", () => {
     const { container } = renderView();
+    const surface = dock(container);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open map settings" }));
+    expect(
+      within(surface).queryByRole("button", { name: /settings/i }),
+    ).toBeNull();
+    expect(
+      within(surface).queryByRole("link", { name: /settings/i }),
+    ).toBeNull();
+    expect(surface.querySelector("[href='/settings']")).toBeNull();
+  });
 
-    expect(screen.getByRole("heading", { name: "Appearance" })).toBeVisible();
-    expect(screen.getByText("Map settings")).toBeVisible();
+  it("keeps the world behind the Dock, the header and the toast stack", () => {
+    const { container } = renderView();
+    const shell = container.querySelector(".app-shell");
+    const bottom = container.querySelector(".app-shell__bottom");
+
+    expect(shell?.querySelector(".app-shell__world")).not.toBeNull();
+    expect(bottom?.querySelector(".bond-dock")).not.toBeNull();
+    expect(bottom?.querySelector(".app-shell__toasts")).toBeNull();
+    expect(
+      container.querySelector(".app-shell__toasts .toast-region"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".app-shell__status .core-chip"),
+    ).not.toBeNull();
+  });
+
+  it("opens the identity route from the Bond rather than a Dock-local screen", () => {
+    const onNavigate = vi.fn();
+
+    renderView({ onNavigate });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+    );
+
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
+  });
+
+  it("returns to the world from an identity surface", () => {
+    const onNavigate = vi.fn();
+
+    renderView({ section: "identity", onNavigate });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
+  });
+
+  it("presents the Bond profile on the identity route", () => {
+    renderView({ section: "identity" });
+
+    expect(screen.getByRole("heading", { name: "0x0sky" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
+    expect(screen.getByText("pub_dress")).toBeVisible();
+    expect(screen.getByText("Providers")).toBeVisible();
+    expect(screen.queryByText("Phone")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add host" })).toBeVisible();
+  });
+
+  it("opens Add hosts with provider authorization redirects", () => {
+    renderView({ section: "identity" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add host" }));
+
+    expect(screen.getByRole("heading", { name: "Add hosts" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Connect with Telegram/i }),
+    ).toHaveAttribute("href", "/auth?provider=telegram&intent=connect");
+    expect(
+      screen.getByRole("link", { name: /Connect with Discord/i }),
+    ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
+  });
+
+  it("keeps provider management separate from profile edit", () => {
+    renderView({
+      section: "identity",
+      connectedProviders: ["telegram", "discord"],
+    });
+
+    expect(screen.getByLabelText("Telegram connected")).toBeVisible();
+    expect(screen.getByLabelText("Discord connected")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(2);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]!);
+
+    expect(screen.getByRole("heading", { name: "Edit profile" })).toBeVisible();
+    expect(screen.queryByText("Providers")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Provider connections are managed separately/i),
+    ).toBeVisible();
+  });
+
+  it("opens provider management from the Providers row", () => {
+    renderView({ section: "identity", connectedProviders: ["telegram"] });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[1]!);
+
+    expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
+    expect(screen.getByText("Telegram")).toBeVisible();
+    expect(screen.getByText("Connected")).toBeVisible();
+    expect(screen.getByRole("button", { name: "+ Add host" })).toBeVisible();
+  });
+
+  it("presents appearance on the settings route and persists it locally", () => {
+    const { container } = renderView({ section: "settings" });
+
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeVisible();
     expect(screen.getByRole("radio", { name: /Auto/i })).toBeChecked();
 
     fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
@@ -124,8 +244,7 @@ describe("AuthenticatedMapHomeView", () => {
   it("forwards an appearance change as renderer presentation state", () => {
     const mapRenderer = renderer();
 
-    renderView({ mapRenderer });
-    fireEvent.click(screen.getByRole("button", { name: "Open map settings" }));
+    renderView({ mapRenderer, section: "settings" });
     fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
 
     expect(mapRenderer.setAppearance).toHaveBeenLastCalledWith("light");
@@ -160,6 +279,19 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByText(detail)).toBeVisible();
   });
 
+  it("reports renderer status through the toast stack, never the Dock", () => {
+    const { container } = renderView({
+      mapRenderer: renderer({ kind: "loading" }),
+    });
+
+    const toasts = container.querySelector<HTMLElement>(".app-shell__toasts");
+    expect(toasts).not.toBeNull();
+    expect(
+      within(toasts as HTMLElement).getByText("Loading map"),
+    ).toBeVisible();
+    expect(within(dock(container)).queryByText("Loading map")).toBeNull();
+  });
+
   it("subscribes to renderer status so a late failure still surfaces", () => {
     const mapRenderer = renderer({ kind: "loading" });
 
@@ -169,78 +301,12 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByText("Loading map")).toBeVisible();
   });
 
-  it("opens the Bond profile without rendering a phone field", () => {
-    renderView();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
-    );
-
-    expect(screen.getByRole("heading", { name: "0x0sky" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
-    expect(screen.getByText("pub_dress")).toBeVisible();
-    expect(screen.getByText("Providers")).toBeVisible();
-    expect(screen.queryByText("Phone")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add host" })).toBeVisible();
-  });
-
-  it("opens Add hosts with provider authorization redirects", () => {
-    renderView();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Add host" }));
-
-    expect(screen.getByRole("heading", { name: "Add hosts" })).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: /Connect with Telegram/i }),
-    ).toHaveAttribute("href", "/auth?provider=telegram&intent=connect");
-    expect(
-      screen.getByRole("link", { name: /Connect with Discord/i }),
-    ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
-  });
-
-  it("keeps provider management separate from profile edit", () => {
-    renderView({ connectedProviders: ["telegram", "discord"] });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
-    );
-
-    expect(screen.getByLabelText("Telegram connected")).toBeVisible();
-    expect(screen.getByLabelText("Discord connected")).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(2);
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]!);
-
-    expect(screen.getByRole("heading", { name: "Edit profile" })).toBeVisible();
-    expect(screen.queryByText("Providers")).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/Provider connections are managed separately/i),
-    ).toBeVisible();
-  });
-
-  it("opens provider management from the Providers row", () => {
-    renderView({ connectedProviders: ["telegram"] });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
-    );
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[1]!);
-
-    expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
-    expect(screen.getByText("Telegram")).toBeVisible();
-    expect(screen.getByText("Connected")).toBeVisible();
-    expect(screen.getByRole("button", { name: "+ Add host" })).toBeVisible();
-  });
-
-  it("exposes host actions through the compact menu", () => {
+  it("exposes host actions through the header overflow menu", () => {
     const onLogout = vi.fn();
 
     renderView({ onLogout });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open host menu" }));
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
     expect(onLogout).toHaveBeenCalledOnce();
@@ -269,10 +335,7 @@ describe("AuthenticatedMapHomeView", () => {
       value: { getCurrentPosition },
     });
 
-    renderView({ mapRenderer });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
-    );
+    renderView({ mapRenderer, section: "identity" });
     fireEvent.click(
       screen.getByRole("button", { name: "Focus map near this device" }),
     );

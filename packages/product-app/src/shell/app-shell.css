@@ -1,0 +1,182 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* Layout only. The shell owns spatial semantics; feature stylesheets own
+   material and colour. */
+
+.app-shell {
+  /* Distance from the safe area to every viewport-anchored overlay. */
+  --shell-inset: 2rem;
+  /* Distance between two stacked overlay layers. */
+  --shell-gap: 1rem;
+  /* Deterministic header height: one row of controls at the control size. */
+  --shell-control-size: 3.25rem;
+  --shell-header-block: var(--shell-control-size);
+  --shell-dock-width: 42rem;
+  --shell-toast-width: 26rem;
+  /* Room the toast stack leaves for the bottom layer until that layer reports
+     its own height through --shell-bottom-height. */
+  --shell-dock-reserve: 11rem;
+
+  position: fixed;
+  inset: 0;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+.app-shell[data-presentation="compact"] {
+  --shell-dock-width: 100%;
+  --shell-inset: 1rem;
+  --shell-gap: 0.7rem;
+  --shell-control-size: 2.85rem;
+  --shell-dock-reserve: 9rem;
+}
+
+.app-shell[data-presentation="regular"] {
+  --shell-inset: 1.5rem;
+}
+
+/* The world fills the viewport and persists behind every overlay. */
+.app-shell__world {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+
+.app-shell__header {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--shell-inset) + var(--safe-top, 0px));
+  right: calc(var(--shell-inset) + var(--safe-right, 0px));
+  left: calc(var(--shell-inset) + var(--safe-left, 0px));
+  min-height: var(--shell-header-block);
+  pointer-events: none;
+}
+
+.app-shell__header > * {
+  pointer-events: auto;
+}
+
+/* Anchored top right, always below the header, never inside the Dock. */
+.app-shell__toasts {
+  position: absolute;
+  z-index: 4;
+  top: calc(
+    var(--shell-inset) + var(--safe-top, 0px) + var(--shell-header-block) +
+      var(--shell-gap)
+  );
+  right: calc(var(--shell-inset) + var(--safe-right, 0px));
+  left: calc(var(--shell-inset) + var(--safe-left, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+  /* A long stack scrolls inside its own bounds rather than reaching the Dock. */
+  max-height: max(
+    3rem,
+    calc(
+      100dvh - var(--safe-top, 0px) - var(--safe-bottom, 0px) -
+        var(--shell-header-block) - var(--shell-gap) * 2 - var(--shell-inset) *
+        2 - var(--shell-bottom-height, var(--shell-dock-reserve))
+    )
+  );
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: none;
+}
+
+.app-shell__toasts > * {
+  width: min(var(--shell-toast-width), 100%);
+}
+
+.app-shell__notices:empty {
+  display: none;
+}
+
+/* The Dock's lower edge stays attached to the bottom safe area at every size
+   and every height. Content growth moves the upper edge only. */
+.app-shell__bottom {
+  position: absolute;
+  z-index: 2;
+  right: calc(var(--shell-inset) + var(--safe-right, 0px));
+  bottom: calc(var(--shell-inset) + var(--safe-bottom, 0px));
+  left: calc(var(--shell-inset) + var(--safe-left, 0px));
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: var(--shell-gap);
+  max-height: calc(
+    100dvh - var(--safe-top, 0px) - var(--safe-bottom, 0px) -
+      var(--shell-header-block) - var(--shell-gap) - var(--shell-inset) * 2
+  );
+  pointer-events: none;
+}
+
+/* The Dock surface sizes itself from --shell-dock-width so a width change
+   stays animatable on the surface that owns the material. */
+.app-shell__dock {
+  display: flex;
+  min-height: 0;
+  max-width: 100%;
+}
+
+.app-shell__dock > * {
+  max-height: 100%;
+  pointer-events: auto;
+}
+
+.app-shell__status {
+  display: flex;
+  justify-content: flex-end;
+  align-self: flex-end;
+  max-width: 100%;
+}
+
+.app-shell__status > * {
+  pointer-events: auto;
+}
+
+.app-shell__overlay {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-shell__overlay > * {
+  pointer-events: auto;
+}
+
+/* Wide viewports place the status rail beside the Dock instead of above it, so
+   the world keeps its negative space. */
+.app-shell[data-presentation="wide"] .app-shell__bottom {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.app-shell[data-presentation="compact"] .app-shell__toasts > * {
+  width: 100%;
+}
+
+/* A short viewport constrains the toast stack before anything touches the
+   Dock's anchor. */
+@media (max-height: 620px) {
+  .app-shell {
+    --shell-dock-reserve: 7.5rem;
+  }
+}
+
+/* When there is barely room above the Dock, density gives way before the
+   anchor does: a notice keeps its title and drops its detail. */
+@media (max-height: 480px) {
+  .app-shell__toasts .toast {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .app-shell__toasts .toast__description,
+  .app-shell__toasts .toast__details {
+    display: none;
+  }
+}

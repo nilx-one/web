@@ -19,6 +19,7 @@ export {
   ToastRegion,
   type ToastAction,
   type ToastContent,
+  type ToastPlacement,
   type ToastProps,
   type ToastRegionItem,
   type ToastRegionProps,

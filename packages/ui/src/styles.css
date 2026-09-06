@@ -445,15 +445,28 @@ a {
   }
 }
 
+/* Transient feedback is anchored top right, below whatever chrome the surface
+   puts above it. It never anchors to the bottom, where contextual surfaces
+   live. */
 .toast-region {
   position: fixed;
   z-index: 20;
+  top: calc(
+    16px + var(--safe-top, env(safe-area-inset-top, 0px)) +
+      var(--toast-region-offset, 0px)
+  );
   right: calc(16px + var(--safe-right, env(safe-area-inset-right, 0px)));
-  bottom: calc(16px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
   left: calc(16px + var(--safe-left, env(safe-area-inset-left, 0px)));
   display: flex;
   justify-content: flex-end;
   pointer-events: none;
+}
+
+/* Inside a shell that already anchors the stack, the region is only a list. */
+.toast-region--inline {
+  position: static;
+  inset: auto;
+  width: 100%;
 }
 
 .toast-region__list {
@@ -501,6 +514,42 @@ a {
 .toast__title,
 .toast__description {
   margin: 0;
+}
+
+/* A status description stays compact until a person asks for the rest. */
+.toast__description--clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.status-toast__more {
+  padding: 0;
+  border: 0;
+  margin-top: 6px;
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.status-toast--active .toast__marker {
+  background: var(--positive);
+}
+
+.status-toast--loading .toast__marker {
+  background: #22d3ee;
+  box-shadow: 0 0 0 5px rgb(34 211 238 / 14%);
+}
+
+.status-toast--warning .toast__marker {
+  background: var(--warning);
+}
+
+.status-toast--error .toast__marker {
+  background: var(--negative);
 }
 
 .toast__title {
@@ -576,8 +625,11 @@ a {
 
 @media (max-width: 760px) {
   .toast-region {
+    top: calc(
+      12px + var(--safe-top, env(safe-area-inset-top, 0px)) +
+        var(--toast-region-offset, 0px)
+    );
     right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
-    bottom: calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
     left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px)));
   }
 }
