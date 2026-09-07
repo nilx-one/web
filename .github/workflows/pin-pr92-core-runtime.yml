@@ -45,6 +45,7 @@ jobs:
             ./scripts/build_wasm_package.sh "$GITHUB_WORKSPACE/.core-wasm-runtime"
           )
           actual="$(sha256sum .core-wasm-runtime/index_bg.wasm | awk '{print $1}')"
+          printf 'Pinned Core Wasm SHA-256: %s\n' "$actual"
           python - "$actual" <<'PY'
           from pathlib import Path
           import re
@@ -88,8 +89,6 @@ jobs:
               raise SystemExit("Web workflow digest pin drifted")
           workflow.write_text(text)
           PY
-          pnpm exec prettier --write .github/workflows/web.yml
-          printf 'Pinned Core Wasm SHA-256: %s\n' "$actual"
       - name: Commit reproducible runtime pin
         run: |
           set -Eeuo pipefail
