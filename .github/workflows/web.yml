@@ -26,6 +26,14 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build and verify procedural avatar assets
+        run: |
+          python -m pip install -r tools/avatars/requirements.txt
+          sh tools/avatars/build.sh
+          python tools/avatars/test_rig.py
       - name: Verify repository policy
         run: pnpm policy
       - name: Verify formatting
@@ -84,6 +92,13 @@ jobs:
             apps/discord-activity/dist
           retention-days: 1
 
+      - name: Preserve verified avatar assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: avatar-assets-${{ github.sha }}
+          path: deploy/web/avatars
+          retention-days: 1
+
   deploy-validation:
     name: Validate client deploy package
     if: github.event_name == 'pull_request'
@@ -117,6 +132,11 @@ jobs:
           mv site/dist apps/site/dist
           mv telegram-mini-app/dist apps/telegram-mini-app/dist
           mv discord-activity/dist apps/discord-activity/dist
+      - name: Reuse verified avatar assets
+        uses: actions/download-artifact@v4
+        with:
+          name: avatar-assets-${{ github.sha }}
+          path: deploy/web/avatars
       - name: Validate immutable multi-host runtime image
         run: docker build --file deploy/web/Dockerfile --tag 0x1-clients:ci .
       - name: Verify every host runtime

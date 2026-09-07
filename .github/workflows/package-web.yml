@@ -48,6 +48,13 @@ jobs:
         run: |
           ./scripts/prepare_core_wasm_runtime.sh .core-source
           rm -rf .core-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate versioned avatar assets
+        run: |
+          python -m pip install -r tools/avatars/requirements.txt
+          sh tools/avatars/build.sh
       - name: Build production Web hosts
         run: pnpm --filter @nilx-one/site --filter @nilx-one/telegram-mini-app --filter @nilx-one/discord-activity build
       - name: Verify browser error collector configuration
