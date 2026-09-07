@@ -3,6 +3,7 @@
 
 export interface IdentityProjection {
   pubDress: string;
+  avaiaPubDress?: string;
 }
 
 export interface PubDressSelection {
