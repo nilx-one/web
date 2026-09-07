@@ -18,6 +18,8 @@ export {
 } from "./failure-notice";
 export {
   ReadRuntimeReadiness,
+  type CorePubDressLabelErrorCode,
+  type CorePubDressLabelResult,
   type CoreRuntimePort,
   type CoreRuntimeStatus,
   type CoreUnavailableReason,
