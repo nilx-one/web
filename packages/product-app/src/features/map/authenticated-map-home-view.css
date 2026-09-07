@@ -176,8 +176,10 @@
 }
 
 .authenticated-map-home.authenticated-map-home .app-header__settings:hover,
-.authenticated-map-home.authenticated-map-home .app-header__settings:focus-visible,
-.authenticated-map-home.authenticated-map-home .app-header__overflow-trigger:hover,
+.authenticated-map-home.authenticated-map-home
+  .app-header__settings:focus-visible,
+.authenticated-map-home.authenticated-map-home
+  .app-header__overflow-trigger:hover,
 .authenticated-map-home.authenticated-map-home
   .app-header__overflow-trigger:focus-visible {
   border-color: rgba(0, 191, 212, 0.54);
@@ -198,7 +200,8 @@
 }
 
 .authenticated-map-home.authenticated-map-home .app-header__menu-item:hover,
-.authenticated-map-home.authenticated-map-home .app-header__menu-item:focus-visible {
+.authenticated-map-home.authenticated-map-home
+  .app-header__menu-item:focus-visible {
   background: rgba(55, 215, 229, 0.11);
 }
 
@@ -476,7 +479,9 @@
 }
 
 .authenticated-map-home.authenticated-map-home .bond-dock__detail-header h2,
-.authenticated-map-home.authenticated-map-home .interface-settings__option strong,
+.authenticated-map-home.authenticated-map-home
+  .interface-settings__option
+  strong,
 .authenticated-map-home.authenticated-map-home .bond-profile__rows dd,
 .authenticated-map-home.authenticated-map-home .host-connect-button,
 .authenticated-map-home.authenticated-map-home
@@ -499,7 +504,9 @@
   color: #74e6ee;
 }
 
-.authenticated-map-home.authenticated-map-home .interface-settings__option small,
+.authenticated-map-home.authenticated-map-home
+  .interface-settings__option
+  small,
 .authenticated-map-home.authenticated-map-home .interface-settings__note,
 .authenticated-map-home.authenticated-map-home .bond-profile__rows dt,
 .authenticated-map-home.authenticated-map-home .host-connect-button small,
@@ -509,7 +516,9 @@
   color: var(--map-ink-muted);
 }
 
-.authenticated-map-home.authenticated-map-home .interface-settings__option input {
+.authenticated-map-home.authenticated-map-home
+  .interface-settings__option
+  input {
   accent-color: var(--map-accent-spatial-strong);
 }
 
@@ -538,13 +547,16 @@
 .authenticated-map-home.authenticated-map-home .bond-dock__edit:hover,
 .authenticated-map-home.authenticated-map-home .bond-dock__edit:focus-visible,
 .authenticated-map-home.authenticated-map-home .interface-settings__back:hover,
-.authenticated-map-home.authenticated-map-home .interface-settings__back:focus-visible,
+.authenticated-map-home.authenticated-map-home
+  .interface-settings__back:focus-visible,
 .authenticated-map-home.authenticated-map-home .bond-profile__action:hover,
-.authenticated-map-home.authenticated-map-home .bond-profile__action:focus-visible,
+.authenticated-map-home.authenticated-map-home
+  .bond-profile__action:focus-visible,
 .authenticated-map-home.authenticated-map-home .provider-control:hover,
 .authenticated-map-home.authenticated-map-home .provider-control:focus-visible,
 .authenticated-map-home.authenticated-map-home .host-connect-button:hover,
-.authenticated-map-home.authenticated-map-home .host-connect-button:focus-visible {
+.authenticated-map-home.authenticated-map-home
+  .host-connect-button:focus-visible {
   border-color: rgba(0, 191, 212, 0.5);
   color: #007f90;
   outline: 0;
@@ -553,7 +565,8 @@
 .authenticated-map-home[data-theme="dark"] .bond-dock__edit:hover,
 .authenticated-map-home[data-theme="dark"] .bond-dock__edit:focus-visible,
 .authenticated-map-home[data-theme="dark"] .interface-settings__back:hover,
-.authenticated-map-home[data-theme="dark"] .interface-settings__back:focus-visible,
+.authenticated-map-home[data-theme="dark"]
+  .interface-settings__back:focus-visible,
 .authenticated-map-home[data-theme="dark"] .bond-profile__action:hover,
 .authenticated-map-home[data-theme="dark"] .bond-profile__action:focus-visible,
 .authenticated-map-home[data-theme="dark"] .provider-control:hover,
