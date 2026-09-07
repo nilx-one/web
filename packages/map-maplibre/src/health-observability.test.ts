@@ -16,6 +16,10 @@ interface FakeMap {
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
   readonly getCanvas: () => HTMLCanvasElement;
+  // This map never carries an observed position, so the renderer only ever
+  // asks whether its presentation layers are still there after a style phase.
+  readonly getSource: () => undefined;
+  readonly getLayer: () => undefined;
   emit(event: string, error?: unknown): void;
 }
 
@@ -38,6 +42,8 @@ function makeFakeMap(): FakeMap {
     jumpTo: vi.fn(),
     setStyle: vi.fn(),
     getCanvas: () => canvas,
+    getSource: () => undefined,
+    getLayer: () => undefined,
     emit(event, error) {
       for (const listener of [...(listeners.get(event) ?? [])]) {
         listener({ error });

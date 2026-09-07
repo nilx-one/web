@@ -5,8 +5,8 @@ import type {
   CoreRuntimePort,
   IdentityAccessPort,
 } from "@nilx-one/application";
-import type { HostPort } from "@nilx-one/host-contract";
-import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
+import type { GeolocationCapability, HostPort } from "@nilx-one/host-contract";
+import type { MapRenderer } from "@nilx-one/map-contract";
 import { ProductApp } from "@nilx-one/product-app";
 import {
   act,
@@ -19,13 +19,18 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  createGeolocationDouble,
+  createMapRendererDouble,
+  observation,
+  type GeolocationDouble,
+} from "../support/doubles";
+
 const readyCore: CoreRuntimePort = {
   probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
 };
 
-const readyMapStatus: MapRendererStatus = { kind: "ready" };
-
-function createHost(): HostPort {
+function createHost(geolocation: GeolocationCapability): HostPort {
   return {
     getSnapshot: () => ({
       kind: "browser",
@@ -38,6 +43,7 @@ function createHost(): HostPort {
     ready: vi.fn(),
     openExternal: vi.fn(),
     impact: vi.fn(),
+    geolocation,
   };
 }
 
@@ -60,14 +66,7 @@ function createAuthenticatedIdentity(): IdentityAccessPort {
 }
 
 function createMapRenderer(): MapRenderer {
-  return {
-    mount: vi.fn(),
-    unmount: vi.fn(),
-    getStatus: vi.fn(() => readyMapStatus),
-    subscribe: vi.fn(() => () => undefined),
-    setCamera: vi.fn(),
-    setAppearance: vi.fn(),
-  };
+  return createMapRendererDouble({ kind: "ready" });
 }
 
 function mapContainer(): HTMLElement {
@@ -97,7 +96,7 @@ describe("persistent authenticated world routing", () => {
     render(
       <ProductApp
         core={readyCore}
-        host={createHost()}
+        host={createHost(createGeolocationDouble())}
         identity={createAuthenticatedIdentity()}
         mapRenderer={renderer}
       />,
@@ -157,7 +156,7 @@ describe("persistent authenticated world routing", () => {
       render(
         <ProductApp
           core={readyCore}
-          host={createHost()}
+          host={createHost(createGeolocationDouble())}
           identity={createAuthenticatedIdentity()}
           mapRenderer={renderer}
         />,
@@ -179,7 +178,7 @@ describe("persistent authenticated world routing", () => {
     render(
       <ProductApp
         core={readyCore}
-        host={createHost()}
+        host={createHost(createGeolocationDouble())}
         identity={createAuthenticatedIdentity()}
         mapRenderer={renderer}
         routerBasepath="/embedded"
@@ -191,5 +190,84 @@ describe("persistent authenticated world routing", () => {
     ).toBeVisible();
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
+  });
+});
+
+describe("device location over the persistent world", () => {
+  function renderWorld(geolocation: GeolocationDouble) {
+    const renderer = createMapRenderer();
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost(geolocation)}
+        identity={createAuthenticatedIdentity()}
+        mapRenderer={renderer}
+      />,
+    );
+    return renderer;
+  }
+
+  it("requests once and watches once across route transitions", async () => {
+    const user = userEvent.setup();
+    const geolocation = createGeolocationDouble({ position: observation() });
+
+    const renderer = renderWorld(geolocation);
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+    );
+    await screen.findByRole("heading", { name: "0x0sky" });
+
+    const settingsLink = document.querySelector<HTMLAnchorElement>(
+      'a[href="/settings"]',
+    );
+    fireEvent.click(settingsLink as HTMLAnchorElement);
+    await screen.findByRole("heading", { name: "Settings" });
+
+    expect(geolocation.readPermission).toHaveBeenCalledOnce();
+    expect(geolocation.requestPosition).toHaveBeenCalledOnce();
+    expect(geolocation.watchPosition).toHaveBeenCalledOnce();
+    expect(geolocation.watchers()).toBe(1);
+    expect(renderer.mount).toHaveBeenCalledOnce();
+  });
+
+  it("moves the marker on a live update without taking the camera back", async () => {
+    const geolocation = createGeolocationDouble({ position: observation() });
+
+    const renderer = renderWorld(geolocation);
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    const camerasAfterFirstFix = vi.mocked(renderer.setCamera).mock.calls
+      .length;
+
+    act(() => {
+      geolocation.publish({
+        kind: "observed",
+        position: observation({ latitude: 50.4514 }),
+      });
+    });
+
+    await waitFor(() =>
+      expect(renderer.setObservedPosition).toHaveBeenCalledWith({
+        center: [30.5234, 50.4514],
+        accuracyMeters: 24,
+      }),
+    );
+    expect(vi.mocked(renderer.setCamera).mock.calls).toHaveLength(
+      camerasAfterFirstFix,
+    );
+  });
+
+  it("stops observing when the authenticated world goes away", async () => {
+    const geolocation = createGeolocationDouble({ position: observation() });
+
+    renderWorld(geolocation);
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    expect(geolocation.watchers()).toBe(1);
+
+    cleanup();
+
+    expect(geolocation.watchers()).toBe(0);
+    expect(geolocation.stopped()).toBe(1);
   });
 });

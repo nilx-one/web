@@ -62,7 +62,23 @@ Every client host provides capabilities through `host-contract`:
 - lifecycle events;
 - back navigation;
 - haptics;
-- external links and sharing.
+- external links and sharing;
+- device geolocation.
+
+Device geolocation is a host capability, not renderer behavior and not
+protocol truth. Shared application code never calls a platform geolocation API
+directly, and the map renderer never requests a position: it draws an
+observation the application supplies. Telegram and Discord run in embedded
+browsers, so their compositions hand the same browser capability to the host
+adapter rather than each growing one. A host without a provider composes the
+canonical unsupported capability, so an absent provider is an answer rather
+than a branch in the map feature.
+
+An observed position is ephemeral evidence local to one client session. It may
+drive local presentation and nothing else: it never becomes a BondChain entry,
+never implies another Bond's presence or consent, never becomes Relationship or
+Core state, and never reaches storage, a backend API, analytics, or `4x-errors`.
+Explicit location sharing between Bonds would be a separate protocol feature.
 
 Telegram `initData` and future native-app session envelopes are always marked as requiring verification at the client boundary. They become authentication context only after server-side validation. The fact that two hosts run on the same physical device is not authentication evidence. Passwordless continuation is allowed only when the backend verifies the host credential and resolves it to the exact selected identity. `TELOXIDE_TOKEN` exists only in the server-side identity runtime and must never enter Vite configuration, client JavaScript, static assets, or browser-visible environment state. Host availability changes presentation capability, never Core semantics.
 
@@ -77,6 +93,13 @@ Custom graphics select WebGPU by capability. Failure to acquire an adapter falls
 Geographic rendering enters the product through `@nilx-one/map-contract`. `@nilx-one/map-maplibre` implements that port with MapLibre GL JS and is constructed only in the host composition roots. Product code never imports MapLibre directly.
 
 The baseline style contract is the same-origin, versioned `/map/0.1.0/style.json`. The MapLibre adapter registers the PMTiles protocol as presentation infrastructure, while the immutable Web runtime serves `/map/*` from a host-independent static boundary. A style contract may be published before its geographic basemap archive; when that happens the style metadata must state the missing asset explicitly rather than silently substituting a public provider. Once a basemap is activated, its `.pmtiles` URL remains same-origin and versioned. Shared spatial state, visibility, clustering, permissions, and interaction projections must still arrive from Core-facing contracts rather than being invented by MapLibre or React.
+
+The renderer also owns camera transitions and the presentation depth choice.
+The application requests semantic camera changes — recenter on this coordinate,
+with this viewport padding, animated or not — and MapLibre performs them; React
+controls never call MapLibre directly. Presentation depth (`flat` or
+`volumetric`) selects how the published style presents the same geography and
+never forks the geographic model into two maps.
 
 Camera synchronization with future custom world renderers may cross an explicit client-side coordination boundary, but no renderer may treat camera synchronization as authority over shared world state. Ownership, update direction, frame lifecycle, and versioning for that coordination remain an explicit architecture open item in the canonical 0x1 specification.
 

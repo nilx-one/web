@@ -1,0 +1,88 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* The location affordance floats over the world, above the Dock's measured
+   height so it never covers the bottom layer. */
+.location-control {
+  position: absolute;
+  right: calc(var(--shell-inset) + var(--safe-right, 0px));
+  bottom: calc(
+    var(--shell-inset) + var(--safe-bottom, 0px) +
+      var(--shell-bottom-height, 0px) + var(--shell-gap)
+  );
+}
+
+.location-control__button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--map-night-border);
+  border-radius: 50%;
+  background: var(--map-night-raised);
+  backdrop-filter: blur(18px);
+  color: #f5f3f7;
+  cursor: pointer;
+}
+
+.location-control__button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.location-control__button:focus-visible {
+  outline: 2px solid #f5f3f7;
+  outline-offset: 2px;
+}
+
+/* The glyph carries state through shape as well as colour: a filled disc when
+   the camera frames the observation, a ring when it does not, a dashed ring
+   when the host has no position to give. */
+.location-control__glyph {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.location-control[data-state="centered"] .location-control__glyph {
+  border-color: var(--map-accent-spatial);
+  background: var(--map-accent-spatial);
+}
+
+.location-control[data-state="displaced"] .location-control__glyph {
+  border-color: var(--map-accent-spatial);
+  background: transparent;
+}
+
+.location-control[data-state="locating"] .location-control__glyph {
+  border-style: dotted;
+  border-color: var(--map-accent-spatial);
+  animation: location-control-pulse 1.4s ease-in-out infinite;
+}
+
+.location-control[data-state="unsupported"] .location-control__glyph,
+.location-control[data-state="denied"] .location-control__glyph,
+.location-control[data-state="unavailable"] .location-control__glyph {
+  border-style: dashed;
+}
+
+@keyframes location-control-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* A static control has to stay fully readable, so reduced motion drops the
+   pulse rather than replacing it with another effect. */
+@media (prefers-reduced-motion: reduce) {
+  .location-control[data-state="locating"] .location-control__glyph {
+    animation: none;
+  }
+}

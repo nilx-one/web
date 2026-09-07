@@ -5,6 +5,7 @@ import {
   createCoreWasmClient,
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
+import { createBrowserGeolocation } from "@nilx-one/host-browser";
 import {
   createTelegramHost,
   resolveTelegramWebApp,
@@ -23,7 +24,11 @@ if (container === null) {
   throw new Error("0x1 root element is missing");
 }
 
-const host = createTelegramHost(resolveTelegramWebApp(window));
+// A Mini App runs in an embedded browser, so the host reuses the browser
+// geolocation capability rather than growing a Telegram-specific one.
+const host = createTelegramHost(resolveTelegramWebApp(window), {
+  geolocation: createBrowserGeolocation(),
+});
 const core = createCoreWasmClient({
   loadBindings: loadGeneratedCoreWasmBindings,
 });

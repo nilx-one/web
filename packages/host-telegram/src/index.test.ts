@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { UNSUPPORTED_GEOLOCATION } from "@nilx-one/host-contract";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -73,5 +74,29 @@ describe("TelegramHost", () => {
     );
     expect(resolveTelegramWebApp({ Telegram: {} })).toBeUndefined();
     expect(resolveTelegramWebApp(undefined)).toBeUndefined();
+  });
+});
+
+describe("TelegramHost geolocation", () => {
+  it("exposes the composed embedded-browser capability unchanged", async () => {
+    const geolocation = {
+      readPermission: vi.fn(async () => "granted" as const),
+      requestPosition: vi.fn(async () => ({
+        kind: "failed" as const,
+        reason: "timeout" as const,
+      })),
+      watchPosition: vi.fn(() => () => undefined),
+    };
+
+    const host = createTelegramHost(createBridge(), { geolocation });
+
+    expect(host.geolocation).toBe(geolocation);
+    await expect(host.geolocation.readPermission()).resolves.toBe("granted");
+  });
+
+  it("answers unsupported when the composition provides no capability", () => {
+    expect(createTelegramHost(createBridge()).geolocation).toBe(
+      UNSUPPORTED_GEOLOCATION,
+    );
   });
 });

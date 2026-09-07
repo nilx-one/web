@@ -2,12 +2,23 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  UNSUPPORTED_GEOLOCATION,
   ZERO_SAFE_AREA,
+  type GeolocationCapability,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
   type SafeAreaInsets,
 } from "@nilx-one/host-contract";
+
+export interface TelegramHostComposition {
+  /**
+   * Telegram Mini Apps run in an embedded browser, so the composition root
+   * hands this host the same browser capability rather than growing a second
+   * geolocation implementation here.
+   */
+  readonly geolocation?: GeolocationCapability;
+}
 
 export interface TelegramWebAppBridge {
   initData: string;
@@ -57,7 +68,10 @@ function assertExternalUrl(url: URL): void {
 }
 
 class TelegramHost implements HostPort {
-  public constructor(private readonly bridge?: TelegramWebAppBridge) {}
+  public constructor(
+    private readonly bridge: TelegramWebAppBridge | undefined,
+    public readonly geolocation: GeolocationCapability,
+  ) {}
 
   public getSnapshot(): HostSnapshot {
     return {
@@ -131,6 +145,12 @@ export function resolveTelegramWebApp(
   return webApp as unknown as TelegramWebAppBridge;
 }
 
-export function createTelegramHost(bridge?: TelegramWebAppBridge): HostPort {
-  return new TelegramHost(bridge);
+export function createTelegramHost(
+  bridge?: TelegramWebAppBridge,
+  composition: TelegramHostComposition = {},
+): HostPort {
+  return new TelegramHost(
+    bridge,
+    composition.geolocation ?? UNSUPPORTED_GEOLOCATION,
+  );
 }

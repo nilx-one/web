@@ -4,6 +4,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
+import { MAP_SCALE_ZOOM } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 interface MapStyleSource {
@@ -22,9 +24,17 @@ interface MapStyleLayer {
   readonly paint?: Record<string, unknown>;
 }
 
+interface MapStyleLight {
+  readonly anchor?: string;
+  readonly position?: readonly number[];
+  readonly color?: string;
+  readonly intensity?: number;
+}
+
 interface MapStyleContract {
   readonly version: number;
   readonly metadata?: Record<string, unknown>;
+  readonly light?: MapStyleLight;
   readonly sources: Record<string, MapStyleSource>;
   readonly layers: readonly MapStyleLayer[];
 }
@@ -47,6 +57,12 @@ const SOURCE_LAYERS = [
   "places",
   "pois",
 ];
+
+// Feature attributes the published archive is documented to carry, recorded in
+// docs/map-data.md and verifiable against a real archive with
+// deploy/web/inspect-basemap.sh. A style that reads anything else is guessing
+// at a schema, and a wrong guess fails silently as missing geography.
+const SOURCE_ATTRIBUTES = ["kind", "kind_detail", "height", "min_height"];
 
 function readStyleText(appearance: keyof typeof APPEARANCE_FILES): string {
   return readFileSync(resolve(APPEARANCE_FILES[appearance]), "utf8");
@@ -265,6 +281,7 @@ describe("map deployment assets", () => {
       "rivers",
       "buildings-flat",
       "roads-rail",
+      "roads-minor-casing",
       "roads-secondary",
       "roads-casing",
       "roads-primary",
@@ -296,6 +313,21 @@ describe("map deployment assets", () => {
     );
   });
 
+  it("locks the dark palette to the same roles as the light one", () => {
+    const style = readStyle("dark");
+
+    expect(style.metadata?.["nilx-one:surface-background"]).toBe("#070c0e");
+    expect(style.metadata?.["nilx-one:surface-land"]).toBe("#0c1417");
+    expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#10201d");
+    expect(style.metadata?.["nilx-one:surface-buildings"]).toBe("#203036");
+    expect(style.metadata?.["nilx-one:surface-building-faces"]).toBe("#26383f");
+    expect(style.metadata?.["nilx-one:road-primary"]).toBe("#344a52");
+    expect(style.metadata?.["nilx-one:road-secondary"]).toBe("#26383e");
+    expect(style.metadata?.["nilx-one:water-base"]).toBe("#05222a");
+    expect(style.metadata?.["nilx-one:label-primary"]).toBe("#a8b6bb");
+    expect(style.metadata?.["nilx-one:label-secondary"]).toBe("#78898f");
+  });
+
   it("spends the cyan accent on water and never as a global fill", () => {
     for (const appearance of ["light", "dark"] as const) {
       const style = readStyle(appearance);
@@ -323,6 +355,128 @@ describe("map deployment assets", () => {
       ["get", "height"],
       7,
     ]);
+  });
+
+  it.each(["light", "dark"] as const)(
+    "validates against the MapLibre style specification (%s)",
+    (appearance) => {
+      // A style the renderer refuses is a deployment failure that no unit
+      // assertion about its shape would catch.
+      expect(validateStyleMin(readStyle(appearance) as never)).toEqual([]);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "reads only feature attributes the published archive carries (%s)",
+    (appearance) => {
+      const read = [
+        ...readStyleText(appearance).matchAll(/"get",\s*"([a-z_]+)"/g),
+      ].map((match) => match[1]);
+
+      expect([...new Set(read)].sort()).toEqual([...SOURCE_ATTRIBUTES].sort());
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "publishes the named zoom ladder the camera policy shares (%s)",
+    (appearance) => {
+      const metadata = readStyle(appearance).metadata ?? {};
+
+      expect(metadata["nilx-one:zoom-city"]).toBe(MAP_SCALE_ZOOM.city);
+      expect(metadata["nilx-one:zoom-neighborhood"]).toBe(
+        MAP_SCALE_ZOOM.neighborhood,
+      );
+      expect(metadata["nilx-one:zoom-street"]).toBe(MAP_SCALE_ZOOM.street);
+      expect(metadata["nilx-one:zoom-building"]).toBe(MAP_SCALE_ZOOM.building);
+    },
+  );
+
+  it("adds structure at every step from city to building scale", () => {
+    const style = readStyle("light");
+    const at = (zoom: number) => layersPaintingAt(style, zoom);
+
+    // City: geography, water and coarse built fabric, no depth and no points.
+    expect(at(MAP_SCALE_ZOOM.city)).toEqual(
+      expect.arrayContaining(["earth", "water", "roads-primary"]),
+    );
+    expect(at(MAP_SCALE_ZOOM.city)).not.toContain("buildings");
+
+    // Neighbourhood: the street network and footprints carry the structure.
+    expect(at(MAP_SCALE_ZOOM.neighborhood)).toEqual(
+      expect.arrayContaining(["buildings-flat", "roads-secondary"]),
+    );
+    expect(at(MAP_SCALE_ZOOM.neighborhood)).not.toContain("buildings");
+
+    // Street: minor roads gain casing, footprints reach full presence.
+    expect(at(MAP_SCALE_ZOOM.street)).toEqual(
+      expect.arrayContaining(["roads-minor-casing", "buildings-flat"]),
+    );
+
+    // Building: extrusion joins the same footprints it stands on.
+    expect(at(MAP_SCALE_ZOOM.building)).toEqual(
+      expect.arrayContaining(["buildings", "buildings-flat", "pois"]),
+    );
+  });
+
+  it("keeps footprints past the extrusion handover so 2D stays complete", () => {
+    const style = readStyle("light");
+    const footprints = style.layers.find(
+      (layer) => layer.id === "buildings-flat",
+    );
+
+    // Explicit 2D suppresses the extrusion layer, so the footprints beneath it
+    // are what buildings become. They must not fade out at close zoom.
+    expect(footprints?.maxzoom).toBeUndefined();
+    expect(paintsAt(footprints as MapStyleLayer, MAP_SCALE_ZOOM.building)).toBe(
+      true,
+    );
+    expect(paintsAt(footprints as MapStyleLayer, 19)).toBe(true);
+  });
+
+  it("keeps one extruded depth layer with a conservative unknown-height fallback", () => {
+    for (const appearance of ["light", "dark"] as const) {
+      const style = readStyle(appearance);
+      const extruded = style.layers.filter(
+        (layer) => layer.type === "fill-extrusion",
+      );
+
+      expect(extruded.map((layer) => layer.id)).toEqual(["buildings"]);
+      // Real OSM height where the archive has it; the fallback is presentation
+      // only and is declared as such rather than passing as geographic data.
+      expect(extruded[0]?.paint?.["fill-extrusion-height"]).toEqual([
+        "coalesce",
+        ["get", "height"],
+        7,
+      ]);
+      expect(style.metadata?.["nilx-one:building-height-source"]).toBe(
+        "openstreetmap-height",
+      );
+      expect(style.metadata?.["nilx-one:building-height-fallback"]).toBe(
+        "presentation-only-7m",
+      );
+    }
+  });
+
+  it("lights both appearances from the same direction", () => {
+    const light = readStyle("light").light;
+    const dark = readStyle("dark").light;
+
+    // Soft directional light is the depth treatment MapLibre supports without
+    // a second renderer or a stricter client capability baseline.
+    expect(light?.anchor).toBe("viewport");
+    expect(light?.position).toEqual(dark?.position);
+    expect(light?.anchor).toBe(dark?.anchor);
+    expect(light?.intensity).toBeLessThan(0.6);
+    expect(dark?.intensity).toBeLessThan(0.6);
+  });
+
+  it("keeps building faces paler than the footprints they stand on", () => {
+    const style = readStyle("light");
+
+    // Near-white volumes over a slightly deeper footprint read as ground
+    // contact, which is what makes the massing legible without a shadow pass.
+    expect(style.metadata?.["nilx-one:surface-building-faces"]).toBe("#eef3f4");
+    expect(style.metadata?.["nilx-one:surface-buildings"]).toBe("#d8e2e5");
   });
 
   it.each(["light", "dark"] as const)(

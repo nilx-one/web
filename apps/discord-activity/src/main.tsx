@@ -5,6 +5,7 @@ import {
   createCoreWasmClient,
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
+import { createBrowserGeolocation } from "@nilx-one/host-browser";
 import { bootstrapDiscordActivity } from "@nilx-one/host-discord";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
 import { createMapLibreRenderer } from "@nilx-one/map-maplibre";
@@ -23,7 +24,15 @@ if (container === null) {
 const root = createRoot(container);
 
 async function main(): Promise<void> {
-  const session = await bootstrapDiscordActivity();
+  // An Activity runs in an embedded browser, so the host reuses the browser
+  // geolocation capability; Discord's own restrictions arrive as capability
+  // results rather than as a Discord branch in the map feature.
+  const session = await bootstrapDiscordActivity({
+    environment: {
+      matchMedia: (query: string) => window.matchMedia(query),
+      geolocation: createBrowserGeolocation(),
+    },
+  });
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,
   });

@@ -1,9 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { UNSUPPORTED_GEOLOCATION } from "@nilx-one/host-contract";
 import { describe, expect, it, vi } from "vitest";
 
-import { bootstrapDiscordActivity } from "./index";
+import { bootstrapDiscordActivity, createDiscordHost } from "./index";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -83,5 +84,43 @@ describe("Discord Activity host", () => {
         authenticated: true,
       },
     });
+  });
+});
+
+describe("Discord host geolocation", () => {
+  const bridge = {
+    ready: vi.fn(),
+    commands: {
+      authorize: vi.fn(),
+      authenticate: vi.fn(),
+      encourageHardwareAcceleration: vi.fn(),
+      openExternalLink: vi.fn(),
+    },
+  } as unknown as Parameters<typeof createDiscordHost>[0];
+
+  it("exposes the composed embedded-browser capability unchanged", () => {
+    const geolocation = {
+      readPermission: vi.fn(async () => "prompt" as const),
+      requestPosition: vi.fn(async () => ({
+        kind: "failed" as const,
+        reason: "permission-denied" as const,
+      })),
+      watchPosition: vi.fn(() => () => undefined),
+    };
+
+    const host = createDiscordHost(bridge, {
+      matchMedia: () => mediaQueryList(),
+      geolocation,
+    });
+
+    expect(host.geolocation).toBe(geolocation);
+  });
+
+  it("answers unsupported when the composition provides no capability", () => {
+    const host = createDiscordHost(bridge, {
+      matchMedia: () => mediaQueryList(),
+    });
+
+    expect(host.geolocation).toBe(UNSUPPORTED_GEOLOCATION);
   });
 });
