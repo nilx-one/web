@@ -33,6 +33,7 @@ export {
   RegisterNativeIdentity,
   RegisterProviderIdentity,
   ResolvePubDress,
+  ResolvePubDressLabel,
   formatPubDress,
   parsePubDress,
   type IdentityAccessPort,
@@ -44,6 +45,20 @@ export {
   type NativeRegistrationResult,
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
+  type PubDressLabelResolutionResult,
   type PubDressSelection,
   type PubDressResolutionResult,
 } from "./identity-registration";
+export {
+  PUB_DRESS_LABEL_MAX_LENGTH,
+  PUB_DRESS_URL_SUFFIX_MAX_LENGTH,
+  PUB_DRESS_URL_ZONE,
+  composePubDressLabel,
+  derivePubDressLabelStem,
+  formatPubDressUrl,
+  normalizePubDressUrlSuffix,
+  suggestPubDressUrlSuffix,
+  type PubDressLabelComposition,
+  type PubDressLabelRejection,
+  type PubDressLabelStem,
+} from "./pub-dress-url";

@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { PubDressLabelResolutionResult } from "@nilx-one/application";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -390,5 +391,99 @@ describe("progressive native identity form", () => {
     expect(near.x).toBe(150);
     expect(near.energy).toBeGreaterThan(far.energy);
     expect(near.spread).toBeLessThan(far.spread);
+  });
+});
+
+describe("public address inside the identity form", () => {
+  function renderForm(
+    mode: "register" | "sign-in",
+    selection: { discriminator: string; slug: string },
+    pubDressUrlResolution?: PubDressLabelResolutionResult,
+  ) {
+    render(
+      <IdentityFoundationView
+        password=""
+        selection={selection}
+        {...(pubDressUrlResolution ? { pubDressUrlResolution } : {})}
+        viewModel={{
+          hostLabel: "browser host",
+          safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+          showProviderRow: false,
+          runtime: {
+            tone: "ready",
+            label: "Shared Core ready",
+            detail: "Contract 1 is available to the Web client.",
+          },
+          identity: {
+            kind: "form",
+            mode,
+            status:
+              mode === "register"
+                ? {
+                    kind: "available",
+                    detail: "Available — create this identity",
+                  }
+                : { kind: "registered", detail: "Bond found — sign in" },
+            busy: false,
+          },
+        }}
+        onAcknowledgeRecovery={vi.fn()}
+        onCredentialAutofill={vi.fn()}
+        onForgetRemembered={vi.fn()}
+        onLogout={vi.fn()}
+        onPasswordChange={vi.fn()}
+        onResolvePubDress={vi.fn()}
+        onSelectionChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+  }
+
+  it("shows a registering Bond the address its pub_dress folds onto", () => {
+    renderForm("register", { discriminator: "d", slug: "A-Sha" });
+
+    expect(screen.getByText("public address")).toBeInTheDocument();
+    expect(screen.getAllByText("0xda-sha")).not.toHaveLength(0);
+    expect(screen.getByText(/Lowercased for the address/)).toBeInTheDocument();
+  });
+
+  it("does not offer an address to a Bond that already has one", () => {
+    renderForm("sign-in", { discriminator: "d", slug: "a-sha" });
+
+    expect(screen.queryByText("public address")).not.toBeInTheDocument();
+  });
+
+  it("opens the second part when the folded address is already held", () => {
+    renderForm(
+      "register",
+      { discriminator: "d", slug: "a-sha" },
+      {
+        kind: "registered",
+        label: "0xda-sha",
+      },
+    );
+
+    expect(
+      screen.getByLabelText("Distinguishing part of 0xda-sha.nilx.one"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the folded stem out of the editable part", () => {
+    renderForm(
+      "register",
+      { discriminator: "d", slug: "a-sha" },
+      {
+        kind: "registered",
+        label: "0xda-sha",
+      },
+    );
+
+    const suffix = screen.getByLabelText(
+      "Distinguishing part of 0xda-sha.nilx.one",
+    );
+    fireEvent.change(suffix, { target: { value: "7412" } });
+
+    expect(suffix).toHaveValue("7412");
+    expect(screen.getByText("0xda-sha")).toBeInTheDocument();
   });
 });

@@ -1,0 +1,235 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+# Implementation instruction for nilx-one/core.
+#
+# nilx-one/web derives a Bond's public address in its own client today
+# (packages/application/src/pub-dress-url.ts) so a registering Bond can see the
+# fold before committing. That derivation is a preview, not authority: the same
+# rule has to exist normatively next to PubDress, or the Web client and the
+# identity service can disagree about which Bond owns an address.
+#
+# This file is the handoff. It states what belongs in core, what is already
+# decided, and the one decision that is genuinely open.
+
+contract:
+  name: pub_dress_label
+  owner: nilx-one/core
+  crate: ox1-contracts
+  companion_of: PubDress
+  consumers:
+    - repository: nilx-one/web
+      pinned_at: 240b6e79bf937261169fa98253b4d288a3d1a451
+      uses:
+        - services/identity # allocation, resolution endpoint
+        - packages/application/src/pub-dress-url.ts # preview, to be replaced by the Wasm boundary
+  reference: docs/pub-dress-url.md
+
+problem:
+  statement: >-
+    A pub_dress is case-sensitive; a DNS label is not. The fold between them is
+    not injective, so it cannot be inverted and cannot be recomputed as a view
+    of the identity column.
+  evidence:
+    - identities.pub_dress TEXT PRIMARY KEY COLLATE BINARY
+    - "identity form copy: Case-sensitive · 2–32 characters"
+  collision_example:
+    distinct_identities: ["0x0Sky", "0x0sky"]
+    single_label: "0x0sky"
+  consequences:
+    - The allocated label is stored with its own uniqueness, never derived at read time.
+    - A label resolves back to an identity only by lookup.
+    - The first Bond to claim a label owns it; later Bonds folding onto it choose a suffix.
+
+decided:
+  # These are settled by the shape of pub_dress itself and need no debate.
+  - id: slug-only-fold
+    rule: Only the slug folds.
+    because: The discriminator is already constrained to lowercase hexadecimal, so `0xDsky` is not a pub_dress at all.
+  - id: prefix-namespacing
+    rule: Every label keeps the `0x` prefix.
+    because: >-
+      No Bond can fold onto `www`, `api`, or `_acme-challenge`, so the Bond
+      namespace is disjoint from service hosts by construction. A positive rule,
+      not a reserved-name blocklist to maintain.
+  - id: ascii-fold-only
+    rule: Fold A-Z to a-z explicitly; do not call a general Unicode lowercase.
+    because: >-
+      A general lowercase also folds scalars this contract refuses, which hides
+      a rejection behind a silent rewrite.
+  - id: allocation-is-a-transaction
+    rule: Resolution is advisory; the allocating insert is the only collision boundary.
+    because: Matches the existing pub_dress rule in services/identity/README.md.
+
+open_decision:
+  id: non-ascii-mapping
+  question: What label, if any, does a non-ASCII pub_dress get?
+  current_web_behavior: Refused, with reason `non-ascii`, surfaced as "this alphabet has no agreed address form".
+  why_deferred: >-
+    Choosing an IDNA/UTS-46 mapping is normative. A fold invented downstream
+    could land one Bond's identity on another Bond's address permanently, and
+    the mapping cannot be changed later without breaking allocated addresses.
+  options:
+    - id: refuse
+      effect: Non-ASCII identities have no public address.
+      cost: Excludes Cyrillic and every non-Latin script from addresses.
+    - id: idna-uts46
+      effect: Punycode, e.g. `0x0небо` -> `xn--`-encoded label.
+      note: >-
+        Injective and reversible, so it does not create the collision class this
+        contract exists to control. Requires pinning one UTS-46 revision inside
+        core; do not delegate it to a platform API whose version can drift.
+      cost: Length must be checked after encoding, not before.
+    - id: transliterate
+      effect: Map non-ASCII onto ASCII lookalikes.
+      verdict: rejected
+      because: Non-injective and homograph-friendly; it manufactures both collisions and phishing.
+  decide_before: Any migration that stores allocated labels.
+
+api:
+  language: rust
+  module: ox1_contracts
+  types:
+    - name: PubDressLabel
+      kind: newtype
+      invariant: A validated, allocatable DNS label; construction is the only way to hold one.
+      derives: [Clone, Debug, PartialEq, Eq, Hash]
+    - name: PubDressLabelError
+      kind: enum
+      variants:
+        - NotAPubDress # input was not canonical
+        - NonAscii # see open_decision
+        - InvalidCharacter # ASCII outside [a-z0-9-]
+        - BoundaryHyphen # leading or trailing hyphen on the composed label
+        - TooLong # exceeds 63 octets after any encoding
+        - SuffixTooLong # suffix exceeds its own budget
+  functions:
+    - signature: "PubDressLabel::stem(pub_dress: &PubDress) -> Result<PubDressStem, PubDressLabelError>"
+      returns: The folded label stem, and whether folding changed the address.
+    - signature: "PubDressLabel::compose(stem: &PubDressStem, suffix: &str) -> Result<PubDressLabel, PubDressLabelError>"
+      note: Validate the composed label, not the suffix alone, so a boundary hyphen is caught wherever it came from.
+    - signature: "PubDressLabel::parse(label: &str) -> Result<PubDressLabel, PubDressLabelError>"
+      note: For the resolution endpoint, which receives a label rather than a pub_dress.
+    - signature: "PubDressLabel::as_str(&self) -> &str"
+  constants:
+    label_max_octets: 63 # RFC 1035
+    suffix_max_length: 8
+    zone_is_not_owned_here: true # the zone is deployment configuration, not protocol
+
+test_vectors:
+  # Mirrors packages/application/src/pub-dress-url.test.ts so the two sides can
+  # be cross-checked. Every row here should exist as a Rust test.
+  stem:
+    - input: "0xda-sha"
+      stem: "0xda-sha"
+      folded: false
+    - input: "0xdA-Sha"
+      stem: "0xda-sha"
+      folded: true
+    - input: "0x0Sky"
+      stem: "0x0sky"
+      folded: true
+    - input: "0x0sky"
+      stem: "0x0sky"
+      folded: false
+      note: Together with the row above, the collision this contract exists to control.
+    - input: "sky"
+      error: NotAPubDress
+    - input: "0xgsky"
+      error: NotAPubDress
+      note: Non-hexadecimal discriminator.
+    - input: "0xDsky"
+      error: NotAPubDress
+      note: An uppercase discriminator is not a pub_dress; the fold never reaches it.
+    - input: "0x0sky_one"
+      error: InvalidCharacter
+    - input: "0x0sky-"
+      error: BoundaryHyphen
+    - input: "0x0небо"
+      error: NonAscii
+      note: Governed by open_decision; this row changes if idna-uts46 is chosen.
+  compose:
+    - stem: "0xda-sha"
+      suffix: ""
+      label: "0xda-sha"
+    - stem: "0xda-sha"
+      suffix: "7412"
+      label: "0xda-sha7412"
+    - stem: "0x0sky"
+      suffix: "TWO"
+      label: "0x0skytwo"
+      note: The suffix folds the same way the stem does.
+    - stem: "0x0sky"
+      suffix: "2-"
+      error: BoundaryHyphen
+    - stem: "0x0sky"
+      suffix: "a.b"
+      error: InvalidCharacter
+    - stem: "0x0sky"
+      suffix: "111111111"
+      error: SuffixTooLong
+  properties:
+    - Every stem starts with "0x".
+    - Any suffix of decimal digits composes into a valid label.
+    - compose is total on (valid stem, valid suffix) within the length budget.
+
+downstream:
+  # Work in nilx-one/web that unblocks once the contract lands. Listed so the
+  # core change is sized against what it has to serve.
+  - repository: nilx-one/web
+    steps:
+      - id: pin
+        action: Move the ox1-contracts rev in services/identity/Cargo.toml to the commit adding this contract.
+      - id: migration
+        action: Add migration 0004 storing the allocated label.
+        detail: >-
+          UNIQUE and COLLATE NOCASE on the label column. The identity it belongs
+          to is the existing pub_dress foreign key.
+      - id: allocation
+        action: Allocate the label inside the existing registration transaction.
+        detail: >-
+          Bounded retry (8 attempts) on suffix collision, then a plain error.
+          Never a loop without a bound, never a check-then-insert.
+      - id: endpoint
+        action: "POST /api/v1/identity/url/resolve"
+        request: '{"label": "0xda-sha"}'
+        responses:
+          - '{"state": "available", "label": "0xda-sha"}'
+          - '{"state": "registered", "label": "0xda-sha"}'
+          - "error code invalid_pub_dress_label"
+          - "error code rate_limited"
+        note: >-
+          The client adapter already speaks this shape
+          (packages/identity-http/src/index.ts).
+      - id: projection
+        action: Add pub_dress_url to the identity projection.
+        note: The client already parses it and treats it as optional.
+      - id: contract-version
+        action: Bump services/identity/deploy/contract.version and requiresIdentityContract in deploy/web/targets.json.
+        note: Only once a verified identity package providing the new contract exists in the release ancestry.
+
+out_of_scope:
+  - id: zone-routing
+    detail: Wildcard DNS and TLS for the zone.
+    owner: 0x0sky/infra
+    reference: deploy/web/README.md — "0x0sky/infra owns public HTTPS route selection"
+  - id: certificate-shape
+    detail: >-
+      One wildcard certificate over ACME DNS-01. Per-label certificates would
+      publish every registered nickname in Certificate Transparency logs
+      permanently.
+  - id: cookie-boundary
+    detail: >-
+      Already correct and must stay correct: session and remembered-Bond cookies
+      use the __Host- prefix and set no Domain attribute, so no subdomain can
+      read or shadow them (services/identity/src/api.rs).
+    escalation: >-
+      If Bond addresses ever serve Bond-controlled JavaScript, __Host- alone
+      stops being sufficient and they need their own registrable domain plus a
+      Public Suffix List entry.
+
+acceptance:
+  - The contract compiles in ox1-contracts with no dependency on a zone, a database, or a transport.
+  - Every row in test_vectors exists as a test and passes.
+  - open_decision is resolved and recorded in the contract's own documentation before any label is stored.
+  - The Web client's preview derivation is replaced by, or verified against, this contract rather than living beside it indefinitely.

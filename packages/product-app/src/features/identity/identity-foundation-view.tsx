@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { parsePubDress, type PubDressSelection } from "@nilx-one/application";
+import {
+  parsePubDress,
+  type PubDressLabelResolutionResult,
+  type PubDressSelection,
+} from "@nilx-one/application";
 import { AppChrome, RuntimeStatus } from "@nilx-one/ui";
 import {
   useEffect,
@@ -20,11 +24,20 @@ import type {
   PubDressStatusViewState,
 } from "./identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./pub-dress-credential-input";
+import { PubDressUrlField } from "./pub-dress-url-field";
+import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 
 export interface IdentityFoundationViewProps {
   password: string;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
+  /**
+   * Availability of the folded public label. Absent until the identity service
+   * exposes label resolution, which leaves the address surface in its
+   * read-only preview: the Bond still sees the fold, and only a real collision
+   * answer can open the editable second part.
+   */
+  pubDressUrlResolution?: PubDressLabelResolutionResult;
   onAcknowledgeRecovery(challenge: string): void;
   onCredentialAutofill(selection: PubDressSelection, password: string): void;
   onForgetRemembered(): void;
@@ -298,6 +311,7 @@ function RecoveryKeyView({
 function IdentityForm({
   identity,
   password,
+  pubDressUrlResolution,
   selection,
   onCredentialAutofill,
   onForgetRemembered,
@@ -308,6 +322,7 @@ function IdentityForm({
 }: {
   identity: Extract<IdentityViewState, { kind: "form" }>;
   password: string;
+  pubDressUrlResolution: PubDressLabelResolutionResult | undefined;
   selection: PubDressSelection;
   onCredentialAutofill(selection: PubDressSelection, password: string): void;
   onForgetRemembered(): void;
@@ -338,6 +353,7 @@ function IdentityForm({
   const lastAppliedCredential = useRef<string | undefined>(undefined);
   const credentialSwitchKey = useRef<string | undefined>(undefined);
   const [confirmedAddressKey, setConfirmedAddressKey] = useState<string>();
+  const [addressSuffix, setAddressSuffix] = useState("");
   const remembered = identity.mode === "remembered";
   const displayedSelection = remembered
     ? (parsePubDress(identity.rememberedPubDress ?? "") ?? selection)
@@ -363,6 +379,17 @@ function IdentityForm({
       availablePulseComplete);
   const addressCollapsed = showsPassword;
   const providerRegistration = identity.mode === "provider-register";
+  // Only a Bond creating an identity chooses an address. Signing in to an
+  // existing one shows nothing here: that Bond's address is already allocated,
+  // and re-deriving it locally would risk contradicting the stored value.
+  const choosesAddress =
+    identity.mode === "register" || identity.mode === "provider-register";
+  const pubDressUrl = createPubDressUrlViewState({
+    selection: displayedSelection,
+    suffix: addressSuffix,
+    pending: identity.status.kind === "checking",
+    resolution: pubDressUrlResolution,
+  });
   const credentialUsername = `0x${displayedSelection.discriminator}${displayedSelection.slug}`;
   const normalizedPassword = password.normalize("NFC");
   const normalizedPasswordLength = [...normalizedPassword].length;
@@ -872,6 +899,14 @@ function IdentityForm({
         {identity.status.detail}
       </p>
 
+      {choosesAddress && !addressCollapsed ? (
+        <PubDressUrlField
+          state={pubDressUrl}
+          busy={identity.busy}
+          onSuffixChange={setAddressSuffix}
+        />
+      ) : null}
+
       <div
         ref={passwordFieldRef}
         className={`password-field${showsPassword ? "" : " password-field--autofill-proxy"}`}
@@ -967,6 +1002,7 @@ function IdentityForm({
 
 export function IdentityFoundationView({
   password,
+  pubDressUrlResolution,
   selection,
   viewModel,
   onAcknowledgeRecovery,
@@ -1010,6 +1046,7 @@ export function IdentityFoundationView({
               <IdentityForm
                 identity={viewModel.identity}
                 password={password}
+                pubDressUrlResolution={pubDressUrlResolution}
                 selection={selection}
                 onCredentialAutofill={onCredentialAutofill}
                 onForgetRemembered={onForgetRemembered}

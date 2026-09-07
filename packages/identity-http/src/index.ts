@@ -12,6 +12,7 @@ import {
   type NativeRegistrationResult,
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
+  type PubDressLabelResolutionResult,
   type PubDressResolutionResult,
   type PubDressSelection,
 } from "@nilx-one/application";
@@ -33,6 +34,9 @@ function parseIdentity(value: unknown): IdentityProjection | undefined {
     pubDress: value.pub_dress,
     ...(typeof value.avaia_pub_dress === "string"
       ? { avaiaPubDress: value.avaia_pub_dress }
+      : {}),
+    ...(typeof value.pub_dress_url === "string"
+      ? { pubDressUrl: value.pub_dress_url }
       : {}),
   };
 }
@@ -77,6 +81,35 @@ class IdentityHttpAdapter implements IdentityAccessPort {
       case "invalid_pub_dress_character":
       case "invalid_pub_dress_prefix":
         return { kind: "rejected", reason: "invalid-character" };
+      case "rate_limited":
+        return { kind: "rate-limited" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
+  public async resolvePubDressLabel(
+    label: string,
+  ): Promise<PubDressLabelResolutionResult> {
+    const response = await this.fetch("/api/v1/identity/url/resolve", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (
+      response.ok &&
+      isRecord(body) &&
+      typeof body.label === "string" &&
+      (body.state === "available" || body.state === "registered")
+    ) {
+      return { kind: body.state, label: body.label };
+    }
+    switch (parseErrorCode(body)) {
+      case "invalid_pub_dress_label":
+        return { kind: "rejected", reason: "invalid-label" };
       case "rate_limited":
         return { kind: "rate-limited" };
       default:
