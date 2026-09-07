@@ -33,7 +33,7 @@ export interface IdentityFoundationViewProps {
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
   /** Normative public-label derivation returned by 0x1 Core. */
-  pubDressLabelDerivation?: CorePubDressLabelResult;
+  pubDressLabelDerivation?: CorePubDressLabelResult | undefined;
   pubDressLabelDerivationPending?: boolean;
   /**
    * Availability of the allocated public label. Absent until the identity

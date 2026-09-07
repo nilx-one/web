@@ -134,10 +134,10 @@ export interface PubDressUrlInput {
   readonly pending: boolean;
   readonly resolution: PubDressLabelResolutionResult | undefined;
   /** Normative derivation returned by the Core runtime. */
-  readonly derivation?: CorePubDressLabelResult;
+  readonly derivation?: CorePubDressLabelResult | undefined;
   readonly derivationPending?: boolean;
   /** Normative suffix composition returned by Core when the suffix UI is active. */
-  readonly composition?: CorePubDressLabelResult;
+  readonly composition?: CorePubDressLabelResult | undefined;
   readonly compositionPending?: boolean;
 }
 
