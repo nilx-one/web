@@ -3,14 +3,24 @@
 
 import {
   ZERO_SAFE_AREA,
+  type GeolocationCapability,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
 } from "@nilx-one/host-contract";
 
+import { createBrowserGeolocation } from "./geolocation";
+
+export {
+  createBrowserGeolocation,
+  type BrowserGeolocationEnvironment,
+} from "./geolocation";
+
 export interface BrowserHostEnvironment {
   matchMedia(query: string): MediaQueryList;
   open(url: string, target: string, features: string): Window | null;
+  /** Composed rather than constructed so a test can supply its own provider. */
+  readonly geolocation?: GeolocationCapability;
 }
 
 function assertExternalUrl(url: URL): void {
@@ -21,9 +31,11 @@ function assertExternalUrl(url: URL): void {
 
 class BrowserHost implements HostPort {
   private readonly colorScheme: MediaQueryList;
+  public readonly geolocation: GeolocationCapability;
 
   public constructor(private readonly environment: BrowserHostEnvironment) {
     this.colorScheme = environment.matchMedia("(prefers-color-scheme: dark)");
+    this.geolocation = environment.geolocation ?? createBrowserGeolocation();
   }
 
   public getSnapshot(): HostSnapshot {

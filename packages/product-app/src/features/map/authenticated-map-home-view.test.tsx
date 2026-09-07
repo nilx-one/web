@@ -1,10 +1,17 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { GeolocationCapability } from "@nilx-one/host-contract";
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  UNSUPPORTED_GEOLOCATION_DOUBLE,
+  createGeolocationDouble,
+  createMapRendererDouble,
+  observation,
+} from "../../../../../tests/support/doubles";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
 import {
   AuthenticatedMapHomeView,
@@ -12,18 +19,12 @@ import {
 } from "./authenticated-map-home-view";
 
 function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
-  return {
-    mount: vi.fn(),
-    unmount: vi.fn(),
-    getStatus: vi.fn(() => status),
-    subscribe: vi.fn(() => () => undefined),
-    setCamera: vi.fn(),
-    setAppearance: vi.fn(),
-  };
+  return createMapRendererDouble(status);
 }
 
 interface ViewOverrides {
   connectedProviders?: readonly ConnectedProvider[];
+  geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
   section?: ShellSection;
   onLogout?: () => void;
@@ -48,6 +49,7 @@ function renderView(overrides: ViewOverrides = {}) {
       hostLabel="browser host"
       pubDress="0x0sky"
       renderer={overrides.mapRenderer ?? renderer()}
+      geolocation={overrides.geolocation ?? UNSUPPORTED_GEOLOCATION_DOUBLE}
       runtime={{
         tone: "ready",
         label: "Shared Core ready",
@@ -320,43 +322,46 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
-  it("focuses the camera from the Bond profile", () => {
+  it("recenters through the host capability instead of a browser API", async () => {
     const mapRenderer = renderer();
-    const getCurrentPosition = vi.fn((success: PositionCallback) => {
-      success({
-        coords: {
-          latitude: 50.4501,
-          longitude: 30.5234,
-          accuracy: 20,
-          altitude: null,
-          altitudeAccuracy: null,
-          heading: null,
-          speed: null,
-          toJSON: () => ({}),
-        },
-        timestamp: Date.now(),
-        toJSON: () => ({}),
-      } as GeolocationPosition);
-    });
-    Object.defineProperty(navigator, "geolocation", {
-      configurable: true,
-      value: { getCurrentPosition },
-    });
+    const geolocation = createGeolocationDouble({ position: observation() });
 
-    renderView({ mapRenderer, section: "identity" });
+    renderView({ mapRenderer, geolocation });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    // The observation reaches the renderer as presentation geometry; the
+    // renderer was never asked to acquire it.
+    expect(mapRenderer.setObservedPosition).toHaveBeenCalledWith({
+      center: [30.5234, 50.4501],
+      accuracyMeters: 24,
+    });
+    expect(mapRenderer.setCamera).toHaveBeenCalledOnce();
+    expect(geolocation.requestPosition).toHaveBeenCalledOnce();
+
     fireEvent.click(
-      screen.getByRole("button", { name: "Focus map near this device" }),
+      screen.getByRole("button", { name: "Map centred on this device" }),
     );
 
-    expect(getCurrentPosition).toHaveBeenCalledOnce();
-    expect(mapRenderer.setCamera).toHaveBeenCalledWith({
-      center: [30.5234, 50.4501],
-      zoom: 13,
-      bearing: 0,
-      pitch: 42,
-    });
+    // Recentering reuses the observation it already holds.
+    expect(geolocation.requestPosition).toHaveBeenCalledOnce();
+    expect(mapRenderer.setCamera).toHaveBeenCalledTimes(2);
     expect(
       screen.getByText("Map camera focused near this device."),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the world usable when the host has no location capability", async () => {
+    const mapRenderer = renderer();
+
+    renderView({ mapRenderer });
+
+    const control = await screen.findByRole("button", {
+      name: "Location unavailable on this host",
+    });
+    expect(control).toBeDisabled();
+    expect(mapRenderer.setCamera).not.toHaveBeenCalled();
+    expect(mapRenderer.setObservedPosition).toHaveBeenCalledWith(null);
+    // A host without the capability is not a renderer failure.
+    expect(screen.queryByText("Map unavailable")).toBeNull();
   });
 });

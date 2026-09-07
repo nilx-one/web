@@ -3,7 +3,9 @@
 
 import { DiscordSDK, type IDiscordSDK } from "@discord/embedded-app-sdk";
 import {
+  UNSUPPORTED_GEOLOCATION,
   ZERO_SAFE_AREA,
+  type GeolocationCapability,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
@@ -21,6 +23,12 @@ type DiscordActivityBridge = Pick<IDiscordSDK, "ready"> & {
 
 export interface DiscordHostEnvironment {
   matchMedia(query: string): MediaQueryList;
+  /**
+   * A Discord Activity runs in an embedded browser, so the composition root
+   * supplies the same browser capability instead of a Discord-specific one.
+   * Host restrictions then arrive as capability results, not special cases.
+   */
+  readonly geolocation?: GeolocationCapability;
 }
 
 export interface DiscordActivitySession {
@@ -57,12 +65,14 @@ function requireString(value: unknown, field: string): string {
 
 class DiscordHost implements HostPort {
   private readonly colorScheme: MediaQueryList;
+  public readonly geolocation: GeolocationCapability;
 
   public constructor(
     private readonly bridge: DiscordActivityBridge,
     environment: DiscordHostEnvironment,
   ) {
     this.colorScheme = environment.matchMedia("(prefers-color-scheme: dark)");
+    this.geolocation = environment.geolocation ?? UNSUPPORTED_GEOLOCATION;
   }
 
   public getSnapshot(): HostSnapshot {

@@ -557,6 +557,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         hostLabel={viewModel.hostLabel}
         pubDress={viewModel.identity.pubDress}
         renderer={dependencies.mapRenderer}
+        geolocation={dependencies.host.geolocation}
         runtime={viewModel.runtime}
         safeArea={viewModel.safeArea}
         section={section}

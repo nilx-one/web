@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@nilx-one/core-wasm": "workspace:*",
+    "@nilx-one/host-browser": "workspace:*",
     "@nilx-one/host-telegram": "workspace:*",
     "@nilx-one/identity-http": "workspace:*",
     "@nilx-one/map-maplibre": "workspace:*",

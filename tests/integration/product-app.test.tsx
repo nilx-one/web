@@ -6,7 +6,10 @@ import {
   type CoreRuntimePort,
   type IdentityAccessPort,
 } from "@nilx-one/application";
-import type { HostPort } from "@nilx-one/host-contract";
+import {
+  UNSUPPORTED_GEOLOCATION,
+  type HostPort,
+} from "@nilx-one/host-contract";
 import type { MapRenderer } from "@nilx-one/map-contract";
 import {
   ProductApp as ProductAppRuntime,
@@ -23,19 +26,14 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createMapRendererDouble } from "../support/doubles";
+
 const readyCore: CoreRuntimePort = {
   probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
 };
 
 function createMapRenderer(): MapRenderer {
-  return {
-    mount: vi.fn(),
-    unmount: vi.fn(),
-    getStatus: () => ({ kind: "unmounted" }),
-    subscribe: () => () => undefined,
-    setCamera: vi.fn(),
-    setAppearance: vi.fn(),
-  };
+  return createMapRendererDouble({ kind: "unmounted" });
 }
 
 function ProductApp(props: Omit<ProductAppProps, "mapRenderer">) {
@@ -55,6 +53,7 @@ function createHost(): HostPort {
     ready: vi.fn(),
     openExternal: vi.fn(),
     impact: vi.fn(),
+    geolocation: UNSUPPORTED_GEOLOCATION,
   };
 }
 
@@ -75,6 +74,7 @@ function createTelegramHost(): HostPort {
     ready: vi.fn(),
     openExternal: vi.fn(),
     impact: vi.fn(),
+    geolocation: UNSUPPORTED_GEOLOCATION,
   };
 }
 
@@ -95,6 +95,7 @@ function createNativeHost(authenticated = true): HostPort {
     ready: vi.fn(),
     openExternal: vi.fn(),
     impact: vi.fn(),
+    geolocation: UNSUPPORTED_GEOLOCATION,
   };
 }
 

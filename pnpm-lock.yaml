@@ -86,6 +86,9 @@ importers:
       '@nilx-one/core-wasm':
         specifier: workspace:*
         version: link:../../packages/core-wasm
+      '@nilx-one/host-browser':
+        specifier: workspace:*
+        version: link:../../packages/host-browser
       '@nilx-one/host-discord':
         specifier: workspace:*
         version: link:../../packages/host-discord
@@ -149,6 +152,9 @@ importers:
       '@nilx-one/core-wasm':
         specifier: workspace:*
         version: link:../../packages/core-wasm
+      '@nilx-one/host-browser':
+        specifier: workspace:*
+        version: link:../../packages/host-browser
       '@nilx-one/host-telegram':
         specifier: workspace:*
         version: link:../../packages/host-telegram

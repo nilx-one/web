@@ -1,7 +1,12 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
+import type { GeolocationCapability } from "@nilx-one/host-contract";
+import type {
+  MapDimension,
+  MapRenderer,
+  MapRendererStatus,
+} from "@nilx-one/map-contract";
 import { StatusToastStack, type StatusToastItem } from "@nilx-one/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,6 +22,20 @@ import { useShellPresentation } from "../../shell/shell-presentation";
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
+import {
+  deviceLocationPosition,
+  type DeviceLocationState,
+} from "./device-location";
+import { LocationControl } from "./location-control";
+import { useDeviceLocation } from "./use-device-location";
+import { createLocationControlViewModel } from "./location-control-view-model";
+import {
+  cameraFramesPosition,
+  cameraMotion,
+  firstFixCamera,
+  locationCameraPadding,
+  recenterCamera,
+} from "./location-camera-policy";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
 
 export type ConnectedProvider = "telegram" | "discord";
@@ -25,6 +44,11 @@ export interface AuthenticatedMapHomeViewProps {
   readonly hostLabel: string;
   readonly pubDress: string;
   readonly renderer: MapRenderer;
+  /**
+   * The host capability. This surface never reaches for a platform geolocation
+   * API of its own, and the renderer never asks for a position at all.
+   */
+  readonly geolocation: GeolocationCapability;
   readonly runtime: RuntimeViewState;
   readonly safeArea: ShellSafeArea;
   /** The canonical route this surface is presenting. */
@@ -34,7 +58,27 @@ export interface AuthenticatedMapHomeViewProps {
   readonly onNavigate?: (route: ShellRoute) => void;
 }
 
+/**
+ * The world's presentation of the device-location lifecycle. It drives shell
+ * material only: a focused camera is never evidence of Bond presence.
+ */
 type FocusState = "idle" | "locating" | "focused" | "unavailable";
+
+function focusStateFor(location: DeviceLocationState): FocusState {
+  switch (location.kind) {
+    case "locating":
+      return "locating";
+    case "active":
+      return "focused";
+    case "denied":
+    case "unsupported":
+    case "unavailable":
+      return "unavailable";
+    default:
+      return "idle";
+  }
+}
+
 /** Identity detail is a state of the identity surface, never a separate route. */
 type IdentityDetail = "profile-edit" | "add-hosts" | "providers-edit";
 
@@ -50,6 +94,7 @@ type AppearancePreference = "light" | "dark" | "auto";
 type ResolvedAppearance = "light" | "dark";
 
 const APPEARANCE_STORAGE_KEY = "nilx-one.interface.appearance";
+const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
 
 function runtimeContract(runtime: RuntimeViewState): string | undefined {
   if (runtime.tone !== "ready") return undefined;
@@ -66,6 +111,22 @@ function readAppearancePreference(): AppearancePreference {
     // Storage is optional. The interface remains usable with an in-memory preference.
   }
   return "auto";
+}
+
+function readDimensionPreference(): MapDimension {
+  try {
+    const stored = window.localStorage.getItem(DIMENSION_STORAGE_KEY);
+    if (stored === "flat" || stored === "volumetric") return stored;
+  } catch {
+    // Storage is optional. The interface remains usable with an in-memory preference.
+  }
+  return "volumetric";
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
+  );
 }
 
 function systemAppearance(): ResolvedAppearance {
@@ -111,6 +172,7 @@ export function AuthenticatedMapHomeView({
   hostLabel,
   pubDress,
   renderer,
+  geolocation,
   runtime,
   safeArea,
   section = "world",
@@ -119,7 +181,7 @@ export function AuthenticatedMapHomeView({
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
   const mapHostRef = useRef<HTMLDivElement>(null);
-  const [focusState, setFocusState] = useState<FocusState>("idle");
+  const location = useDeviceLocation(geolocation);
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
   >(undefined);
@@ -134,7 +196,23 @@ export function AuthenticatedMapHomeView({
   const [dismissedStatus, setDismissedStatus] = useState<string | undefined>(
     undefined,
   );
+  const [dimension, setDimension] = useState<MapDimension>(
+    readDimensionPreference,
+  );
+  // The camera the renderer actually holds, and whether a person put it there.
+  const [camera, setCamera] = useState(() => renderer.getCamera());
+  const cameraMovedByPerson = useRef(false);
+  const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
+  const observedPosition = deviceLocationPosition(location.state);
+  const cameraCentered =
+    observedPosition !== undefined &&
+    cameraFramesPosition(camera, observedPosition);
+  const locationControl = createLocationControlViewModel(
+    location.state,
+    cameraCentered,
+  );
+  const focusState: FocusState = focusStateFor(location.state);
   const resolvedAppearance = appearance === "auto" ? systemTheme : appearance;
   const contractVersion = runtimeContract(runtime);
   const mapViewModel = createMapFoundationViewModel(mapStatus);
@@ -174,12 +252,78 @@ export function AuthenticatedMapHomeView({
   }, [renderer]);
 
   useEffect(() => {
+    renderer.setDimension(dimension);
+  }, [renderer, dimension]);
+
+  // Nothing is asked of the host until the persistent world actually renders.
+  // Renderer readiness is a presentation fact; it is what gates the request,
+  // not what performs it.
+  useEffect(() => {
+    if (mapStatus.kind !== "ready") return;
+    location.activate();
+  }, [location, mapStatus.kind]);
+
+  // Camera state is the renderer's. The world only observes it, so it can tell
+  // a camera a person moved from one the application moved.
+  useEffect(
+    () =>
+      renderer.subscribeCamera((change) => {
+        setCamera(change.camera);
+        if (change.gesture) {
+          cameraMovedByPerson.current = true;
+        }
+      }),
+    [renderer],
+  );
+
+  // The observation reaches the renderer as presentation geometry and display
+  // text. It is never persisted, sent to a backend, or written to telemetry.
+  useEffect(() => {
+    if (observedPosition === undefined) {
+      renderer.setObservedPosition(null);
+      renderer.setObservedPositionLabel(null);
+      return;
+    }
+
+    renderer.setObservedPosition({
+      center: [observedPosition.longitude, observedPosition.latitude],
+      accuracyMeters: observedPosition.accuracyMeters,
+    });
+    renderer.setObservedPositionLabel({
+      title: pubDress,
+      detail: "This device",
+    });
+  }, [observedPosition, pubDress, renderer]);
+
+  // The first fix of a world recenters once. Later updates move the marker;
+  // they never take the camera back from the person holding it.
+  useEffect(() => {
+    if (observedPosition === undefined || firstFixApplied.current) return;
+    firstFixApplied.current = true;
+    if (cameraMovedByPerson.current) return;
+
+    const context = { presentation, dimension, safeArea };
+    renderer.setCamera(firstFixCamera(observedPosition, context), {
+      motion: cameraMotion(prefersReducedMotion()),
+      padding: locationCameraPadding(context),
+    });
+  }, [dimension, observedPosition, presentation, renderer, safeArea]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance);
     } catch {
       // Persistence is best-effort only.
     }
   }, [appearance]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DIMENSION_STORAGE_KEY, dimension);
+    } catch {
+      // Persistence is best-effort only.
+    }
+  }, [dimension]);
 
   useEffect(() => {
     if (window.matchMedia === undefined) return;
@@ -197,26 +341,31 @@ export function AuthenticatedMapHomeView({
     setDetailState({ section, detail });
   }
 
-  function focusMapNearDevice(): void {
-    if (focusState === "locating") return;
-    if (navigator.geolocation === undefined) {
-      setFocusState("unavailable");
+  /**
+   * The one explicit user-gesture path. It either asks the host — which is
+   * also the retry when a platform refuses to prompt without a gesture — or
+   * moves the camera back onto the latest observation. It never refetches a
+   * position it already has.
+   */
+  function activateLocationControl(): void {
+    if (locationControl.intent === "request") {
+      location.requestFromGesture();
       return;
     }
-    setFocusState("locating");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        renderer.setCamera({
-          center: [position.coords.longitude, position.coords.latitude],
-          zoom: 13,
-          bearing: 0,
-          pitch: 42,
-        });
-        setFocusState("focused");
-      },
-      () => setFocusState("unavailable"),
-      { enableHighAccuracy: false, maximumAge: 30_000, timeout: 8_000 },
-    );
+
+    if (
+      locationControl.intent !== "recenter" ||
+      observedPosition === undefined
+    ) {
+      return;
+    }
+
+    const context = { presentation, dimension, safeArea };
+    renderer.setCamera(recenterCamera(observedPosition, camera, context), {
+      motion: cameraMotion(prefersReducedMotion()),
+      padding: locationCameraPadding(context),
+    });
+    cameraMovedByPerson.current = false;
   }
 
   function leaveDetail(): void {
@@ -444,20 +593,6 @@ export function AuthenticatedMapHomeView({
                       <dd>No projection available yet</dd>
                     </div>
                   </dl>
-                  <button
-                    className="bond-profile__action"
-                    type="button"
-                    onClick={focusMapNearDevice}
-                    disabled={focusState === "locating"}
-                  >
-                    {focusState === "locating"
-                      ? "Locating…"
-                      : focusState === "focused"
-                        ? "Focused on this device"
-                        : focusState === "unavailable"
-                          ? "Location unavailable"
-                          : "Focus map near this device"}
-                  </button>
                 </div>
               ) : null}
 
@@ -510,6 +645,28 @@ export function AuthenticatedMapHomeView({
                           value={mode}
                           checked={appearance === mode}
                           onChange={() => setAppearance(mode)}
+                        />
+                      </label>
+                    ))}
+                  </fieldset>
+                  <fieldset className="interface-settings__appearance">
+                    <legend>Depth</legend>
+                    {(["volumetric", "flat"] as const).map((mode) => (
+                      <label key={mode} className="interface-settings__option">
+                        <span>
+                          <strong>{mode === "flat" ? "2D" : "3D"}</strong>
+                          <small>
+                            {mode === "flat"
+                              ? "Keep buildings as footprints"
+                              : "Raise buildings at close zoom"}
+                          </small>
+                        </span>
+                        <input
+                          type="radio"
+                          name="dimension"
+                          value={mode}
+                          checked={dimension === mode}
+                          onChange={() => setDimension(mode)}
                         />
                       </label>
                     ))}
@@ -590,15 +747,23 @@ export function AuthenticatedMapHomeView({
         </section>
       }
       overlay={
-        <span className="visually-hidden" aria-live="polite">
-          {focusState === "locating"
-            ? "Locating this device for local map focus."
-            : focusState === "focused"
-              ? "Map camera focused near this device."
-              : focusState === "unavailable"
-                ? "Device location is unavailable."
-                : ""}
-        </span>
+        <>
+          <LocationControl
+            viewModel={locationControl}
+            onActivate={activateLocationControl}
+          />
+          {/* The canvas marker has no text of its own, so the observation's
+              meaning is announced here rather than left to a cyan dot. */}
+          <span className="visually-hidden" aria-live="polite">
+            {focusState === "locating"
+              ? "Locating this device for local map focus."
+              : focusState === "focused"
+                ? "Map camera focused near this device."
+                : focusState === "unavailable"
+                  ? "Device location is unavailable."
+                  : ""}
+          </span>
+        </>
       }
     />
   );

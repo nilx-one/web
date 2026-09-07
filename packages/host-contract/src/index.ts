@@ -1,6 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { GeolocationCapability } from "./geolocation";
+
+export * from "./geolocation";
+
 export type HostKind = "browser" | "telegram" | "discord" | "native";
 export type HostTheme = "dark" | "light";
 
@@ -48,6 +52,12 @@ export interface HostPort {
   ready(): void;
   openExternal(url: URL): void;
   impact(style: "light" | "medium" | "heavy"): void;
+  /**
+   * Device position is a host capability, not renderer behavior: the map
+   * renderer never asks for it and shared application code never reaches for a
+   * platform geolocation API of its own.
+   */
+  readonly geolocation: GeolocationCapability;
 }
 
 export function hasAuthenticatedHostSession(snapshot: HostSnapshot): boolean {

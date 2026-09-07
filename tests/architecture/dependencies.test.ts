@@ -120,6 +120,77 @@ describe("Clean Architecture boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps device geolocation behind the host capability boundary", () => {
+    const violations: string[] = [];
+
+    for (const scope of ["apps", "packages"] as const) {
+      for (const file of sourceFiles(join(ROOT, scope))) {
+        const normalized = relative(ROOT, file);
+
+        // The browser adapter is the one place that may touch the platform
+        // API; every other surface reads the host capability instead.
+        if (normalized.startsWith("packages/host-browser/")) {
+          continue;
+        }
+
+        const source = readFileSync(file, "utf8");
+
+        if (/navigator\.geolocation|navigator\.permissions/.test(source)) {
+          violations.push(normalized);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("never lets the map renderer ask for a device position", () => {
+    const violations: string[] = [];
+
+    for (const file of sourceFiles(join(ROOT, "packages/map-maplibre/src"))) {
+      const source = readFileSync(file, "utf8");
+
+      // The renderer draws an observation the application supplies. It never
+      // acquires one, and it never learns about permission at all.
+      if (
+        /getCurrentPosition|watchPosition|GeolocationPermission/.test(source)
+      ) {
+        violations.push(relative(ROOT, file));
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps the device observation out of persistence and telemetry", () => {
+    // The modules that hold or draw an observed position. An observation is
+    // ephemeral client evidence: it may reach the screen and nothing else.
+    const locationModules = [
+      "packages/product-app/src/features/map/device-location.ts",
+      "packages/product-app/src/features/map/use-device-location.ts",
+      "packages/product-app/src/features/map/location-camera-policy.ts",
+      "packages/product-app/src/features/map/location-control.tsx",
+      "packages/product-app/src/features/map/location-control-view-model.ts",
+      "packages/map-maplibre/src/observed-position.ts",
+      "packages/map-maplibre/src/observed-position-label.ts",
+    ];
+    const violations: string[] = [];
+
+    for (const module of locationModules) {
+      const source = readFileSync(join(ROOT, module), "utf8");
+
+      if (
+        /console\.|\bfetch\(|localStorage|sessionStorage|indexedDB|reporter/.test(
+          source,
+        )
+      ) {
+        violations.push(module);
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
   it("never introduces a Canvas 2D rendering fallback", () => {
     const violations: string[] = [];
 
