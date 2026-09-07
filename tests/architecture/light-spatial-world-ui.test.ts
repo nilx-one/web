@@ -31,8 +31,12 @@ describe("authenticated light spatial world", () => {
     expect(css).toContain("--map-glass: rgba(250, 253, 253, 0.74)");
     expect(css).toContain("background: var(--map-glass)");
     expect(css).toContain("backdrop-filter: blur(22px) saturate(1.08)");
-    expect(css).not.toMatch(/\.authenticated-map-home__map\s*\{[^}]*filter\s*:/s);
-    expect(css).not.toMatch(/\.authenticated-map-home__map\s*\{[^}]*transform\s*:/s);
+    expect(css).not.toMatch(
+      /\.authenticated-map-home__map\s*\{[^}]*filter\s*:/s,
+    );
+    expect(css).not.toMatch(
+      /\.authenticated-map-home__map\s*\{[^}]*transform\s*:/s,
+    );
   });
 
   it("keeps dark appearance deliberate without changing the visual hierarchy", () => {
