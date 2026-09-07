@@ -24,6 +24,7 @@ export type ConnectedProvider = "telegram" | "discord";
 export interface AuthenticatedMapHomeViewProps {
   readonly hostLabel: string;
   readonly pubDress: string;
+  readonly avaiaPubDress?: string;
   readonly renderer: MapRenderer;
   readonly runtime: RuntimeViewState;
   readonly safeArea: ShellSafeArea;
@@ -110,6 +111,7 @@ function mapStatusToast(
 export function AuthenticatedMapHomeView({
   hostLabel,
   pubDress,
+  avaiaPubDress,
   renderer,
   runtime,
   safeArea,
@@ -154,6 +156,7 @@ export function AuthenticatedMapHomeView({
     onLogout === undefined
       ? []
       : [{ id: "sign-out", label: "Sign out", perform: onLogout }];
+  const avaiaLabel = avaiaPubDress ?? "Avaia";
 
   // A map that never paints must say so. Without this the shell shows an empty
   // surface and a renderer, asset, or basemap failure is indistinguishable
@@ -337,10 +340,10 @@ export function AuthenticatedMapHomeView({
                   className="bond-dock__bond bond-dock__bond--unavailable"
                   type="button"
                   disabled
-                  aria-label="x0skai AI runtime unavailable on this host"
+                  aria-label={`${avaiaLabel} AI runtime unavailable on this host`}
                 >
-                  <span className="bond-dock__glyph">x0</span>
-                  <strong>x0skai</strong>
+                  <span className="bond-dock__glyph">AI</span>
+                  <strong>{avaiaLabel}</strong>
                   <small>
                     AI
                     <i className="bond-dock__status-dot" aria-hidden="true" />
