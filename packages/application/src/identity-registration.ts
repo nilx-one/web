@@ -3,6 +3,12 @@
 
 export interface IdentityProjection {
   pubDress: string;
+  /**
+   * The public address allocated for this Bond, absent while the identity
+   * service has not allocated one. It is stored, not computed: the fold from a
+   * case-sensitive `pub_dress` is not reversible.
+   */
+  pubDressUrl?: string;
 }
 
 export interface PubDressSelection {
@@ -27,6 +33,18 @@ export function parsePubDress(value: string): PubDressSelection | undefined {
   }
   return { discriminator, slug: value.slice(3) };
 }
+
+/**
+ * The availability of a public label, resolved against the identity service.
+ * `registered` means another Bond already folded onto this label, which is the
+ * point at which the Bond chooses a distinguishing suffix.
+ */
+export type PubDressLabelResolutionResult =
+  | { kind: "available"; label: string }
+  | { kind: "registered"; label: string }
+  | { kind: "rejected"; reason: "invalid-label" }
+  | { kind: "rate-limited" }
+  | { kind: "service-unavailable" };
 
 export type PubDressResolutionResult =
   | { kind: "available"; pubDress: string }
@@ -141,6 +159,7 @@ export interface IdentityAccessPort {
   resolvePubDress(
     selection: PubDressSelection,
   ): Promise<PubDressResolutionResult>;
+  resolvePubDressLabel(label: string): Promise<PubDressLabelResolutionResult>;
 }
 
 export class ResolvePubDress {
@@ -151,6 +170,23 @@ export class ResolvePubDress {
   ): Promise<PubDressResolutionResult> {
     try {
       return await this.identity.resolvePubDress(selection);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+/**
+ * Advisory, exactly like {@link ResolvePubDress}. The allocating transaction in
+ * the identity service stays the only collision boundary, so a label may still
+ * be taken between this answer and registration.
+ */
+export class ResolvePubDressLabel {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(label: string): Promise<PubDressLabelResolutionResult> {
+    try {
+      return await this.identity.resolvePubDressLabel(label);
     } catch {
       return { kind: "service-unavailable" };
     }

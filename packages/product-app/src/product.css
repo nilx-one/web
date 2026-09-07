@@ -822,3 +822,110 @@
     transition: none;
   }
 }
+
+/* Public address (`<pub_dress folded>.nilx.one`).
+
+   The address is a projection of the identity above it, not a second thing to
+   fill in, so it is quieter than the pub_dress field and only grows an input
+   once a fold collision actually requires one. */
+.pub-dress-url {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.address-field--url {
+  min-height: 52px;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  padding-left: 18px;
+  background: rgb(255 255 255 / 38%);
+  box-shadow: none;
+}
+
+.address-field--url-suffix {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  justify-content: stretch;
+  padding-left: 18px;
+}
+
+.address-url-stem,
+.address-url-zone,
+.address-url-suffix {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(15px, 1.7vw, 19px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.address-url-stem {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* The identity has no address form yet, so its pub_dress is shown struck
+   through rather than as an address it does not have. */
+.address-url-stem--empty {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.address-url-zone {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.address-field--url .address-url-suffix {
+  min-width: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-ink);
+}
+
+.address-field--url .address-url-suffix:focus {
+  outline: none;
+}
+
+.address-field--url .status-action {
+  width: 38px;
+  height: 38px;
+  margin-right: 6px;
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: 12px;
+  color: var(--accent-ink);
+}
+
+.address-field--url .status-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* A taken address is a prompt, not a failure: the Bond keeps its pub_dress and
+   simply names the address apart from the one already claimed. */
+.address-field[data-status="taken"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.identity-status--taken {
+  color: var(--accent-ink);
+}
+
+/* Before and after, so the lost case is visible rather than merely stated. */
+.pub-dress-url-fold {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  margin: 0;
+  color: var(--muted);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.pub-dress-url-fold strong {
+  color: var(--ink);
+  font: inherit;
+}
