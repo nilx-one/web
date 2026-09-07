@@ -643,7 +643,7 @@ mod tests {
         IdentityRepository, NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome,
         identity_for_pub_dress,
     };
-    use crate::PubDress;
+    use crate::{AvaiaPubDress, PubDress};
 
     #[tokio::test]
     async fn owned_avaia_migration_is_idempotent_on_reopen() {
