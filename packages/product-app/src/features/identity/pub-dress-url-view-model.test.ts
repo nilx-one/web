@@ -68,13 +68,22 @@ describe("public address view state", () => {
     ).toMatchObject({ kind: "preview", status: "checking" });
   });
 
-  it("opens the editable part when another Bond holds the label", () => {
+  it("opens the editable part immediately when another Bond holds the label", () => {
     const view = state({ resolution: taken });
 
     expect(view).toMatchObject({
       kind: "suffix",
       stem: "0xda-sha",
       suffix: "",
+      status: "taken",
+      detail: "Another Bond holds this address — add a distinguishing part",
+    });
+  });
+
+  it("fails closed only after a suffix needs Core composition", () => {
+    expect(state({ resolution: taken, suffix: "7412" })).toMatchObject({
+      kind: "suffix",
+      suffix: "7412",
       status: "service-unavailable",
     });
   });
