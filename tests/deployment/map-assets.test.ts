@@ -214,11 +214,12 @@ describe("map deployment assets", () => {
   );
 
   it.each(["light", "dark"] as const)(
-    "makes Kyiv readable at the bootstrap camera zoom (%s)",
+    "makes Kyiv readable and inhabited at the bootstrap camera zoom (%s)",
     (appearance) => {
       const painted = layersPaintingAt(readStyle(appearance), 10);
 
-      // Geography, the Dnipro and its accent, and the major road frame.
+      // Geography, Dnipro, major roads, neighbourhood roads and coarse built
+      // fabric all participate in the first city-scale frame.
       expect(painted).toEqual(
         expect.arrayContaining([
           "background",
@@ -228,13 +229,14 @@ describe("map deployment assets", () => {
           "water",
           "water-accent",
           "rivers",
+          "buildings-flat",
+          "roads-secondary",
           "roads-primary",
         ]),
       );
 
-      // Close-zoom detail stays out of the first paint.
+      // 3D depth and point-level detail remain close-zoom concerns.
       expect(painted).not.toContain("buildings");
-      expect(painted).not.toContain("buildings-flat");
       expect(painted).not.toContain("pois");
     },
   );
@@ -281,14 +283,14 @@ describe("map deployment assets", () => {
 
     expect(style.metadata?.["nilx-one:visual-language"]).toBe("0x1-spatial");
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#f7f9fa");
-    expect(style.metadata?.["nilx-one:surface-land"]).toBe("#f3f6f7");
-    expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#edf4f1");
-    expect(style.metadata?.["nilx-one:surface-buildings"]).toBe("#e8eef0");
-    expect(style.metadata?.["nilx-one:road-primary"]).toBe("#d5e1e4");
-    expect(style.metadata?.["nilx-one:road-secondary"]).toBe("#e4ebed");
-    expect(style.metadata?.["nilx-one:water-base"]).toBe("#dff7fa");
+    expect(style.metadata?.["nilx-one:surface-land"]).toBe("#f1f4f5");
+    expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#eaf2ef");
+    expect(style.metadata?.["nilx-one:surface-buildings"]).toBe("#d8e2e5");
+    expect(style.metadata?.["nilx-one:road-primary"]).toBe("#bccfd4");
+    expect(style.metadata?.["nilx-one:road-secondary"]).toBe("#cedcdf");
+    expect(style.metadata?.["nilx-one:water-base"]).toBe("#d9f4f7");
     expect(style.metadata?.["nilx-one:label-primary"]).toBe("#536166");
-    expect(style.metadata?.["nilx-one:label-secondary"]).toBe("#879399");
+    expect(style.metadata?.["nilx-one:label-secondary"]).toBe("#7d8a90");
     expect(style.metadata?.["nilx-one:accent-semantics"]).toBe(
       "presentation-only",
     );
