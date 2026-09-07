@@ -12,15 +12,15 @@
     "nilx-one:appearance-light-url": "/map/0.1.0/style.json",
     "nilx-one:appearance-dark-url": "/map/0.1.0/style-dark.json",
     "nilx-one:surface-background": "#070c0e",
-    "nilx-one:surface-land": "#0b1215",
-    "nilx-one:surface-parks": "#0e1a18",
-    "nilx-one:surface-buildings": "#172126",
-    "nilx-one:road-primary": "#26363c",
-    "nilx-one:road-secondary": "#172126",
-    "nilx-one:water-base": "#04191f",
+    "nilx-one:surface-land": "#0c1417",
+    "nilx-one:surface-parks": "#10201d",
+    "nilx-one:surface-buildings": "#203036",
+    "nilx-one:road-primary": "#344a52",
+    "nilx-one:road-secondary": "#26383e",
+    "nilx-one:water-base": "#05222a",
     "nilx-one:accent-primary": "#37d7e5",
     "nilx-one:label-primary": "#a8b6bb",
-    "nilx-one:label-secondary": "#6e7d83",
+    "nilx-one:label-secondary": "#78898f",
     "nilx-one:label-state": "reserved-pending-same-origin-glyphs",
     "nilx-one:accent-semantics": "presentation-only"
   },
@@ -46,7 +46,7 @@
       "source-layer": "earth",
       "filter": ["==", ["geometry-type"], "Polygon"],
       "paint": {
-        "fill-color": "#0b1215"
+        "fill-color": "#0c1417"
       }
     },
     {
@@ -60,12 +60,12 @@
           "match",
           ["get", "kind"],
           ["forest", "scrub", "grassland"],
-          "#0e1a18",
+          "#10201d",
           ["urban_area"],
-          "#101a1e",
-          "#0b1215"
+          "#122126",
+          "#0c1417"
         ],
-        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.9, 10, 0.35]
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.9, 10, 0.5]
       }
     },
     {
@@ -100,7 +100,7 @@
         ]
       ],
       "paint": {
-        "fill-color": "#0e1a18",
+        "fill-color": "#10201d",
         "fill-opacity": ["interpolate", ["linear"], ["zoom"], 6, 0, 10, 1]
       }
     },
@@ -109,29 +109,42 @@
       "type": "fill",
       "source": "basemap",
       "source-layer": "landuse",
-      "minzoom": 10,
+      "minzoom": 9,
       "filter": [
         "in",
         ["get", "kind"],
         [
           "literal",
           [
+            "residential",
+            "commercial",
             "industrial",
             "hospital",
             "school",
             "university",
             "college",
+            "kindergarten",
             "pedestrian",
+            "stadium",
             "aerodrome",
             "military",
-            "naval_base",
             "zoo"
           ]
         ]
       ],
       "paint": {
-        "fill-color": "#172126",
-        "fill-opacity": 0.45
+        "fill-color": "#18282d",
+        "fill-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9,
+          0.2,
+          10,
+          0.46,
+          12,
+          0.62
+        ]
       }
     },
     {
@@ -141,7 +154,7 @@
       "source-layer": "water",
       "filter": ["==", ["geometry-type"], "Polygon"],
       "paint": {
-        "fill-color": "#04191f"
+        "fill-color": "#05222a"
       }
     },
     {
@@ -154,23 +167,23 @@
         "line-color": "#37d7e5",
         "line-opacity": [
           "match",
-          ["get", "kind"],
-          ["river"],
-          0.62,
-          ["lake", "water"],
-          0.4,
-          0.32
+          ["get", "kind_detail"],
+          ["river", "riverbank"],
+          0.7,
+          ["lake", "reservoir"],
+          0.46,
+          0.36
         ],
         "line-width": [
           "interpolate",
           ["linear"],
           ["zoom"],
           6,
-          0.3,
+          0.35,
           10,
-          0.9,
+          1,
           14,
-          1.8
+          1.9
         ]
       }
     },
@@ -183,7 +196,7 @@
       "filter": [
         "all",
         ["==", ["geometry-type"], "LineString"],
-        ["==", ["get", "kind"], "river"]
+        ["==", ["get", "kind_detail"], "river"]
       ],
       "layout": {
         "line-cap": "round",
@@ -191,15 +204,15 @@
       },
       "paint": {
         "line-color": "#37d7e5",
-        "line-opacity": 0.5,
+        "line-opacity": 0.56,
         "line-width": [
           "interpolate",
           ["exponential", 1.6],
           ["zoom"],
           8,
-          0.4,
+          0.45,
           12,
-          1.4,
+          1.5,
           18,
           7
         ]
@@ -210,7 +223,7 @@
       "type": "fill",
       "source": "basemap",
       "source-layer": "buildings",
-      "minzoom": 12,
+      "minzoom": 10,
       "maxzoom": 15,
       "filter": [
         "in",
@@ -218,17 +231,20 @@
         ["literal", ["building", "building_part"]]
       ],
       "paint": {
-        "fill-color": "#172126",
+        "fill-color": "#203036",
+        "fill-outline-color": "#2a3c42",
         "fill-opacity": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          12,
-          0,
-          13,
-          0.65,
+          10,
+          0.15,
+          11,
+          0.32,
+          12.5,
+          0.62,
           14.5,
-          0.65,
+          0.68,
           15,
           0
         ]
@@ -239,13 +255,13 @@
       "type": "line",
       "source": "basemap",
       "source-layer": "roads",
-      "minzoom": 12,
+      "minzoom": 11,
       "filter": ["==", ["get", "kind"], "rail"],
       "paint": {
-        "line-color": "#26363c",
-        "line-opacity": 0.5,
+        "line-color": "#344a52",
+        "line-opacity": 0.62,
         "line-dasharray": [3, 2],
-        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.4, 18, 1.4]
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.3, 18, 1.5]
       }
     },
     {
@@ -253,20 +269,35 @@
       "type": "line",
       "source": "basemap",
       "source-layer": "roads",
-      "minzoom": 12,
-      "filter": ["in", ["get", "kind"], ["literal", ["minor_road", "other"]]],
+      "minzoom": 10,
+      "filter": ["==", ["get", "kind"], "minor_road"],
       "layout": {
         "line-cap": "round",
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#172126",
+        "line-color": "#26383e",
+        "line-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          10,
+          0.5,
+          12,
+          0.74,
+          14,
+          0.92
+        ],
         "line-width": [
           "interpolate",
           ["exponential", 1.5],
           ["zoom"],
+          10,
+          0.18,
+          11,
+          0.28,
           12,
-          0.4,
+          0.5,
           15,
           2,
           18,
@@ -286,7 +317,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#0b1215",
+        "line-color": "#0c1417",
         "line-width": [
           "interpolate",
           ["exponential", 1.5],
@@ -312,17 +343,17 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#26363c",
+        "line-color": "#344a52",
         "line-width": [
           "interpolate",
           ["exponential", 1.5],
           ["zoom"],
           7,
-          0.5,
+          0.55,
           11,
-          1.2,
+          1.3,
           14,
-          3.4,
+          3.5,
           18,
           12
         ]
@@ -340,7 +371,7 @@
         ["literal", ["building", "building_part"]]
       ],
       "paint": {
-        "fill-extrusion-color": "#172126",
+        "fill-extrusion-color": "#203036",
         "fill-extrusion-height": ["coalesce", ["get", "height"], 7],
         "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
         "fill-extrusion-opacity": [
@@ -350,7 +381,7 @@
           14,
           0,
           15,
-          0.94
+          0.95
         ],
         "fill-extrusion-vertical-gradient": true
       }
@@ -362,10 +393,10 @@
       "source-layer": "boundaries",
       "minzoom": 4,
       "paint": {
-        "line-color": "#6e7d83",
-        "line-opacity": 0.3,
+        "line-color": "#78898f",
+        "line-opacity": 0.34,
         "line-dasharray": [2, 2],
-        "line-width": 0.6
+        "line-width": 0.7
       }
     },
     {
@@ -373,19 +404,19 @@
       "type": "circle",
       "source": "basemap",
       "source-layer": "pois",
-      "minzoom": 15,
+      "minzoom": 14,
       "paint": {
         "circle-radius": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          15,
-          1.2,
+          14,
+          0.8,
           18,
           2.6
         ],
-        "circle-color": "#6e7d83",
-        "circle-opacity": 0.45
+        "circle-color": "#78898f",
+        "circle-opacity": 0.42
       }
     }
   ]
