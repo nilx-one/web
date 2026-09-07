@@ -615,7 +615,11 @@ async fn reconcile_authenticated_identity(
         tracing::error!(%error, "stored authenticated human pub_dress is invalid");
         unavailable()
     })?;
-    match state.repository.reconcile_owned_avaia(&pub_dress, now).await {
+    match state
+        .repository
+        .reconcile_owned_avaia(&pub_dress, now)
+        .await
+    {
         Ok(Some(record)) => Ok(record),
         Ok(None) => {
             tracing::error!(pub_dress = %identity.pub_dress, "authenticated human identity disappeared during Avaia reconciliation");
@@ -1557,7 +1561,10 @@ mod tests {
             serde_json::from_slice(&authenticated_context).expect("JSON body");
         assert_eq!(authenticated_context["state"], "authenticated");
         assert_eq!(authenticated_context["identity"]["pub_dress"], "0x0Sky");
-        assert_eq!(authenticated_context["identity"]["avaia_pub_dress"], "0Skai");
+        assert_eq!(
+            authenticated_context["identity"]["avaia_pub_dress"],
+            "0Skai"
+        );
     }
 
     #[tokio::test]
