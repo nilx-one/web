@@ -13,7 +13,7 @@ pub use credentials::{
     TokenFactory,
 };
 pub use discord_oauth::{DiscordAccessToken, DiscordOAuthClient, DiscordOAuthError};
-pub use ox1_contracts::{PubDress, PubDressError};
+pub use ox1_contracts::{AvaiaPubDress, AvaiaPubDressError, PubDress, PubDressError};
 pub use repository::{
     IdentityProvider, IdentityRecord, IdentityRepository, NativeCredentialRecord,
     NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome, RepositoryError,

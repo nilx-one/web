@@ -32,6 +32,9 @@ function parseIdentity(value: unknown): IdentityProjection | undefined {
   }
   return {
     pubDress: value.pub_dress,
+    ...(typeof value.avaia_pub_dress === "string"
+      ? { avaiaPubDress: value.avaia_pub_dress }
+      : {}),
     ...(typeof value.pub_dress_url === "string"
       ? { pubDressUrl: value.pub_dress_url }
       : {}),

@@ -71,7 +71,12 @@ export type IdentityViewState =
       busy: boolean;
       error?: string;
     }
-  | { kind: "authenticated"; pubDress: string; native: boolean }
+  | {
+      kind: "authenticated";
+      pubDress: string;
+      avaiaPubDress?: string;
+      native: boolean;
+    }
   | { kind: "unavailable"; detail: string }
   | { kind: "provider-required"; detail: string };
 
@@ -81,6 +86,12 @@ export interface IdentityFoundationViewModel {
   runtime: RuntimeViewState;
   safeArea: HostSnapshot["safeArea"];
   showProviderRow: boolean;
+}
+
+function projectedAvaia(avaiaPubDress: string | undefined): {
+  avaiaPubDress?: string;
+} {
+  return avaiaPubDress === undefined ? {} : { avaiaPubDress };
 }
 
 export function createPubDressStatusViewState(
@@ -139,6 +150,7 @@ export function createNativeIdentityViewState(
     return {
       kind: "authenticated",
       pubDress: authentication.identity.pubDress,
+      ...projectedAvaia(authentication.identity.avaiaPubDress),
       native: true,
     };
   }
@@ -167,6 +179,7 @@ export function createNativeIdentityViewState(
     return {
       kind: "authenticated",
       pubDress: context.identity.pubDress,
+      ...projectedAvaia(context.identity.avaiaPubDress),
       native: true,
     };
   }
@@ -218,6 +231,7 @@ export function createProviderIdentityViewState(
     return {
       kind: "authenticated",
       pubDress: registration.identity.pubDress,
+      ...projectedAvaia(registration.identity.avaiaPubDress),
       native: false,
     };
   }
@@ -225,6 +239,7 @@ export function createProviderIdentityViewState(
     return {
       kind: "authenticated",
       pubDress: identity.identity.pubDress,
+      ...projectedAvaia(identity.identity.avaiaPubDress),
       native: false,
     };
   }

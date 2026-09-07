@@ -3,6 +3,7 @@
 
 export interface IdentityProjection {
   pubDress: string;
+  avaiaPubDress?: string;
   /**
    * The public address allocated for this Bond, absent while the identity
    * service has not allocated one. It is stored, not computed: the fold from a

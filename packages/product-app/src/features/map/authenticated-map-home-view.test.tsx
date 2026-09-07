@@ -23,6 +23,7 @@ function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
 }
 
 interface ViewOverrides {
+  avaiaPubDress?: string;
   connectedProviders?: readonly ConnectedProvider[];
   geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
@@ -48,6 +49,7 @@ function renderView(overrides: ViewOverrides = {}) {
     <AuthenticatedMapHomeView
       hostLabel="browser host"
       pubDress="0x0sky"
+      avaiaPubDress={overrides.avaiaPubDress ?? "0skai"}
       renderer={overrides.mapRenderer ?? renderer()}
       geolocation={overrides.geolocation ?? UNSUPPORTED_GEOLOCATION_DOUBLE}
       runtime={{
@@ -90,9 +92,10 @@ describe("AuthenticatedMapHomeView", () => {
     ).toHaveTextContent("—");
     expect(
       screen.getByRole("button", {
-        name: "x0skai AI runtime unavailable on this host",
+        name: "0skai AI runtime unavailable on this host",
       }),
     ).toBeDisabled();
+    expect(screen.getByText("0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
