@@ -80,6 +80,15 @@ If Bond addresses ever serve Bond-controlled JavaScript, `__Host-` alone stops
 being sufficient and the addresses need their own registrable domain plus a
 Public Suffix List entry.
 
+## Handing the fold to core
+
+[`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) is the
+implementation instruction for `nilx-one/core`: the API surface to add next to
+`PubDress`, the rules already settled, the one open decision (the non-ASCII
+mapping), and test vectors mirroring
+`packages/application/src/pub-dress-url.test.ts` so both sides can be
+cross-checked.
+
 ## Not yet implemented
 
 - the normative fold in `nilx-one/core`, including the IDNA decision;
