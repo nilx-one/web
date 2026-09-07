@@ -60,8 +60,10 @@ describe("CoreWasmClient", () => {
 
   it("accepts the generated runtime only after the full compatibility handshake", async () => {
     const runtime = generatedRuntime();
-    const bindings = await loadGeneratedCoreWasmBindings(async () => runtime);
+    const importRuntime = vi.fn(async () => runtime);
+    const bindings = await loadGeneratedCoreWasmBindings({ importRuntime });
 
+    expect(importRuntime).toHaveBeenCalledWith("/core/0.1.0/index.js");
     expect(runtime.default).toHaveBeenCalledWith({
       module_or_path: "/core/0.1.0/index_bg.wasm",
     });
@@ -74,7 +76,22 @@ describe("CoreWasmClient", () => {
     });
 
     await expect(
-      loadGeneratedCoreWasmBindings(async () => runtime),
+      loadGeneratedCoreWasmBindings({ importRuntime: async () => runtime }),
     ).rejects.toThrow("compatibility verification");
+  });
+
+  it("loads the generated runtime from a host-proxied base", async () => {
+    const runtime = generatedRuntime();
+    const importRuntime = vi.fn(async () => runtime);
+
+    await loadGeneratedCoreWasmBindings({
+      baseUrl: "/.proxy/core/0.1.0",
+      importRuntime,
+    });
+
+    expect(importRuntime).toHaveBeenCalledWith("/.proxy/core/0.1.0/index.js");
+    expect(runtime.default).toHaveBeenCalledWith({
+      module_or_path: "/.proxy/core/0.1.0/index_bg.wasm",
+    });
   });
 });
