@@ -49,14 +49,23 @@ something the Bond failed to fill in.
   module refuses, which would hide a rejection behind a silent rewrite.
 - The label must be LDH (`a-z`, `0-9`, `-`), must not end on a hyphen, and must
   fit the 63-octet label limit.
-- Non-ASCII is refused with its own reason rather than transliterated. Choosing
-  an IDNA mapping is a normative decision: a fold invented in the Web client
-  could land one Bond's identity on another Bond's label, permanently. That
-  mapping belongs in the pinned `nilx-one/core` contract next to `PubDress`.
+- Non-ASCII is declined here rather than guessed at. The contract does give such
+  an identity an address — UTS-46 encodes `0x0небо` as `xn--0x0-dddt1cj` — but
+  computing it in the client would mean a second IDNA implementation, which is
+  the drift the contract exists to prevent. The preview says the address is
+  computed at registration instead of claiming none exists.
 
-Every stem keeps the `0x` prefix. That is what keeps the user namespace disjoint
-from service hosts — no Bond can fold onto `www`, `api`, or `_acme-challenge` —
-so no reserved-name blocklist has to be maintained alongside it.
+Every label begins with `0x` or, once encoded, `xn--`. That is what keeps the
+user namespace disjoint from service hosts — no Bond can fold onto `www`, `api`,
+or `_acme-challenge` — so no reserved-name blocklist has to be maintained
+alongside it. Because an ASCII stem always begins `0x`, no Bond can hand-craft a
+label starting `xn--` either, so an ACE prefix cannot be forged.
+
+One consequence of the encoding is worth knowing before it is discovered in
+production: **no right-to-left `pub_dress` can have an address.** RFC 5893
+requires an RTL label to begin with L, R, or AL, and every label here begins with
+the digit `0`. Hebrew and Arabic Bonds are excluded by the `0x` prefix itself,
+not by anything about their script.
 
 ## Allocation stays a server transaction
 
@@ -91,7 +100,7 @@ cross-checked.
 
 ## Not yet implemented
 
-- the normative fold in `nilx-one/core`, including the IDNA decision;
+- the normative fold in `nilx-one/core`, now specified as UTS-46;
 - `POST /api/v1/identity/url/resolve`, and label allocation inside the
   registration transaction, with `pub_dress_url` on the identity projection;
 - the migration adding the stored label with a `UNIQUE COLLATE NOCASE` index;

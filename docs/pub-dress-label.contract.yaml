@@ -47,11 +47,33 @@ decided:
     rule: Only the slug folds.
     because: The discriminator is already constrained to lowercase hexadecimal, so `0xDsky` is not a pub_dress at all.
   - id: prefix-namespacing
-    rule: Every label keeps the `0x` prefix.
+    rule: Every label begins with `0x` (ASCII) or `xn--` (encoded).
     because: >-
       No Bond can fold onto `www`, `api`, or `_acme-challenge`, so the Bond
       namespace is disjoint from service hosts by construction. A positive rule,
       not a reserved-name blocklist to maintain.
+    note: >-
+      An ASCII stem always starts `0x`, so no Bond can hand-craft a label
+      beginning `xn--`. Only genuine IDNA encoding produces that prefix here,
+      which means an ACE prefix can never be forged to make one Bond's label
+      decode as another string.
+  - id: idna-uts46
+    rule: Non-ASCII is encoded with UTS-46, not refused and not transliterated.
+    because: >-
+      Punycode is injective and reversible, so it does not create the collision
+      class this contract exists to control, and it does not exclude non-Latin
+      scripts from having an address.
+    parameters:
+      # Pin these inside core. Do not delegate to a platform API whose UTS-46
+      # revision can drift between runtimes: the mapping cannot change after
+      # labels are allocated.
+      unicode_version: pin explicitly, and treat a bump as a contract change
+      transitional_processing: false # IDNA2008 behaviour; see deviation vectors
+      use_std3_ascii_rules: true
+      check_hyphens: true
+      check_bidi: true
+      check_joiners: true
+      verify_dns_length: true
   - id: ascii-fold-only
     rule: Fold A-Z to a-z explicitly; do not call a general Unicode lowercase.
     because: >-
@@ -61,30 +83,63 @@ decided:
     rule: Resolution is advisory; the allocating insert is the only collision boundary.
     because: Matches the existing pub_dress rule in services/identity/README.md.
 
-open_decision:
+resolved_decision:
   id: non-ascii-mapping
-  question: What label, if any, does a non-ASCII pub_dress get?
-  current_web_behavior: Refused, with reason `non-ascii`, surfaced as "this alphabet has no agreed address form".
-  why_deferred: >-
-    Choosing an IDNA/UTS-46 mapping is normative. A fold invented downstream
-    could land one Bond's identity on another Bond's address permanently, and
-    the mapping cannot be changed later without breaking allocated addresses.
-  options:
+  chosen: idna-uts46
+  rejected:
     - id: refuse
-      effect: Non-ASCII identities have no public address.
-      cost: Excludes Cyrillic and every non-Latin script from addresses.
-    - id: idna-uts46
-      effect: Punycode, e.g. `0x0небо` -> `xn--`-encoded label.
-      note: >-
-        Injective and reversible, so it does not create the collision class this
-        contract exists to control. Requires pinning one UTS-46 revision inside
-        core; do not delegate it to a platform API whose version can drift.
-      cost: Length must be checked after encoding, not before.
+      because: Excludes every non-Latin script from having an address at all.
     - id: transliterate
-      effect: Map non-ASCII onto ASCII lookalikes.
-      verdict: rejected
       because: Non-injective and homograph-friendly; it manufactures both collisions and phishing.
-  decide_before: Any migration that stores allocated labels.
+  # Every consequence below was verified against a real UTS-46 processor
+  # (Python `idna` 3.11, uts46=True, transitional=False, std3_rules=True).
+  # They are consequences of the choice, not open questions.
+  consequences:
+    - id: rtl-is-structurally-excluded
+      severity: decide-and-document
+      finding: >-
+        No right-to-left pub_dress can have an address. RFC 5893 requires the
+        first character of an RTL label to be L, R, or AL, and every label here
+        begins with the digit `0` (directionality EN). `0x0א` and `0x0ء` are
+        both rejected with a Bidi error.
+      implication: >-
+        Hebrew and Arabic Bonds are excluded by the `0x` prefix itself, not by
+        anything about their script. Relaxing check_bidi is not the fix: a label
+        that violates the Bidi rule will not round-trip through browsers even if
+        DNS serves it.
+      action: Accept and state it in the contract, or reconsider the mandatory prefix.
+    - id: length-is-checked-after-encoding
+      severity: correctness
+      finding: >-
+        A 32-scalar slug is valid for pub_dress and can still exceed 63 octets
+        once encoded — a CJK slug of 32 scalars reaches 105 octets. Checking
+        length before encoding would accept labels DNS cannot carry.
+      action: Apply verify_dns_length to the A-label, never to the input.
+    - id: deviation-characters-pin-the-flag
+      severity: correctness
+      finding: >-
+        `0x0straße` encodes to `xn--0x0strae-wya` under non-transitional
+        processing and to plain `0x0strasse` under transitional. The two
+        settings allocate different addresses for the same identity.
+      action: transitional_processing is false, and the vectors below lock it.
+    - id: disallowed-scalars-are-not-non-ascii
+      severity: api
+      finding: >-
+        UTS-46 rejects scalars that punycode would happily encode — `0x0🌍`
+        fails on U+1F30D. The old `NonAscii` error no longer describes anything;
+        a disallowed scalar is its own outcome.
+      action: Replace NonAscii with DisallowedScalar and BidiRule.
+    - id: confusables-remain-open
+      severity: follow-up
+      finding: >-
+        UTS-46 does not restrict mixed scripts. `0x0paypal` and `0x0pаypal`
+        (Cyrillic а) are distinct identities with distinct labels
+        (`0x0paypal`, `xn--0x0pypal-46g`) — no collision, but they read alike.
+        Greek final sigma and lunate sigma likewise produce distinct labels.
+      action: >-
+        Out of scope for this contract, which owns collision, not display.
+        Consider a UTS-39 restriction level as a separate rule if Bond addresses
+        are ever shown to third parties as trust signals.
 
 api:
   language: rust
@@ -98,39 +153,54 @@ api:
       kind: enum
       variants:
         - NotAPubDress # input was not canonical
-        - NonAscii # see open_decision
-        - InvalidCharacter # ASCII outside [a-z0-9-]
+        - InvalidCharacter # ASCII outside [a-z0-9-]; includes STD3 rejections such as `_`
+        - DisallowedScalar # non-ASCII scalar UTS-46 marks disallowed, e.g. emoji
+        - BidiRule # RFC 5893; every RTL pub_dress lands here, see consequences
         - BoundaryHyphen # leading or trailing hyphen on the composed label
-        - TooLong # exceeds 63 octets after any encoding
+        - TooLong # A-label exceeds 63 octets AFTER encoding
         - SuffixTooLong # suffix exceeds its own budget
   functions:
     - signature: "PubDressLabel::stem(pub_dress: &PubDress) -> Result<PubDressStem, PubDressLabelError>"
-      returns: The folded label stem, and whether folding changed the address.
+      returns: >-
+        The A-label stem, whether folding changed the address, and the mapped
+        Unicode form so a surface can show the Bond what its address means.
+      note: >-
+        A stem is already an A-label: `0x0Небо` yields `xn--0x0-dddt1cj`, not a
+        Unicode string awaiting encoding elsewhere.
     - signature: "PubDressLabel::compose(stem: &PubDressStem, suffix: &str) -> Result<PubDressLabel, PubDressLabelError>"
-      note: Validate the composed label, not the suffix alone, so a boundary hyphen is caught wherever it came from.
+      note: >-
+        Compose on the mapped Unicode form and encode once, then validate the
+        resulting A-label. Appending a suffix to an already-encoded `xn--` label
+        would produce a string that no longer decodes.
+      suffix_charset: >-
+        ASCII lowercase and digits, whatever the stem's script. The suffix is a
+        disambiguator, not part of the chosen name, and keeping it ASCII means
+        it can never change how the stem encodes.
     - signature: "PubDressLabel::parse(label: &str) -> Result<PubDressLabel, PubDressLabelError>"
       note: For the resolution endpoint, which receives a label rather than a pub_dress.
     - signature: "PubDressLabel::as_str(&self) -> &str"
   constants:
-    label_max_octets: 63 # RFC 1035
+    label_max_octets: 63 # RFC 1035, measured on the A-label
     suffix_max_length: 8
     zone_is_not_owned_here: true # the zone is deployment configuration, not protocol
 
 test_vectors:
-  # Mirrors packages/application/src/pub-dress-url.test.ts so the two sides can
-  # be cross-checked. Every row here should exist as a Rust test.
-  stem:
+  # ASCII rows mirror packages/application/src/pub-dress-url.test.ts. Encoded
+  # rows were computed with Python `idna` 3.11 under the pinned parameters
+  # (uts46=True, transitional=False, std3_rules=True) — they are measured, not
+  # illustrative. Every row should exist as a Rust test.
+  stem_ascii:
     - input: "0xda-sha"
-      stem: "0xda-sha"
+      label: "0xda-sha"
       folded: false
     - input: "0xdA-Sha"
-      stem: "0xda-sha"
+      label: "0xda-sha"
       folded: true
     - input: "0x0Sky"
-      stem: "0x0sky"
+      label: "0x0sky"
       folded: true
     - input: "0x0sky"
-      stem: "0x0sky"
+      label: "0x0sky"
       folded: false
       note: Together with the row above, the collision this contract exists to control.
     - input: "sky"
@@ -143,11 +213,64 @@ test_vectors:
       note: An uppercase discriminator is not a pub_dress; the fold never reaches it.
     - input: "0x0sky_one"
       error: InvalidCharacter
+      note: U+005F is disallowed_STD3_valid, so use_std3_ascii_rules decides this row.
     - input: "0x0sky-"
       error: BoundaryHyphen
+
+  stem_encoded:
     - input: "0x0небо"
-      error: NonAscii
-      note: Governed by open_decision; this row changes if idna-uts46 is chosen.
+      label: "xn--0x0-dddt1cj"
+      octets: 15
+      folded: false
+    - input: "0x0Небо"
+      label: "xn--0x0-dddt1cj"
+      octets: 15
+      folded: true
+      note: >-
+        The case fold survives encoding — two case-distinct Cyrillic identities
+        land on one label, exactly as two ASCII ones do.
+    - input: "0xdпривіт"
+      label: "xn--0xd-hdd3a5bhs3p"
+      octets: 19
+    - input: "0x0café"
+      label: "xn--0x0caf-gva"
+      octets: 14
+    - input: "0x0日本"
+      label: "xn--0x0-v08fl0d"
+      octets: 15
+
+  deviation_characters:
+    # These rows exist only to pin transitional_processing: false. Under
+    # transitional processing they produce different addresses for the same
+    # identity, which is unrecoverable once labels are allocated.
+    - input: "0x0straße"
+      label: "xn--0x0strae-wya"
+      octets: 16
+      under_transitional: "0x0strasse"
+    - input: "0x0ςigma"
+      label: "xn--0x0igma-zpf"
+      octets: 15
+      under_transitional: "xn--0x0igma-7pf"
+      note: Final sigma is preserved, not folded to σ.
+
+  rejections_encoded:
+    - input: "0x0🌍"
+      error: DisallowedScalar
+      detail: U+1F30D is disallowed by UTS-46 even though punycode would encode it.
+    - input: "0x0א"
+      error: BidiRule
+      detail: >-
+        RFC 5893 requires an RTL label to begin with L, R, or AL; this label
+        begins with the digit `0`.
+    - input: "0x0ء"
+      error: BidiRule
+      detail: Same cause. Every Hebrew and Arabic pub_dress lands here.
+    - input: "0x0一凥嗊妯嶔慹敞楃洨焍瓲磗粼傡咆填屐怵搚柿毤濉玮瞓筸佝卂圧嬌廱拖暻"
+      error: TooLong
+      detail: >-
+        32 scalars — a valid pub_dress slug — encoding to 105 octets. This row
+        is the reason length is measured on the A-label.
+
   compose:
     - stem: "0xda-sha"
       suffix: ""
@@ -159,6 +282,14 @@ test_vectors:
       suffix: "TWO"
       label: "0x0skytwo"
       note: The suffix folds the same way the stem does.
+    - stem_input: "0x0небо"
+      suffix: "7412"
+      label: "xn--0x07412-dgg9a9en"
+      octets: 20
+      note: >-
+        Composed on the mapped Unicode form and encoded once. Appending the
+        suffix to `xn--0x0-dddt1cj` instead would produce a label that no longer
+        decodes.
     - stem: "0x0sky"
       suffix: "2-"
       error: BoundaryHyphen
@@ -168,10 +299,13 @@ test_vectors:
     - stem: "0x0sky"
       suffix: "111111111"
       error: SuffixTooLong
+
   properties:
-    - Every stem starts with "0x".
-    - Any suffix of decimal digits composes into a valid label.
-    - compose is total on (valid stem, valid suffix) within the length budget.
+    - Every label begins with "0x" or "xn--".
+    - No ASCII stem can begin with "xn--", so an ACE prefix cannot be forged.
+    - Encoding is injective; only case and NFC differences collapse.
+    - Any suffix of decimal digits composes into a valid label when the stem is valid.
+    - verify_dns_length is applied to the A-label, never to the input.
 
 downstream:
   # Work in nilx-one/web that unblocks once the contract lands. Listed so the
@@ -204,6 +338,15 @@ downstream:
       - id: projection
         action: Add pub_dress_url to the identity projection.
         note: The client already parses it and treats it as optional.
+      - id: client-preview
+        action: >-
+          Route the Web client's preview through the shared Core boundary
+          instead of packages/application/src/pub-dress-url.ts.
+        detail: >-
+          The client cannot implement UTS-46 without pulling an IDNA library
+          into a package that has no dependencies, and a second implementation
+          is the drift this contract exists to prevent. Until then its preview
+          refuses non-ASCII and says so as a preview limit.
       - id: contract-version
         action: Bump services/identity/deploy/contract.version and requiresIdentityContract in deploy/web/targets.json.
         note: Only once a verified identity package providing the new contract exists in the release ancestry.
@@ -231,5 +374,16 @@ out_of_scope:
 acceptance:
   - The contract compiles in ox1-contracts with no dependency on a zone, a database, or a transport.
   - Every row in test_vectors exists as a test and passes.
-  - open_decision is resolved and recorded in the contract's own documentation before any label is stored.
-  - The Web client's preview derivation is replaced by, or verified against, this contract rather than living beside it indefinitely.
+  - >-
+    The pinned Unicode version and the seven UTS-46 parameters are asserted in a
+    test, not only configured. The deviation rows fail loudly if
+    transitional_processing is ever flipped.
+  - >-
+    The RTL exclusion is stated in the contract's own documentation. A Bond
+    whose pub_dress cannot have an address must learn that from the product, not
+    from an empty field.
+  - >-
+    The Web client's preview derivation is replaced by, or verified against,
+    this contract rather than living beside it indefinitely. It currently
+    refuses non-ASCII, which this decision makes a temporary preview limit
+    rather than the rule.

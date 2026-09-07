@@ -102,12 +102,12 @@ describe("public address field", () => {
     expect(screen.getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("explains an identity that has no address form yet", () => {
+  it("says an encoded address is computed at registration, not that none exists", () => {
     renderField({ selection: { discriminator: "0", slug: "небо" } });
 
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/this alphabet has no agreed address form/),
+      screen.getByText(/Address shown once you register/),
     ).toBeInTheDocument();
   });
 });

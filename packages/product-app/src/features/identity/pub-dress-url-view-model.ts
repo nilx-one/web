@@ -70,7 +70,7 @@ function foldDetail(folded: boolean): string {
 function rejectionDetail(reason: PubDressLabelRejection): string {
   switch (reason) {
     case "non-ascii":
-      return "No address yet — this alphabet has no agreed address form";
+      return "Address shown once you register — this alphabet is encoded there";
     case "unsupported-character":
       return "No address — this character cannot appear in an address";
     case "boundary-hyphen":

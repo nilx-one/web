@@ -32,10 +32,12 @@ export type PubDressLabelRejection =
   /** The input was not a canonical `pub_dress`. */
   | "not-a-pub-dress"
   /**
-   * Folding non-ASCII scalars is an IDNA decision that belongs to the pinned
-   * `nilx-one/core` contract, not to a rule invented in the Web client. Until
-   * that contract defines one, such an identity is honestly refused a URL
-   * rather than silently transliterated onto some other Bond's label.
+   * Such an identity does get an address: the contract encodes it with UTS-46
+   * (`0x0небо` becomes `xn--0x0-dddt1cj`). This preview cannot compute that
+   * without a second IDNA implementation, which is exactly the drift the
+   * contract exists to prevent, so it declines to guess and says so.
+   *
+   * See docs/pub-dress-label.contract.yaml.
    */
   | "non-ascii"
   | "unsupported-character"
