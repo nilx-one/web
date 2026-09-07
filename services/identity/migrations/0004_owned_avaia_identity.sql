@@ -11,12 +11,9 @@ ALTER TABLE identities
 ALTER TABLE identities
     ADD COLUMN owner_pub_dress TEXT REFERENCES identities(pub_dress) ON DELETE CASCADE;
 
--- Existing human identities predate registration-coupled Avaia creation. Their
--- creation time is intentionally left unknown rather than fabricated. Every new
--- human/Avaia pair records the real current registration/reconciliation time.
-ALTER TABLE identities
-    ADD COLUMN created_at INTEGER;
-
+-- `identities.created_at` already exists in the historical schema. Preserve
+-- that observed timestamp for pre-amendment humans; all new human/Avaia rows
+-- write the current registration or reconciliation time through repository code.
 CREATE UNIQUE INDEX IF NOT EXISTS identities_one_owned_avaia_per_owner
     ON identities(owner_pub_dress)
     WHERE identity_kind = 'avaia';
