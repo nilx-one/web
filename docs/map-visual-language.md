@@ -17,7 +17,11 @@ The accents should behave as light rather than broad flat fills: a saturated cor
 
 ## Authenticated shell
 
-The versioned `/map/0.1.0/style.json` contract remains the mineral-light geographic substrate. The authenticated Web home may use a dark host-local shell, glass, typography, and identity accents around or over that substrate. Those shell choices are product presentation and do not replace the versioned geographic palette. In particular, violet and coral used by the authenticated shell are not new map-contract meanings and do not supersede the cyan/orange map accent roles.
+The versioned `/map/0.1.0/style.json` contract is the geographic substrate and the authenticated shell is designed as chrome over that same world, not as a separate application panel around it.
+
+Light appearance is the primary visual reference: the map stays near-white and the header, Bond context, status and transient feedback use quiet translucent mineral surfaces with restrained cyan focus. The map remains visually dominant. The shell must not apply brightness, saturation, contrast or darkening filters to compensate for the published map style.
+
+Dark appearance is a deliberate mapped variant. It keeps the same layer structure, hierarchy and interaction semantics rather than inverting arbitrary shell colours or creating a second product language.
 
 The authenticated shell must not turn presentation into protocol truth:
 
@@ -26,15 +30,27 @@ The authenticated shell must not turn presentation into protocol truth:
 - an unavailable AI Bond may be shown as an unavailable counterpart candidate, but a separator between two displayed identities must not imply reciprocity, a completed Interaction, BondChain, or Relationship;
 - shell colors, glow, proximity on screen, and camera focus remain presentation unless backed by an authoritative projection.
 
-When a dark geographic basemap is needed after the real PMTiles archive is activated, it should be introduced as an explicit versioned map-style variant instead of silently redefining the mineral-light contract through host CSS.
+Persistent world ownership also remains explicit: `/`, `/identity`, and `/settings` are foreground presentation states over one authenticated world. Route changes must not redefine or replace geographic truth.
 
 ## Scale behavior
 
 At distant zoom levels, the map should remain predominantly monochrome. Cyan and orange should become more visible as the view approaches interaction-relevant human scale. This is visual hierarchy only and must not fabricate density, presence, proximity, or interaction state.
 
+City-scale fabric should already read at the bootstrap camera where the published archive supports it. Building footprints and secondary roads may appear before close zoom; volumetric building depth belongs to the later building-scale transition.
+
+## Known data-bound limits
+
+The visual reference is intent, not evidence. Features are rendered only when the published same-origin map data supports them.
+
+- text labels require a same-origin glyph payload before MapLibre text layers can be enabled;
+- terrain or hillshade requires a published DEM source;
+- individual vegetation, landmarks or other geometry must not be invented solely to imitate a reference image.
+
+These limits are data/rendering concerns. The shell must stay usable and spatially coherent without fabricating missing geography.
+
 ## Basemap activation
 
-The current `0.1.0` style contract records the palette while the geographic `basemap.pmtiles` archive remains unpublished. When the real self-hosted Protomaps archive is activated, roads, buildings, water, land cover, boundaries, labels, and optional hillshade should be mapped onto this palette without changing the semantic boundary: MapLibre renders geography; Core-facing projections remain authoritative for shared world and interaction truth.
+The current `0.1.0` style contract maps the self-hosted regional Protomaps archive onto the 0x1 spatial language. Roads, coarse built fabric, buildings, water, land cover, boundaries and supported point detail are presentation over that archive; Core-facing projections remain authoritative for shared world and interaction truth.
 
 ---
 
