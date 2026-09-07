@@ -563,6 +563,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         onNavigate={(route: ShellRoute) => {
           void navigate({ to: route });
         }}
+        {...(viewModel.identity.avaiaPubDress === undefined
+          ? {}
+          : { avaiaPubDress: viewModel.identity.avaiaPubDress })}
         {...(viewModel.identity.native
           ? { onLogout: () => logout.mutate() }
           : {})}
