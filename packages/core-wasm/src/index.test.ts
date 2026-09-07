@@ -20,6 +20,18 @@ function generatedRuntime(
     contract_version: () => CORE_CONTRACT_VERSION,
     fixture_corpus_version: () => CORE_FIXTURE_CORPUS_VERSION,
     fixture_corpus_digest: () => CORE_FIXTURE_CORPUS_DIGEST,
+    derive_pub_dress_label: (value) =>
+      value === "0x0небо"
+        ? "label:xn--0x0-dddt1cj"
+        : "error:not_a_pub_dress",
+    compose_pub_dress_label: (value, suffix) =>
+      value === "0x0небо" && suffix === "42"
+        ? "label:xn--0x042-3ve3g4f"
+        : "error:invalid_character",
+    pub_dress_unicode_version: () => "16.0.0",
+    pub_dress_uts46_implementation: () =>
+      "idna=1.1.0;idna_adapter=1.1.0;idna_mapping=1.1.0",
+    validate_pub_dress: (value) => (value === "0x0небо" ? "valid" : "invalid"),
     ...overrides,
   };
 }
@@ -66,6 +78,33 @@ describe("CoreWasmClient", () => {
       module_or_path: "/core/0.1.0/index_bg.wasm",
     });
     expect(bindings.contractVersion()).toBe("0.1.0");
+    expect(bindings.derivePubDressLabel?.("0x0небо")).toEqual({
+      kind: "label",
+      label: "xn--0x0-dddt1cj",
+    });
+  });
+
+  it("decodes stable Core label errors without reimplementing Unicode rules", async () => {
+    const runtime = generatedRuntime({
+      derive_pub_dress_label: () => "error:disallowed_scalar",
+    });
+    const bindings = await loadGeneratedCoreWasmBindings(async () => runtime);
+
+    expect(bindings.derivePubDressLabel?.("0x0a🌍")).toEqual({
+      kind: "error",
+      code: "disallowed_scalar",
+    });
+  });
+
+  it("rejects malformed Core label wire results", async () => {
+    const runtime = generatedRuntime({
+      derive_pub_dress_label: () => "label:../unsafe",
+    });
+    const bindings = await loadGeneratedCoreWasmBindings(async () => runtime);
+
+    expect(() => bindings.derivePubDressLabel?.("0x0sky")).toThrow(
+      "invalid PubDress label",
+    );
   });
 
   it("rejects a generated runtime with a different corpus digest", async () => {
