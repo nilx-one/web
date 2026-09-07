@@ -68,7 +68,7 @@ function rejectionDetail(reason: PubDressLabelRejection): string {
     case "disallowed-scalar":
       return "No address — this scalar is not allowed by the Core address contract";
     case "bidi-rule":
-      return "No address — this value fails the Core bidirectional-text rule";
+      return "No address — a right-to-left script cannot follow the 0x prefix";
     case "not-encodable":
       return "No address — Core cannot encode this value as one DNS label";
     case "unsupported-character":
