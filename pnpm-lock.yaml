@@ -11,6 +11,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.9.1(supports-color@7.2.0))
+      '@maplibre/maplibre-gl-style-spec':
+        specifier: ^26.4.1
+        version: 26.4.1
       '@nilx-one/application':
         specifier: workspace:*
         version: link:packages/application

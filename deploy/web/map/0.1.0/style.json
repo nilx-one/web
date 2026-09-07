@@ -22,7 +22,20 @@
     "nilx-one:label-primary": "#536166",
     "nilx-one:label-secondary": "#7d8a90",
     "nilx-one:label-state": "reserved-pending-same-origin-glyphs",
-    "nilx-one:accent-semantics": "presentation-only"
+    "nilx-one:accent-semantics": "presentation-only",
+    "nilx-one:surface-building-faces": "#eef3f4",
+    "nilx-one:building-height-source": "openstreetmap-height",
+    "nilx-one:building-height-fallback": "presentation-only-7m",
+    "nilx-one:zoom-city": 11,
+    "nilx-one:zoom-neighborhood": 13,
+    "nilx-one:zoom-street": 15,
+    "nilx-one:zoom-building": 16.5
+  },
+  "light": {
+    "anchor": "viewport",
+    "position": [1.4, 205, 32],
+    "color": "#ffffff",
+    "intensity": 0.4
   },
   "sources": {
     "basemap": {
@@ -224,7 +237,6 @@
       "source": "basemap",
       "source-layer": "buildings",
       "minzoom": 10,
-      "maxzoom": 15,
       "filter": [
         "in",
         ["get", "kind"],
@@ -242,11 +254,13 @@
           11,
           0.28,
           12.5,
-          0.55,
-          14.5,
-          0.62,
+          0.5,
           15,
-          0
+          0.62,
+          16.5,
+          0.5,
+          19,
+          0.42
         ]
       }
     },
@@ -262,6 +276,33 @@
         "line-opacity": 0.58,
         "line-dasharray": [3, 2],
         "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.3, 18, 1.5]
+      }
+    },
+    {
+      "id": "roads-minor-casing",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "roads",
+      "minzoom": 14,
+      "filter": ["==", ["get", "kind"], "minor_road"],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#f6fafa",
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0, 15, 0.8],
+        "line-width": [
+          "interpolate",
+          ["exponential", 1.5],
+          ["zoom"],
+          14,
+          2,
+          18,
+          11,
+          20,
+          18
+        ]
       }
     },
     {
@@ -301,7 +342,9 @@
           15,
           2,
           18,
-          7
+          7,
+          20,
+          12
         ]
       }
     },
@@ -317,7 +360,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#eef2f3",
+        "line-color": "#f8fbfb",
         "line-width": [
           "interpolate",
           ["exponential", 1.5],
@@ -327,7 +370,9 @@
           14,
           6,
           18,
-          20
+          20,
+          20,
+          34
         ]
       }
     },
@@ -355,7 +400,9 @@
           14,
           3.5,
           18,
-          12
+          12,
+          20,
+          20
         ]
       }
     },
@@ -371,16 +418,16 @@
         ["literal", ["building", "building_part"]]
       ],
       "paint": {
-        "fill-extrusion-color": "#d8e2e5",
+        "fill-extrusion-color": "#eef3f4",
         "fill-extrusion-height": ["coalesce", ["get", "height"], 7],
         "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
         "fill-extrusion-opacity": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          14,
-          0,
           15,
+          0,
+          16.5,
           0.92
         ],
         "fill-extrusion-vertical-gradient": true
@@ -404,19 +451,19 @@
       "type": "circle",
       "source": "basemap",
       "source-layer": "pois",
-      "minzoom": 14,
+      "minzoom": 16,
       "paint": {
         "circle-radius": [
           "interpolate",
           ["linear"],
           ["zoom"],
-          14,
+          16,
           0.8,
-          18,
-          2.6
+          19,
+          2.4
         ],
         "circle-color": "#7d8a90",
-        "circle-opacity": 0.36
+        "circle-opacity": 0.3
       }
     }
   ]
