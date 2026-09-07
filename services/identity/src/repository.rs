@@ -121,8 +121,9 @@ impl IdentityRepository {
 
         if let Some(mut record) = find_by_provider_in(&mut transaction, provider_identity).await? {
             if record.avaia_pub_dress.is_none() {
+                let owner = pub_dress_for(&record)?;
                 record.avaia_pub_dress =
-                    create_owned_avaia_in(&mut transaction, pub_dress_for(&record)?, now).await?;
+                    create_owned_avaia_in(&mut transaction, &owner, now).await?;
             }
             transaction.commit().await?;
             return Ok(RegistrationOutcome::AlreadyRegistered(record));
@@ -638,6 +639,7 @@ mod tests {
 
     use super::{
         IdentityRepository, NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome,
+        identity_for_pub_dress,
     };
     use crate::PubDress;
 
