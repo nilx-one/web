@@ -31,6 +31,9 @@
     "nilx-one:zoom-street": 15,
     "nilx-one:zoom-building": 16.5
   },
+  "projection": {
+    "type": "globe"
+  },
   "light": {
     "anchor": "viewport",
     "position": [1.4, 205, 32],
