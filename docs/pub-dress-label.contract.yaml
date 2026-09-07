@@ -19,7 +19,7 @@ contract:
   companion_of: PubDress
   consumers:
     - repository: nilx-one/web
-      pinned_at: 240b6e79bf937261169fa98253b4d288a3d1a451
+      pinned_at: 18f8906f8ac5493577f2fa87d31d0a90e482aa9a
       uses:
         - services/identity # allocation, resolution endpoint
         - packages/application/src/pub-dress-url.ts # preview, to be replaced by the Wasm boundary
@@ -315,7 +315,7 @@ downstream:
       - id: pin
         action: Move the ox1-contracts rev in services/identity/Cargo.toml to the commit adding this contract.
       - id: migration
-        action: Add migration 0004 storing the allocated label.
+        action: Add migration 0005 storing the allocated label.
         detail: >-
           UNIQUE and COLLATE NOCASE on the label column. The identity it belongs
           to is the existing pub_dress foreign key.
