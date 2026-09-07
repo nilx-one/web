@@ -195,8 +195,8 @@ async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) 
         match state.repository.find_native_session(&token_hash, now).await {
             Ok(Some(identity)) => {
                 let identity = match reconcile_authenticated_identity(&state, identity, now).await {
-                    Ok(value) => value,
-                    Err(response) => return response,
+                    Some(value) => value,
+                    None => return unavailable(),
                 };
                 return no_store_json(
                     StatusCode::OK,
@@ -607,27 +607,30 @@ async fn reconcile_authenticated_identity(
     state: &ApiState,
     identity: IdentityRecord,
     now: u64,
-) -> Result<IdentityRecord, Response> {
+) -> Option<IdentityRecord> {
     if identity.avaia_pub_dress.is_some() {
-        return Ok(identity);
+        return Some(identity);
     }
-    let pub_dress = PubDress::from_str(&identity.pub_dress).map_err(|error| {
-        tracing::error!(%error, "stored authenticated human pub_dress is invalid");
-        unavailable()
-    })?;
+    let pub_dress = match PubDress::from_str(&identity.pub_dress) {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "stored authenticated human pub_dress is invalid");
+            return None;
+        }
+    };
     match state
         .repository
         .reconcile_owned_avaia(&pub_dress, now)
         .await
     {
-        Ok(Some(record)) => Ok(record),
+        Ok(Some(record)) => Some(record),
         Ok(None) => {
             tracing::error!(pub_dress = %identity.pub_dress, "authenticated human identity disappeared during Avaia reconciliation");
-            Err(unavailable())
+            None
         }
         Err(error) => {
             tracing::error!(%error, "authenticated Avaia reconciliation failed");
-            Err(unavailable())
+            None
         }
     }
 }
@@ -639,8 +642,8 @@ async fn authenticated_response(
     replacement_recovery_key: Option<String>,
 ) -> Response {
     let identity = match reconcile_authenticated_identity(state, identity, now).await {
-        Ok(value) => value,
-        Err(response) => return response,
+        Some(value) => value,
+        None => return unavailable(),
     };
     let session_token = match TokenFactory::session() {
         Ok(value) => value,
@@ -949,8 +952,8 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
     match state.repository.find_by_provider(&provider_identity).await {
         Ok(Some(identity)) => {
             let identity = match reconcile_authenticated_identity(&state, identity, now).await {
-                Ok(value) => value,
-                Err(response) => return response,
+                Some(value) => value,
+                None => return unavailable(),
             };
             identity_response(StatusCode::OK, identity)
         }
