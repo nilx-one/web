@@ -43,7 +43,7 @@ something the Bond failed to fill in.
 
 ## Derivation rules
 
-`packages/application/src/pub-dress-url.ts` is the client-side derivation.
+`nilx-one/core` owns derivation and composition. `packages/application/src/pub-dress-url.ts` is presentation-only: it receives Core results and never performs Unicode/IDNA mapping itself.
 
 - A label has two forms and both matter. The Bond reads `0x0небо.nilx.one`,
   which is what a browser shows; DNS carries `xn--0x0-dddt1cj`. Composition
@@ -56,18 +56,15 @@ something the Bond failed to fill in.
   Bond is shown the address it will really get.
 - Mapping is wider than case. Fullwidth `0x0ａｂ` reaches the same label as plain
   `0x0ab`, so they are a collision pair with no case variance between them.
-- ASCII must be LDH (`a-z`, `0-9`, `-`) and must not end on a hyphen. A
-  non-ASCII scalar must be a letter, mark, or digit — a conservative stand-in
-  for the UTS-46 validity table this package does not carry, biased so it may
-  refuse something the contract accepts but never the reverse.
+- Core validates the LDH A-label boundary, UTS-46 scalar policy, hyphen rules,
+  bidirectional-text rules, joiners, and the final DNS length. Web maps Core's
+  stable rejection codes into product copy rather than reclassifying Unicode.
 - The 63-octet limit is measured on the encoded form. A 32-scalar slug is a
   valid `pub_dress` and can still reach 105 octets once encoded.
 - Non-ASCII is encoded, not refused. `0x0небо` becomes `https://0x0небо.nilx.one`,
-  carried by DNS as `xn--0x0-dddt1cj`. The preview reaches the platform's own
-  UTS-46 through URL parsing rather than carrying an IDNA table, and applies its
-  own charset, boundary and length rules around it — URL parsing deliberately
-  relaxes some of them. A symbol is still refused: punycode would encode
-  `0x0🌍`, IDNA does not allow it.
+  carried by DNS as `xn--0x0-dddt1cj`. The A-label comes from the pinned Core
+  runtime; Web keeps the Unicode identity readable and shows the DNS form as a
+  footnote when the two differ.
 
 Every label begins with `0x` or, once encoded, `xn--`. That is what keeps the
 user namespace disjoint from service hosts — no Bond can fold onto `www`, `api`,
@@ -104,18 +101,16 @@ If Bond addresses ever serve Bond-controlled JavaScript, `__Host-` alone stops
 being sufficient and the addresses need their own registrable domain plus a
 Public Suffix List entry.
 
-## Handing the fold to core
+## Core ownership
 
-[`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) is the
-implementation instruction for `nilx-one/core`: the API surface to add next to
-`PubDress`, the rules already settled, the one open decision (the non-ASCII
-mapping), and test vectors mirroring
-`packages/application/src/pub-dress-url.test.ts` so both sides can be
-cross-checked.
+[`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) mirrors the
+Core-owned contract consumed by Web. The normative implementation now lives in
+`nilx-one/core` and is exposed to Web through the verified Wasm boundary; the
+local document remains as a cross-repository compatibility and downstream-work
+record.
 
 ## Not yet implemented
 
-- the normative fold in `nilx-one/core`, now specified as UTS-46;
 - `POST /api/v1/identity/url/resolve`, and label allocation inside the
   registration transaction, with `pub_dress_url` on the identity projection;
 - the migration adding the stored label with a `UNIQUE COLLATE NOCASE` index;
@@ -126,9 +121,9 @@ Until label resolution exists, `IdentityFoundationView` receives no
 the Bond still sees the fold and the encoded form, and only a real collision
 answer opens the editable part.
 
-The preview's encoder is the platform's UTS-46, which is conformant but not the
-revision `nilx-one/core` will pin. Its vectors assert the same encoded values as
-the contract, so a divergence fails the Web suite rather than reaching a Bond.
+The preview uses the pinned Core runtime directly. If the Wasm label binding is
+missing or malformed, Web fails closed instead of falling back to a second
+Unicode/IDNA implementation.
 
 ---
 

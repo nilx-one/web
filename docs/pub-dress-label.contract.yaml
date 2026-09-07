@@ -1,16 +1,14 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-# Implementation instruction for nilx-one/core.
+# Cross-repository mirror of the Core-owned PubDressLabel contract.
 #
-# nilx-one/web derives a Bond's public address in its own client today
-# (packages/application/src/pub-dress-url.ts) so a registering Bond can see the
-# fold before committing. That derivation is a preview, not authority: the same
-# rule has to exist normatively next to PubDress, or the Web client and the
-# identity service can disagree about which Bond owns an address.
+# nilx-one/core is normative. Web consumes deterministic label derivation and
+# composition through the pinned Core Wasm boundary and only projects those
+# results into product UI. It must not carry a second Unicode/IDNA implementation.
 #
-# This file is the handoff. It states what belongs in core, what is already
-# decided, and the one decision that is genuinely open.
+# This file records the contract consequences and the remaining server/deploy
+# work so Web, identity, and infra cannot silently diverge from Core.
 
 contract:
   name: pub_dress_label
@@ -19,10 +17,10 @@ contract:
   companion_of: PubDress
   consumers:
     - repository: nilx-one/web
-      pinned_at: 18f8906f8ac5493577f2fa87d31d0a90e482aa9a
+      pinned_at: c224304947280169017e298237bcf5361d1bfb30
       uses:
         - services/identity # allocation, resolution endpoint
-        - packages/application/src/pub-dress-url.ts # preview, to be replaced by the Wasm boundary
+        - packages/application/src/pub-dress-url.ts # presentation of Core-owned labels
   reference: docs/pub-dress-url.md
 
 problem:
@@ -374,24 +372,17 @@ downstream:
         action: Add pub_dress_url to the identity projection.
         note: The client already parses it and treats it as optional.
       - id: client-preview
-        action: >-
-          Route the Web client's preview through the shared Core boundary
-          instead of packages/application/src/pub-dress-url.ts.
+        status: implemented
+        action: Keep Web presentation behind the shared Core Wasm boundary.
         detail: >-
-          The preview now encodes non-ASCII through the platform's own UTS-46,
-          reached by URL parsing, so a Cyrillic Bond sees its address rather
-          than a deferral. That is a conformant implementation but not the
-          pinned one, so it stays a preview until Core owns the encoding.
+          Web calls Core for label derivation and treats the returned A-label as
+          authoritative. packages/application/src/pub-dress-url.ts only maps the
+          typed pub_dress plus Core result into readable product presentation; it
+          performs no Unicode classification or UTS-46 mapping.
         verified_agreement: >-
-          The platform encoder matches this contract's vectors exactly on every
-          valid row, including the non-transitional readings of ß and ς.
-        known_divergence: >-
-          URL parsing relaxes UseSTD3ASCIIRules and CheckHyphens, so it accepts
-          `_`, a trailing hyphen, and emoji. The client applies its own charset,
-          boundary and length rules around the encoder rather than trusting it,
-          and uses a letter/mark/digit test as a conservative stand-in for the
-          UTS-46 validity table: it may refuse a scalar Core accepts, never the
-          reverse.
+          Core owns the pinned Unicode version and UTS-46 implementation, and the
+          Web adapter validates the stable label/error wire surface before exposing
+          it to product code.
       - id: contract-version
         action: Bump services/identity/deploy/contract.version and requiresIdentityContract in deploy/web/targets.json.
         note: Only once a verified identity package providing the new contract exists in the release ancestry.
