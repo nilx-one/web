@@ -15,7 +15,7 @@ axum = { version = "0.8", features = ["json"] }
 base64 = "0.22"
 getrandom = "0.3"
 hmac = "0.12"
-ox1-contracts = { git = "https://github.com/nilx-one/core", rev = "240b6e79bf937261169fa98253b4d288a3d1a451" }
+ox1-contracts = { git = "https://github.com/nilx-one/core", rev = "9f4b3e60287db81cf9fb7bd26569932979a1d31d" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -32,4 +32,4 @@ url = "2"
 
 [dev-dependencies]
 tempfile = "3"
-tower = { version = "0.5", features = ["util"] }
+tower = { version = "0.5", features = ["util"]
