@@ -18,7 +18,9 @@ const APPEARANCE_FILES = [
 ] as const;
 
 function readProjection(path: string): ProjectionStyle["projection"] {
-  const style = JSON.parse(readFileSync(resolve(path), "utf8")) as ProjectionStyle;
+  const style = JSON.parse(
+    readFileSync(resolve(path), "utf8"),
+  ) as ProjectionStyle;
   return style.projection;
 }
 
