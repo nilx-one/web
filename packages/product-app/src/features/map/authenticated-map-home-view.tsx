@@ -118,7 +118,7 @@ export function AuthenticatedMapHomeView({
   onLogout,
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
-  const mapRef = useRef<HTMLDivElement>(null);
+  const mapHostRef = useRef<HTMLDivElement>(null);
   const [focusState, setFocusState] = useState<FocusState>("idle");
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
@@ -167,9 +167,9 @@ export function AuthenticatedMapHomeView({
   }, [renderer, resolvedAppearance]);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (map === null) return;
-    renderer.mount(map);
+    const mapHost = mapHostRef.current;
+    if (mapHost === null) return;
+    renderer.mount(mapHost);
     return () => renderer.unmount();
   }, [renderer]);
 
@@ -256,11 +256,13 @@ export function AuthenticatedMapHomeView({
       data-section={section}
       world={
         <>
-          <div
-            className="authenticated-map-home__map"
-            ref={mapRef}
-            aria-hidden="true"
-          />
+          <div className="authenticated-map-home__map" aria-hidden="true">
+            <div
+              className="authenticated-map-home__map-host"
+              ref={mapHostRef}
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
           <div className="authenticated-map-home__shade" aria-hidden="true" />
         </>
       }
