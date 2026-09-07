@@ -12,6 +12,7 @@ import {
   RegisterNativeIdentity,
   RegisterProviderIdentity,
   ResolvePubDress,
+  formatPubDress,
   type CoreRuntimePort,
   type IdentityAccessPort,
   type PubDressSelection,
@@ -211,6 +212,28 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const readinessQuery = useQuery({
     queryKey: ["core-runtime-readiness"],
     queryFn: () => new ReadRuntimeReadiness(dependencies.core).execute(),
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const pubDressLabelSlugLength = [...selection.slug].length;
+  const pubDressLabelEnabled =
+    pubDressLabelSlugLength >= 2 &&
+    pubDressLabelSlugLength <= 32 &&
+    dependencies.core.derivePubDressLabel !== undefined;
+  const pubDressLabelQuery = useQuery({
+    queryKey: [
+      "core-pub-dress-label",
+      selection.discriminator,
+      selection.slug,
+    ],
+    queryFn: () => {
+      const derive = dependencies.core.derivePubDressLabel;
+      if (derive === undefined) {
+        throw new Error("0x1 Core PubDress label derivation is unavailable");
+      }
+      return derive.call(dependencies.core, formatPubDress(selection));
+    },
+    enabled: pubDressLabelEnabled,
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -577,6 +600,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   return (
     <IdentityFoundationView
       password={password}
+      pubDressLabelDerivation={pubDressLabelQuery.data}
+      pubDressLabelDerivationPending={
+        pubDressLabelEnabled && pubDressLabelQuery.isFetching
+      }
       selection={selection}
       viewModel={viewModel}
       onCredentialAutofill={applyAutofilledCredential}
