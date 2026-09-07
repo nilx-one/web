@@ -77,11 +77,10 @@ describe("Core-backed pub_dress URL presentation", () => {
 
   it("presents a Core-composed Unicode label without encoding it again", () => {
     expect(
-      projectCorePubDressLabelComposition(
-        "0x0небо",
-        "7412",
-        { kind: "label", label: "xn--0x07412-dgg9a9en" },
-      ),
+      projectCorePubDressLabelComposition("0x0небо", "7412", {
+        kind: "label",
+        label: "xn--0x07412-dgg9a9en",
+      }),
     ).toEqual({
       kind: "label",
       label: "0x0небо7412",

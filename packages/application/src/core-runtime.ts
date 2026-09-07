@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 export type CoreUnavailableReason =
-  | "artifact-missing"
-  | "binding-invalid"
-  | "load-failed";
+  "artifact-missing" | "binding-invalid" | "load-failed";
 
 export type CoreRuntimeStatus =
   | {
@@ -40,9 +38,7 @@ export type CorePubDressLabelResult =
  */
 export interface CoreRuntimePort {
   probe(): Promise<CoreRuntimeStatus>;
-  derivePubDressLabel?(
-    pubDress: string,
-  ): Promise<CorePubDressLabelResult>;
+  derivePubDressLabel?(pubDress: string): Promise<CorePubDressLabelResult>;
   composePubDressLabel?(
     pubDress: string,
     suffix: string,

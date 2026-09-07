@@ -110,7 +110,9 @@ export async function loadGeneratedCoreWasmBindings(
     derivePubDressLabel: (pubDress) =>
       decodePubDressLabelWire(runtime.derive_pub_dress_label(pubDress)),
     composePubDressLabel: (pubDress, suffix) =>
-      decodePubDressLabelWire(runtime.compose_pub_dress_label(pubDress, suffix)),
+      decodePubDressLabelWire(
+        runtime.compose_pub_dress_label(pubDress, suffix),
+      ),
   };
 }
 

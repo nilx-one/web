@@ -221,11 +221,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     pubDressLabelSlugLength <= 32 &&
     dependencies.core.derivePubDressLabel !== undefined;
   const pubDressLabelQuery = useQuery({
-    queryKey: [
-      "core-pub-dress-label",
-      selection.discriminator,
-      selection.slug,
-    ],
+    queryKey: ["core-pub-dress-label", selection.discriminator, selection.slug],
     queryFn: () => {
       const derive = dependencies.core.derivePubDressLabel;
       if (derive === undefined) {

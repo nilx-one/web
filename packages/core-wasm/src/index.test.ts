@@ -21,9 +21,7 @@ function generatedRuntime(
     fixture_corpus_version: () => CORE_FIXTURE_CORPUS_VERSION,
     fixture_corpus_digest: () => CORE_FIXTURE_CORPUS_DIGEST,
     derive_pub_dress_label: (value) =>
-      value === "0x0небо"
-        ? "label:xn--0x0-dddt1cj"
-        : "error:not_a_pub_dress",
+      value === "0x0небо" ? "label:xn--0x0-dddt1cj" : "error:not_a_pub_dress",
     compose_pub_dress_label: (value, suffix) =>
       value === "0x0небо" && suffix === "42"
         ? "label:xn--0x042-3ve3g4f"
