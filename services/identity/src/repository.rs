@@ -87,7 +87,7 @@ impl IdentityRepository {
             .execute(&self.pool)
             .await?;
 
-        if self.has_legacy_telegram_column().await? {
+        if self.has_identity_column("tg_id").await? {
             sqlx::raw_sql(include_str!("../migrations/0002_provider_accounts.sql"))
                 .execute(&self.pool)
                 .await?;
@@ -96,19 +96,21 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0003_native_auth.sql"))
             .execute(&self.pool)
             .await?;
-        sqlx::raw_sql(include_str!("../migrations/0004_owned_avaia_identity.sql"))
-            .execute(&self.pool)
-            .await?;
+        if !self.has_identity_column("identity_kind").await? {
+            sqlx::raw_sql(include_str!("../migrations/0004_owned_avaia_identity.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
         Ok(())
     }
 
-    async fn has_legacy_telegram_column(&self) -> Result<bool, RepositoryError> {
+    async fn has_identity_column(&self, name: &str) -> Result<bool, RepositoryError> {
         let columns = sqlx::query("PRAGMA table_info(identities)")
             .fetch_all(&self.pool)
             .await?;
         Ok(columns
             .iter()
-            .any(|column| column.get::<String, _>("name") == "tg_id"))
+            .any(|column| column.get::<String, _>("name") == name))
     }
 
     pub async fn register(
@@ -644,6 +646,22 @@ mod tests {
     use crate::PubDress;
 
     #[tokio::test]
+    async fn owned_avaia_migration_is_idempotent_on_reopen() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+
+        let repository = IdentityRepository::connect(&database_url)
+            .await
+            .expect("first initialization");
+        drop(repository);
+
+        IdentityRepository::connect(&database_url)
+            .await
+            .expect("second initialization must not replay additive migration");
+    }
+
+    #[tokio::test]
     async fn provider_registration_atomically_creates_the_owned_avaia() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
@@ -667,13 +685,20 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let occupying_human = PubDress::from_str("0xfooai").expect("valid human collision");
+        let occupying_owner = PubDress::from_str("0x0sky").expect("valid first owner");
         repository
-            .register(&occupying_human, &ProviderIdentity::telegram(10), 100)
+            .register(&occupying_owner, &ProviderIdentity::telegram(10), 100)
             .await
             .expect("occupying registration");
 
-        let candidate_owner = PubDress::from_str("0x0xfoo").expect("valid owner");
+        // Core deliberately maps both `sky` and `sk` to the same default
+        // Avaia stem, so this is a real canonical-address collision rather
+        // than a hand-written guess at the naming contract.
+        let candidate_owner = PubDress::from_str("0x0sk").expect("valid second owner");
+        assert_eq!(
+            AvaiaPubDress::derive_default(&occupying_owner),
+            AvaiaPubDress::derive_default(&candidate_owner)
+        );
         assert!(matches!(
             repository
                 .register(&candidate_owner, &ProviderIdentity::discord("20"), 101)
@@ -711,7 +736,7 @@ mod tests {
             .expect("human exists");
         assert_eq!(reconciled.avaia_pub_dress.as_deref(), Some("da-sha.ai"));
         let created_at = sqlx::query_scalar::<_, i64>(
-            "SELECT created_at FROM identities WHERE pub_dress = 'da-sha.ai'",
+            "SELECT CAST(created_at AS INTEGER) FROM identities WHERE pub_dress = 'da-sha.ai'",
         )
         .fetch_one(&repository.pool)
         .await
