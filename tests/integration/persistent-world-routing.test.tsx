@@ -60,6 +60,7 @@ function createAuthenticatedIdentity(): IdentityAccessPort {
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
+    setTelegramPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
     resolvePubDress: async () => ({ kind: "service-unavailable" }),

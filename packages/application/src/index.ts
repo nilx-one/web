@@ -32,6 +32,8 @@ export {
   ReadProviderIdentity,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
+  SetTelegramPassword,
+  type ProviderPasswordResult,
   ResolvePubDress,
   ResolvePubDressLabel,
   formatPubDress,

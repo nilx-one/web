@@ -24,6 +24,7 @@ import type {
   PubDressStatusViewState,
 } from "./identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./pub-dress-credential-input";
+import { TelegramPasswordForm } from "./telegram-password-form";
 import { PubDressUrlField } from "./pub-dress-url-field";
 import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 
@@ -167,6 +168,8 @@ function VisibilityGlyph({ visible }: { visible: boolean }) {
 
 function heading(identity: IdentityViewState): string {
   switch (identity.kind) {
+    case "provider-password":
+      return "Create your password.";
     case "recovery-key":
       return "Save your recovery key.";
     case "form":
@@ -193,6 +196,8 @@ function heading(identity: IdentityViewState): string {
 
 function lede(identity: IdentityViewState): string {
   switch (identity.kind) {
+    case "provider-password":
+      return "Use this password to sign in to the same Bond outside Telegram.";
     case "recovery-key":
       return "This is the only native recovery proof. It appears once.";
     case "authenticated":
@@ -1042,7 +1047,19 @@ export function IdentityFoundationView({
                 </div>
               </>
             ) : null}
-            {viewModel.identity.kind === "form" ? (
+            {viewModel.identity.kind === "provider-password" ? (
+              <TelegramPasswordForm
+                key={viewModel.identity.pubDress}
+                pubDress={viewModel.identity.pubDress}
+                password={password}
+                busy={viewModel.identity.busy}
+                {...(viewModel.identity.error === undefined
+                  ? {}
+                  : { error: viewModel.identity.error })}
+                onPasswordChange={onPasswordChange}
+                onSubmit={onSubmit}
+              />
+            ) : viewModel.identity.kind === "form" ? (
               <IdentityForm
                 identity={viewModel.identity}
                 password={password}

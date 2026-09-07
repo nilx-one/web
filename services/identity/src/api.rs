@@ -139,6 +139,10 @@ fn router_with_clock(
             get(check_pub_dress_availability),
         )
         .route("/api/v1/identity/registration", post(register_identity))
+        .route(
+            "/api/v1/auth/telegram/password",
+            post(set_telegram_password),
+        )
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(state)
 }
@@ -955,7 +959,21 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
                 Some(value) => value,
                 None => return unavailable(),
             };
-            identity_response(StatusCode::OK, identity)
+            let password_required = match state
+                .repository
+                .password_required(&identity.pub_dress)
+                .await
+            {
+                Ok(value) => value,
+                Err(_) => return unavailable(),
+            };
+            no_store_json(
+                StatusCode::OK,
+                ProviderIdentityProjection {
+                    identity: identity.into(),
+                    password_required,
+                },
+            )
         }
         Ok(None) => api_error(
             StatusCode::NOT_FOUND,
@@ -966,6 +984,97 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
             tracing::error!(%error, "identity API lookup failed");
             unavailable()
         }
+    }
+}
+
+// Deliberately excludes a client-selected pub_dress and never resets an active password.
+async fn set_telegram_password(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<ProviderPasswordRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let provider = match authenticate(&state, &headers).await {
+        Ok(identity) if identity.provider == crate::IdentityProvider::Telegram => identity,
+        Ok(_) => return unauthorized(),
+        Err(error) => return error.into_response(),
+    };
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(
+            format!("password-setup:telegram:{}", provider.subject),
+            now,
+            8,
+            3600,
+        )
+        .and_then(|_| {
+            state
+                .limiter
+                .consume("password-setup:global", now, 500, 3600)
+        })
+    {
+        return rate_limited(retry_after);
+    }
+    match state.repository.find_by_provider(&provider).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return unauthorized(),
+        Err(_) => return unavailable(),
+    }
+    let password = match state.password_engine.validate(&request.password) {
+        Ok(value) => value,
+        Err(error) => return password_policy_error(error),
+    };
+    let engine = state.password_engine.clone();
+    let password_hash = match tokio::task::spawn_blocking(move || engine.hash(&password)).await {
+        Ok(Ok(value)) => value,
+        _ => return unavailable(),
+    };
+    let (Ok(recovery_key), Ok(challenge)) = (
+        TokenFactory::recovery_key(),
+        TokenFactory::registration_challenge(),
+    ) else {
+        return unavailable();
+    };
+    let recovery_hash = state
+        .secret_digester
+        .digest("native-recovery-key", &recovery_key);
+    let challenge_hash = state
+        .secret_digester
+        .digest("native-registration-challenge", &challenge);
+    match state
+        .repository
+        .prepare_provider_password(
+            &provider,
+            &password_hash,
+            state.password_engine.hash_version(),
+            &recovery_hash,
+            &challenge_hash,
+            now,
+            now.saturating_add(state.native_auth.registration_challenge_ttl_seconds),
+        )
+        .await
+    {
+        Ok(Some(identity)) => no_store_json(
+            StatusCode::CREATED,
+            NativeRegistrationResponse {
+                state: "recovery_key_required",
+                identity: identity.into(),
+                recovery_key,
+                challenge,
+            },
+        ),
+        Ok(None) => no_store_error(
+            StatusCode::CONFLICT,
+            "password_already_set",
+            "A password is already active. Sign in or use recovery to change it.",
+        ),
+        Err(_) => unavailable(),
     }
 }
 
@@ -992,20 +1101,24 @@ async fn register_identity(
         .register(&pub_dress, &provider_identity, now)
         .await
     {
-        Ok(RegistrationOutcome::Registered(identity)) => registration_response(
-            StatusCode::CREATED,
-            RegistrationResponse {
-                outcome: RegistrationResponseKind::Registered,
-                identity: identity.into(),
-            },
-        ),
-        Ok(RegistrationOutcome::AlreadyRegistered(identity)) => registration_response(
-            StatusCode::OK,
-            RegistrationResponse {
-                outcome: RegistrationResponseKind::AlreadyRegistered,
-                identity: identity.into(),
-            },
-        ),
+        Ok(RegistrationOutcome::Registered(identity)) => {
+            provider_registration_response(
+                &state,
+                StatusCode::CREATED,
+                RegistrationResponseKind::Registered,
+                identity,
+            )
+            .await
+        }
+        Ok(RegistrationOutcome::AlreadyRegistered(identity)) => {
+            provider_registration_response(
+                &state,
+                StatusCode::OK,
+                RegistrationResponseKind::AlreadyRegistered,
+                identity,
+            )
+            .await
+        }
         Ok(RegistrationOutcome::HandleUnavailable) | Ok(RegistrationOutcome::AvaiaUnavailable) => {
             api_error(
                 StatusCode::CONFLICT,
@@ -1107,12 +1220,28 @@ fn error_code(error: crate::PubDressError) -> &'static str {
     }
 }
 
-fn identity_response(status: StatusCode, identity: IdentityRecord) -> Response {
-    (status, Json(IdentityProjection::from(identity))).into_response()
-}
-
-fn registration_response(status: StatusCode, response: RegistrationResponse) -> Response {
-    (status, Json(response)).into_response()
+async fn provider_registration_response(
+    state: &ApiState,
+    status: StatusCode,
+    outcome: RegistrationResponseKind,
+    identity: IdentityRecord,
+) -> Response {
+    let password_required = match state
+        .repository
+        .password_required(&identity.pub_dress)
+        .await
+    {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    no_store_json(
+        status,
+        RegistrationResponse {
+            outcome,
+            identity: identity.into(),
+            password_required,
+        },
+    )
 }
 
 fn unauthorized() -> Response {
@@ -1154,6 +1283,12 @@ struct PubDressSelectionRequest {
 }
 
 type RegistrationRequest = PubDressSelectionRequest;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderPasswordRequest {
+    password: String,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1254,6 +1389,7 @@ struct NativeAuthenticationResponse {
 
 #[derive(Debug, Serialize)]
 struct RegistrationResponse {
+    password_required: bool,
     outcome: RegistrationResponseKind,
     identity: IdentityProjection,
 }
@@ -1263,6 +1399,13 @@ struct RegistrationResponse {
 enum RegistrationResponseKind {
     Registered,
     AlreadyRegistered,
+}
+
+#[derive(Serialize)]
+struct ProviderIdentityProjection {
+    #[serde(flatten)]
+    identity: IdentityProjection,
+    password_required: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -1661,6 +1804,256 @@ mod tests {
         assert_eq!(
             wrong_password["error"]["code"],
             "invalid_native_credentials"
+        );
+    }
+    fn telegram_password_request(user_id: i64, body: &str) -> Request<Body> {
+        Request::post("/api/v1/auth/telegram/password")
+            .header(AUTHORIZATION, format!("tma {}", signed_init_data(user_id)))
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(body.to_owned()))
+            .expect("request")
+    }
+
+    async fn register_telegram_fixture(app: &axum::Router) {
+        let request = Request::post("/api/v1/identity/registration")
+            .header(AUTHORIZATION, format!("tma {}", signed_init_data(42)))
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .expect("request");
+        assert_eq!(
+            app.clone()
+                .oneshot(request)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::CREATED
+        );
+    }
+
+    async fn json_body(response: axum::response::Response) -> Value {
+        serde_json::from_slice(&to_bytes(response.into_body(), 8192).await.expect("body"))
+            .expect("JSON")
+    }
+
+    #[tokio::test]
+    async fn telegram_password_requires_recovery_then_supports_native_sign_in_without_reset() {
+        let app = app().await;
+        register_telegram_fixture(&app).await;
+        let setup = app
+            .clone()
+            .oneshot(telegram_password_request(
+                42,
+                r#"{"password":"a deliberately long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(setup.status(), StatusCode::CREATED);
+        assert_eq!(setup.headers()[CACHE_CONTROL], "no-store");
+        let setup = json_body(setup).await;
+        assert_eq!(setup["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(setup["state"], "recovery_key_required");
+        assert!(setup.get("password_hash").is_none());
+        let sign_in = || {
+            Request::post("/api/v1/auth/native/session")
+                .header("content-type", "application/json")
+                .header("x-0x1-csrf", "1")
+                .body(Body::from(
+                    r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+                ))
+                .expect("request")
+        };
+        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(
+                serde_json::json!({"challenge":setup["challenge"]}).to_string(),
+            ))
+            .expect("request");
+        assert_eq!(
+            app.clone()
+                .oneshot(acknowledgement)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(sign_in())
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        let reset = app
+            .clone()
+            .oneshot(telegram_password_request(
+                42,
+                r#"{"password":"a different long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(reset.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            json_body(reset).await["error"]["code"],
+            "password_already_set"
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(sign_in())
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        let read = Request::get("/api/v1/identity")
+            .header(AUTHORIZATION, format!("tma {}", signed_init_data(42)))
+            .body(Body::empty())
+            .expect("request");
+        let identity = json_body(app.oneshot(read).await.expect("response")).await;
+        assert_eq!(identity["password_required"], false);
+        assert_eq!(identity["pub_dress"], "0x0sky");
+    }
+
+    #[tokio::test]
+    async fn telegram_password_rejects_unbound_forged_and_client_selected_owners() {
+        let app = app().await;
+        register_telegram_fixture(&app).await;
+        let body = r#"{"password":"a deliberately long password"}"#;
+        let unbound = app
+            .clone()
+            .oneshot(telegram_password_request(99, body))
+            .await
+            .expect("response");
+        assert_eq!(unbound.status(), StatusCode::UNAUTHORIZED);
+        let mut forged = telegram_password_request(42, body);
+        forged
+            .headers_mut()
+            .insert(AUTHORIZATION, "tma forged".parse().expect("header"));
+        assert_eq!(
+            app.clone()
+                .oneshot(forged)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let mut no_csrf = telegram_password_request(42, body);
+        no_csrf.headers_mut().remove("x-0x1-csrf");
+        assert_eq!(
+            app.clone()
+                .oneshot(no_csrf)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        let selected_owner = telegram_password_request(
+            42,
+            r#"{"password":"a deliberately long password","pub_dress":"0x0other"}"#,
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(selected_owner)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        let weak = telegram_password_request(42, r#"{"password":"password"}"#);
+        let weak = app.oneshot(weak).await.expect("response");
+        assert_eq!(weak.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            json_body(weak).await["error"]["code"],
+            "compromised_password"
+        );
+    }
+
+    #[tokio::test]
+    async fn telegram_password_can_resume_pending_setup_and_invalidates_old_challenge() {
+        let app = app().await;
+        register_telegram_fixture(&app).await;
+        let body = r#"{"password":"a deliberately long password"}"#;
+        let first = json_body(
+            app.clone()
+                .oneshot(telegram_password_request(42, body))
+                .await
+                .expect("response"),
+        )
+        .await;
+        let second = json_body(
+            app.clone()
+                .oneshot(telegram_password_request(42, body))
+                .await
+                .expect("response"),
+        )
+        .await;
+        assert_ne!(first["challenge"], second["challenge"]);
+        for (setup, expected) in [(first, StatusCode::BAD_REQUEST), (second, StatusCode::OK)] {
+            let request = Request::post("/api/v1/auth/native/recovery/acknowledgement")
+                .header("content-type", "application/json")
+                .header("x-0x1-csrf", "1")
+                .body(Body::from(
+                    serde_json::json!({"challenge":setup["challenge"]}).to_string(),
+                ))
+                .expect("request");
+            assert_eq!(
+                app.clone()
+                    .oneshot(request)
+                    .await
+                    .expect("response")
+                    .status(),
+                expected
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn telegram_password_setup_is_rate_limited_before_hashing() {
+        let app = app().await;
+        register_telegram_fixture(&app).await;
+        for _ in 0..8 {
+            assert_eq!(
+                app.clone()
+                    .oneshot(telegram_password_request(42, r#"{"password":"short"}"#))
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::UNPROCESSABLE_ENTITY
+            );
+        }
+        assert_eq!(
+            app.oneshot(telegram_password_request(42, r#"{"password":"short"}"#))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+    #[tokio::test]
+    async fn telegram_password_does_not_enable_native_sign_in_before_recovery_acknowledgement() {
+        let app = app().await;
+        register_telegram_fixture(&app).await;
+        let setup = app
+            .clone()
+            .oneshot(telegram_password_request(
+                42,
+                r#"{"password":"a deliberately long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(setup.status(), StatusCode::CREATED);
+        let sign_in = Request::post("/api/v1/auth/native/session")
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(
+                r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+            ))
+            .expect("request");
+        assert_eq!(
+            app.oneshot(sign_in).await.expect("response").status(),
+            StatusCode::UNAUTHORIZED
         );
     }
 }

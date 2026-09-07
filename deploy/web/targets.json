@@ -18,7 +18,7 @@
       "compatEdgeAlias": "ox1-telegram",
       "composeProject": "nilx-one-telegram",
       "publicPath": "/telegram/",
-      "requiresIdentityContract": 1
+      "requiresIdentityContract": 2
     },
     "discord": {
       "app": "discord-activity",
