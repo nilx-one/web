@@ -64,7 +64,11 @@ pub struct IdentityRepository {
 
 impl IdentityRepository {
     pub async fn connect(database_url: &str) -> Result<Self, RepositoryError> {
-        let max_connections = if database_url.contains(":memory:") { 1 } else { 5 };
+        let max_connections = if database_url.contains(":memory:") {
+            1
+        } else {
+            5
+        };
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
             .foreign_keys(true)
@@ -138,8 +142,7 @@ impl IdentityRepository {
             return Ok(RegistrationOutcome::HandleUnavailable);
         }
 
-        let Some(avaia_pub_dress) =
-            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        let Some(avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
         else {
             transaction.rollback().await?;
             return Ok(RegistrationOutcome::AvaiaUnavailable);
@@ -272,8 +275,7 @@ impl IdentityRepository {
             return Ok(NativeRegistrationOutcome::HandleUnavailable);
         }
 
-        let Some(avaia_pub_dress) =
-            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        let Some(avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
         else {
             transaction.rollback().await?;
             return Ok(NativeRegistrationOutcome::AvaiaUnavailable);
@@ -755,13 +757,28 @@ mod tests {
         let lower = PubDress::from_str("0x0sky").expect("valid pub_dress");
         let title = PubDress::from_str("0x0Sky").expect("valid pub_dress");
 
-        assert!(repository.is_pub_dress_available(&lower).await.expect("lookup"));
+        assert!(
+            repository
+                .is_pub_dress_available(&lower)
+                .await
+                .expect("lookup")
+        );
         repository
             .register(&lower, &ProviderIdentity::telegram(42), 100)
             .await
             .expect("registration");
-        assert!(!repository.is_pub_dress_available(&lower).await.expect("lookup"));
-        assert!(repository.is_pub_dress_available(&title).await.expect("lookup"));
+        assert!(
+            !repository
+                .is_pub_dress_available(&lower)
+                .await
+                .expect("lookup")
+        );
+        assert!(
+            repository
+                .is_pub_dress_available(&title)
+                .await
+                .expect("lookup")
+        );
     }
 
     #[tokio::test]
@@ -888,7 +905,10 @@ mod tests {
             .expect("active session");
         assert_eq!(session.avaia_pub_dress.as_deref(), Some("0skai"));
         assert_eq!(
-            repository.find_native_session(b"session", 200).await.expect("expired"),
+            repository
+                .find_native_session(b"session", 200)
+                .await
+                .expect("expired"),
             None
         );
         repository
@@ -896,7 +916,10 @@ mod tests {
             .await
             .expect("revocation");
         assert_eq!(
-            repository.find_native_session(b"session", 151).await.expect("revoked"),
+            repository
+                .find_native_session(b"session", 151)
+                .await
+                .expect("revoked"),
             None
         );
     }
