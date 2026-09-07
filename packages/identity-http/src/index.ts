@@ -29,7 +29,12 @@ function parseIdentity(value: unknown): IdentityProjection | undefined {
   if (!isRecord(value) || typeof value.pub_dress !== "string") {
     return undefined;
   }
-  return { pubDress: value.pub_dress };
+  return {
+    pubDress: value.pub_dress,
+    ...(typeof value.avaia_pub_dress === "string"
+      ? { avaiaPubDress: value.avaia_pub_dress }
+      : {}),
+  };
 }
 
 function parseErrorCode(value: unknown): string | undefined {

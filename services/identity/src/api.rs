@@ -194,6 +194,10 @@ async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) 
         let token_hash = state.secret_digester.digest("native-session", &token);
         match state.repository.find_native_session(&token_hash, now).await {
             Ok(Some(identity)) => {
+                let identity = match reconcile_authenticated_identity(&state, identity, now).await {
+                    Some(value) => value,
+                    None => return unavailable(),
+                };
                 return no_store_json(
                     StatusCode::OK,
                     NativeContextResponse::authenticated(identity),
@@ -336,10 +340,11 @@ async fn register_native_identity(
             "native_registration_already_committed",
             "Registration committed and its recovery key was already issued.",
         ),
-        Ok(NativeRegistrationOutcome::HandleUnavailable) => no_store_error(
+        Ok(NativeRegistrationOutcome::HandleUnavailable)
+        | Ok(NativeRegistrationOutcome::AvaiaUnavailable) => no_store_error(
             StatusCode::CONFLICT,
             "pub_dress_unavailable",
-            "That pub_dress is already registered.",
+            "That pub_dress is already registered or cannot own its required Avaia address.",
         ),
         Err(error) => {
             tracing::error!(%error, "native identity registration failed");
@@ -454,6 +459,7 @@ async fn authenticate_native_identity(
         &state,
         IdentityRecord {
             pub_dress: credential.pub_dress,
+            avaia_pub_dress: None,
         },
         now,
         None,
@@ -582,6 +588,7 @@ async fn recover_native_identity(
                 &state,
                 IdentityRecord {
                     pub_dress: pub_dress.to_string(),
+                    avaia_pub_dress: None,
                 },
                 now,
                 Some(replacement_recovery_key),
@@ -596,12 +603,48 @@ async fn recover_native_identity(
     }
 }
 
+async fn reconcile_authenticated_identity(
+    state: &ApiState,
+    identity: IdentityRecord,
+    now: u64,
+) -> Option<IdentityRecord> {
+    if identity.avaia_pub_dress.is_some() {
+        return Some(identity);
+    }
+    let pub_dress = match PubDress::from_str(&identity.pub_dress) {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "stored authenticated human pub_dress is invalid");
+            return None;
+        }
+    };
+    match state
+        .repository
+        .reconcile_owned_avaia(&pub_dress, now)
+        .await
+    {
+        Ok(Some(record)) => Some(record),
+        Ok(None) => {
+            tracing::error!(pub_dress = %identity.pub_dress, "authenticated human identity disappeared during Avaia reconciliation");
+            None
+        }
+        Err(error) => {
+            tracing::error!(%error, "authenticated Avaia reconciliation failed");
+            None
+        }
+    }
+}
+
 async fn authenticated_response(
     state: &ApiState,
     identity: IdentityRecord,
     now: u64,
     replacement_recovery_key: Option<String>,
 ) -> Response {
+    let identity = match reconcile_authenticated_identity(state, identity, now).await {
+        Some(value) => value,
+        None => return unavailable(),
+    };
     let session_token = match TokenFactory::session() {
         Ok(value) => value,
         Err(error) => {
@@ -901,9 +944,19 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
         Ok(identity) => identity,
         Err(error) => return error.into_response(),
     };
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
 
     match state.repository.find_by_provider(&provider_identity).await {
-        Ok(Some(identity)) => identity_response(StatusCode::OK, identity),
+        Ok(Some(identity)) => {
+            let identity = match reconcile_authenticated_identity(&state, identity, now).await {
+                Some(value) => value,
+                None => return unavailable(),
+            };
+            identity_response(StatusCode::OK, identity)
+        }
         Ok(None) => api_error(
             StatusCode::NOT_FOUND,
             "identity_not_registered",
@@ -929,10 +982,14 @@ async fn register_identity(
         Ok(value) => value,
         Err(error) => return invalid_pub_dress(error),
     };
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
 
     match state
         .repository
-        .register(&pub_dress, &provider_identity)
+        .register(&pub_dress, &provider_identity, now)
         .await
     {
         Ok(RegistrationOutcome::Registered(identity)) => registration_response(
@@ -949,11 +1006,13 @@ async fn register_identity(
                 identity: identity.into(),
             },
         ),
-        Ok(RegistrationOutcome::HandleUnavailable) => api_error(
-            StatusCode::CONFLICT,
-            "pub_dress_unavailable",
-            "That pub_dress cannot be registered. Choose another one.",
-        ),
+        Ok(RegistrationOutcome::HandleUnavailable) | Ok(RegistrationOutcome::AvaiaUnavailable) => {
+            api_error(
+                StatusCode::CONFLICT,
+                "pub_dress_unavailable",
+                "That pub_dress cannot be registered with its required owned Avaia. Choose another one.",
+            )
+        }
         Err(error) => {
             tracing::error!(%error, "identity API registration failed");
             unavailable()
@@ -1209,12 +1268,14 @@ enum RegistrationResponseKind {
 #[derive(Debug, Serialize)]
 struct IdentityProjection {
     pub_dress: String,
+    avaia_pub_dress: Option<String>,
 }
 
 impl From<IdentityRecord> for IdentityProjection {
     fn from(identity: IdentityRecord) -> Self {
         Self {
             pub_dress: identity.pub_dress,
+            avaia_pub_dress: identity.avaia_pub_dress,
         }
     }
 }
@@ -1331,6 +1392,7 @@ mod tests {
         let body = to_bytes(second.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(body["identity"]["avaia_pub_dress"], "0skai");
         assert!(body.to_string().find("provider_subject").is_none());
     }
 
@@ -1449,6 +1511,7 @@ mod tests {
         let body = to_bytes(response.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["state"], "recovery_key_required");
+        assert_eq!(body["identity"]["avaia_pub_dress"], "0Skai");
         assert!(
             body["recovery_key"]
                 .as_str()
@@ -1501,6 +1564,10 @@ mod tests {
             serde_json::from_slice(&authenticated_context).expect("JSON body");
         assert_eq!(authenticated_context["state"], "authenticated");
         assert_eq!(authenticated_context["identity"]["pub_dress"], "0x0Sky");
+        assert_eq!(
+            authenticated_context["identity"]["avaia_pub_dress"],
+            "0Skai"
+        );
     }
 
     #[tokio::test]

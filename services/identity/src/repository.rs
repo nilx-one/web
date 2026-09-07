@@ -4,12 +4,12 @@
 use std::str::FromStr;
 
 use sqlx::{
-    Row, SqlitePool,
+    Row, Sqlite, SqlitePool, Transaction,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 use thiserror::Error;
 
-use crate::PubDress;
+use crate::{AvaiaPubDress, PubDress};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityProvider {
@@ -51,6 +51,10 @@ impl ProviderIdentity {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdentityRecord {
     pub pub_dress: String,
+    /// The owned Avaia is identity state. `None` is valid only for a
+    /// pre-amendment human Bond that has not yet crossed an authenticated
+    /// reconciliation boundary.
+    pub avaia_pub_dress: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -83,7 +87,7 @@ impl IdentityRepository {
             .execute(&self.pool)
             .await?;
 
-        if self.has_legacy_telegram_column().await? {
+        if self.has_identity_column("tg_id").await? {
             sqlx::raw_sql(include_str!("../migrations/0002_provider_accounts.sql"))
                 .execute(&self.pool)
                 .await?;
@@ -92,41 +96,60 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0003_native_auth.sql"))
             .execute(&self.pool)
             .await?;
-
+        if !self.has_identity_column("identity_kind").await? {
+            sqlx::raw_sql(include_str!("../migrations/0004_owned_avaia_identity.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
         Ok(())
     }
 
-    async fn has_legacy_telegram_column(&self) -> Result<bool, RepositoryError> {
+    async fn has_identity_column(&self, name: &str) -> Result<bool, RepositoryError> {
         let columns = sqlx::query("PRAGMA table_info(identities)")
             .fetch_all(&self.pool)
             .await?;
         Ok(columns
             .iter()
-            .any(|column| column.get::<String, _>("name") == "tg_id"))
+            .any(|column| column.get::<String, _>("name") == name))
     }
 
     pub async fn register(
         &self,
         pub_dress: &PubDress,
         provider_identity: &ProviderIdentity,
+        now: u64,
     ) -> Result<RegistrationOutcome, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
 
-        if let Some(record) = find_by_provider_in(&mut transaction, provider_identity).await? {
+        if let Some(mut record) = find_by_provider_in(&mut transaction, provider_identity).await? {
+            if record.avaia_pub_dress.is_none() {
+                let owner = pub_dress_for(&record)?;
+                record.avaia_pub_dress =
+                    create_owned_avaia_in(&mut transaction, &owner, now).await?;
+            }
             transaction.commit().await?;
             return Ok(RegistrationOutcome::AlreadyRegistered(record));
         }
 
-        let identity_insert =
-            sqlx::query("INSERT INTO identities (pub_dress) VALUES (?) ON CONFLICT DO NOTHING")
-                .bind(pub_dress.as_str())
-                .execute(&mut *transaction)
-                .await?;
+        let identity_insert = sqlx::query(
+            "INSERT INTO identities (pub_dress, identity_kind, created_at) \
+             VALUES (?, 'human', ?) ON CONFLICT DO NOTHING",
+        )
+        .bind(pub_dress.as_str())
+        .bind(now as i64)
+        .execute(&mut *transaction)
+        .await?;
 
         if identity_insert.rows_affected() == 0 {
-            transaction.commit().await?;
+            transaction.rollback().await?;
             return Ok(RegistrationOutcome::HandleUnavailable);
         }
+
+        let Some(avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        else {
+            transaction.rollback().await?;
+            return Ok(RegistrationOutcome::AvaiaUnavailable);
+        };
 
         sqlx::query(
             "INSERT INTO identity_providers (provider, provider_subject, pub_dress) VALUES (?, ?, ?)",
@@ -140,6 +163,7 @@ impl IdentityRepository {
         transaction.commit().await?;
         Ok(RegistrationOutcome::Registered(IdentityRecord {
             pub_dress: pub_dress.to_string(),
+            avaia_pub_dress: Some(avaia_pub_dress),
         }))
     }
 
@@ -147,17 +171,50 @@ impl IdentityRepository {
         &self,
         provider_identity: &ProviderIdentity,
     ) -> Result<Option<IdentityRecord>, RepositoryError> {
-        let row = sqlx::query(
+        let pub_dress = sqlx::query_scalar::<_, String>(
             "SELECT identities.pub_dress \
              FROM identity_providers \
              JOIN identities ON identities.pub_dress = identity_providers.pub_dress \
-             WHERE identity_providers.provider = ? AND identity_providers.provider_subject = ?",
+             WHERE identities.identity_kind = 'human' \
+               AND identity_providers.provider = ? \
+               AND identity_providers.provider_subject = ?",
         )
         .bind(provider_identity.provider.as_str())
         .bind(&provider_identity.subject)
         .fetch_optional(&self.pool)
         .await?;
-        Ok(row.map(identity_from_row))
+
+        match pub_dress {
+            Some(value) => Ok(Some(identity_for_pub_dress(&self.pool, value).await?)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn reconcile_owned_avaia(
+        &self,
+        pub_dress: &PubDress,
+        now: u64,
+    ) -> Result<Option<IdentityRecord>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let human_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identities \
+             WHERE pub_dress = ? AND identity_kind = 'human')",
+        )
+        .bind(pub_dress.as_str())
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !human_exists {
+            transaction.rollback().await?;
+            return Ok(None);
+        }
+
+        let avaia_pub_dress = create_owned_avaia_in(&mut transaction, pub_dress, now).await?;
+        let record = IdentityRecord {
+            pub_dress: pub_dress.to_string(),
+            avaia_pub_dress,
+        };
+        transaction.commit().await?;
+        Ok(Some(record))
     }
 
     pub async fn is_pub_dress_available(
@@ -195,29 +252,37 @@ impl IdentityRepository {
     ) -> Result<NativeRegistrationOutcome, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
 
-        let replay = sqlx::query(
+        let replay = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM native_registration_idempotency \
              WHERE idempotency_key_hash = ?",
         )
         .bind(idempotency_key_hash)
         .fetch_optional(&mut *transaction)
         .await?;
-        if let Some(row) = replay {
+        if let Some(pub_dress) = replay {
+            let record = identity_for_pub_dress_in(&mut transaction, pub_dress).await?;
             transaction.commit().await?;
-            return Ok(NativeRegistrationOutcome::IdempotentReplay(
-                identity_from_row(row),
-            ));
+            return Ok(NativeRegistrationOutcome::IdempotentReplay(record));
         }
 
-        let identity_insert =
-            sqlx::query("INSERT INTO identities (pub_dress) VALUES (?) ON CONFLICT DO NOTHING")
-                .bind(pub_dress.as_str())
-                .execute(&mut *transaction)
-                .await?;
+        let identity_insert = sqlx::query(
+            "INSERT INTO identities (pub_dress, identity_kind, created_at) \
+             VALUES (?, 'human', ?) ON CONFLICT DO NOTHING",
+        )
+        .bind(pub_dress.as_str())
+        .bind(now as i64)
+        .execute(&mut *transaction)
+        .await?;
         if identity_insert.rows_affected() == 0 {
-            transaction.commit().await?;
+            transaction.rollback().await?;
             return Ok(NativeRegistrationOutcome::HandleUnavailable);
         }
+
+        let Some(avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        else {
+            transaction.rollback().await?;
+            return Ok(NativeRegistrationOutcome::AvaiaUnavailable);
+        };
 
         sqlx::query(
             "INSERT INTO native_credentials \
@@ -255,6 +320,7 @@ impl IdentityRepository {
         transaction.commit().await?;
         Ok(NativeRegistrationOutcome::Registered(IdentityRecord {
             pub_dress: pub_dress.to_string(),
+            avaia_pub_dress: Some(avaia_pub_dress),
         }))
     }
 
@@ -278,7 +344,7 @@ impl IdentityRepository {
         now: u64,
     ) -> Result<Option<IdentityRecord>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let challenge = sqlx::query(
+        let pub_dress = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM native_registration_challenges \
              WHERE challenge_hash = ? AND expires_at > ?",
         )
@@ -286,11 +352,11 @@ impl IdentityRepository {
         .bind(now as i64)
         .fetch_optional(&mut *transaction)
         .await?;
-        let Some(challenge) = challenge else {
-            transaction.commit().await?;
+        let Some(pub_dress) = pub_dress else {
+            transaction.rollback().await?;
             return Ok(None);
         };
-        let pub_dress: String = challenge.get("pub_dress");
+
         sqlx::query("UPDATE native_credentials SET active = 1, updated_at = ? WHERE pub_dress = ?")
             .bind(now as i64)
             .bind(&pub_dress)
@@ -300,8 +366,9 @@ impl IdentityRepository {
             .bind(challenge_hash)
             .execute(&mut *transaction)
             .await?;
+        let record = identity_for_pub_dress_in(&mut transaction, pub_dress).await?;
         transaction.commit().await?;
-        Ok(Some(IdentityRecord { pub_dress }))
+        Ok(Some(record))
     }
 
     pub async fn create_native_session(
@@ -329,7 +396,7 @@ impl IdentityRepository {
         token_hash: &[u8],
         now: u64,
     ) -> Result<Option<IdentityRecord>, RepositoryError> {
-        let row = sqlx::query(
+        let pub_dress = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM native_sessions \
              WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?",
         )
@@ -337,7 +404,10 @@ impl IdentityRepository {
         .bind(now as i64)
         .fetch_optional(&self.pool)
         .await?;
-        Ok(row.map(identity_from_row))
+        match pub_dress {
+            Some(value) => Ok(Some(identity_for_pub_dress(&self.pool, value).await?)),
+            None => Ok(None),
+        }
     }
 
     pub async fn revoke_native_session(
@@ -382,7 +452,7 @@ impl IdentityRepository {
         .execute(&mut *transaction)
         .await?;
         if update.rows_affected() == 0 {
-            transaction.commit().await?;
+            transaction.rollback().await?;
             return Ok(false);
         }
         sqlx::query(
@@ -421,27 +491,105 @@ impl IdentityRepository {
     }
 }
 
+async fn create_owned_avaia_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    owner: &PubDress,
+    now: u64,
+) -> Result<Option<String>, sqlx::Error> {
+    if let Some(existing) = owned_avaia_for_owner_in(transaction, owner.as_str()).await? {
+        return Ok(Some(existing));
+    }
+
+    let candidate = AvaiaPubDress::derive_default(owner).to_string();
+    let insert = sqlx::query(
+        "INSERT INTO identities \
+         (pub_dress, identity_kind, owner_pub_dress, created_at) \
+         VALUES (?, 'avaia', ?, ?) ON CONFLICT DO NOTHING",
+    )
+    .bind(&candidate)
+    .bind(owner.as_str())
+    .bind(now as i64)
+    .execute(&mut **transaction)
+    .await?;
+
+    if insert.rows_affected() == 1 {
+        return Ok(Some(candidate));
+    }
+
+    // A concurrent owner reconciliation can race on the owner-unique index.
+    // Re-read the owner before classifying the failed insert as an address
+    // collision with another identity.
+    owned_avaia_for_owner_in(transaction, owner.as_str()).await
+}
+
+async fn owned_avaia_for_owner_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    owner_pub_dress: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT pub_dress FROM identities \
+         WHERE identity_kind = 'avaia' AND owner_pub_dress = ?",
+    )
+    .bind(owner_pub_dress)
+    .fetch_optional(&mut **transaction)
+    .await
+}
+
+async fn identity_for_pub_dress(
+    pool: &SqlitePool,
+    pub_dress: String,
+) -> Result<IdentityRecord, sqlx::Error> {
+    let avaia_pub_dress = sqlx::query_scalar::<_, String>(
+        "SELECT pub_dress FROM identities \
+         WHERE identity_kind = 'avaia' AND owner_pub_dress = ?",
+    )
+    .bind(&pub_dress)
+    .fetch_optional(pool)
+    .await?;
+    Ok(IdentityRecord {
+        pub_dress,
+        avaia_pub_dress,
+    })
+}
+
+async fn identity_for_pub_dress_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    pub_dress: String,
+) -> Result<IdentityRecord, sqlx::Error> {
+    let avaia_pub_dress = owned_avaia_for_owner_in(transaction, &pub_dress).await?;
+    Ok(IdentityRecord {
+        pub_dress,
+        avaia_pub_dress,
+    })
+}
+
 async fn find_by_provider_in(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    transaction: &mut Transaction<'_, Sqlite>,
     provider_identity: &ProviderIdentity,
 ) -> Result<Option<IdentityRecord>, sqlx::Error> {
-    let row = sqlx::query(
+    let pub_dress = sqlx::query_scalar::<_, String>(
         "SELECT identities.pub_dress \
          FROM identity_providers \
          JOIN identities ON identities.pub_dress = identity_providers.pub_dress \
-         WHERE identity_providers.provider = ? AND identity_providers.provider_subject = ?",
+         WHERE identities.identity_kind = 'human' \
+           AND identity_providers.provider = ? \
+           AND identity_providers.provider_subject = ?",
     )
     .bind(provider_identity.provider.as_str())
     .bind(&provider_identity.subject)
     .fetch_optional(&mut **transaction)
     .await?;
-    Ok(row.map(identity_from_row))
+    match pub_dress {
+        Some(value) => Ok(Some(identity_for_pub_dress_in(transaction, value).await?)),
+        None => Ok(None),
+    }
 }
 
-fn identity_from_row(row: sqlx::sqlite::SqliteRow) -> IdentityRecord {
-    IdentityRecord {
-        pub_dress: row.get("pub_dress"),
-    }
+fn pub_dress_for(record: &IdentityRecord) -> Result<PubDress, RepositoryError> {
+    record
+        .pub_dress
+        .parse()
+        .map_err(|_| RepositoryError::CorruptHumanPubDress)
 }
 
 fn native_credential_from_row(row: sqlx::sqlite::SqliteRow) -> NativeCredentialRecord {
@@ -468,6 +616,7 @@ pub enum NativeRegistrationOutcome {
     Registered(IdentityRecord),
     IdempotentReplay(IdentityRecord),
     HandleUnavailable,
+    AvaiaUnavailable,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -475,12 +624,15 @@ pub enum RegistrationOutcome {
     Registered(IdentityRecord),
     AlreadyRegistered(IdentityRecord),
     HandleUnavailable,
+    AvaiaUnavailable,
 }
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
     #[error("identity storage failed: {0}")]
     Storage(#[from] sqlx::Error),
+    #[error("stored human pub_dress is invalid")]
+    CorruptHumanPubDress,
 }
 
 #[cfg(test)]
@@ -489,40 +641,111 @@ mod tests {
 
     use super::{
         IdentityRepository, NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome,
+        identity_for_pub_dress,
     };
-    use crate::PubDress;
+    use crate::{AvaiaPubDress, PubDress};
 
     #[tokio::test]
-    async fn insert_is_the_registration_and_collision_boundary_across_providers() {
+    async fn owned_avaia_migration_is_idempotent_on_reopen() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+
+        let repository = IdentityRepository::connect(&database_url)
+            .await
+            .expect("first initialization");
+        drop(repository);
+
+        IdentityRepository::connect(&database_url)
+            .await
+            .expect("second initialization must not replay additive migration");
+    }
+
+    #[tokio::test]
+    async fn provider_registration_atomically_creates_the_owned_avaia() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let first = PubDress::from_str("0x0sky").expect("valid pub_dress");
-        let second = PubDress::from_str("0x1sky").expect("valid pub_dress");
-        let telegram = ProviderIdentity::telegram(10);
-        let other_telegram = ProviderIdentity::telegram(11);
-        let discord = ProviderIdentity::discord("42");
+        let address = PubDress::from_str("0xda-sha.").expect("valid pub_dress");
 
+        let outcome = repository
+            .register(&address, &ProviderIdentity::telegram(10), 100)
+            .await
+            .expect("registration");
         assert!(matches!(
-            repository.register(&first, &telegram).await,
-            Ok(RegistrationOutcome::Registered(_))
-        ));
-        assert!(matches!(
-            repository.register(&first, &other_telegram).await,
-            Ok(RegistrationOutcome::HandleUnavailable)
-        ));
-        assert!(matches!(
-            repository.register(&second, &telegram).await,
-            Ok(RegistrationOutcome::AlreadyRegistered(record)) if record.pub_dress == "0x0sky"
-        ));
-        assert!(matches!(
-            repository.register(&second, &discord).await,
-            Ok(RegistrationOutcome::Registered(record)) if record.pub_dress == "0x1sky"
+            outcome,
+            RegistrationOutcome::Registered(record)
+                if record.pub_dress == "0xda-sha."
+                    && record.avaia_pub_dress.as_deref() == Some("da-sha.ai")
         ));
     }
 
     #[tokio::test]
-    async fn provider_subjects_remain_namespaced() {
+    async fn provider_registration_rolls_back_when_the_default_avaia_collides() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let occupying_owner = PubDress::from_str("0x0sky").expect("valid first owner");
+        repository
+            .register(&occupying_owner, &ProviderIdentity::telegram(10), 100)
+            .await
+            .expect("occupying registration");
+
+        // Core deliberately maps both `sky` and `sk` to the same default
+        // Avaia stem, so this is a real canonical-address collision rather
+        // than a hand-written guess at the naming contract.
+        let candidate_owner = PubDress::from_str("0x0sk").expect("valid second owner");
+        assert_eq!(
+            AvaiaPubDress::derive_default(&occupying_owner),
+            AvaiaPubDress::derive_default(&candidate_owner)
+        );
+        assert!(matches!(
+            repository
+                .register(&candidate_owner, &ProviderIdentity::discord("20"), 101)
+                .await,
+            Ok(RegistrationOutcome::AvaiaUnavailable)
+        ));
+        assert!(
+            repository
+                .is_pub_dress_available(&candidate_owner)
+                .await
+                .expect("rolled-back human address remains available")
+        );
+    }
+
+    #[tokio::test]
+    async fn pre_amendment_human_is_reconciled_only_at_the_current_boundary() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        sqlx::query("INSERT INTO identities (pub_dress) VALUES ('0xda-sha.')")
+            .execute(&repository.pool)
+            .await
+            .expect("legacy human fixture");
+        let address = PubDress::from_str("0xda-sha.").expect("valid pub_dress");
+
+        let before = identity_for_pub_dress(&repository.pool, address.to_string())
+            .await
+            .expect("identity lookup");
+        assert_eq!(before.avaia_pub_dress, None);
+
+        let reconciled = repository
+            .reconcile_owned_avaia(&address, 777)
+            .await
+            .expect("reconciliation")
+            .expect("human exists");
+        assert_eq!(reconciled.avaia_pub_dress.as_deref(), Some("da-sha.ai"));
+        let created_at = sqlx::query_scalar::<_, i64>(
+            "SELECT CAST(created_at AS INTEGER) FROM identities WHERE pub_dress = 'da-sha.ai'",
+        )
+        .fetch_one(&repository.pool)
+        .await
+        .expect("creation timestamp");
+        assert_eq!(created_at, 777);
+    }
+
+    #[tokio::test]
+    async fn provider_subjects_remain_namespaced_and_existing_registration_is_idempotent() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
@@ -530,27 +753,31 @@ mod tests {
         let discord_address = PubDress::from_str("0x7sky").expect("valid pub_dress");
 
         repository
-            .register(&telegram_address, &ProviderIdentity::telegram(42))
+            .register(&telegram_address, &ProviderIdentity::telegram(42), 100)
             .await
             .expect("telegram insert");
         repository
-            .register(&discord_address, &ProviderIdentity::discord("42"))
+            .register(&discord_address, &ProviderIdentity::discord("42"), 100)
             .await
             .expect("discord insert");
 
-        assert_eq!(
+        let telegram = repository
+            .find_by_provider(&ProviderIdentity::telegram(42))
+            .await
+            .expect("lookup")
+            .expect("identity");
+        assert_eq!(telegram.avaia_pub_dress.as_deref(), Some("0skai"));
+        assert!(matches!(
             repository
-                .find_by_provider(&ProviderIdentity::discord("42"))
-                .await
-                .expect("lookup must succeed")
-                .expect("identity must exist")
-                .pub_dress,
-            "0x7sky"
-        );
+                .register(&discord_address, &ProviderIdentity::discord("42"), 101)
+                .await,
+            Ok(RegistrationOutcome::AlreadyRegistered(record))
+                if record.avaia_pub_dress.as_deref() == Some("7skai")
+        ));
     }
 
     #[tokio::test]
-    async fn availability_is_an_exact_case_sensitive_read_without_reservation() {
+    async fn availability_is_global_case_sensitive_and_without_reservation() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
@@ -561,23 +788,23 @@ mod tests {
             repository
                 .is_pub_dress_available(&lower)
                 .await
-                .expect("availability lookup")
+                .expect("lookup")
         );
         repository
-            .register(&lower, &ProviderIdentity::telegram(42))
+            .register(&lower, &ProviderIdentity::telegram(42), 100)
             .await
             .expect("registration");
         assert!(
             !repository
                 .is_pub_dress_available(&lower)
                 .await
-                .expect("availability lookup")
+                .expect("lookup")
         );
         assert!(
             repository
                 .is_pub_dress_available(&title)
                 .await
-                .expect("case-sensitive availability lookup")
+                .expect("lookup")
         );
     }
 
@@ -601,7 +828,11 @@ mod tests {
             )
             .await
             .expect("native registration");
-        assert!(matches!(outcome, NativeRegistrationOutcome::Registered(_)));
+        assert!(matches!(
+            outcome,
+            NativeRegistrationOutcome::Registered(record)
+                if record.avaia_pub_dress.as_deref() == Some("0skai")
+        ));
         assert!(
             !repository
                 .find_native_credential(&address)
@@ -616,37 +847,22 @@ mod tests {
                 .await
                 .expect("activation")
                 .expect("identity")
-                .pub_dress,
-            "0x0sky"
-        );
-        assert!(
-            repository
-                .find_native_credential(&address)
-                .await
-                .expect("credential lookup")
-                .expect("credential")
-                .active
-        );
-        assert_eq!(
-            repository
-                .activate_native_registration(b"challenge", 199)
-                .await
-                .expect("one-time activation"),
-            None
+                .avaia_pub_dress
+                .as_deref(),
+            Some("0skai")
         );
     }
 
     #[tokio::test]
-    async fn native_registration_rechecks_uniqueness_and_idempotency_in_storage() {
+    async fn native_idempotency_does_not_create_a_second_avaia() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let first = PubDress::from_str("0x0sky").expect("valid pub_dress");
-        let second = PubDress::from_str("0x1sky").expect("valid pub_dress");
+        let address = PubDress::from_str("0x0sky").expect("valid pub_dress");
 
         repository
             .register_native(
-                &first,
+                &address,
                 "hash",
                 1,
                 b"recovery-1",
@@ -660,43 +876,30 @@ mod tests {
         assert!(matches!(
             repository
                 .register_native(
-                    &first,
+                    &address,
                     "different",
                     1,
                     b"recovery-2",
                     b"challenge-2",
                     b"idem-1",
-                    100,
-                    200,
+                    101,
+                    201,
                 )
                 .await,
-            Ok(NativeRegistrationOutcome::IdempotentReplay(record)) if record.pub_dress == "0x0sky"
+            Ok(NativeRegistrationOutcome::IdempotentReplay(record))
+                if record.avaia_pub_dress.as_deref() == Some("0skai")
         ));
-        assert!(matches!(
-            repository
-                .register_native(
-                    &first,
-                    "different",
-                    1,
-                    b"recovery-3",
-                    b"challenge-3",
-                    b"idem-3",
-                    100,
-                    200,
-                )
-                .await,
-            Ok(NativeRegistrationOutcome::HandleUnavailable)
-        ));
-        assert!(
-            repository
-                .is_pub_dress_available(&second)
-                .await
-                .expect("unrelated address")
-        );
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia' AND owner_pub_dress = '0x0sky'",
+        )
+        .fetch_one(&repository.pool)
+        .await
+        .expect("count");
+        assert_eq!(count, 1);
     }
 
     #[tokio::test]
-    async fn sessions_are_revocable_and_expire_at_the_storage_boundary() {
+    async fn sessions_are_revocable_and_keep_the_owned_avaia_projection() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
@@ -722,20 +925,17 @@ mod tests {
             .create_native_session(b"session", "0x0sky", 101, 200)
             .await
             .expect("session");
-        assert_eq!(
-            repository
-                .find_native_session(b"session", 199)
-                .await
-                .expect("session lookup")
-                .expect("active session")
-                .pub_dress,
-            "0x0sky"
-        );
+        let session = repository
+            .find_native_session(b"session", 199)
+            .await
+            .expect("session lookup")
+            .expect("active session");
+        assert_eq!(session.avaia_pub_dress.as_deref(), Some("0skai"));
         assert_eq!(
             repository
                 .find_native_session(b"session", 200)
                 .await
-                .expect("expired session"),
+                .expect("expired"),
             None
         );
         repository
@@ -746,7 +946,7 @@ mod tests {
             repository
                 .find_native_session(b"session", 151)
                 .await
-                .expect("revoked session"),
+                .expect("revoked"),
             None
         );
     }
