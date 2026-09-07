@@ -15,6 +15,8 @@ ambiguous “21 bones” count without removing a named joint.
 Positions, normals, joints and inverse bind matrices are converted together
 from Z-up authoring to Y-up glTF. A single mesh has one primitive per material;
 part names, groups and vertex ranges remain in each generated manifest.
+Exported floating-point buffers use seven decimal places and canonical positive
+zero to remove CPU/libm rounding noise (position precision: 0.1 micrometre).
 Weights come from final vertex positions and semantic part families. Hard
 parts use one bone per part. Dasha's boot shafts/rims/back seams use the shin;
 boot feet and shoes use the foot. Neither foot planting nor boot/cloth physics

@@ -50,7 +50,7 @@ class RigTests(unittest.TestCase):
                     world.append(world[parent] @ m if parent >= 0 else m)
                 inverse = read(doc["skins"][0]["inverseBindMatrices"]).reshape(-1, 4, 4).transpose(0, 2, 1)
                 skin = np.array(world) @ inverse
-                np.testing.assert_allclose(skin, np.tile(np.eye(4), (22, 1, 1)), atol=1e-7)
+                np.testing.assert_allclose(skin, np.tile(np.eye(4), (22, 1, 1)), atol=2e-7)
                 primitives = doc["meshes"][0]["primitives"]
                 self.assertLessEqual(len(primitives), 23)
                 self.assertEqual(len(primitives), len(doc["materials"]))
@@ -64,7 +64,7 @@ class RigTests(unittest.TestCase):
                     self.assertLess(int(read(p["indices"]).max()), len(pos))
                     homogeneous = np.column_stack([pos, np.ones(len(pos))])
                     deformed = np.einsum("nk,nkij,nj->ni", weights, skin[joints], homogeneous)
-                    np.testing.assert_allclose(deformed[:, :3], pos, atol=3e-7)
+                    np.testing.assert_allclose(deformed[:, :3], pos, atol=5e-7)
                     vertices += len(pos)
                     triangles += len(read(p["indices"])) // 3
                 self.assertEqual(vertices, manifest["vertices"])

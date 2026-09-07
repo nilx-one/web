@@ -135,6 +135,11 @@ class Glb:
                     "accessors": [], "bufferViews": []}
 
     def accessor(self, data, kind, component=5126, bounds=False):
+        # Canonical export precision removes CPU/libm rounding noise, including
+        # signed zero. Positions retain 0.1 micrometre resolution.
+        if component == 5126:
+            data = np.round(data.astype(np.float64), 7).astype("<f4")
+            data[data == 0] = 0
         data = np.ascontiguousarray(data)
         while len(self.data) % 4:
             self.data.append(0)
