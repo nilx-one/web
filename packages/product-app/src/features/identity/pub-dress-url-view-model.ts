@@ -182,7 +182,23 @@ export function createPubDressUrlViewState({
   const status = resolutionStatus(pending, resolution);
   const encoded = derived.ascii !== derived.stem;
 
-  if (status === "taken" || suffix.length > 0) {
+  // A collision opens the suffix control before the Bond has typed anything.
+  // Core composition is only required once there is a suffix to compose; an
+  // empty editor is a real "taken" state, not a Core service failure.
+  if (status === "taken" && suffix.length === 0) {
+    return {
+      kind: "suffix",
+      pubDress,
+      stem: derived.stem,
+      ...(encoded ? { ascii: derived.ascii } : {}),
+      folded: derived.folded,
+      suffix,
+      status,
+      detail: statusDetail(status, derived.folded, encoded, false),
+    };
+  }
+
+  if (suffix.length > 0) {
     if (composition === undefined) {
       return {
         kind: "suffix",
