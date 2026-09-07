@@ -76,6 +76,8 @@ function rejectionDetail(reason: PubDressLabelRejection): string {
       return "No address — a symbol cannot appear in an address";
     case "bidi-rule":
       return "No address — a right-to-left script cannot follow the 0x prefix";
+    case "not-encodable":
+      return "No address — this address cannot be encoded for DNS";
     case "unsupported-character":
       return "No address — this character cannot appear in an address";
     case "boundary-hyphen":
@@ -163,7 +165,7 @@ export function createPubDressUrlViewState({
   }
 
   const status = resolutionStatus(pending, resolution);
-  const composition = composePubDressLabel(derived.stem, suffix);
+  const composition = composePubDressLabel(derived.source, suffix);
 
   // A collision is what opens the editable part, but once it is open the Bond
   // keeps it: closing the field under them the moment their suffix resolves

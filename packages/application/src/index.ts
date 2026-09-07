@@ -59,6 +59,7 @@ export {
   normalizePubDressUrlSuffix,
   suggestPubDressUrlSuffix,
   type PubDressLabelComposition,
+  type PubDressLabelDerivation,
   type PubDressLabelRejection,
   type PubDressLabelStem,
 } from "./pub-dress-url";

@@ -74,11 +74,25 @@ decided:
       check_bidi: true
       check_joiners: true
       verify_dns_length: true
-  - id: ascii-fold-only
-    rule: Fold A-Z to a-z explicitly; do not call a general Unicode lowercase.
+  - id: the-encoder-owns-the-fold
+    rule: >-
+      Case folding is part of UTS-46 mapping and happens inside the encoder.
+      Never lowercase before encoding, and never hand-roll the fold.
     because: >-
-      A general lowercase also folds scalars this contract refuses, which hides
-      a rejection behind a silent rewrite.
+      A general Unicode lowercase disagrees with UTS-46 on real inputs. The
+      plain case is word-final sigma: `0x0ΟΔΟΣ` lowercases to `0x0οδος` and
+      encodes to `xn--0x0-2xc8cbv`, while UTS-46 maps `Σ` to `σ` throughout and
+      allocates `xn--0x0-2xc8cb2a`. Two different addresses for one identity,
+      from an ordinary Greek name.
+    corollary: >-
+      Compose a suffix onto the identity as typed and encode once. Folding
+      first, or appending to an already-encoded `xn--` label, both change the
+      address.
+  - id: suffix-stays-ascii
+    rule: The suffix is ASCII lowercase and digits whatever the stem's script.
+    because: >-
+      It is a disambiguator, not part of the chosen name, and keeping it ASCII
+      means it can never change how the stem encodes.
   - id: allocation-is-a-transaction
     rule: Resolution is advisory; the allocating insert is the only collision boundary.
     because: Matches the existing pub_dress rule in services/identity/README.md.
@@ -129,6 +143,26 @@ resolved_decision:
         fails on U+1F30D. The old `NonAscii` error no longer describes anything;
         a disallowed scalar is its own outcome.
       action: Replace NonAscii with DisallowedScalar and BidiRule.
+    - id: bidi-is-not-the-only-refusal
+      severity: api
+      finding: >-
+        Scalars that are neither ASCII nor right-to-left still fail to form a
+        label — Khmer U+17B4 and the Hangul fillers U+115F, U+1160 and U+3164
+        among them. Reporting every encoder refusal as a Bidi violation tells a
+        Khmer or Korean Bond that its script reads right to left.
+      action: >-
+        Keep NotEncodable distinct from BidiRule, and claim the Bidi rule only
+        when the label actually carries a right-to-left script.
+    - id: compatibility-mappings-collide
+      severity: correctness
+      finding: >-
+        UTS-46 mapping is wider than case. `0x0ａｂ` in fullwidth forms maps to
+        the same label as plain `0x0ab`, so they are a collision pair even
+        though neither is a case variant of the other.
+      action: >-
+        Derive the readable form from the encoder's output rather than from a
+        local fold, or the surface will report "already lowercase" for an
+        identity whose address another Bond holds.
     - id: confusables-remain-open
       severity: follow-up
       finding: >-
@@ -156,6 +190,7 @@ api:
         - InvalidCharacter # ASCII outside [a-z0-9-]; includes STD3 rejections such as `_`
         - DisallowedScalar # non-ASCII scalar UTS-46 marks disallowed, e.g. emoji
         - BidiRule # RFC 5893; every RTL pub_dress lands here, see consequences
+        - NotEncodable # any other refusal from the encoder, see below
         - BoundaryHyphen # leading or trailing hyphen on the composed label
         - TooLong # A-label exceeds 63 octets AFTER encoding
         - SuffixTooLong # suffix exceeds its own budget

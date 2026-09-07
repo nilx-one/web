@@ -18,6 +18,7 @@ describe("pub_dress URL derivation", () => {
       kind: "stem",
       stem: "0xda-sha",
       ascii: "0xda-sha",
+      source: "0xda-sha",
       folded: false,
     });
   });
@@ -27,6 +28,7 @@ describe("pub_dress URL derivation", () => {
       kind: "stem",
       stem: "0xda-sha",
       ascii: "0xda-sha",
+      source: "0xdA-Sha",
       folded: true,
     });
   });
@@ -62,6 +64,7 @@ describe("pub_dress URL derivation", () => {
       kind: "stem",
       stem: "0x0небо",
       ascii: "xn--0x0-dddt1cj",
+      source: "0x0небо",
       folded: false,
     });
   });
@@ -244,6 +247,68 @@ describe("collision suffix suggestion", () => {
 
     expect(composePubDressLabel("0xda-sha", suffix)).toMatchObject({
       kind: "label",
+    });
+  });
+});
+
+describe("agreement with the encoder", () => {
+  // Every case here previously produced an address the contract would not
+  // allocate, or named the wrong cause for a refusal.
+
+  it("never shows a readable form whose encoding differs from the real label", () => {
+    // `toLowerCase` applies Final_Sigma and gives `ς` where UTS-46 gives `σ`,
+    // which are two different addresses. The readable form is dropped rather
+    // than shown wrong.
+    const derived = derivePubDressLabelStem("0x0ΟΔΟΣ");
+
+    expect(derived).toMatchObject({ kind: "stem", ascii: "xn--0x0-2xc8cb2a" });
+    if (derived.kind === "stem") {
+      expect(derived.stem).toBe(derived.ascii);
+    }
+  });
+
+  it("folds compatibility forms onto the label their ASCII twin holds", () => {
+    const wide = derivePubDressLabelStem("0x0ａｂ");
+    const plain = derivePubDressLabelStem("0x0ab");
+
+    expect(wide).toMatchObject({ stem: "0x0ab", ascii: "0x0ab", folded: true });
+    expect(plain).toMatchObject({ ascii: "0x0ab", folded: false });
+  });
+
+  it("does not blame the Bidi rule for a refusal it did not cause", () => {
+    // Khmer U+17B4 and the Hangul fillers pass the scalar test and still
+    // cannot form a label. Neither script reads right to left.
+    expect(derivePubDressLabelStem("0x0\u17B4")).toEqual({
+      kind: "unrepresentable",
+      reason: "not-encodable",
+    });
+    expect(derivePubDressLabelStem("0x0\u115F")).toEqual({
+      kind: "unrepresentable",
+      reason: "not-encodable",
+    });
+  });
+
+  it("keeps the suffix ASCII whatever the stem's script", () => {
+    expect(composePubDressLabel("0x0sky", "Éé")).toEqual({
+      kind: "rejected",
+      reason: "unsupported-character",
+    });
+    expect(normalizePubDressUrlSuffix("Éé")).toBe("Éé");
+  });
+
+  it("composes on the identity as typed, not on the folded form", () => {
+    expect(composePubDressLabel("0x0Небо", "7412")).toEqual({
+      kind: "label",
+      label: "0x0небо7412",
+      ascii: "xn--0x07412-dgg9a9en",
+      url: "https://0x0небо7412.nilx.one",
+    });
+  });
+
+  it("tolerates a zone given in another case", () => {
+    expect(derivePubDressLabelStem("0x0sky", "NILX.ONE")).toMatchObject({
+      kind: "stem",
+      ascii: "0x0sky",
     });
   });
 });

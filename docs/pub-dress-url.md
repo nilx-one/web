@@ -49,8 +49,13 @@ something the Bond failed to fill in.
   which is what a browser shows; DNS carries `xn--0x0-dddt1cj`. Composition
   happens on the readable form and encodes once — appending a suffix to an
   already-encoded `xn--` label would produce a string that no longer decodes.
-- Case folds across every script, so `0x0Небо` and `0x0небо` collide exactly as
-  their ASCII counterparts do.
+- The encoder owns the fold. Case folding is part of UTS-46 mapping, so nothing
+  here lowercases before encoding: `toLowerCase` applies Final_Sigma and would
+  give `0x0ΟΔΟΣ` a different address from the one allocated. A readable form is
+  offered only when it encodes back to exactly the same label, and otherwise the
+  Bond is shown the address it will really get.
+- Mapping is wider than case. Fullwidth `0x0ａｂ` reaches the same label as plain
+  `0x0ab`, so they are a collision pair with no case variance between them.
 - ASCII must be LDH (`a-z`, `0-9`, `-`) and must not end on a hyphen. A
   non-ASCII scalar must be a letter, mark, or digit — a conservative stand-in
   for the UTS-46 validity table this package does not carry, biased so it may
