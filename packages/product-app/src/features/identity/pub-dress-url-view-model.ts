@@ -35,6 +35,8 @@ export type PubDressUrlViewState =
       kind: "preview";
       pubDress: string;
       stem: string;
+      /** Present only when the address encodes, i.e. the stem is not ASCII. */
+      ascii?: string;
       folded: boolean;
       url: string;
       status: PubDressUrlStatus;
@@ -44,6 +46,7 @@ export type PubDressUrlViewState =
       kind: "suffix";
       pubDress: string;
       stem: string;
+      ascii?: string;
       folded: boolean;
       suffix: string;
       url?: string;
@@ -69,8 +72,10 @@ function foldDetail(folded: boolean): string {
 
 function rejectionDetail(reason: PubDressLabelRejection): string {
   switch (reason) {
-    case "non-ascii":
-      return "Address shown once you register — this alphabet is encoded there";
+    case "disallowed-scalar":
+      return "No address — a symbol cannot appear in an address";
+    case "bidi-rule":
+      return "No address — a right-to-left script cannot follow the 0x prefix";
     case "unsupported-character":
       return "No address — this character cannot appear in an address";
     case "boundary-hyphen":
@@ -170,7 +175,14 @@ export function createPubDressUrlViewState({
       stem: derived.stem,
       folded: derived.folded,
       suffix,
-      ...(composition.kind === "label" ? { url: composition.url } : {}),
+      ...(composition.kind === "label"
+        ? {
+            url: composition.url,
+            ...(composition.ascii === composition.label
+              ? {}
+              : { ascii: composition.ascii }),
+          }
+        : {}),
       status: composition.kind === "label" ? status : "invalid",
       detail:
         composition.kind === "label"
@@ -185,6 +197,9 @@ export function createPubDressUrlViewState({
     stem: derived.stem,
     folded: derived.folded,
     url: composition.kind === "label" ? composition.url : "",
+    ...(composition.kind === "label" && composition.ascii !== composition.label
+      ? { ascii: composition.ascii }
+      : {}),
     status,
     detail: statusDetail(status, derived.folded, false),
   };

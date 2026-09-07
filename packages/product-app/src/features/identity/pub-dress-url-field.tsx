@@ -115,6 +115,16 @@ export function PubDressUrlField({
         </div>
       )}
 
+      {/* DNS carries the encoded form. A browser shows the readable one, so the
+          encoded form is a footnote rather than the address itself — but it is
+          shown, because it is what the Bond's record will contain. */}
+      {state.kind !== "unrepresentable" && state.ascii !== undefined ? (
+        <p className="pub-dress-url-ascii">
+          <span aria-hidden="true">DNS</span>
+          <code>{state.ascii}</code>
+        </p>
+      ) : null}
+
       {state.kind !== "unrepresentable" && state.folded ? (
         <p className="pub-dress-url-fold">
           <span>{state.pubDress}</span>

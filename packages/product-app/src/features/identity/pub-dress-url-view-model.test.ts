@@ -119,13 +119,37 @@ describe("public address view state", () => {
     ).toMatchObject({ status: "invalid" });
   });
 
-  it("refuses an address it cannot represent instead of inventing one", () => {
+  it("gives a Cyrillic identity a readable address and its encoded form", () => {
     expect(
       state({ selection: { discriminator: "0", slug: "небо" } }),
     ).toMatchObject({
-      kind: "unrepresentable",
+      kind: "preview",
       pubDress: "0x0небо",
-      reason: "non-ascii",
+      stem: "0x0небо",
+      ascii: "xn--0x0-dddt1cj",
+      url: "https://0x0небо.nilx.one",
     });
+  });
+
+  it("omits the encoded form when it is the address itself", () => {
+    expect(state()).not.toHaveProperty("ascii");
+  });
+
+  it("refuses a right-to-left identity, naming the prefix as the cause", () => {
+    const view = state({ selection: { discriminator: "0", slug: "אבג" } });
+
+    expect(view).toMatchObject({
+      kind: "unrepresentable",
+      reason: "bidi-rule",
+    });
+    expect(view.kind === "unrepresentable" && view.detail).toContain(
+      "0x prefix",
+    );
+  });
+
+  it("refuses a symbol rather than promising an address registration denies", () => {
+    expect(
+      state({ selection: { discriminator: "0", slug: "🌍🌎" } }),
+    ).toMatchObject({ kind: "unrepresentable", reason: "disallowed-scalar" });
   });
 });

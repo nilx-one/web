@@ -929,3 +929,26 @@
   color: var(--ink);
   font: inherit;
 }
+
+/* The encoded form, shown only when it differs from the address the Bond
+   reads. A browser displays the readable form, so this is a footnote. */
+.pub-dress-url-ascii {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.pub-dress-url-ascii span {
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.pub-dress-url-ascii code {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}

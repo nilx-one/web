@@ -45,15 +45,24 @@ something the Bond failed to fill in.
 
 `packages/application/src/pub-dress-url.ts` is the client-side derivation.
 
-- ASCII case fold only. `String.prototype.toLowerCase` also folds scalars this
-  module refuses, which would hide a rejection behind a silent rewrite.
-- The label must be LDH (`a-z`, `0-9`, `-`), must not end on a hyphen, and must
-  fit the 63-octet label limit.
-- Non-ASCII is declined here rather than guessed at. The contract does give such
-  an identity an address — UTS-46 encodes `0x0небо` as `xn--0x0-dddt1cj` — but
-  computing it in the client would mean a second IDNA implementation, which is
-  the drift the contract exists to prevent. The preview says the address is
-  computed at registration instead of claiming none exists.
+- A label has two forms and both matter. The Bond reads `0x0небо.nilx.one`,
+  which is what a browser shows; DNS carries `xn--0x0-dddt1cj`. Composition
+  happens on the readable form and encodes once — appending a suffix to an
+  already-encoded `xn--` label would produce a string that no longer decodes.
+- Case folds across every script, so `0x0Небо` and `0x0небо` collide exactly as
+  their ASCII counterparts do.
+- ASCII must be LDH (`a-z`, `0-9`, `-`) and must not end on a hyphen. A
+  non-ASCII scalar must be a letter, mark, or digit — a conservative stand-in
+  for the UTS-46 validity table this package does not carry, biased so it may
+  refuse something the contract accepts but never the reverse.
+- The 63-octet limit is measured on the encoded form. A 32-scalar slug is a
+  valid `pub_dress` and can still reach 105 octets once encoded.
+- Non-ASCII is encoded, not refused. `0x0небо` becomes `https://0x0небо.nilx.one`,
+  carried by DNS as `xn--0x0-dddt1cj`. The preview reaches the platform's own
+  UTS-46 through URL parsing rather than carrying an IDNA table, and applies its
+  own charset, boundary and length rules around it — URL parsing deliberately
+  relaxes some of them. A symbol is still refused: punycode would encode
+  `0x0🌍`, IDNA does not allow it.
 
 Every label begins with `0x` or, once encoded, `xn--`. That is what keeps the
 user namespace disjoint from service hosts — no Bond can fold onto `www`, `api`,
@@ -62,7 +71,8 @@ alongside it. Because an ASCII stem always begins `0x`, no Bond can hand-craft a
 label starting `xn--` either, so an ACE prefix cannot be forged.
 
 One consequence of the encoding is worth knowing before it is discovered in
-production: **no right-to-left `pub_dress` can have an address.** RFC 5893
+production, and the surface now says it in place rather than leaving an empty
+field: **no right-to-left `pub_dress` can have an address.** RFC 5893
 requires an RTL label to begin with L, R, or AL, and every label here begins with
 the digit `0`. Hebrew and Arabic Bonds are excluded by the `0x` prefix itself,
 not by anything about their script.
@@ -108,8 +118,12 @@ cross-checked.
 
 Until label resolution exists, `IdentityFoundationView` receives no
 `pubDressUrlResolution` and the address surface stays in its read-only preview:
-the Bond still sees the fold, and only a real collision answer opens the
-editable part.
+the Bond still sees the fold and the encoded form, and only a real collision
+answer opens the editable part.
+
+The preview's encoder is the platform's UTS-46, which is conformant but not the
+revision `nilx-one/core` will pin. Its vectors assert the same encoded values as
+the contract, so a divergence fails the Web suite rather than reaching a Bond.
 
 ---
 

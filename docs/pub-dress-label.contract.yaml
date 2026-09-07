@@ -343,10 +343,20 @@ downstream:
           Route the Web client's preview through the shared Core boundary
           instead of packages/application/src/pub-dress-url.ts.
         detail: >-
-          The client cannot implement UTS-46 without pulling an IDNA library
-          into a package that has no dependencies, and a second implementation
-          is the drift this contract exists to prevent. Until then its preview
-          refuses non-ASCII and says so as a preview limit.
+          The preview now encodes non-ASCII through the platform's own UTS-46,
+          reached by URL parsing, so a Cyrillic Bond sees its address rather
+          than a deferral. That is a conformant implementation but not the
+          pinned one, so it stays a preview until Core owns the encoding.
+        verified_agreement: >-
+          The platform encoder matches this contract's vectors exactly on every
+          valid row, including the non-transitional readings of ß and ς.
+        known_divergence: >-
+          URL parsing relaxes UseSTD3ASCIIRules and CheckHyphens, so it accepts
+          `_`, a trailing hyphen, and emoji. The client applies its own charset,
+          boundary and length rules around the encoder rather than trusting it,
+          and uses a letter/mark/digit test as a conservative stand-in for the
+          UTS-46 validity table: it may refuse a scalar Core accepts, never the
+          reverse.
       - id: contract-version
         action: Bump services/identity/deploy/contract.version and requiresIdentityContract in deploy/web/targets.json.
         note: Only once a verified identity package providing the new contract exists in the release ancestry.
@@ -384,6 +394,6 @@ acceptance:
     from an empty field.
   - >-
     The Web client's preview derivation is replaced by, or verified against,
-    this contract rather than living beside it indefinitely. It currently
-    refuses non-ASCII, which this decision makes a temporary preview limit
-    rather than the rule.
+    this contract rather than living beside it indefinitely. Its vectors already
+    assert the same encoded values, so a divergence between Core and the
+    platform encoder fails the Web suite rather than reaching a Bond.

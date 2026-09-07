@@ -17,6 +17,7 @@ describe("pub_dress URL derivation", () => {
     expect(derivePubDressLabelStem("0xda-sha")).toEqual({
       kind: "stem",
       stem: "0xda-sha",
+      ascii: "0xda-sha",
       folded: false,
     });
   });
@@ -25,6 +26,7 @@ describe("pub_dress URL derivation", () => {
     expect(derivePubDressLabelStem("0xdA-Sha")).toEqual({
       kind: "stem",
       stem: "0xda-sha",
+      ascii: "0xda-sha",
       folded: true,
     });
   });
@@ -55,10 +57,64 @@ describe("pub_dress URL derivation", () => {
     });
   });
 
-  it("refuses a non-ASCII address instead of transliterating it", () => {
+  it("encodes a Cyrillic address instead of refusing it", () => {
     expect(derivePubDressLabelStem("0x0небо")).toEqual({
+      kind: "stem",
+      stem: "0x0небо",
+      ascii: "xn--0x0-dddt1cj",
+      folded: false,
+    });
+  });
+
+  it("folds case across scripts, so Cyrillic collides exactly as ASCII does", () => {
+    const upper = derivePubDressLabelStem("0x0Небо");
+    const lower = derivePubDressLabelStem("0x0небо");
+
+    expect(upper).toMatchObject({ stem: "0x0небо", folded: true });
+    expect(lower).toMatchObject({ stem: "0x0небо", folded: false });
+    expect(upper.kind === "stem" && lower.kind === "stem").toBe(true);
+    if (upper.kind === "stem" && lower.kind === "stem") {
+      expect(upper.ascii).toBe(lower.ascii);
+    }
+  });
+
+  it("keeps the deviation characters on their non-transitional reading", () => {
+    // Under transitional processing these become `0x0strasse` and a different
+    // sigma encoding — two different addresses for one identity.
+    expect(derivePubDressLabelStem("0x0straße")).toMatchObject({
+      ascii: "xn--0x0strae-wya",
+    });
+    expect(derivePubDressLabelStem("0x0ςigma")).toMatchObject({
+      ascii: "xn--0x0igma-zpf",
+    });
+  });
+
+  it("refuses a symbol that punycode would happily encode", () => {
+    expect(derivePubDressLabelStem("0x0🌍")).toEqual({
       kind: "unrepresentable",
-      reason: "non-ascii",
+      reason: "disallowed-scalar",
+    });
+  });
+
+  it("refuses a right-to-left address, which the 0x prefix cannot carry", () => {
+    for (const rtl of ["0x0א", "0x0ء"]) {
+      expect(derivePubDressLabelStem(rtl)).toEqual({
+        kind: "unrepresentable",
+        reason: "bidi-rule",
+      });
+    }
+  });
+
+  it("measures length on the encoded form, not on the address typed", () => {
+    // 32 scalars is a valid pub_dress slug; encoded it reaches 105 octets.
+    const slug = Array.from({ length: 32 }, (_, index) =>
+      String.fromCodePoint(0x4e00 + ((index * 997) % 0x3000)),
+    ).join("");
+
+    expect([...slug]).toHaveLength(32);
+    expect(derivePubDressLabelStem(`0x0${slug}`)).toEqual({
+      kind: "unrepresentable",
+      reason: "too-long",
     });
   });
 
@@ -93,7 +149,27 @@ describe("pub_dress URL composition", () => {
     expect(composePubDressLabel("0xda-sha")).toEqual({
       kind: "label",
       label: "0xda-sha",
+      ascii: "0xda-sha",
       url: "https://0xda-sha.nilx.one",
+    });
+  });
+
+  it("keeps the readable form in the URL and the encoded form beside it", () => {
+    expect(composePubDressLabel("0x0небо")).toEqual({
+      kind: "label",
+      label: "0x0небо",
+      ascii: "xn--0x0-dddt1cj",
+      url: "https://0x0небо.nilx.one",
+    });
+  });
+
+  it("composes before encoding, so the suffix does not break the encoding", () => {
+    const composed = composePubDressLabel("0x0небо", "7412");
+
+    expect(composed).toMatchObject({
+      label: "0x0небо7412",
+      ascii: "xn--0x07412-dgg9a9en",
+      url: "https://0x0небо7412.nilx.one",
     });
   });
 
@@ -101,6 +177,7 @@ describe("pub_dress URL composition", () => {
     expect(composePubDressLabel("0xda-sha", "7412")).toEqual({
       kind: "label",
       label: "0xda-sha7412",
+      ascii: "0xda-sha7412",
       url: "https://0xda-sha7412.nilx.one",
     });
   });

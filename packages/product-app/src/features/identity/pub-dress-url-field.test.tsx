@@ -102,12 +102,26 @@ describe("public address field", () => {
     expect(screen.getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("says an encoded address is computed at registration, not that none exists", () => {
+  it("shows a Cyrillic address as the Bond reads it, with the encoded footnote", () => {
     renderField({ selection: { discriminator: "0", slug: "небо" } });
+
+    expect(screen.getByText("0x0небо")).toBeInTheDocument();
+    expect(screen.getByText(".nilx.one")).toBeInTheDocument();
+    expect(screen.getByText("xn--0x0-dddt1cj")).toBeInTheDocument();
+  });
+
+  it("does not footnote an encoded form for an ASCII address", () => {
+    renderField();
+
+    expect(screen.queryByText(/^xn--/)).not.toBeInTheDocument();
+  });
+
+  it("explains why a right-to-left identity has no address", () => {
+    renderField({ selection: { discriminator: "0", slug: "אבג" } });
 
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Address shown once you register/),
+      screen.getByText(/right-to-left script cannot follow the 0x prefix/),
     ).toBeInTheDocument();
   });
 });
