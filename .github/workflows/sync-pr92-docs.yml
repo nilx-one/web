@@ -1,0 +1,92 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Sync PR 92 docs
+
+on:
+  push:
+    branches:
+      - claude/subdomain-registration-xjk8jc
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/subdomain-registration-xjk8jc
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Synchronize Core-owned address docs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          contract = Path("docs/pub-dress-label.contract.yaml")
+          text = contract.read_text()
+          old = """# Implementation instruction for nilx-one/core.\n#\n# nilx-one/web derives a Bond's public address in its own client today\n# (packages/application/src/pub-dress-url.ts) so a registering Bond can see the\n# fold before committing. That derivation is a preview, not authority: the same\n# rule has to exist normatively next to PubDress, or the Web client and the\n# identity service can disagree about which Bond owns an address.\n#\n# This file is the handoff. It states what belongs in core, what is already\n# decided, and the one decision that is genuinely open.\n"""
+          new = """# Cross-repository mirror of the Core-owned PubDressLabel contract.\n#\n# nilx-one/core is normative. Web consumes deterministic label derivation and\n# composition through the pinned Core Wasm boundary and only projects those\n# results into product UI. It must not carry a second Unicode/IDNA implementation.\n#\n# This file records the contract consequences and the remaining server/deploy\n# work so Web, identity, and infra cannot silently diverge from Core.\n"""
+          if old not in text:
+              raise SystemExit("contract header drifted")
+          text = text.replace(old, new)
+          text = text.replace(
+              "pinned_at: 18f8906f8ac5493577f2fa87d31d0a90e482aa9a",
+              "pinned_at: c224304947280169017e298237bcf5361d1bfb30",
+          )
+          text = text.replace(
+              "packages/application/src/pub-dress-url.ts # preview, to be replaced by the Wasm boundary",
+              "packages/application/src/pub-dress-url.ts # presentation of Core-owned labels",
+          )
+          old_preview = """      - id: client-preview\n        action: >-\n          Route the Web client's preview through the shared Core boundary\n          instead of packages/application/src/pub-dress-url.ts.\n        detail: >-\n          The preview now encodes non-ASCII through the platform's own UTS-46,\n          reached by URL parsing, so a Cyrillic Bond sees its address rather\n          than a deferral. That is a conformant implementation but not the\n          pinned one, so it stays a preview until Core owns the encoding.\n        verified_agreement: >-\n          The platform encoder matches this contract's vectors exactly on every\n          valid row, including the non-transitional readings of ß and ς.\n        known_divergence: >-\n          URL parsing relaxes UseSTD3ASCIIRules and CheckHyphens, so it accepts\n          `_`, a trailing hyphen, and emoji. The client applies its own charset,\n          boundary and length rules around the encoder rather than trusting it,\n          and uses a letter/mark/digit test as a conservative stand-in for the\n          UTS-46 validity table: it may refuse a scalar Core accepts, never the\n          reverse.\n"""
+          new_preview = """      - id: client-preview\n        status: implemented\n        action: Keep Web presentation behind the shared Core Wasm boundary.\n        detail: >-\n          Web calls Core for label derivation and treats the returned A-label as\n          authoritative. packages/application/src/pub-dress-url.ts only maps the\n          typed pub_dress plus Core result into readable product presentation; it\n          performs no Unicode classification or UTS-46 mapping.\n        verified_agreement: >-\n          Core owns the pinned Unicode version and UTS-46 implementation, and the\n          Web adapter validates the stable label/error wire surface before exposing\n          it to product code.\n"""
+          if old_preview not in text:
+              raise SystemExit("client-preview block drifted")
+          text = text.replace(old_preview, new_preview)
+          contract.write_text(text)
+
+          doc = Path("docs/pub-dress-url.md")
+          text = doc.read_text()
+          text = text.replace(
+              "`packages/application/src/pub-dress-url.ts` is the client-side derivation.",
+              "`nilx-one/core` owns derivation and composition. `packages/application/src/pub-dress-url.ts` is presentation-only: it receives Core results and never performs Unicode/IDNA mapping itself.",
+          )
+          old_platform = """- ASCII must be LDH (`a-z`, `0-9`, `-`) and must not end on a hyphen. A\n  non-ASCII scalar must be a letter, mark, or digit — a conservative stand-in\n  for the UTS-46 validity table this package does not carry, biased so it may\n  refuse something the contract accepts but never the reverse.\n- The 63-octet limit is measured on the encoded form. A 32-scalar slug is a\n  valid `pub_dress` and can still reach 105 octets once encoded.\n- Non-ASCII is encoded, not refused. `0x0небо` becomes `https://0x0небо.nilx.one`,\n  carried by DNS as `xn--0x0-dddt1cj`. The preview reaches the platform's own\n  UTS-46 through URL parsing rather than carrying an IDNA table, and applies its\n  own charset, boundary and length rules around it — URL parsing deliberately\n  relaxes some of them. A symbol is still refused: punycode would encode\n  `0x0🌍`, IDNA does not allow it.\n"""
+          new_platform = """- Core validates the LDH A-label boundary, UTS-46 scalar policy, hyphen rules,\n  bidirectional-text rules, joiners, and the final DNS length. Web maps Core's\n  stable rejection codes into product copy rather than reclassifying Unicode.\n- The 63-octet limit is measured on the encoded form. A 32-scalar slug is a\n  valid `pub_dress` and can still reach 105 octets once encoded.\n- Non-ASCII is encoded, not refused. `0x0небо` becomes `https://0x0небо.nilx.one`,\n  carried by DNS as `xn--0x0-dddt1cj`. The A-label comes from the pinned Core\n  runtime; Web keeps the Unicode identity readable and shows the DNS form as a\n  footnote when the two differ.\n"""
+          if old_platform not in text:
+              raise SystemExit("platform derivation block drifted")
+          text = text.replace(old_platform, new_platform)
+          old_handoff = """## Handing the fold to core\n\n[`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) is the\nimplementation instruction for `nilx-one/core`: the API surface to add next to\n`PubDress`, the rules already settled, the one open decision (the non-ASCII\nmapping), and test vectors mirroring\n`packages/application/src/pub-dress-url.test.ts` so both sides can be\ncross-checked.\n"""
+          new_handoff = """## Core ownership\n\n[`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) mirrors the\nCore-owned contract consumed by Web. The normative implementation now lives in\n`nilx-one/core` and is exposed to Web through the verified Wasm boundary; the\nlocal document remains as a cross-repository compatibility and downstream-work\nrecord.\n"""
+          if old_handoff not in text:
+              raise SystemExit("handoff section drifted")
+          text = text.replace(old_handoff, new_handoff)
+          text = text.replace(
+              "- the normative fold in `nilx-one/core`, now specified as UTS-46;\n",
+              "",
+          )
+          old_tail = """The preview's encoder is the platform's UTS-46, which is conformant but not the\nrevision `nilx-one/core` will pin. Its vectors assert the same encoded values as\nthe contract, so a divergence fails the Web suite rather than reaching a Bond.\n"""
+          new_tail = """The preview uses the pinned Core runtime directly. If the Wasm label binding is\nmissing or malformed, Web fails closed instead of falling back to a second\nUnicode/IDNA implementation.\n"""
+          if old_tail not in text:
+              raise SystemExit("preview tail drifted")
+          text = text.replace(old_tail, new_tail)
+          doc.write_text(text)
+          PY
+      - run: pnpm exec prettier --write docs/pub-dress-label.contract.yaml docs/pub-dress-url.md
+      - name: Commit synchronized docs
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/pub-dress-label.contract.yaml docs/pub-dress-url.md
+          git commit -m "docs(identity): align address contract with Core ownership"
+          git push origin HEAD:claude/subdomain-registration-xjk8jc
