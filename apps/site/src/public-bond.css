@@ -1,0 +1,132 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.public-bond-page {
+  --public-bond-surface: color-mix(in srgb, Canvas 92%, transparent);
+  --public-bond-line: color-mix(in srgb, CanvasText 14%, transparent);
+  --public-bond-muted: color-mix(in srgb, CanvasText 58%, transparent);
+  --public-bond-accent: #5bc6f4;
+
+  box-sizing: border-box;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  gap: 2rem;
+  padding: max(2rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--public-bond-accent) 11%, transparent), transparent 42rem),
+    Canvas;
+  color: CanvasText;
+  color-scheme: light dark;
+}
+
+.public-bond-card {
+  box-sizing: border-box;
+  width: min(100%, 38rem);
+  align-self: end;
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  border: 1px solid var(--public-bond-line);
+  border-radius: 1.75rem;
+  background: var(--public-bond-surface);
+  box-shadow: 0 1.75rem 5rem color-mix(in srgb, CanvasText 8%, transparent);
+  backdrop-filter: blur(24px);
+}
+
+.public-bond-kicker,
+.public-bond-card h1,
+.public-bond-card p,
+.public-bond-facts,
+.public-bond-card dd {
+  margin: 0;
+}
+
+.public-bond-kicker {
+  color: var(--public-bond-muted);
+  font: 600 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.public-bond-card h1 {
+  margin-top: 0.8rem;
+  overflow-wrap: anywhere;
+  font: 500 clamp(2rem, 9vw, 4rem) / 1.02 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.055em;
+}
+
+.public-bond-address {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 0.9rem;
+  overflow-wrap: anywhere;
+  color: var(--public-bond-muted);
+  font: 500 0.88rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration-color: color-mix(in srgb, var(--public-bond-accent) 65%, transparent);
+  text-underline-offset: 0.28rem;
+}
+
+.public-bond-facts {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 2.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--public-bond-line);
+}
+
+.public-bond-facts div {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.public-bond-facts dt {
+  color: var(--public-bond-muted);
+  font: 500 0.75rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: lowercase;
+}
+
+.public-bond-facts dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: 500 0.92rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.public-bond-home {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 2rem;
+  color: CanvasText;
+  font: 600 0.82rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+}
+
+.public-bond-home span {
+  color: var(--public-bond-accent);
+}
+
+.public-bond-card--message p:not(.public-bond-kicker) {
+  margin-top: 1rem;
+  color: var(--public-bond-muted);
+  line-height: 1.55;
+}
+
+.public-bond-page > footer {
+  align-self: end;
+  color: var(--public-bond-muted);
+  font: 500 0.66rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 32rem) {
+  .public-bond-card {
+    border-radius: 1.4rem;
+  }
+
+  .public-bond-facts div {
+    grid-template-columns: 4rem 1fr;
+  }
+}
