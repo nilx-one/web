@@ -1921,10 +1921,7 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["identity"]["pub_dress"], "0x0sky");
         assert_eq!(body["identity"]["avaia_pub_dress"], "0skai");
-        assert_eq!(
-            body["identity"]["pub_dress_url"],
-            "https://0x0sky.nilx.one"
-        );
+        assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
         assert!(body.to_string().find("provider_subject").is_none());
     }
 
@@ -2044,10 +2041,7 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["state"], "recovery_key_required");
         assert_eq!(body["identity"]["avaia_pub_dress"], "0Skai");
-        assert_eq!(
-            body["identity"]["pub_dress_url"],
-            "https://0x0sky.nilx.one"
-        );
+        assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
         assert!(
             body["recovery_key"]
                 .as_str()
@@ -3174,8 +3168,8 @@ mod tests {
         let app = app().await;
         register_telegram_fixture(&app).await;
         let request = |csrf: bool, proof: bool| {
-            let mut builder = Request::post("/api/v1/identity/avatar")
-                .header("content-type", "application/json");
+            let mut builder =
+                Request::post("/api/v1/identity/avatar").header("content-type", "application/json");
             if csrf {
                 builder = builder.header(super::CSRF_HEADER, "1");
             }

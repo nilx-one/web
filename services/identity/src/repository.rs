@@ -251,7 +251,8 @@ impl IdentityRepository {
             return Ok(RegistrationOutcome::HandleUnavailable);
         }
 
-        let Some(_avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        let Some(_avaia_pub_dress) =
+            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
         else {
             transaction.rollback().await?;
             return Ok(RegistrationOutcome::AvaiaUnavailable);
@@ -611,7 +612,8 @@ impl IdentityRepository {
             return Ok(NativeRegistrationOutcome::HandleUnavailable);
         }
 
-        let Some(_avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        let Some(_avaia_pub_dress) =
+            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
         else {
             transaction.rollback().await?;
             return Ok(NativeRegistrationOutcome::AvaiaUnavailable);
@@ -1307,7 +1309,10 @@ mod tests {
             .expect("lookup")
             .expect("identity");
         assert_eq!(telegram.avaia_pub_dress.as_deref(), Some("0skai"));
-        assert_eq!(telegram.readable_url("nilx.one").as_deref(), Some("https://0x0sky.nilx.one"));
+        assert_eq!(
+            telegram.readable_url("nilx.one").as_deref(),
+            Some("https://0x0sky.nilx.one")
+        );
         assert!(matches!(
             repository
                 .register(&discord_address, &ProviderIdentity::discord("42"), 101)
@@ -1474,7 +1479,10 @@ mod tests {
             .expect("session lookup")
             .expect("active session");
         assert_eq!(session.avaia_pub_dress.as_deref(), Some("0skai"));
-        assert_eq!(session.readable_url("nilx.one").as_deref(), Some("https://0x0sky.nilx.one"));
+        assert_eq!(
+            session.readable_url("nilx.one").as_deref(),
+            Some("https://0x0sky.nilx.one")
+        );
         assert_eq!(
             repository
                 .find_native_session(b"session", 200)
