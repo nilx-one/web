@@ -6,3 +6,5 @@ coverage/
 
 __pycache__/
 deploy/web/avatars/
+services/identity/target/
+services/identity/Cargo.lock
