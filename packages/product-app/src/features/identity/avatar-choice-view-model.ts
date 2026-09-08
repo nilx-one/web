@@ -42,7 +42,9 @@ const STUDIES: Readonly<
   "kai-study": { name: "Kai", detail: "non-binary study" },
 };
 
-function isPublishedAvatarModel(model: StoredAvatarModel): model is AvatarModel {
+function isPublishedAvatarModel(
+  model: StoredAvatarModel,
+): model is AvatarModel {
   return (AVATAR_MODELS as readonly string[]).includes(model);
 }
 
