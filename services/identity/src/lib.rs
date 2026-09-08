@@ -6,6 +6,7 @@ pub mod browser_web_auth;
 pub mod credentials;
 pub mod discord_oauth;
 pub mod provider_link;
+pub mod public_api;
 pub mod rate_limit;
 pub mod repository;
 pub mod telegram_init_data;
@@ -16,11 +17,13 @@ pub use credentials::{
     TokenFactory,
 };
 pub use discord_oauth::{DiscordAccessToken, DiscordOAuthClient, DiscordOAuthError};
-pub use ox1_contracts::{AvaiaPubDress, AvaiaPubDressError, PubDress, PubDressError};
+pub use ox1_contracts::{
+    AvaiaPubDress, AvaiaPubDressError, PubDress, PubDressError, PubDressLabel, PubDressLabelError,
+};
 pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository};
 pub use repository::{
     IdentityProvider, IdentityRecord, IdentityRepository, NativeCredentialRecord,
-    NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome, RegistrationOutcome,
-    RepositoryError,
+    NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome, PublicIdentityRecord,
+    RegistrationOutcome, RepositoryError,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};

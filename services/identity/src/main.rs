@@ -6,7 +6,7 @@ use std::{env, net::SocketAddr, sync::Arc};
 use identity_bot::{
     BrowserOAuthConfig, DiscordOAuthClient, IdentityRepository, NativeAuthConfig,
     OAuthClientCredentials, ProviderLinkRepository, TelegramInitDataVerifier, api,
-    browser_web_auth,
+    browser_web_auth, public_api,
 };
 use teloxide::{
     prelude::*,
@@ -82,13 +82,15 @@ async fn main() {
         native_auth.clone(),
         BrowserOAuthConfig::new(public_origin, telegram_browser_oauth, discord_credentials),
     );
+    let public_api = public_api::router(repository.clone());
     let api = api::router(
         repository.clone(),
         TelegramInitDataVerifier::new(bot_token, init_data_max_age_seconds),
         discord_activity_oauth,
         native_auth,
     )
-    .merge(provider_api);
+    .merge(provider_api)
+    .merge(public_api);
     let listener = tokio::net::TcpListener::bind(http_bind)
         .await
         .expect("identity HTTP listener must bind");
