@@ -1,0 +1,106 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.avaia-setup {
+  display: grid;
+  gap: 16px;
+}
+
+.avaia-setup__summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.avaia-setup__summary > span:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.avaia-setup__summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avaia-setup__summary small {
+  opacity: 0.68;
+  text-transform: lowercase;
+}
+
+.avaia-setup__glyph {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border: 1px solid var(--line-subtle, rgba(255, 255, 255, 0.14));
+  border-radius: 50%;
+  font: 600 11px/1 ui-monospace, monospace;
+}
+
+.avaia-setup__form {
+  display: grid;
+  gap: 10px;
+}
+
+.avaia-setup__address,
+.avaia-setup__model input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line-subtle, rgba(255, 255, 255, 0.14));
+  border-radius: 12px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  color: inherit;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.avaia-setup__address:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.avaia-setup__model {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line-subtle, rgba(255, 255, 255, 0.1));
+  border-radius: 14px;
+  opacity: 0.62;
+}
+
+.avaia-setup__model legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.avaia-setup__model label {
+  font-size: 12px;
+}
+
+.avaia-setup__save {
+  justify-self: stretch;
+  min-height: 42px;
+}
+
+.bond-profile__avaia-row button {
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: right;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.bond-profile__avaia-row button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
