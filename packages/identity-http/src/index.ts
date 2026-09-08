@@ -6,8 +6,13 @@ import type {
   IdentityAccessPort,
 } from "@nilx-one/application";
 
-import { withAvaiaProfileHttp, type AvaiaProfileHttpOptions } from "./avaia-profile";
-import { createIdentityHttpAdapter as createBaseIdentityHttpAdapter } from "./identity-http-base";
+import {
+  withAvaiaProfileHttp,
+  type AvaiaProfileHttpOptions,
+} from "./avaia-profile";
+import {
+  createIdentityHttpAdapter as createBaseIdentityHttpAdapter,
+} from "./identity-http-base";
 
 export type { AvaiaProfileHttpOptions } from "./avaia-profile";
 
