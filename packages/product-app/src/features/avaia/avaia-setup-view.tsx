@@ -9,7 +9,9 @@ import type {
 import type { AvaiaProfileLoadState } from "./use-avaia-profile";
 import "./avaia-setup-view.css";
 
-function saveError(result: AvaiaProfileUpdateResult | undefined): string | undefined {
+function saveError(
+  result: AvaiaProfileUpdateResult | undefined,
+): string | undefined {
   if (result === undefined || result.kind === "updated") return undefined;
   if (result.kind === "service-unavailable") {
     return "Avaia profile is temporarily unavailable.";
@@ -44,11 +46,11 @@ function loadMessage(load: AvaiaProfileLoadState): string | undefined {
 
 export interface AvaiaSetupViewProps {
   readonly address: string;
-  readonly configurationState?: AvaiaConfigurationState;
+  readonly configurationState?: AvaiaConfigurationState | undefined;
   readonly load: AvaiaProfileLoadState;
   readonly draft: string;
   readonly saving: boolean;
-  readonly saveResult?: AvaiaProfileUpdateResult;
+  readonly saveResult?: AvaiaProfileUpdateResult | undefined;
   onDraftChange(value: string): void;
   onSave(): void;
 }
