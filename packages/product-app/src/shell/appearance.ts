@@ -39,12 +39,24 @@ export function resolveAppearance(
   return preference === "auto" ? device : preference;
 }
 
+const DEVICE_DARK_QUERY = "(prefers-color-scheme: dark)";
+
+// One media query list for the application's lifetime. `getSnapshot` runs on
+// every render, so the device answer is read off a kept query rather than
+// building a new one each time.
+let deviceMedia: MediaQueryList | undefined;
+
+function deviceQuery(): MediaQueryList | undefined {
+  if (deviceMedia === undefined && window.matchMedia !== undefined) {
+    deviceMedia = window.matchMedia(DEVICE_DARK_QUERY);
+  }
+  return deviceMedia;
+}
+
 /** The device's own answer, for hosts that have nothing better to say. */
 export function deviceAppearance(): ResolvedAppearance {
   try {
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches === true
-      ? "dark"
-      : "light";
+    return deviceQuery()?.matches === true ? "dark" : "light";
   } catch {
     return "light";
   }
@@ -67,7 +79,6 @@ export function readAppearancePreference(): AppearancePreference {
 let declaredDevice: ResolvedAppearance | undefined;
 
 const listeners = new Set<() => void>();
-let deviceMedia: MediaQueryList | undefined;
 
 function notify(): void {
   for (const listener of listeners) {
@@ -103,12 +114,17 @@ export function chooseAppearance(preference: AppearancePreference): void {
 
 // A single media subscription for the application's lifetime: the store is the
 // one place the device answer is watched, so surfaces cannot drift apart.
+let deviceWatched = false;
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
 
-  if (deviceMedia === undefined && window.matchMedia !== undefined) {
-    deviceMedia = window.matchMedia("(prefers-color-scheme: dark)");
-    deviceMedia.addEventListener?.("change", notify);
+  if (!deviceWatched) {
+    const query = deviceQuery();
+    if (query !== undefined) {
+      query.addEventListener?.("change", notify);
+      deviceWatched = true;
+    }
   }
 
   return () => {

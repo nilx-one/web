@@ -553,7 +553,9 @@ describe("ProductApp identity", () => {
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
-    await screen.findByText("Checking availability…");
+    // The resolving state is a full debounce away from the last keystroke, so
+    // the wait has to outlast PUB_DRESS_RESOLUTION_DELAY_MS rather than race it.
+    await screen.findByText("Checking availability…", {}, { timeout: 2_000 });
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 
     resolveRegistered?.();
