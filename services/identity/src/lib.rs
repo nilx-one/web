@@ -16,6 +16,7 @@ pub use discord_oauth::{DiscordAccessToken, DiscordOAuthClient, DiscordOAuthErro
 pub use ox1_contracts::{AvaiaPubDress, AvaiaPubDressError, PubDress, PubDressError};
 pub use repository::{
     IdentityProvider, IdentityRecord, IdentityRepository, NativeCredentialRecord,
-    NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome, RepositoryError,
+    NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome, RegistrationOutcome,
+    RepositoryError,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};

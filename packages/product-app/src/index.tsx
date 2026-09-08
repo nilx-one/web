@@ -11,6 +11,8 @@ import {
   ReadRuntimeReadiness,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
+  RenameAvaiaSlug,
+  RenamePubDressSlug,
   SetProviderPassword,
   ResolvePubDress,
   formatPubDress,
@@ -54,7 +56,12 @@ import {
   createPubDressStatusViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
+import {
+  createAvaiaSlugViewState,
+  createProfileSlugViewState,
+} from "./features/identity/profile-slug-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
+import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
 import {
   IDENTITY_ROUTE,
@@ -222,6 +229,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [resolutionSelection, setResolutionSelection] = useState(selection);
   const [resolutionArmed, setResolutionArmed] = useState(false);
   const [useRememberedHint, setUseRememberedHint] = useState(true);
+  // Undefined means the profile is showing the address the service holds.
+  const [slugDraft, setSlugDraft] = useState<string | undefined>(undefined);
+  const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);
   const pendingAutofillCredential = useRef<
     PendingAutofillCredential | undefined
   >(undefined);
@@ -377,6 +387,43 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       setIdempotencyKey(newIdempotencyKey());
       setUseRememberedHint(false);
       pendingAutofillCredential.current = undefined;
+    },
+  });
+  // A renamed address makes every projection of the previous one stale: the
+  // mutation results that still name it, and both identity queries.
+  async function refreshIdentityProjections(): Promise<void> {
+    nativeRegistration.reset();
+    nativeAuthentication.reset();
+    recoveryAcknowledgement.reset();
+    providerRegistration.reset();
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["native-identity-context"],
+      }),
+      queryClient.invalidateQueries({ queryKey: ["provider-identity"] }),
+    ]);
+  }
+
+  // The addresses a Bond may edit. A draft is local until the service accepts
+  // it, and nothing else in the profile is a choice this surface can offer.
+  const renameSlug = useMutation({
+    mutationFn: (slug: string) =>
+      new RenamePubDressSlug(dependencies.identity).execute(slug),
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "renamed") return;
+      setSlugDraft(undefined);
+      await refreshIdentityProjections();
+    },
+  });
+  const renameAvaia = useMutation({
+    mutationFn: (slug: string) =>
+      new RenameAvaiaSlug(dependencies.identity).execute(slug),
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "renamed") return;
+      setAvaiaDraft(undefined);
+      await refreshIdentityProjections();
     },
   });
   const logout = useMutation({
@@ -625,6 +672,42 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         section={section}
         onNavigate={(route: ShellRoute) => {
           void navigate({ to: route });
+        }}
+        avaiaAvailability={avaiaAvailability({
+          // No Avaia runtime is published yet, so there is nothing to fetch on
+          // any device. The Dock states the truth rather than an intention.
+          acceleratedGraphics: "gpu" in navigator,
+        })}
+        slugEdit={createProfileSlugViewState(
+          viewModel.identity.pubDress,
+          slugDraft,
+          renameSlug.isPending,
+          renameSlug.data,
+        )}
+        avaiaEdit={createAvaiaSlugViewState(
+          viewModel.identity.avaiaPubDress,
+          viewModel.identity.pubDress,
+          avaiaDraft,
+          renameAvaia.isPending,
+          renameAvaia.data,
+        )}
+        onSlugChange={(next: string) => {
+          renameSlug.reset();
+          setSlugDraft(next);
+        }}
+        onSlugSubmit={() => {
+          if (slugDraft !== undefined && !renameSlug.isPending) {
+            renameSlug.mutate(slugDraft);
+          }
+        }}
+        onAvaiaChange={(next: string) => {
+          renameAvaia.reset();
+          setAvaiaDraft(next);
+        }}
+        onAvaiaSubmit={() => {
+          if (avaiaDraft !== undefined && !renameAvaia.isPending) {
+            renameAvaia.mutate(avaiaDraft);
+          }
         }}
         {...(viewModel.identity.avaiaPubDress === undefined
           ? {}

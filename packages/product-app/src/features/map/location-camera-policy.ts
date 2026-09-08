@@ -31,6 +31,9 @@ export const FIRST_FIX_SCALE: MapScale = "neighborhood";
 /** Recentering never leaves the camera further out than useful local context. */
 export const RECENTER_MIN_SCALE: MapScale = "neighborhood";
 
+/** Focusing an identity goes as close as the published styles stay legible. */
+export const CLOSE_UP_SCALE: MapScale = "building";
+
 /**
  * A narrow viewport shows less ground at the same zoom, so it starts slightly
  * wider to keep the same amount of context around the observation.
@@ -140,6 +143,24 @@ export function recenterCamera(
         : raised
           ? locationCameraPitch(zoom, "volumetric")
           : current.pitch,
+  };
+}
+
+/**
+ * The closest the world goes on purpose. Focusing an identity is a deliberate
+ * "take me to it", so it lands at building scale rather than preserving the
+ * zoom the person happened to be at.
+ */
+export function closeUpCamera(
+  position: ObservedGeolocation,
+  context: LocationCameraContext,
+): MapCamera {
+  const zoom = locationCameraZoom(CLOSE_UP_SCALE, context.presentation);
+  return {
+    center: [position.longitude, position.latitude],
+    zoom,
+    bearing: 0,
+    pitch: locationCameraPitch(zoom, context.dimension),
   };
 }
 

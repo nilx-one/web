@@ -132,6 +132,8 @@ function createIdentity(
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
+    renameAvaiaSlug: async () => ({ kind: "service-unavailable" }),
+    renamePubDressSlug: async () => ({ kind: "service-unavailable" }),
     setProviderPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
@@ -245,7 +247,7 @@ describe("ProductApp identity", () => {
     expect(acknowledgeRecoveryKey).toHaveBeenCalledWith("0x1c-registration");
     expect(
       await screen.findByRole("button", {
-        name: "Open Bond profile for 0xaSky",
+        name: "Focus the world on 0xaSky",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Authenticated as/)).toBeNull();
@@ -349,7 +351,7 @@ describe("ProductApp identity", () => {
     expect(registerNative).not.toHaveBeenCalled();
     expect(
       await screen.findByRole("button", {
-        name: "Open Bond profile for 0xfrSb2",
+        name: "Focus the world on 0xfrSb2",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Authenticated as/)).toBeNull();
@@ -758,7 +760,7 @@ describe("ProductApp identity", () => {
     );
     expect(await screen.findByText("0x1-rk-test")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "Open Bond profile for 0xaSky" }),
+      screen.queryByRole("button", { name: "Focus the world on 0xaSky" }),
     ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "I saved this recovery key" }),
@@ -766,7 +768,7 @@ describe("ProductApp identity", () => {
     await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
     expect(
       await screen.findByRole("button", {
-        name: "Open Bond profile for 0xaSky",
+        name: "Focus the world on 0xaSky",
       }),
     ).toBeVisible();
     expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
@@ -799,7 +801,7 @@ describe("ProductApp identity", () => {
       } else {
         expect(
           await screen.findByRole("button", {
-            name: "Open Bond profile for 0x0sky",
+            name: "Focus the world on 0x0sky",
           }),
         ).toBeVisible();
         expect(
@@ -871,12 +873,72 @@ describe("ProductApp identity", () => {
     await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
     expect(
       await screen.findByRole("button", {
-        name: "Open Bond profile for 0x0sky",
+        name: "Focus the world on 0x0sky",
       }),
     ).toBeVisible();
     expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
       "discord-challenge",
     );
+  });
+
+  it("names the Bond and its Avaia from the one profile surface", async () => {
+    const user = userEvent.setup();
+    let pubDress = "0x0sky";
+    let avaiaPubDress = "0skai";
+    const renamePubDressSlug = vi
+      .fn<IdentityAccessPort["renamePubDressSlug"]>()
+      .mockImplementation(async (slug) => {
+        pubDress = `0x0${slug}`;
+        return { kind: "renamed", identity: { pubDress, avaiaPubDress } };
+      });
+    const renameAvaiaSlug = vi
+      .fn<IdentityAccessPort["renameAvaiaSlug"]>()
+      .mockImplementation(async (slug) => {
+        avaiaPubDress = `0${slug}`;
+        return { kind: "renamed", identity: { pubDress, avaiaPubDress } };
+      });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          readNativeContext: async () => ({
+            kind: "authenticated",
+            identity: { pubDress, avaiaPubDress },
+          }),
+          renamePubDressSlug,
+          renameAvaiaSlug,
+        })}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Focus the world on 0x0sky" });
+    await user.click(
+      document.querySelector<HTMLAnchorElement>(
+        'a[href="/identity"]',
+      ) as HTMLAnchorElement,
+    );
+    const slug = await screen.findByLabelText("pub_dress");
+    expect(slug).toHaveValue("sky");
+    expect(screen.getAllByRole("button", { name: "Save" })[0]).toBeDisabled();
+
+    await user.clear(slug);
+    await user.type(slug, "rain");
+    await user.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+
+    expect(renamePubDressSlug).toHaveBeenCalledExactlyOnceWith("rain");
+    expect(await screen.findByText("Saved. This is 0x0rain.")).toBeVisible();
+    expect(await screen.findByLabelText("pub_dress")).toHaveValue("rain");
+
+    // The same surface names the Avaia this Bond owns.
+    const avaia = screen.getByLabelText("avaia");
+    expect(avaia).toHaveValue("skai");
+    await user.clear(avaia);
+    await user.type(avaia, "vesnai");
+    await user.click(screen.getAllByRole("button", { name: "Save" })[1]!);
+
+    expect(renameAvaiaSlug).toHaveBeenCalledExactlyOnceWith("vesnai");
+    expect(await screen.findByText("Saved. This is 0vesnai.")).toBeVisible();
   });
 
   it("accepts a backend-verified native host session without asking for a password", async () => {
@@ -896,7 +958,7 @@ describe("ProductApp identity", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "Open Bond profile for 0x0sky",
+        name: "Focus the world on 0x0sky",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Authenticated as/)).toBeNull();

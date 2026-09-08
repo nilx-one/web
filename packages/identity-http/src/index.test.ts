@@ -180,6 +180,83 @@ describe("identity HTTP adapter", () => {
   });
 });
 
+describe("pub_dress rename transport", () => {
+  it("sends only the slug, with the session and CSRF protection", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        response(200, { pub_dress: "0x0rain", avaia_pub_dress: "0rainai" }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.renamePubDressSlug("rain")).resolves.toEqual({
+      kind: "renamed",
+      identity: { pubDress: "0x0rain", avaiaPubDress: "0rainai" },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/identity/pub_dress",
+      expect.objectContaining({
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ slug: "rain" }),
+      }),
+    );
+  });
+
+  it("carries a provider proof when the host has one", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(response(200, { pub_dress: "0x0rain" }));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "discord access-1",
+    });
+
+    await adapter.renamePubDressSlug("rain");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/identity/pub_dress",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "discord access-1" }),
+      }),
+    );
+  });
+
+  it("keeps the service's refusal reason", async () => {
+    const refusal = (status: number, code: string) =>
+      createIdentityHttpAdapter({
+        fetch: vi
+          .fn<typeof globalThis.fetch>()
+          .mockResolvedValue(response(status, { error: { code } })),
+        getAuthorization: () => undefined,
+      });
+
+    await expect(
+      refusal(409, "pub_dress_unavailable").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "rejected", reason: "unavailable" });
+    await expect(
+      refusal(409, "avaia_unavailable").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "rejected", reason: "avaia-unavailable" });
+    await expect(
+      refusal(422, "invalid_pub_dress_length").renamePubDressSlug("r"),
+    ).resolves.toEqual({ kind: "rejected", reason: "invalid-length" });
+    await expect(
+      refusal(429, "rate_limited").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "rejected", reason: "rate-limited" });
+    await expect(
+      refusal(500, "server_error").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "service-unavailable" });
+  });
+});
+
 describe("Provider password setup transport", () => {
   it("sends only the password with verified host authorization and CSRF protection", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
