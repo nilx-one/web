@@ -13,6 +13,14 @@ const motionCss = readFileSync(
   resolve(process.cwd(), "apps/site/src/bond-dock-motion.css"),
   "utf8",
 );
+const windowCss = readFileSync(
+  resolve(process.cwd(), "packages/product-app/src/shell/dock-window.css"),
+  "utf8",
+);
+const windowSource = readFileSync(
+  resolve(process.cwd(), "packages/product-app/src/shell/dock-window.tsx"),
+  "utf8",
+);
 
 describe("Bond dock motion level 1", () => {
   it("loads the motion layer in the canonical site host", () => {
@@ -37,5 +45,47 @@ describe("Bond dock motion level 1", () => {
     expect(motionCss).not.toContain(".authenticated-map-home__map");
     expect(motionCss).not.toContain("view-transition-name");
     expect(motionCss).not.toContain("startViewTransition");
+  });
+});
+
+describe("Bond dock motion level 2: the navigated window", () => {
+  it("moves a screen change as a from-to pair, not a replacement", () => {
+    for (const phase of ['[data-phase="from"]', '[data-phase="to"]']) {
+      expect(windowCss).toContain(phase);
+    }
+    for (const move of [
+      "bond-dock-screen-push-in",
+      "bond-dock-screen-push-out",
+      "bond-dock-screen-pop-in",
+      "bond-dock-screen-pop-out",
+    ]) {
+      expect(windowCss).toContain(`@keyframes ${move}`);
+    }
+  });
+
+  it("travels between the two heights the pair actually has", () => {
+    expect(windowCss).toContain(
+      "transition: height var(--dock-window-duration)",
+    );
+    expect(windowSource).toContain("element.style.height = `${to}px`");
+    // Depth is told to the window, never inferred from the screen's name.
+    expect(windowSource).toContain("depth < settled.depth");
+  });
+
+  it("puts the screen being left out of reach while it leaves", () => {
+    expect(windowSource).toContain('aria-hidden="true"');
+    expect(windowSource).toContain("inert");
+  });
+
+  it("keeps reduced motion and unmeasured layout on the settled path", () => {
+    expect(windowCss).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(windowSource).toContain("prefersReducedMotion()");
+    expect(windowSource).toContain("from === 0 || to === 0");
+  });
+
+  it("stays inside the Dock and off the persistent world", () => {
+    expect(windowCss).not.toContain(".authenticated-map-home__map");
+    expect(windowCss).not.toContain("view-transition-name");
+    expect(windowSource).not.toContain("startViewTransition");
   });
 });

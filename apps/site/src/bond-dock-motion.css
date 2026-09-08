@@ -19,6 +19,9 @@
     box-shadow var(--bond-motion-medium) var(--bond-motion-ease);
 }
 
+/* Content entrances, for a screen that arrives without a screen to leave.
+   A screen change itself is a from-to pair the Dock window owns, and it
+   suspends everything here for the length of the move. */
 .bond-dock__header,
 .bond-dock__pair {
   animation: bond-dock-home-enter var(--bond-motion-surface)
@@ -36,7 +39,6 @@
 
 .bond-profile,
 .profile-edit,
-.host-connect-list,
 .provider-management,
 .interface-settings__appearance,
 .bond-dock__detail > .interface-settings__note {
@@ -45,23 +47,20 @@
 }
 
 .bond-profile__rows > div,
-.provider-management__connected > div,
-.host-connect-button,
+.provider-management__list > li,
 .interface-settings__option {
   animation: bond-dock-row-enter var(--bond-motion-medium)
     var(--bond-motion-ease) both;
 }
 
 .bond-profile__rows > div:nth-child(2),
-.provider-management__connected > div:nth-child(2),
-.host-connect-button:nth-child(2),
+.provider-management__list > li:nth-child(2),
 .interface-settings__option:nth-of-type(2) {
   animation-delay: 24ms;
 }
 
 .bond-profile__rows > div:nth-child(3),
-.provider-management__connected > div:nth-child(3),
-.host-connect-button:nth-child(3),
+.provider-management__list > li:nth-child(3),
 .interface-settings__option:nth-of-type(3) {
   animation-delay: 48ms;
 }
@@ -74,7 +73,9 @@
 .interface-settings__back,
 .provider-control,
 .bond-profile__action,
-.host-connect-button {
+.provider-management__open,
+.provider-management__connect,
+.provider-management__disconnect {
   transition:
     transform var(--bond-motion-fast) var(--bond-motion-ease),
     border-color var(--bond-motion-fast) ease,
@@ -88,7 +89,9 @@
 .interface-settings__back:active,
 .provider-control:active,
 .bond-profile__action:active,
-.host-connect-button:active {
+.provider-management__open:active,
+.provider-management__connect:active,
+.provider-management__disconnect:active {
   transform: scale(0.965);
 }
 

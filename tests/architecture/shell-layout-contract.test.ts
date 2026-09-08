@@ -21,6 +21,9 @@ const worldView = read(
   "packages/product-app/src/features/map/authenticated-map-home-view.tsx",
 );
 const productApp = read("packages/product-app/src/index.tsx");
+const dockCss = stylesheet(
+  "packages/product-app/src/features/map/authenticated-map-settings.css",
+);
 
 function rule(css: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -109,6 +112,21 @@ describe("shell layout contract", () => {
   it("leaves no authenticated success hero on the world surface", () => {
     expect(worldView).not.toContain("You’re in.");
     expect(worldView).not.toContain("Authenticated as");
+  });
+
+  it("keeps the Dock's edit action a touch target on a phone", () => {
+    const target = (selector: string): number => {
+      const block = dockCss.slice(dockCss.indexOf(selector));
+      const declaration = block.match(/min-height:\s*([\d.]+)rem/);
+
+      expect(declaration, `${selector} must declare its height`).not.toBeNull();
+      return Number(declaration?.[1]);
+    };
+
+    expect(target(".bond-dock__edit,")).toBeGreaterThanOrEqual(2.5);
+    expect(
+      target('[data-presentation="compact"] .bond-dock__edit'),
+    ).toBeGreaterThanOrEqual(2.5);
   });
 
   it("never gives the Bond surface ownership of application settings", () => {

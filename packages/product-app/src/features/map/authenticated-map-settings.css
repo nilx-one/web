@@ -50,8 +50,12 @@
 .bond-profile__action:focus-visible,
 .provider-control:hover,
 .provider-control:focus-visible,
-.host-connect-button:hover,
-.host-connect-button:focus-visible {
+.provider-management__open:hover,
+.provider-management__open:focus-visible,
+.provider-management__connect:hover,
+.provider-management__connect:focus-visible,
+.provider-management__disconnect:hover,
+.provider-management__disconnect:focus-visible {
   border-color: rgba(157, 108, 255, 0.58);
   color: #d6c9ff;
   outline: 0;
@@ -137,8 +141,7 @@
 .interface-settings__option small,
 .interface-settings__note,
 .bond-profile__rows dt,
-.host-connect-button small,
-.provider-management__connected small {
+.provider-management__list small {
   color: rgba(245, 243, 247, 0.55);
   font-size: 0.75rem;
   line-height: 1.4;
@@ -157,8 +160,7 @@
 
 .bond-profile,
 .profile-edit,
-.provider-management,
-.host-connect-list {
+.provider-management {
   display: grid;
   gap: 1rem;
 }
@@ -320,9 +322,9 @@ button.provider-control {
   background: rgba(138, 99, 255, 0.1);
 }
 
-.provider-control--edit {
-  min-width: auto;
-  padding-inline: 0.72rem;
+/* A provider this Bond has not attached is present but quiet. */
+.provider-control--idle {
+  opacity: 0.62;
 }
 
 .bond-profile__action {
@@ -343,40 +345,17 @@ button.provider-control {
   cursor: wait;
 }
 
-.host-connect-button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.8rem;
-  min-height: 4.4rem;
-  padding: 0.8rem 0.9rem;
-  border: 1px solid rgba(245, 243, 247, 0.12);
-  border-radius: 1rem;
-  color: rgba(245, 243, 247, 0.9);
-  background: rgba(245, 243, 247, 0.045);
-  text-decoration: none;
-}
-
-.host-connect-button > span:nth-child(2),
-.provider-management__connected > div > span:last-child {
-  display: grid;
-  gap: 0.16rem;
-}
-
-.host-connect-button strong,
-.provider-management__connected strong {
-  font-size: 0.84rem;
-  font-weight: 680;
-}
-
-.provider-management__connected {
+.provider-management__list {
   display: grid;
   gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.provider-management__connected > div {
+.provider-management__list > li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.75rem;
   min-height: 3.8rem;
@@ -384,6 +363,48 @@ button.provider-control {
   border: 1px solid rgba(245, 243, 247, 0.1);
   border-radius: 0.9rem;
   background: rgba(245, 243, 247, 0.035);
+}
+
+.provider-management__list > li > span:nth-child(2) {
+  display: grid;
+  gap: 0.16rem;
+}
+
+.provider-management__list strong {
+  font-size: 0.84rem;
+  font-weight: 680;
+}
+
+.provider-management__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.provider-management__open,
+.provider-management__connect,
+.provider-management__disconnect {
+  display: inline-grid;
+  place-items: center;
+  min-height: 2.5rem;
+  padding: 0 0.85rem;
+  border: 1px solid rgba(245, 243, 247, 0.16);
+  border-radius: 0.72rem;
+  color: rgba(245, 243, 247, 0.84);
+  background: rgba(245, 243, 247, 0.055);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 680;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* The delete glyph disconnects this Bond's attachment and nothing further:
+   no external account is reachable from here. */
+.provider-management__disconnect {
+  min-width: 2.5rem;
+  padding: 0;
+  font-size: 0.92rem;
 }
 
 .authenticated-map-home[data-theme="light"] {
@@ -429,10 +450,7 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .interface-settings__option small,
 .authenticated-map-home[data-theme="light"] .interface-settings__note,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows dt,
-.authenticated-map-home[data-theme="light"] .host-connect-button small,
-.authenticated-map-home[data-theme="light"]
-  .provider-management__connected
-  small {
+.authenticated-map-home[data-theme="light"] .provider-management__list small {
   color: rgba(17, 19, 26, 0.62);
 }
 
@@ -482,19 +500,16 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .bond-dock__detail-header h2,
 .authenticated-map-home[data-theme="light"] .interface-settings__option strong,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows dd,
-.authenticated-map-home[data-theme="light"] .host-connect-button,
-.authenticated-map-home[data-theme="light"]
-  .provider-management__connected
-  strong {
+.authenticated-map-home[data-theme="light"] .provider-management__list strong {
   color: #11131a;
 }
 
 .authenticated-map-home[data-theme="light"] .interface-settings__option,
 .authenticated-map-home[data-theme="light"] .bond-profile__action,
-.authenticated-map-home[data-theme="light"] .host-connect-button,
-.authenticated-map-home[data-theme="light"]
-  .provider-management__connected
-  > div,
+.authenticated-map-home[data-theme="light"] .provider-management__list > li,
+.authenticated-map-home[data-theme="light"] .provider-management__open,
+.authenticated-map-home[data-theme="light"] .provider-management__connect,
+.authenticated-map-home[data-theme="light"] .provider-management__disconnect,
 .authenticated-map-home[data-theme="light"] .provider-control {
   border-color: rgba(28, 33, 50, 0.12);
   color: rgba(17, 19, 26, 0.82);
@@ -527,8 +542,10 @@ button.provider-control {
   min-height: 2.25rem;
 }
 
+/* The edit action stays a full touch target on a phone, where the rest of the
+   Dock's chrome may shrink. */
 .authenticated-map-home[data-presentation="compact"] .bond-dock__edit {
-  min-height: 2.25rem;
+  min-height: 2.5rem;
 }
 
 .authenticated-map-home[data-presentation="compact"] .bond-profile__rows > div {

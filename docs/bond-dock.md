@@ -41,8 +41,33 @@ without accelerated graphics reports `unavailable` even once a runtime exists.
 
 ## Navigation
 
-The Dock is not the way into the profile. The Bond address in the header is the
-identity affordance, and it is a real link to `/identity`, so the Dock's left
-side is free to be what it should be: the world's focus control.
+The Dock's header names the Bond on the left and carries one action on the
+right: **edit ✍️** opens the Bond edit surface at `/identity`. The Bond address
+in the app header remains the identity affordance and remains a real link, so
+the Dock's left side stays what it should be — the world's focus control, not a
+second way to read a profile.
+
+## One window, two screens
+
+A screen change inside the Dock is a from-to pair rather than a replacement. The
+screen being left and the screen being entered are both on the surface for the
+length of the move: forward arrives from the trailing edge while the previous
+screen recedes, back reverses exactly that, and the window travels between the
+two heights, so the Dock grows or shrinks into its next screen instead of
+jumping to it. It is the platform idiom iOS made familiar, which is the point —
+a person reads the direction before they read the screen.
+
+Direction is told, never guessed from a screen's name. The window is given the
+screen it presents and how deep that screen sits; deeper is forward, shallower
+is back. The stack is three deep: the world, a Bond surface, and a screen that
+surface opens.
+
+The screen being left is `aria-hidden` and `inert` while it leaves, so it is out
+of reach of both a pointer and assistive technology. Two cases arrive settled
+with no move at all: a window with no measurable layout — a test environment, or
+a Dock that is not being painted — and a person who asked for reduced motion.
+Nothing in the move touches the persistent world; the map is never animated or
+remounted by a Dock navigation, and no view transition is taken over the
+document to achieve it.
 
 © 2026 aiaiaiai · aiaiaiai.org

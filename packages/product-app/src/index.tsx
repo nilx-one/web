@@ -20,6 +20,7 @@ import {
   SetProviderPassword,
   ResolvePubDress,
   formatPubDress,
+  type BondProviderType,
   type BrowserIdentityProvider,
   type CoreRuntimePort,
   type IdentityAccessPort,
@@ -64,6 +65,7 @@ import {
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
 import { createAvatarChoiceViewState } from "./features/identity/avatar-choice-view-model";
+import { useBondProviderConnections } from "./features/identity/use-bond-provider-connections";
 import { createAvatarChoiceStepViewState } from "./features/identity/identity-foundation-view-model";
 import {
   createAvaiaSlugViewState,
@@ -512,6 +514,18 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     browserProviderContextQuery.data?.kind === "pending"
       ? browserProviderContextQuery.data.provider
       : undefined;
+  // The provider a session was proved through is the one attachment this
+  // client can attest to. A Bond's full set of attachments is a service fact
+  // no endpoint answers yet, so nothing here invents one.
+  const attestedProvider: BondProviderType | undefined =
+    host.kind === "telegram" || host.kind === "discord"
+      ? host.kind
+      : browserProviderLink.data?.kind === "linked"
+        ? browserProviderLink.data.provider
+        : undefined;
+  const providers = useBondProviderConnections(
+    attestedProvider === undefined ? [] : [{ provider: attestedProvider }],
+  );
   const authenticatedNativePubDress =
     nativeIdentityState.kind === "authenticated"
       ? nativeIdentityState.pubDress
@@ -802,6 +816,13 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         runtime={viewModel.runtime}
         safeArea={viewModel.safeArea}
         section={section}
+        connectedProviders={providers.connections}
+        onDisconnectProvider={providers.disconnect}
+        // A host that is itself the provider can follow that provider's URL
+        // scheme. Every other host is offered the web address instead.
+        providerDeepLinks={
+          attestedProvider === undefined ? [] : [attestedProvider]
+        }
         onNavigate={(route: ShellRoute) => {
           void navigate({ to: route });
         }}
