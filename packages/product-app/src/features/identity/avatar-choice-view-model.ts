@@ -34,17 +34,18 @@ export interface AvatarChoiceViewState {
   readonly error?: string;
 }
 
-const STUDIES: Readonly<
-  Record<AvatarModel, { name: string; detail: string }>
-> = {
+interface AvatarStudy {
+  readonly name: string;
+  readonly detail: string;
+}
+
+const STUDIES: Readonly<Record<AvatarModel, AvatarStudy>> = {
   "sky-study": { name: "Sky", detail: "masculine study" },
   "dasha-study": { name: "Dasha", detail: "feminine study" },
   "kai-study": { name: "Kai", detail: "non-binary study" },
 };
 
-function isPublishedAvatarModel(
-  model: StoredAvatarModel,
-): model is AvatarModel {
+function isPublishedAvatarModel(model: string): model is AvatarModel {
   return (AVATAR_MODELS as readonly string[]).includes(model);
 }
 
