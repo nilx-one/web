@@ -11,6 +11,7 @@ import {
   ReadRuntimeReadiness,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
+  RenamePubDressSlug,
   SetProviderPassword,
   ResolvePubDress,
   formatPubDress,
@@ -54,6 +55,7 @@ import {
   createPubDressStatusViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
+import { createProfileSlugViewState } from "./features/identity/profile-slug-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { MapFoundationView } from "./features/map/map-foundation-view";
 import {
@@ -222,6 +224,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [resolutionSelection, setResolutionSelection] = useState(selection);
   const [resolutionArmed, setResolutionArmed] = useState(false);
   const [useRememberedHint, setUseRememberedHint] = useState(true);
+  // Undefined means the profile is showing the address the service holds.
+  const [slugDraft, setSlugDraft] = useState<string | undefined>(undefined);
   const pendingAutofillCredential = useRef<
     PendingAutofillCredential | undefined
   >(undefined);
@@ -377,6 +381,27 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       setIdempotencyKey(newIdempotencyKey());
       setUseRememberedHint(false);
       pendingAutofillCredential.current = undefined;
+    },
+  });
+  // The address a Bond may edit. The draft is local until the service accepts
+  // it, and every cached projection of the old address is dropped when it does.
+  const renameSlug = useMutation({
+    mutationFn: (slug: string) =>
+      new RenamePubDressSlug(dependencies.identity).execute(slug),
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "renamed") return;
+      setSlugDraft(undefined);
+      nativeRegistration.reset();
+      nativeAuthentication.reset();
+      recoveryAcknowledgement.reset();
+      providerRegistration.reset();
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["native-identity-context"],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["provider-identity"] }),
+      ]);
     },
   });
   const logout = useMutation({
@@ -625,6 +650,21 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         section={section}
         onNavigate={(route: ShellRoute) => {
           void navigate({ to: route });
+        }}
+        slugEdit={createProfileSlugViewState(
+          viewModel.identity.pubDress,
+          slugDraft,
+          renameSlug.isPending,
+          renameSlug.data,
+        )}
+        onSlugChange={(next: string) => {
+          renameSlug.reset();
+          setSlugDraft(next);
+        }}
+        onSlugSubmit={() => {
+          if (slugDraft !== undefined && !renameSlug.isPending) {
+            renameSlug.mutate(slugDraft);
+          }
         }}
         {...(viewModel.identity.avaiaPubDress === undefined
           ? {}

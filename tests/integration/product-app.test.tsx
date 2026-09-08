@@ -132,6 +132,7 @@ function createIdentity(
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
+    renamePubDressSlug: async () => ({ kind: "service-unavailable" }),
     setProviderPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
@@ -877,6 +878,51 @@ describe("ProductApp identity", () => {
     expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
       "discord-challenge",
     );
+  });
+
+  it("renames the Bond from profile editing and shows the new address", async () => {
+    const user = userEvent.setup();
+    let pubDress = "0x0sky";
+    const renamePubDressSlug = vi
+      .fn<IdentityAccessPort["renamePubDressSlug"]>()
+      .mockImplementation(async (slug) => {
+        pubDress = `0x0${slug}`;
+        return { kind: "renamed", identity: { pubDress } };
+      });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          readNativeContext: async () => ({
+            kind: "authenticated",
+            identity: { pubDress },
+          }),
+          renamePubDressSlug,
+        })}
+      />,
+    );
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Open Bond profile for 0x0sky",
+      }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const slug = await screen.findByLabelText("pub_dress");
+    expect(slug).toHaveValue("sky");
+    expect(screen.getByRole("button", { name: "Save address" })).toBeDisabled();
+
+    await user.clear(slug);
+    await user.type(slug, "rain");
+    await user.click(screen.getByRole("button", { name: "Save address" }));
+
+    expect(renamePubDressSlug).toHaveBeenCalledExactlyOnceWith("rain");
+    expect(
+      await screen.findByText("Saved. This Bond is 0x0rain."),
+    ).toBeVisible();
+    expect(await screen.findByLabelText("pub_dress")).toHaveValue("rain");
   });
 
   it("accepts a backend-verified native host session without asking for a password", async () => {

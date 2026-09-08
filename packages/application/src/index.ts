@@ -34,6 +34,8 @@ export {
   ReadProviderIdentity,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
+  RenamePubDressSlug,
+  type PubDressRenameResult,
   SetProviderPassword,
   type ProviderPasswordHost,
   type ProviderPasswordResult,

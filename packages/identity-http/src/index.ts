@@ -13,6 +13,7 @@ import {
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
   type ProviderPasswordHost,
+  type PubDressRenameResult,
   type ProviderPasswordResult,
   type PubDressLabelResolutionResult,
   type PubDressResolutionResult,
@@ -349,6 +350,48 @@ class IdentityHttpAdapter implements IdentityAccessPort {
         return { kind: "rejected", reason: "invalid-password-length" };
       case "compromised_password":
         return { kind: "rejected", reason: "compromised-password" };
+      case "rate_limited":
+        return { kind: "rejected", reason: "rate-limited" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
+  public async renamePubDressSlug(slug: string): Promise<PubDressRenameResult> {
+    // A browser Bond proves itself with its session cookie and a provider host
+    // with its host proof, so the transport carries whichever it has.
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/pub_dress", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        ...(authorization === undefined ? {} : { authorization }),
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({ slug }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const identity = parseIdentity(body);
+      if (identity !== undefined) {
+        return { kind: "renamed", identity };
+      }
+    }
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "pub_dress_unavailable":
+        return { kind: "rejected", reason: "unavailable" };
+      case "avaia_unavailable":
+        return { kind: "rejected", reason: "avaia-unavailable" };
+      case "invalid_pub_dress_length":
+        return { kind: "rejected", reason: "invalid-length" };
+      case "invalid_pub_dress_character":
+      case "invalid_pub_dress_discriminator":
+      case "invalid_pub_dress_prefix":
+        return { kind: "rejected", reason: "invalid-character" };
       case "rate_limited":
         return { kind: "rejected", reason: "rate-limited" };
       default:

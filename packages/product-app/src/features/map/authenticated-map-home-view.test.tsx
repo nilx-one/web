@@ -12,6 +12,8 @@ import {
   createMapRendererDouble,
   observation,
 } from "../../../../../tests/support/doubles";
+import { createProfileSlugViewState } from "../identity/profile-slug-view-model";
+import type { ProfileSlugViewState } from "../identity/profile-slug-view-model";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
 import {
   AuthenticatedMapHomeView,
@@ -28,8 +30,11 @@ interface ViewOverrides {
   geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
   section?: ShellSection;
+  slugEdit?: ProfileSlugViewState;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
+  onSlugChange?: (slug: string) => void;
+  onSlugSubmit?: () => void;
 }
 
 function renderView(overrides: ViewOverrides = {}) {
@@ -43,6 +48,15 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.onNavigate === undefined
       ? {}
       : { onNavigate: overrides.onNavigate }),
+    ...(overrides.slugEdit === undefined
+      ? {}
+      : { slugEdit: overrides.slugEdit }),
+    ...(overrides.onSlugChange === undefined
+      ? {}
+      : { onSlugChange: overrides.onSlugChange }),
+    ...(overrides.onSlugSubmit === undefined
+      ? {}
+      : { onSlugSubmit: overrides.onSlugSubmit }),
   };
 
   return render(
@@ -198,7 +212,70 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByRole("heading", { name: "Edit profile" })).toBeVisible();
     expect(screen.queryByText("Providers")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Provider connections are managed separately/i),
+      screen.getByText(/provider connections and the owned Avaia/i),
+    ).toBeVisible();
+  });
+
+  it("offers the slug as the only editable profile fact", () => {
+    const onSlugChange = vi.fn();
+    renderView({
+      section: "identity",
+      slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
+      onSlugChange,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    const slug = screen.getByLabelText("pub_dress");
+    expect(slug).toHaveValue("sky");
+    expect(screen.getByRole("button", { name: "Save address" })).toBeDisabled();
+    // Nothing a person cannot change is presented as something to edit.
+    expect(screen.queryByText("Age")).not.toBeInTheDocument();
+    expect(screen.queryByText("Home")).not.toBeInTheDocument();
+    expect(screen.queryByText("Family")).not.toBeInTheDocument();
+
+    fireEvent.change(slug, { target: { value: "rain" } });
+
+    expect(onSlugChange).toHaveBeenCalledExactlyOnceWith("rain");
+  });
+
+  it("saves a changed slug and reports what the service answered", () => {
+    const onSlugSubmit = vi.fn();
+    const { rerender } = renderView({
+      section: "identity",
+      slugEdit: createProfileSlugViewState("0x0sky", "rain", false),
+      onSlugSubmit,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    const save = screen.getByRole("button", { name: "Save address" });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    expect(onSlugSubmit).toHaveBeenCalledOnce();
+
+    rerender(
+      <AuthenticatedMapHomeView
+        hostLabel="browser host"
+        pubDress="0x0sky"
+        avaiaPubDress="0skai"
+        renderer={renderer()}
+        geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
+        runtime={{
+          tone: "ready",
+          label: "Shared Core ready",
+          detail: "Contract 0.1.0 is available to the Web client.",
+        }}
+        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+        section="identity"
+        slugEdit={createProfileSlugViewState("0x0sky", "rain", false, {
+          kind: "rejected",
+          reason: "unavailable",
+        })}
+        onSlugSubmit={onSlugSubmit}
+      />,
+    );
+
+    expect(
+      screen.getByText("That address belongs to another Bond."),
     ).toBeVisible();
   });
 

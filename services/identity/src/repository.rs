@@ -217,6 +217,101 @@ impl IdentityRepository {
         Ok(Some(record))
     }
 
+    /// Moves a human Bond to another address it already owns the right to
+    /// choose. The Bond, its provider bindings, credentials and sessions are the
+    /// same facts under the new address; only the address changes.
+    ///
+    /// The owned Avaia address is a derivation of its owner's address, so it
+    /// moves with the owner rather than outliving the name it was derived from.
+    pub async fn rename_pub_dress(
+        &self,
+        current: &PubDress,
+        next: &PubDress,
+        now: u64,
+    ) -> Result<PubDressRenameOutcome, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        // `identities.owner_pub_dress` is the one reference without
+        // ON UPDATE CASCADE, so the owned Avaia row is re-pointed by the second
+        // statement and the constraint is checked at commit instead of between
+        // the two. Every other reference cascades on its own.
+        sqlx::query("PRAGMA defer_foreign_keys = ON")
+            .execute(&mut *transaction)
+            .await?;
+
+        let human_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identities \
+             WHERE pub_dress = ? AND identity_kind = 'human')",
+        )
+        .bind(current.as_str())
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !human_exists {
+            transaction.rollback().await?;
+            return Ok(PubDressRenameOutcome::Unknown);
+        }
+
+        let occupied = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identities WHERE pub_dress = ?)",
+        )
+        .bind(next.as_str())
+        .fetch_one(&mut *transaction)
+        .await?;
+        if occupied {
+            transaction.rollback().await?;
+            return Ok(PubDressRenameOutcome::Unavailable);
+        }
+
+        let existing_avaia = owned_avaia_for_owner_in(&mut transaction, current.as_str()).await?;
+        let derived_avaia = AvaiaPubDress::derive_default(next).to_string();
+        if existing_avaia.is_some() {
+            let avaia_occupied = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM identities \
+                 WHERE pub_dress = ? AND owner_pub_dress IS NOT ?)",
+            )
+            .bind(&derived_avaia)
+            .bind(current.as_str())
+            .fetch_one(&mut *transaction)
+            .await?;
+            if avaia_occupied {
+                transaction.rollback().await?;
+                return Ok(PubDressRenameOutcome::AvaiaUnavailable);
+            }
+        }
+
+        sqlx::query("UPDATE identities SET pub_dress = ? WHERE pub_dress = ?")
+            .bind(next.as_str())
+            .bind(current.as_str())
+            .execute(&mut *transaction)
+            .await?;
+
+        let avaia_pub_dress = if existing_avaia.is_some() {
+            sqlx::query(
+                "UPDATE identities SET pub_dress = ?, owner_pub_dress = ? \
+                 WHERE identity_kind = 'avaia' AND owner_pub_dress = ?",
+            )
+            .bind(&derived_avaia)
+            .bind(next.as_str())
+            .bind(current.as_str())
+            .execute(&mut *transaction)
+            .await?;
+            Some(derived_avaia)
+        } else {
+            // A pre-amendment Bond crossing this boundary gains the Avaia its
+            // new address derives, exactly as an authenticated read would.
+            let Some(created) = create_owned_avaia_in(&mut transaction, next, now).await? else {
+                transaction.rollback().await?;
+                return Ok(PubDressRenameOutcome::AvaiaUnavailable);
+            };
+            Some(created)
+        };
+
+        transaction.commit().await?;
+        Ok(PubDressRenameOutcome::Renamed(IdentityRecord {
+            pub_dress: next.to_string(),
+            avaia_pub_dress,
+        }))
+    }
+
     pub async fn is_pub_dress_available(
         &self,
         pub_dress: &PubDress,
@@ -682,6 +777,17 @@ pub enum NativeRegistrationOutcome {
     IdempotentReplay(IdentityRecord),
     HandleUnavailable,
     AvaiaUnavailable,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PubDressRenameOutcome {
+    Renamed(IdentityRecord),
+    /// Another identity — human or Avaia — already holds the requested address.
+    Unavailable,
+    /// The Avaia address the new owner address derives belongs to someone else.
+    AvaiaUnavailable,
+    /// The address the caller presented is no longer a human Bond.
+    Unknown,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

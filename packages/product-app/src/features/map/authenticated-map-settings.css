@@ -196,6 +196,58 @@
   overflow-wrap: anywhere;
 }
 
+.profile-edit__form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.profile-edit__address {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(245, 243, 247, 0.18);
+  border-radius: 1rem;
+}
+
+.profile-edit__discriminator {
+  color: rgba(245, 243, 247, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-edit__address input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+
+.profile-edit__address input:focus-visible {
+  outline: none;
+}
+
+.profile-edit__note {
+  margin: 0;
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+}
+
+.profile-edit__error,
+.profile-edit__saved {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.profile-edit__error {
+  color: #ff8f8f;
+}
+
+.profile-edit__saved {
+  color: rgba(245, 243, 247, 0.88);
+}
+
 .provider-controls {
   display: inline-flex;
   align-items: center;

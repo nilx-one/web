@@ -20,6 +20,7 @@ import {
 } from "../../shell/routes";
 import { useShellPresentation } from "../../shell/shell-presentation";
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
+import type { ProfileSlugViewState } from "../identity/profile-slug-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
 import {
@@ -55,6 +56,13 @@ export interface AuthenticatedMapHomeViewProps {
   /** The canonical route this surface is presenting. */
   readonly section?: ShellSection;
   readonly connectedProviders?: readonly ConnectedProvider[];
+  /**
+   * The address the Bond may edit. Without it the profile presents the address
+   * it already has and offers nothing to change.
+   */
+  readonly slugEdit?: ProfileSlugViewState;
+  readonly onSlugChange?: (slug: string) => void;
+  readonly onSlugSubmit?: () => void;
   readonly onLogout?: () => void;
   readonly onNavigate?: (route: ShellRoute) => void;
 }
@@ -179,6 +187,9 @@ export function AuthenticatedMapHomeView({
   safeArea,
   section = "world",
   connectedProviders = [],
+  slugEdit,
+  onSlugChange,
+  onSlugSubmit,
   onLogout,
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
@@ -601,27 +612,75 @@ export function AuthenticatedMapHomeView({
 
               {activeDetail === "profile-edit" ? (
                 <div className="profile-edit">
-                  <dl className="bond-profile__rows">
-                    <div>
-                      <dt>pub_dress</dt>
-                      <dd>{pubDress}</dd>
-                    </div>
-                    <div>
-                      <dt>Age</dt>
-                      <dd>Not set</dd>
-                    </div>
-                    <div>
-                      <dt>Home</dt>
-                      <dd>Not set</dd>
-                    </div>
-                    <div>
-                      <dt>Family</dt>
-                      <dd>Not set</dd>
-                    </div>
-                  </dl>
+                  {slugEdit === undefined || slugEdit.kind === "fixed" ? (
+                    <dl className="bond-profile__rows">
+                      <div>
+                        <dt>pub_dress</dt>
+                        <dd>{pubDress}</dd>
+                      </div>
+                    </dl>
+                  ) : (
+                    <form
+                      className="profile-edit__form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (slugEdit.canSave) onSlugSubmit?.();
+                      }}
+                    >
+                      <label
+                        className="interface-settings__eyebrow"
+                        htmlFor="profile-slug"
+                      >
+                        pub_dress
+                      </label>
+                      <div className="profile-edit__address">
+                        <span
+                          className="profile-edit__discriminator"
+                          aria-hidden="true"
+                        >
+                          {`0x${slugEdit.discriminator}`}
+                        </span>
+                        <input
+                          id="profile-slug"
+                          name="pub_dress-slug"
+                          type="text"
+                          autoComplete="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          value={slugEdit.slug}
+                          disabled={slugEdit.busy}
+                          aria-describedby="profile-slug-note"
+                          aria-invalid={slugEdit.error !== undefined}
+                          onChange={(event) =>
+                            onSlugChange?.(event.currentTarget.value)
+                          }
+                        />
+                      </div>
+                      <p className="profile-edit__note" id="profile-slug-note">
+                        {slugEdit.note}
+                      </p>
+                      {slugEdit.error === undefined ? null : (
+                        <p className="profile-edit__error" role="alert">
+                          {slugEdit.error}
+                        </p>
+                      )}
+                      {slugEdit.saved === undefined ? null : (
+                        <p className="profile-edit__saved" role="status">
+                          {`Saved. This Bond is ${slugEdit.saved}.`}
+                        </p>
+                      )}
+                      <button
+                        className="bond-profile__action"
+                        type="submit"
+                        disabled={!slugEdit.canSave}
+                      >
+                        {slugEdit.busy ? "Saving…" : "Save address"}
+                      </button>
+                    </form>
+                  )}
                   <p className="interface-settings__note">
-                    Provider connections are managed separately and are never
-                    changed by profile editing.
+                    The discriminator, provider connections and the owned Avaia
+                    address follow this Bond; they are never chosen here.
                   </p>
                 </div>
               ) : null}
