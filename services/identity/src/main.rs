@@ -72,6 +72,10 @@ async fn main() {
     let repository = IdentityRepository::connect(&database_url)
         .await
         .expect("identity database must initialize");
+    repository
+        .initialize_avaia_configuration()
+        .await
+        .expect("Avaia configuration storage must initialize");
     let provider_links = ProviderLinkRepository::connect(&database_url)
         .await
         .expect("provider link database connection must initialize");
@@ -83,12 +87,21 @@ async fn main() {
         BrowserOAuthConfig::new(public_origin, telegram_browser_oauth, discord_credentials),
     );
     let public_api = public_api::router(repository.clone());
+    let telegram_activity_verifier =
+        TelegramInitDataVerifier::new(bot_token, init_data_max_age_seconds);
+    let avaia_api = api::avaia_router(
+        repository.clone(),
+        telegram_activity_verifier.clone(),
+        discord_activity_oauth.clone(),
+        native_auth.clone(),
+    );
     let api = api::router(
         repository.clone(),
-        TelegramInitDataVerifier::new(bot_token, init_data_max_age_seconds),
+        telegram_activity_verifier,
         discord_activity_oauth,
         native_auth,
     )
+    .merge(avaia_api)
     .merge(provider_api)
     .merge(public_api);
     let listener = tokio::net::TcpListener::bind(http_bind)
