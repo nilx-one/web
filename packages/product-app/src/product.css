@@ -694,7 +694,7 @@
   white-space: nowrap;
 }
 
-:root[data-host-theme="dark"] .identity-surface {
+:root[data-appearance="dark"] .identity-surface {
   background:
     linear-gradient(145deg, rgb(32 44 71 / 82%), rgb(13 19 36 / 72%)),
     var(--glass-surface);
@@ -704,21 +704,21 @@
     inset 0 1px 0 rgb(220 228 255 / 18%);
 }
 
-:root[data-host-theme="dark"] .address-field,
-:root[data-host-theme="dark"] .password-field,
-:root[data-host-theme="dark"] .recovery-surface code,
-:root[data-host-theme="dark"] .provider-buttons button,
-:root[data-host-theme="dark"] .recovery-actions button,
-:root[data-host-theme="dark"] .authenticated-surface button {
+:root[data-appearance="dark"] .address-field,
+:root[data-appearance="dark"] .password-field,
+:root[data-appearance="dark"] .recovery-surface code,
+:root[data-appearance="dark"] .provider-buttons button,
+:root[data-appearance="dark"] .recovery-actions button,
+:root[data-appearance="dark"] .authenticated-surface button {
   background: rgb(10 28 42 / 58%);
   box-shadow: inset 0 1px 0 rgb(226 246 255 / 9%);
 }
 
-:root[data-host-theme="dark"] .address-prefix {
+:root[data-appearance="dark"] .address-prefix {
   background: rgb(74 123 157 / 17%);
 }
 
-:root[data-host-theme="dark"] .digit-selector {
+:root[data-appearance="dark"] .digit-selector {
   background: linear-gradient(
     180deg,
     rgb(43 132 181 / 30%),

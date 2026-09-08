@@ -3,6 +3,20 @@
 
 export { AppShell, type AppShellProps, type ShellSafeArea } from "./app-shell";
 export {
+  APPEARANCE_ATTRIBUTE,
+  APPEARANCE_STORAGE_KEY,
+  applyAppearance,
+  chooseAppearance,
+  declareDeviceAppearance,
+  deviceAppearance,
+  readAppearancePreference,
+  resolveAppearance,
+  useAppearance,
+  type AppearancePreference,
+  type AppearanceState,
+  type ResolvedAppearance,
+} from "./appearance";
+export {
   AppHeader,
   type AppHeaderProps,
   type HeaderAction,

@@ -75,6 +75,11 @@ import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
 import {
+  applyAppearance,
+  declareDeviceAppearance,
+  useAppearance,
+} from "./shell/appearance";
+import {
   IDENTITY_ROUTE,
   SETTINGS_ROUTE,
   WORLD_ROUTE,
@@ -234,6 +239,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const host = useHostSnapshot(dependencies.host);
+  const appearance = useAppearance();
   const browserHost = host.kind === "browser";
   const [selection, setSelection] = useState<PubDressSelection>({
     discriminator: "0",
@@ -615,10 +621,17 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       : identityState,
   );
 
+  // The host answers for the device; the appearance store resolves a person's
+  // standing choice over it. One resolution, stamped once on the document, is
+  // what keeps the sign-in surface and the world the same colour.
   useEffect(() => {
-    document.documentElement.dataset.hostTheme = host.theme;
+    declareDeviceAppearance(host.theme);
     document.documentElement.dataset.host = host.kind;
   }, [host.kind, host.theme]);
+
+  useEffect(() => {
+    applyAppearance(appearance.resolved);
+  }, [appearance.resolved]);
 
   function changeSelection(next: PubDressSelection): void {
     if (nativeContextQuery.data?.kind === "remembered") {

@@ -29,23 +29,26 @@
   --field-line: rgb(42 102 146 / 17%);
 }
 
-:root[data-host-theme="dark"] {
-  color: #ecf7ff;
-  background: #0d1923;
-  --background: #0d1923;
-  --surface: #132331;
-  --ink: #ecf7ff;
-  --muted: #96aaba;
-  --line: rgb(180 220 245 / 16%);
-  --accent: #43baff;
-  --accent-ink: #8cd5ff;
-  --accent-soft: rgb(67 186 255 / 16%);
-  --positive: #5ed5ad;
-  --negative: #ff86a3;
-  --warning: #f2ba69;
-  --glass-surface: rgb(18 36 50 / 74%);
-  --glass-line: rgb(171 220 250 / 16%);
-  --field-line: rgb(171 220 250 / 17%);
+/* Dark is a variant of the same palette, not a second design. Every token the
+   light ground defines is answered here so no surface falls back to a light
+   value on a dark ground. */
+:root[data-appearance="dark"] {
+  color: #f5f2ff;
+  background: #121116;
+  --background: #121116;
+  --surface: #1a181f;
+  --ink: #f5f2ff;
+  --muted: #aaa5b2;
+  --line: rgb(245 242 255 / 14%);
+  --accent: #a895ff;
+  --accent-ink: #c9bcff;
+  --accent-soft: rgb(168 149 255 / 14%);
+  --positive: #63bd91;
+  --negative: #f27d93;
+  --warning: #e1a85f;
+  --glass-surface: rgb(26 24 31 / 74%);
+  --glass-line: rgb(245 242 255 / 16%);
+  --field-line: rgb(245 242 255 / 17%);
 }
 
 * {
@@ -69,7 +72,7 @@ body {
   color: var(--ink);
 }
 
-:root[data-host-theme="dark"] body {
+:root[data-appearance="dark"] body {
   background:
     radial-gradient(circle at 78% 16%, rgb(35 142 205 / 19%), transparent 34%),
     radial-gradient(circle at 12% 82%, rgb(132 91 55 / 13%), transparent 30%),
@@ -408,40 +411,6 @@ a {
   .app-footer {
     align-items: flex-start;
     flex-direction: column;
-  }
-}
-
-:root[data-host-theme="dark"] {
-  color: #f5f2ff;
-  background: #121116;
-  --background: #121116;
-  --surface: #1a181f;
-  --ink: #f5f2ff;
-  --muted: #aaa5b2;
-  --line: rgba(245, 242, 255, 0.14);
-  --accent: #a895ff;
-  --accent-ink: #c9bcff;
-  --accent-soft: rgba(168, 149, 255, 0.14);
-  --positive: #63bd91;
-  --negative: #f27d93;
-  --warning: #e1a85f;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-host-theme]) {
-    color: #f5f2ff;
-    background: #121116;
-    --background: #121116;
-    --surface: #1a181f;
-    --ink: #f5f2ff;
-    --muted: #aaa5b2;
-    --line: rgba(245, 242, 255, 0.14);
-    --accent: #a895ff;
-    --accent-ink: #c9bcff;
-    --accent-soft: rgba(168, 149, 255, 0.14);
-    --positive: #63bd91;
-    --negative: #f27d93;
-    --warning: #e1a85f;
   }
 }
 

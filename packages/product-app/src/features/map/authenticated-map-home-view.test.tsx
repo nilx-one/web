@@ -577,6 +577,7 @@ describe("AuthenticatedMapHomeView", () => {
   });
 
   it("resolves the appearance before the renderer paints its first style", () => {
+    window.localStorage.setItem("nilx-one.interface.appearance", "dark");
     const mapRenderer = renderer();
 
     renderView({ mapRenderer });
@@ -589,6 +590,20 @@ describe("AuthenticatedMapHomeView", () => {
     expect(appearanceCall).toBeDefined();
     expect(mountCall).toBeDefined();
     expect(appearanceCall ?? 0).toBeLessThan(mountCall ?? 0);
+  });
+
+  // A device that never asked for dark must not be given it. The world opens
+  // in the same light the sign-in surface was painted in.
+  it("opens light when neither a choice nor the device asks for dark", () => {
+    const mapRenderer = renderer();
+
+    const { container } = renderView({ mapRenderer });
+
+    expect(mapRenderer.setAppearance).toHaveBeenCalledWith("light");
+    expect(container.querySelector(".authenticated-map-home")).toHaveAttribute(
+      "data-theme",
+      "light",
+    );
   });
 
   it("forwards an appearance change as renderer presentation state", () => {

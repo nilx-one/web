@@ -9,7 +9,36 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <meta name="description" content="The Telegram-hosted 0x1 Web client." />
-    <meta name="theme-color" content="#f5f4ef" />
+    <meta name="theme-color" content="#f3f8fc" />
+    <script>
+      /* The appearance is resolved before the first paint, so the sign-in
+         surface opens in the colour the world will keep. Dark is only ever
+         entered on evidence: a stored choice, or a device that asks for it. */
+      (function () {
+        var resolved = "light";
+        try {
+          var stored = window.localStorage.getItem(
+            "nilx-one.interface.appearance",
+          );
+          resolved =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+        } catch (error) {
+          resolved = "light";
+        }
+        document.documentElement.setAttribute("data-appearance", resolved);
+        var chrome = document.querySelector('meta[name="theme-color"]');
+        if (chrome) {
+          chrome.setAttribute(
+            "content",
+            resolved === "dark" ? "#121116" : "#f3f8fc",
+          );
+        }
+      })();
+    </script>
     <title>0x1 · Telegram</title>
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <script>
