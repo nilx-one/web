@@ -4,7 +4,9 @@
 use std::{env, net::SocketAddr, sync::Arc};
 
 use identity_bot::{
-    DiscordOAuthClient, IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier, api,
+    BrowserOAuthConfig, DiscordOAuthClient, IdentityRepository, NativeAuthConfig,
+    OAuthClientCredentials, ProviderLinkRepository, TelegramInitDataVerifier, api,
+    browser_web_auth,
 };
 use teloxide::{
     prelude::*,
@@ -15,6 +17,7 @@ use tracing_subscriber::EnvFilter;
 use url::Url;
 
 const MINI_APP_URL: &str = "https://nilx.one/telegram/";
+const DEFAULT_PUBLIC_ORIGIN: &str = "https://nilx.one";
 const HELP: &str = "Commands:\n/start — open pub_dress registration\n/whoami — show your identity record\n/recover — explain the current recovery boundary";
 
 #[tokio::main]
@@ -33,6 +36,13 @@ async fn main() {
         .unwrap_or_else(|_| "0.0.0.0:8080".to_owned())
         .parse::<SocketAddr>()
         .expect("HTTP_BIND must be a socket address");
+    let public_origin = env::var("PUBLIC_ORIGIN")
+        .unwrap_or_else(|_| DEFAULT_PUBLIC_ORIGIN.to_owned())
+        .parse::<Url>()
+        .expect("PUBLIC_ORIGIN must be a valid URL");
+    if public_origin.scheme() != "https" || public_origin.host_str().is_none() {
+        panic!("PUBLIC_ORIGIN must be an https origin");
+    }
     let init_data_max_age_seconds = env::var("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS")
         .map_or(Ok(300_u64), |value| value.parse::<u64>())
         .expect("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS must be an unsigned integer");
@@ -41,17 +51,44 @@ async fn main() {
         env::var("PASSWORD_PEPPER").expect("PASSWORD_PEPPER must be configured"),
     )
     .expect("native authentication secrets must satisfy the minimum length");
-    let discord_oauth = discord_oauth_from_environment();
+
+    let telegram_browser_oauth = oauth_credentials_from_environment(
+        "TELEGRAM_OIDC_CLIENT_ID",
+        "TELEGRAM_OIDC_CLIENT_SECRET",
+        "Telegram browser authentication",
+    );
+    let discord_credentials = oauth_credentials_from_environment(
+        "DISCORD_CLIENT_ID",
+        "DISCORD_CLIENT_SECRET",
+        "Discord authentication",
+    );
+    let discord_activity_oauth = discord_credentials.as_ref().map(|credentials| {
+        DiscordOAuthClient::new(
+            credentials.client_id.clone(),
+            credentials.client_secret.clone(),
+        )
+    });
+
     let repository = IdentityRepository::connect(&database_url)
         .await
         .expect("identity database must initialize");
+    let provider_links = ProviderLinkRepository::connect(&database_url)
+        .await
+        .expect("provider link database connection must initialize");
     let bot = Bot::new(bot_token.clone());
+    let provider_api = browser_web_auth::router(
+        repository.clone(),
+        provider_links,
+        native_auth.clone(),
+        BrowserOAuthConfig::new(public_origin, telegram_browser_oauth, discord_credentials),
+    );
     let api = api::router(
         repository.clone(),
         TelegramInitDataVerifier::new(bot_token, init_data_max_age_seconds),
-        discord_oauth,
+        discord_activity_oauth,
         native_auth,
-    );
+    )
+    .merge(provider_api);
     let listener = tokio::net::TcpListener::bind(http_bind)
         .await
         .expect("identity HTTP listener must bind");
@@ -71,24 +108,31 @@ async fn main() {
     }
 }
 
-fn discord_oauth_from_environment() -> Option<DiscordOAuthClient> {
-    let client_id = env::var("DISCORD_CLIENT_ID")
+fn oauth_credentials_from_environment(
+    client_id_key: &str,
+    client_secret_key: &str,
+    label: &str,
+) -> Option<OAuthClientCredentials> {
+    let client_id = env::var(client_id_key)
         .ok()
         .filter(|value| !value.is_empty());
-    let client_secret = env::var("DISCORD_CLIENT_SECRET")
+    let client_secret = env::var(client_secret_key)
         .ok()
         .filter(|value| !value.is_empty());
 
     match (client_id, client_secret) {
         (Some(client_id), Some(client_secret)) => {
-            info!("Discord Activity authentication enabled");
-            Some(DiscordOAuthClient::new(client_id, client_secret))
+            info!(provider = label, "provider authentication enabled");
+            Some(OAuthClientCredentials::new(client_id, client_secret))
         }
         (None, None) => {
-            info!("Discord Activity authentication is not configured");
+            info!(
+                provider = label,
+                "provider authentication is not configured"
+            );
             None
         }
-        _ => panic!("DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET must be configured together"),
+        _ => panic!("{client_id_key} and {client_secret_key} must be configured together"),
     }
 }
 

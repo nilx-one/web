@@ -190,6 +190,34 @@ export type ProviderPasswordResult =
     }
   | { kind: "service-unavailable" };
 
+export type BrowserIdentityProvider = "telegram" | "discord";
+
+export interface BrowserProviderAvailability {
+  telegram: boolean;
+  discord: boolean;
+}
+
+export type BrowserProviderContextResult =
+  | { kind: "none"; available: BrowserProviderAvailability }
+  | {
+      kind: "pending";
+      provider: BrowserIdentityProvider;
+      available: BrowserProviderAvailability;
+    }
+  | { kind: "service-unavailable" };
+
+export type BrowserProviderLinkResult =
+  | { kind: "linked"; provider: BrowserIdentityProvider }
+  | {
+      kind: "rejected";
+      reason:
+        | "authentication-required"
+        | "provider-proof-required"
+        | "provider-already-linked"
+        | "session-changed";
+    }
+  | { kind: "service-unavailable" };
+
 /**
  * Renaming moves the same Bond to another address it may hold. The
  * discriminator is not part of the request: the service keeps the one the Bond
@@ -246,6 +274,20 @@ export interface IdentityAccessPort {
     selection: PubDressSelection,
   ): Promise<PubDressResolutionResult>;
   resolvePubDressLabel(label: string): Promise<PubDressLabelResolutionResult>;
+  /** Browser-only provider authorization surface. */
+  browserProviderAuthorizationUrl?(
+    provider: BrowserIdentityProvider,
+    intent?: "connect",
+  ): string;
+  /** Browser-only pending provider proof and provider availability. */
+  readBrowserProviderContext?(): Promise<BrowserProviderContextResult>;
+  /**
+   * Links pending verified provider proof to the currently authenticated Bond.
+   * `expectedPubDress` is a race guard, never authority to select another Bond.
+   */
+  linkBrowserProvider?(
+    expectedPubDress: string,
+  ): Promise<BrowserProviderLinkResult>;
 }
 
 export class ResolvePubDress {
@@ -433,6 +475,51 @@ export class SetProviderPassword {
   ): Promise<ProviderPasswordResult> {
     try {
       return await this.identity.setProviderPassword(host, password);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class BeginBrowserProviderAuthorization {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public execute(
+    provider: BrowserIdentityProvider,
+    intent?: "connect",
+  ): string | undefined {
+    return this.identity.browserProviderAuthorizationUrl?.(provider, intent);
+  }
+}
+
+export class ReadBrowserProviderContext {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(): Promise<BrowserProviderContextResult> {
+    const read = this.identity.readBrowserProviderContext;
+    if (read === undefined) {
+      return { kind: "service-unavailable" };
+    }
+    try {
+      return await read.call(this.identity);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class LinkBrowserProvider {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(
+    expectedPubDress: string,
+  ): Promise<BrowserProviderLinkResult> {
+    const link = this.identity.linkBrowserProvider;
+    if (link === undefined) {
+      return { kind: "service-unavailable" };
+    }
+    try {
+      return await link.call(this.identity, expectedPubDress);
     } catch {
       return { kind: "service-unavailable" };
     }

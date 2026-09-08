@@ -5,8 +5,11 @@ import {
   AcknowledgeRecoveryKey,
   ChooseAvatarModel,
   AuthenticateNativeIdentity,
+  BeginBrowserProviderAuthorization,
   ForgetRememberedBond,
+  LinkBrowserProvider,
   LogoutNativeIdentity,
+  ReadBrowserProviderContext,
   ReadNativeIdentityContext,
   ReadProviderIdentity,
   ReadRuntimeReadiness,
@@ -17,6 +20,7 @@ import {
   SetProviderPassword,
   ResolvePubDress,
   formatPubDress,
+  type BrowserIdentityProvider,
   type CoreRuntimePort,
   type IdentityAccessPort,
   type AvatarModel,
@@ -56,6 +60,7 @@ import {
   createNativeIdentityViewState,
   createProviderIdentityViewState,
   createPubDressStatusViewState,
+  type IdentityViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
 import { createAvatarChoiceViewState } from "./features/identity/avatar-choice-view-model";
@@ -141,6 +146,10 @@ function validNativePassword(password: string): boolean {
     normalized.trim() === normalized &&
     !/[\p{Cc}\u2028\u2029]/u.test(normalized)
   );
+}
+
+function providerDisplayName(provider: BrowserIdentityProvider): string {
+  return provider === "telegram" ? "Telegram" : "Discord";
 }
 
 /** The root only selects between the persistent product foundation and diagnostics. */
@@ -275,6 +284,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     retry: false,
     staleTime: 0,
   });
+  const browserProviderContextQuery = useQuery({
+    queryKey: ["browser-provider-context"],
+    queryFn: () =>
+      new ReadBrowserProviderContext(dependencies.identity).execute(),
+    enabled: browserHost,
+    retry: false,
+    staleTime: 0,
+  });
   const providerIdentityQuery = useQuery({
     queryKey: ["provider-identity", host.kind],
     queryFn: () => new ReadProviderIdentity(dependencies.identity).execute(),
@@ -377,6 +394,17 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       if (result.kind === "recovery-key-required") setPassword("");
     },
   });
+  const browserProviderLink = useMutation({
+    mutationFn: (expectedPubDress: string) =>
+      new LinkBrowserProvider(dependencies.identity).execute(expectedPubDress),
+    onSuccess: (result) => {
+      if (result.kind === "linked") {
+        void queryClient.invalidateQueries({
+          queryKey: ["browser-provider-context"],
+        });
+      }
+    },
+  });
   const forgetRemembered = useMutation({
     mutationFn: () => new ForgetRememberedBond(dependencies.identity).execute(),
     onSuccess: (result) => {
@@ -389,6 +417,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       nativeRegistration.reset();
       nativeAuthentication.reset();
       recoveryAcknowledgement.reset();
+      browserProviderLink.reset();
       setSelection({ discriminator: "0", slug: "" });
       setPassword("");
       setIdempotencyKey(newIdempotencyKey());
@@ -453,6 +482,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       nativeRegistration.reset();
       nativeAuthentication.reset();
       recoveryAcknowledgement.reset();
+      browserProviderLink.reset();
       setUseRememberedHint(true);
       pendingAutofillCredential.current = undefined;
       await queryClient.invalidateQueries({
@@ -469,16 +499,44 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     logout.isPending;
   const latestAuthentication =
     recoveryAcknowledgement.data ?? nativeAuthentication.data;
-  const identityState = browserHost
-    ? createNativeIdentityViewState(
-        nativeContextQuery.data?.kind === "remembered" && !useRememberedHint
-          ? { kind: "anonymous" }
-          : nativeContextQuery.data,
-        status,
-        nativeRegistration.data,
-        latestAuthentication,
-        nativePending,
-      )
+  const nativeIdentityState = createNativeIdentityViewState(
+    nativeContextQuery.data?.kind === "remembered" && !useRememberedHint
+      ? { kind: "anonymous" }
+      : nativeContextQuery.data,
+    status,
+    nativeRegistration.data,
+    latestAuthentication,
+    nativePending,
+  );
+  const pendingBrowserProvider =
+    browserProviderContextQuery.data?.kind === "pending"
+      ? browserProviderContextQuery.data.provider
+      : undefined;
+  const authenticatedNativePubDress =
+    nativeIdentityState.kind === "authenticated"
+      ? nativeIdentityState.pubDress
+      : undefined;
+
+  useEffect(() => {
+    if (
+      !browserHost ||
+      pendingBrowserProvider === undefined ||
+      authenticatedNativePubDress === undefined ||
+      browserProviderLink.isPending ||
+      browserProviderLink.data !== undefined
+    ) {
+      return;
+    }
+    browserProviderLink.mutate(authenticatedNativePubDress);
+  }, [
+    authenticatedNativePubDress,
+    browserHost,
+    browserProviderLink,
+    pendingBrowserProvider,
+  ]);
+
+  let identityState: IdentityViewState = browserHost
+    ? nativeIdentityState
     : createProviderIdentityViewState(
         host,
         providerIdentityQuery.data,
@@ -490,6 +548,35 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         providerPassword.data,
         recoveryAcknowledgement.data,
       );
+  if (
+    browserHost &&
+    pendingBrowserProvider !== undefined &&
+    nativeIdentityState.kind === "authenticated"
+  ) {
+    const provider = providerDisplayName(pendingBrowserProvider);
+    const linkResult = browserProviderLink.data;
+    if (linkResult?.kind === "linked") {
+      identityState = nativeIdentityState;
+    } else if (linkResult?.kind === "rejected") {
+      identityState = {
+        kind: "unavailable",
+        detail:
+          linkResult.reason === "provider-already-linked"
+            ? `${provider} is already connected to another Bond.`
+            : `Could not connect ${provider} to this Bond. Authorize ${provider} again.`,
+      };
+    } else if (linkResult?.kind === "service-unavailable") {
+      identityState = {
+        kind: "unavailable",
+        detail: `Could not connect ${provider} right now.`,
+      };
+    } else {
+      identityState = {
+        kind: "loading",
+        detail: `Connecting ${provider} to ${nativeIdentityState.pubDress}…`,
+      };
+    }
+  }
   const avatarChoice = createAvatarChoiceViewState(
     identityState.kind === "authenticated"
       ? identityState.avatarModel
@@ -640,6 +727,15 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     }
   }
 
+  function authorizeBrowserProvider(provider: BrowserIdentityProvider): void {
+    const url = new BeginBrowserProviderAuthorization(
+      dependencies.identity,
+    ).execute(provider);
+    if (url !== undefined) {
+      window.location.assign(url);
+    }
+  }
+
   useEffect(() => {
     if (
       pendingAutofillCredential.current === undefined ||
@@ -759,6 +855,21 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     );
   }
 
+  const providerContext = browserProviderContextQuery.data;
+  const browserProviderAuth = browserHost
+    ? {
+        available:
+          providerContext?.kind === "none" ||
+          providerContext?.kind === "pending"
+            ? providerContext.available
+            : { telegram: false, discord: false },
+        onAuthorize: authorizeBrowserProvider,
+        ...(pendingBrowserProvider === undefined
+          ? {}
+          : { pendingProvider: pendingBrowserProvider }),
+      }
+    : undefined;
+
   return (
     <IdentityFoundationView
       password={password}
@@ -768,6 +879,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
       selection={selection}
       viewModel={viewModel}
+      {...(browserProviderAuth === undefined ? {} : { browserProviderAuth })}
       onCredentialAutofill={applyAutofilledCredential}
       onAvatarChoice={(model) => {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);

@@ -15,6 +15,7 @@ axum = { version = "0.8", features = ["json"] }
 base64 = "0.22"
 getrandom = "0.3"
 hmac = "0.12"
+jsonwebtoken = "9"
 ox1-contracts = { git = "https://github.com/nilx-one/core", rev = "c224304947280169017e298237bcf5361d1bfb30" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
