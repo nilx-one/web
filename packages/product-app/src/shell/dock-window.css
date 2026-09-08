@@ -1,0 +1,127 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* One window, two screens, for the length of a move. The window travels
+   between the two heights while the screens travel past each other, so the
+   Dock reads as one surface being navigated rather than one being rebuilt. */
+.bond-dock__window {
+  --dock-window-duration: 420ms;
+  /* An immediate start with a long, soft landing: the platform navigation
+     curve a person already has expectations about. */
+  --dock-window-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  /* The screen being left does not leave; it gives way behind the new one. */
+  --dock-window-recede: 26%;
+  position: relative;
+  transition: height var(--dock-window-duration) var(--dock-window-ease);
+}
+
+/* Clipping is only true while a pair is travelling. A settled window must not
+   cut off focus rings, shadows, or anything a screen paints outside its box. */
+.bond-dock__window[data-navigation] {
+  overflow: hidden;
+}
+
+.bond-dock__window[data-navigation] > .bond-dock__screen[data-phase="from"] {
+  position: absolute;
+  inset: 0 0 auto 0;
+}
+
+.bond-dock__window[data-navigation] > .bond-dock__screen[data-phase="to"] {
+  position: relative;
+  box-shadow: -1rem 0 2.2rem -1.15rem var(--map-shadow, transparent);
+}
+
+.bond-dock__window[data-navigation="push"]
+  > .bond-dock__screen[data-phase="to"] {
+  animation: bond-dock-screen-push-in var(--dock-window-duration)
+    var(--dock-window-ease) both;
+}
+
+.bond-dock__window[data-navigation="push"]
+  > .bond-dock__screen[data-phase="from"] {
+  animation: bond-dock-screen-push-out var(--dock-window-duration)
+    var(--dock-window-ease) both;
+}
+
+.bond-dock__window[data-navigation="pop"]
+  > .bond-dock__screen[data-phase="to"] {
+  animation: bond-dock-screen-pop-in var(--dock-window-duration)
+    var(--dock-window-ease) both;
+}
+
+.bond-dock__window[data-navigation="pop"]
+  > .bond-dock__screen[data-phase="from"] {
+  animation: bond-dock-screen-pop-out var(--dock-window-duration)
+    var(--dock-window-ease) both;
+}
+
+/* While a pair travels, the window owns the motion. Content-level entrances
+   from the motion layer would animate a screen that is already moving. */
+.bond-dock__window[data-navigation] .bond-dock__screen[data-phase] * {
+  animation: none;
+}
+
+@keyframes bond-dock-screen-push-in {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes bond-dock-screen-push-out {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+
+  60% {
+    opacity: 0.32;
+  }
+
+  to {
+    transform: translate3d(calc(-1 * var(--dock-window-recede)), 0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes bond-dock-screen-pop-in {
+  from {
+    transform: translate3d(calc(-1 * var(--dock-window-recede)), 0, 0);
+    opacity: 0.32;
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes bond-dock-screen-pop-out {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+
+  60% {
+    opacity: 0.32;
+  }
+
+  to {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0;
+  }
+}
+
+/* Asking for less motion removes the travel, never the destination. */
+@media (prefers-reduced-motion: reduce) {
+  .bond-dock__window {
+    transition: none;
+  }
+
+  .bond-dock__window > .bond-dock__screen {
+    animation: none;
+  }
+}

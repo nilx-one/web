@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AvatarModel } from "@nilx-one/application";
+import type {
+  AvatarModel,
+  BondProviderConnections,
+} from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import {
@@ -38,7 +41,9 @@ function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
 
 interface ViewOverrides {
   avaiaPubDress?: string;
-  connectedProviders?: readonly ConnectedProvider[];
+  connectedProviders?: BondProviderConnections;
+  providerDeepLinks?: readonly ConnectedProvider[];
+  onDisconnectProvider?: (provider: ConnectedProvider) => void;
   geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
   section?: ShellSection;
@@ -61,6 +66,12 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.connectedProviders === undefined
       ? {}
       : { connectedProviders: overrides.connectedProviders }),
+    ...(overrides.providerDeepLinks === undefined
+      ? {}
+      : { providerDeepLinks: overrides.providerDeepLinks }),
+    ...(overrides.onDisconnectProvider === undefined
+      ? {}
+      : { onDisconnectProvider: overrides.onDisconnectProvider }),
     ...(overrides.onLogout === undefined
       ? {}
       : { onLogout: overrides.onLogout }),
@@ -262,6 +273,26 @@ describe("AuthenticatedMapHomeView", () => {
     expect(camera?.zoom).toBeGreaterThan(15);
   });
 
+  it("opens the Bond edit surface from the Dock header", () => {
+    const onNavigate = vi.fn();
+
+    renderView({ onNavigate });
+    const edit = screen.getByRole("button", { name: "Edit this Bond" });
+
+    expect(edit).toHaveTextContent("edit");
+    fireEvent.click(edit);
+
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
+  });
+
+  it("keeps the edit action to the world, where the Dock names the Bond", () => {
+    renderView({ section: "identity" });
+
+    expect(
+      screen.queryByRole("button", { name: "Edit this Bond" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("returns to the world from an identity surface", () => {
     const onNavigate = vi.fn();
 
@@ -286,7 +317,9 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByLabelText("pub_dress")).toHaveValue("sky");
     expect(screen.getByLabelText("avaia")).toHaveValue("skai");
     expect(screen.getByText("Providers")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Add host" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Add a provider" }),
+    ).toBeVisible();
     // Nothing a person cannot change is presented as something to edit.
     for (const absent of [
       "Age",
@@ -299,18 +332,19 @@ describe("AuthenticatedMapHomeView", () => {
     }
   });
 
-  it("opens Add hosts with provider authorization redirects", () => {
+  it("opens the Providers screen from add, with a connect route each", () => {
     renderView({ section: "identity" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add host" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a provider" }));
 
-    expect(screen.getByRole("heading", { name: "Add hosts" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
     expect(
-      screen.getByRole("link", { name: /Connect with Telegram/i }),
+      screen.getByRole("link", { name: "Connect Telegram" }),
     ).toHaveAttribute("href", "/auth?provider=telegram&intent=connect");
     expect(
-      screen.getByRole("link", { name: /Connect with Discord/i }),
+      screen.getByRole("link", { name: "Connect Discord" }),
     ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
+    expect(screen.getAllByText("Not connected")).toHaveLength(2);
   });
 
   it("offers the three studies, assigns none, and draws no fallback body", async () => {
@@ -370,18 +404,49 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByRole("radio", { name: /Sky/ })).toBeDisabled();
   });
 
-  it("shows each connected provider as its own control", () => {
+  it("shows connected providers as marks that open the external account", () => {
     renderView({
       section: "identity",
-      connectedProviders: ["telegram", "discord"],
+      connectedProviders: [
+        { provider: "telegram", handle: "zerosky" },
+        { provider: "discord", externalId: "84759302847591038" },
+      ],
     });
 
-    expect(screen.getByLabelText("Telegram connected")).toBeVisible();
-    expect(screen.getByLabelText("Discord connected")).toBeVisible();
+    const telegram = screen.getByRole("link", { name: "Open Telegram" });
+    expect(telegram).toHaveTextContent("TG");
+    expect(telegram).toHaveAttribute("href", "https://t.me/zerosky");
+    expect(telegram).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("link", { name: "Open Discord" })).toHaveAttribute(
+      "href",
+      "https://discord.com/users/84759302847591038",
+    );
+    // The compact surface carries no account text at all.
+    expect(screen.queryByText("zerosky")).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByLabelText("Telegram connected"));
+  it("hands a provider scheme to a host that can follow one", () => {
+    renderView({
+      section: "identity",
+      providerDeepLinks: ["telegram"],
+      connectedProviders: [{ provider: "telegram", handle: "zerosky" }],
+    });
 
-    expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
+    const telegram = screen.getByRole("link", { name: "Open Telegram" });
+    expect(telegram).toHaveAttribute("href", "tg://resolve?domain=zerosky");
+    expect(telegram).not.toHaveAttribute("target");
+  });
+
+  it("falls back to the provider itself for an address it does not know", () => {
+    renderView({
+      section: "identity",
+      connectedProviders: [{ provider: "telegram" }],
+    });
+
+    expect(screen.getByRole("link", { name: "Open Telegram" })).toHaveAttribute(
+      "href",
+      "https://t.me",
+    );
   });
 
   it("names the Bond and its Avaia from the same surface", () => {
@@ -451,15 +516,46 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeVisible();
   });
 
-  it("opens provider management from the Providers row", () => {
-    renderView({ section: "identity", connectedProviders: ["telegram"] });
+  it("manages connected and unconnected providers on one screen", () => {
+    const onDisconnectProvider = vi.fn();
+    renderView({
+      section: "identity",
+      connectedProviders: [{ provider: "telegram", handle: "zerosky" }],
+      onDisconnectProvider,
+    });
 
-    fireEvent.click(screen.getByLabelText("Telegram connected"));
+    fireEvent.click(screen.getByRole("button", { name: "Add a provider" }));
 
     expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
-    expect(screen.getByText("Telegram")).toBeVisible();
     expect(screen.getByText("Connected")).toBeVisible();
-    expect(screen.getByRole("button", { name: "+ Add host" })).toBeVisible();
+    expect(screen.getByText("Not connected")).toBeVisible();
+    // Connected: reachable and detachable. Unconnected: connectable.
+    expect(screen.getByRole("link", { name: "Open Telegram" })).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "Connect Telegram" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connect Discord" })).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Disconnect Telegram from this Bond",
+      }),
+    );
+
+    expect(onDisconnectProvider).toHaveBeenCalledExactlyOnceWith("telegram");
+  });
+
+  it("says a disconnect never reaches the external account", () => {
+    renderView({
+      section: "identity",
+      connectedProviders: [{ provider: "telegram" }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a provider" }));
+
+    expect(
+      screen.getByText(/never deletes the account on the provider/),
+    ).toBeVisible();
   });
 
   it("presents appearance on the settings route and persists it locally", () => {

@@ -9,6 +9,25 @@ export {
   type WorldPosition,
 } from "./avaia-movement-controller";
 export {
+  BOND_PROVIDER_TYPES,
+  bondProviderConnection,
+  bondProviderOpenTarget,
+  bondProviderOpenTargets,
+  connectBondProvider,
+  connectedBondProviders,
+  disconnectBondProvider,
+  isBondProviderConnected,
+  isBondProviderType,
+  type BondProviderAccount,
+  type BondProviderAttachment,
+  type BondProviderConnections,
+  type BondProviderDetachment,
+  type BondProviderOpenKind,
+  type BondProviderOpenOptions,
+  type BondProviderOpenTarget,
+  type BondProviderType,
+} from "./bond-providers";
+export {
   createFailureNotice,
   type FailureKind,
   type FailureNotice,
