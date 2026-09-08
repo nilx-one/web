@@ -55,6 +55,36 @@ pub struct IdentityRecord {
     /// pre-amendment human Bond that has not yet crossed an authenticated
     /// reconciliation boundary.
     pub avaia_pub_dress: Option<String>,
+    /// The DNS A-label allocated to this Bond. `None` means no public label is
+    /// allocated; callers must not derive ownership from `pub_dress` instead.
+    pub pub_dress_label: Option<String>,
+    /// The persisted allocation suffix. Empty for the unsuffixed first claim.
+    pub pub_dress_label_suffix: String,
+}
+
+impl IdentityRecord {
+    /// Creates a transient record before the authenticated reconciliation read.
+    /// No public address is claimed until repository state is read back.
+    pub fn unresolved(pub_dress: String) -> Self {
+        Self {
+            pub_dress,
+            avaia_pub_dress: None,
+            pub_dress_label: None,
+            pub_dress_label_suffix: String::new(),
+        }
+    }
+
+    /// Returns the product-readable public URL only from persisted allocation
+    /// state. DNS transport keeps the A-label; Unicode is presentation only.
+    pub fn readable_url(&self, zone: &str) -> Option<String> {
+        let stored_label = self.pub_dress_label.as_ref()?;
+        let label = if stored_label.starts_with("xn--") {
+            format!("{}{}", self.pub_dress, self.pub_dress_label_suffix)
+        } else {
+            stored_label.clone()
+        };
+        Some(format!("https://{label}.{zone}"))
+    }
 }
 
 /// A public lookup is authoritative because it comes from the allocated stored
@@ -221,7 +251,8 @@ impl IdentityRepository {
             return Ok(RegistrationOutcome::HandleUnavailable);
         }
 
-        let Some(avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        let Some(_avaia_pub_dress) =
+            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
         else {
             transaction.rollback().await?;
             return Ok(RegistrationOutcome::AvaiaUnavailable);
@@ -236,11 +267,9 @@ impl IdentityRepository {
         .execute(&mut *transaction)
         .await?;
 
+        let record = identity_for_pub_dress_in(&mut transaction, pub_dress.to_string()).await?;
         transaction.commit().await?;
-        Ok(RegistrationOutcome::Registered(IdentityRecord {
-            pub_dress: pub_dress.to_string(),
-            avaia_pub_dress: Some(avaia_pub_dress),
-        }))
+        Ok(RegistrationOutcome::Registered(record))
     }
 
     pub async fn find_by_provider(
@@ -284,11 +313,8 @@ impl IdentityRepository {
             return Ok(None);
         }
 
-        let avaia_pub_dress = create_owned_avaia_in(&mut transaction, pub_dress, now).await?;
-        let record = IdentityRecord {
-            pub_dress: pub_dress.to_string(),
-            avaia_pub_dress,
-        };
+        create_owned_avaia_in(&mut transaction, pub_dress, now).await?;
+        let record = identity_for_pub_dress_in(&mut transaction, pub_dress.to_string()).await?;
         transaction.commit().await?;
         Ok(Some(record))
     }
@@ -387,7 +413,7 @@ impl IdentityRepository {
             .execute(&mut *transaction)
             .await?;
 
-        let avaia_pub_dress = if let Some(existing) = existing_avaia {
+        if let Some(existing) = existing_avaia {
             let moved = derived_avaia.unwrap_or(existing);
             sqlx::query(
                 "UPDATE identities SET pub_dress = ?, owner_pub_dress = ? \
@@ -398,22 +424,18 @@ impl IdentityRepository {
             .bind(current.as_str())
             .execute(&mut *transaction)
             .await?;
-            Some(moved)
         } else {
             // A pre-amendment Bond crossing this boundary gains the Avaia its
             // new address derives, exactly as an authenticated read would.
-            let Some(created) = create_owned_avaia_in(&mut transaction, next, now).await? else {
+            let Some(_created) = create_owned_avaia_in(&mut transaction, next, now).await? else {
                 transaction.rollback().await?;
                 return Ok(PubDressRenameOutcome::AvaiaUnavailable);
             };
-            Some(created)
-        };
+        }
 
+        let record = identity_for_pub_dress_in(&mut transaction, next.to_string()).await?;
         transaction.commit().await?;
-        Ok(PubDressRenameOutcome::Renamed(IdentityRecord {
-            pub_dress: next.to_string(),
-            avaia_pub_dress,
-        }))
+        Ok(PubDressRenameOutcome::Renamed(record))
     }
 
     /// Names the Avaia a human Bond owns. The address keeps its owner's
@@ -481,11 +503,9 @@ impl IdentityRepository {
             }
         }
 
+        let record = identity_for_pub_dress_in(&mut transaction, owner.to_string()).await?;
         transaction.commit().await?;
-        Ok(PubDressRenameOutcome::Renamed(IdentityRecord {
-            pub_dress: owner.to_string(),
-            avaia_pub_dress: Some(next.to_string()),
-        }))
+        Ok(PubDressRenameOutcome::Renamed(record))
     }
 
     pub async fn is_pub_dress_available(
@@ -592,7 +612,8 @@ impl IdentityRepository {
             return Ok(NativeRegistrationOutcome::HandleUnavailable);
         }
 
-        let Some(avaia_pub_dress) = create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        let Some(_avaia_pub_dress) =
+            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
         else {
             transaction.rollback().await?;
             return Ok(NativeRegistrationOutcome::AvaiaUnavailable);
@@ -631,11 +652,9 @@ impl IdentityRepository {
         .execute(&mut *transaction)
         .await?;
 
+        let record = identity_for_pub_dress_in(&mut transaction, pub_dress.to_string()).await?;
         transaction.commit().await?;
-        Ok(NativeRegistrationOutcome::Registered(IdentityRecord {
-            pub_dress: pub_dress.to_string(),
-            avaia_pub_dress: Some(avaia_pub_dress),
-        }))
+        Ok(NativeRegistrationOutcome::Registered(record))
     }
 
     /// The provider binding is the authority; a submitted handle cannot select an owner.
@@ -972,6 +991,13 @@ async fn identity_for_pub_dress(
     pool: &SqlitePool,
     pub_dress: String,
 ) -> Result<IdentityRecord, sqlx::Error> {
+    let public = sqlx::query(
+        "SELECT pub_dress_label, pub_dress_label_suffix FROM identities \
+         WHERE pub_dress = ? AND identity_kind = 'human'",
+    )
+    .bind(&pub_dress)
+    .fetch_one(pool)
+    .await?;
     let avaia_pub_dress = sqlx::query_scalar::<_, String>(
         "SELECT pub_dress FROM identities \
          WHERE identity_kind = 'avaia' AND owner_pub_dress = ?",
@@ -982,6 +1008,8 @@ async fn identity_for_pub_dress(
     Ok(IdentityRecord {
         pub_dress,
         avaia_pub_dress,
+        pub_dress_label: public.get("pub_dress_label"),
+        pub_dress_label_suffix: public.get("pub_dress_label_suffix"),
     })
 }
 
@@ -989,10 +1017,19 @@ async fn identity_for_pub_dress_in(
     transaction: &mut Transaction<'_, Sqlite>,
     pub_dress: String,
 ) -> Result<IdentityRecord, sqlx::Error> {
+    let public = sqlx::query(
+        "SELECT pub_dress_label, pub_dress_label_suffix FROM identities \
+         WHERE pub_dress = ? AND identity_kind = 'human'",
+    )
+    .bind(&pub_dress)
+    .fetch_one(&mut **transaction)
+    .await?;
     let avaia_pub_dress = owned_avaia_for_owner_in(transaction, &pub_dress).await?;
     Ok(IdentityRecord {
         pub_dress,
         avaia_pub_dress,
+        pub_dress_label: public.get("pub_dress_label"),
+        pub_dress_label_suffix: public.get("pub_dress_label_suffix"),
     })
 }
 
@@ -1132,13 +1169,23 @@ mod tests {
             .await
             .expect("repository must initialize");
         let address = PubDress::from_str("0x0небо").expect("valid pub_dress");
-        repository
+        let registered = match repository
             .register(&address, &ProviderIdentity::telegram(10), 100)
             .await
-            .expect("registration");
+            .expect("registration")
+        {
+            RegistrationOutcome::Registered(record) => record,
+            other => panic!("unexpected registration outcome: {other:?}"),
+        };
 
         let label = PubDressLabel::stem(&address).expect("label");
         assert_eq!(label.as_str(), "xn--0x0-dddt1cj");
+        assert_eq!(registered.pub_dress_label.as_deref(), Some(label.as_str()));
+        assert_eq!(registered.pub_dress_label_suffix, "");
+        assert_eq!(
+            registered.readable_url("nilx.one").as_deref(),
+            Some("https://0x0небо.nilx.one")
+        );
         let record = repository
             .find_by_pub_dress_label(
                 &PubDressLabel::from_str(label.as_str()).expect("stored label"),
@@ -1262,6 +1309,10 @@ mod tests {
             .expect("lookup")
             .expect("identity");
         assert_eq!(telegram.avaia_pub_dress.as_deref(), Some("0skai"));
+        assert_eq!(
+            telegram.readable_url("nilx.one").as_deref(),
+            Some("https://0x0sky.nilx.one")
+        );
         assert!(matches!(
             repository
                 .register(&discord_address, &ProviderIdentity::discord("42"), 101)
@@ -1327,6 +1378,7 @@ mod tests {
             outcome,
             NativeRegistrationOutcome::Registered(record)
                 if record.avaia_pub_dress.as_deref() == Some("0skai")
+                    && record.readable_url("nilx.one").as_deref() == Some("https://0x0sky.nilx.one")
         ));
         assert!(
             !repository
@@ -1383,6 +1435,7 @@ mod tests {
                 .await,
             Ok(NativeRegistrationOutcome::IdempotentReplay(record))
                 if record.avaia_pub_dress.as_deref() == Some("0skai")
+                    && record.pub_dress_label.as_deref() == Some("0x0sky")
         ));
         let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia' AND owner_pub_dress = '0x0sky'",
@@ -1426,6 +1479,10 @@ mod tests {
             .expect("session lookup")
             .expect("active session");
         assert_eq!(session.avaia_pub_dress.as_deref(), Some("0skai"));
+        assert_eq!(
+            session.readable_url("nilx.one").as_deref(),
+            Some("https://0x0sky.nilx.one")
+        );
         assert_eq!(
             repository
                 .find_native_session(b"session", 200)
