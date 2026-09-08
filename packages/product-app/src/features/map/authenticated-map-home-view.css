@@ -463,11 +463,11 @@
 .authenticated-map-home.authenticated-map-home .interface-settings__back,
 .authenticated-map-home.authenticated-map-home .interface-settings__option,
 .authenticated-map-home.authenticated-map-home .bond-profile__action,
-.authenticated-map-home.authenticated-map-home .host-connect-button,
 .authenticated-map-home.authenticated-map-home .provider-control,
-.authenticated-map-home.authenticated-map-home
-  .provider-management__connected
-  > div {
+.authenticated-map-home.authenticated-map-home .provider-management__open,
+.authenticated-map-home.authenticated-map-home .provider-management__connect,
+.authenticated-map-home.authenticated-map-home .provider-management__disconnect,
+.authenticated-map-home.authenticated-map-home .provider-management__list > li {
   border-color: var(--map-line);
   color: var(--map-ink);
   background: rgba(255, 255, 255, 0.34);
@@ -477,11 +477,11 @@
 .authenticated-map-home[data-theme="dark"] .interface-settings__back,
 .authenticated-map-home[data-theme="dark"] .interface-settings__option,
 .authenticated-map-home[data-theme="dark"] .bond-profile__action,
-.authenticated-map-home[data-theme="dark"] .host-connect-button,
 .authenticated-map-home[data-theme="dark"] .provider-control,
-.authenticated-map-home[data-theme="dark"]
-  .provider-management__connected
-  > div {
+.authenticated-map-home[data-theme="dark"] .provider-management__open,
+.authenticated-map-home[data-theme="dark"] .provider-management__connect,
+.authenticated-map-home[data-theme="dark"] .provider-management__disconnect,
+.authenticated-map-home[data-theme="dark"] .provider-management__list > li {
   background: rgba(255, 255, 255, 0.035);
 }
 
@@ -490,9 +490,8 @@
   .interface-settings__option
   strong,
 .authenticated-map-home.authenticated-map-home .bond-profile__rows dd,
-.authenticated-map-home.authenticated-map-home .host-connect-button,
 .authenticated-map-home.authenticated-map-home
-  .provider-management__connected
+  .provider-management__list
   strong {
   color: var(--map-ink);
 }
@@ -516,9 +515,8 @@
   small,
 .authenticated-map-home.authenticated-map-home .interface-settings__note,
 .authenticated-map-home.authenticated-map-home .bond-profile__rows dt,
-.authenticated-map-home.authenticated-map-home .host-connect-button small,
 .authenticated-map-home.authenticated-map-home
-  .provider-management__connected
+  .provider-management__list
   small {
   color: var(--map-ink-muted);
 }
@@ -561,9 +559,17 @@
   .bond-profile__action:focus-visible,
 .authenticated-map-home.authenticated-map-home .provider-control:hover,
 .authenticated-map-home.authenticated-map-home .provider-control:focus-visible,
-.authenticated-map-home.authenticated-map-home .host-connect-button:hover,
+.authenticated-map-home.authenticated-map-home .provider-management__open:hover,
 .authenticated-map-home.authenticated-map-home
-  .host-connect-button:focus-visible {
+  .provider-management__open:focus-visible,
+.authenticated-map-home.authenticated-map-home
+  .provider-management__connect:hover,
+.authenticated-map-home.authenticated-map-home
+  .provider-management__connect:focus-visible,
+.authenticated-map-home.authenticated-map-home
+  .provider-management__disconnect:hover,
+.authenticated-map-home.authenticated-map-home
+  .provider-management__disconnect:focus-visible {
   border-color: rgba(0, 191, 212, 0.5);
   color: #007f90;
   outline: 0;
@@ -578,8 +584,16 @@
 .authenticated-map-home[data-theme="dark"] .bond-profile__action:focus-visible,
 .authenticated-map-home[data-theme="dark"] .provider-control:hover,
 .authenticated-map-home[data-theme="dark"] .provider-control:focus-visible,
-.authenticated-map-home[data-theme="dark"] .host-connect-button:hover,
-.authenticated-map-home[data-theme="dark"] .host-connect-button:focus-visible {
+.authenticated-map-home[data-theme="dark"] .provider-management__open:hover,
+.authenticated-map-home[data-theme="dark"]
+  .provider-management__open:focus-visible,
+.authenticated-map-home[data-theme="dark"] .provider-management__connect:hover,
+.authenticated-map-home[data-theme="dark"]
+  .provider-management__connect:focus-visible,
+.authenticated-map-home[data-theme="dark"]
+  .provider-management__disconnect:hover,
+.authenticated-map-home[data-theme="dark"]
+  .provider-management__disconnect:focus-visible {
   color: #78e8ef;
 }
 

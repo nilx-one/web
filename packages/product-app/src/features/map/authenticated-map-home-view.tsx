@@ -1,6 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type {
+  BondProviderConnections,
+  BondProviderType,
+} from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import type {
   MapDimension,
@@ -12,7 +16,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
+import { DockWindow } from "../../shell/dock-window";
 import {
+  IDENTITY_ROUTE,
   WORLD_ROUTE,
   type ShellRoute,
   type ShellSection,
@@ -20,6 +26,10 @@ import {
 import { useShellPresentation } from "../../shell/shell-presentation";
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import type { AvatarChoiceViewState } from "../identity/avatar-choice-view-model";
+import {
+  createBondProvidersViewState,
+  type ProviderRowViewState,
+} from "../identity/bond-providers-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
@@ -46,7 +56,8 @@ import {
   type DockSeat,
 } from "./bond-dock-view-model";
 
-export type ConnectedProvider = "telegram" | "discord";
+/** The provider types this client can present. The domain owns the list. */
+export type ConnectedProvider = BondProviderType;
 
 export interface AuthenticatedMapHomeViewProps {
   readonly hostLabel: string;
@@ -62,7 +73,18 @@ export interface AuthenticatedMapHomeViewProps {
   readonly safeArea: ShellSafeArea;
   /** The canonical route this surface is presenting. */
   readonly section?: ShellSection;
-  readonly connectedProviders?: readonly ConnectedProvider[];
+  /**
+   * The provider accounts this Bond carries. Account text never reaches this
+   * surface as content: an attachment resolves where it opens, nothing more.
+   */
+  readonly connectedProviders?: BondProviderConnections;
+  /** The providers whose URL scheme this host can hand to the platform. */
+  readonly providerDeepLinks?: readonly ConnectedProvider[];
+  /**
+   * Detaches a provider from this Bond. It is a local disconnection: no
+   * external account is deleted, here or anywhere this can reach.
+   */
+  readonly onDisconnectProvider?: (provider: ConnectedProvider) => void;
   /**
    * What this device can do about the Avaia runtime. Without a published
    * runtime there is nothing to download, which is what "unavailable" says.
@@ -112,7 +134,7 @@ function focusStateFor(location: DeviceLocationState): FocusState {
 }
 
 /** Identity detail is a state of the identity surface, never a separate route. */
-type IdentityDetail = "add-hosts" | "providers-edit";
+type IdentityDetail = "providers";
 
 /**
  * Detail is scoped to the section that opened it, so leaving the identity
@@ -168,18 +190,6 @@ function systemAppearance(): ResolvedAppearance {
   return window.matchMedia?.("(prefers-color-scheme: light)").matches
     ? "light"
     : "dark";
-}
-
-function providerLabel(provider: ConnectedProvider): string {
-  return provider === "telegram" ? "Telegram" : "Discord";
-}
-
-function providerAbbreviation(provider: ConnectedProvider): string {
-  return provider === "telegram" ? "TG" : "DC";
-}
-
-function providerConnectHref(provider: ConnectedProvider): string {
-  return `/auth?provider=${provider}&intent=connect`;
 }
 
 /** A transient renderer state belongs in the toast stack, not on the Dock. */
@@ -290,6 +300,43 @@ function AddressField({
   );
 }
 
+/**
+ * A connected provider opens where the domain resolved it: a provider scheme
+ * when this host can follow one, the account's own web address when it cannot,
+ * and the provider itself when this client does not know that address. The
+ * mark carries no account text — the provider is what it says.
+ */
+function ProviderMark({
+  row,
+  label,
+}: {
+  readonly row: ProviderRowViewState;
+  readonly label?: string;
+}) {
+  if (row.openUrl === undefined) return null;
+
+  return (
+    <a
+      className={
+        label === undefined
+          ? "provider-control provider-control--connected"
+          : "provider-management__open"
+      }
+      href={row.openUrl}
+      data-open={row.openKind}
+      aria-label={row.openLabel}
+      title={row.label}
+      // A provider scheme is handed to the platform in place; only a web
+      // address is worth a second browsing context.
+      {...(row.openKind === "deep-link"
+        ? {}
+        : { target: "_blank", rel: "noreferrer noopener" })}
+    >
+      {label ?? row.glyph}
+    </a>
+  );
+}
+
 export function AuthenticatedMapHomeView({
   hostLabel,
   pubDress,
@@ -300,6 +347,8 @@ export function AuthenticatedMapHomeView({
   safeArea,
   section = "world",
   connectedProviders = [],
+  providerDeepLinks = [],
+  onDisconnectProvider,
   avaiaAvailability = "unavailable",
   onPrepareAvaia,
   slugEdit,
@@ -354,6 +403,12 @@ export function AuthenticatedMapHomeView({
   const activeDetail =
     detailState?.section === section ? detailState.detail : undefined;
   const dockScreen = section === "world" ? "home" : (activeDetail ?? section);
+  // The Dock's navigation stack: the world, a Bond surface, a screen it opens.
+  const dockDepth =
+    section === "world" ? 0 : activeDetail === undefined ? 1 : 2;
+  const providers = createBondProvidersViewState(connectedProviders, {
+    deepLinkProviders: providerDeepLinks,
+  });
   const statusToast = mapStatusToast(
     mapStatus,
     mapViewModel.label,
@@ -599,13 +654,16 @@ export function AuthenticatedMapHomeView({
   function detailTitle(): string {
     if (section === "settings") return "Settings";
     switch (activeDetail) {
-      case "add-hosts":
-        return "Add hosts";
-      case "providers-edit":
+      case "providers":
         return "Providers";
       case undefined:
         return pubDress;
     }
+  }
+
+  /** The Dock names itself by the screen it is presenting. */
+  function dockTitle(): string {
+    return section === "world" ? "Bond" : detailTitle();
   }
 
   return (
@@ -664,288 +722,284 @@ export function AuthenticatedMapHomeView({
         <section
           className="bond-dock"
           data-screen={dockScreen}
-          aria-labelledby="bond-dock-title"
+          aria-label={dockTitle()}
         >
-          {section === "world" ? (
-            <>
-              <div className="bond-dock__header">
-                <span className="bond-dock__kicker" id="bond-dock-title">
-                  Bond
-                </span>
-              </div>
-              <div className="bond-dock__pair">
-                <button
-                  className="bond-dock__bond bond-dock__bond--active"
-                  type="button"
-                  disabled={!dock.left.actionable}
-                  onClick={focusWorldOnWheel}
-                  aria-label={dock.left.actionLabel}
-                >
-                  <span className="bond-dock__glyph">{dock.left.glyph}</span>
-                  <strong>{dock.left.address}</strong>
-                  <small>
-                    {dock.left.seat === "bond" ? "You" : "AI"}
-                    <i
-                      className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
-                      aria-hidden="true"
-                    />
-                    {dock.left.role}
-                  </small>
-                </button>
-                <span
-                  className="bond-dock__link"
-                  aria-label="No reciprocal relationship asserted"
-                >
-                  —
-                </span>
-                <button
-                  className={`bond-dock__bond${
-                    dock.right.actionable ? "" : " bond-dock__bond--unavailable"
-                  }`}
-                  type="button"
-                  disabled={!dock.right.actionable}
-                  onClick={activateSpectator}
-                  aria-label={dock.right.actionLabel}
-                >
-                  <span className="bond-dock__glyph">{dock.right.glyph}</span>
-                  <strong>{dock.right.address}</strong>
-                  <small>
-                    {dock.right.seat === "bond" ? "You" : "AI"}
-                    <i
-                      className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
-                      aria-hidden="true"
-                    />
-                    {dock.right.role}
-                  </small>
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="bond-dock__detail">
-              <div className="bond-dock__detail-header">
-                <button
-                  className="interface-settings__back"
-                  type="button"
-                  aria-label="Back"
-                  onClick={leaveDetail}
-                >
-                  <span aria-hidden="true">←</span>
-                </button>
-                <div>
-                  <span className="interface-settings__eyebrow">
-                    {detailEyebrow()}
-                  </span>
-                  <h2 id="bond-dock-title">{detailTitle()}</h2>
+          <DockWindow screen={dockScreen} depth={dockDepth}>
+            {section === "world" ? (
+              <>
+                <div className="bond-dock__header">
+                  <span className="bond-dock__kicker">Bond</span>
+                  <button
+                    className="bond-dock__edit"
+                    type="button"
+                    aria-label="Edit this Bond"
+                    onClick={() => navigate(IDENTITY_ROUTE)}
+                  >
+                    edit <span aria-hidden="true">✍️</span>
+                  </button>
                 </div>
-              </div>
+                <div className="bond-dock__pair">
+                  <button
+                    className="bond-dock__bond bond-dock__bond--active"
+                    type="button"
+                    disabled={!dock.left.actionable}
+                    onClick={focusWorldOnWheel}
+                    aria-label={dock.left.actionLabel}
+                  >
+                    <span className="bond-dock__glyph">{dock.left.glyph}</span>
+                    <strong>{dock.left.address}</strong>
+                    <small>
+                      {dock.left.seat === "bond" ? "You" : "AI"}
+                      <i
+                        className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
+                        aria-hidden="true"
+                      />
+                      {dock.left.role}
+                    </small>
+                  </button>
+                  <span
+                    className="bond-dock__link"
+                    aria-label="No reciprocal relationship asserted"
+                  >
+                    —
+                  </span>
+                  <button
+                    className={`bond-dock__bond${
+                      dock.right.actionable
+                        ? ""
+                        : " bond-dock__bond--unavailable"
+                    }`}
+                    type="button"
+                    disabled={!dock.right.actionable}
+                    onClick={activateSpectator}
+                    aria-label={dock.right.actionLabel}
+                  >
+                    <span className="bond-dock__glyph">{dock.right.glyph}</span>
+                    <strong>{dock.right.address}</strong>
+                    <small>
+                      {dock.right.seat === "bond" ? "You" : "AI"}
+                      <i
+                        className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
+                        aria-hidden="true"
+                      />
+                      {dock.right.role}
+                    </small>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="bond-dock__detail">
+                <div className="bond-dock__detail-header">
+                  <button
+                    className="interface-settings__back"
+                    type="button"
+                    aria-label="Back"
+                    onClick={leaveDetail}
+                  >
+                    <span aria-hidden="true">←</span>
+                  </button>
+                  <div>
+                    <span className="interface-settings__eyebrow">
+                      {detailEyebrow()}
+                    </span>
+                    <h2>{detailTitle()}</h2>
+                  </div>
+                </div>
 
-              {section === "identity" && activeDetail === undefined ? (
-                <div className="bond-profile">
-                  <AddressField
-                    id="profile-slug"
-                    label="pub_dress"
-                    state={slugEdit}
-                    fallback={pubDress}
-                    onChange={onSlugChange}
-                    onSubmit={onSlugSubmit}
-                  />
-                  <AddressField
-                    id="avaia-slug"
-                    label="avaia"
-                    state={avaiaEdit}
-                    fallback={avaiaLabel}
-                    onChange={onAvaiaChange}
-                    onSubmit={onAvaiaSubmit}
-                  />
-                  {avatarChoice === undefined ? null : (
-                    <fieldset className="avatar-choice">
-                      <legend>Avatar</legend>
-                      {avatarChoice.options.map((option) => (
+                {section === "identity" && activeDetail === undefined ? (
+                  <div className="bond-profile">
+                    <AddressField
+                      id="profile-slug"
+                      label="pub_dress"
+                      state={slugEdit}
+                      fallback={pubDress}
+                      onChange={onSlugChange}
+                      onSubmit={onSlugSubmit}
+                    />
+                    <AddressField
+                      id="avaia-slug"
+                      label="avaia"
+                      state={avaiaEdit}
+                      fallback={avaiaLabel}
+                      onChange={onAvaiaChange}
+                      onSubmit={onAvaiaSubmit}
+                    />
+                    {avatarChoice === undefined ? null : (
+                      <fieldset className="avatar-choice">
+                        <legend>Avatar</legend>
+                        {avatarChoice.options.map((option) => (
+                          <label
+                            key={option.model}
+                            className="interface-settings__option"
+                          >
+                            <span>
+                              <strong>{option.name}</strong>
+                              <small>{option.detail}</small>
+                            </span>
+                            <input
+                              type="radio"
+                              name="avatar-model"
+                              value={option.model}
+                              checked={option.selected}
+                              disabled={avatarChoice.busy}
+                              onChange={() => onAvatarChoice?.(option.model)}
+                            />
+                          </label>
+                        ))}
+                        <p className="profile-edit__note">
+                          {avatarChoice.unsupportedModel !== undefined
+                            ? `This Bond chose ${avatarChoice.unsupportedModel}, which this client cannot display. Update 0x1 to render that choice.`
+                            : avatarChoice.unchosen
+                              ? "No study chosen yet — no avatar is drawn until you choose."
+                              : "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves."}
+                        </p>
+                        {avatarChoice.error === undefined ? null : (
+                          <p className="profile-edit__error" role="alert">
+                            {avatarChoice.error}
+                          </p>
+                        )}
+                      </fieldset>
+                    )}
+                    <dl className="bond-profile__rows">
+                      <div>
+                        <dt>Providers</dt>
+                        <dd>
+                          <span className="provider-controls">
+                            {providers.connected.map((row) => (
+                              <ProviderMark key={row.provider} row={row} />
+                            ))}
+                            <button
+                              className="provider-control provider-control--add"
+                              type="button"
+                              aria-label="Add a provider"
+                              onClick={() => openDetail("providers")}
+                            >
+                              +
+                            </button>
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                ) : null}
+
+                {section === "settings" ? (
+                  <>
+                    <fieldset className="interface-settings__appearance">
+                      <legend>Appearance</legend>
+                      {(["light", "dark", "auto"] as const).map((mode) => (
                         <label
-                          key={option.model}
+                          key={mode}
                           className="interface-settings__option"
                         >
                           <span>
-                            <strong>{option.name}</strong>
-                            <small>{option.detail}</small>
+                            <strong>
+                              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                            </strong>
+                            <small>
+                              {mode === "auto"
+                                ? "Follow this device"
+                                : `Keep the map ${mode}`}
+                            </small>
                           </span>
                           <input
                             type="radio"
-                            name="avatar-model"
-                            value={option.model}
-                            checked={option.selected}
-                            disabled={avatarChoice.busy}
-                            onChange={() => onAvatarChoice?.(option.model)}
+                            name="appearance"
+                            value={mode}
+                            checked={appearance === mode}
+                            onChange={() => setAppearance(mode)}
                           />
                         </label>
                       ))}
-                      <p className="profile-edit__note">
-                        {avatarChoice.unsupportedModel !== undefined
-                          ? `This Bond chose ${avatarChoice.unsupportedModel}, which this client cannot display. Update 0x1 to render that choice.`
-                          : avatarChoice.unchosen
-                            ? "No study chosen yet — no avatar is drawn until you choose."
-                            : "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves."}
-                      </p>
-                      {avatarChoice.error === undefined ? null : (
-                        <p className="profile-edit__error" role="alert">
-                          {avatarChoice.error}
-                        </p>
-                      )}
                     </fieldset>
-                  )}
-                  <dl className="bond-profile__rows">
-                    <div>
-                      <dt>Providers</dt>
-                      <dd>
-                        <span className="provider-controls">
-                          {connectedProviders.map((provider) => (
-                            <button
-                              className="provider-control provider-control--connected"
-                              key={provider}
-                              type="button"
-                              aria-label={`${providerLabel(provider)} connected`}
-                              title={providerLabel(provider)}
-                              onClick={() => openDetail("providers-edit")}
-                            >
-                              {providerAbbreviation(provider)}
-                            </button>
-                          ))}
-                          <button
-                            className="provider-control provider-control--add"
-                            type="button"
-                            aria-label="Add host"
-                            onClick={() => openDetail("add-hosts")}
-                          >
-                            +
-                          </button>
-                        </span>
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              ) : null}
-
-              {section === "settings" ? (
-                <>
-                  <fieldset className="interface-settings__appearance">
-                    <legend>Appearance</legend>
-                    {(["light", "dark", "auto"] as const).map((mode) => (
-                      <label key={mode} className="interface-settings__option">
-                        <span>
-                          <strong>
-                            {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                          </strong>
-                          <small>
-                            {mode === "auto"
-                              ? "Follow this device"
-                              : `Keep the map ${mode}`}
-                          </small>
-                        </span>
-                        <input
-                          type="radio"
-                          name="appearance"
-                          value={mode}
-                          checked={appearance === mode}
-                          onChange={() => setAppearance(mode)}
-                        />
-                      </label>
-                    ))}
-                  </fieldset>
-                  <fieldset className="interface-settings__appearance">
-                    <legend>Depth</legend>
-                    {(["volumetric", "flat"] as const).map((mode) => (
-                      <label key={mode} className="interface-settings__option">
-                        <span>
-                          <strong>{mode === "flat" ? "2D" : "3D"}</strong>
-                          <small>
-                            {mode === "flat"
-                              ? "Keep buildings as footprints"
-                              : "Raise buildings at close zoom"}
-                          </small>
-                        </span>
-                        <input
-                          type="radio"
-                          name="dimension"
-                          value={mode}
-                          checked={dimension === mode}
-                          onChange={() => setDimension(mode)}
-                        />
-                      </label>
-                    ))}
-                  </fieldset>
-                  <p className="interface-settings__note">
-                    This is local interface presentation state. It does not
-                    change Bond, BondChain, or shared Core state.
-                  </p>
-                </>
-              ) : null}
-
-              {activeDetail === "add-hosts" ? (
-                <div className="host-connect-list">
-                  {(["telegram", "discord"] as const).map((provider) => (
-                    <a
-                      className="host-connect-button"
-                      href={providerConnectHref(provider)}
-                      key={provider}
-                    >
-                      <span
-                        className="provider-control provider-control--connected"
-                        aria-hidden="true"
-                      >
-                        {providerAbbreviation(provider)}
-                      </span>
-                      <span>
-                        <strong>Connect with {providerLabel(provider)}</strong>
-                        <small>
-                          Authorize this Bond with your{" "}
-                          {providerLabel(provider)} account
-                        </small>
-                      </span>
-                      <span aria-hidden="true">→</span>
-                    </a>
-                  ))}
-                  <p className="interface-settings__note">
-                    Hosts are authentication bindings for this Bond. Telegram
-                    Mini App and Discord Activity are host environments, not
-                    additional provider identities.
-                  </p>
-                </div>
-              ) : null}
-
-              {activeDetail === "providers-edit" ? (
-                <div className="provider-management">
-                  <div className="provider-management__connected">
-                    {connectedProviders.map((provider) => (
-                      <div key={provider}>
-                        <span
-                          className="provider-control provider-control--connected"
-                          aria-hidden="true"
+                    <fieldset className="interface-settings__appearance">
+                      <legend>Depth</legend>
+                      {(["volumetric", "flat"] as const).map((mode) => (
+                        <label
+                          key={mode}
+                          className="interface-settings__option"
                         >
-                          {providerAbbreviation(provider)}
-                        </span>
-                        <span>
-                          <strong>{providerLabel(provider)}</strong>
-                          <small>Connected</small>
-                        </span>
-                      </div>
-                    ))}
+                          <span>
+                            <strong>{mode === "flat" ? "2D" : "3D"}</strong>
+                            <small>
+                              {mode === "flat"
+                                ? "Keep buildings as footprints"
+                                : "Raise buildings at close zoom"}
+                            </small>
+                          </span>
+                          <input
+                            type="radio"
+                            name="dimension"
+                            value={mode}
+                            checked={dimension === mode}
+                            onChange={() => setDimension(mode)}
+                          />
+                        </label>
+                      ))}
+                    </fieldset>
+                    <p className="interface-settings__note">
+                      This is local interface presentation state. It does not
+                      change Bond, BondChain, or shared Core state.
+                    </p>
+                  </>
+                ) : null}
+
+                {activeDetail === "providers" ? (
+                  <div className="provider-management">
+                    <ul className="provider-management__list">
+                      {providers.rows.map((row) => (
+                        <li key={row.provider} data-connected={row.connected}>
+                          <span
+                            className={`provider-control${
+                              row.connected
+                                ? " provider-control--connected"
+                                : " provider-control--idle"
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {row.glyph}
+                          </span>
+                          <span>
+                            <strong>{row.label}</strong>
+                            <small>{row.status}</small>
+                          </span>
+                          {row.connected ? (
+                            <span className="provider-management__actions">
+                              <ProviderMark row={row} label="Open" />
+                              <button
+                                className="provider-management__disconnect"
+                                type="button"
+                                aria-label={row.disconnectLabel}
+                                title={row.disconnectLabel}
+                                onClick={() =>
+                                  onDisconnectProvider?.(row.provider)
+                                }
+                              >
+                                <span aria-hidden="true">🗑</span>
+                              </button>
+                            </span>
+                          ) : (
+                            <a
+                              className="provider-management__connect"
+                              href={row.connectHref}
+                              aria-label={row.connectLabel}
+                            >
+                              Connect
+                            </a>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="interface-settings__note">
+                      A provider account is an identity this Bond points at, one
+                      account per provider. Disconnecting detaches it from this
+                      Bond; it never deletes the account on the provider.
+                    </p>
                   </div>
-                  {connectedProviders.length < 2 ? (
-                    <button
-                      className="bond-profile__action"
-                      type="button"
-                      onClick={() => openDetail("add-hosts")}
-                    >
-                      + Add host
-                    </button>
-                  ) : null}
-                  <p className="interface-settings__note">
-                    Provider changes are separate from Bond profile editing.
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          )}
+                ) : null}
+              </div>
+            )}
+          </DockWindow>
         </section>
       }
       overlay={

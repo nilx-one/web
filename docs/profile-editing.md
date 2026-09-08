@@ -10,9 +10,40 @@ There is one profile surface. Reading the profile and changing it are the same
 screen, because a screen that only shows what a second screen would let you
 change is a detour, not a step. It carries those three choices. Rows that could
 only ever read "Not set" are gone rather than presented as fields no one can
-fill, and the providers row is what it says: the hosts this Bond is connected
-through, each its own control. What follows a rename — the discriminator and the
-provider connections — is a consequence, never an input.
+fill, and the providers row is what it says: the providers this Bond is
+connected through, each its own mark and nothing more. What follows a rename —
+the discriminator and the provider connections — is a consequence, never an
+input.
+
+## Providers
+
+A provider account is an external identity a Bond points at. The pointing is
+what this client owns: which providers a Bond carries, that it carries at most
+one account of each, and where an attached account opens. None of that is
+decided by a screen. `packages/application/src/bond-providers.ts` answers it,
+and a second Telegram or Discord account offered to a Bond that already carries
+one is refused there rather than merged or counted by whatever happens to be
+rendering the list.
+
+The Bond edit surface stays compact about this: it shows a mark per connected
+provider and an `add +`, and no account text at all — a provider handle is not a
+profile field. Management is its own screen, which `add +` opens. That screen
+lists Telegram and Discord whether or not they are attached; a connected
+provider offers **Open** and a disconnect control, an unconnected one offers
+**Connect**, which is the provider authorization route the rest of the product
+already uses.
+
+Disconnecting is a detachment, and the delete glyph carrying it says so in its
+accessible name: it removes this Bond's pointer at the account. It does not
+delete the account on the provider, and nothing in this repository can.
+
+A connected mark opens the account where the domain resolved it, best target
+first: the provider's own URL scheme where the host can follow one — a host that
+is itself that provider — then the account's canonical web address, and finally
+the provider's own entry point. That last one is not a placeholder. This client
+is told which provider a session was proved through and not the account behind
+it, so an attachment whose external address it does not know still opens
+somewhere rather than nowhere.
 
 ## Authority
 
