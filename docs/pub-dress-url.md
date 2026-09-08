@@ -1,7 +1,7 @@
 # Public Bond address
 
 A Bond's public address is `https://<label>.nilx.one`, where the label is
-derived from its `pub_dress`.
+derived from its `pub_dress` and allocated as stored identity state.
 
 ## Why the address is stored, not computed
 
@@ -43,28 +43,29 @@ something the Bond failed to fill in.
 
 ## Derivation rules
 
-`nilx-one/core` owns derivation and composition. `packages/application/src/pub-dress-url.ts` is presentation-only: it receives Core results and never performs Unicode/IDNA mapping itself.
+`nilx-one/core` owns derivation and composition.
+`packages/application/src/pub-dress-url.ts` is presentation-only: it receives
+Core results and never performs Unicode/IDNA mapping itself.
 
-- A label has two forms and both matter. The Bond reads `0x0небо.nilx.one`,
-  which is what a browser shows; DNS carries `xn--0x0-dddt1cj`. Composition
-  happens on the readable form and encodes once — appending a suffix to an
-  already-encoded `xn--` label would produce a string that no longer decodes.
+- A label has two forms and both matter. The product presents
+  `0x0небо.nilx.one`; DNS carries `xn--0x0-dddt1cj`. Browser chrome is outside
+  the product boundary and may choose to display either the Unicode form or the
+  A-label/Punycode form. Composition happens on the readable source and encodes
+  once — appending a suffix to an already-encoded `xn--` label would produce a
+  string that no longer decodes to the intended source.
 - The encoder owns the fold. Case folding is part of UTS-46 mapping, so nothing
   here lowercases before encoding: `toLowerCase` applies Final_Sigma and would
   give `0x0ΟΔΟΣ` a different address from the one allocated. A readable form is
-  offered only when it encodes back to exactly the same label, and otherwise the
-  Bond is shown the address it will really get.
+  offered only when it corresponds to the stored Core allocation.
 - Mapping is wider than case. Fullwidth `0x0ａｂ` reaches the same label as plain
   `0x0ab`, so they are a collision pair with no case variance between them.
 - Core validates the LDH A-label boundary, UTS-46 scalar policy, hyphen rules,
   bidirectional-text rules, joiners, and the final DNS length. Web maps Core's
   stable rejection codes into product copy rather than reclassifying Unicode.
 - The 63-octet limit is measured on the encoded form. A 32-scalar slug is a
-  valid `pub_dress` and can still reach 105 octets once encoded.
-- Non-ASCII is encoded, not refused. `0x0небо` becomes `https://0x0небо.nilx.one`,
-  carried by DNS as `xn--0x0-dddt1cj`. The A-label comes from the pinned Core
-  runtime; Web keeps the Unicode identity readable and shows the DNS form as a
-  footnote when the two differ.
+  valid `pub_dress` and can still exceed one DNS label once encoded.
+- Non-ASCII is encoded, not refused. `0x0небо` has the product-readable public
+  URL `https://0x0небо.nilx.one`, carried by DNS as `xn--0x0-dddt1cj`.
 
 Every label begins with `0x` or, once encoded, `xn--`. That is what keeps the
 user namespace disjoint from service hosts — no Bond can fold onto `www`, `api`,
@@ -73,29 +74,52 @@ alongside it. Because an ASCII stem always begins `0x`, no Bond can hand-craft a
 label starting `xn--` either, so an ACE prefix cannot be forged.
 
 One consequence of the encoding is worth knowing before it is discovered in
-production, and the surface now says it in place rather than leaving an empty
-field: **no right-to-left `pub_dress` can have an address.** RFC 5893
-requires an RTL label to begin with L, R, or AL, and every label here begins with
-the digit `0`. Hebrew and Arabic Bonds are excluded by the `0x` prefix itself,
-not by anything about their script.
+production, and the surface says it in place rather than leaving an empty field:
+**no right-to-left `pub_dress` can have an address.** RFC 5893 requires an RTL
+label to begin with L, R, or AL, and every label here begins with the digit `0`.
+Hebrew and Arabic Bonds are excluded by the `0x` prefix itself, not by anything
+about their script.
 
 ## Allocation stays a server transaction
 
-`ResolvePubDressLabel` is advisory in exactly the way `ResolvePubDress` is. The
-identity service's allocating insert remains the only collision boundary, so a
-label may still be taken between the answer and registration, and the client
-must handle that.
+`POST /api/v1/identity/url/resolve` is advisory in exactly the way
+`POST /api/v1/identity/resolve` is. The identity service's allocating insert
+remains the only collision boundary, so a label may still be taken between the
+answer and registration, and the client must handle that.
+
+Human identities now carry `pub_dress_label` plus the selected
+`pub_dress_label_suffix`. The label has a `UNIQUE COLLATE NOCASE` index. New
+native and provider registrations allocate the default Core-derived label in the
+same transaction that creates the human Bond. Renaming a Bond also moves or
+releases that stored label in the rename transaction.
+
+Existing human Bonds are backfilled in stable creation order. The first historic
+Bond that maps onto a label receives it; a later historic collision remains
+unallocated rather than inventing a distinguishing suffix its owner never chose.
+A `pub_dress` that Core cannot represent as one DNS label remains a valid Bond
+with no public label.
+
+## Public lookup
+
+`GET /api/v1/identity/public` resolves the request host by its stored A-label.
+The service validates the hostname as a canonical `PubDressLabel`, then looks up
+the allocation. Decoding an A-label is never identity authority: an unallocated
+host returns `404` instead of being reverse-computed into a Bond.
+
+On a Bond hostname, `apps/site` renders a public-only surface from that lookup.
+It does not start the authenticated world, session flow, geolocation, map, or
+Avaia runtime. The response exposes public identity projection only:
+`pub_dress`, optional owned Avaia and avatar choice, and the readable public URL.
 
 ## Security boundary
 
-A subdomain is a separate origin on the same registrable domain. Two properties
-already hold in `services/identity/src/api.rs` and must keep holding:
+A subdomain is a separate origin on the same registrable domain. Session and
+remembered-Bond cookies use the `__Host-` prefix and set no `Domain` attribute,
+so a Bond subdomain cannot read or shadow the authenticated `nilx.one` cookies.
 
-- session and remembered-Bond cookies use the `__Host-` prefix and set no
-  `Domain` attribute, so no subdomain can read or shadow them;
-- one wildcard certificate for `*.nilx.one`, issued over ACME DNS-01. Per-label
-  certificates would publish every registered nickname in Certificate
-  Transparency logs permanently.
+Production needs one wildcard certificate for `*.nilx.one`, issued through a
+DNS-01-capable path. Per-label certificates would publish registered public
+labels in Certificate Transparency logs permanently.
 
 If Bond addresses ever serve Bond-controlled JavaScript, `__Host-` alone stops
 being sufficient and the addresses need their own registrable domain plus a
@@ -104,26 +128,25 @@ Public Suffix List entry.
 ## Core ownership
 
 [`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) mirrors the
-Core-owned contract consumed by Web. The normative implementation now lives in
+Core-owned contract consumed by Web. The normative implementation lives in
 `nilx-one/core` and is exposed to Web through the verified Wasm boundary; the
 local document remains as a cross-repository compatibility and downstream-work
 record.
 
-## Not yet implemented
+## Remaining work
 
-- `POST /api/v1/identity/url/resolve`, and label allocation inside the
-  registration transaction, with `pub_dress_url` on the identity projection;
-- the migration adding the stored label with a `UNIQUE COLLATE NOCASE` index;
-- wildcard DNS and TLS, which `deploy/web/README.md` places in `0x0sky/infra`.
+- wire the existing distinguishing-suffix editor to Core composition,
+  `/api/v1/identity/url/resolve`, and suffix-aware registration allocation. Until
+  then a new Bond whose default DNS label is already allocated is rejected at
+  the transaction boundary rather than silently receiving another address;
+- provision wildcard `*.nilx.one` DNS and DNS-01 TLS at the shared edge in
+  `0x0sky/infra`, then route Bond hosts to `ox1-web`;
+- activate and publicly verify that edge change. Merge and deployment remain
+  separate delivery stages.
 
-Until label resolution exists, `IdentityFoundationView` receives no
-`pubDressUrlResolution` and the address surface stays in its read-only preview:
-the Bond still sees the fold and the encoded form, and only a real collision
-answer opens the editable part.
-
-The preview uses the pinned Core runtime directly. If the Wasm label binding is
-missing or malformed, Web fails closed instead of falling back to a second
-Unicode/IDNA implementation.
+The preview and collision composition use the pinned Core runtime directly. If
+the Wasm label binding is missing or malformed, Web fails closed instead of
+falling back to a second Unicode/IDNA implementation.
 
 ---
 
