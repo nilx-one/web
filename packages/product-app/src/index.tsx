@@ -859,7 +859,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const browserProviderAuth = browserHost
     ? {
         available:
-          providerContext?.kind === "none" || providerContext?.kind === "pending"
+          providerContext?.kind === "none" ||
+          providerContext?.kind === "pending"
             ? providerContext.available
             : { telegram: false, discord: false },
         onAuthorize: authorizeBrowserProvider,

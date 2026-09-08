@@ -524,13 +524,10 @@ class IdentityHttpAdapter implements IdentityAccessPort {
   }
 
   public async readBrowserProviderContext(): Promise<BrowserProviderContextResult> {
-    const response = await this.fetch(
-      "/api/v1/auth/browser/provider/context",
-      {
-        cache: "no-store",
-        credentials: "same-origin",
-      },
-    );
+    const response = await this.fetch("/api/v1/auth/browser/provider/context", {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
     const body: unknown = await response.json().catch(() => undefined);
     if (!response.ok || !isRecord(body) || !isRecord(body.available)) {
       return { kind: "service-unavailable" };

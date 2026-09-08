@@ -287,7 +287,10 @@ function ProviderRow({
         </button>
       </div>
       {pendingLabel === undefined ? null : (
-        <p className="identity-status identity-status--available" aria-live="polite">
+        <p
+          className="identity-status identity-status--available"
+          aria-live="polite"
+        >
           {pendingLabel} verified. Already have a Bond? Sign in below and we’ll
           connect {pendingLabel}. New here? Create your Bond below.
         </p>
