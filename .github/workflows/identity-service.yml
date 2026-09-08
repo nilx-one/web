@@ -27,6 +27,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
+      - name: Resolve lockfile for review branch
+        run: cargo generate-lockfile --manifest-path services/identity/Cargo.toml
+      - name: Preserve resolved lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-cargo-lock
+          path: services/identity/Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
       - name: Check formatting
         run: cargo fmt --manifest-path services/identity/Cargo.toml --all -- --check
       - name: Run Clippy
