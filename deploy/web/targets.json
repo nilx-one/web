@@ -1,6 +1,10 @@
 {
   "schema": 1,
-  "deployOrder": ["web", "telegram", "discord"],
+  "deployOrder": [
+    "web",
+    "telegram",
+    "discord"
+  ],
   "targets": {
     "web": {
       "app": "site",
@@ -9,7 +13,7 @@
       "compatEdgeAlias": "ox1-telegram-mini-app",
       "composeProject": "nilx-one-web",
       "publicPath": "/",
-      "requiresIdentityContract": 4
+      "requiresIdentityContract": 5
     },
     "telegram": {
       "app": "telegram-mini-app",

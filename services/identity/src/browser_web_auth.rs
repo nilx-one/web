@@ -367,7 +367,7 @@ async fn telegram_callback(
     let transaction =
         match callback_transaction(&state, &headers, &query, BrowserProvider::Telegram) {
             Ok(value) => value,
-            Err(response) => return response,
+            Err(code) => return callback_failure(code),
         };
     let Some(client) = state.config.telegram.as_ref() else {
         return callback_failure("telegram_browser_auth_not_configured");
@@ -427,7 +427,7 @@ async fn discord_callback(
     let transaction = match callback_transaction(&state, &headers, &query, BrowserProvider::Discord)
     {
         Ok(value) => value,
-        Err(response) => return response,
+        Err(code) => return callback_failure(code),
     };
     let Some(client) = state.config.discord.as_ref() else {
         return callback_failure("discord_browser_auth_not_configured");
@@ -501,27 +501,27 @@ fn callback_transaction(
     headers: &HeaderMap,
     query: &OAuthCallbackQuery,
     provider: BrowserProvider,
-) -> Result<OAuthTransaction, Response> {
+) -> Result<OAuthTransaction, &'static str> {
     if query.error.is_some() {
-        return Err(callback_failure("provider_authorization_rejected"));
+        return Err("provider_authorization_rejected");
     }
     let (Some(code), Some(query_state)) = (query.code.as_deref(), query.state.as_deref()) else {
-        return Err(callback_failure("provider_callback_invalid"));
+        return Err("provider_callback_invalid");
     };
     if code.is_empty() || query_state.is_empty() {
-        return Err(callback_failure("provider_callback_invalid"));
+        return Err("provider_callback_invalid");
     }
     let Some(cookie) = read_cookie(headers, OAUTH_TRANSACTION_COOKIE) else {
-        return Err(callback_failure("provider_callback_expired"));
+        return Err("provider_callback_expired");
     };
     let Some(transaction) = state
         .cookie_signer
         .verify::<OAuthTransaction>("browser-oauth-transaction", &cookie)
     else {
-        return Err(callback_failure("provider_callback_invalid"));
+        return Err("provider_callback_invalid");
     };
     let Some(now) = now_unix_seconds() else {
-        return Err(callback_failure("provider_authentication_unavailable"));
+        return Err("provider_authentication_unavailable");
     };
     if transaction.provider != provider
         || transaction.expires_at <= now
@@ -532,7 +532,7 @@ fn callback_transaction(
             .unwrap_u8()
             != 1
     {
-        return Err(callback_failure("provider_callback_invalid"));
+        return Err("provider_callback_invalid");
     }
     Ok(transaction)
 }
