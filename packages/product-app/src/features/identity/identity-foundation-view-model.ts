@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvatarChoiceViewState } from "./avatar-choice-view-model";
 import type {
   NativeAuthenticationResult,
   NativeIdentityContextResult,
@@ -10,6 +11,7 @@ import type {
   ProviderPasswordResult,
   PubDressResolutionResult,
   PubDressSelection,
+  StoredAvatarModel,
   RuntimeReadiness,
 } from "@nilx-one/application";
 import {
@@ -72,6 +74,16 @@ export type IdentityViewState =
       rememberedPubDress?: string;
     }
   | {
+      /**
+       * The body a new Bond is offered right after it becomes one. It is a
+       * choice, not a step to get past: skipping it leaves the Bond with no
+       * model recorded, and the profile keeps the same picker.
+       */
+      kind: "avatar-choice";
+      pubDress: string;
+      choice: AvatarChoiceViewState;
+    }
+  | {
       kind: "recovery-key";
       pubDress: string;
       recoveryKey: string;
@@ -83,6 +95,8 @@ export type IdentityViewState =
       kind: "authenticated";
       pubDress: string;
       avaiaPubDress?: string;
+      /** The body this Bond chose, absent while it has chosen none. */
+      avatarModel?: StoredAvatarModel;
       native: boolean;
     }
   | { kind: "unavailable"; detail: string }
@@ -100,6 +114,30 @@ function projectedAvaia(avaiaPubDress: string | undefined): {
   avaiaPubDress?: string;
 } {
   return avaiaPubDress === undefined ? {} : { avaiaPubDress };
+}
+
+// A stored model may be newer than this client. The view state carries what
+// the service recorded; narrowing to a study this build can draw happens where
+// the body is chosen or rendered, never by dropping the person's choice here.
+function projectedAvatar(avatarModel: StoredAvatarModel | undefined): {
+  avatarModel?: StoredAvatarModel;
+} {
+  return avatarModel === undefined ? {} : { avatarModel };
+}
+
+/**
+ * A newly registered Bond is asked which study represents it, once. An
+ * identity that already recorded a choice, or a person who skipped, goes
+ * straight to the world.
+ */
+export function createAvatarChoiceStepViewState(
+  identity: Extract<IdentityViewState, { kind: "authenticated" }>,
+  choice: AvatarChoiceViewState,
+  offered: boolean,
+): IdentityViewState {
+  return offered && identity.avatarModel === undefined
+    ? { kind: "avatar-choice", pubDress: identity.pubDress, choice }
+    : identity;
 }
 
 export function createPubDressStatusViewState(
@@ -159,6 +197,7 @@ export function createNativeIdentityViewState(
       kind: "authenticated",
       pubDress: authentication.identity.pubDress,
       ...projectedAvaia(authentication.identity.avaiaPubDress),
+      ...projectedAvatar(authentication.identity.avatarModel),
       native: true,
     };
   }
@@ -188,6 +227,7 @@ export function createNativeIdentityViewState(
       kind: "authenticated",
       pubDress: context.identity.pubDress,
       ...projectedAvaia(context.identity.avaiaPubDress),
+      ...projectedAvatar(context.identity.avatarModel),
       native: true,
     };
   }
@@ -260,6 +300,7 @@ export function createProviderIdentityViewState(
         kind: "authenticated",
         pubDress: acknowledgement.identity.pubDress,
         ...projectedAvaia(acknowledgement.identity.avaiaPubDress),
+        ...projectedAvatar(acknowledgement.identity.avatarModel),
         native: false,
       };
     }
@@ -291,6 +332,7 @@ export function createProviderIdentityViewState(
       kind: "authenticated",
       pubDress: registration.identity.pubDress,
       ...projectedAvaia(registration.identity.avaiaPubDress),
+      ...projectedAvatar(registration.identity.avatarModel),
       native: false,
     };
   }
@@ -299,6 +341,7 @@ export function createProviderIdentityViewState(
       kind: "authenticated",
       pubDress: identity.identity.pubDress,
       ...projectedAvaia(identity.identity.avaiaPubDress),
+      ...projectedAvatar(identity.identity.avatarModel),
       native: false,
     };
   }

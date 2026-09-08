@@ -3,7 +3,9 @@
 
 import { describe, expect, it } from "vitest";
 
+import { createAvatarChoiceViewState } from "./avatar-choice-view-model";
 import {
+  createAvatarChoiceStepViewState,
   createIdentityFoundationViewModel,
   createNativeIdentityViewState,
   createProviderIdentityViewState,
@@ -153,6 +155,33 @@ describe("pub_dress status", () => {
       mode: "sign-in",
       status: { kind: "registered" },
     });
+  });
+});
+
+describe("avatar choice step", () => {
+  const authenticated = {
+    kind: "authenticated" as const,
+    pubDress: "0x0sky",
+    native: true,
+  };
+  const choice = createAvatarChoiceViewState(undefined, undefined);
+
+  it("offers a body to a Bond that has just come into existence", () => {
+    expect(
+      createAvatarChoiceStepViewState(authenticated, choice, true),
+    ).toMatchObject({ kind: "avatar-choice", pubDress: "0x0sky" });
+  });
+
+  it("never offers it to a Bond that already chose one", () => {
+    const chosen = { ...authenticated, avatarModel: "kai-study" };
+
+    expect(createAvatarChoiceStepViewState(chosen, choice, true)).toBe(chosen);
+  });
+
+  it("opens the world when the step is not offered", () => {
+    expect(createAvatarChoiceStepViewState(authenticated, choice, false)).toBe(
+      authenticated,
+    );
   });
 });
 

@@ -1,9 +1,33 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+/**
+ * The avatar studies this client can choose and render. Identity responses may
+ * carry a newer model id; preserve that explicit choice opaquely instead of
+ * collapsing it into the absence of a choice.
+ */
+export const AVATAR_MODELS = ["sky-study", "dasha-study", "kai-study"] as const;
+
+export type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
+/** A model this client publishes and is allowed to send as a new choice. */
+export type AvatarModel = PublishedAvatarModel;
+/** An explicit stored model id, including ids published by a newer runtime. */
+export type StoredAvatarModel = string;
+
+/**
+ * Parses an explicit stored identity model id without assuming this client
+ * publishes it. Rendering code must narrow against `AVATAR_MODELS` before
+ * drawing it.
+ */
+export function isAvatarModel(value: unknown): value is StoredAvatarModel {
+  return typeof value === "string" && value.length > 0;
+}
+
 export interface IdentityProjection {
   pubDress: string;
   avaiaPubDress?: string;
+  /** The body this Bond chose. Absent only while it has chosen none. */
+  avatarModel?: StoredAvatarModel;
   /**
    * The public address allocated for this Bond, absent while the identity
    * service has not allocated one. It is stored, not computed: the fold from a
@@ -144,6 +168,15 @@ export type ProviderRegistrationResult =
  */
 export type ProviderPasswordHost = "telegram" | "discord";
 
+/** Choosing a body changes identity state and nothing else about the Bond. */
+export type AvatarModelResult =
+  | { kind: "chosen"; identity: IdentityProjection }
+  | {
+      kind: "rejected";
+      reason: "authentication-required" | "unknown-model" | "rate-limited";
+    }
+  | { kind: "service-unavailable" };
+
 export type ProviderPasswordResult =
   | Extract<NativeRegistrationResult, { kind: "recovery-key-required" }>
   | {
@@ -206,6 +239,7 @@ export type PubDressRenameResult =
   | { kind: "service-unavailable" };
 
 export interface IdentityAccessPort {
+  chooseAvatarModel(model: AvatarModel): Promise<AvatarModelResult>;
   renameAvaiaSlug(slug: string): Promise<PubDressRenameResult>;
   renamePubDressSlug(slug: string): Promise<PubDressRenameResult>;
   setProviderPassword(
@@ -390,6 +424,18 @@ export class RegisterProviderIdentity {
   ): Promise<ProviderRegistrationResult> {
     try {
       return await this.identity.registerProvider(selection);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class ChooseAvatarModel {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(model: AvatarModel): Promise<AvatarModelResult> {
+    try {
+      return await this.identity.chooseAvatarModel(model);
     } catch {
       return { kind: "service-unavailable" };
     }

@@ -3,6 +3,7 @@
 
 import {
   AcknowledgeRecoveryKey,
+  ChooseAvatarModel,
   AuthenticateNativeIdentity,
   BeginBrowserProviderAuthorization,
   ForgetRememberedBond,
@@ -22,6 +23,7 @@ import {
   type BrowserIdentityProvider,
   type CoreRuntimePort,
   type IdentityAccessPort,
+  type AvatarModel,
   type ProviderPasswordHost,
   type PubDressSelection,
 } from "@nilx-one/application";
@@ -61,6 +63,8 @@ import {
   type IdentityViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
+import { createAvatarChoiceViewState } from "./features/identity/avatar-choice-view-model";
+import { createAvatarChoiceStepViewState } from "./features/identity/identity-foundation-view-model";
 import {
   createAvaiaSlugViewState,
   createProfileSlugViewState,
@@ -240,6 +244,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [useRememberedHint, setUseRememberedHint] = useState(true);
   // Undefined means the profile is showing the address the service holds.
   const [slugDraft, setSlugDraft] = useState<string | undefined>(undefined);
+  // A new Bond is asked for a body once. Deciding later is a real answer, so
+  // the step is not offered again in this session.
+  const [avatarStepDeclined, setAvatarStepDeclined] = useState(false);
   const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);
   const pendingAutofillCredential = useRef<
     PendingAutofillCredential | undefined
@@ -445,6 +452,17 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       await refreshIdentityProjections();
     },
   });
+  // Choosing a body is identity state, so it is saved where the Bond is, not
+  // in this device's interface preferences.
+  const chooseAvatar = useMutation({
+    mutationFn: (model: AvatarModel) =>
+      new ChooseAvatarModel(dependencies.identity).execute(model),
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "chosen") return;
+      await refreshIdentityProjections();
+    },
+  });
   const renameAvaia = useMutation({
     mutationFn: (slug: string) =>
       new RenameAvaiaSlug(dependencies.identity).execute(slug),
@@ -559,10 +577,28 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       };
     }
   }
+  const avatarChoice = createAvatarChoiceViewState(
+    identityState.kind === "authenticated"
+      ? identityState.avatarModel
+      : undefined,
+    chooseAvatar.isPending ? chooseAvatar.variables : undefined,
+    chooseAvatar.data,
+  );
+  // Registration is the one moment a body is offered without being asked for:
+  // a Bond that just came into existence, before its world opens.
+  const registeredThisSession =
+    nativeRegistration.data?.kind === "recovery-key-required" ||
+    providerPassword.data?.kind === "recovery-key-required";
   const viewModel = createIdentityFoundationViewModel(
     host,
     readinessQuery.data,
-    identityState,
+    identityState.kind === "authenticated"
+      ? createAvatarChoiceStepViewState(
+          identityState,
+          avatarChoice,
+          registeredThisSession && !avatarStepDeclined,
+        )
+      : identityState,
   );
 
   useEffect(() => {
@@ -800,6 +836,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           renameAvaia.reset();
           setAvaiaDraft(next);
         }}
+        avatarChoice={avatarChoice}
+        onAvatarChoice={(model) => {
+          if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
+        }}
         onAvaiaSubmit={() => {
           if (avaiaDraft !== undefined && !renameAvaia.isPending) {
             renameAvaia.mutate(avaiaDraft);
@@ -840,6 +880,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       viewModel={viewModel}
       {...(browserProviderAuth === undefined ? {} : { browserProviderAuth })}
       onCredentialAutofill={applyAutofilledCredential}
+      onAvatarChoice={(model) => {
+        if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
+      }}
+      onSkipAvatarChoice={() => setAvatarStepDeclined(true)}
       onAcknowledgeRecovery={(challenge) =>
         recoveryAcknowledgement.mutate(challenge)
       }

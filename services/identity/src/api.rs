@@ -142,6 +142,7 @@ fn router_with_clock(
         .route("/api/v1/identity/registration", post(register_identity))
         .route("/api/v1/identity/pub_dress", post(rename_pub_dress))
         .route("/api/v1/identity/avaia/pub_dress", post(rename_owned_avaia))
+        .route("/api/v1/identity/avatar", post(choose_avatar_model))
         .route(
             "/api/v1/auth/telegram/password",
             post(set_telegram_password),
@@ -206,9 +207,13 @@ async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) 
                     Some(value) => value,
                     None => return unavailable(),
                 };
+                let avatar_model = match state.repository.avatar_model(&identity.pub_dress).await {
+                    Ok(value) => value,
+                    Err(_) => return unavailable(),
+                };
                 return no_store_json(
                     StatusCode::OK,
-                    NativeContextResponse::authenticated(identity),
+                    NativeContextResponse::authenticated(identity, avatar_model),
                 );
             }
             Ok(None) => {}
@@ -971,10 +976,14 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
                 Ok(value) => value,
                 Err(_) => return unavailable(),
             };
+            let avatar_model = match state.repository.avatar_model(&identity.pub_dress).await {
+                Ok(value) => value,
+                Err(_) => return unavailable(),
+            };
             no_store_json(
                 StatusCode::OK,
                 ProviderIdentityProjection {
-                    identity: identity.into(),
+                    identity: IdentityProjection::with_avatar(identity, avatar_model),
                     password_required,
                 },
             )
@@ -1172,6 +1181,66 @@ async fn rename_pub_dress(
         Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
         Err(error) => {
             tracing::error!(%error, "pub_dress rename failed");
+            unavailable()
+        }
+    }
+}
+
+/// The published avatar studies. A body is chosen, never assigned: an address
+/// with no choice recorded carries no model at all.
+const AVATAR_MODELS: [&str; 3] = ["sky-study", "dasha-study", "kai-study"];
+
+async fn choose_avatar_model(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<AvatarModelRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let identity = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value,
+        Err(error) => return error.into_response(),
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(
+            format!("avatar-model:{}", identity.pub_dress),
+            now,
+            30,
+            3600,
+        )
+        .and_then(|_| {
+            state
+                .limiter
+                .consume("avatar-model:global", now, 2_000, 3600)
+        })
+    {
+        return rate_limited(retry_after);
+    }
+    if !AVATAR_MODELS.contains(&request.model.as_str()) {
+        return no_store_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unknown_avatar_model",
+            "That avatar model is not published.",
+        );
+    }
+    match state
+        .repository
+        .set_avatar_model(&identity.pub_dress, &request.model)
+        .await
+    {
+        Ok(true) => no_store_json(
+            StatusCode::OK,
+            IdentityProjection::with_avatar(identity, Some(request.model)),
+        ),
+        Ok(false) => unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "avatar model update failed");
             unavailable()
         }
     }
@@ -1532,6 +1601,12 @@ struct PubDressRenameRequest {
     slug: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AvatarModelRequest {
+    model: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ResolvePubDressRequest {
@@ -1604,10 +1679,10 @@ impl NativeContextResponse {
         }
     }
 
-    fn authenticated(identity: IdentityRecord) -> Self {
+    fn authenticated(identity: IdentityRecord, avatar_model: Option<String>) -> Self {
         Self {
             state: "authenticated",
-            identity: Some(identity.into()),
+            identity: Some(IdentityProjection::with_avatar(identity, avatar_model)),
             remembered_pub_dress: None,
         }
     }
@@ -1654,6 +1729,19 @@ struct ProviderIdentityProjection {
 struct IdentityProjection {
     pub_dress: String,
     avaia_pub_dress: Option<String>,
+    /// Present only where the response was built from a stored choice. Its
+    /// absence says this response does not carry one, never that none exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    avatar_model: Option<String>,
+}
+
+impl IdentityProjection {
+    fn with_avatar(identity: IdentityRecord, avatar_model: Option<String>) -> Self {
+        Self {
+            avatar_model,
+            ..Self::from(identity)
+        }
+    }
 }
 
 impl From<IdentityRecord> for IdentityProjection {
@@ -1661,6 +1749,7 @@ impl From<IdentityRecord> for IdentityProjection {
         Self {
             pub_dress: identity.pub_dress,
             avaia_pub_dress: identity.avaia_pub_dress,
+            avatar_model: None,
         }
     }
 }
@@ -2988,5 +3077,122 @@ mod tests {
         let renamed = json_body(app.oneshot(rename).await.expect("response")).await;
         assert_eq!(renamed["pub_dress"], "0x0Rain");
         assert_eq!(renamed["avaia_pub_dress"], "0Rainai");
+    }
+    #[tokio::test]
+    async fn avatar_model_is_chosen_by_the_bond_and_read_back_with_its_identity() {
+        let app = app().await;
+        let cookies = native_session_cookies(&app, "0x0Sky", "avatar-choice-test-0001").await;
+        let choose = |model: &str| {
+            let mut request = Request::post("/api/v1/identity/avatar")
+                .header("content-type", "application/json")
+                .header(super::CSRF_HEADER, "1")
+                .body(Body::from(
+                    serde_json::json!({ "model": model }).to_string(),
+                ))
+                .expect("request");
+            request
+                .headers_mut()
+                .insert("cookie", cookies.parse().expect("header"));
+            request
+        };
+
+        // No body is assigned by default: the identity carries no model until
+        // the person chooses one.
+        let context = Request::get("/api/v1/auth/native/context")
+            .header("cookie", cookies.clone())
+            .body(Body::empty())
+            .expect("request");
+        let context = json_body(app.clone().oneshot(context).await.expect("response")).await;
+        assert!(context["identity"].get("avatar_model").is_none());
+
+        let chosen = app
+            .clone()
+            .oneshot(choose("kai-study"))
+            .await
+            .expect("response");
+        assert_eq!(chosen.status(), StatusCode::OK);
+        assert_eq!(chosen.headers()[CACHE_CONTROL], "no-store");
+        assert_eq!(json_body(chosen).await["avatar_model"], "kai-study");
+
+        let context = Request::get("/api/v1/auth/native/context")
+            .header("cookie", cookies.clone())
+            .body(Body::empty())
+            .expect("request");
+        let context = json_body(app.clone().oneshot(context).await.expect("response")).await;
+        assert_eq!(context["identity"]["avatar_model"], "kai-study");
+
+        // A choice replaces the previous one; the address itself is untouched.
+        let chosen = app
+            .clone()
+            .oneshot(choose("dasha-study"))
+            .await
+            .expect("response");
+        let chosen = json_body(chosen).await;
+        assert_eq!(chosen["avatar_model"], "dasha-study");
+        assert_eq!(chosen["pub_dress"], "0x0Sky");
+
+        let unknown = app
+            .clone()
+            .oneshot(choose("someone-else-study"))
+            .await
+            .expect("response");
+        assert_eq!(unknown.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            json_body(unknown).await["error"]["code"],
+            "unknown_avatar_model"
+        );
+    }
+
+    #[tokio::test]
+    async fn avatar_model_requires_an_authenticated_bond_and_csrf() {
+        let app = app().await;
+        register_telegram_fixture(&app).await;
+        let request = |csrf: bool, proof: bool| {
+            let mut builder =
+                Request::post("/api/v1/identity/avatar").header("content-type", "application/json");
+            if csrf {
+                builder = builder.header(super::CSRF_HEADER, "1");
+            }
+            if proof {
+                builder = builder.header(AUTHORIZATION, format!("tma {}", signed_init_data(42)));
+            }
+            builder
+                .body(Body::from(r#"{"model":"kai-study"}"#))
+                .expect("request")
+        };
+
+        assert_eq!(
+            app.clone()
+                .oneshot(request(true, false))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(request(false, true))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+
+        // A verified provider Bond chooses for the identity that proof resolves.
+        let chosen = app
+            .clone()
+            .oneshot(request(true, true))
+            .await
+            .expect("response");
+        assert_eq!(chosen.status(), StatusCode::OK);
+        assert_eq!(json_body(chosen).await["avatar_model"], "kai-study");
+        let read = Request::get("/api/v1/identity")
+            .header(AUTHORIZATION, format!("tma {}", signed_init_data(42)))
+            .body(Body::empty())
+            .expect("request");
+        assert_eq!(
+            json_body(app.oneshot(read).await.expect("response")).await["avatar_model"],
+            "kai-study"
+        );
     }
 }

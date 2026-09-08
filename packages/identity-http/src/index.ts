@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  isAvatarModel,
   formatPubDress,
   type BrowserIdentityProvider,
   type BrowserProviderContextResult,
@@ -15,6 +16,8 @@ import {
   type NativeRegistrationResult,
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
+  type AvatarModel,
+  type AvatarModelResult,
   type ProviderPasswordHost,
   type PubDressRenameResult,
   type ProviderPasswordResult,
@@ -40,6 +43,9 @@ function parseIdentity(value: unknown): IdentityProjection | undefined {
     pubDress: value.pub_dress,
     ...(typeof value.avaia_pub_dress === "string"
       ? { avaiaPubDress: value.avaia_pub_dress }
+      : {}),
+    ...(isAvatarModel(value.avatar_model)
+      ? { avatarModel: value.avatar_model }
       : {}),
     ...(typeof value.pub_dress_url === "string"
       ? { pubDressUrl: value.pub_dress_url }
@@ -357,6 +363,40 @@ class IdentityHttpAdapter implements IdentityAccessPort {
         return { kind: "rejected", reason: "invalid-password-length" };
       case "compromised_password":
         return { kind: "rejected", reason: "compromised-password" };
+      case "rate_limited":
+        return { kind: "rejected", reason: "rate-limited" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
+  public async chooseAvatarModel(
+    model: AvatarModel,
+  ): Promise<AvatarModelResult> {
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/avatar", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        ...(authorization === undefined ? {} : { authorization }),
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({ model }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const identity = parseIdentity(body);
+      if (identity !== undefined) {
+        return { kind: "chosen", identity };
+      }
+    }
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "unknown_avatar_model":
+        return { kind: "rejected", reason: "unknown-model" };
       case "rate_limited":
         return { kind: "rejected", reason: "rate-limited" };
       default:
