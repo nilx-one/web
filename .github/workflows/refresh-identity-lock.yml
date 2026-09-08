@@ -1,0 +1,67 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Refresh identity lockfile
+
+on:
+  push:
+    branches:
+      - "claude/discord-loading-issue-w1j6pg"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Pin identity dependencies and enforce locked builds
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cargo generate-lockfile --manifest-path services/identity/Cargo.toml
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ignore = Path('.gitignore')
+          lines = ignore.read_text().splitlines()
+          ignore.write_text('\n'.join(line for line in lines if line != 'services/identity/Cargo.lock') + '\n')
+
+          workflow = Path('.github/workflows/identity-service.yml')
+          text = workflow.read_text()
+          old = '''      - name: Resolve locked dependencies
+                  run: cargo generate-lockfile --manifest-path services/identity/Cargo.toml
+          '''
+          if old not in text:
+              raise SystemExit('identity CI lockfile generation block not found')
+          workflow.write_text(text.replace(old, ''))
+
+          dockerfile = Path('services/identity/Dockerfile')
+          text = dockerfile.read_text()
+          old = '''COPY services/identity/Cargo.toml ./Cargo.toml
+          COPY services/identity/migrations ./migrations
+          COPY services/identity/src ./src
+          RUN cargo generate-lockfile \\
+              && cargo build --locked --release
+          '''
+          new = '''COPY services/identity/Cargo.toml ./Cargo.toml
+          COPY services/identity/Cargo.lock ./Cargo.lock
+          COPY services/identity/migrations ./migrations
+          COPY services/identity/src ./src
+          RUN cargo build --locked --release
+          '''
+          if old not in text:
+              raise SystemExit('identity Docker lockfile generation block not found')
+          dockerfile.write_text(text.replace(old, new))
+          PY
+      - name: Commit reproducible identity build
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "0x1 CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add .gitignore .github/workflows/identity-service.yml services/identity/Dockerfile services/identity/Cargo.lock
+          git commit -m "fix(identity): pin Rust dependency graph"
+          git push origin HEAD:"${GITHUB_REF_NAME}"
