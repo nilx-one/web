@@ -9,7 +9,7 @@
       "compatEdgeAlias": "ox1-telegram-mini-app",
       "composeProject": "nilx-one-web",
       "publicPath": "/",
-      "requiresIdentityContract": 1
+      "requiresIdentityContract": 4
     },
     "telegram": {
       "app": "telegram-mini-app",
@@ -18,7 +18,7 @@
       "compatEdgeAlias": "ox1-telegram",
       "composeProject": "nilx-one-telegram",
       "publicPath": "/telegram/",
-      "requiresIdentityContract": 2
+      "requiresIdentityContract": 4
     },
     "discord": {
       "app": "discord-activity",
@@ -27,7 +27,7 @@
       "compatEdgeAlias": "ox1-discord",
       "composeProject": "nilx-one-discord",
       "publicPath": "/discord/",
-      "requiresIdentityContract": 1
+      "requiresIdentityContract": 4
     }
   }
 }

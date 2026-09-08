@@ -137,6 +137,13 @@ export type ProviderRegistrationResult =
     }
   | { kind: "service-unavailable" };
 
+/**
+ * The provider hosts that can create a native password for the Bond their
+ * verified account already owns. Both endpoints are the same operation under a
+ * different verified provider, so the host is an argument rather than a branch.
+ */
+export type ProviderPasswordHost = "telegram" | "discord";
+
 export type ProviderPasswordResult =
   | Extract<NativeRegistrationResult, { kind: "recovery-key-required" }>
   | {
@@ -173,12 +180,38 @@ export type BrowserProviderLinkResult =
       reason:
         | "authentication-required"
         | "provider-proof-required"
-        | "provider-already-linked";
+        | "provider-already-linked"
+        | "session-changed";
+    }
+  | { kind: "service-unavailable" };
+
+/**
+ * Renaming moves the same Bond to another address it may hold. The
+ * discriminator is not part of the request: the service keeps the one the Bond
+ * registered under, and the owned Avaia address follows its owner.
+ */
+export type PubDressRenameResult =
+  | { kind: "renamed"; identity: IdentityProjection }
+  | {
+      kind: "rejected";
+      reason:
+        | "authentication-required"
+        | "invalid-length"
+        | "invalid-character"
+        | "invalid-avaia-suffix"
+        | "unavailable"
+        | "avaia-unavailable"
+        | "rate-limited";
     }
   | { kind: "service-unavailable" };
 
 export interface IdentityAccessPort {
-  setTelegramPassword(password: string): Promise<ProviderPasswordResult>;
+  renameAvaiaSlug(slug: string): Promise<PubDressRenameResult>;
+  renamePubDressSlug(slug: string): Promise<PubDressRenameResult>;
+  setProviderPassword(
+    host: ProviderPasswordHost,
+    password: string,
+  ): Promise<ProviderPasswordResult>;
   acknowledgeRecoveryKey(
     challenge: string,
   ): Promise<NativeAuthenticationResult>;
@@ -207,14 +240,20 @@ export interface IdentityAccessPort {
     selection: PubDressSelection,
   ): Promise<PubDressResolutionResult>;
   resolvePubDressLabel(label: string): Promise<PubDressLabelResolutionResult>;
-  /** Optional capability: only browser-capable identity adapters expose it. */
+  /** Browser-only provider authorization surface. */
   browserProviderAuthorizationUrl?(
     provider: BrowserIdentityProvider,
+    intent?: "connect",
   ): string;
-  /** Optional capability: pending provider proof is a browser-only state. */
+  /** Browser-only pending provider proof and provider availability. */
   readBrowserProviderContext?(): Promise<BrowserProviderContextResult>;
-  /** Optional capability: links verified provider proof to an authenticated Bond. */
-  linkBrowserProvider?(): Promise<BrowserProviderLinkResult>;
+  /**
+   * Links pending verified provider proof to the currently authenticated Bond.
+   * `expectedPubDress` is a race guard, never authority to select another Bond.
+   */
+  linkBrowserProvider?(
+    expectedPubDress: string,
+  ): Promise<BrowserProviderLinkResult>;
 }
 
 export class ResolvePubDress {
@@ -357,12 +396,39 @@ export class RegisterProviderIdentity {
   }
 }
 
-export class SetTelegramPassword {
+export class RenameAvaiaSlug {
   public constructor(private readonly identity: IdentityAccessPort) {}
 
-  public async execute(password: string): Promise<ProviderPasswordResult> {
+  public async execute(slug: string): Promise<PubDressRenameResult> {
     try {
-      return await this.identity.setTelegramPassword(password);
+      return await this.identity.renameAvaiaSlug(slug);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class RenamePubDressSlug {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(slug: string): Promise<PubDressRenameResult> {
+    try {
+      return await this.identity.renamePubDressSlug(slug);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class SetProviderPassword {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(
+    host: ProviderPasswordHost,
+    password: string,
+  ): Promise<ProviderPasswordResult> {
+    try {
+      return await this.identity.setProviderPassword(host, password);
     } catch {
       return { kind: "service-unavailable" };
     }
@@ -372,8 +438,11 @@ export class SetTelegramPassword {
 export class BeginBrowserProviderAuthorization {
   public constructor(private readonly identity: IdentityAccessPort) {}
 
-  public execute(provider: BrowserIdentityProvider): string | undefined {
-    return this.identity.browserProviderAuthorizationUrl?.(provider);
+  public execute(
+    provider: BrowserIdentityProvider,
+    intent?: "connect",
+  ): string | undefined {
+    return this.identity.browserProviderAuthorizationUrl?.(provider, intent);
   }
 }
 
@@ -396,13 +465,15 @@ export class ReadBrowserProviderContext {
 export class LinkBrowserProvider {
   public constructor(private readonly identity: IdentityAccessPort) {}
 
-  public async execute(): Promise<BrowserProviderLinkResult> {
+  public async execute(
+    expectedPubDress: string,
+  ): Promise<BrowserProviderLinkResult> {
     const link = this.identity.linkBrowserProvider;
     if (link === undefined) {
       return { kind: "service-unavailable" };
     }
     try {
-      return await link.call(this.identity);
+      return await link.call(this.identity, expectedPubDress);
     } catch {
       return { kind: "service-unavailable" };
     }

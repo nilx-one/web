@@ -4,22 +4,21 @@
 import {
   AcknowledgeRecoveryKey,
   AuthenticateNativeIdentity,
-  BeginBrowserProviderAuthorization,
   ForgetRememberedBond,
-  LinkBrowserProvider,
   LogoutNativeIdentity,
-  ReadBrowserProviderContext,
   ReadNativeIdentityContext,
   ReadProviderIdentity,
   ReadRuntimeReadiness,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
-  SetTelegramPassword,
+  RenameAvaiaSlug,
+  RenamePubDressSlug,
+  SetProviderPassword,
   ResolvePubDress,
   formatPubDress,
-  type BrowserIdentityProvider,
   type CoreRuntimePort,
   type IdentityAccessPort,
+  type ProviderPasswordHost,
   type PubDressSelection,
 } from "@nilx-one/application";
 import {
@@ -55,10 +54,14 @@ import {
   createNativeIdentityViewState,
   createProviderIdentityViewState,
   createPubDressStatusViewState,
-  type IdentityViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
+import {
+  createAvaiaSlugViewState,
+  createProfileSlugViewState,
+} from "./features/identity/profile-slug-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
+import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
 import {
   IDENTITY_ROUTE,
@@ -110,6 +113,21 @@ function newIdempotencyKey(): string {
   return `0x1-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
+// Password setup belongs to a verified provider session. A host without one
+// never reaches this state, and never names a provider the service would trust.
+function providerPasswordHost(
+  kind: HostSnapshot["kind"],
+): ProviderPasswordHost | undefined {
+  switch (kind) {
+    case "telegram":
+      return "telegram";
+    case "discord":
+      return "discord";
+    default:
+      return undefined;
+  }
+}
+
 function validNativePassword(password: string): boolean {
   const normalized = password.normalize("NFC");
   const length = [...normalized].length;
@@ -119,10 +137,6 @@ function validNativePassword(password: string): boolean {
     normalized.trim() === normalized &&
     !/[\p{Cc}\u2028\u2029]/u.test(normalized)
   );
-}
-
-function providerDisplayName(provider: BrowserIdentityProvider): string {
-  return provider === "telegram" ? "Telegram" : "Discord";
 }
 
 /** The root only selects between the persistent product foundation and diagnostics. */
@@ -215,6 +229,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [resolutionSelection, setResolutionSelection] = useState(selection);
   const [resolutionArmed, setResolutionArmed] = useState(false);
   const [useRememberedHint, setUseRememberedHint] = useState(true);
+  // Undefined means the profile is showing the address the service holds.
+  const [slugDraft, setSlugDraft] = useState<string | undefined>(undefined);
+  const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);
   const pendingAutofillCredential = useRef<
     PendingAutofillCredential | undefined
   >(undefined);
@@ -247,14 +264,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     queryKey: ["native-identity-context"],
     queryFn: () =>
       new ReadNativeIdentityContext(dependencies.identity).execute(),
-    enabled: browserHost,
-    retry: false,
-    staleTime: 0,
-  });
-  const browserProviderContextQuery = useQuery({
-    queryKey: ["browser-provider-context"],
-    queryFn: () =>
-      new ReadBrowserProviderContext(dependencies.identity).execute(),
     enabled: browserHost,
     retry: false,
     staleTime: 0,
@@ -353,22 +362,12 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
     },
   });
-  const telegramPassword = useMutation({
-    mutationFn: () =>
-      new SetTelegramPassword(dependencies.identity).execute(password),
+  const providerPassword = useMutation({
+    mutationFn: (host: ProviderPasswordHost) =>
+      new SetProviderPassword(dependencies.identity).execute(host, password),
     gcTime: 0,
     onSuccess: (result) => {
       if (result.kind === "recovery-key-required") setPassword("");
-    },
-  });
-  const browserProviderLink = useMutation({
-    mutationFn: () => new LinkBrowserProvider(dependencies.identity).execute(),
-    onSuccess: (result) => {
-      if (result.kind === "linked") {
-        void queryClient.invalidateQueries({
-          queryKey: ["browser-provider-context"],
-        });
-      }
     },
   });
   const forgetRemembered = useMutation({
@@ -383,12 +382,48 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       nativeRegistration.reset();
       nativeAuthentication.reset();
       recoveryAcknowledgement.reset();
-      browserProviderLink.reset();
       setSelection({ discriminator: "0", slug: "" });
       setPassword("");
       setIdempotencyKey(newIdempotencyKey());
       setUseRememberedHint(false);
       pendingAutofillCredential.current = undefined;
+    },
+  });
+  // A renamed address makes every projection of the previous one stale: the
+  // mutation results that still name it, and both identity queries.
+  async function refreshIdentityProjections(): Promise<void> {
+    nativeRegistration.reset();
+    nativeAuthentication.reset();
+    recoveryAcknowledgement.reset();
+    providerRegistration.reset();
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["native-identity-context"],
+      }),
+      queryClient.invalidateQueries({ queryKey: ["provider-identity"] }),
+    ]);
+  }
+
+  // The addresses a Bond may edit. A draft is local until the service accepts
+  // it, and nothing else in the profile is a choice this surface can offer.
+  const renameSlug = useMutation({
+    mutationFn: (slug: string) =>
+      new RenamePubDressSlug(dependencies.identity).execute(slug),
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "renamed") return;
+      setSlugDraft(undefined);
+      await refreshIdentityProjections();
+    },
+  });
+  const renameAvaia = useMutation({
+    mutationFn: (slug: string) =>
+      new RenameAvaiaSlug(dependencies.identity).execute(slug),
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "renamed") return;
+      setAvaiaDraft(undefined);
+      await refreshIdentityProjections();
     },
   });
   const logout = useMutation({
@@ -400,7 +435,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       nativeRegistration.reset();
       nativeAuthentication.reset();
       recoveryAcknowledgement.reset();
-      browserProviderLink.reset();
       setUseRememberedHint(true);
       pendingAutofillCredential.current = undefined;
       await queryClient.invalidateQueries({
@@ -417,82 +451,27 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     logout.isPending;
   const latestAuthentication =
     recoveryAcknowledgement.data ?? nativeAuthentication.data;
-  const nativeIdentityState = createNativeIdentityViewState(
-    nativeContextQuery.data?.kind === "remembered" && !useRememberedHint
-      ? { kind: "anonymous" }
-      : nativeContextQuery.data,
-    status,
-    nativeRegistration.data,
-    latestAuthentication,
-    nativePending,
-  );
-  const pendingBrowserProvider =
-    browserProviderContextQuery.data?.kind === "pending"
-      ? browserProviderContextQuery.data.provider
-      : undefined;
-  const authenticatedNativeBond =
-    nativeIdentityState.kind === "authenticated";
-
-  useEffect(() => {
-    if (
-      !browserHost ||
-      pendingBrowserProvider === undefined ||
-      !authenticatedNativeBond ||
-      browserProviderLink.isPending ||
-      browserProviderLink.data !== undefined
-    ) {
-      return;
-    }
-    browserProviderLink.mutate();
-  }, [
-    authenticatedNativeBond,
-    browserHost,
-    browserProviderLink,
-    pendingBrowserProvider,
-  ]);
-
-  let identityState: IdentityViewState = browserHost
-    ? nativeIdentityState
+  const identityState = browserHost
+    ? createNativeIdentityViewState(
+        nativeContextQuery.data?.kind === "remembered" && !useRememberedHint
+          ? { kind: "anonymous" }
+          : nativeContextQuery.data,
+        status,
+        nativeRegistration.data,
+        latestAuthentication,
+        nativePending,
+      )
     : createProviderIdentityViewState(
         host,
         providerIdentityQuery.data,
         providerRegistration.data,
         status,
         providerRegistration.isPending ||
-          telegramPassword.isPending ||
+          providerPassword.isPending ||
           recoveryAcknowledgement.isPending,
-        telegramPassword.data,
+        providerPassword.data,
         recoveryAcknowledgement.data,
       );
-  if (
-    browserHost &&
-    pendingBrowserProvider !== undefined &&
-    nativeIdentityState.kind === "authenticated"
-  ) {
-    const provider = providerDisplayName(pendingBrowserProvider);
-    const linkResult = browserProviderLink.data;
-    if (linkResult?.kind === "linked") {
-      identityState = nativeIdentityState;
-    } else if (linkResult?.kind === "rejected") {
-      identityState = {
-        kind: "unavailable",
-        detail:
-          linkResult.reason === "provider-already-linked"
-            ? `${provider} is already connected to another Bond.`
-            : `Could not connect ${provider} to this Bond. Authorize ${provider} again.`,
-      };
-    } else if (linkResult?.kind === "service-unavailable") {
-      identityState = {
-        kind: "unavailable",
-        detail: `Could not connect ${provider} to this Bond. Try again.`,
-      };
-    } else {
-      identityState = {
-        kind: "loading",
-        detail: `Connecting ${provider} to ${nativeIdentityState.pubDress}…`,
-      };
-    }
-  }
   const viewModel = createIdentityFoundationViewModel(
     host,
     readinessQuery.data,
@@ -581,9 +560,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
 
   function submitIdentity(): void {
     if (identityState.kind === "provider-password") {
-      if (!identityState.busy && validNativePassword(password)) {
+      const providerHost = providerPasswordHost(host.kind);
+      if (
+        providerHost !== undefined &&
+        !identityState.busy &&
+        validNativePassword(password)
+      ) {
         recoveryAcknowledgement.reset();
-        telegramPassword.mutate();
+        providerPassword.mutate(providerHost);
       }
       return;
     }
@@ -617,15 +601,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       case "initial":
       case "resolving":
         break;
-    }
-  }
-
-  function authorizeBrowserProvider(provider: BrowserIdentityProvider): void {
-    const url = new BeginBrowserProviderAuthorization(
-      dependencies.identity,
-    ).execute(provider);
-    if (url !== undefined) {
-      window.location.assign(url);
     }
   }
 
@@ -698,6 +673,42 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         onNavigate={(route: ShellRoute) => {
           void navigate({ to: route });
         }}
+        avaiaAvailability={avaiaAvailability({
+          // No Avaia runtime is published yet, so there is nothing to fetch on
+          // any device. The Dock states the truth rather than an intention.
+          acceleratedGraphics: "gpu" in navigator,
+        })}
+        slugEdit={createProfileSlugViewState(
+          viewModel.identity.pubDress,
+          slugDraft,
+          renameSlug.isPending,
+          renameSlug.data,
+        )}
+        avaiaEdit={createAvaiaSlugViewState(
+          viewModel.identity.avaiaPubDress,
+          viewModel.identity.pubDress,
+          avaiaDraft,
+          renameAvaia.isPending,
+          renameAvaia.data,
+        )}
+        onSlugChange={(next: string) => {
+          renameSlug.reset();
+          setSlugDraft(next);
+        }}
+        onSlugSubmit={() => {
+          if (slugDraft !== undefined && !renameSlug.isPending) {
+            renameSlug.mutate(slugDraft);
+          }
+        }}
+        onAvaiaChange={(next: string) => {
+          renameAvaia.reset();
+          setAvaiaDraft(next);
+        }}
+        onAvaiaSubmit={() => {
+          if (avaiaDraft !== undefined && !renameAvaia.isPending) {
+            renameAvaia.mutate(avaiaDraft);
+          }
+        }}
         {...(viewModel.identity.avaiaPubDress === undefined
           ? {}
           : { avaiaPubDress: viewModel.identity.avaiaPubDress })}
@@ -708,20 +719,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     );
   }
 
-  const providerContext = browserProviderContextQuery.data;
-  const browserProviderAuth = browserHost
-    ? {
-        available:
-          providerContext?.kind === "none" || providerContext?.kind === "pending"
-            ? providerContext.available
-            : { telegram: false, discord: false },
-        onAuthorize: authorizeBrowserProvider,
-        ...(pendingBrowserProvider === undefined
-          ? {}
-          : { pendingProvider: pendingBrowserProvider }),
-      }
-    : undefined;
-
   return (
     <IdentityFoundationView
       password={password}
@@ -731,7 +728,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
       selection={selection}
       viewModel={viewModel}
-      {...(browserProviderAuth === undefined ? {} : { browserProviderAuth })}
       onCredentialAutofill={applyAutofilledCredential}
       onAcknowledgeRecovery={(challenge) =>
         recoveryAcknowledgement.mutate(challenge)

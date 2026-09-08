@@ -20,10 +20,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    DiscordOAuthClient, DiscordOAuthError, IdentityRecord, IdentityRepository, NativeAuthConfig,
-    NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine, PasswordPolicyError,
-    ProviderIdentity, PubDress, RegistrationOutcome, RememberedBondSigner, SecretDigester,
-    TelegramInitDataVerifier, TokenFactory, rate_limit::AttemptLimiter,
+    AvaiaPubDress, DiscordOAuthClient, DiscordOAuthError, IdentityRecord, IdentityRepository,
+    NativeAuthConfig, NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine,
+    PasswordPolicyError, ProviderIdentity, PubDress, PubDressRenameOutcome, RegistrationOutcome,
+    RememberedBondSigner, SecretDigester, TelegramInitDataVerifier, TokenFactory,
+    rate_limit::AttemptLimiter,
 };
 use subtle::ConstantTimeEq as _;
 
@@ -139,10 +140,13 @@ fn router_with_clock(
             get(check_pub_dress_availability),
         )
         .route("/api/v1/identity/registration", post(register_identity))
+        .route("/api/v1/identity/pub_dress", post(rename_pub_dress))
+        .route("/api/v1/identity/avaia/pub_dress", post(rename_owned_avaia))
         .route(
             "/api/v1/auth/telegram/password",
             post(set_telegram_password),
         )
+        .route("/api/v1/auth/discord/password", post(set_discord_password))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(state)
 }
@@ -987,17 +991,36 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
     }
 }
 
-// Deliberately excludes a client-selected pub_dress and never resets an active password.
 async fn set_telegram_password(
     State(state): State<ApiState>,
     headers: HeaderMap,
     Json(request): Json<ProviderPasswordRequest>,
 ) -> Response {
+    set_provider_password(state, headers, request, crate::IdentityProvider::Telegram).await
+}
+
+async fn set_discord_password(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<ProviderPasswordRequest>,
+) -> Response {
+    set_provider_password(state, headers, request, crate::IdentityProvider::Discord).await
+}
+
+// One operation per verified provider. The route only says which provider proof
+// is presented; the binding, and therefore the owner, is resolved here.
+// Deliberately excludes a client-selected pub_dress and never resets an active password.
+async fn set_provider_password(
+    state: ApiState,
+    headers: HeaderMap,
+    request: ProviderPasswordRequest,
+    expected: crate::IdentityProvider,
+) -> Response {
     if let Some(response) = reject_missing_csrf(&headers) {
         return response;
     }
     let provider = match authenticate(&state, &headers).await {
-        Ok(identity) if identity.provider == crate::IdentityProvider::Telegram => identity,
+        Ok(identity) if identity.provider == expected => identity,
         Ok(_) => return unauthorized(),
         Err(error) => return error.into_response(),
     };
@@ -1008,7 +1031,7 @@ async fn set_telegram_password(
     if let Err(retry_after) = state
         .limiter
         .consume(
-            format!("password-setup:telegram:{}", provider.subject),
+            format!("password-setup:{}:{}", expected.as_str(), provider.subject),
             now,
             8,
             3600,
@@ -1075,6 +1098,219 @@ async fn set_telegram_password(
             "A password is already active. Sign in or use recovery to change it.",
         ),
         Err(_) => unavailable(),
+    }
+}
+
+// A Bond keeps its identity across a rename: the same provider bindings,
+// credentials and sessions, under the address its owner chose. Only the slug is
+// accepted, so the discriminator the Bond registered under is never rewritten by
+// a request.
+async fn rename_pub_dress(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<PubDressRenameRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let identity = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value,
+        Err(error) => return error.into_response(),
+    };
+    let Ok(current) = PubDress::from_str(&identity.pub_dress) else {
+        tracing::error!("stored human pub_dress is invalid");
+        return unavailable();
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(
+            format!("pub-dress-rename:{}", current.as_str()),
+            now,
+            8,
+            3600,
+        )
+        .and_then(|_| {
+            state
+                .limiter
+                .consume("pub-dress-rename:global", now, 500, 3600)
+        })
+    {
+        return rate_limited(retry_after);
+    }
+    let next = match PubDress::from_str(&format!("0x{}{}", current.discriminator(), request.slug)) {
+        Ok(value) => value,
+        Err(error) => return invalid_pub_dress(error),
+    };
+    // Asking for the address the Bond already holds is not a conflict with
+    // itself, and it writes nothing.
+    if next == current {
+        return renamed_response(&state, &headers, identity, now);
+    }
+
+    match state
+        .repository
+        .rename_pub_dress(&current, &next, now)
+        .await
+    {
+        Ok(PubDressRenameOutcome::Renamed(identity)) => {
+            renamed_response(&state, &headers, identity, now)
+        }
+        Ok(PubDressRenameOutcome::Unavailable) => no_store_error(
+            StatusCode::CONFLICT,
+            "pub_dress_unavailable",
+            "That address belongs to another identity.",
+        ),
+        Ok(PubDressRenameOutcome::AvaiaUnavailable) => no_store_error(
+            StatusCode::CONFLICT,
+            "avaia_unavailable",
+            "The Avaia address this name derives belongs to another identity.",
+        ),
+        Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "pub_dress rename failed");
+            unavailable()
+        }
+    }
+}
+
+// An Avaia address carries its owner's discriminator and the canonical `ai`
+// suffix. Both are the contract's, not a request's, so only the name in between
+// is accepted here.
+async fn rename_owned_avaia(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<PubDressRenameRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let identity = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value,
+        Err(error) => return error.into_response(),
+    };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        tracing::error!("stored human pub_dress is invalid");
+        return unavailable();
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(format!("avaia-rename:{}", owner.as_str()), now, 8, 3600)
+        .and_then(|_| state.limiter.consume("avaia-rename:global", now, 500, 3600))
+    {
+        return rate_limited(retry_after);
+    }
+    let next = match AvaiaPubDress::from_str(&format!("{}{}", owner.discriminator(), request.slug))
+    {
+        Ok(value) => value,
+        Err(error) => return invalid_avaia_pub_dress(error),
+    };
+    if identity.avaia_pub_dress.as_deref() == Some(next.as_str()) {
+        return no_store_json(StatusCode::OK, IdentityProjection::from(identity));
+    }
+
+    match state
+        .repository
+        .rename_owned_avaia(&owner, &next, now)
+        .await
+    {
+        Ok(PubDressRenameOutcome::Renamed(identity)) => {
+            no_store_json(StatusCode::OK, IdentityProjection::from(identity))
+        }
+        Ok(PubDressRenameOutcome::AvaiaUnavailable) | Ok(PubDressRenameOutcome::Unavailable) => {
+            no_store_error(
+                StatusCode::CONFLICT,
+                "avaia_unavailable",
+                "That Avaia address belongs to another identity.",
+            )
+        }
+        Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "Avaia rename failed");
+            unavailable()
+        }
+    }
+}
+
+fn invalid_avaia_pub_dress(error: crate::AvaiaPubDressError) -> Response {
+    let code = match error {
+        crate::AvaiaPubDressError::InvalidDiscriminator => "invalid_avaia_discriminator",
+        crate::AvaiaPubDressError::InvalidLength => "invalid_avaia_length",
+        crate::AvaiaPubDressError::InvalidCharacter => "invalid_avaia_character",
+        crate::AvaiaPubDressError::MissingAiSuffix => "invalid_avaia_suffix",
+    };
+    api_error(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        code,
+        "Use a 2–34-character name that ends in ai.",
+    )
+}
+
+// The remembered-Bond hint names an address. A Bond that just moved would
+// otherwise be offered its previous name on the next visit.
+fn renamed_response(
+    state: &ApiState,
+    headers: &HeaderMap,
+    identity: IdentityRecord,
+    now: u64,
+) -> Response {
+    let refreshed = read_cookie(headers, REMEMBERED_BOND_COOKIE).and_then(|_| {
+        state
+            .remembered_bond_signer
+            .issue(
+                &identity.pub_dress,
+                now.saturating_add(state.native_auth.remembered_bond_ttl_seconds),
+            )
+            .ok()
+    });
+    let mut response = no_store_json(StatusCode::OK, IdentityProjection::from(identity));
+    if let Some(hint) = refreshed {
+        append_cookie(
+            &mut response,
+            secure_cookie(
+                REMEMBERED_BOND_COOKIE,
+                &hint,
+                state.native_auth.remembered_bond_ttl_seconds,
+            ),
+        );
+    }
+    response
+}
+
+/// The Bond behind a request, however this host proves it: a native session
+/// cookie, or a verified provider account bound to exactly one Bond.
+async fn authenticated_bond(
+    state: &ApiState,
+    headers: &HeaderMap,
+    now: u64,
+) -> Result<IdentityRecord, AuthenticationFailure> {
+    if let Some(token) = read_cookie(headers, SESSION_COOKIE) {
+        let token_hash = state.secret_digester.digest("native-session", &token);
+        match state.repository.find_native_session(&token_hash, now).await {
+            Ok(Some(identity)) => return Ok(identity),
+            Ok(None) => {}
+            Err(error) => {
+                tracing::error!(%error, "native session lookup failed");
+                return Err(AuthenticationFailure::Unavailable);
+            }
+        }
+    }
+
+    let provider = authenticate(state, headers).await?;
+    match state.repository.find_by_provider(&provider).await {
+        Ok(Some(identity)) => Ok(identity),
+        Ok(None) => Err(AuthenticationFailure::Unauthorized),
+        Err(error) => {
+            tracing::error!(%error, "provider identity lookup failed");
+            Err(AuthenticationFailure::Unavailable)
+        }
     }
 }
 
@@ -1290,6 +1526,12 @@ struct ProviderPasswordRequest {
     password: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PubDressRenameRequest {
+    slug: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ResolvePubDressRequest {
@@ -1444,6 +1686,7 @@ mod tests {
             Request, StatusCode,
             header::{AUTHORIZATION, CACHE_CONTROL, SET_COOKIE},
         },
+        response::IntoResponse as _,
     };
     use hmac::{Hmac, Mac};
     use serde_json::Value;
@@ -1452,7 +1695,9 @@ mod tests {
     use url::form_urlencoded;
 
     use super::{Clock, router_with_clock};
-    use crate::{IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier};
+    use crate::{
+        DiscordOAuthClient, IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier,
+    };
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
@@ -1497,6 +1742,56 @@ mod tests {
         form_urlencoded::Serializer::new(String::new())
             .extend_pairs(fields)
             .finish()
+    }
+
+    // A stand-in for Discord's user endpoint. The bearer token names the account
+    // it belongs to, so a test can present a bound, an unbound, or a forged proof.
+    async fn discord_oauth() -> DiscordOAuthClient {
+        let api = axum::Router::new().route(
+            "/v10/users/@me",
+            axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                match headers
+                    .get(AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.strip_prefix("Bearer "))
+                    .and_then(|token| token.strip_prefix("access-"))
+                {
+                    Some(user_id) => (
+                        StatusCode::OK,
+                        axum::Json(serde_json::json!({ "id": user_id })),
+                    )
+                        .into_response(),
+                    None => StatusCode::UNAUTHORIZED.into_response(),
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let origin = format!("http://{}", listener.local_addr().expect("address"));
+        tokio::spawn(async move {
+            axum::serve(listener, api)
+                .await
+                .expect("Discord API stand-in");
+        });
+        DiscordOAuthClient::with_api_origin("client-1", "client-secret", origin)
+    }
+
+    async fn discord_app() -> axum::Router {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        router_with_clock(
+            repository,
+            TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
+            Some(discord_oauth().await),
+            NativeAuthConfig::new(
+                "test-auth-secret-that-is-at-least-thirty-two-bytes",
+                "test-password-pepper-that-is-at-least-thirty-two-bytes",
+            )
+            .expect("valid native auth configuration"),
+            Arc::new(StaticClock),
+        )
     }
 
     async fn app() -> axum::Router {
@@ -2055,5 +2350,643 @@ mod tests {
             app.oneshot(sign_in).await.expect("response").status(),
             StatusCode::UNAUTHORIZED
         );
+    }
+    fn discord_password_request(user_id: &str, body: &str) -> Request<Body> {
+        Request::post("/api/v1/auth/discord/password")
+            .header(AUTHORIZATION, format!("discord access-{user_id}"))
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(body.to_owned()))
+            .expect("request")
+    }
+
+    async fn register_discord_fixture(app: &axum::Router) {
+        let request = Request::post("/api/v1/identity/registration")
+            .header(AUTHORIZATION, "discord access-42")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .expect("request");
+        assert_eq!(
+            app.clone()
+                .oneshot(request)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::CREATED
+        );
+    }
+
+    #[tokio::test]
+    async fn discord_password_requires_recovery_then_supports_native_sign_in_without_reset() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let setup = app
+            .clone()
+            .oneshot(discord_password_request(
+                "42",
+                r#"{"password":"a deliberately long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(setup.status(), StatusCode::CREATED);
+        assert_eq!(setup.headers()[CACHE_CONTROL], "no-store");
+        let setup = json_body(setup).await;
+        assert_eq!(setup["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(setup["state"], "recovery_key_required");
+        assert!(setup.get("password_hash").is_none());
+        let sign_in = || {
+            Request::post("/api/v1/auth/native/session")
+                .header("content-type", "application/json")
+                .header("x-0x1-csrf", "1")
+                .body(Body::from(
+                    r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+                ))
+                .expect("request")
+        };
+        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(
+                serde_json::json!({"challenge":setup["challenge"]}).to_string(),
+            ))
+            .expect("request");
+        assert_eq!(
+            app.clone()
+                .oneshot(acknowledgement)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(sign_in())
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        let reset = app
+            .clone()
+            .oneshot(discord_password_request(
+                "42",
+                r#"{"password":"a different long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(reset.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            json_body(reset).await["error"]["code"],
+            "password_already_set"
+        );
+        let read = Request::get("/api/v1/identity")
+            .header(AUTHORIZATION, "discord access-42")
+            .body(Body::empty())
+            .expect("request");
+        let identity = json_body(app.oneshot(read).await.expect("response")).await;
+        assert_eq!(identity["password_required"], false);
+        assert_eq!(identity["pub_dress"], "0x0sky");
+    }
+
+    #[tokio::test]
+    async fn discord_password_rejects_other_proofs_unbound_accounts_and_selected_owners() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let body = r#"{"password":"a deliberately long password"}"#;
+        let unbound = app
+            .clone()
+            .oneshot(discord_password_request("99", body))
+            .await
+            .expect("response");
+        assert_eq!(unbound.status(), StatusCode::UNAUTHORIZED);
+        let mut forged = discord_password_request("42", body);
+        forged
+            .headers_mut()
+            .insert(AUTHORIZATION, "discord forged".parse().expect("header"));
+        assert_eq!(
+            app.clone()
+                .oneshot(forged)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        // A Telegram proof never sets a Discord-authorized password, and the
+        // Telegram endpoint stays closed to a Discord proof.
+        let mut telegram_proof = discord_password_request("42", body);
+        telegram_proof.headers_mut().insert(
+            AUTHORIZATION,
+            format!("tma {}", signed_init_data(42))
+                .parse()
+                .expect("header"),
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(telegram_proof)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let mut crossed = telegram_password_request(42, body);
+        crossed
+            .headers_mut()
+            .insert(AUTHORIZATION, "discord access-42".parse().expect("header"));
+        assert_eq!(
+            app.clone()
+                .oneshot(crossed)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let mut no_csrf = discord_password_request("42", body);
+        no_csrf.headers_mut().remove("x-0x1-csrf");
+        assert_eq!(
+            app.clone()
+                .oneshot(no_csrf)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        let selected_owner = discord_password_request(
+            "42",
+            r#"{"password":"a deliberately long password","pub_dress":"0x0other"}"#,
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(selected_owner)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        let weak = discord_password_request("42", r#"{"password":"password"}"#);
+        let weak = app.oneshot(weak).await.expect("response");
+        assert_eq!(weak.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            json_body(weak).await["error"]["code"],
+            "compromised_password"
+        );
+    }
+
+    #[tokio::test]
+    async fn discord_password_does_not_enable_native_sign_in_before_recovery_acknowledgement() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let setup = app
+            .clone()
+            .oneshot(discord_password_request(
+                "42",
+                r#"{"password":"a deliberately long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(setup.status(), StatusCode::CREATED);
+        let sign_in = Request::post("/api/v1/auth/native/session")
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(
+                r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+            ))
+            .expect("request");
+        assert_eq!(
+            app.oneshot(sign_in).await.expect("response").status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[tokio::test]
+    async fn discord_password_setup_is_rate_limited_before_hashing() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        for _ in 0..8 {
+            assert_eq!(
+                app.clone()
+                    .oneshot(discord_password_request("42", r#"{"password":"short"}"#))
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::UNPROCESSABLE_ENTITY
+            );
+        }
+        assert_eq!(
+            app.oneshot(discord_password_request("42", r#"{"password":"short"}"#))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+    // A signed-in Bond, with the cookies its session and remembered hint use.
+    async fn native_session_cookies(app: &axum::Router, pub_dress: &str, key: &str) -> String {
+        let registration = Request::post("/api/v1/auth/native/registration")
+            .header("content-type", "application/json")
+            .header("idempotency-key", key)
+            .header(super::CSRF_HEADER, "1")
+            .body(Body::from(
+                serde_json::json!({
+                    "pub_dress": pub_dress,
+                    "password": "a deliberately long password",
+                })
+                .to_string(),
+            ))
+            .expect("registration request");
+        let registration = json_body(
+            app.clone()
+                .oneshot(registration)
+                .await
+                .expect("registration"),
+        )
+        .await;
+        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
+            .header("content-type", "application/json")
+            .header(super::CSRF_HEADER, "1")
+            .body(Body::from(
+                serde_json::json!({ "challenge": registration["challenge"] }).to_string(),
+            ))
+            .expect("acknowledgement request");
+        let acknowledgement = app
+            .clone()
+            .oneshot(acknowledgement)
+            .await
+            .expect("acknowledgement");
+        assert_eq!(acknowledgement.status(), StatusCode::OK);
+        acknowledgement
+            .headers()
+            .get_all(SET_COOKIE)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .filter_map(|value| value.split(';').next())
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+
+    fn rename_request(slug: &str) -> Request<Body> {
+        Request::post("/api/v1/identity/pub_dress")
+            .header("content-type", "application/json")
+            .header(super::CSRF_HEADER, "1")
+            .body(Body::from(serde_json::json!({ "slug": slug }).to_string()))
+            .expect("request")
+    }
+
+    #[tokio::test]
+    async fn rename_moves_the_bond_its_avaia_and_its_session_to_the_new_address() {
+        let app = app().await;
+        let cookies = native_session_cookies(&app, "0x0Sky", "rename-test-0001").await;
+        let mut rename = rename_request("Rain");
+        rename
+            .headers_mut()
+            .insert("cookie", cookies.parse().expect("header"));
+        let renamed = app.clone().oneshot(rename).await.expect("response");
+        assert_eq!(renamed.status(), StatusCode::OK);
+        assert_eq!(renamed.headers()[CACHE_CONTROL], "no-store");
+        let renamed = json_body(renamed).await;
+        assert_eq!(renamed["pub_dress"], "0x0Rain");
+        // The owned Avaia is a derivation of its owner's address, so it moved too.
+        assert_eq!(renamed["avaia_pub_dress"], "0Rainai");
+
+        let context = Request::get("/api/v1/auth/native/context")
+            .header("cookie", cookies.clone())
+            .body(Body::empty())
+            .expect("context request");
+        let context = json_body(app.clone().oneshot(context).await.expect("context")).await;
+        assert_eq!(context["state"], "authenticated");
+        assert_eq!(context["identity"]["pub_dress"], "0x0Rain");
+
+        // The credential followed the Bond: the same password signs in under the
+        // new address and no longer resolves under the previous one.
+        let sign_in = |pub_dress: &str| {
+            Request::post("/api/v1/auth/native/session")
+                .header("content-type", "application/json")
+                .header(super::CSRF_HEADER, "1")
+                .body(Body::from(
+                    serde_json::json!({
+                        "pub_dress": pub_dress,
+                        "password": "a deliberately long password",
+                    })
+                    .to_string(),
+                ))
+                .expect("request")
+        };
+        assert_eq!(
+            app.clone()
+                .oneshot(sign_in("0x0Rain"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(sign_in("0x0Sky"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+
+        // The previous address is free again, and the new one is not.
+        let availability = |pub_dress: &str| {
+            Request::post("/api/v1/identity/resolve")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "pub_dress": pub_dress }).to_string(),
+                ))
+                .expect("request")
+        };
+        assert_eq!(
+            json_body(
+                app.clone()
+                    .oneshot(availability("0x0Sky"))
+                    .await
+                    .expect("response")
+            )
+            .await["state"],
+            "available"
+        );
+        assert_eq!(
+            json_body(
+                app.oneshot(availability("0x0Rain"))
+                    .await
+                    .expect("response")
+            )
+            .await["state"],
+            "registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn rename_answers_a_verified_provider_and_refuses_an_unauthenticated_request() {
+        let app = app().await;
+        register_telegram_fixture(&app).await;
+        let mut provider_rename = rename_request("rain");
+        provider_rename.headers_mut().insert(
+            AUTHORIZATION,
+            format!("tma {}", signed_init_data(42))
+                .parse()
+                .expect("header"),
+        );
+        let renamed = json_body(
+            app.clone()
+                .oneshot(provider_rename)
+                .await
+                .expect("response"),
+        )
+        .await;
+        assert_eq!(renamed["pub_dress"], "0x0rain");
+
+        let read = Request::get("/api/v1/identity")
+            .header(AUTHORIZATION, format!("tma {}", signed_init_data(42)))
+            .body(Body::empty())
+            .expect("request");
+        assert_eq!(
+            json_body(app.clone().oneshot(read).await.expect("response")).await["pub_dress"],
+            "0x0rain"
+        );
+
+        assert_eq!(
+            app.clone()
+                .oneshot(rename_request("stranger"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let mut no_csrf = rename_request("stranger");
+        no_csrf.headers_mut().remove(super::CSRF_HEADER);
+        no_csrf.headers_mut().insert(
+            AUTHORIZATION,
+            format!("tma {}", signed_init_data(42))
+                .parse()
+                .expect("header"),
+        );
+        assert_eq!(
+            app.oneshot(no_csrf).await.expect("response").status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn rename_refuses_an_occupied_address_an_invalid_slug_and_a_selected_discriminator() {
+        let app = app().await;
+        let taken = native_session_cookies(&app, "0x0Rain", "rename-test-0002").await;
+        drop(taken);
+        let cookies = native_session_cookies(&app, "0x0Sky", "rename-test-0003").await;
+        let with_session = |slug: &str| {
+            let mut request = rename_request(slug);
+            request
+                .headers_mut()
+                .insert("cookie", cookies.parse().expect("header"));
+            request
+        };
+
+        let occupied = app
+            .clone()
+            .oneshot(with_session("Rain"))
+            .await
+            .expect("response");
+        assert_eq!(occupied.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            json_body(occupied).await["error"]["code"],
+            "pub_dress_unavailable"
+        );
+
+        assert_eq!(
+            app.clone()
+                .oneshot(with_session("x"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        // A space is outside the canonical slug allowlist.
+        assert_eq!(
+            app.clone()
+                .oneshot(with_session("Rainy sky"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        let selected_owner = {
+            let mut request = Request::post("/api/v1/identity/pub_dress")
+                .header("content-type", "application/json")
+                .header(super::CSRF_HEADER, "1")
+                .body(Body::from(
+                    r#"{"slug":"Rainy","pub_dress":"0x0other"}"#.to_owned(),
+                ))
+                .expect("request");
+            request
+                .headers_mut()
+                .insert("cookie", cookies.parse().expect("header"));
+            request
+        };
+        assert_eq!(
+            app.clone()
+                .oneshot(selected_owner)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        // Asking for the address the Bond already holds writes nothing.
+        let unchanged = app
+            .clone()
+            .oneshot(with_session("Sky"))
+            .await
+            .expect("response");
+        assert_eq!(unchanged.status(), StatusCode::OK);
+        assert_eq!(json_body(unchanged).await["pub_dress"], "0x0Sky");
+
+        // A slug cannot smuggle a discriminator: whatever it starts with stays
+        // part of the slug, and the Bond keeps the discriminator it registered.
+        let smuggled = app.oneshot(with_session("1Rain")).await.expect("response");
+        assert_eq!(smuggled.status(), StatusCode::OK);
+        assert_eq!(json_body(smuggled).await["pub_dress"], "0x01Rain");
+    }
+
+    #[tokio::test]
+    async fn rename_is_rate_limited_per_bond() {
+        let app = app().await;
+        let cookies = native_session_cookies(&app, "0x0Sky", "rename-test-0004").await;
+        let with_session = |slug: &str| {
+            let mut request = rename_request(slug);
+            request
+                .headers_mut()
+                .insert("cookie", cookies.parse().expect("header"));
+            request
+        };
+        for _ in 0..8 {
+            assert_eq!(
+                app.clone()
+                    .oneshot(with_session("x"))
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::UNPROCESSABLE_ENTITY
+            );
+        }
+        assert_eq!(
+            app.oneshot(with_session("Rain"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+    fn avaia_rename_request(slug: &str) -> Request<Body> {
+        Request::post("/api/v1/identity/avaia/pub_dress")
+            .header("content-type", "application/json")
+            .header(super::CSRF_HEADER, "1")
+            .body(Body::from(serde_json::json!({ "slug": slug }).to_string()))
+            .expect("request")
+    }
+
+    #[tokio::test]
+    async fn avaia_rename_names_the_owned_avaia_and_survives_an_owner_rename() {
+        let app = app().await;
+        let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0001").await;
+        let with_session = |mut request: Request<Body>| {
+            request
+                .headers_mut()
+                .insert("cookie", cookies.parse().expect("header"));
+            request
+        };
+
+        let named = app
+            .clone()
+            .oneshot(with_session(avaia_rename_request("Vesnai")))
+            .await
+            .expect("response");
+        assert_eq!(named.status(), StatusCode::OK);
+        let named = json_body(named).await;
+        assert_eq!(named["pub_dress"], "0x0Sky");
+        assert_eq!(named["avaia_pub_dress"], "0Vesnai");
+
+        // A chosen Avaia name is not a derivation, so renaming its owner keeps
+        // it: only the owner's own address changes.
+        let renamed = json_body(
+            app.clone()
+                .oneshot(with_session(rename_request("Rain")))
+                .await
+                .expect("response"),
+        )
+        .await;
+        assert_eq!(renamed["pub_dress"], "0x0Rain");
+        assert_eq!(renamed["avaia_pub_dress"], "0Vesnai");
+
+        let context = Request::get("/api/v1/auth/native/context")
+            .header("cookie", cookies.clone())
+            .body(Body::empty())
+            .expect("request");
+        let context = json_body(app.oneshot(context).await.expect("response")).await;
+        assert_eq!(context["identity"]["avaia_pub_dress"], "0Vesnai");
+    }
+
+    #[tokio::test]
+    async fn avaia_rename_requires_the_canonical_suffix_and_a_free_address() {
+        let app = app().await;
+        let neighbour = native_session_cookies(&app, "0x0Rain", "avaia-rename-test-0002").await;
+        drop(neighbour);
+        let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0003").await;
+        let with_session = |slug: &str| {
+            let mut request = avaia_rename_request(slug);
+            request
+                .headers_mut()
+                .insert("cookie", cookies.parse().expect("header"));
+            request
+        };
+
+        // The `ai` suffix and the owner discriminator belong to the contract.
+        let without_suffix = app
+            .clone()
+            .oneshot(with_session("Vesna"))
+            .await
+            .expect("response");
+        assert_eq!(without_suffix.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            json_body(without_suffix).await["error"]["code"],
+            "invalid_avaia_suffix"
+        );
+
+        // Another Bond's derived Avaia is another identity's address.
+        let taken = app
+            .clone()
+            .oneshot(with_session("Rainai"))
+            .await
+            .expect("response");
+        assert_eq!(taken.status(), StatusCode::CONFLICT);
+        assert_eq!(json_body(taken).await["error"]["code"], "avaia_unavailable");
+
+        assert_eq!(
+            app.clone()
+                .oneshot(avaia_rename_request("Vesnai"))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let mut no_csrf = with_session("Vesnai");
+        no_csrf.headers_mut().remove(super::CSRF_HEADER);
+        assert_eq!(
+            app.oneshot(no_csrf).await.expect("response").status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn owner_rename_still_moves_an_avaia_it_derived() {
+        let app = app().await;
+        let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0004").await;
+        let mut rename = rename_request("Rain");
+        rename
+            .headers_mut()
+            .insert("cookie", cookies.parse().expect("header"));
+        let renamed = json_body(app.oneshot(rename).await.expect("response")).await;
+        assert_eq!(renamed["pub_dress"], "0x0Rain");
+        assert_eq!(renamed["avaia_pub_dress"], "0Rainai");
     }
 }

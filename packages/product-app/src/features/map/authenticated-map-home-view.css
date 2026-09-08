@@ -338,9 +338,16 @@
   background: rgba(95, 118, 123, 0.38);
 }
 
-.bond-dock__status-dot--authenticated {
+.bond-dock__status-dot--authenticated,
+.bond-dock__status-dot--ready {
   background: var(--map-positive);
   box-shadow: 0 0 0 0.22rem rgba(41, 155, 118, 0.1);
+}
+
+/* A runtime being fetched or warmed up is working, not yet present. */
+.bond-dock__status-dot--working {
+  background: #d8a23a;
+  box-shadow: 0 0 0 0.22rem rgba(216, 162, 58, 0.12);
 }
 
 .bond-dock__bond--active:hover strong,

@@ -108,12 +108,11 @@ pub fn router(
     };
 
     Router::new()
-        .route("/api/v1/auth/browser/telegram/start", get(start_telegram))
+        .route("/auth", get(start_browser_auth))
         .route(
             "/api/v1/auth/browser/telegram/callback",
             get(telegram_callback),
         )
-        .route("/api/v1/auth/browser/discord/start", get(start_discord))
         .route(
             "/api/v1/auth/browser/discord/callback",
             get(discord_callback),
@@ -151,6 +150,14 @@ impl BrowserProvider {
         }
     }
 
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "telegram" => Some(Self::Telegram),
+            "discord" => Some(Self::Discord),
+            _ => None,
+        }
+    }
+
     fn identity(self, subject: String) -> ProviderIdentity {
         ProviderIdentity {
             provider: match self {
@@ -162,11 +169,20 @@ impl BrowserProvider {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum BrowserAuthIntent {
+    SignIn,
+    Connect,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OAuthTransaction {
     provider: BrowserProvider,
+    intent: BrowserAuthIntent,
     state: String,
     code_verifier: String,
+    connect_pub_dress: Option<String>,
     expires_at: u64,
 }
 
@@ -214,36 +230,82 @@ impl SignedCookie {
     }
 }
 
-async fn start_telegram(State(state): State<BrowserAuthState>) -> Response {
-    let Some(client) = state.config.telegram.as_ref() else {
-        return provider_unavailable("telegram_browser_auth_not_configured");
-    };
-    start_provider(&state, BrowserProvider::Telegram, client)
+#[derive(Debug, Deserialize)]
+struct BrowserAuthStartQuery {
+    provider: Option<String>,
+    intent: Option<String>,
 }
 
-async fn start_discord(State(state): State<BrowserAuthState>) -> Response {
-    let Some(client) = state.config.discord.as_ref() else {
-        return provider_unavailable("discord_browser_auth_not_configured");
+async fn start_browser_auth(
+    State(state): State<BrowserAuthState>,
+    headers: HeaderMap,
+    Query(query): Query<BrowserAuthStartQuery>,
+) -> Response {
+    let Some(provider) = query
+        .provider
+        .as_deref()
+        .and_then(BrowserProvider::parse)
+    else {
+        return no_store_error(
+            StatusCode::BAD_REQUEST,
+            "browser_provider_invalid",
+            "Choose telegram or discord as the browser provider.",
+        );
     };
-    start_provider(&state, BrowserProvider::Discord, client)
+    let intent = match query.intent.as_deref() {
+        None => BrowserAuthIntent::SignIn,
+        Some("connect") => BrowserAuthIntent::Connect,
+        Some(_) => {
+            return no_store_error(
+                StatusCode::BAD_REQUEST,
+                "browser_auth_intent_invalid",
+                "The browser authorization intent is invalid.",
+            );
+        }
+    };
+    let client = match provider {
+        BrowserProvider::Telegram => state.config.telegram.as_ref(),
+        BrowserProvider::Discord => state.config.discord.as_ref(),
+    };
+    let Some(client) = client else {
+        return provider_unavailable(match provider {
+            BrowserProvider::Telegram => "telegram_browser_auth_not_configured",
+            BrowserProvider::Discord => "discord_browser_auth_not_configured",
+        });
+    };
+    let Some(now) = now_unix_seconds() else {
+        return service_unavailable();
+    };
+    let connect_pub_dress = match intent {
+        BrowserAuthIntent::SignIn => None,
+        BrowserAuthIntent::Connect => {
+            let Some(identity) = native_session_identity(&state, &headers, now).await else {
+                return auth_failure("native_authentication_required");
+            };
+            Some(identity.pub_dress)
+        }
+    };
+    start_provider(&state, provider, intent, connect_pub_dress, client, now)
 }
 
 fn start_provider(
     state: &BrowserAuthState,
     provider: BrowserProvider,
+    intent: BrowserAuthIntent,
+    connect_pub_dress: Option<String>,
     client: &OAuthClientCredentials,
+    now: u64,
 ) -> Response {
-    let Some(now) = now_unix_seconds() else {
-        return service_unavailable();
-    };
     let (Some(state_token), Some(code_verifier)) = (random_urlsafe(24), random_urlsafe(32)) else {
         return service_unavailable();
     };
     let code_challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(code_verifier.as_bytes()));
     let transaction = OAuthTransaction {
         provider,
+        intent,
         state: state_token.clone(),
         code_verifier,
+        connect_pub_dress,
         expires_at: now.saturating_add(OAUTH_TRANSACTION_TTL_SECONDS),
     };
     let Some(transaction_cookie) = state
@@ -280,11 +342,14 @@ fn start_provider(
 
     redirect_with_cookies(
         authorization_url.as_str(),
-        [secure_cookie(
-            OAUTH_TRANSACTION_COOKIE,
-            &transaction_cookie,
-            OAUTH_TRANSACTION_TTL_SECONDS,
-        )],
+        [
+            clear_cookie(PENDING_PROVIDER_COOKIE),
+            secure_cookie(
+                OAUTH_TRANSACTION_COOKIE,
+                &transaction_cookie,
+                OAUTH_TRANSACTION_TTL_SECONDS,
+            ),
+        ],
     )
 }
 
@@ -347,7 +412,12 @@ async fn telegram_callback(
             return callback_failure("telegram_authentication_failed");
         }
     };
-    finish_provider_callback(&state, &headers, BrowserProvider::Telegram.identity(subject)).await
+    finish_provider_callback(
+        &state,
+        BrowserProvider::Telegram.identity(subject),
+        &transaction,
+    )
+    .await
 }
 
 async fn discord_callback(
@@ -419,7 +489,12 @@ async fn discord_callback(
             return callback_failure("discord_authentication_failed");
         }
     };
-    finish_provider_callback(&state, &headers, BrowserProvider::Discord.identity(user.id)).await
+    finish_provider_callback(
+        &state,
+        BrowserProvider::Discord.identity(user.id),
+        &transaction,
+    )
+    .await
 }
 
 fn callback_transaction(
@@ -460,46 +535,50 @@ fn callback_transaction(
 
 async fn finish_provider_callback(
     state: &BrowserAuthState,
-    headers: &HeaderMap,
     provider: ProviderIdentity,
+    transaction: &OAuthTransaction,
 ) -> Response {
     let Some(now) = now_unix_seconds() else {
         return callback_failure("provider_authentication_unavailable");
     };
+
+    if transaction.intent == BrowserAuthIntent::Connect {
+        let Some(target) = transaction.connect_pub_dress.as_deref() else {
+            return callback_failure("provider_callback_invalid");
+        };
+        let pub_dress = match target.parse::<PubDress>() {
+            Ok(value) => value,
+            Err(_) => return callback_failure("provider_callback_invalid"),
+        };
+        return match state.provider_links.link(&pub_dress, &provider).await {
+            Ok(ProviderLinkOutcome::Linked | ProviderLinkOutcome::AlreadyLinked) => {
+                redirect_with_cookies(
+                    "/identity",
+                    [
+                        clear_cookie(OAUTH_TRANSACTION_COOKIE),
+                        clear_cookie(PENDING_PROVIDER_COOKIE),
+                    ],
+                )
+            }
+            Ok(ProviderLinkOutcome::ProviderAlreadyLinked) => {
+                callback_failure("provider_already_linked")
+            }
+            Ok(ProviderLinkOutcome::IdentityMissing) => {
+                callback_failure("connect_identity_changed")
+            }
+            Err(error) => {
+                tracing::error!(%error, "browser provider binding failed");
+                callback_failure("provider_authentication_unavailable")
+            }
+        };
+    }
+
     match state.repository.find_by_provider(&provider).await {
         Ok(Some(identity)) => return issue_native_session(state, identity, now).await,
         Ok(None) => {}
         Err(error) => {
             tracing::error!(%error, "browser provider binding lookup failed");
             return callback_failure("provider_authentication_unavailable");
-        }
-    }
-
-    if let Some(identity) = native_session_identity(state, headers, now).await {
-        let pub_dress = match identity.pub_dress.parse::<PubDress>() {
-            Ok(value) => value,
-            Err(_) => return callback_failure("provider_authentication_unavailable"),
-        };
-        match state.provider_links.link(&pub_dress, &provider).await {
-            Ok(ProviderLinkOutcome::Linked | ProviderLinkOutcome::AlreadyLinked) => {
-                return redirect_with_cookies(
-                    "/",
-                    [
-                        clear_cookie(OAUTH_TRANSACTION_COOKIE),
-                        clear_cookie(PENDING_PROVIDER_COOKIE),
-                    ],
-                );
-            }
-            Ok(ProviderLinkOutcome::ProviderAlreadyLinked) => {
-                return callback_failure("provider_already_linked");
-            }
-            Ok(ProviderLinkOutcome::IdentityMissing) => {
-                return callback_failure("provider_authentication_unavailable");
-            }
-            Err(error) => {
-                tracing::error!(%error, "browser provider binding failed");
-                return callback_failure("provider_authentication_unavailable");
-            }
         }
     }
 
@@ -646,6 +725,11 @@ async fn read_provider_context(
     response
 }
 
+#[derive(Debug, Deserialize)]
+struct BrowserProviderLinkRequest {
+    pub_dress: String,
+}
+
 #[derive(Debug, Serialize)]
 struct BrowserProviderLinkResponse {
     state: &'static str,
@@ -655,6 +739,7 @@ struct BrowserProviderLinkResponse {
 async fn link_pending_provider(
     State(state): State<BrowserAuthState>,
     headers: HeaderMap,
+    Json(request): Json<BrowserProviderLinkRequest>,
 ) -> Response {
     if headers
         .get(CSRF_HEADER)
@@ -677,6 +762,13 @@ async fn link_pending_provider(
             "Sign in to the Bond before linking this provider.",
         );
     };
+    if native_identity.pub_dress != request.pub_dress {
+        return no_store_error(
+            StatusCode::CONFLICT,
+            "native_session_changed",
+            "The signed-in Bond changed before the provider could be linked.",
+        );
+    }
     let Some(cookie) = read_cookie(&headers, PENDING_PROVIDER_COOKIE) else {
         return no_store_error(
             StatusCode::UNAUTHORIZED,
@@ -846,6 +938,11 @@ fn redirect_with_cookies<const N: usize>(location: &str, cookies: [String; N]) -
     response
 }
 
+fn auth_failure(code: &'static str) -> Response {
+    let location = format!("/?auth_error={code}");
+    redirect_with_cookies(&location, [])
+}
+
 fn callback_failure(code: &'static str) -> Response {
     let location = format!("/?auth_error={code}");
     redirect_with_cookies(&location, [clear_cookie(OAUTH_TRANSACTION_COOKIE)])
@@ -892,7 +989,10 @@ fn no_store_json<T: Serialize>(status: StatusCode, body: T) -> Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{BrowserOAuthConfig, BrowserProvider, PendingProvider, SignedCookie};
+    use super::{
+        BrowserAuthIntent, BrowserOAuthConfig, BrowserProvider, OAuthTransaction, PendingProvider,
+        SignedCookie,
+    };
     use crate::NativeAuthConfig;
     use url::Url;
 
@@ -925,6 +1025,27 @@ mod tests {
                 .verify::<PendingProvider>("browser-pending-provider", &format!("{value}x"))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn connect_target_is_bound_inside_the_signed_oauth_transaction() {
+        let signer = SignedCookie::new(native_auth().secret_digester());
+        let transaction = OAuthTransaction {
+            provider: BrowserProvider::Discord,
+            intent: BrowserAuthIntent::Connect,
+            state: "state".to_owned(),
+            code_verifier: "verifier".to_owned(),
+            connect_pub_dress: Some("0x0sky".to_owned()),
+            expires_at: 500,
+        };
+        let value = signer
+            .issue("browser-oauth-transaction", &transaction)
+            .expect("signed transaction");
+        let parsed = signer
+            .verify::<OAuthTransaction>("browser-oauth-transaction", &value)
+            .expect("valid signed transaction");
+        assert_eq!(parsed.intent, BrowserAuthIntent::Connect);
+        assert_eq!(parsed.connect_pub_dress.as_deref(), Some("0x0sky"));
     }
 
     #[test]

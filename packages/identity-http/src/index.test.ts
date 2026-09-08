@@ -180,7 +180,84 @@ describe("identity HTTP adapter", () => {
   });
 });
 
-describe("Telegram password setup transport", () => {
+describe("pub_dress rename transport", () => {
+  it("sends only the slug, with the session and CSRF protection", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        response(200, { pub_dress: "0x0rain", avaia_pub_dress: "0rainai" }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.renamePubDressSlug("rain")).resolves.toEqual({
+      kind: "renamed",
+      identity: { pubDress: "0x0rain", avaiaPubDress: "0rainai" },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/identity/pub_dress",
+      expect.objectContaining({
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ slug: "rain" }),
+      }),
+    );
+  });
+
+  it("carries a provider proof when the host has one", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(response(200, { pub_dress: "0x0rain" }));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "discord access-1",
+    });
+
+    await adapter.renamePubDressSlug("rain");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/identity/pub_dress",
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: "discord access-1" }),
+      }),
+    );
+  });
+
+  it("keeps the service's refusal reason", async () => {
+    const refusal = (status: number, code: string) =>
+      createIdentityHttpAdapter({
+        fetch: vi
+          .fn<typeof globalThis.fetch>()
+          .mockResolvedValue(response(status, { error: { code } })),
+        getAuthorization: () => undefined,
+      });
+
+    await expect(
+      refusal(409, "pub_dress_unavailable").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "rejected", reason: "unavailable" });
+    await expect(
+      refusal(409, "avaia_unavailable").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "rejected", reason: "avaia-unavailable" });
+    await expect(
+      refusal(422, "invalid_pub_dress_length").renamePubDressSlug("r"),
+    ).resolves.toEqual({ kind: "rejected", reason: "invalid-length" });
+    await expect(
+      refusal(429, "rate_limited").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "rejected", reason: "rate-limited" });
+    await expect(
+      refusal(500, "server_error").renamePubDressSlug("rain"),
+    ).resolves.toEqual({ kind: "service-unavailable" });
+  });
+});
+
+describe("Provider password setup transport", () => {
   it("sends only the password with verified host authorization and CSRF protection", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(201, {
@@ -195,7 +272,7 @@ describe("Telegram password setup transport", () => {
       getAuthorization: () => "tma signed",
     });
     await expect(
-      adapter.setTelegramPassword("a private password"),
+      adapter.setProviderPassword("telegram", "a private password"),
     ).resolves.toMatchObject({ kind: "recovery-key-required" });
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/auth/telegram/password",
@@ -210,6 +287,35 @@ describe("Telegram password setup transport", () => {
       }),
     );
   });
+  it("presents the Discord proof to the Discord setup endpoint", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(201, {
+        state: "recovery_key_required",
+        identity: { pub_dress: "0x0sky" },
+        recovery_key: "rk",
+        challenge: "challenge",
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "discord access-1",
+    });
+    await expect(
+      adapter.setProviderPassword("discord", "a private password"),
+    ).resolves.toMatchObject({ kind: "recovery-key-required" });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/auth/discord/password",
+      expect.objectContaining({
+        cache: "no-store",
+        headers: {
+          authorization: "discord access-1",
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ password: "a private password" }),
+      }),
+    );
+  });
   it("does not send a password without provider authentication", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const adapter = createIdentityHttpAdapter({
@@ -217,7 +323,7 @@ describe("Telegram password setup transport", () => {
       getAuthorization: () => undefined,
     });
     await expect(
-      adapter.setTelegramPassword("a private password"),
+      adapter.setProviderPassword("telegram", "a private password"),
     ).resolves.toEqual({ kind: "rejected", reason: "authentication-required" });
     expect(fetch).not.toHaveBeenCalled();
   });

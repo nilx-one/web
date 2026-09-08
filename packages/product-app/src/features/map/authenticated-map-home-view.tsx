@@ -13,13 +13,13 @@ import { useEffect, useRef, useState } from "react";
 import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import {
-  IDENTITY_ROUTE,
   WORLD_ROUTE,
   type ShellRoute,
   type ShellSection,
 } from "../../shell/routes";
 import { useShellPresentation } from "../../shell/shell-presentation";
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
+import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
 import {
@@ -32,11 +32,17 @@ import { createLocationControlViewModel } from "./location-control-view-model";
 import {
   cameraFramesPosition,
   cameraMotion,
+  closeUpCamera,
   firstFixCamera,
   locationCameraPadding,
   recenterCamera,
 } from "./location-camera-policy";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
+import {
+  createBondDockViewState,
+  type AvaiaAvailability,
+  type DockSeat,
+} from "./bond-dock-view-model";
 
 export type ConnectedProvider = "telegram" | "discord";
 
@@ -55,6 +61,24 @@ export interface AuthenticatedMapHomeViewProps {
   /** The canonical route this surface is presenting. */
   readonly section?: ShellSection;
   readonly connectedProviders?: readonly ConnectedProvider[];
+  /**
+   * What this device can do about the Avaia runtime. Without a published
+   * runtime there is nothing to download, which is what "unavailable" says.
+   */
+  readonly avaiaAvailability?: AvaiaAvailability;
+  /** Starts fetching that runtime. Absent means this host cannot fetch it. */
+  readonly onPrepareAvaia?: () => void;
+  /**
+   * The two addresses this Bond may name: its own, and its Avaia's. Without
+   * them the profile presents the addresses it already has and offers nothing
+   * to change.
+   */
+  readonly slugEdit?: AddressSlugViewState;
+  readonly avaiaEdit?: AddressSlugViewState;
+  readonly onSlugChange?: (slug: string) => void;
+  readonly onSlugSubmit?: () => void;
+  readonly onAvaiaChange?: (slug: string) => void;
+  readonly onAvaiaSubmit?: () => void;
   readonly onLogout?: () => void;
   readonly onNavigate?: (route: ShellRoute) => void;
 }
@@ -81,7 +105,7 @@ function focusStateFor(location: DeviceLocationState): FocusState {
 }
 
 /** Identity detail is a state of the identity surface, never a separate route. */
-type IdentityDetail = "profile-edit" | "add-hosts" | "providers-edit";
+type IdentityDetail = "add-hosts" | "providers-edit";
 
 /**
  * Detail is scoped to the section that opened it, so leaving the identity
@@ -169,6 +193,93 @@ function mapStatusToast(
   };
 }
 
+/**
+ * One address, named in place. There is no separate edit screen: the profile
+ * shows what a Bond is and lets it be changed where it is read.
+ */
+function AddressField({
+  id,
+  label,
+  state,
+  fallback,
+  onChange,
+  onSubmit,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly state: AddressSlugViewState | undefined;
+  readonly fallback: string;
+  readonly onChange: ((slug: string) => void) | undefined;
+  readonly onSubmit: (() => void) | undefined;
+}) {
+  if (state === undefined || state.kind === "fixed") {
+    return (
+      <dl className="bond-profile__rows">
+        <div>
+          <dt>{label}</dt>
+          <dd>
+            {state?.address === undefined || state.address.length === 0
+              ? fallback
+              : state.address}
+          </dd>
+        </div>
+      </dl>
+    );
+  }
+
+  return (
+    <form
+      className="profile-edit__form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (state.canSave) onSubmit?.();
+      }}
+    >
+      <label className="interface-settings__eyebrow" htmlFor={id}>
+        {label}
+      </label>
+      <div className="profile-edit__address">
+        <span className="profile-edit__discriminator" aria-hidden="true">
+          {state.prefix}
+        </span>
+        <input
+          id={id}
+          name={`${id}-value`}
+          type="text"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          value={state.slug}
+          disabled={state.busy}
+          aria-describedby={`${id}-note`}
+          aria-invalid={state.error !== undefined}
+          onChange={(event) => onChange?.(event.currentTarget.value)}
+        />
+        <button
+          className="profile-edit__save"
+          type="submit"
+          disabled={!state.canSave}
+        >
+          {state.busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+      <p className="profile-edit__note" id={`${id}-note`}>
+        {state.note}
+      </p>
+      {state.error === undefined ? null : (
+        <p className="profile-edit__error" role="alert">
+          {state.error}
+        </p>
+      )}
+      {state.saved === undefined ? null : (
+        <p className="profile-edit__saved" role="status">
+          {`Saved. This is ${state.saved}.`}
+        </p>
+      )}
+    </form>
+  );
+}
+
 export function AuthenticatedMapHomeView({
   hostLabel,
   pubDress,
@@ -179,6 +290,14 @@ export function AuthenticatedMapHomeView({
   safeArea,
   section = "world",
   connectedProviders = [],
+  avaiaAvailability = "unavailable",
+  onPrepareAvaia,
+  slugEdit,
+  avaiaEdit,
+  onSlugChange,
+  onSlugSubmit,
+  onAvaiaChange,
+  onAvaiaSubmit,
   onLogout,
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
@@ -198,6 +317,8 @@ export function AuthenticatedMapHomeView({
   const [dismissedStatus, setDismissedStatus] = useState<string | undefined>(
     undefined,
   );
+  // Who is at the wheel is presentation: it moves nothing in the shared world.
+  const [wheel, setWheel] = useState<DockSeat>("bond");
   const [dimension, setDimension] = useState<MapDimension>(
     readDimensionPreference,
   );
@@ -350,6 +471,40 @@ export function AuthenticatedMapHomeView({
    * moves the camera back onto the latest observation. It never refetches a
    * position it already has.
    */
+  const dock = createBondDockViewState({
+    pubDress,
+    avaiaPubDress,
+    wheel,
+    avaia: avaiaAvailability,
+    focusable: observedPosition !== undefined,
+    downloadable: onPrepareAvaia !== undefined,
+  });
+
+  /**
+   * The identity at the wheel is where the world looks. Focusing it is a camera
+   * move to the closest scale this policy allows, never a claim of presence.
+   */
+  function focusWorldOnWheel(): void {
+    if (observedPosition === undefined) return;
+    const context = { presentation, dimension, safeArea };
+    renderer.setCamera(closeUpCamera(observedPosition, context), {
+      motion: cameraMotion(prefersReducedMotion()),
+      padding: locationCameraPadding(context),
+    });
+    cameraMovedByPerson.current = false;
+  }
+
+  /** The identity that is spectating takes the wheel, when it can. */
+  function activateSpectator(): void {
+    if (dock.handover === "download") {
+      onPrepareAvaia?.();
+      return;
+    }
+    if (dock.handover === "switch") {
+      setWheel(wheel === "bond" ? "avaia" : "bond");
+    }
+  }
+
   function activateLocationControl(): void {
     if (locationControl.intent === "request") {
       location.requestFromGesture();
@@ -387,8 +542,6 @@ export function AuthenticatedMapHomeView({
   function detailTitle(): string {
     if (section === "settings") return "Settings";
     switch (activeDetail) {
-      case "profile-edit":
-        return "Edit profile";
       case "add-hosts":
         return "Add hosts";
       case "providers-edit":
@@ -467,18 +620,19 @@ export function AuthenticatedMapHomeView({
                 <button
                   className="bond-dock__bond bond-dock__bond--active"
                   type="button"
-                  onClick={() => navigate(IDENTITY_ROUTE)}
-                  aria-label={`Open Bond profile for ${pubDress}`}
+                  disabled={!dock.left.actionable}
+                  onClick={focusWorldOnWheel}
+                  aria-label={dock.left.actionLabel}
                 >
-                  <span className="bond-dock__glyph">0x0</span>
-                  <strong>{pubDress}</strong>
+                  <span className="bond-dock__glyph">{dock.left.glyph}</span>
+                  <strong>{dock.left.address}</strong>
                   <small>
-                    You
+                    {dock.left.seat === "bond" ? "You" : "AI"}
                     <i
-                      className="bond-dock__status-dot bond-dock__status-dot--authenticated"
+                      className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
                       aria-hidden="true"
                     />
-                    spectate
+                    {dock.left.role}
                   </small>
                 </button>
                 <span
@@ -488,17 +642,23 @@ export function AuthenticatedMapHomeView({
                   —
                 </span>
                 <button
-                  className="bond-dock__bond bond-dock__bond--unavailable"
+                  className={`bond-dock__bond${
+                    dock.right.actionable ? "" : " bond-dock__bond--unavailable"
+                  }`}
                   type="button"
-                  disabled
-                  aria-label={`${avaiaLabel} AI runtime unavailable on this host`}
+                  disabled={!dock.right.actionable}
+                  onClick={activateSpectator}
+                  aria-label={dock.right.actionLabel}
                 >
-                  <span className="bond-dock__glyph">AI</span>
-                  <strong>{avaiaLabel}</strong>
+                  <span className="bond-dock__glyph">{dock.right.glyph}</span>
+                  <strong>{dock.right.address}</strong>
                   <small>
-                    AI
-                    <i className="bond-dock__status-dot" aria-hidden="true" />
-                    unavailable
+                    {dock.right.seat === "bond" ? "You" : "AI"}
+                    <i
+                      className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
+                      aria-hidden="true"
+                    />
+                    {dock.right.role}
                   </small>
                 </button>
               </div>
@@ -520,109 +680,55 @@ export function AuthenticatedMapHomeView({
                   </span>
                   <h2 id="bond-dock-title">{detailTitle()}</h2>
                 </div>
-                {section === "identity" && activeDetail === undefined ? (
-                  <button
-                    className="bond-dock__edit"
-                    type="button"
-                    onClick={() => openDetail("profile-edit")}
-                  >
-                    Edit
-                  </button>
-                ) : null}
               </div>
 
               {section === "identity" && activeDetail === undefined ? (
                 <div className="bond-profile">
+                  <AddressField
+                    id="profile-slug"
+                    label="pub_dress"
+                    state={slugEdit}
+                    fallback={pubDress}
+                    onChange={onSlugChange}
+                    onSubmit={onSlugSubmit}
+                  />
+                  <AddressField
+                    id="avaia-slug"
+                    label="avaia"
+                    state={avaiaEdit}
+                    fallback={avaiaLabel}
+                    onChange={onAvaiaChange}
+                    onSubmit={onAvaiaSubmit}
+                  />
                   <dl className="bond-profile__rows">
-                    <div>
-                      <dt>pub_dress</dt>
-                      <dd>{pubDress}</dd>
-                    </div>
-                    <div>
-                      <dt>Age</dt>
-                      <dd>Not set</dd>
-                    </div>
                     <div>
                       <dt>Providers</dt>
                       <dd>
                         <span className="provider-controls">
-                          {connectedProviders.length === 0 ? (
+                          {connectedProviders.map((provider) => (
                             <button
-                              className="provider-control provider-control--add"
+                              className="provider-control provider-control--connected"
+                              key={provider}
                               type="button"
-                              aria-label="Add host"
-                              onClick={() => openDetail("add-hosts")}
+                              aria-label={`${providerLabel(provider)} connected`}
+                              title={providerLabel(provider)}
+                              onClick={() => openDetail("providers-edit")}
                             >
-                              +
+                              {providerAbbreviation(provider)}
                             </button>
-                          ) : (
-                            <>
-                              {connectedProviders.map((provider) => (
-                                <span
-                                  className="provider-control provider-control--connected"
-                                  key={provider}
-                                  aria-label={`${providerLabel(provider)} connected`}
-                                  title={providerLabel(provider)}
-                                >
-                                  {providerAbbreviation(provider)}
-                                </span>
-                              ))}
-                              <button
-                                className="provider-control provider-control--edit"
-                                type="button"
-                                onClick={() => openDetail("providers-edit")}
-                              >
-                                Edit
-                              </button>
-                            </>
-                          )}
+                          ))}
+                          <button
+                            className="provider-control provider-control--add"
+                            type="button"
+                            aria-label="Add host"
+                            onClick={() => openDetail("add-hosts")}
+                          >
+                            +
+                          </button>
                         </span>
                       </dd>
                     </div>
-                    <div>
-                      <dt>Home</dt>
-                      <dd>Not set · map selection later</dd>
-                    </div>
-                    <div>
-                      <dt>Family</dt>
-                      <dd>Not set</dd>
-                    </div>
-                    <div>
-                      <dt>Closest Bond</dt>
-                      <dd>No Relationship projection yet</dd>
-                    </div>
-                    <div>
-                      <dt>BondChains</dt>
-                      <dd>No projection available yet</dd>
-                    </div>
                   </dl>
-                </div>
-              ) : null}
-
-              {activeDetail === "profile-edit" ? (
-                <div className="profile-edit">
-                  <dl className="bond-profile__rows">
-                    <div>
-                      <dt>pub_dress</dt>
-                      <dd>{pubDress}</dd>
-                    </div>
-                    <div>
-                      <dt>Age</dt>
-                      <dd>Not set</dd>
-                    </div>
-                    <div>
-                      <dt>Home</dt>
-                      <dd>Not set</dd>
-                    </div>
-                    <div>
-                      <dt>Family</dt>
-                      <dd>Not set</dd>
-                    </div>
-                  </dl>
-                  <p className="interface-settings__note">
-                    Provider connections are managed separately and are never
-                    changed by profile editing.
-                  </p>
                 </div>
               ) : null}
 

@@ -3,7 +3,13 @@
 
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -12,7 +18,13 @@ import {
   createMapRendererDouble,
   observation,
 } from "../../../../../tests/support/doubles";
+import {
+  createAvaiaSlugViewState,
+  createProfileSlugViewState,
+} from "../identity/profile-slug-view-model";
+import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
+import type { AvaiaAvailability } from "./bond-dock-view-model";
 import {
   AuthenticatedMapHomeView,
   type ConnectedProvider,
@@ -28,8 +40,16 @@ interface ViewOverrides {
   geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
   section?: ShellSection;
+  avaiaAvailability?: AvaiaAvailability;
+  onPrepareAvaia?: () => void;
+  slugEdit?: AddressSlugViewState;
+  avaiaEdit?: AddressSlugViewState;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
+  onSlugChange?: (slug: string) => void;
+  onSlugSubmit?: () => void;
+  onAvaiaChange?: (slug: string) => void;
+  onAvaiaSubmit?: () => void;
 }
 
 function renderView(overrides: ViewOverrides = {}) {
@@ -43,6 +63,30 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.onNavigate === undefined
       ? {}
       : { onNavigate: overrides.onNavigate }),
+    ...(overrides.avaiaAvailability === undefined
+      ? {}
+      : { avaiaAvailability: overrides.avaiaAvailability }),
+    ...(overrides.onPrepareAvaia === undefined
+      ? {}
+      : { onPrepareAvaia: overrides.onPrepareAvaia }),
+    ...(overrides.slugEdit === undefined
+      ? {}
+      : { slugEdit: overrides.slugEdit }),
+    ...(overrides.avaiaEdit === undefined
+      ? {}
+      : { avaiaEdit: overrides.avaiaEdit }),
+    ...(overrides.onSlugChange === undefined
+      ? {}
+      : { onSlugChange: overrides.onSlugChange }),
+    ...(overrides.onSlugSubmit === undefined
+      ? {}
+      : { onSlugSubmit: overrides.onSlugSubmit }),
+    ...(overrides.onAvaiaChange === undefined
+      ? {}
+      : { onAvaiaChange: overrides.onAvaiaChange }),
+    ...(overrides.onAvaiaSubmit === undefined
+      ? {}
+      : { onAvaiaSubmit: overrides.onAvaiaSubmit }),
   };
 
   return render(
@@ -84,15 +128,17 @@ describe("AuthenticatedMapHomeView", () => {
 
     renderView({ mapRenderer });
 
+    // The Bond is at the wheel, so it is the Avaia that spectates — and with no
+    // runtime to fetch, spectating is all it can do.
     expect(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
-    ).toHaveTextContent("spectate");
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    ).toHaveTextContent("You");
     expect(
       screen.getByLabelText("No reciprocal relationship asserted"),
     ).toHaveTextContent("—");
     expect(
       screen.getByRole("button", {
-        name: "0skai AI runtime unavailable on this host",
+        name: "0skai is unavailable on this device",
       }),
     ).toBeDisabled();
     expect(screen.getByText("0skai")).toBeVisible();
@@ -138,15 +184,72 @@ describe("AuthenticatedMapHomeView", () => {
     ).not.toBeNull();
   });
 
-  it("opens the identity route from the Bond rather than a Dock-local screen", () => {
-    const onNavigate = vi.fn();
+  it("takes the wheel to the Avaia and leaves the Bond spectating", () => {
+    renderView({ avaiaAvailability: "ready" });
 
-    renderView({ onNavigate });
+    const handover = screen.getByRole("button", {
+      name: "Hand the wheel to 0skai",
+    });
+    expect(handover).toBeEnabled();
+    expect(handover).toHaveTextContent("ready");
+
+    fireEvent.click(handover);
+
+    expect(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toHaveTextContent("spectate");
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).toHaveTextContent("driving");
+
     fireEvent.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
 
-    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    ).toHaveTextContent("You");
+  });
+
+  it("offers the runtime download only when this host can fetch one", () => {
+    const onPrepareAvaia = vi.fn();
+    renderView({ avaiaAvailability: "downloadable", onPrepareAvaia });
+
+    const download = screen.getByRole("button", {
+      name: "Download the 0skai runtime",
+    });
+    expect(download).toHaveTextContent("download");
+    fireEvent.click(download);
+    expect(onPrepareAvaia).toHaveBeenCalledOnce();
+
+    cleanup();
+    renderView({ avaiaAvailability: "downloadable" });
+    expect(
+      screen.getByRole("button", {
+        name: "0skai is unavailable on this device",
+      }),
+    ).toBeDisabled();
+  });
+
+  it("focuses the world on the identity at the wheel", async () => {
+    const mapRenderer = renderer();
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+    });
+    // The first fix moves the camera once on its own; focusing is the move a
+    // person asks for, and it goes closer than that first fix does.
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    const setCamera = vi.mocked(mapRenderer.setCamera);
+    const firstFix = setCamera.mock.calls.length;
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    );
+
+    expect(setCamera.mock.calls.length).toBe(firstFix + 1);
+    const [camera] = setCamera.mock.calls.at(-1) ?? [];
+    expect(camera?.zoom).toBeGreaterThan(15);
   });
 
   it("returns to the world from an identity surface", () => {
@@ -158,15 +261,32 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
   });
 
-  it("presents the Bond profile on the identity route", () => {
-    renderView({ section: "identity" });
+  it("presents the whole Bond profile on one identity surface", () => {
+    renderView({
+      section: "identity",
+      slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
+      avaiaEdit: createAvaiaSlugViewState("0skai", "0x0sky", undefined, false),
+    });
 
     expect(screen.getByRole("heading", { name: "0x0sky" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeVisible();
-    expect(screen.getByText("pub_dress")).toBeVisible();
+    // Reading and changing the profile are the same screen.
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("pub_dress")).toHaveValue("sky");
+    expect(screen.getByLabelText("avaia")).toHaveValue("skai");
     expect(screen.getByText("Providers")).toBeVisible();
-    expect(screen.queryByText("Phone")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add host" })).toBeVisible();
+    // Nothing a person cannot change is presented as something to edit.
+    for (const absent of [
+      "Age",
+      "Home",
+      "Family",
+      "Closest Bond",
+      "BondChains",
+    ]) {
+      expect(screen.queryByText(absent)).not.toBeInTheDocument();
+    }
   });
 
   it("opens Add hosts with provider authorization redirects", () => {
@@ -183,7 +303,7 @@ describe("AuthenticatedMapHomeView", () => {
     ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
   });
 
-  it("keeps provider management separate from profile edit", () => {
+  it("shows each connected provider as its own control", () => {
     renderView({
       section: "identity",
       connectedProviders: ["telegram", "discord"],
@@ -191,21 +311,83 @@ describe("AuthenticatedMapHomeView", () => {
 
     expect(screen.getByLabelText("Telegram connected")).toBeVisible();
     expect(screen.getByLabelText("Discord connected")).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(2);
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]!);
+    fireEvent.click(screen.getByLabelText("Telegram connected"));
 
-    expect(screen.getByRole("heading", { name: "Edit profile" })).toBeVisible();
-    expect(screen.queryByText("Providers")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
+  });
+
+  it("names the Bond and its Avaia from the same surface", () => {
+    const onSlugChange = vi.fn();
+    const onAvaiaChange = vi.fn();
+    renderView({
+      section: "identity",
+      slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
+      avaiaEdit: createAvaiaSlugViewState("0skai", "0x0sky", undefined, false),
+      onSlugChange,
+      onAvaiaChange,
+    });
+
+    const save = screen.getAllByRole("button", { name: "Save" });
+    expect(save).toHaveLength(2);
+    expect(save[0]).toBeDisabled();
+    expect(save[1]).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("pub_dress"), {
+      target: { value: "rain" },
+    });
+    fireEvent.change(screen.getByLabelText("avaia"), {
+      target: { value: "rainai" },
+    });
+
+    expect(onSlugChange).toHaveBeenCalledExactlyOnceWith("rain");
+    expect(onAvaiaChange).toHaveBeenCalledExactlyOnceWith("rainai");
+  });
+
+  it("saves a changed slug and reports what the service answered", () => {
+    const onSlugSubmit = vi.fn();
+    const { rerender } = renderView({
+      section: "identity",
+      slugEdit: createProfileSlugViewState("0x0sky", "rain", false),
+      onSlugSubmit,
+    });
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    expect(onSlugSubmit).toHaveBeenCalledOnce();
+
+    rerender(
+      <AuthenticatedMapHomeView
+        hostLabel="browser host"
+        pubDress="0x0sky"
+        avaiaPubDress="0skai"
+        renderer={renderer()}
+        geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
+        runtime={{
+          tone: "ready",
+          label: "Shared Core ready",
+          detail: "Contract 0.1.0 is available to the Web client.",
+        }}
+        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+        section="identity"
+        slugEdit={createProfileSlugViewState("0x0sky", "rain", false, {
+          kind: "rejected",
+          reason: "unavailable",
+        })}
+        onSlugSubmit={onSlugSubmit}
+      />,
+    );
+
     expect(
-      screen.getByText(/Provider connections are managed separately/i),
+      screen.getByText("That address belongs to another Bond."),
     ).toBeVisible();
   });
 
   it("opens provider management from the Providers row", () => {
     renderView({ section: "identity", connectedProviders: ["telegram"] });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[1]!);
+    fireEvent.click(screen.getByLabelText("Telegram connected"));
 
     expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
     expect(screen.getByText("Telegram")).toBeVisible();

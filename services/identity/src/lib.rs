@@ -20,6 +20,7 @@ pub use ox1_contracts::{AvaiaPubDress, AvaiaPubDressError, PubDress, PubDressErr
 pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository};
 pub use repository::{
     IdentityProvider, IdentityRecord, IdentityRepository, NativeCredentialRecord,
-    NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome, RepositoryError,
+    NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome, RegistrationOutcome,
+    RepositoryError,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};

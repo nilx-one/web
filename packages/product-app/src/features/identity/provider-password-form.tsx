@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 
-export function TelegramPasswordForm({
+export function ProviderPasswordForm({
   pubDress,
   password,
   busy,
@@ -38,43 +38,43 @@ export function TelegramPasswordForm({
         if (!busy && valid && matches) onSubmit();
       }}
     >
-      <label className="surface-kicker" htmlFor="telegram-password-username">
+      <label className="surface-kicker" htmlFor="provider-password-username">
         pub_dress
       </label>
       <input
-        className="telegram-password-username"
-        id="telegram-password-username"
+        className="provider-password-username"
+        id="provider-password-username"
         name="username"
         autoComplete="username"
         readOnly
         value={pubDress}
       />
-      <label className="surface-kicker" htmlFor="telegram-new-password">
+      <label className="surface-kicker" htmlFor="provider-new-password">
         Password
       </label>
       <div className="password-field">
         <input
-          id="telegram-new-password"
+          id="provider-new-password"
           name="password"
           type={visible ? "text" : "password"}
           autoComplete="new-password"
           value={password}
           disabled={busy}
-          aria-describedby="telegram-password-policy"
+          aria-describedby="provider-password-policy"
           required
           onChange={(event) => onPasswordChange(event.currentTarget.value)}
         />
       </div>
-      <p className="password-note" id="telegram-password-policy">
+      <p className="password-note" id="provider-password-policy">
         8–128 Unicode characters · no leading/trailing whitespace · no line
         breaks
       </p>
-      <label className="surface-kicker" htmlFor="telegram-confirm-password">
+      <label className="surface-kicker" htmlFor="provider-confirm-password">
         Confirm password
       </label>
       <div className="password-field">
         <input
-          id="telegram-confirm-password"
+          id="provider-confirm-password"
           name="password-confirmation"
           type={visible ? "text" : "password"}
           autoComplete="new-password"
@@ -82,7 +82,7 @@ export function TelegramPasswordForm({
           disabled={busy}
           required
           aria-invalid={mismatch}
-          aria-describedby={mismatch ? "telegram-password-mismatch" : undefined}
+          aria-describedby={mismatch ? "provider-password-mismatch" : undefined}
           onChange={(event) => setConfirmation(event.currentTarget.value)}
         />
       </div>
@@ -96,7 +96,7 @@ export function TelegramPasswordForm({
       {mismatch ? (
         <p
           className="identity-error"
-          id="telegram-password-mismatch"
+          id="provider-password-mismatch"
           role="alert"
         >
           Passwords don’t match.

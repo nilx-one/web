@@ -58,6 +58,7 @@ export type IdentityViewState =
   | {
       kind: "provider-password";
       pubDress: string;
+      provider: ProviderPasswordLabel;
       busy: boolean;
       error?: string;
     }
@@ -242,8 +243,12 @@ export function createProviderIdentityViewState(
       : identity?.kind === "registered"
         ? identity
         : undefined;
+  // Telegram and Discord both authorize an existing Bond that may still have no
+  // native credential. The setup step belongs to the provider host, not to one
+  // provider, so both reach it on the same condition.
+  const passwordHost = providerPasswordLabel(host);
   if (
-    host.kind === "telegram" &&
+    passwordHost !== undefined &&
     registered !== undefined &&
     registered.passwordRequired !== false
   ) {
@@ -272,10 +277,11 @@ export function createProviderIdentityViewState(
             : {}),
       };
     }
-    const error = providerPasswordError(passwordSetup);
+    const error = providerPasswordError(passwordSetup, passwordHost);
     return {
       kind: "provider-password",
       pubDress: registered.identity.pubDress,
+      provider: passwordHost,
       busy: pending,
       ...(error === undefined ? {} : { error }),
     };
@@ -472,15 +478,32 @@ function providerLabel(
   }
 }
 
+/** The provider hosts that can create a native password, by display name. */
+export type ProviderPasswordLabel = "Telegram" | "Discord";
+
+function providerPasswordLabel(
+  host: HostSnapshot,
+): ProviderPasswordLabel | undefined {
+  switch (host.kind) {
+    case "telegram":
+      return "Telegram";
+    case "discord":
+      return "Discord";
+    default:
+      return undefined;
+  }
+}
+
 function providerPasswordError(
   result: ProviderPasswordResult | undefined,
+  provider: ProviderPasswordLabel,
 ): string | undefined {
   if (result?.kind === "service-unavailable")
     return "Couldn’t save your password. Try again.";
   if (result?.kind !== "rejected") return undefined;
   switch (result.reason) {
     case "authentication-required":
-      return "Reopen 0x1 from Telegram to continue.";
+      return `Reopen 0x1 from ${provider} to continue.`;
     case "already-set":
       return "A password is already set. Reopen 0x1 to sign in.";
     case "invalid-password-length":

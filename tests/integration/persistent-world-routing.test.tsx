@@ -60,7 +60,9 @@ function createAuthenticatedIdentity(): IdentityAccessPort {
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
-    setTelegramPassword: async () => ({ kind: "service-unavailable" }),
+    renameAvaiaSlug: async () => ({ kind: "service-unavailable" }),
+    renamePubDressSlug: async () => ({ kind: "service-unavailable" }),
+    setProviderPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
     resolvePubDress: async () => ({ kind: "service-unavailable" }),
@@ -105,14 +107,16 @@ describe("persistent authenticated world routing", () => {
     );
 
     await screen.findByRole("button", {
-      name: "Open Bond profile for 0x0sky",
+      name: "Focus the world on 0x0sky",
     });
     const initialMap = mapContainer();
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
 
     await user.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+      document.querySelector<HTMLAnchorElement>(
+        'a[href="/identity"]',
+      ) as HTMLAnchorElement,
     );
     expect(
       await screen.findByRole("heading", { name: "0x0sky" }),
@@ -217,7 +221,9 @@ describe("device location over the persistent world", () => {
     await screen.findByRole("button", { name: "Map centred on this device" });
 
     await user.click(
-      screen.getByRole("button", { name: "Open Bond profile for 0x0sky" }),
+      document.querySelector<HTMLAnchorElement>(
+        'a[href="/identity"]',
+      ) as HTMLAnchorElement,
     );
     await screen.findByRole("heading", { name: "0x0sky" });
 

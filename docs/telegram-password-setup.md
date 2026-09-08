@@ -37,8 +37,9 @@ to an independently created native Bond remains a separate dual-proof operation.
 ## Deployment
 
 Identity runtime contract **2** provides the additive setup endpoint and credential
-state. Only the Telegram target requires contract 2; browser and Discord retain
-contract 1. Deploy validation must pass before merge. After merge, package the
+state. Only the Telegram target requires contract 2; the browser retains contract 1 and
+Discord requires contract 3 for its own setup endpoint (see
+`docs/discord-password-setup.md`). Deploy validation must pass before merge. After merge, package the
 identity service at contract 2 before activating the Telegram client; the production
 orchestrator checks this dependency and fails closed without a suitable package.
 No schema migration or new environment secret is required.
