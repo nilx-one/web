@@ -49,7 +49,7 @@ Two rules bound it:
 - **Apparent size only.** The multiplier changes how tall a body is drawn and nothing else. It never moves the body, never widens the accuracy it stands in, and never survives into shared state.
 - **A body withdraws before it can lie.** Further out than street scale no body is drawn at all. The observed-position marker already says "here" at those widths, and a figure standing there would read as a person at a spot the observation cannot actually resolve.
 
-One body is drawn: the signed-in Bond's own, and only while this device holds an observation of itself. An avatar on the map is never evidence of presence, proximity, or that anyone else is nearby.
+One body is drawn — the identity at the wheel — and only while this device holds an observation of itself. A body on the map is never evidence of presence, proximity, or that anyone else is nearby.
 
 ## Marker and body
 
@@ -61,12 +61,21 @@ The handover only happens when a body is actually coming. With no study chosen t
 
 ## Who is drawn
 
-Two bodies, both belonging to this client:
+One body: the identity at the wheel. The Dock already names it — one identity drives, the other spectates — and the world is that same statement drawn on the ground. Two bodies standing as peers would say something the Dock does not.
 
-- **the Bond's own**, standing where this device observed itself;
-- **its Avaia's**, standing beside it in a different study so the two are told apart at a glance.
+The world opens on the **Avaia**, in a study the Bond is not wearing. The Bond spectates on the right of the Dock until he takes the wheel.
 
-An Avaia is this Bond's own AI counterpart, so where it stands is local presentation the client composes for itself. It accompanies its Bond, and a new observation is somewhere to walk to rather than somewhere to appear: it moves at walking pace and plays its walk while it is going. None of that is a shared-world fact, none of it is written back, and reduced motion arrives at the same place without the journey.
+Where a body stands is the one thing this client actually observed: its own device position. An Avaia is not there in any sense the protocol asserts — an Avaia may be anywhere, on an errand or a walk or at home, and where it is will come from an integration that knows. Until one does, the world can only draw it at the client's own anchor, and that is a limit of what is known rather than a claim about where it is.
+
+An Avaia's runtime has nothing to do with whether it has a body. A body is the identity; the Dock's status dot is the machinery behind it, and the two are reported separately.
+
+## Handing the wheel over
+
+Taking the wheel is not one model replacing another at the same instant. The body that is leaving plays `quiesce` and goes; the body arriving plays `wake` and comes out onto the world. These are the two non-looping clips every published study carries, and the ambient sampler deliberately never reaches for them — they exist for this.
+
+The two halves run in sequence, not overlapped, so the two identities are never both standing on the same spot. Each holds its own handle for as long as the handover runs, which is what lets the arriving study load while the other one is still settling.
+
+Who is at the wheel is presentation. It moves nobody, asserts nothing about where anyone is, and is never written back.
 
 No other identity is drawn. Nothing in the client carries a position for another Bond, and a body invented for one would be a presence claim the protocol never made.
 

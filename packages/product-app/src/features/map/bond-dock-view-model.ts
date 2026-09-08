@@ -112,7 +112,10 @@ export function createBondDockViewState(
     address: avaiaAddress,
     glyph: "AI",
     role: seated === "left" ? "driving" : avaiaRole(input.avaia),
-    tone: seated === "left" ? "ready" : avaiaTone(input.avaia),
+    // Driving is about the wheel; the status dot is about the runtime. An
+    // Avaia can be the identity the world is showing while its runtime is not
+    // up, and the dot must not claim otherwise.
+    tone: avaiaTone(input.avaia),
     actionable: seated === "left" ? input.focusable : handover !== undefined,
     actionLabel:
       seated === "left"

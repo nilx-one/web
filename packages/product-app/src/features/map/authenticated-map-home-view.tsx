@@ -1,11 +1,9 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  createAvaiaMovementController,
-  type AvaiaMovementController,
-  type BondProviderConnections,
-  type BondProviderType,
+import type {
+  BondProviderConnections,
+  BondProviderType,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import type {
@@ -52,14 +50,17 @@ import {
   recenterCamera,
 } from "./location-camera-policy";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
-import { AVATAR_HANDLE_ID, createSelfAvatarHandle } from "./avatar-presence";
 import {
-  AVAIA_HANDLE_ID,
-  avaiaStandpoint,
   avaiaStudy,
-  createAvaiaAvatarHandle,
-  headingDegrees,
-} from "./avaia-presence";
+  BODY_HANDLE_IDS,
+  createWheelBodyHandle,
+} from "./avatar-presence";
+import {
+  handoverComplete,
+  HANDOVER_MS,
+  wheelBody,
+  type WheelHandover,
+} from "./wheel-handover";
 import {
   createBondDockViewState,
   type AvaiaAvailability,
@@ -158,9 +159,6 @@ interface IdentityDetailState {
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
 
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
-
-/** Long enough that any standoff is already behind the body that skipped it. */
-const REDUCED_MOTION_ARRIVAL_SECONDS = 3_600;
 
 function runtimeContract(runtime: RuntimeViewState): string | undefined {
   if (runtime.tone !== "ready") return undefined;
@@ -367,17 +365,17 @@ export function AuthenticatedMapHomeView({
     undefined,
   );
   // Who is at the wheel is presentation: it moves nothing in the shared world.
-  const [wheel, setWheel] = useState<DockSeat>("bond");
+  // The world opens on the Avaia — the Bond is spectating until he takes it.
+  const [wheel, setWheel] = useState<DockSeat>("avaia");
+  const [handover, setHandover] = useState<WheelHandover | undefined>(
+    undefined,
+  );
   const [dimension, setDimension] = useState<MapDimension>(
     readDimensionPreference,
   );
   // The camera the renderer actually holds, and whether a person put it there.
   const [camera, setCamera] = useState(() => renderer.getCamera());
   const cameraMovedByPerson = useRef(false);
-  // The Avaia keeps walking across renders, so its movement and the way it
-  // ended up facing outlive any one of them.
-  const avaiaMovement = useRef<AvaiaMovementController | undefined>(undefined);
-  const avaiaFacing = useRef(0);
   const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
@@ -546,133 +544,59 @@ export function AuthenticatedMapHomeView({
    * The identity at the wheel is where the world looks. Focusing it is a camera
    * move to the closest scale this policy allows, never a claim of presence.
    */
-  // The Bond's own body stands where this device observed itself, and only
-  // after the Bond chose a study this client can render. The ambient clip is
-  // resampled on the slot boundary rather than per frame: the renderer owns
-  // playback, this owns the choice of clip. The camera's zoom reaches the body
-  // as apparent size only — it is what lets a person be seen at all when the
-  // ground under them is still far away, and it moves nobody.
-  useEffect(() => {
-    const avatars = renderer.avatars;
-    const model = avatarChoice?.rendered;
-    if (avatars === undefined || model === undefined) return;
-    if (observedPosition === undefined) {
-      avatars.remove(AVATAR_HANDLE_ID);
-      return;
-    }
-
-    // Capture the narrowed capability and published model before the timer
-    // closure. TypeScript correctly treats these aliases as stable values, and
-    // the effect still exits before drawing when either capability is absent.
-    const avatarLayer = avatars;
-    const renderedModel = model;
-    const reducedMotion = prefersReducedMotion();
-    function draw(): void {
-      const handle = createSelfAvatarHandle({
-        pubDress,
-        model: renderedModel,
-        location: location.state,
-        zoom: cameraZoom,
-        timeMs: globalThis.performance.now(),
-        reducedMotion,
-      });
-      if (handle !== null) avatarLayer.upsert(handle);
-    }
-
-    draw();
-    if (reducedMotion) return () => avatarLayer.remove(AVATAR_HANDLE_ID);
-    const timer = globalThis.setInterval(draw, AVATAR_AMBIENT_REFRESH_MS);
-    return () => {
-      globalThis.clearInterval(timer);
-      avatarLayer.remove(AVATAR_HANDLE_ID);
-    };
-  }, [
-    avatarChoice?.rendered,
-    cameraZoom,
-    location.state,
-    observedPosition,
-    pubDress,
-    renderer,
-  ]);
-
-  // The Avaia's own body, walking.
+  // The body of whichever identity is at the wheel.
   //
-  // An Avaia is this Bond's AI counterpart, so where it stands is local
-  // presentation the client composes for itself — never a shared-world fact
-  // and never written back. It accompanies its Bond, and a new observation is
-  // somewhere to walk to rather than somewhere to appear: the controller moves
-  // it at walking pace, and the body plays its walk while it is going.
+  // The world draws one: the Dock says who is driving, and this is that
+  // identity standing on the world. Where it stands is the one thing this
+  // client observed — its own device position. Handing the wheel over is a
+  // body settling and leaving, then the other arriving, so a handover holds
+  // both handles for as long as it runs and the arriving study can load while
+  // the other one is still going.
   useEffect(() => {
     const avatars = renderer.avatars;
     const bondStudy = avatarChoice?.rendered;
-    if (avatars === undefined) return;
-    // A body needs a study to wear, and an Avaia never wears its Bond's own —
-    // so the Bond's choice is what tells this one which body is left.
-    if (
-      bondStudy === undefined ||
-      avaiaAvailability !== "ready" ||
-      observedPosition === undefined
-    ) {
-      avatars.remove(AVAIA_HANDLE_ID);
-      avaiaMovement.current = undefined;
+    if (avatars === undefined || bondStudy === undefined) return;
+    if (observedPosition === undefined) {
+      for (const id of Object.values(BODY_HANDLE_IDS)) avatars.remove(id);
       return;
     }
 
     const avatarLayer = avatars;
-    const address = avaiaAddress;
-    const study = avaiaStudy(address, bondStudy);
     const reducedMotion = prefersReducedMotion();
-    const standpoint = avaiaStandpoint(
-      {
-        longitude: observedPosition.longitude,
-        latitude: observedPosition.latitude,
-      },
-      address,
-    );
-
-    const controller =
-      avaiaMovement.current ??
-      createAvaiaMovementController({ initialPosition: standpoint });
-    avaiaMovement.current = controller;
-    controller.navigateTo(standpoint);
-    // Reduced motion asks for no journey, not for no Avaia: it arrives at the
-    // same place, without the walk between here and there.
-    if (reducedMotion) controller.tick(REDUCED_MOTION_ARRIVAL_SECONDS);
+    const study = (seat: DockSeat) =>
+      seat === "bond" ? bondStudy : avaiaStudy(avaiaAddress, bondStudy);
+    const address = (seat: DockSeat) =>
+      seat === "bond" ? pubDress : avaiaAddress;
 
     let frame: number | undefined;
-    let lastMs = globalThis.performance.now();
 
     function draw(nowMs: number): void {
-      const movement = controller.tick(Math.max(0, (nowMs - lastMs) / 1_000));
-      lastMs = nowMs;
-      if (movement.kind === "moving") {
-        avaiaFacing.current = headingDegrees(
-          movement.position,
-          movement.target,
-        );
+      const body = wheelBody(wheel, handover, nowMs);
+      const handle = createWheelBodyHandle({
+        body,
+        address: address(body.seat),
+        study: study(body.seat),
+        location: location.state,
+        zoom: cameraZoom,
+        timeMs: nowMs,
+        reducedMotion,
+      });
+      if (handle !== null) avatarLayer.upsert(handle);
+
+      // Only the identity in the seat this instant is on the world: the other
+      // handle is dropped rather than left standing behind the one driving.
+      for (const [seat, id] of Object.entries(BODY_HANDLE_IDS)) {
+        if (seat !== body.seat) avatarLayer.remove(id);
       }
 
-      avatarLayer.upsert(
-        createAvaiaAvatarHandle({
-          avaiaAddress: address,
-          study,
-          movement,
-          zoom: cameraZoom,
-          timeMs: nowMs,
-          reducedMotion,
-          facingDegrees: avaiaFacing.current,
-        }),
-      );
-
-      // The walk is the only thing that needs a frame. Standing still, this
-      // body resamples on the ambient slot like every other one.
+      // A handover is the only thing here that needs frames, and it ends.
       frame =
-        movement.kind === "moving"
+        handover !== undefined && !handoverComplete(handover, nowMs)
           ? globalThis.requestAnimationFrame(draw)
           : undefined;
     }
 
-    draw(lastMs);
+    draw(globalThis.performance.now());
     const ambient = globalThis.setInterval(
       () => draw(globalThis.performance.now()),
       AVATAR_AMBIENT_REFRESH_MS,
@@ -681,16 +605,34 @@ export function AuthenticatedMapHomeView({
     return () => {
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       globalThis.clearInterval(ambient);
-      avatarLayer.remove(AVAIA_HANDLE_ID);
+      for (const id of Object.values(BODY_HANDLE_IDS)) avatarLayer.remove(id);
     };
   }, [
     avaiaAddress,
-    avaiaAvailability,
     avatarChoice?.rendered,
     cameraZoom,
+    handover,
+    location.state,
     observedPosition,
+    pubDress,
     renderer,
+    wheel,
   ]);
+
+  // A handover ends on its own: the wheel is already where it is going, and
+  // clearing it is what returns the arrived body to the ambient rhythm.
+  useEffect(() => {
+    if (handover === undefined) return;
+    const remaining = Math.max(
+      0,
+      handover.startedMs + HANDOVER_MS - globalThis.performance.now(),
+    );
+    const settled = globalThis.setTimeout(
+      () => setHandover(undefined),
+      remaining,
+    );
+    return () => globalThis.clearTimeout(settled);
+  }, [handover]);
 
   function focusWorldOnWheel(): void {
     if (observedPosition === undefined) return;
@@ -709,7 +651,11 @@ export function AuthenticatedMapHomeView({
       return;
     }
     if (dock.handover === "switch") {
-      setWheel(wheel === "bond" ? "avaia" : "bond");
+      // Taking the wheel is not a swap at one instant: the body driving
+      // settles and leaves, and the one taking over arrives on the world.
+      const to: DockSeat = wheel === "bond" ? "avaia" : "bond";
+      setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
+      setWheel(to);
     }
   }
 
