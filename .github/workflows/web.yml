@@ -53,7 +53,7 @@ jobs:
         run: pnpm build
       - name: Verify Core runtime in every host artifact
         run: |
-          expected=539e3e74c3f7f38b4b6c7255946a61d4e77ff119c6920d1a05569c2fe289a2f2
+          expected=173c3e9164c030384865013df87d36a29846b09cd2b8ee59b433509b2d77c90d
           for host in site telegram-mini-app discord-activity; do
             runtime="apps/$host/dist/core/0.1.0/index_bg.wasm"
             test -f "$runtime"
