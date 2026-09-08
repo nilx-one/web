@@ -40,6 +40,7 @@ export {
   isAvatarModel,
   type AvatarModel,
   type AvatarModelResult,
+  type PublishedAvatarModel,
   RenamePubDressSlug,
   type PubDressRenameResult,
   SetProviderPassword,

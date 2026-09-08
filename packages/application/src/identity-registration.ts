@@ -9,18 +9,15 @@
 export const AVATAR_MODELS = ["sky-study", "dasha-study", "kai-study"] as const;
 
 export type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
-declare const forwardAvatarModelBrand: unique symbol;
-type ForwardAvatarModel = string & {
-  readonly [forwardAvatarModelBrand]: "forward-avatar-model";
-};
-export type AvatarModel = PublishedAvatarModel | ForwardAvatarModel;
+/** An explicit stored model id, including ids published by a newer runtime. */
+export type AvatarModel = string;
 
 /**
  * Parses an explicit identity model id without assuming this client publishes
  * it. Rendering code must narrow against `AVATAR_MODELS` before drawing it.
  */
 export function isAvatarModel(value: unknown): value is AvatarModel {
-  return typeof value === "string";
+  return typeof value === "string" && value.length > 0;
 }
 
 export interface IdentityProjection {
@@ -211,7 +208,7 @@ export type PubDressRenameResult =
   | { kind: "service-unavailable" };
 
 export interface IdentityAccessPort {
-  chooseAvatarModel(model: AvatarModel): Promise<AvatarModelResult>;
+  chooseAvatarModel(model: PublishedAvatarModel): Promise<AvatarModelResult>;
   renameAvaiaSlug(slug: string): Promise<PubDressRenameResult>;
   renamePubDressSlug(slug: string): Promise<PubDressRenameResult>;
   setProviderPassword(
@@ -391,7 +388,7 @@ export class RegisterProviderIdentity {
 export class ChooseAvatarModel {
   public constructor(private readonly identity: IdentityAccessPort) {}
 
-  public async execute(model: AvatarModel): Promise<AvatarModelResult> {
+  public async execute(model: PublishedAvatarModel): Promise<AvatarModelResult> {
     try {
       return await this.identity.chooseAvatarModel(model);
     } catch {

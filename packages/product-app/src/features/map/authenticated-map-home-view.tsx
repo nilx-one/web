@@ -509,24 +509,29 @@ export function AuthenticatedMapHomeView({
       return;
     }
 
+    // Capture the narrowed capability and published model before the timer
+    // closure. TypeScript correctly treats these aliases as stable values, and
+    // the effect still exits before drawing when either capability is absent.
+    const avatarLayer = avatars;
+    const renderedModel = model;
     const reducedMotion = prefersReducedMotion();
     function draw(): void {
       const handle = createSelfAvatarHandle(
         pubDress,
-        model,
+        renderedModel,
         location.state,
         globalThis.performance.now(),
         reducedMotion,
       );
-      if (handle !== null) avatars.upsert(handle);
+      if (handle !== null) avatarLayer.upsert(handle);
     }
 
     draw();
-    if (reducedMotion) return () => avatars.remove(AVATAR_HANDLE_ID);
+    if (reducedMotion) return () => avatarLayer.remove(AVATAR_HANDLE_ID);
     const timer = globalThis.setInterval(draw, AVATAR_AMBIENT_REFRESH_MS);
     return () => {
       globalThis.clearInterval(timer);
-      avatars.remove(AVATAR_HANDLE_ID);
+      avatarLayer.remove(AVATAR_HANDLE_ID);
     };
   }, [
     avatarChoice?.rendered,
