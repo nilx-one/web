@@ -167,10 +167,10 @@ describe("ProductApp identity", () => {
       await screen.findByRole("heading", { name: "Enter your pub_dress." }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Telegram — coming next/i }),
+      screen.getByRole("button", { name: "Sign in with Telegram" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: /Discord — coming later/i }),
+      screen.getByRole("button", { name: "Sign in with Discord" }),
     ).toBeDisabled();
     expect(await screen.findByText("Shared Core required")).toBeInTheDocument();
   });
