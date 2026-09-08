@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nilx-one/core
-          ref: e09a42184951b6f40ad4b11eedf6e48c5b6a0ac9
+          ref: c224304947280169017e298237bcf5361d1bfb30
           path: .core-source
           persist-credentials: false
       - name: Install matching wasm-bindgen CLI
