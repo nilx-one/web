@@ -3,6 +3,7 @@
 
 import {
   parsePubDress,
+  type BrowserIdentityProvider,
   type CorePubDressLabelResult,
   type PubDressLabelResolutionResult,
   type PubDressSelection,
@@ -29,10 +30,20 @@ import { TelegramPasswordForm } from "./telegram-password-form";
 import { PubDressUrlField } from "./pub-dress-url-field";
 import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 
+export interface BrowserProviderAuthViewState {
+  available: {
+    telegram: boolean;
+    discord: boolean;
+  };
+  pendingProvider?: BrowserIdentityProvider;
+  onAuthorize(provider: BrowserIdentityProvider): void;
+}
+
 export interface IdentityFoundationViewProps {
   password: string;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
+  browserProviderAuth?: BrowserProviderAuthViewState;
   /** Normative public-label derivation returned by 0x1 Core. */
   pubDressLabelDerivation?: CorePubDressLabelResult | undefined;
   pubDressLabelDerivationPending?: boolean;
@@ -223,28 +234,54 @@ function lede(identity: IdentityViewState): string {
   }
 }
 
-function ProviderRow() {
+function ProviderRow({
+  auth,
+}: {
+  auth: BrowserProviderAuthViewState | undefined;
+}) {
+  const pendingLabel =
+    auth?.pendingProvider === "telegram"
+      ? "Telegram"
+      : auth?.pendingProvider === "discord"
+        ? "Discord"
+        : undefined;
   return (
     <section className="provider-row" aria-labelledby="provider-row-label">
       <span id="provider-row-label">Sign in with</span>
       <div className="provider-buttons">
-        <button type="button" disabled aria-label="Telegram — coming next">
+        <button
+          type="button"
+          disabled={auth?.available.telegram !== true}
+          aria-label="Sign in with Telegram"
+          onClick={() => auth?.onAuthorize("telegram")}
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="m4 11 15-6-4.7 14-3.6-4.1L8 17l.6-4.1L17 7.4 6.4 12.2 4 11Z" />
           </svg>
           <span>Telegram</span>
-          <small>next</small>
+          <small>web</small>
         </button>
-        <button type="button" disabled aria-label="Discord — coming later">
+        <button
+          type="button"
+          disabled={auth?.available.discord !== true}
+          aria-label="Sign in with Discord"
+          onClick={() => auth?.onAuthorize("discord")}
+        >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M7.2 7.2A14 14 0 0 1 12 6.3a14 14 0 0 1 4.8.9c1.1 1.6 2 4.3 2.2 6.5a12 12 0 0 1-3.2 2.1l-.8-1.1a8.6 8.6 0 0 0 1.4-.7c-2.7 1.2-6.1 1.2-8.8 0 .4.3.9.5 1.4.7l-.8 1.1A12 12 0 0 1 5 13.7c.2-2.2 1.1-4.9 2.2-6.5Z" />
             <circle cx="9.5" cy="11.5" r="1" />
             <circle cx="14.5" cy="11.5" r="1" />
           </svg>
           <span>Discord</span>
-          <small>later</small>
+          <small>web</small>
         </button>
       </div>
+      {pendingLabel === undefined ? null : (
+        <p className="identity-status identity-status--available" aria-live="polite">
+          {pendingLabel} verified. Already have a Bond? Sign in below and we’ll
+          connect {pendingLabel}. New here? Create your Bond below.
+        </p>
+      )}
     </section>
   );
 }
@@ -1015,6 +1052,7 @@ function IdentityForm({
 }
 
 export function IdentityFoundationView({
+  browserProviderAuth,
   password,
   pubDressLabelDerivation,
   pubDressLabelDerivationPending = false,
@@ -1052,7 +1090,7 @@ export function IdentityFoundationView({
           <div className="identity-surface">
             {viewModel.showProviderRow ? (
               <>
-                <ProviderRow />
+                <ProviderRow auth={browserProviderAuth} />
                 <div className="identity-divider" aria-hidden="true">
                   <span>or</span>
                 </div>
