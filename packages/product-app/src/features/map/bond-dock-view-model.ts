@@ -1,30 +1,34 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvaiaConfigurationState } from "@nilx-one/application";
+
 /**
  * The Dock presents two identities and which of them is at the wheel.
  *
- * The identity at the wheel sits on the left: activating it brings the world to
- * it. The other sits on the right: activating it hands the wheel over, when
- * that is possible at all. Nothing here writes shared-world state — the wheel
- * is presentation, and spectating is what an identity does when it is not
- * driving.
+ * The identity at the wheel sits on the left: activating a Bond brings the
+ * world to it. Avaia activation opens its owner-controlled profile surface;
+ * runtime handover remains a separate presentation capability. Nothing here
+ * writes shared-world state.
  */
 
 /** What this device can do about the Avaia runtime right now. */
 export type AvaiaAvailability =
-  "ready" | "preparing" | "downloadable" | "unavailable";
+  | "ready"
+  | "preparing"
+  | "downloadable"
+  | "unavailable";
 
 export type DockSeat = "bond" | "avaia";
 
-/** What activating the identity on the right would do. */
+/** What the runtime can do when the spectator takes the wheel. */
 export type DockHandover = "switch" | "download" | undefined;
 
 export interface DockIdentityViewState {
   readonly seat: DockSeat;
   readonly address: string;
   readonly glyph: string;
-  /** The relationship this identity has to the world right now. */
+  /** The identity/profile/runtime state presented beside this address. */
   readonly role: string;
   /** Presentation tone for the status dot. */
   readonly tone: "authenticated" | "ready" | "working" | "idle";
@@ -34,9 +38,9 @@ export interface DockIdentityViewState {
 
 export interface BondDockViewState {
   readonly wheel: DockSeat;
-  /** At the wheel. Activating it focuses the world on this identity. */
+  /** At the wheel. */
   readonly left: DockIdentityViewState;
-  /** Spectating. Activating it takes the wheel, or prepares the runtime. */
+  /** Spectating. */
   readonly right: DockIdentityViewState;
   readonly handover: DockHandover;
 }
@@ -46,13 +50,19 @@ export interface BondDockInput {
   readonly avaiaPubDress?: string | undefined;
   readonly wheel: DockSeat;
   readonly avaia: AvaiaAvailability;
+  /** Persisted identity/profile state; never inferred from runtime. */
+  readonly avaiaConfiguration?: AvaiaConfigurationState | undefined;
   /** Whether the world has somewhere to move the camera to. */
   readonly focusable: boolean;
   /** Whether this composition can start a runtime download at all. */
   readonly downloadable: boolean;
 }
 
-function avaiaRole(availability: AvaiaAvailability): string {
+function avaiaRole(
+  configuration: AvaiaConfigurationState | undefined,
+  availability: AvaiaAvailability,
+): string {
+  if (configuration === "unconfigured") return "unconfigured";
   switch (availability) {
     case "ready":
       return "ready";
@@ -66,8 +76,10 @@ function avaiaRole(availability: AvaiaAvailability): string {
 }
 
 function avaiaTone(
+  configuration: AvaiaConfigurationState | undefined,
   availability: AvaiaAvailability,
 ): DockIdentityViewState["tone"] {
+  if (configuration === "unconfigured") return "idle";
   switch (availability) {
     case "ready":
       return "ready";
@@ -83,6 +95,7 @@ export function createBondDockViewState(
   input: BondDockInput,
 ): BondDockViewState {
   const avaiaAddress = input.avaiaPubDress ?? "Avaia";
+  const hasAvaiaAddress = input.avaiaPubDress !== undefined;
   const driving = input.wheel;
   const handover: DockHandover =
     driving === "avaia"
@@ -97,7 +110,6 @@ export function createBondDockViewState(
     seat: "bond",
     address: input.pubDress,
     glyph: "0x0",
-    // A Bond that is not driving is watching: that is what spectating means.
     role: seated === "left" ? "You" : "spectate",
     tone: "authenticated",
     actionable: seated === "left" ? input.focusable : true,
@@ -111,17 +123,20 @@ export function createBondDockViewState(
     seat: "avaia",
     address: avaiaAddress,
     glyph: "AI",
-    role: seated === "left" ? "driving" : avaiaRole(input.avaia),
-    tone: seated === "left" ? "ready" : avaiaTone(input.avaia),
-    actionable: seated === "left" ? input.focusable : handover !== undefined,
-    actionLabel:
+    role:
       seated === "left"
-        ? `Focus the world on ${avaiaAddress}`
-        : handover === "switch"
-          ? `Hand the wheel to ${avaiaAddress}`
-          : handover === "download"
-            ? `Download the ${avaiaAddress} runtime`
-            : `${avaiaAddress} is unavailable on this device`,
+        ? "driving"
+        : avaiaRole(input.avaiaConfiguration, input.avaia),
+    tone:
+      seated === "left"
+        ? "ready"
+        : avaiaTone(input.avaiaConfiguration, input.avaia),
+    // Runtime unavailability must never block identity/profile editing.
+    actionable: hasAvaiaAddress,
+    actionLabel:
+      input.avaiaConfiguration === "unconfigured"
+        ? `Set up ${avaiaAddress}`
+        : `Edit ${avaiaAddress}`,
   });
 
   return {
