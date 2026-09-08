@@ -51,6 +51,11 @@ sh tools/avatars/build.sh
 python tools/avatars/test_rig.py
 ```
 
+`python tools/avatars/preview.py sheet.png` rasterises the exported studies to a
+single PNG — front and three-quarter views, flat-shaded from the material
+palette — so a change can be looked at without a device or a scene editor. It is
+a check on geometry, not the runtime renderer, and not a substitute for Blender.
+
 Outputs live in `deploy/web/avatars/0.1.0/`. Generated GLBs and manifests are
 excluded from Git; reproducible sources and SHA-256 expectations are versioned.
 CI generates and validates them once, then passes the verified assets to deploy

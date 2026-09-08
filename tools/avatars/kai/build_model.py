@@ -32,10 +32,10 @@ PALETTE={
  'brow':('#4f4034',.82,0), 'eye_white':('#ece6dc',.34,0),
  'iris':('#6f7f80',.40,0), 'iris_edge':('#44514f',.48,0), 'pupil':('#161a1a',.24,0),
  'hair':('#3f3a36',.62,0), 'hair_light':('#59524a',.58,0), 'hair_fade':('#33302d',.70,0),
- 'overshirt':('#7d8b74',.86,0), 'overshirt_shadow':('#68765f',.88,0),
- 'tee':('#e6e2d7',.90,0), 'tee_shadow':('#cbc7bb',.92,0),
- 'trouser':('#4a4f56',.90,0), 'trouser_shadow':('#3c4046',.92,0),
- 'boot':('#2a2723',.52,0), 'boot_sole':('#141311',.78,0),
+ 'overshirt':('#9aa891',.86,0), 'overshirt_shadow':('#82927a',.88,0),
+ 'tee':('#efece3',.90,0), 'tee_shadow':('#d6d2c7',.92,0),
+ 'trouser':('#6b727b',.90,0), 'trouser_shadow':('#585e66',.92,0),
+ 'boot':('#3b3630',.52,0), 'boot_sole':('#211e1b',.78,0),
  'silver':('#c0c5c8',.24,.86), 'cord':('#2f332f',.88,0)
 }
 def rgb(h): return [int(h[i:i+2],16) for i in (1,3,5)]
@@ -156,14 +156,14 @@ coat=[(.986,.176,.112,0,0),(1.010,.182,.115,0,0),(1.120,.181,.114,0,0),(1.240,.1
       (1.510,.168,.088,0,.008),(1.532,.096,.063,0,.008),(1.542,.071,.053,0,.008)]
 # The shell is open at the front: the gap widens from collar to hem, so the
 # tee reads through the opening instead of the shell closing over it.
-loft('overshirt_shell',coat,'overshirt',96,104,'clothing',gap=lambda z:float(np.interp(z,[.986,1.240,1.500,1.542],[.30,.24,.13,.05])))
-loft('overshirt_hem',[(.978,.174,.111,0,0),(.990,.180,.114,0,0),(1.006,.181,.114,0,0),(1.018,.176,.111,0,0)],'overshirt_shadow',18,88,'clothing',gap=lambda z:.30)
+loft('overshirt_shell',coat,'overshirt',96,104,'clothing',gap=lambda z:float(np.interp(z,[.986,1.240,1.500,1.542],[.46,.36,.18,.06])))
+loft('overshirt_hem',[(.978,.174,.111,0,0),(.990,.180,.114,0,0),(1.006,.181,.114,0,0),(1.018,.176,.111,0,0)],'overshirt_shadow',18,88,'clothing',gap=lambda z:.46)
 loft('overshirt_collar',[(1.502,.088,.061,0,.008),(1.524,.077,.056,0,.008),(1.548,.072,.053,0,.008),(1.558,.069,.051,0,.008)],'overshirt',18,72,'clothing',gap=lambda z:.10)
 loft('overshirt_stand',[(1.508,.071,.052,0,.008),(1.546,.065,.048,0,.008),(1.556,.063,.047,0,.008)],'overshirt_shadow',14,64,'clothing',gap=lambda z:.12)
 
 # Front placket edges and two patch pockets: the only structure on the shell.
 for s,label in [(-1,'L'),(1,'R')]:
-    edge=[surf_pt(coat,z,s*float(np.interp(z,[.986,1.240,1.500,1.542],[.30,.24,.13,.05])),-.0012) for z in (1.000,1.150,1.300,1.430,1.520)]
+    edge=[surf_pt(coat,z,s*float(np.interp(z,[.986,1.240,1.500,1.542],[.46,.36,.18,.06])),-.0012) for z in (1.000,1.150,1.300,1.430,1.520)]
     strip(label+'_placket',edge,[.016,.019,.020,.019,.014],.0028,'overshirt_shadow',(0,-1,0),46,'clothing',10)
     welt=[surf_pt(coat,z,s*a,-.0014) for z,a in [(1.150,.98),(1.128,.74),(1.116,.50)]]
     tube(label+'_pocket_welt',welt,[.0018,.0028,.0015],'overshirt_shadow',34,8,'clothing')
