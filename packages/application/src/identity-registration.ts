@@ -150,6 +150,33 @@ export type ProviderPasswordResult =
     }
   | { kind: "service-unavailable" };
 
+export type BrowserIdentityProvider = "telegram" | "discord";
+
+export interface BrowserProviderAvailability {
+  telegram: boolean;
+  discord: boolean;
+}
+
+export type BrowserProviderContextResult =
+  | { kind: "none"; available: BrowserProviderAvailability }
+  | {
+      kind: "pending";
+      provider: BrowserIdentityProvider;
+      available: BrowserProviderAvailability;
+    }
+  | { kind: "service-unavailable" };
+
+export type BrowserProviderLinkResult =
+  | { kind: "linked"; provider: BrowserIdentityProvider }
+  | {
+      kind: "rejected";
+      reason:
+        | "authentication-required"
+        | "provider-proof-required"
+        | "provider-already-linked";
+    }
+  | { kind: "service-unavailable" };
+
 export interface IdentityAccessPort {
   setTelegramPassword(password: string): Promise<ProviderPasswordResult>;
   acknowledgeRecoveryKey(
@@ -180,6 +207,14 @@ export interface IdentityAccessPort {
     selection: PubDressSelection,
   ): Promise<PubDressResolutionResult>;
   resolvePubDressLabel(label: string): Promise<PubDressLabelResolutionResult>;
+  /** Optional capability: only browser-capable identity adapters expose it. */
+  browserProviderAuthorizationUrl?(
+    provider: BrowserIdentityProvider,
+  ): string;
+  /** Optional capability: pending provider proof is a browser-only state. */
+  readBrowserProviderContext?(): Promise<BrowserProviderContextResult>;
+  /** Optional capability: links verified provider proof to an authenticated Bond. */
+  linkBrowserProvider?(): Promise<BrowserProviderLinkResult>;
 }
 
 export class ResolvePubDress {
@@ -328,6 +363,46 @@ export class SetTelegramPassword {
   public async execute(password: string): Promise<ProviderPasswordResult> {
     try {
       return await this.identity.setTelegramPassword(password);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class BeginBrowserProviderAuthorization {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public execute(provider: BrowserIdentityProvider): string | undefined {
+    return this.identity.browserProviderAuthorizationUrl?.(provider);
+  }
+}
+
+export class ReadBrowserProviderContext {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(): Promise<BrowserProviderContextResult> {
+    const read = this.identity.readBrowserProviderContext;
+    if (read === undefined) {
+      return { kind: "service-unavailable" };
+    }
+    try {
+      return await read.call(this.identity);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class LinkBrowserProvider {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(): Promise<BrowserProviderLinkResult> {
+    const link = this.identity.linkBrowserProvider;
+    if (link === undefined) {
+      return { kind: "service-unavailable" };
+    }
+    try {
+      return await link.call(this.identity);
     } catch {
       return { kind: "service-unavailable" };
     }
