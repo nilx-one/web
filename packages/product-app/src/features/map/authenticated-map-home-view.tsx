@@ -25,6 +25,8 @@ import {
   type ShellSection,
 } from "../../shell/routes";
 import { useShellPresentation } from "../../shell/shell-presentation";
+import { AvaiaSetupView } from "../avaia/avaia-setup-view";
+import { useAvaiaProfile } from "../avaia/use-avaia-profile";
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import type { AvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import {
@@ -94,9 +96,8 @@ export interface AuthenticatedMapHomeViewProps {
   /** Starts fetching that runtime. Absent means this host cannot fetch it. */
   readonly onPrepareAvaia?: () => void;
   /**
-   * The two addresses this Bond may name: its own, and its Avaia's. Without
-   * them the profile presents the addresses it already has and offers nothing
-   * to change.
+   * Legacy address-only edit state. Contract-8 clients use the owner Avaia
+   * profile surface instead; these remain for older IdentityAccessPort hosts.
    */
   readonly slugEdit?: AddressSlugViewState;
   readonly avaiaEdit?: AddressSlugViewState;
@@ -134,20 +135,20 @@ function focusStateFor(location: DeviceLocationState): FocusState {
   }
 }
 
-/** Identity detail is a state of the identity surface, never a separate route. */
-type IdentityDetail = "providers";
+/** Identity detail is a state of the Dock, never a separate route. */
+type IdentityDetail = "providers" | "avaia";
 
 /**
- * Detail is scoped to the section that opened it, so leaving the identity
- * surface abandons it without a state synchronisation effect.
+ * Detail is scoped to the section that opened it, so leaving that section
+ * abandons it without making the detail a lifecycle owner.
  */
 interface IdentityDetailState {
   readonly section: ShellSection;
   readonly detail: IdentityDetail;
 }
+
 /** One ambient slot: the cadence the sampler itself changes clips on. */
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
-
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
 
 function runtimeContract(runtime: RuntimeViewState): string | undefined {
@@ -178,9 +179,7 @@ function mapStatusToast(
   label: string,
   detail: string,
 ): StatusToastItem | undefined {
-  if (status.kind === "ready") {
-    return undefined;
-  }
+  if (status.kind === "ready") return undefined;
 
   return {
     id:
@@ -194,8 +193,8 @@ function mapStatusToast(
 }
 
 /**
- * One address, named in place. There is no separate edit screen: the profile
- * shows what a Bond is and lets it be changed where it is read.
+ * One address, named in place. The human Bond keeps its established slug edit
+ * surface; Avaia moves to the full-address profile contract in contract 8.
  */
 function AddressField({
   id,
@@ -283,8 +282,7 @@ function AddressField({
 /**
  * A connected provider opens where the domain resolved it: a provider scheme
  * when this host can follow one, the account's own web address when it cannot,
- * and the provider itself when this client does not know that address. The
- * mark carries no account text — the provider is what it says.
+ * and the provider itself when this client does not know that address.
  */
 function ProviderMark({
   row,
@@ -306,8 +304,6 @@ function ProviderMark({
       data-open={row.openKind}
       aria-label={row.openLabel}
       title={row.label}
-      // A provider scheme is handed to the platform in place; only a web
-      // address is worth a second browsing context.
       {...(row.openKind === "deep-link"
         ? {}
         : { target: "_blank", rel: "noreferrer noopener" })}
@@ -344,6 +340,11 @@ export function AuthenticatedMapHomeView({
 }: AuthenticatedMapHomeViewProps) {
   const mapHostRef = useRef<HTMLDivElement>(null);
   const location = useDeviceLocation(geolocation);
+  const avaiaProfile = useAvaiaProfile(pubDress);
+  const [avaiaProfileDraft, setAvaiaProfileDraft] = useState("");
+  const [avaiaSaveToast, setAvaiaSaveToast] = useState<
+    StatusToastItem | undefined
+  >(undefined);
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
   >(undefined);
@@ -354,12 +355,10 @@ export function AuthenticatedMapHomeView({
   const [dismissedStatus, setDismissedStatus] = useState<string | undefined>(
     undefined,
   );
-  // Who is at the wheel is presentation: it moves nothing in the shared world.
   const [wheel, setWheel] = useState<DockSeat>("bond");
   const [dimension, setDimension] = useState<MapDimension>(
     readDimensionPreference,
   );
-  // The camera the renderer actually holds, and whether a person put it there.
   const [camera, setCamera] = useState(() => renderer.getCamera());
   const cameraMovedByPerson = useRef(false);
   const firstFixApplied = useRef(false);
@@ -374,17 +373,14 @@ export function AuthenticatedMapHomeView({
   );
   const focusState: FocusState = focusStateFor(location.state);
   const resolvedAppearance = appearance.resolved;
-  // Zoom alone drives the body's apparent size, so the avatar is not redrawn
-  // for a pan that leaves the scale untouched.
   const cameraZoom = camera.zoom;
   const contractVersion = runtimeContract(runtime);
   const mapViewModel = createMapFoundationViewModel(mapStatus);
   const activeDetail =
     detailState?.section === section ? detailState.detail : undefined;
-  const dockScreen = section === "world" ? "home" : (activeDetail ?? section);
-  // The Dock's navigation stack: the world, a Bond surface, a screen it opens.
+  const dockScreen = activeDetail ?? (section === "world" ? "home" : section);
   const dockDepth =
-    section === "world" ? 0 : activeDetail === undefined ? 1 : 2;
+    activeDetail === undefined ? (section === "world" ? 0 : 1) : section === "world" ? 1 : 2;
   const providers = createBondProvidersViewState(connectedProviders, {
     deepLinkProviders: providerDeepLinks,
   });
@@ -393,23 +389,20 @@ export function AuthenticatedMapHomeView({
     mapViewModel.label,
     mapViewModel.detail,
   );
-  const statusToasts =
-    statusToast === undefined || statusToast.id === dismissedStatus
-      ? []
-      : [statusToast];
+  const statusToasts = [statusToast, avaiaSaveToast].filter(
+    (toast): toast is StatusToastItem =>
+      toast !== undefined && toast.id !== dismissedStatus,
+  );
   const headerActions: readonly HeaderAction[] =
     onLogout === undefined
       ? []
       : [{ id: "sign-out", label: "Sign out", perform: onLogout }];
-  const avaiaLabel = avaiaPubDress ?? "Avaia";
+  const storedAvaiaPubDress = avaiaProfile.profile?.pubDress ?? avaiaPubDress;
+  const avaiaConfiguration = avaiaProfile.profile?.configurationState;
+  const avaiaLabel = storedAvaiaPubDress ?? "Avaia";
 
-  // A map that never paints must say so. Without this the shell shows an empty
-  // surface and a renderer, asset, or basemap failure is indistinguishable
-  // from an ordinary dark map.
   useEffect(() => renderer.subscribe(setMapStatus), [renderer]);
 
-  // Appearance is applied before mounting so the first paint already uses the
-  // resolved style variant instead of loading light and swapping to dark.
   useEffect(() => {
     renderer.setAppearance(resolvedAppearance);
   }, [renderer, resolvedAppearance]);
@@ -425,29 +418,20 @@ export function AuthenticatedMapHomeView({
     renderer.setDimension(dimension);
   }, [renderer, dimension]);
 
-  // Nothing is asked of the host until the persistent world actually renders.
-  // Renderer readiness is a presentation fact; it is what gates the request,
-  // not what performs it.
   useEffect(() => {
     if (mapStatus.kind !== "ready") return;
     location.activate();
   }, [location, mapStatus.kind]);
 
-  // Camera state is the renderer's. The world only observes it, so it can tell
-  // a camera a person moved from one the application moved.
   useEffect(
     () =>
       renderer.subscribeCamera((change) => {
         setCamera(change.camera);
-        if (change.gesture) {
-          cameraMovedByPerson.current = true;
-        }
+        if (change.gesture) cameraMovedByPerson.current = true;
       }),
     [renderer],
   );
 
-  // The observation reaches the renderer as presentation geometry and display
-  // text. It is never persisted, sent to a backend, or written to telemetry.
   useEffect(() => {
     if (observedPosition === undefined) {
       renderer.setObservedPosition(null);
@@ -465,8 +449,6 @@ export function AuthenticatedMapHomeView({
     });
   }, [observedPosition, pubDress, renderer]);
 
-  // The first fix of a world recenters once. Later updates move the marker;
-  // they never take the camera back from the person holding it.
   useEffect(() => {
     if (observedPosition === undefined || firstFixApplied.current) return;
     firstFixApplied.current = true;
@@ -495,31 +477,40 @@ export function AuthenticatedMapHomeView({
     setDetailState({ section, detail });
   }
 
-  /**
-   * The one explicit user-gesture path. It either asks the host — which is
-   * also the retry when a platform refuses to prompt without a gesture — or
-   * moves the camera back onto the latest observation. It never refetches a
-   * position it already has.
-   */
+  function openAvaiaDetail(): void {
+    if (avaiaConfiguration === undefined || storedAvaiaPubDress === undefined) {
+      return;
+    }
+    avaiaProfile.resetSave();
+    setAvaiaProfileDraft(storedAvaiaPubDress);
+    openDetail("avaia");
+  }
+
+  async function saveAvaiaProfile(): Promise<void> {
+    const result = await avaiaProfile.save(avaiaProfileDraft);
+    if (result.kind !== "updated") return;
+
+    setAvaiaProfileDraft(result.profile.pubDress);
+    setAvaiaSaveToast({
+      id: `avaia-saved-${result.profile.pubDress}`,
+      kind: "active",
+      title: "Avaia saved",
+      description: result.profile.pubDress,
+    });
+    setDetailState(undefined);
+    navigate(WORLD_ROUTE);
+  }
+
   const dock = createBondDockViewState({
     pubDress,
-    avaiaPubDress,
+    avaiaPubDress: storedAvaiaPubDress,
     wheel,
     avaia: avaiaAvailability,
+    avaiaConfiguration,
     focusable: observedPosition !== undefined,
     downloadable: onPrepareAvaia !== undefined,
   });
 
-  /**
-   * The identity at the wheel is where the world looks. Focusing it is a camera
-   * move to the closest scale this policy allows, never a claim of presence.
-   */
-  // The Bond's own body stands where this device observed itself, and only
-  // after the Bond chose a study this client can render. The ambient clip is
-  // resampled on the slot boundary rather than per frame: the renderer owns
-  // playback, this owns the choice of clip. The camera's zoom reaches the body
-  // as apparent size only — it is what lets a person be seen at all when the
-  // ground under them is still far away, and it moves nobody.
   useEffect(() => {
     const avatars = renderer.avatars;
     const model = avatarChoice?.rendered;
@@ -529,9 +520,6 @@ export function AuthenticatedMapHomeView({
       return;
     }
 
-    // Capture the narrowed capability and published model before the timer
-    // closure. TypeScript correctly treats these aliases as stable values, and
-    // the effect still exits before drawing when either capability is absent.
     const avatarLayer = avatars;
     const renderedModel = model;
     const reducedMotion = prefersReducedMotion();
@@ -573,7 +561,6 @@ export function AuthenticatedMapHomeView({
     cameraMovedByPerson.current = false;
   }
 
-  /** The identity that is spectating takes the wheel, when it can. */
   function activateSpectator(): void {
     if (dock.handover === "download") {
       onPrepareAvaia?.();
@@ -582,6 +569,22 @@ export function AuthenticatedMapHomeView({
     if (dock.handover === "switch") {
       setWheel(wheel === "bond" ? "avaia" : "bond");
     }
+  }
+
+  function activateLeftSeat(): void {
+    if (dock.left.seat === "avaia" && avaiaConfiguration !== undefined) {
+      openAvaiaDetail();
+      return;
+    }
+    focusWorldOnWheel();
+  }
+
+  function activateRightSeat(): void {
+    if (dock.right.seat === "avaia" && avaiaConfiguration !== undefined) {
+      openAvaiaDetail();
+      return;
+    }
+    activateSpectator();
   }
 
   function activateLocationControl(): void {
@@ -614,23 +617,28 @@ export function AuthenticatedMapHomeView({
   }
 
   function detailEyebrow(): string {
+    if (activeDetail === "avaia") return "Avaia";
     if (section === "settings") return "Application";
     return "Personal Bond";
   }
 
   function detailTitle(): string {
+    if (activeDetail === "avaia") return avaiaLabel;
     if (section === "settings") return "Settings";
     switch (activeDetail) {
       case "providers":
         return "Providers";
       case undefined:
         return pubDress;
+      case "avaia":
+        return avaiaLabel;
     }
   }
 
-  /** The Dock names itself by the screen it is presenting. */
   function dockTitle(): string {
-    return section === "world" ? "Bond" : detailTitle();
+    return section === "world" && activeDetail === undefined
+      ? "Bond"
+      : detailTitle();
   }
 
   return (
@@ -692,7 +700,7 @@ export function AuthenticatedMapHomeView({
           aria-label={dockTitle()}
         >
           <DockWindow screen={dockScreen} depth={dockDepth}>
-            {section === "world" ? (
+            {section === "world" && activeDetail === undefined ? (
               <>
                 <div className="bond-dock__header">
                   <span className="bond-dock__kicker">Bond</span>
@@ -710,7 +718,7 @@ export function AuthenticatedMapHomeView({
                     className="bond-dock__bond bond-dock__bond--active"
                     type="button"
                     disabled={!dock.left.actionable}
-                    onClick={focusWorldOnWheel}
+                    onClick={activateLeftSeat}
                     aria-label={dock.left.actionLabel}
                   >
                     <span className="bond-dock__glyph">{dock.left.glyph}</span>
@@ -738,7 +746,7 @@ export function AuthenticatedMapHomeView({
                     }`}
                     type="button"
                     disabled={!dock.right.actionable}
-                    onClick={activateSpectator}
+                    onClick={activateRightSeat}
                     aria-label={dock.right.actionLabel}
                   >
                     <span className="bond-dock__glyph">{dock.right.glyph}</span>
@@ -773,6 +781,24 @@ export function AuthenticatedMapHomeView({
                   </div>
                 </div>
 
+                {activeDetail === "avaia" ? (
+                  <AvaiaSetupView
+                    address={avaiaLabel}
+                    configurationState={avaiaConfiguration}
+                    load={avaiaProfile.load}
+                    draft={avaiaProfileDraft}
+                    saving={avaiaProfile.saving}
+                    saveResult={avaiaProfile.saveResult}
+                    onDraftChange={(value) => {
+                      avaiaProfile.resetSave();
+                      setAvaiaProfileDraft(value);
+                    }}
+                    onSave={() => {
+                      void saveAvaiaProfile();
+                    }}
+                  />
+                ) : null}
+
                 {section === "identity" && activeDetail === undefined ? (
                   <div className="bond-profile">
                     <AddressField
@@ -783,14 +809,36 @@ export function AuthenticatedMapHomeView({
                       onChange={onSlugChange}
                       onSubmit={onSlugSubmit}
                     />
-                    <AddressField
-                      id="avaia-slug"
-                      label="avaia"
-                      state={avaiaEdit}
-                      fallback={avaiaLabel}
-                      onChange={onAvaiaChange}
-                      onSubmit={onAvaiaSubmit}
-                    />
+                    {avaiaProfile.load.kind === "unsupported" ? (
+                      <AddressField
+                        id="avaia-slug"
+                        label="avaia"
+                        state={avaiaEdit}
+                        fallback={avaiaLabel}
+                        onChange={onAvaiaChange}
+                        onSubmit={onAvaiaSubmit}
+                      />
+                    ) : (
+                      <dl className="bond-profile__rows">
+                        <div className="bond-profile__avaia-row">
+                          <dt>Avaia</dt>
+                          <dd>
+                            <button
+                              type="button"
+                              disabled={avaiaConfiguration === undefined}
+                              aria-label={
+                                avaiaConfiguration === "unconfigured"
+                                  ? `Set up ${avaiaLabel}`
+                                  : `Edit ${avaiaLabel}`
+                              }
+                              onClick={openAvaiaDetail}
+                            >
+                              {avaiaLabel}
+                            </button>
+                          </dd>
+                        </div>
+                      </dl>
+                    )}
                     {avatarChoice === undefined ? null : (
                       <fieldset className="avatar-choice">
                         <legend>Avatar</legend>
@@ -850,7 +898,7 @@ export function AuthenticatedMapHomeView({
                   </div>
                 ) : null}
 
-                {section === "settings" ? (
+                {section === "settings" && activeDetail === undefined ? (
                   <>
                     <fieldset className="interface-settings__appearance">
                       <legend>Appearance</legend>
@@ -975,8 +1023,6 @@ export function AuthenticatedMapHomeView({
             viewModel={locationControl}
             onActivate={activateLocationControl}
           />
-          {/* The canvas marker has no text of its own, so the observation's
-              meaning is announced here rather than left to a cyan dot. */}
           <span className="visually-hidden" aria-live="polite">
             {focusState === "locating"
               ? "Locating this device for local map focus."
