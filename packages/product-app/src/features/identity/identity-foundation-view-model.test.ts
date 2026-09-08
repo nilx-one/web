@@ -156,7 +156,7 @@ describe("pub_dress status", () => {
   });
 });
 
-describe("Telegram password authority", () => {
+describe("provider password authority", () => {
   const host = {
     ...browserHost,
     kind: "telegram" as const,
@@ -194,6 +194,64 @@ describe("Telegram password authority", () => {
         status,
         false,
       ),
-    ).toMatchObject({ kind: "provider-password", pubDress: "0x0sky" });
+    ).toMatchObject({
+      kind: "provider-password",
+      pubDress: "0x0sky",
+      provider: "Telegram",
+    });
+  });
+  it("offers the same setup to an authorized Discord Bond", () => {
+    const discordHost = {
+      ...browserHost,
+      kind: "discord" as const,
+      authentication: {
+        kind: "discord-oauth" as const,
+        authenticated: true,
+        verification: "required" as const,
+      },
+    };
+    expect(
+      createProviderIdentityViewState(
+        discordHost,
+        {
+          kind: "registered",
+          identity: { pubDress: "0x0sky" },
+          passwordRequired: true,
+        },
+        undefined,
+        status,
+        false,
+        { kind: "rejected", reason: "authentication-required" },
+      ),
+    ).toMatchObject({
+      kind: "provider-password",
+      pubDress: "0x0sky",
+      provider: "Discord",
+      error: "Reopen 0x1 from Discord to continue.",
+    });
+  });
+  it("keeps a Discord Bond with an active password out of setup", () => {
+    const discordHost = {
+      ...browserHost,
+      kind: "discord" as const,
+      authentication: {
+        kind: "discord-oauth" as const,
+        authenticated: true,
+        verification: "required" as const,
+      },
+    };
+    expect(
+      createProviderIdentityViewState(
+        discordHost,
+        {
+          kind: "registered",
+          identity: { pubDress: "0x0sky" },
+          passwordRequired: false,
+        },
+        undefined,
+        status,
+        false,
+      ),
+    ).toMatchObject({ kind: "authenticated", pubDress: "0x0sky" });
   });
 });

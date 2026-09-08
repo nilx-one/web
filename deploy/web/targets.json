@@ -27,7 +27,7 @@
       "compatEdgeAlias": "ox1-discord",
       "composeProject": "nilx-one-discord",
       "publicPath": "/discord/",
-      "requiresIdentityContract": 1
+      "requiresIdentityContract": 3
     }
   }
 }
