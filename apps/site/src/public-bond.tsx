@@ -86,7 +86,10 @@ export async function readPublicBond(
 function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
   return (
     <main className="public-bond-page">
-      <article className="public-bond-card" aria-labelledby="public-bond-title">
+      <article
+        className="public-bond-card"
+        aria-labelledby="public-bond-title"
+      >
         <p className="public-bond-kicker">0x1 · Bond</p>
         <h1 id="public-bond-title">{bond.pubDress}</h1>
         <a className="public-bond-address" href={bond.pubDressUrl}>
@@ -117,12 +120,23 @@ function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
   );
 }
 
-function PublicBondMessage({ state }: { state: "not-found" | "unavailable" }) {
+function PublicBondMessage({
+  state,
+}: {
+  state: "not-found" | "unavailable";
+}) {
   return (
     <main className="public-bond-page">
-      <section className="public-bond-card public-bond-card--message" role="status">
+      <section
+        className="public-bond-card public-bond-card--message"
+        role="status"
+      >
         <p className="public-bond-kicker">0x1 · Bond</p>
-        <h1>{state === "not-found" ? "Bond not found." : "Temporarily unavailable."}</h1>
+        <h1>
+          {state === "not-found"
+            ? "Bond not found."
+            : "Temporarily unavailable."}
+        </h1>
         <p>
           {state === "not-found"
             ? "No Bond is allocated to this public address."
