@@ -55,27 +55,28 @@ jobs:
 
           prepare = Path("scripts/prepare_core_wasm_runtime.sh")
           text = prepare.read_text()
-          text = re.sub(
+          text, count = re.subn(
               r'expected_wasm_sha256="[0-9a-f]{64}"',
               f'expected_wasm_sha256="{digest}"',
               text,
               count=1,
           )
-          text = text.replace(
-              'runtime_build="$PWD/.core-wasm-runtime"\n',
-              'runtime_build="$PWD/.core-wasm-runtime"\nruntime_lock="$PWD/scripts/core-runtime.Cargo.lock"\n',
-              1,
-          )
+          if count != 1:
+              raise SystemExit("prepare script digest pin drifted")
+          marker = 'runtime_build="$PWD/.core-wasm-runtime"\n'
+          if 'runtime_lock="$PWD/scripts/core-runtime.Cargo.lock"' not in text:
+              if marker not in text:
+                  raise SystemExit("prepare script runtime build marker drifted")
+              text = text.replace(
+                  marker,
+                  marker + 'runtime_lock="$PWD/scripts/core-runtime.Cargo.lock"\n',
+                  1,
+              )
           old = '''  cd "$core_dir"\n  cargo generate-lockfile\n  # Keep the pinned Core revision reproducible even when a newer compatible\n  # tinyvec release appears on crates.io. tinyvec 1.13.0 currently fails the\n  # wasm/no_std build used by this runtime boundary.\n  cargo update -p tinyvec --precise 1.12.0\n  ./scripts/build_wasm_package.sh "$runtime_build"\n'''
-          new = '''  cd "$core_dir"\n  # Core is consumed here as a runtime artifact, not as an unconstrained library\n  # build. Its dependency graph is therefore locked next to the Web pin so the\n  # verified Wasm digest cannot drift when crates.io publishes a compatible\n  # release.\n  cp "$runtime_lock" Cargo.lock\n  ./scripts/build_wasm_package.sh "$runtime_build"\n'''
+          new = '''  cd "$core_dir"\n  # Core is consumed here as a runtime artifact, not as an unconstrained library\n  # build. Its dependency graph is locked next to the Web pin so the verified\n  # Wasm digest cannot drift when crates.io publishes a compatible release.\n  cp "$runtime_lock" Cargo.lock\n  ./scripts/build_wasm_package.sh "$runtime_build"\n'''
           if old not in text:
               raise SystemExit("prepare script dependency block drifted")
-          text = text.replace(old, new, 1)
-          old_check = 'printf \'%s  %s\\n\' "$expected_wasm_sha256" "$runtime_build/index_bg.wasm" | sha256sum --check --status\n'
-          new_check = '''actual_wasm_sha256="$(sha256sum "$runtime_build/index_bg.wasm" | awk '{print $1}')"\nif [[ "$actual_wasm_sha256" != "$expected_wasm_sha256" ]]; then\n  echo "Core Wasm digest mismatch: expected $expected_wasm_sha256, got $actual_wasm_sha256" >&2\n  exit 1\nfi\n'''
-          if old_check not in text:
-              raise SystemExit("prepare script digest check drifted")
-          prepare.write_text(text.replace(old_check, new_check, 1))
+          prepare.write_text(text.replace(old, new, 1))
 
           workflow = Path(".github/workflows/web.yml")
           text = workflow.read_text()
