@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Pin identity dependencies and enforce locked builds
+      - name: Pin identity dependencies and enforce locked image builds
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -28,15 +28,6 @@ jobs:
           ignore = Path('.gitignore')
           lines = ignore.read_text().splitlines()
           ignore.write_text('\n'.join(line for line in lines if line != 'services/identity/Cargo.lock') + '\n')
-
-          workflow = Path('.github/workflows/identity-service.yml')
-          text = workflow.read_text()
-          old = '''      - name: Resolve locked dependencies
-                  run: cargo generate-lockfile --manifest-path services/identity/Cargo.toml
-          '''
-          if old not in text:
-              raise SystemExit('identity CI lockfile generation block not found')
-          workflow.write_text(text.replace(old, ''))
 
           dockerfile = Path('services/identity/Dockerfile')
           text = dockerfile.read_text()
@@ -62,6 +53,6 @@ jobs:
           set -Eeuo pipefail
           git config user.name "0x1 CI"
           git config user.email "actions@users.noreply.github.com"
-          git add .gitignore .github/workflows/identity-service.yml services/identity/Dockerfile services/identity/Cargo.lock
+          git add .gitignore services/identity/Dockerfile services/identity/Cargo.lock
           git commit -m "fix(identity): pin Rust dependency graph"
           git push origin HEAD:"${GITHUB_REF_NAME}"
