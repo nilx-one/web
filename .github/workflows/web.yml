@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: web-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   full-ci:
     name: Full CI
@@ -29,10 +33,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build and verify procedural avatar assets
+          cache: pip
+          cache-dependency-path: tools/avatars/requirements.txt
+      - id: avatar-cache
+        name: Restore deterministic avatar assets
+        uses: actions/cache@v4
+        with:
+          path: deploy/web/avatars
+          key: avatar-assets-v1-${{ runner.os }}-py312-${{ hashFiles('tools/avatars/**') }}
+      - name: Install avatar dependencies
+        run: python -m pip install -r tools/avatars/requirements.txt
+      - name: Build procedural avatar assets
+        if: steps.avatar-cache.outputs.cache-hit != 'true'
+        run: sh tools/avatars/build.sh
+      - name: Verify procedural avatar assets
         run: |
-          python -m pip install -r tools/avatars/requirements.txt
-          sh tools/avatars/build.sh
+          sha256sum --check tools/avatars/SHA256SUMS
           python tools/avatars/test_rig.py
       - name: Verify repository policy
         run: pnpm policy
@@ -44,7 +60,17 @@ jobs:
         run: pnpm typecheck
       - name: Test contracts and integration
         run: pnpm test
+      - id: core-runtime-cache
+        name: Restore pinned Core Wasm runtime
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/site/public/core/0.1.0
+            apps/telegram-mini-app/public/core/0.1.0
+            apps/discord-activity/public/core/0.1.0
+          key: core-wasm-v1-${{ runner.os }}-c224304947280169017e298237bcf5361d1bfb30-wbg-0.2.127-${{ hashFiles('scripts/prepare_core_wasm_runtime.sh') }}
       - name: Checkout pinned Core runtime source
+        if: steps.core-runtime-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: nilx-one/core
@@ -52,11 +78,31 @@ jobs:
           path: .core-source
           persist-credentials: false
       - name: Install matching wasm-bindgen CLI
+        if: steps.core-runtime-cache.outputs.cache-hit != 'true'
         run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
       - name: Prepare verified Core Wasm runtime
+        if: steps.core-runtime-cache.outputs.cache-hit != 'true'
         run: |
           ./scripts/prepare_core_wasm_runtime.sh .core-source
           rm -rf .core-source
+      - name: Verify pinned Core Wasm runtime
+        run: |
+          set -Eeuo pipefail
+          expected_core=c224304947280169017e298237bcf5361d1bfb30
+          expected_wasm=173c3e9164c030384865013df87d36a29846b09cd2b8ee59b433509b2d77c90d
+          for host in site telegram-mini-app discord-activity; do
+            runtime="apps/$host/public/core/0.1.0"
+            test -f "$runtime/index.js"
+            test -f "$runtime/index_bg.wasm"
+            test -f "$runtime/provenance.json"
+            printf '%s  %s\n' "$expected_wasm" "$runtime/index_bg.wasm" | sha256sum --check --status
+            jq -e --arg core "$expected_core" --arg digest "$expected_wasm" '
+              .core_repository == "nilx-one/core"
+              and .core_revision == $core
+              and .contract_version == "0.1.0"
+              and .wasm_sha256 == $digest
+            ' "$runtime/provenance.json" >/dev/null
+          done
       - name: Build every Web host
         run: pnpm build
       - name: Verify Core runtime in every host artifact
