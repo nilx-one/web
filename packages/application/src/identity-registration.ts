@@ -6,11 +6,7 @@
  * carry a newer model id; preserve that explicit choice opaquely instead of
  * collapsing it into the absence of a choice.
  */
-export const AVATAR_MODELS = [
-  "sky-study",
-  "dasha-study",
-  "kai-study",
-] as const;
+export const AVATAR_MODELS = ["sky-study", "dasha-study", "kai-study"] as const;
 
 export type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
 declare const forwardAvatarModelBrand: unique symbol;
