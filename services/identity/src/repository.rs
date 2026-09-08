@@ -9,7 +9,7 @@ use sqlx::{
 };
 use thiserror::Error;
 
-use crate::{AvaiaPubDress, PubDress};
+use crate::{AvaiaPubDress, PubDress, PubDressLabel};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityProvider {
@@ -55,6 +55,33 @@ pub struct IdentityRecord {
     /// pre-amendment human Bond that has not yet crossed an authenticated
     /// reconciliation boundary.
     pub avaia_pub_dress: Option<String>,
+}
+
+/// A public lookup is authoritative because it comes from the allocated stored
+/// DNS label, never by decoding a hostname and guessing which case-sensitive
+/// `pub_dress` it meant.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PublicIdentityRecord {
+    pub identity: IdentityRecord,
+    pub pub_dress_label: String,
+    pub pub_dress_label_suffix: String,
+}
+
+impl PublicIdentityRecord {
+    /// Product-readable URL. DNS still carries `pub_dress_label`; the readable
+    /// Unicode form is presentation only and is safe because this record already
+    /// proves which Bond owns that A-label.
+    pub fn readable_url(&self, zone: &str) -> String {
+        let label = if self.pub_dress_label.starts_with("xn--") {
+            format!(
+                "{}{}",
+                self.identity.pub_dress, self.pub_dress_label_suffix
+            )
+        } else {
+            self.pub_dress_label.clone()
+        };
+        format!("https://{label}.{zone}")
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -106,6 +133,12 @@ impl IdentityRepository {
                 .execute(&self.pool)
                 .await?;
         }
+        if !self.has_identity_column("pub_dress_label").await? {
+            sqlx::raw_sql(include_str!("../migrations/0006_pub_dress_label.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
+        self.backfill_pub_dress_labels().await?;
         Ok(())
     }
 
@@ -116,6 +149,40 @@ impl IdentityRepository {
         Ok(columns
             .iter()
             .any(|column| column.get::<String, _>("name") == name))
+    }
+
+    /// Existing Bonds predate the stored public-label column. Backfill in stable
+    /// creation order: the earliest human Bond wins a colliding DNS label and a
+    /// later collision stays unallocated rather than inventing mutuality or a
+    /// suffix the owner never chose.
+    async fn backfill_pub_dress_labels(&self) -> Result<(), RepositoryError> {
+        let rows = sqlx::query(
+            "SELECT pub_dress FROM identities \
+             WHERE identity_kind = 'human' AND pub_dress_label IS NULL \
+             ORDER BY created_at ASC, pub_dress COLLATE BINARY ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for row in rows {
+            let raw: String = row.get("pub_dress");
+            let pub_dress = PubDress::from_str(&raw)
+                .map_err(|_| RepositoryError::CorruptHumanPubDress)?;
+            let Some(label) = default_pub_dress_label(&pub_dress) else {
+                continue;
+            };
+            sqlx::query(
+                "UPDATE OR IGNORE identities \
+                 SET pub_dress_label = ?, pub_dress_label_suffix = '' \
+                 WHERE pub_dress = ? AND identity_kind = 'human' \
+                   AND pub_dress_label IS NULL",
+            )
+            .bind(label)
+            .bind(pub_dress.as_str())
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
     }
 
     pub async fn register(
@@ -136,15 +203,22 @@ impl IdentityRepository {
             return Ok(RegistrationOutcome::AlreadyRegistered(record));
         }
 
+        let label = default_pub_dress_label(pub_dress);
         let identity_insert = sqlx::query(
-            "INSERT INTO identities (pub_dress, identity_kind, created_at) \
-             VALUES (?, 'human', ?) ON CONFLICT DO NOTHING",
+            "INSERT INTO identities \
+             (pub_dress, identity_kind, pub_dress_label, pub_dress_label_suffix, created_at) \
+             VALUES (?, 'human', ?, '', ?) ON CONFLICT DO NOTHING",
         )
         .bind(pub_dress.as_str())
+        .bind(label)
         .bind(now as i64)
         .execute(&mut *transaction)
         .await?;
 
+        // A representable DNS-label collision and an exact pub_dress collision
+        // are both unavailable at this legacy registration boundary. The public
+        // label resolver distinguishes them before submission; the transaction
+        // remains the final authority.
         if identity_insert.rows_affected() == 0 {
             transaction.rollback().await?;
             return Ok(RegistrationOutcome::HandleUnavailable);
@@ -243,17 +317,17 @@ impl IdentityRepository {
             .execute(&mut *transaction)
             .await?;
 
-        let human_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM identities \
-             WHERE pub_dress = ? AND identity_kind = 'human')",
+        let suffix = sqlx::query_scalar::<_, String>(
+            "SELECT pub_dress_label_suffix FROM identities \
+             WHERE pub_dress = ? AND identity_kind = 'human'",
         )
         .bind(current.as_str())
-        .fetch_one(&mut *transaction)
+        .fetch_optional(&mut *transaction)
         .await?;
-        if !human_exists {
+        let Some(suffix) = suffix else {
             transaction.rollback().await?;
             return Ok(PubDressRenameOutcome::Unknown);
-        }
+        };
 
         let occupied = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM identities WHERE pub_dress = ?)",
@@ -264,6 +338,24 @@ impl IdentityRepository {
         if occupied {
             transaction.rollback().await?;
             return Ok(PubDressRenameOutcome::Unavailable);
+        }
+
+        let next_label = pub_dress_label_with_suffix(next, &suffix)?;
+        if let Some(label) = next_label.as_deref() {
+            let label_occupied = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM identities \
+                 WHERE identity_kind = 'human' \
+                   AND pub_dress_label = ? COLLATE NOCASE \
+                   AND pub_dress <> ?)",
+            )
+            .bind(label)
+            .bind(current.as_str())
+            .fetch_one(&mut *transaction)
+            .await?;
+            if label_occupied {
+                transaction.rollback().await?;
+                return Ok(PubDressRenameOutcome::Unavailable);
+            }
         }
 
         let existing_avaia = owned_avaia_for_owner_in(&mut transaction, current.as_str()).await?;
@@ -291,11 +383,14 @@ impl IdentityRepository {
             }
         }
 
-        sqlx::query("UPDATE identities SET pub_dress = ? WHERE pub_dress = ?")
-            .bind(next.as_str())
-            .bind(current.as_str())
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query(
+            "UPDATE identities SET pub_dress = ?, pub_dress_label = ? WHERE pub_dress = ?",
+        )
+        .bind(next.as_str())
+        .bind(next_label)
+        .bind(current.as_str())
+        .execute(&mut *transaction)
+        .await?;
 
         let avaia_pub_dress = if let Some(existing) = existing_avaia {
             let moved = derived_avaia.unwrap_or(existing);
@@ -411,6 +506,46 @@ impl IdentityRepository {
         Ok(!occupied)
     }
 
+    pub async fn is_pub_dress_label_available(
+        &self,
+        label: &PubDressLabel,
+    ) -> Result<bool, RepositoryError> {
+        let occupied = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identities \
+             WHERE identity_kind = 'human' AND pub_dress_label = ? COLLATE NOCASE)",
+        )
+        .bind(label.as_str())
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(!occupied)
+    }
+
+    pub async fn find_by_pub_dress_label(
+        &self,
+        label: &PubDressLabel,
+    ) -> Result<Option<PublicIdentityRecord>, RepositoryError> {
+        let row = sqlx::query(
+            "SELECT pub_dress, pub_dress_label, pub_dress_label_suffix \
+             FROM identities \
+             WHERE identity_kind = 'human' AND pub_dress_label = ? COLLATE NOCASE",
+        )
+        .bind(label.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let pub_dress: String = row.get("pub_dress");
+        let pub_dress_label: String = row.get("pub_dress_label");
+        let pub_dress_label_suffix: String = row.get("pub_dress_label_suffix");
+        let identity = identity_for_pub_dress(&self.pool, pub_dress).await?;
+        Ok(Some(PublicIdentityRecord {
+            identity,
+            pub_dress_label,
+            pub_dress_label_suffix,
+        }))
+    }
+
     pub async fn find_by_telegram(
         &self,
         telegram_user_id: i64,
@@ -446,11 +581,14 @@ impl IdentityRepository {
             return Ok(NativeRegistrationOutcome::IdempotentReplay(record));
         }
 
+        let label = default_pub_dress_label(pub_dress);
         let identity_insert = sqlx::query(
-            "INSERT INTO identities (pub_dress, identity_kind, created_at) \
-             VALUES (?, 'human', ?) ON CONFLICT DO NOTHING",
+            "INSERT INTO identities \
+             (pub_dress, identity_kind, pub_dress_label, pub_dress_label_suffix, created_at) \
+             VALUES (?, 'human', ?, '', ?) ON CONFLICT DO NOTHING",
         )
         .bind(pub_dress.as_str())
+        .bind(label)
         .bind(now as i64)
         .execute(&mut *transaction)
         .await?;
@@ -766,6 +904,31 @@ impl IdentityRepository {
     }
 }
 
+fn default_pub_dress_label(pub_dress: &PubDress) -> Option<String> {
+    PubDressLabel::stem(pub_dress)
+        .ok()
+        .map(|stem| stem.as_str().to_owned())
+}
+
+fn pub_dress_label_with_suffix(
+    pub_dress: &PubDress,
+    suffix: &str,
+) -> Result<Option<String>, RepositoryError> {
+    let Ok(stem) = PubDressLabel::stem(pub_dress) else {
+        return if suffix.is_empty() {
+            Ok(None)
+        } else {
+            Err(RepositoryError::CorruptPublicLabelSuffix)
+        };
+    };
+    if suffix.is_empty() {
+        return Ok(Some(stem.as_str().to_owned()));
+    }
+    PubDressLabel::compose(&stem, suffix)
+        .map(|label| Some(label.as_str().to_owned()))
+        .map_err(|_| RepositoryError::CorruptPublicLabelSuffix)
+}
+
 async fn create_owned_avaia_in(
     transaction: &mut Transaction<'_, Sqlite>,
     owner: &PubDress,
@@ -919,6 +1082,8 @@ pub enum RepositoryError {
     Storage(#[from] sqlx::Error),
     #[error("stored human pub_dress is invalid")]
     CorruptHumanPubDress,
+    #[error("stored public-label suffix is invalid for this pub_dress")]
+    CorruptPublicLabelSuffix,
 }
 
 #[cfg(test)]
@@ -929,7 +1094,7 @@ mod tests {
         IdentityRepository, NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome,
         identity_for_pub_dress,
     };
-    use crate::{AvaiaPubDress, PubDress};
+    use crate::{AvaiaPubDress, PubDress, PubDressLabel};
 
     #[tokio::test]
     async fn owned_avaia_migration_is_idempotent_on_reopen() {
@@ -964,6 +1129,55 @@ mod tests {
                 if record.pub_dress == "0xda-sha."
                     && record.avaia_pub_dress.as_deref() == Some("da-sha.ai")
         ));
+    }
+
+    #[tokio::test]
+    async fn public_label_is_stored_atomically_and_resolves_to_the_allocated_bond() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let address = PubDress::from_str("0x0небо").expect("valid pub_dress");
+        repository
+            .register(&address, &ProviderIdentity::telegram(10), 100)
+            .await
+            .expect("registration");
+
+        let label = PubDressLabel::stem(&address).expect("label");
+        assert_eq!(label.as_str(), "xn--0x0-dddt1cj");
+        let record = repository
+            .find_by_pub_dress_label(
+                &PubDressLabel::from_str(label.as_str()).expect("stored label"),
+            )
+            .await
+            .expect("lookup")
+            .expect("allocated Bond");
+        assert_eq!(record.identity.pub_dress, "0x0небо");
+        assert_eq!(record.readable_url("nilx.one"), "https://0x0небо.nilx.one");
+    }
+
+    #[tokio::test]
+    async fn a_dns_fold_collision_never_selects_a_second_identity() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let lower = PubDress::from_str("0x0небо").expect("lower");
+        let title = PubDress::from_str("0x0Небо").expect("title");
+        repository
+            .register(&lower, &ProviderIdentity::telegram(10), 100)
+            .await
+            .expect("first registration");
+        assert!(matches!(
+            repository
+                .register(&title, &ProviderIdentity::discord("20"), 101)
+                .await,
+            Ok(RegistrationOutcome::HandleUnavailable)
+        ));
+        assert!(
+            repository
+                .is_pub_dress_available(&title)
+                .await
+                .expect("the case-sensitive pub_dress itself remains free")
+        );
     }
 
     #[tokio::test]
