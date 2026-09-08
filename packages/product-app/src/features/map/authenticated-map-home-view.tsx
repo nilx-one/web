@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
+import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
 import {
   IDENTITY_ROUTE,
@@ -144,30 +145,15 @@ interface IdentityDetailState {
   readonly section: ShellSection;
   readonly detail: IdentityDetail;
 }
-type AppearancePreference = "light" | "dark" | "auto";
-type ResolvedAppearance = "light" | "dark";
-
 /** One ambient slot: the cadence the sampler itself changes clips on. */
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
 
-const APPEARANCE_STORAGE_KEY = "nilx-one.interface.appearance";
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
 
 function runtimeContract(runtime: RuntimeViewState): string | undefined {
   if (runtime.tone !== "ready") return undefined;
   const match = runtime.detail.match(/Contract\s+([^\s]+)\s+/i);
   return match?.[1];
-}
-
-function readAppearancePreference(): AppearancePreference {
-  try {
-    const stored = window.localStorage.getItem(APPEARANCE_STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "auto")
-      return stored;
-  } catch {
-    // Storage is optional. The interface remains usable with an in-memory preference.
-  }
-  return "auto";
 }
 
 function readDimensionPreference(): MapDimension {
@@ -184,12 +170,6 @@ function prefersReducedMotion(): boolean {
   return (
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
   );
-}
-
-function systemAppearance(): ResolvedAppearance {
-  return window.matchMedia?.("(prefers-color-scheme: light)").matches
-    ? "light"
-    : "dark";
 }
 
 /** A transient renderer state belongs in the toast stack, not on the Dock. */
@@ -367,11 +347,7 @@ export function AuthenticatedMapHomeView({
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
   >(undefined);
-  const [appearance, setAppearance] = useState<AppearancePreference>(
-    readAppearancePreference,
-  );
-  const [systemTheme, setSystemTheme] =
-    useState<ResolvedAppearance>(systemAppearance);
+  const appearance = useAppearance();
   const [mapStatus, setMapStatus] = useState<MapRendererStatus>(() =>
     renderer.getStatus(),
   );
@@ -397,7 +373,7 @@ export function AuthenticatedMapHomeView({
     cameraCentered,
   );
   const focusState: FocusState = focusStateFor(location.state);
-  const resolvedAppearance = appearance === "auto" ? systemTheme : appearance;
+  const resolvedAppearance = appearance.resolved;
   const contractVersion = runtimeContract(runtime);
   const mapViewModel = createMapFoundationViewModel(mapStatus);
   const activeDetail =
@@ -502,27 +478,11 @@ export function AuthenticatedMapHomeView({
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(APPEARANCE_STORAGE_KEY, appearance);
-    } catch {
-      // Persistence is best-effort only.
-    }
-  }, [appearance]);
-
-  useEffect(() => {
-    try {
       window.localStorage.setItem(DIMENSION_STORAGE_KEY, dimension);
     } catch {
       // Persistence is best-effort only.
     }
   }, [dimension]);
-
-  useEffect(() => {
-    if (window.matchMedia === undefined) return;
-    const media = window.matchMedia("(prefers-color-scheme: light)");
-    const update = () => setSystemTheme(media.matches ? "light" : "dark");
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
-  }, []);
 
   function navigate(route: ShellRoute): void {
     onNavigate?.(route);
@@ -906,8 +866,8 @@ export function AuthenticatedMapHomeView({
                             type="radio"
                             name="appearance"
                             value={mode}
-                            checked={appearance === mode}
-                            onChange={() => setAppearance(mode)}
+                            checked={appearance.preference === mode}
+                            onChange={() => chooseAppearance(mode)}
                           />
                         </label>
                       ))}

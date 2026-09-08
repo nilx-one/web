@@ -81,6 +81,31 @@ The pub_dress is a native identity affordance, so it carries the identity entry
 below wide widths instead of a generic avatar. The host indicator is secondary
 context: it gives way before identity does when the header runs out of room.
 
+## Appearance
+
+Light, dark, and auto are one presentation state for the whole interface, not a
+map setting. `auto` follows the host's own colour scheme, which is the device's
+answer in a browser and the client's answer inside Telegram or Discord; `light`
+and `dark` are a standing choice that outlives whatever the device says. It is
+local interface state, stored on the device, and it never becomes Bond,
+Relationship, or shared Core state.
+
+Two rules keep it from flickering or changing under a person mid-session:
+
+- **Dark is only ever entered on evidence** — a stored choice, or a device that
+  asks for it. A question that cannot be answered resolves light, so a client
+  that has read neither never opens black.
+- **The appearance is resolved once and stamped once**, as `data-appearance` on
+  the document root. Every surface reads that attribute instead of resolving the
+  question again, so the sign-in surface and the world are always the same
+  colour and passing the login cannot change it by itself.
+
+The resolution runs in an inline script in each host document, before the first
+paint, and the application re-applies the same resolution once React owns the
+document. The map renderer is told the appearance before it is mounted, so its
+first style request is already the right variant rather than a light map that
+swaps to dark.
+
 ## Ownership
 
 - the header owns navigation and host context; it never owns the toast stack,
