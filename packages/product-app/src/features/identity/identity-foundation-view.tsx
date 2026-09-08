@@ -3,6 +3,7 @@
 
 import {
   parsePubDress,
+  type CorePubDressLabelResult,
   type PubDressLabelResolutionResult,
   type PubDressSelection,
 } from "@nilx-one/application";
@@ -31,11 +32,13 @@ export interface IdentityFoundationViewProps {
   password: string;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
+  /** Normative public-label derivation returned by 0x1 Core. */
+  pubDressLabelDerivation?: CorePubDressLabelResult | undefined;
+  pubDressLabelDerivationPending?: boolean;
   /**
-   * Availability of the folded public label. Absent until the identity service
-   * exposes label resolution, which leaves the address surface in its
-   * read-only preview: the Bond still sees the fold, and only a real collision
-   * answer can open the editable second part.
+   * Availability of the allocated public label. Absent until the identity
+   * service exposes label resolution; only a real collision answer can open
+   * the editable second part.
    */
   pubDressUrlResolution?: PubDressLabelResolutionResult;
   onAcknowledgeRecovery(challenge: string): void;
@@ -311,6 +314,8 @@ function RecoveryKeyView({
 function IdentityForm({
   identity,
   password,
+  pubDressLabelDerivation,
+  pubDressLabelDerivationPending,
   pubDressUrlResolution,
   selection,
   onCredentialAutofill,
@@ -322,6 +327,8 @@ function IdentityForm({
 }: {
   identity: Extract<IdentityViewState, { kind: "form" }>;
   password: string;
+  pubDressLabelDerivation: CorePubDressLabelResult | undefined;
+  pubDressLabelDerivationPending: boolean;
   pubDressUrlResolution: PubDressLabelResolutionResult | undefined;
   selection: PubDressSelection;
   onCredentialAutofill(selection: PubDressSelection, password: string): void;
@@ -389,6 +396,8 @@ function IdentityForm({
     suffix: addressSuffix,
     pending: identity.status.kind === "checking",
     resolution: pubDressUrlResolution,
+    derivation: pubDressLabelDerivation,
+    derivationPending: pubDressLabelDerivationPending,
   });
   const credentialUsername = `0x${displayedSelection.discriminator}${displayedSelection.slug}`;
   const normalizedPassword = password.normalize("NFC");
@@ -1002,6 +1011,8 @@ function IdentityForm({
 
 export function IdentityFoundationView({
   password,
+  pubDressLabelDerivation,
+  pubDressLabelDerivationPending = false,
   pubDressUrlResolution,
   selection,
   viewModel,
@@ -1046,6 +1057,8 @@ export function IdentityFoundationView({
               <IdentityForm
                 identity={viewModel.identity}
                 password={password}
+                pubDressLabelDerivation={pubDressLabelDerivation}
+                pubDressLabelDerivationPending={pubDressLabelDerivationPending}
                 pubDressUrlResolution={pubDressUrlResolution}
                 selection={selection}
                 onCredentialAutofill={onCredentialAutofill}

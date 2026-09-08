@@ -3,26 +3,16 @@
 
 import {
   PUB_DRESS_URL_ZONE,
-  composePubDressLabel,
-  derivePubDressLabelStem,
   formatPubDress,
+  formatPubDressUrl,
+  projectCorePubDressLabel,
+  projectCorePubDressLabelComposition,
+  type CorePubDressLabelResult,
   type PubDressLabelRejection,
   type PubDressLabelResolutionResult,
   type PubDressSelection,
 } from "@nilx-one/application";
 
-/**
- * The public address surface has exactly two shapes.
- *
- * While the folded label is free, the Bond is shown one read-only line: the
- * address it typed, and the lowercase label that address becomes. The fold is
- * never silent — losing case is a fact about the identity's public URL, so the
- * Bond sees it before committing rather than discovering it afterwards.
- *
- * Once another Bond already holds that label, the same line splits: the folded
- * stem stays fixed, and a second part becomes editable in the same way the slug
- * is editable during registration.
- */
 export type PubDressUrlViewState =
   | { kind: "idle" }
   | {
@@ -35,8 +25,9 @@ export type PubDressUrlViewState =
       kind: "preview";
       pubDress: string;
       stem: string;
+      ascii?: string;
       folded: boolean;
-      url: string;
+      url?: string;
       status: PubDressUrlStatus;
       detail: string;
     }
@@ -44,6 +35,7 @@ export type PubDressUrlViewState =
       kind: "suffix";
       pubDress: string;
       stem: string;
+      ascii?: string;
       folded: boolean;
       suffix: string;
       url?: string;
@@ -61,45 +53,32 @@ export type PubDressUrlStatus =
 
 export const PUB_DRESS_URL_ZONE_LABEL = `.${PUB_DRESS_URL_ZONE}`;
 
-function foldDetail(folded: boolean): string {
-  return folded
-    ? "Lowercased for the address — your pub_dress keeps its case"
-    : "This address is already lowercase";
+function verifiedDetail(folded: boolean, encoded: boolean): string {
+  if (folded) {
+    return "Core maps this ASCII address to its canonical lowercase label";
+  }
+  if (encoded) {
+    return "DNS encoding verified by 0x1 Core";
+  }
+  return "Address verified by 0x1 Core";
 }
 
 function rejectionDetail(reason: PubDressLabelRejection): string {
   switch (reason) {
-    case "non-ascii":
-      return "No address yet — this alphabet has no agreed address form";
+    case "disallowed-scalar":
+      return "No address — this scalar is not allowed by the Core address contract";
+    case "bidi-rule":
+      return "No address — a right-to-left script cannot follow the 0x prefix";
+    case "not-encodable":
+      return "No address — Core cannot encode this value as one DNS label";
     case "unsupported-character":
-      return "No address — this character cannot appear in an address";
+      return "No address — this character cannot appear in a DNS label";
     case "boundary-hyphen":
       return "No address — an address cannot end on a hyphen";
     case "too-long":
-      return "No address — this is too long for one address label";
+      return "No address — this is too long for one DNS label";
     case "not-a-pub-dress":
-      return "No address — finish the pub_dress first";
-  }
-}
-
-function statusDetail(
-  status: PubDressUrlStatus,
-  folded: boolean,
-  suffixed: boolean,
-): string {
-  switch (status) {
-    case "checking":
-      return "Checking this address…";
-    case "available":
-      return suffixed ? "This address is free" : foldDetail(folded);
-    case "taken":
-      return "Another Bond holds this address — add a distinguishing part";
-    case "invalid":
-      return "That part cannot appear in an address";
-    case "unresolved":
-      return foldDetail(folded);
-    case "service-unavailable":
-      return "Unavailable — couldn’t verify this address";
+      return "No address — finish a canonical pub_dress first";
   }
 }
 
@@ -125,15 +104,41 @@ function resolutionStatus(
   }
 }
 
+function statusDetail(
+  status: PubDressUrlStatus,
+  folded: boolean,
+  encoded: boolean,
+  suffixed: boolean,
+): string {
+  switch (status) {
+    case "checking":
+      return "Checking this address…";
+    case "available":
+      return suffixed
+        ? "This address is free"
+        : verifiedDetail(folded, encoded);
+    case "taken":
+      return "Another Bond holds this address — add a distinguishing part";
+    case "invalid":
+      return "That part cannot appear in an address";
+    case "unresolved":
+      return verifiedDetail(folded, encoded);
+    case "service-unavailable":
+      return "Unavailable — couldn’t verify this address";
+  }
+}
+
 export interface PubDressUrlInput {
   readonly selection: PubDressSelection;
-  /**
-   * The part the Bond edits after a collision. An empty suffix keeps the
-   * surface in its read-only preview shape.
-   */
   readonly suffix: string;
   readonly pending: boolean;
   readonly resolution: PubDressLabelResolutionResult | undefined;
+  /** Normative derivation returned by the Core runtime. */
+  readonly derivation?: CorePubDressLabelResult | undefined;
+  readonly derivationPending?: boolean;
+  /** Normative suffix composition returned by Core when the suffix UI is active. */
+  readonly composition?: CorePubDressLabelResult | undefined;
+  readonly compositionPending?: boolean;
 }
 
 export function createPubDressUrlViewState({
@@ -141,13 +146,30 @@ export function createPubDressUrlViewState({
   suffix,
   pending,
   resolution,
+  derivation,
+  derivationPending = false,
+  composition,
+  compositionPending = false,
 }: PubDressUrlInput): PubDressUrlViewState {
   if ([...selection.slug].length < 2) {
     return { kind: "idle" };
   }
 
   const pubDress = formatPubDress(selection);
-  const derived = derivePubDressLabelStem(pubDress);
+  if (derivation === undefined) {
+    return {
+      kind: "preview",
+      pubDress,
+      stem: pubDress,
+      folded: false,
+      status: derivationPending ? "checking" : "service-unavailable",
+      detail: derivationPending
+        ? "Deriving this address with 0x1 Core…"
+        : "Unavailable — 0x1 Core did not provide an address",
+    };
+  }
+
+  const derived = projectCorePubDressLabel(pubDress, derivation);
   if (derived.kind === "unrepresentable") {
     return {
       kind: "unrepresentable",
@@ -158,24 +180,70 @@ export function createPubDressUrlViewState({
   }
 
   const status = resolutionStatus(pending, resolution);
-  const composition = composePubDressLabel(derived.stem, suffix);
+  const encoded = derived.ascii !== derived.stem;
 
-  // A collision is what opens the editable part, but once it is open the Bond
-  // keeps it: closing the field under them the moment their suffix resolves
-  // would move focus out of the control they are typing in.
-  if (status === "taken" || suffix.length > 0) {
+  // A collision opens the suffix control before the Bond has typed anything.
+  // Core composition is only required once there is a suffix to compose; an
+  // empty editor is a real "taken" state, not a Core service failure.
+  if (status === "taken" && suffix.length === 0) {
     return {
       kind: "suffix",
       pubDress,
       stem: derived.stem,
+      ...(encoded ? { ascii: derived.ascii } : {}),
       folded: derived.folded,
       suffix,
-      ...(composition.kind === "label" ? { url: composition.url } : {}),
-      status: composition.kind === "label" ? status : "invalid",
-      detail:
-        composition.kind === "label"
-          ? statusDetail(status, derived.folded, suffix.length > 0)
-          : rejectionDetail(composition.reason),
+      status,
+      detail: statusDetail(status, derived.folded, encoded, false),
+    };
+  }
+
+  if (suffix.length > 0) {
+    if (composition === undefined) {
+      return {
+        kind: "suffix",
+        pubDress,
+        stem: derived.stem,
+        ...(encoded ? { ascii: derived.ascii } : {}),
+        folded: derived.folded,
+        suffix,
+        status: compositionPending ? "checking" : "service-unavailable",
+        detail: compositionPending
+          ? "Checking this distinguishing part with 0x1 Core…"
+          : "Unavailable — 0x1 Core did not compose this address",
+      };
+    }
+
+    const projected = projectCorePubDressLabelComposition(
+      pubDress,
+      suffix,
+      composition,
+    );
+    if (projected.kind === "rejected") {
+      return {
+        kind: "suffix",
+        pubDress,
+        stem: derived.stem,
+        ...(encoded ? { ascii: derived.ascii } : {}),
+        folded: derived.folded,
+        suffix,
+        status: "invalid",
+        detail: rejectionDetail(projected.reason),
+      };
+    }
+
+    return {
+      kind: "suffix",
+      pubDress,
+      stem: derived.stem,
+      ...(projected.ascii === projected.label
+        ? {}
+        : { ascii: projected.ascii }),
+      folded: derived.folded,
+      suffix,
+      url: projected.url,
+      status,
+      detail: statusDetail(status, derived.folded, encoded, true),
     };
   }
 
@@ -184,8 +252,9 @@ export function createPubDressUrlViewState({
     pubDress,
     stem: derived.stem,
     folded: derived.folded,
-    url: composition.kind === "label" ? composition.url : "",
+    url: formatPubDressUrl(derived.stem),
+    ...(encoded ? { ascii: derived.ascii } : {}),
     status,
-    detail: statusDetail(status, derived.folded, false),
+    detail: statusDetail(status, derived.folded, encoded, false),
   };
 }

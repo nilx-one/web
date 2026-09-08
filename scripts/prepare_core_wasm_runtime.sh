@@ -5,8 +5,8 @@
 set -Eeuo pipefail
 
 core_dir="${1:?path to checked-out nilx-one/core is required}"
-expected_core_revision="e09a42184951b6f40ad4b11eedf6e48c5b6a0ac9"
-expected_wasm_sha256="d55bd185a9ec108cf83c0394c350c094cae9c09e381a1c22b11e388b1cd93320"
+expected_core_revision="c224304947280169017e298237bcf5361d1bfb30"
+expected_wasm_sha256="173c3e9164c030384865013df87d36a29846b09cd2b8ee59b433509b2d77c90d"
 runtime_version="0.1.0"
 runtime_build="$PWD/.core-wasm-runtime"
 
@@ -20,14 +20,18 @@ rm -rf "$runtime_build"
 (
   cd "$core_dir"
   cargo generate-lockfile
-  # Keep the pinned Core revision reproducible even when a newer compatible
-  # tinyvec release appears on crates.io. tinyvec 1.13.0 currently fails the
-  # wasm/no_std build used by this runtime boundary.
+  # Keep the pinned Core revision reproducible across the known tinyvec
+  # compatibility break in wasm/no_std builds. The resulting Wasm bytes are
+  # still verified below, so any other dependency drift fails closed.
   cargo update -p tinyvec --precise 1.12.0
   ./scripts/build_wasm_package.sh "$runtime_build"
 )
 
-printf '%s  %s\n' "$expected_wasm_sha256" "$runtime_build/index_bg.wasm" | sha256sum --check --status
+actual_wasm_sha256="$(sha256sum "$runtime_build/index_bg.wasm" | awk '{print $1}')"
+if [[ "$actual_wasm_sha256" != "$expected_wasm_sha256" ]]; then
+  echo "Core Wasm digest mismatch: expected $expected_wasm_sha256, got $actual_wasm_sha256" >&2
+  exit 1
+fi
 
 cat >"$runtime_build/provenance.json" <<JSON
 {

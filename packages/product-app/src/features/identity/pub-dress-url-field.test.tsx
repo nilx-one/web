@@ -20,6 +20,7 @@ function renderField(
     suffix: "",
     pending: false,
     resolution: undefined,
+    derivation: { kind: "label", label: "0xda-sha" },
     ...overrides,
   });
   render(<PubDressUrlField state={state} onSuffixChange={onSuffixChange} />);
@@ -54,7 +55,9 @@ describe("public address field", () => {
     expect(screen.getByText("0xdA-Sha")).toBeInTheDocument();
     // Once in the address itself, once as the result half of the before/after.
     expect(screen.getAllByText("0xda-sha")).toHaveLength(2);
-    expect(screen.getByText(/Lowercased for the address/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Core maps this ASCII address/),
+    ).toBeInTheDocument();
   });
 
   it("opens an editable second part once the address is taken", () => {
@@ -68,7 +71,11 @@ describe("public address field", () => {
   });
 
   it("keeps the folded stem out of the editable part", () => {
-    renderField({ resolution: taken, suffix: "7412" });
+    renderField({
+      resolution: taken,
+      suffix: "7412",
+      composition: { kind: "label", label: "0xda-sha7412" },
+    });
 
     expect(screen.getByRole("textbox")).toHaveValue("7412");
     expect(screen.getByText("0xda-sha")).toBeInTheDocument();
@@ -97,17 +104,41 @@ describe("public address field", () => {
   });
 
   it("marks a part that cannot appear in an address", () => {
-    renderField({ resolution: taken, suffix: "7-" });
+    renderField({
+      resolution: taken,
+      suffix: "7-",
+      composition: { kind: "error", code: "invalid_character" },
+    });
 
     expect(screen.getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
   });
 
-  it("explains an identity that has no address form yet", () => {
-    renderField({ selection: { discriminator: "0", slug: "небо" } });
+  it("shows a Cyrillic address as the Bond reads it, with the encoded footnote", () => {
+    renderField({
+      selection: { discriminator: "0", slug: "небо" },
+      derivation: { kind: "label", label: "xn--0x0-dddt1cj" },
+    });
+
+    expect(screen.getByText("0x0небо")).toBeInTheDocument();
+    expect(screen.getByText(".nilx.one")).toBeInTheDocument();
+    expect(screen.getByText("xn--0x0-dddt1cj")).toBeInTheDocument();
+  });
+
+  it("does not footnote an encoded form for an ASCII address", () => {
+    renderField();
+
+    expect(screen.queryByText(/^xn--/)).not.toBeInTheDocument();
+  });
+
+  it("explains why a right-to-left identity has no address", () => {
+    renderField({
+      selection: { discriminator: "0", slug: "אבג" },
+      derivation: { kind: "error", code: "bidi_rule" },
+    });
 
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/this alphabet has no agreed address form/),
+      screen.getByText(/right-to-left script cannot follow the 0x prefix/),
     ).toBeInTheDocument();
   });
 });
