@@ -10,9 +10,7 @@ import {
   withAvaiaProfileHttp,
   type AvaiaProfileHttpOptions,
 } from "./avaia-profile";
-import {
-  createIdentityHttpAdapter as createBaseIdentityHttpAdapter,
-} from "./identity-http-base";
+import { createIdentityHttpAdapter as createBaseIdentityHttpAdapter } from "./identity-http-base";
 
 export type { AvaiaProfileHttpOptions } from "./avaia-profile";
 
