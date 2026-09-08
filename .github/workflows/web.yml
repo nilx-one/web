@@ -37,7 +37,17 @@ jobs:
       - name: Verify repository policy
         run: pnpm policy
       - name: Verify formatting
-        run: pnpm format
+        run: |
+          set -Eeuo pipefail
+          pnpm exec prettier --write \
+            apps/site/src/public-bond.css \
+            apps/site/src/public-bond.test.tsx \
+            apps/site/src/public-bond.tsx
+          git diff -- \
+            apps/site/src/public-bond.css \
+            apps/site/src/public-bond.test.tsx \
+            apps/site/src/public-bond.tsx
+          exit 1
       - name: Lint
         run: pnpm lint
       - name: Typecheck
