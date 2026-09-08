@@ -63,3 +63,15 @@
   );
   filter: none;
 }
+
+.telegram-password-username {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 1rem;
+  border: 1px solid var(--glass-border, #ffffff33);
+  border-radius: 1rem;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}

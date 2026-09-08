@@ -111,6 +111,7 @@ function createIdentity(
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
+    setTelegramPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
     resolvePubDress: async (selection) => ({
@@ -652,9 +653,23 @@ describe("ProductApp identity", () => {
     expect(forgetRememberedBond).not.toHaveBeenCalled();
   });
 
-  it("reuses the address primitive in Telegram without native password or provider row", async () => {
+  it("creates a Telegram password after address authorization and confirms recovery before entering", async () => {
     window.history.replaceState({}, "", "/telegram/");
     const user = userEvent.setup();
+    const setTelegramPassword = vi
+      .fn<IdentityAccessPort["setTelegramPassword"]>()
+      .mockResolvedValue({
+        kind: "recovery-key-required",
+        identity: { pubDress: "0xaSky" },
+        recoveryKey: "0x1-rk-test",
+        challenge: "test-challenge",
+      });
+    const acknowledgeRecoveryKey = vi
+      .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
+      .mockResolvedValue({
+        kind: "authenticated",
+        identity: { pubDress: "0xaSky" },
+      });
     const registerProvider = vi
       .fn<IdentityAccessPort["registerProvider"]>()
       .mockResolvedValue({
@@ -666,7 +681,11 @@ describe("ProductApp identity", () => {
       <ProductApp
         core={readyCore}
         host={createTelegramHost()}
-        identity={createIdentity({ registerProvider })}
+        identity={createIdentity({
+          registerProvider,
+          setTelegramPassword,
+          acknowledgeRecoveryKey,
+        })}
         routerBasepath="/telegram"
       />,
     );
@@ -690,7 +709,83 @@ describe("ProductApp identity", () => {
       discriminator: "a",
       slug: "Sky",
     });
+    expect(
+      await screen.findByRole("heading", { name: "Create your password." }),
+    ).toBeVisible();
+    const save = screen.getByRole("button", { name: "Save password" });
+    await user.type(
+      screen.getByLabelText("Password"),
+      "a long Telegram password",
+    );
+    expect(save).toBeDisabled();
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "different password",
+    );
+    expect(save).toBeDisabled();
+    expect(screen.getByText("Passwords don’t match.")).toBeVisible();
+    expect(setTelegramPassword).not.toHaveBeenCalled();
+    await user.clear(screen.getByLabelText("Confirm password"));
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "a long Telegram password",
+    );
+    await user.click(save);
+    expect(setTelegramPassword).toHaveBeenCalledExactlyOnceWith(
+      "a long Telegram password",
+    );
+    expect(await screen.findByText("0x1-rk-test")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Open Bond profile for 0xaSky" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", { name: "I saved this recovery key" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
+    expect(
+      await screen.findByRole("button", {
+        name: "Open Bond profile for 0xaSky",
+      }),
+    ).toBeVisible();
+    expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
+      "test-challenge",
+    );
   });
+
+  it.each([true, false])(
+    "handles an existing Telegram Bond with passwordRequired=%s",
+    async (passwordRequired) => {
+      const identity = createIdentity({
+        readProviderIdentity: async () => ({
+          kind: "registered",
+          identity: { pubDress: "0x0sky" },
+          passwordRequired,
+        }),
+      });
+      render(
+        <ProductApp
+          core={readyCore}
+          host={createTelegramHost()}
+          identity={identity}
+        />,
+      );
+      if (passwordRequired) {
+        expect(
+          await screen.findByRole("heading", { name: "Create your password." }),
+        ).toBeVisible();
+        expect(screen.getByLabelText("pub_dress")).toHaveValue("0x0sky");
+      } else {
+        expect(
+          await screen.findByRole("button", {
+            name: "Open Bond profile for 0x0sky",
+          }),
+        ).toBeVisible();
+        expect(
+          screen.queryByLabelText("Confirm password"),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
 
   it("accepts a backend-verified native host session without asking for a password", async () => {
     const readProviderIdentity = vi

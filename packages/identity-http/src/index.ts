@@ -12,6 +12,7 @@ import {
   type NativeRegistrationResult,
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
+  type ProviderPasswordResult,
   type PubDressLabelResolutionResult,
   type PubDressResolutionResult,
   type PubDressSelection,
@@ -286,10 +287,68 @@ class IdentityHttpAdapter implements IdentityAccessPort {
     if (!response.ok) {
       return { kind: "service-unavailable" };
     }
-    const identity = parseIdentity(await response.json());
+    const body: unknown = await response.json();
+    const identity = parseIdentity(body);
     return identity === undefined
       ? { kind: "service-unavailable" }
-      : { kind: "registered", identity };
+      : {
+          kind: "registered",
+          identity,
+          ...(isRecord(body) && typeof body.password_required === "boolean"
+            ? { passwordRequired: body.password_required }
+            : {}),
+        };
+  }
+
+  public async setTelegramPassword(
+    password: string,
+  ): Promise<ProviderPasswordResult> {
+    const authorization = this.authorization();
+    if (authorization === undefined) {
+      return { kind: "rejected", reason: "authentication-required" };
+    }
+    const response = await this.fetch("/api/v1/auth/telegram/password", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        authorization,
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({ password }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok && isRecord(body)) {
+      const identity = parseIdentity(body.identity);
+      if (
+        body.state === "recovery_key_required" &&
+        identity !== undefined &&
+        typeof body.recovery_key === "string" &&
+        typeof body.challenge === "string"
+      ) {
+        return {
+          kind: "recovery-key-required",
+          identity,
+          recoveryKey: body.recovery_key,
+          challenge: body.challenge,
+        };
+      }
+    }
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "password_already_set":
+        return { kind: "rejected", reason: "already-set" };
+      case "invalid_password_length":
+        return { kind: "rejected", reason: "invalid-password-length" };
+      case "compromised_password":
+        return { kind: "rejected", reason: "compromised-password" };
+      case "rate_limited":
+        return { kind: "rejected", reason: "rate-limited" };
+      default:
+        return { kind: "service-unavailable" };
+    }
   }
 
   public async registerProvider(
@@ -316,6 +375,9 @@ class IdentityHttpAdapter implements IdentityAccessPort {
       ) {
         return {
           kind: "registered",
+          ...(typeof body.password_required === "boolean"
+            ? { passwordRequired: body.password_required }
+            : {}),
           outcome:
             body.outcome === "registered" ? "created" : "already-registered",
           identity,

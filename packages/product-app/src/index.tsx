@@ -11,6 +11,7 @@ import {
   ReadRuntimeReadiness,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
+  SetTelegramPassword,
   ResolvePubDress,
   formatPubDress,
   type CoreRuntimePort,
@@ -335,6 +336,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
     },
   });
+  const telegramPassword = useMutation({
+    mutationFn: () =>
+      new SetTelegramPassword(dependencies.identity).execute(password),
+    gcTime: 0,
+    onSuccess: (result) => {
+      if (result.kind === "recovery-key-required") setPassword("");
+    },
+  });
   const forgetRemembered = useMutation({
     mutationFn: () => new ForgetRememberedBond(dependencies.identity).execute(),
     onSuccess: (result) => {
@@ -394,7 +403,11 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         providerIdentityQuery.data,
         providerRegistration.data,
         status,
-        providerRegistration.isPending,
+        providerRegistration.isPending ||
+          telegramPassword.isPending ||
+          recoveryAcknowledgement.isPending,
+        telegramPassword.data,
+        recoveryAcknowledgement.data,
       );
   const viewModel = createIdentityFoundationViewModel(
     host,
@@ -424,6 +437,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     nextSelection: PubDressSelection,
     nextPassword: string,
   ): void {
+    if (!browserHost) return;
     const normalizedSelection = normalizePubDressCredentialInput(
       nextSelection,
       selection,
@@ -482,6 +496,13 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   }
 
   function submitIdentity(): void {
+    if (identityState.kind === "provider-password") {
+      if (!identityState.busy && validNativePassword(password)) {
+        recoveryAcknowledgement.reset();
+        telegramPassword.mutate();
+      }
+      return;
+    }
     if (identityState.kind !== "form" || identityState.busy) {
       return;
     }
@@ -506,6 +527,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         break;
       }
       case "provider-register":
+        if (status.kind !== "available") return;
         providerRegistration.mutate(selection);
         break;
       case "initial":

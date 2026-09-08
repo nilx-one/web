@@ -324,6 +324,71 @@ impl IdentityRepository {
         }))
     }
 
+    /// The provider binding is the authority; a submitted handle cannot select an owner.
+    /// An acknowledged credential is immutable through this setup path.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn prepare_provider_password(
+        &self,
+        provider: &ProviderIdentity,
+        password_hash: &str,
+        password_hash_version: i64,
+        recovery_key_hash: &[u8],
+        challenge_hash: &[u8],
+        now: u64,
+        expires_at: u64,
+    ) -> Result<Option<IdentityRecord>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let pub_dress = sqlx::query_scalar::<_, String>(
+            "INSERT INTO native_credentials \
+             (pub_dress, password_hash, password_hash_version, recovery_key_hash, active, created_at, updated_at) \
+             SELECT p.pub_dress, ?, ?, ?, 0, ?, ? FROM identity_providers p \
+             JOIN identities i ON i.pub_dress = p.pub_dress \
+             WHERE p.provider = ? AND p.provider_subject = ? AND i.identity_kind = 'human' \
+             ON CONFLICT(pub_dress) DO UPDATE SET password_hash = excluded.password_hash, \
+             password_hash_version = excluded.password_hash_version, \
+             recovery_key_hash = excluded.recovery_key_hash, updated_at = excluded.updated_at \
+             WHERE native_credentials.active = 0 RETURNING pub_dress",
+        )
+        .bind(password_hash)
+        .bind(password_hash_version)
+        .bind(recovery_key_hash)
+        .bind(now as i64)
+        .bind(now as i64)
+        .bind(provider.provider.as_str())
+        .bind(&provider.subject)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(pub_dress) = pub_dress else {
+            transaction.rollback().await?;
+            return Ok(None);
+        };
+        sqlx::query(
+            "INSERT INTO native_registration_challenges \
+             (challenge_hash, pub_dress, expires_at, created_at) VALUES (?, ?, ?, ?) \
+             ON CONFLICT(pub_dress) DO UPDATE SET challenge_hash = excluded.challenge_hash, \
+             expires_at = excluded.expires_at, created_at = excluded.created_at",
+        )
+        .bind(challenge_hash)
+        .bind(&pub_dress)
+        .bind(expires_at as i64)
+        .bind(now as i64)
+        .execute(&mut *transaction)
+        .await?;
+        let record = identity_for_pub_dress_in(&mut transaction, pub_dress).await?;
+        transaction.commit().await?;
+        Ok(Some(record))
+    }
+
+    pub async fn password_required(&self, pub_dress: &str) -> Result<bool, RepositoryError> {
+        let active = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM native_credentials WHERE pub_dress = ? AND active = 1)",
+        )
+        .bind(pub_dress)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(!active)
+    }
+
     pub async fn find_native_credential(
         &self,
         pub_dress: &PubDress,

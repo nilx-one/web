@@ -111,7 +111,11 @@ export type NativeMutationResult =
   | { kind: "service-unavailable" };
 
 export type ProviderIdentityLookupResult =
-  | { kind: "registered"; identity: IdentityProjection }
+  | {
+      kind: "registered";
+      identity: IdentityProjection;
+      passwordRequired?: boolean;
+    }
   | { kind: "not-registered" }
   | { kind: "authentication-required" }
   | { kind: "service-unavailable" };
@@ -120,6 +124,7 @@ export type ProviderRegistrationResult =
   | {
       kind: "registered";
       outcome: "created" | "already-registered";
+      passwordRequired?: boolean;
       identity: IdentityProjection;
     }
   | {
@@ -132,7 +137,21 @@ export type ProviderRegistrationResult =
     }
   | { kind: "service-unavailable" };
 
+export type ProviderPasswordResult =
+  | Extract<NativeRegistrationResult, { kind: "recovery-key-required" }>
+  | {
+      kind: "rejected";
+      reason:
+        | "authentication-required"
+        | "already-set"
+        | "invalid-password-length"
+        | "compromised-password"
+        | "rate-limited";
+    }
+  | { kind: "service-unavailable" };
+
 export interface IdentityAccessPort {
+  setTelegramPassword(password: string): Promise<ProviderPasswordResult>;
   acknowledgeRecoveryKey(
     challenge: string,
   ): Promise<NativeAuthenticationResult>;
@@ -297,6 +316,18 @@ export class RegisterProviderIdentity {
   ): Promise<ProviderRegistrationResult> {
     try {
       return await this.identity.registerProvider(selection);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class SetTelegramPassword {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(password: string): Promise<ProviderPasswordResult> {
+    try {
+      return await this.identity.setTelegramPassword(password);
     } catch {
       return { kind: "service-unavailable" };
     }
