@@ -4,20 +4,20 @@
 name: Finalize Browser Auth
 
 on:
-  push:
-    branches:
-      - feature/browser-provider-auth
+  pull_request:
+    types: [synchronize]
 
 permissions:
   contents: write
 
 jobs:
   finalize:
+    if: github.head_ref == 'feature/browser-provider-auth'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/browser-provider-auth
+          ref: ${{ github.head_ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -36,4 +36,4 @@ jobs:
             packages/product-app/src/index.tsx \
             packages/product-app/src/features/identity/identity-foundation-view.tsx
           git commit -m "fix(auth): complete browser provider integration"
-          git push origin HEAD:feature/browser-provider-auth
+          git push origin HEAD:${GITHUB_HEAD_REF}
