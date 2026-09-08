@@ -44,10 +44,12 @@ jobs:
                   let second_repository = repository.clone();
                   let lower = PubDress::from_str("0x0небо").expect("lower");
                   let title = PubDress::from_str("0x0Небо").expect("title");
+                  let telegram = ProviderIdentity::telegram(10);
+                  let discord = ProviderIdentity::discord("20");
 
                   let (first, second) = tokio::join!(
-                      first_repository.register(&lower, &ProviderIdentity::telegram(10), 100),
-                      second_repository.register(&title, &ProviderIdentity::discord("20"), 101),
+                      first_repository.register(&lower, &telegram, 100),
+                      second_repository.register(&title, &discord, 101),
                   );
                   let first = match first.expect("first registration") {
                       RegistrationOutcome::Registered(record) => record,
