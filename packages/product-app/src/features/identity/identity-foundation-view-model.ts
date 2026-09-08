@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
-  AvatarModel,
   NativeAuthenticationResult,
   NativeIdentityContextResult,
   NativeRegistrationResult,
@@ -11,6 +10,7 @@ import type {
   ProviderPasswordResult,
   PubDressResolutionResult,
   PubDressSelection,
+  StoredAvatarModel,
   RuntimeReadiness,
 } from "@nilx-one/application";
 import {
@@ -85,7 +85,7 @@ export type IdentityViewState =
       pubDress: string;
       avaiaPubDress?: string;
       /** The body this Bond chose, absent while it has chosen none. */
-      avatarModel?: AvatarModel;
+      avatarModel?: StoredAvatarModel;
       native: boolean;
     }
   | { kind: "unavailable"; detail: string }
@@ -105,8 +105,11 @@ function projectedAvaia(avaiaPubDress: string | undefined): {
   return avaiaPubDress === undefined ? {} : { avaiaPubDress };
 }
 
-function projectedAvatar(avatarModel: AvatarModel | undefined): {
-  avatarModel?: AvatarModel;
+// A stored model may be newer than this client. The view state carries what
+// the service recorded; narrowing to a study this build can draw happens where
+// the body is chosen or rendered, never by dropping the person's choice here.
+function projectedAvatar(avatarModel: StoredAvatarModel | undefined): {
+  avatarModel?: StoredAvatarModel;
 } {
   return avatarModel === undefined ? {} : { avatarModel };
 }
