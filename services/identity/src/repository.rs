@@ -230,25 +230,16 @@ impl IdentityRepository {
             return Ok(RegistrationOutcome::AlreadyRegistered(record));
         }
 
-        let label = default_pub_dress_label(pub_dress);
-        let identity_insert = sqlx::query(
-            "INSERT INTO identities \
-             (pub_dress, identity_kind, pub_dress_label, pub_dress_label_suffix, created_at) \
-             VALUES (?, 'human', ?, '', ?) ON CONFLICT DO NOTHING",
-        )
-        .bind(pub_dress.as_str())
-        .bind(label)
-        .bind(now as i64)
-        .execute(&mut *transaction)
-        .await?;
-
-        // A representable DNS-label collision and an exact pub_dress collision
-        // are both unavailable at this legacy registration boundary. The public
-        // label resolver distinguishes them before submission; the transaction
-        // remains the final authority.
-        if identity_insert.rows_affected() == 0 {
-            transaction.rollback().await?;
-            return Ok(RegistrationOutcome::HandleUnavailable);
+        match insert_human_with_public_label_in(&mut transaction, pub_dress, now).await? {
+            HumanIdentityInsertOutcome::Inserted => {}
+            HumanIdentityInsertOutcome::PubDressUnavailable => {
+                transaction.rollback().await?;
+                return Ok(RegistrationOutcome::HandleUnavailable);
+            }
+            HumanIdentityInsertOutcome::PublicLabelUnavailable => {
+                transaction.rollback().await?;
+                return Ok(RegistrationOutcome::PublicLabelUnavailable);
+            }
         }
 
         let Some(_avaia_pub_dress) =
@@ -596,20 +587,16 @@ impl IdentityRepository {
             return Ok(NativeRegistrationOutcome::IdempotentReplay(record));
         }
 
-        let label = default_pub_dress_label(pub_dress);
-        let identity_insert = sqlx::query(
-            "INSERT INTO identities \
-             (pub_dress, identity_kind, pub_dress_label, pub_dress_label_suffix, created_at) \
-             VALUES (?, 'human', ?, '', ?) ON CONFLICT DO NOTHING",
-        )
-        .bind(pub_dress.as_str())
-        .bind(label)
-        .bind(now as i64)
-        .execute(&mut *transaction)
-        .await?;
-        if identity_insert.rows_affected() == 0 {
-            transaction.rollback().await?;
-            return Ok(NativeRegistrationOutcome::HandleUnavailable);
+        match insert_human_with_public_label_in(&mut transaction, pub_dress, now).await? {
+            HumanIdentityInsertOutcome::Inserted => {}
+            HumanIdentityInsertOutcome::PubDressUnavailable => {
+                transaction.rollback().await?;
+                return Ok(NativeRegistrationOutcome::HandleUnavailable);
+            }
+            HumanIdentityInsertOutcome::PublicLabelUnavailable => {
+                transaction.rollback().await?;
+                return Ok(NativeRegistrationOutcome::PublicLabelUnavailable);
+            }
         }
 
         let Some(_avaia_pub_dress) =
@@ -918,6 +905,77 @@ impl IdentityRepository {
     }
 }
 
+const PUBLIC_LABEL_RETRY_SUFFIXES: [&str; 8] = ["2", "3", "4", "5", "6", "7", "8", "9"];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HumanIdentityInsertOutcome {
+    Inserted,
+    PubDressUnavailable,
+    PublicLabelUnavailable,
+}
+
+async fn insert_human_with_public_label_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    pub_dress: &PubDress,
+    now: u64,
+) -> Result<HumanIdentityInsertOutcome, RepositoryError> {
+    let stem = match PubDressLabel::stem(pub_dress) {
+        Ok(stem) => stem,
+        Err(_) => {
+            let inserted = sqlx::query(
+                "INSERT INTO identities \
+                 (pub_dress, identity_kind, pub_dress_label, pub_dress_label_suffix, created_at) \
+                 VALUES (?, 'human', NULL, '', ?) ON CONFLICT DO NOTHING",
+            )
+            .bind(pub_dress.as_str())
+            .bind(now as i64)
+            .execute(&mut **transaction)
+            .await?;
+            return Ok(if inserted.rows_affected() == 1 {
+                HumanIdentityInsertOutcome::Inserted
+            } else {
+                HumanIdentityInsertOutcome::PubDressUnavailable
+            });
+        }
+    };
+
+    for suffix in core::iter::once("").chain(PUBLIC_LABEL_RETRY_SUFFIXES) {
+        let label = match PubDressLabel::compose(&stem, suffix) {
+            Ok(label) => label,
+            Err(_) => continue,
+        };
+        let inserted = sqlx::query(
+            "INSERT INTO identities \
+             (pub_dress, identity_kind, pub_dress_label, pub_dress_label_suffix, created_at) \
+             VALUES (?, 'human', ?, ?, ?) ON CONFLICT DO NOTHING",
+        )
+        .bind(pub_dress.as_str())
+        .bind(label.as_str())
+        .bind(suffix)
+        .bind(now as i64)
+        .execute(&mut **transaction)
+        .await?;
+        if inserted.rows_affected() == 1 {
+            return Ok(HumanIdentityInsertOutcome::Inserted);
+        }
+
+        // The failed INSERT is the collision boundary. This read only
+        // classifies which UNIQUE constraint rejected it; it never
+        // reserves a label or performs a check-then-insert allocation.
+        let pub_dress_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identities WHERE pub_dress = ?)",
+        )
+        .bind(pub_dress.as_str())
+        .fetch_one(&mut **transaction)
+        .await?;
+        if pub_dress_exists {
+            return Ok(HumanIdentityInsertOutcome::PubDressUnavailable);
+        }
+    }
+
+    Ok(HumanIdentityInsertOutcome::PublicLabelUnavailable)
+}
+
 fn default_pub_dress_label(pub_dress: &PubDress) -> Option<String> {
     PubDressLabel::stem(pub_dress)
         .ok()
@@ -1086,6 +1144,7 @@ pub enum NativeRegistrationOutcome {
     Registered(IdentityRecord),
     IdempotentReplay(IdentityRecord),
     HandleUnavailable,
+    PublicLabelUnavailable,
     AvaiaUnavailable,
 }
 
@@ -1105,6 +1164,7 @@ pub enum RegistrationOutcome {
     Registered(IdentityRecord),
     AlreadyRegistered(IdentityRecord),
     HandleUnavailable,
+    PublicLabelUnavailable,
     AvaiaUnavailable,
 }
 
@@ -1198,27 +1258,82 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_dns_fold_collision_never_selects_a_second_identity() {
+    async fn a_dns_fold_collision_allocates_the_first_decimal_suffix() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
         let lower = PubDress::from_str("0x0небо").expect("lower");
         let title = PubDress::from_str("0x0Небо").expect("title");
-        repository
+        let first = match repository
             .register(&lower, &ProviderIdentity::telegram(10), 100)
             .await
-            .expect("first registration");
+            .expect("first registration")
+        {
+            RegistrationOutcome::Registered(record) => record,
+            other => panic!("unexpected first outcome: {other:?}"),
+        };
+        let second = match repository
+            .register(&title, &ProviderIdentity::discord("20"), 101)
+            .await
+            .expect("second registration")
+        {
+            RegistrationOutcome::Registered(record) => record,
+            other => panic!("unexpected second outcome: {other:?}"),
+        };
+        assert_eq!(first.pub_dress_label_suffix, "");
+        assert_eq!(second.pub_dress_label_suffix, "2");
+        assert_ne!(first.pub_dress_label, second.pub_dress_label);
+        assert_eq!(
+            second.readable_url("nilx.one").as_deref(),
+            Some("https://0x0Небо2.nilx.one")
+        );
+    }
+
+    #[tokio::test]
+    async fn public_label_retries_are_bounded_and_roll_back_on_exhaustion() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let candidate = PubDress::from_str("0x0Sky").expect("candidate");
+        let stem = PubDressLabel::stem(&candidate).expect("stem");
+        for suffix in core::iter::once("").chain(super::PUBLIC_LABEL_RETRY_SUFFIXES) {
+            let label = PubDressLabel::compose(&stem, suffix).expect("candidate label");
+            sqlx::query(
+                "INSERT INTO identities \
+                 (pub_dress, identity_kind, pub_dress_label, pub_dress_label_suffix, created_at) \
+                 VALUES (?, 'human', ?, ?, ?)",
+            )
+            .bind(format!(
+                "0x{}fixture{}",
+                suffix.len(),
+                if suffix.is_empty() { "aa" } else { suffix }
+            ))
+            .bind(label.as_str())
+            .bind(suffix)
+            .bind(1_i64)
+            .execute(&repository.pool)
+            .await
+            .expect("occupy label");
+        }
+
         assert!(matches!(
             repository
-                .register(&title, &ProviderIdentity::discord("20"), 101)
+                .register(&candidate, &ProviderIdentity::telegram(42), 100)
                 .await,
-            Ok(RegistrationOutcome::HandleUnavailable)
+            Ok(RegistrationOutcome::PublicLabelUnavailable)
         ));
         assert!(
             repository
-                .is_pub_dress_available(&title)
+                .is_pub_dress_available(&candidate)
                 .await
-                .expect("the case-sensitive pub_dress itself remains free")
+                .expect("failed allocation must not create the Bond")
+        );
+        assert!(
+            repository
+                .find_by_provider(&ProviderIdentity::telegram(42))
+                .await
+                .expect("provider lookup")
+                .is_none()
         );
     }
 
