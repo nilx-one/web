@@ -128,6 +128,7 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
 fn public_label_from_host(headers: &HeaderMap) -> Option<PubDressLabel> {
     let host = headers.get(HOST)?.to_str().ok()?.trim_end_matches('.');
     let host = host.split_once(':').map_or(host, |(name, _)| name);
+    let host = host.to_ascii_lowercase();
     let suffix = format!(".{PUBLIC_ZONE}");
     let label = host.strip_suffix(&suffix)?;
     if label.is_empty() || label.contains('.') {
@@ -312,6 +313,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn mixed_case_host_resolves_the_stored_allocation() {
+        let app = app().await;
+        let response = app
+            .oneshot(
+                Request::get("/api/v1/identity/public")
+                    .header("host", "XN--0X0-DDDT1CJ.NILX.ONE.")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json(response).await;
+        assert_eq!(body["pub_dress"], "0x0небо");
+    }
+
+    #[tokio::test]
     async fn an_unallocated_host_is_not_reverse_decoded_into_a_bond() {
         let app = app().await;
         let response = app
@@ -324,5 +342,38 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn malformed_multi_label_host_is_not_a_bond() {
+        let app = app().await;
+        let response = app
+            .oneshot(
+                Request::get("/api/v1/identity/public")
+                    .header("host", "xn--0x0-dddt1cj.preview.nilx.one")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn root_and_service_hosts_stay_outside_the_bond_namespace() {
+        let app = app().await;
+        for host in ["nilx.one", "www.nilx.one", "api.nilx.one"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get("/api/v1/identity/public")
+                        .header("host", host)
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "host={host}");
+        }
     }
 }

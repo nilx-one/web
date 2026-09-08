@@ -46,7 +46,7 @@ describe("public Bond host routing", () => {
     });
     expect(fetchImpl).toHaveBeenCalledWith("/api/v1/identity/public", {
       cache: "no-store",
-      credentials: "same-origin",
+      credentials: "omit",
     });
   });
 
