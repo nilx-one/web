@@ -122,6 +122,39 @@ export interface MapRenderer {
   setObservedPositionLabel(label: MapObservedPositionLabel | null): void;
 }
 
+export type AvatarModelId = "sky-study" | "dasha-study";
+export type AvatarClipId =
+  "idle" | "walk" | "turn_in_place" | "wake" | "quiesce";
+
+/**
+ * Local presentation state for one avatar. It is not evidence of presence,
+ * proximity, consent, or Relationship state. Callers may only create handles
+ * from authority they already possess.
+ */
+export interface AvatarHandle {
+  readonly id: string;
+  readonly modelId: AvatarModelId;
+  readonly lngLat: readonly [longitude: number, latitude: number];
+  readonly altitudeMeters?: number;
+  readonly bearingDeg: number;
+  readonly clipId: AvatarClipId;
+  /** Normalized [0, 1) phase used to make deterministic loops reproducible. */
+  readonly clipPhase: number;
+  readonly scale: number;
+  readonly visible: boolean;
+}
+
+/**
+ * Dependency-free avatar presentation boundary. Camera state flows one way from
+ * the map into the avatar renderer; this surface never owns or mutates camera
+ * state and never publishes viewport or position telemetry.
+ */
+export interface AvatarLayerContract {
+  upsert(handle: AvatarHandle): void;
+  remove(id: string): void;
+  setCamera(camera: MapCamera): void;
+}
+
 export const DEFAULT_MAP_CAMERA: MapCamera = {
   center: [0, 0],
   zoom: 1,
