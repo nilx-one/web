@@ -1,9 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type {
-  BondProviderConnections,
-  BondProviderType,
+import {
+  createAvaiaMovementController,
+  type AvaiaMovementController,
+  type BondProviderConnections,
+  type BondProviderType,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import type {
@@ -51,6 +53,13 @@ import {
 } from "./location-camera-policy";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
 import { AVATAR_HANDLE_ID, createSelfAvatarHandle } from "./avatar-presence";
+import {
+  AVAIA_HANDLE_ID,
+  avaiaStandpoint,
+  avaiaStudy,
+  createAvaiaAvatarHandle,
+  headingDegrees,
+} from "./avaia-presence";
 import {
   createBondDockViewState,
   type AvaiaAvailability,
@@ -149,6 +158,9 @@ interface IdentityDetailState {
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
 
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
+
+/** Long enough that any standoff is already behind the body that skipped it. */
+const REDUCED_MOTION_ARRIVAL_SECONDS = 3_600;
 
 function runtimeContract(runtime: RuntimeViewState): string | undefined {
   if (runtime.tone !== "ready") return undefined;
@@ -362,6 +374,10 @@ export function AuthenticatedMapHomeView({
   // The camera the renderer actually holds, and whether a person put it there.
   const [camera, setCamera] = useState(() => renderer.getCamera());
   const cameraMovedByPerson = useRef(false);
+  // The Avaia keeps walking across renders, so its movement and the way it
+  // ended up facing outlive any one of them.
+  const avaiaMovement = useRef<AvaiaMovementController | undefined>(undefined);
+  const avaiaFacing = useRef(0);
   const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
@@ -377,6 +393,13 @@ export function AuthenticatedMapHomeView({
   // Zoom alone drives the body's apparent size, so the avatar is not redrawn
   // for a pan that leaves the scale untouched.
   const cameraZoom = camera.zoom;
+  // Whether anything will stand here at close range. Without a body the marker
+  // keeps representing the person at every scale rather than fading into
+  // nothing on the way in.
+  const bodyDrawn =
+    renderer.avatars !== undefined &&
+    avatarChoice?.rendered !== undefined &&
+    observedPosition !== undefined;
   const contractVersion = runtimeContract(runtime);
   const mapViewModel = createMapFoundationViewModel(mapStatus);
   const activeDetail =
@@ -402,11 +425,20 @@ export function AuthenticatedMapHomeView({
       ? []
       : [{ id: "sign-out", label: "Sign out", perform: onLogout }];
   const avaiaLabel = avaiaPubDress ?? "Avaia";
+  // One address seeds this Avaia's body, its side of its Bond, and its rhythm,
+  // so an unnamed Avaia is still the same Avaia between renders.
+  const avaiaAddress = avaiaLabel;
 
   // A map that never paints must say so. Without this the shell shows an empty
   // surface and a renderer, asset, or basemap failure is indistinguishable
   // from an ordinary dark map.
   useEffect(() => renderer.subscribe(setMapStatus), [renderer]);
+
+  // The marker and the body are one representation, not two: the point stands
+  // for the person until a body can, and hands over when it does.
+  useEffect(() => {
+    renderer.setObservedPositionRole(bodyDrawn ? "body" : "person");
+  }, [bodyDrawn, renderer]);
 
   // Appearance is applied before mounting so the first paint already uses the
   // resolved style variant instead of loading light and swapping to dark.
@@ -560,6 +592,103 @@ export function AuthenticatedMapHomeView({
     location.state,
     observedPosition,
     pubDress,
+    renderer,
+  ]);
+
+  // The Avaia's own body, walking.
+  //
+  // An Avaia is this Bond's AI counterpart, so where it stands is local
+  // presentation the client composes for itself — never a shared-world fact
+  // and never written back. It accompanies its Bond, and a new observation is
+  // somewhere to walk to rather than somewhere to appear: the controller moves
+  // it at walking pace, and the body plays its walk while it is going.
+  useEffect(() => {
+    const avatars = renderer.avatars;
+    const bondStudy = avatarChoice?.rendered;
+    if (avatars === undefined) return;
+    // A body needs a study to wear, and an Avaia never wears its Bond's own —
+    // so the Bond's choice is what tells this one which body is left.
+    if (
+      bondStudy === undefined ||
+      avaiaAvailability !== "ready" ||
+      observedPosition === undefined
+    ) {
+      avatars.remove(AVAIA_HANDLE_ID);
+      avaiaMovement.current = undefined;
+      return;
+    }
+
+    const avatarLayer = avatars;
+    const address = avaiaAddress;
+    const study = avaiaStudy(address, bondStudy);
+    const reducedMotion = prefersReducedMotion();
+    const standpoint = avaiaStandpoint(
+      {
+        longitude: observedPosition.longitude,
+        latitude: observedPosition.latitude,
+      },
+      address,
+    );
+
+    const controller =
+      avaiaMovement.current ??
+      createAvaiaMovementController({ initialPosition: standpoint });
+    avaiaMovement.current = controller;
+    controller.navigateTo(standpoint);
+    // Reduced motion asks for no journey, not for no Avaia: it arrives at the
+    // same place, without the walk between here and there.
+    if (reducedMotion) controller.tick(REDUCED_MOTION_ARRIVAL_SECONDS);
+
+    let frame: number | undefined;
+    let lastMs = globalThis.performance.now();
+
+    function draw(nowMs: number): void {
+      const movement = controller.tick(Math.max(0, (nowMs - lastMs) / 1_000));
+      lastMs = nowMs;
+      if (movement.kind === "moving") {
+        avaiaFacing.current = headingDegrees(
+          movement.position,
+          movement.target,
+        );
+      }
+
+      avatarLayer.upsert(
+        createAvaiaAvatarHandle({
+          avaiaAddress: address,
+          study,
+          movement,
+          zoom: cameraZoom,
+          timeMs: nowMs,
+          reducedMotion,
+          facingDegrees: avaiaFacing.current,
+        }),
+      );
+
+      // The walk is the only thing that needs a frame. Standing still, this
+      // body resamples on the ambient slot like every other one.
+      frame =
+        movement.kind === "moving"
+          ? globalThis.requestAnimationFrame(draw)
+          : undefined;
+    }
+
+    draw(lastMs);
+    const ambient = globalThis.setInterval(
+      () => draw(globalThis.performance.now()),
+      AVATAR_AMBIENT_REFRESH_MS,
+    );
+
+    return () => {
+      if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
+      globalThis.clearInterval(ambient);
+      avatarLayer.remove(AVAIA_HANDLE_ID);
+    };
+  }, [
+    avaiaAddress,
+    avaiaAvailability,
+    avatarChoice?.rendered,
+    cameraZoom,
+    observedPosition,
     renderer,
   ]);
 

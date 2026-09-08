@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  MAP_BODY_HANDOVER_ZOOM,
   mapMetersPerPixel,
   type MapObservedPosition,
+  type MapObservedPositionRole,
 } from "@nilx-one/map-contract";
 
 export const OBSERVED_POSITION_SOURCE_ID = "observed-position";
@@ -24,6 +26,67 @@ const MAX_ACCURACY_PIXELS = 320;
 
 const ACCURACY_MIN_ZOOM = 0;
 const ACCURACY_MAX_ZOOM = 24;
+
+/**
+ * Half the zoom range the handover takes. A body does not appear on one side
+ * of a hard line while the marker vanishes on the other: they cross over each
+ * other, so the person is never represented twice and never not at all.
+ */
+const HANDOVER_FADE_ZOOM = 0.5;
+
+/**
+ * The opacity a mark that stands for the person is drawn at.
+ *
+ * With no body coming, it holds. With a body coming, it fades out across the
+ * handover so the marker gives the person up to the figure that replaces it.
+ * The accuracy halo is deliberately not faded: it is what the observation
+ * actually knows, and a body stands inside it rather than instead of it.
+ */
+export function handoverOpacity(
+  role: MapObservedPositionRole,
+  opacity: number,
+): unknown {
+  if (role === "person") {
+    return opacity;
+  }
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    MAP_BODY_HANDOVER_ZOOM - HANDOVER_FADE_ZOOM,
+    opacity,
+    MAP_BODY_HANDOVER_ZOOM + HANDOVER_FADE_ZOOM,
+    0,
+  ];
+}
+
+/** The marks that stand for the person, and the opacities they hold at. */
+export const HANDOVER_PAINT: readonly {
+  readonly layerId: string;
+  readonly property: "circle-opacity" | "circle-stroke-opacity";
+  readonly opacity: number;
+}[] = [
+  {
+    layerId: OBSERVED_POSITION_EDGE_LAYER_ID,
+    property: "circle-opacity",
+    opacity: 0.26,
+  },
+  {
+    layerId: OBSERVED_POSITION_EDGE_LAYER_ID,
+    property: "circle-stroke-opacity",
+    opacity: 0.9,
+  },
+  {
+    layerId: OBSERVED_POSITION_POINT_LAYER_ID,
+    property: "circle-opacity",
+    opacity: 1,
+  },
+  {
+    layerId: OBSERVED_POSITION_POINT_LAYER_ID,
+    property: "circle-stroke-opacity",
+    opacity: 0.28,
+  },
+];
 
 export function clampAccuracyMeters(accuracyMeters: number): number {
   if (!Number.isFinite(accuracyMeters) || accuracyMeters <= 0) {
@@ -93,10 +156,12 @@ export function observedPositionSource(
 /**
  * Three restrained circles rather than a conventional pin: the accuracy the
  * host reported, a pale edge that keeps the point legible over near-white
- * buildings, and the exact coordinate itself.
+ * buildings, and the exact coordinate itself. The latter two stand for the
+ * person, so they are the two that hand over to a body at close range.
  */
 export function observedPositionLayers(
   position: MapObservedPosition,
+  role: MapObservedPositionRole = "person",
 ): readonly Record<string, unknown>[] {
   return [
     {
@@ -120,10 +185,10 @@ export function observedPositionLayers(
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 10],
         "circle-color": ACCENT,
-        "circle-opacity": 0.26,
+        "circle-opacity": handoverOpacity(role, 0.26),
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 2,
-        "circle-stroke-opacity": 0.9,
+        "circle-stroke-opacity": handoverOpacity(role, 0.9),
         "circle-pitch-alignment": "viewport",
       },
     },
@@ -134,10 +199,10 @@ export function observedPositionLayers(
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 5.5],
         "circle-color": ACCENT,
-        "circle-opacity": 1,
+        "circle-opacity": handoverOpacity(role, 1),
         "circle-stroke-color": "#0b3f47",
         "circle-stroke-width": 1,
-        "circle-stroke-opacity": 0.28,
+        "circle-stroke-opacity": handoverOpacity(role, 0.28),
         "circle-pitch-alignment": "viewport",
       },
     },

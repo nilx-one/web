@@ -65,6 +65,26 @@ export const MAP_SCALE_ZOOM: Readonly<Record<MapScale, number>> = Object.freeze(
   },
 );
 
+/**
+ * The scale a body takes over from the observed-position marker. Further out
+ * an observation is a place, not a person: the marker says "here" and no body
+ * is drawn. Renderer and application share this so the two never both stand
+ * for the same person, and never both withdraw.
+ */
+export const MAP_BODY_HANDOVER_ZOOM: number = MAP_SCALE_ZOOM.street;
+
+/**
+ * What the observed-position marker stands for.
+ *
+ * `person` keeps the marker at every scale, because nothing else will
+ * represent the person here — no study chosen, or no body to draw. `body`
+ * means a body arrives once the world is close enough, so the marker hands
+ * over to it rather than standing underneath it.
+ */
+export type MapObservedPositionRole = "person" | "body";
+
+export const DEFAULT_OBSERVED_POSITION_ROLE: MapObservedPositionRole = "person";
+
 // Web Mercator ground resolution at zoom 0 for the 512 px tile scheme both
 // the renderer and the application reason in.
 const EQUATOR_METERS_PER_PIXEL = 156_543.03392804097 / 2;
@@ -119,6 +139,11 @@ export interface MapRenderer {
   setAppearance(appearance: MapAppearance): void;
   setDimension(dimension: MapDimension): void;
   setObservedPosition(position: MapObservedPosition | null): void;
+  /**
+   * Whether a body will stand at the observed position, which is what decides
+   * if the marker hands over at close range or keeps representing the person.
+   */
+  setObservedPositionRole(role: MapObservedPositionRole): void;
   setObservedPositionLabel(label: MapObservedPositionLabel | null): void;
   /**
    * The avatar surface, present when this renderer draws avatars at all. The

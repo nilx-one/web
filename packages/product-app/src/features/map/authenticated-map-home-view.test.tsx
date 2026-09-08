@@ -756,6 +756,77 @@ describe("AuthenticatedMapHomeView", () => {
     expect(upsert.mock.lastCall?.[0].visible).toBe(false);
   });
 
+  // The marker and the body are one representation. With a body coming, the
+  // point hands over on the way in; with nothing coming, it has to hold.
+  it("tells the world whether a body will stand at the observation", async () => {
+    const withBody = createMapRendererDouble({ kind: "ready" });
+    renderView({
+      mapRenderer: withBody,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    expect(withBody.setObservedPositionRole).toHaveBeenLastCalledWith("body");
+
+    cleanup();
+
+    const withoutBody = createMapRendererDouble({ kind: "ready" });
+    renderView({
+      mapRenderer: withoutBody,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState(undefined, undefined),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    expect(withoutBody.setObservedPositionRole).toHaveBeenLastCalledWith(
+      "person",
+    );
+  });
+
+  it("stands the Avaia beside its Bond in a body of its own", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "ready",
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const drawn = vi
+      .mocked(mapRenderer.avatars!.upsert)
+      .mock.calls.map(([handle]) => handle);
+    const bond = drawn.findLast((handle) => handle.id === "self");
+    const avaia = drawn.findLast((handle) => handle.id === "avaia");
+
+    expect(bond).toBeDefined();
+    expect(avaia).toBeDefined();
+    // Two identities standing together have to be told apart at a glance.
+    expect(avaia?.modelId).not.toBe(bond?.modelId);
+    // Beside its Bond, not inside it.
+    expect(avaia?.lngLat).not.toEqual(bond?.lngLat);
+  });
+
+  it("draws no Avaia body until its runtime is actually ready", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "downloadable",
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const drawn = vi
+      .mocked(mapRenderer.avatars!.upsert)
+      .mock.calls.map(([handle]) => handle.id);
+    expect(drawn).toContain("self");
+    expect(drawn).not.toContain("avaia");
+  });
+
   it("keeps the world usable when the host has no location capability", async () => {
     const mapRenderer = renderer();
 

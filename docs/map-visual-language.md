@@ -51,6 +51,25 @@ Two rules bound it:
 
 One body is drawn: the signed-in Bond's own, and only while this device holds an observation of itself. An avatar on the map is never evidence of presence, proximity, or that anyone else is nearby.
 
+## Marker and body
+
+One person is represented once. At altitude that is the observed-position marker — the accuracy the host reported, a pale edge, and the exact coordinate. Coming in past street scale a body takes over, and the two marks that stand for the person fade out across the handover rather than leaving a figure standing on top of its own dot.
+
+The accuracy halo is not part of the handover. It is what the observation actually knows, and a body stands inside it rather than instead of it.
+
+The handover only happens when a body is actually coming. With no study chosen there is nothing to hand over to, so the marker holds at every scale — a person must never disappear on the way in.
+
+## Who is drawn
+
+Two bodies, both belonging to this client:
+
+- **the Bond's own**, standing where this device observed itself;
+- **its Avaia's**, standing beside it in a different study so the two are told apart at a glance.
+
+An Avaia is this Bond's own AI counterpart, so where it stands is local presentation the client composes for itself. It accompanies its Bond, and a new observation is somewhere to walk to rather than somewhere to appear: it moves at walking pace and plays its walk while it is going. None of that is a shared-world fact, none of it is written back, and reduced motion arrives at the same place without the journey.
+
+No other identity is drawn. Nothing in the client carries a position for another Bond, and a body invented for one would be a presence claim the protocol never made.
+
 ## Known data-bound limits
 
 The visual reference is intent, not evidence. Features are rendered only when the published same-origin map data supports them.

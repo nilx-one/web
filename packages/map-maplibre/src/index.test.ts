@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { MAP_BODY_HANDOVER_ZOOM } from "@nilx-one/map-contract";
 import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
 
@@ -434,6 +435,67 @@ describe("observed device position", () => {
     ).toBeDefined();
     expect(fakeMap.setStyle).not.toHaveBeenCalled();
     expect(fakeMap.remove).not.toHaveBeenCalled();
+  });
+
+  // The marker and a body are one representation of one person. Without a body
+  // coming, the point has to hold at every scale or the person disappears on
+  // the way in.
+  it("keeps the marker at every scale when nothing will stand here", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setObservedPositionRole("person");
+    renderer.setObservedPosition(OBSERVED);
+
+    expect(
+      fakeMap.paint.get(`${OBSERVED_POSITION_POINT_LAYER_ID}.circle-opacity`),
+    ).toBe(1);
+    expect(
+      fakeMap.paint.get(`${OBSERVED_POSITION_EDGE_LAYER_ID}.circle-opacity`),
+    ).toBe(0.26);
+  });
+
+  it("hands the marker over to a body across the zoom the body arrives at", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionRole("body");
+
+    const opacity = fakeMap.paint.get(
+      `${OBSERVED_POSITION_POINT_LAYER_ID}.circle-opacity`,
+    ) as [string, unknown[], unknown[], number, number, number, number];
+    expect(opacity[0]).toBe("interpolate");
+    expect(opacity[2]).toEqual(["zoom"]);
+    // Fully drawn below the handover, gone above it, and the body's own
+    // threshold sits between the two.
+    expect(opacity[4]).toBe(1);
+    expect(opacity[6]).toBe(0);
+    expect(opacity[3]).toBeLessThan(MAP_BODY_HANDOVER_ZOOM);
+    expect(opacity[5]).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
+
+    // The accuracy halo is what the observation actually knows, so it is never
+    // handed over: a body stands inside it, not instead of it.
+    expect(
+      fakeMap.paint.get(
+        `${OBSERVED_POSITION_ACCURACY_LAYER_ID}.circle-opacity`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("changes the handover without rebuilding the marker under it", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionRole("body");
+    renderer.setObservedPositionRole("person");
+
+    expect(fakeMap.addSource).toHaveBeenCalledOnce();
+    expect(fakeMap.addLayer).toHaveBeenCalledTimes(3);
+    expect(
+      fakeMap.paint.get(`${OBSERVED_POSITION_POINT_LAYER_ID}.circle-opacity`),
+    ).toBe(1);
   });
 
   it("clears every location resource when the observation is withdrawn", () => {
