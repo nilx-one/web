@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvatarModel } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import {
@@ -18,6 +19,7 @@ import {
   createMapRendererDouble,
   observation,
 } from "../../../../../tests/support/doubles";
+import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import {
   createAvaiaSlugViewState,
   createProfileSlugViewState,
@@ -44,6 +46,8 @@ interface ViewOverrides {
   onPrepareAvaia?: () => void;
   slugEdit?: AddressSlugViewState;
   avaiaEdit?: AddressSlugViewState;
+  avatarChoice?: ReturnType<typeof createAvatarChoiceViewState>;
+  onAvatarChoice?: (model: "sky-study" | "dasha-study" | "kai-study") => void;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -75,6 +79,12 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.avaiaEdit === undefined
       ? {}
       : { avaiaEdit: overrides.avaiaEdit }),
+    ...(overrides.avatarChoice === undefined
+      ? {}
+      : { avatarChoice: overrides.avatarChoice }),
+    ...(overrides.onAvatarChoice === undefined
+      ? {}
+      : { onAvatarChoice: overrides.onAvatarChoice }),
     ...(overrides.onSlugChange === undefined
       ? {}
       : { onSlugChange: overrides.onSlugChange }),
@@ -301,6 +311,63 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByRole("link", { name: /Connect with Discord/i }),
     ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
+  });
+
+  it("offers the three studies, assigns none, and draws no fallback body", async () => {
+    const onAvatarChoice = vi.fn();
+    const mapRenderer = renderer();
+    renderView({
+      section: "identity",
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState(undefined, undefined),
+      onAvatarChoice,
+    });
+
+    for (const name of ["Sky", "Dasha", "Kai"]) {
+      expect(
+        screen.getByRole("radio", { name: new RegExp(name) }),
+      ).not.toBeChecked();
+    }
+    expect(
+      screen.getByText(/no avatar is drawn until you choose/i),
+    ).toBeVisible();
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    expect(mapRenderer.avatars).toBeDefined();
+    expect(vi.mocked(mapRenderer.avatars!.upsert)).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Dasha/ }));
+
+    expect(onAvatarChoice).toHaveBeenCalledExactlyOnceWith("dasha-study");
+  });
+
+  it("reports a newer stored study without substituting another body", () => {
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState(
+        "future-study" as AvatarModel,
+        undefined,
+      ),
+    });
+
+    expect(
+      screen.getByText(/future-study, which this client cannot display/i),
+    ).toBeVisible();
+    for (const name of ["Sky", "Dasha", "Kai"]) {
+      expect(
+        screen.getByRole("radio", { name: new RegExp(name) }),
+      ).not.toBeChecked();
+    }
+  });
+
+  it("marks the chosen study and locks the picker while it saves", () => {
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("sky-study", "kai-study"),
+    });
+
+    expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Sky/ })).toBeDisabled();
   });
 
   it("shows each connected provider as its own control", () => {

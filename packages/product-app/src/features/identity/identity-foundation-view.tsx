@@ -19,6 +19,7 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import type { AvatarChoiceViewState } from "./avatar-choice-view-model";
 import type {
   IdentityFoundationViewModel,
   IdentityViewState,
@@ -43,6 +44,11 @@ export interface IdentityFoundationViewProps {
    */
   pubDressUrlResolution?: PubDressLabelResolutionResult;
   onAcknowledgeRecovery(challenge: string): void;
+  /** The body a new Bond picked, or nothing when it chose to decide later. */
+  onAvatarChoice?(
+    model: AvatarChoiceViewState["options"][number]["model"],
+  ): void;
+  onSkipAvatarChoice?(): void;
   onCredentialAutofill(selection: PubDressSelection, password: string): void;
   onForgetRemembered(): void;
   onLogout(): void;
@@ -171,6 +177,8 @@ function VisibilityGlyph({ visible }: { visible: boolean }) {
 
 function heading(identity: IdentityViewState): string {
   switch (identity.kind) {
+    case "avatar-choice":
+      return "Choose your body.";
     case "provider-password":
       return "Create your password.";
     case "recovery-key":
@@ -199,6 +207,8 @@ function heading(identity: IdentityViewState): string {
 
 function lede(identity: IdentityViewState): string {
   switch (identity.kind) {
+    case "avatar-choice":
+      return "This is how the world will draw you. You can change it any time in your profile.";
     case "provider-password":
       return `Use this password to sign in to the same Bond outside ${identity.provider}.`;
     case "recovery-key":
@@ -245,6 +255,49 @@ function ProviderRow() {
           <small>later</small>
         </button>
       </div>
+    </section>
+  );
+}
+
+function AvatarChoiceView({
+  state,
+  onChoose,
+  onSkip,
+}: {
+  state: Extract<IdentityViewState, { kind: "avatar-choice" }>;
+  onChoose(model: AvatarChoiceViewState["options"][number]["model"]): void;
+  onSkip(): void;
+}) {
+  return (
+    <section className="avatar-surface" aria-label="Avatar study">
+      <span className="surface-kicker">{state.pubDress}</span>
+      <ul className="avatar-gallery">
+        {state.choice.options.map((option) => (
+          <li key={option.model}>
+            <button
+              className={`avatar-card${option.selected ? " avatar-card--selected" : ""}`}
+              type="button"
+              disabled={state.choice.busy}
+              aria-pressed={option.selected}
+              onClick={() => onChoose(option.model)}
+            >
+              {/* A still of the study itself, so the card cannot promise a
+                  body the world would not draw. */}
+              <img src={option.previewUrl} alt="" width={210} height={450} />
+              <strong>{option.name}</strong>
+              <small>{option.detail}</small>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {state.choice.error === undefined ? null : (
+        <p className="identity-error" role="alert">
+          {state.choice.error}
+        </p>
+      )}
+      <button className="text-action" type="button" onClick={onSkip}>
+        Decide later
+      </button>
     </section>
   );
 }
@@ -1022,6 +1075,8 @@ export function IdentityFoundationView({
   selection,
   viewModel,
   onAcknowledgeRecovery,
+  onAvatarChoice,
+  onSkipAvatarChoice,
   onCredentialAutofill,
   onForgetRemembered,
   onLogout,
@@ -1084,6 +1139,12 @@ export function IdentityFoundationView({
                 onResolvePubDress={onResolvePubDress}
                 onSelectionChange={onSelectionChange}
                 onSubmit={onSubmit}
+              />
+            ) : viewModel.identity.kind === "avatar-choice" ? (
+              <AvatarChoiceView
+                state={viewModel.identity}
+                onChoose={(model) => onAvatarChoice?.(model)}
+                onSkip={() => onSkipAvatarChoice?.()}
               />
             ) : viewModel.identity.kind === "recovery-key" ? (
               <RecoveryKeyView

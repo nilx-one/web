@@ -78,6 +78,7 @@
 }
 
 .identity-form,
+.avatar-surface,
 .recovery-surface,
 .authenticated-surface,
 .identity-message {
@@ -951,4 +952,55 @@
 .pub-dress-url-ascii code {
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   overflow-wrap: anywhere;
+}
+
+/* Three studies, side by side, each showing itself. */
+.avatar-surface {
+  gap: 16px;
+  justify-items: center;
+}
+
+.avatar-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.avatar-card {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 4px 12px;
+  border: 1px solid var(--glass-border, #ffffff33);
+  border-radius: 18px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.avatar-card img {
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  object-fit: contain;
+}
+
+.avatar-card small {
+  opacity: 0.68;
+  font-size: 0.76rem;
+}
+
+.avatar-card--selected {
+  border-color: var(--accent, #8a63ff);
+}
+
+.avatar-card:disabled {
+  opacity: 0.6;
+  cursor: default;
 }

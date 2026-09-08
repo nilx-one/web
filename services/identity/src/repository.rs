@@ -101,6 +101,11 @@ impl IdentityRepository {
                 .execute(&self.pool)
                 .await?;
         }
+        if !self.has_identity_column("avatar_model").await? {
+            sqlx::raw_sql(include_str!("../migrations/0005_avatar_model.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
         Ok(())
     }
 
@@ -553,6 +558,35 @@ impl IdentityRepository {
         let record = identity_for_pub_dress_in(&mut transaction, pub_dress).await?;
         transaction.commit().await?;
         Ok(Some(record))
+    }
+
+    /// The avatar a Bond chose, or `None` while it has chosen none.
+    pub async fn avatar_model(&self, pub_dress: &str) -> Result<Option<String>, RepositoryError> {
+        Ok(sqlx::query_scalar::<_, Option<String>>(
+            "SELECT avatar_model FROM identities \
+             WHERE pub_dress = ? AND identity_kind = 'human'",
+        )
+        .bind(pub_dress)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten())
+    }
+
+    /// Records that choice. Returns false when the address is not a human Bond.
+    pub async fn set_avatar_model(
+        &self,
+        pub_dress: &str,
+        model: &str,
+    ) -> Result<bool, RepositoryError> {
+        let updated = sqlx::query(
+            "UPDATE identities SET avatar_model = ? \
+             WHERE pub_dress = ? AND identity_kind = 'human'",
+        )
+        .bind(model)
+        .bind(pub_dress)
+        .execute(&self.pool)
+        .await?;
+        Ok(updated.rows_affected() == 1)
     }
 
     pub async fn password_required(&self, pub_dress: &str) -> Result<bool, RepositoryError> {

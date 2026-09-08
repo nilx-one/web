@@ -2,16 +2,17 @@
 
 A Bond profile presents facts the identity service owns. Most of them are
 consequences — the discriminator chosen at registration, the provider bindings,
-the projections that do not exist yet. Two of them are choices their owner may
-revisit: the Bond's own slug, and the slug of the Avaia it owns.
+the projections that do not exist yet. Three of them are choices their owner may
+revisit: the Bond's own slug, the slug of the Avaia it owns, and the avatar study
+that represents the Bond.
 
 There is one profile surface. Reading the profile and changing it are the same
 screen, because a screen that only shows what a second screen would let you
-change is a detour, not a step. Rows that could only ever read "Not set" are
-gone rather than presented as fields no one can fill, and the providers row is
-what it says: the hosts this Bond is connected through, each its own control.
-What follows a rename — the discriminator and the provider connections — is a
-consequence, never an input.
+change is a detour, not a step. It carries those three choices. Rows that could
+only ever read "Not set" are gone rather than presented as fields no one can
+fill, and the providers row is what it says: the hosts this Bond is connected
+through, each its own control. What follows a rename — the discriminator and the
+provider connections — is a consequence, never an input.
 
 ## Authority
 
@@ -63,13 +64,37 @@ was named — the shared discriminator, which a slug rename never changes, keeps
 canonical. A Bond that predates the Avaia amendment names one here instead of
 waiting for a derivation it has already replaced.
 
+## Choosing an avatar
+
+`POST /api/v1/identity/avatar` records which published study a Bond is
+represented by, under the same authority, CSRF requirement and rate limits as
+the renames. The service accepts only a published model id and stores nothing
+else; the choice is identity state, so it follows the Bond to every host rather
+than living in one device's interface preferences.
+
+A new Bond is offered a body once, right after its address, its password and
+its recovery key — the first moment there is a Bond to represent. The three
+studies are shown as themselves: each card is a still generated from that very
+study, so a picker can never promise a figure the world would not draw.
+"Decide later" is a real answer, and the profile keeps the same picker.
+
+No body is assigned to anyone. An identity with no choice recorded carries no
+model at all, and the world draws no avatar until a person chooses. A client that
+reads a newer explicit model id it cannot render keeps that choice distinct from
+"not chosen" and reports it as unsupported instead of substituting another body.
+The published studies share one skeleton and one set of clips, so choosing
+changes the body a person is represented by and nothing about how it moves. See
+`docs/avatar-rendering.md` for the asset pipeline and what the studies are.
+
 ## Deployment
 
-Identity runtime contract **4** provides both rename endpoints. Profile editing is
-part of the shared product surface, so every client target requires contract 4.
-After merge, package the identity service at contract 4 before activating any
+Identity runtime contract **5** provides both rename endpoints and the avatar
+choice. Profile editing is
+part of the shared product surface, so every client target requires contract 5.
+After merge, package the identity service at contract 5 before activating any
 client; the production orchestrator checks this dependency and fails closed
-without a suitable package. No schema migration and no new environment secret is
-required.
+without a suitable package. The avatar choice adds one nullable column to
+`identities` (migration `0005_avatar_model.sql`, applied on start like every
+earlier one); no new environment secret is required.
 
 © 2026 aiaiaiai · aiaiaiai.org

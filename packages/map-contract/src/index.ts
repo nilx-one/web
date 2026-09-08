@@ -120,9 +120,34 @@ export interface MapRenderer {
   setDimension(dimension: MapDimension): void;
   setObservedPosition(position: MapObservedPosition | null): void;
   setObservedPositionLabel(label: MapObservedPositionLabel | null): void;
+  /**
+   * The avatar surface, present when this renderer draws avatars at all. The
+   * application drives exactly one handle through it — the signed-in Bond's
+   * own body — and an avatar on the map is never evidence of presence.
+   */
+  readonly avatars?: AvatarLayerContract;
 }
 
-export type AvatarModelId = "sky-study" | "dasha-study";
+/**
+ * The published avatar studies. Each is an artistic study with the same
+ * skeleton and the same clips, so choosing one changes the body a person is
+ * represented by and nothing about how it moves.
+ */
+export type AvatarModelId = "sky-study" | "dasha-study" | "kai-study";
+
+/** The published asset version every study is served from. */
+export const AVATAR_ASSET_VERSION = "0.1.0";
+
+/** The still image a picker shows for a study, generated from that study. */
+export function avatarPreviewUrl(modelId: AvatarModelId): string {
+  return `/avatars/${AVATAR_ASSET_VERSION}/${modelId}.png`;
+}
+
+export const AVATAR_MODEL_IDS: readonly AvatarModelId[] = [
+  "sky-study",
+  "dasha-study",
+  "kai-study",
+];
 export type AvatarClipId =
   "idle" | "walk" | "turn_in_place" | "wake" | "quiesce";
 
@@ -164,3 +189,36 @@ export const DEFAULT_MAP_CAMERA: MapCamera = {
 
 export const DEFAULT_MAP_APPEARANCE: MapAppearance = "light";
 export const DEFAULT_MAP_DIMENSION: MapDimension = "volumetric";
+
+const AMBIENT_CLIPS: readonly AvatarClipId[] = [
+  "idle",
+  "walk",
+  "turn_in_place",
+];
+const AMBIENT_SLOT_MS = 8_000;
+
+export interface AmbientAvatarSample {
+  readonly clipId: AvatarClipId;
+  readonly clipPhase: number;
+}
+
+/** Pure, offline ambient sampling. No inference and no network input. */
+export function sampleAmbientAvatar(
+  seed: number,
+  timeMs: number,
+  reducedMotion = false,
+): AmbientAvatarSample {
+  if (reducedMotion) {
+    return { clipId: "idle", clipPhase: 0 };
+  }
+  const slot = Math.floor(Math.max(0, timeMs) / AMBIENT_SLOT_MS);
+  let value = (seed ^ Math.imul(slot + 1, 0x9e3779b1)) >>> 0;
+  value ^= value << 13;
+  value ^= value >>> 17;
+  value ^= value << 5;
+  const clipId = AMBIENT_CLIPS[(value >>> 0) % AMBIENT_CLIPS.length] ?? "idle";
+  return {
+    clipId,
+    clipPhase: (Math.max(0, timeMs) % AMBIENT_SLOT_MS) / AMBIENT_SLOT_MS,
+  };
+}
