@@ -29,7 +29,11 @@ pub struct ProviderLinkRepository {
 
 impl ProviderLinkRepository {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
-        let max_connections = if database_url.contains(":memory:") { 1 } else { 5 };
+        let max_connections = if database_url.contains(":memory:") {
+            1
+        } else {
+            5
+        };
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(false)
             .foreign_keys(true)

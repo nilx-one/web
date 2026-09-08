@@ -80,11 +80,7 @@ async fn main() {
         repository.clone(),
         provider_links,
         native_auth.clone(),
-        BrowserOAuthConfig::new(
-            public_origin,
-            telegram_browser_oauth,
-            discord_credentials,
-        ),
+        BrowserOAuthConfig::new(public_origin, telegram_browser_oauth, discord_credentials),
     );
     let api = api::router(
         repository.clone(),
@@ -117,7 +113,9 @@ fn oauth_credentials_from_environment(
     client_secret_key: &str,
     label: &str,
 ) -> Option<OAuthClientCredentials> {
-    let client_id = env::var(client_id_key).ok().filter(|value| !value.is_empty());
+    let client_id = env::var(client_id_key)
+        .ok()
+        .filter(|value| !value.is_empty());
     let client_secret = env::var(client_secret_key)
         .ok()
         .filter(|value| !value.is_empty());
@@ -128,7 +126,10 @@ fn oauth_credentials_from_environment(
             Some(OAuthClientCredentials::new(client_id, client_secret))
         }
         (None, None) => {
-            info!(provider = label, "provider authentication is not configured");
+            info!(
+                provider = label,
+                "provider authentication is not configured"
+            );
             None
         }
         _ => panic!("{client_id_key} and {client_secret_key} must be configured together"),

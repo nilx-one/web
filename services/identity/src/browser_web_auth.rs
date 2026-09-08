@@ -206,7 +206,10 @@ impl SignedCookie {
     fn issue<T: Serialize>(&self, domain: &str, payload: &T) -> Option<String> {
         let encoded = URL_SAFE_NO_PAD.encode(serde_json::to_vec(payload).ok()?);
         let signature = self.digester.digest(domain, &encoded);
-        Some(format!("v1.{encoded}.{}", URL_SAFE_NO_PAD.encode(signature)))
+        Some(format!(
+            "v1.{encoded}.{}",
+            URL_SAFE_NO_PAD.encode(signature)
+        ))
     }
 
     fn verify<T: DeserializeOwned>(&self, domain: &str, value: &str) -> Option<T> {
@@ -241,11 +244,7 @@ async fn start_browser_auth(
     headers: HeaderMap,
     Query(query): Query<BrowserAuthStartQuery>,
 ) -> Response {
-    let Some(provider) = query
-        .provider
-        .as_deref()
-        .and_then(BrowserProvider::parse)
-    else {
+    let Some(provider) = query.provider.as_deref().and_then(BrowserProvider::parse) else {
         return no_store_error(
             StatusCode::BAD_REQUEST,
             "browser_provider_invalid",
@@ -365,11 +364,11 @@ async fn telegram_callback(
     headers: HeaderMap,
     Query(query): Query<OAuthCallbackQuery>,
 ) -> Response {
-    let transaction = match callback_transaction(&state, &headers, &query, BrowserProvider::Telegram)
-    {
-        Ok(value) => value,
-        Err(response) => return response,
-    };
+    let transaction =
+        match callback_transaction(&state, &headers, &query, BrowserProvider::Telegram) {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
     let Some(client) = state.config.telegram.as_ref() else {
         return callback_failure("telegram_browser_auth_not_configured");
     };
@@ -526,7 +525,12 @@ fn callback_transaction(
     };
     if transaction.provider != provider
         || transaction.expires_at <= now
-        || transaction.state.as_bytes().ct_eq(query_state.as_bytes()).unwrap_u8() != 1
+        || transaction
+            .state
+            .as_bytes()
+            .ct_eq(query_state.as_bytes())
+            .unwrap_u8()
+            != 1
     {
         return Err(callback_failure("provider_callback_invalid"));
     }
@@ -619,7 +623,11 @@ async fn native_session_identity(
         .native_auth
         .secret_digester()
         .digest("native-session", &token);
-    state.repository.find_native_session(&hash, now).await.ok()?
+    state
+        .repository
+        .find_native_session(&hash, now)
+        .await
+        .ok()?
 }
 
 async fn issue_native_session(
@@ -632,7 +640,11 @@ async fn issue_native_session(
         Err(_) => return callback_failure("provider_authentication_unavailable"),
     };
     if identity.avaia_pub_dress.is_none() {
-        identity = match state.repository.reconcile_owned_avaia(&pub_dress, now).await {
+        identity = match state
+            .repository
+            .reconcile_owned_avaia(&pub_dress, now)
+            .await
+        {
             Ok(Some(value)) => value,
             _ => return callback_failure("provider_authentication_unavailable"),
         };
@@ -669,7 +681,11 @@ async fn issue_native_session(
         [
             clear_cookie(OAUTH_TRANSACTION_COOKIE),
             clear_cookie(PENDING_PROVIDER_COOKIE),
-            secure_cookie(SESSION_COOKIE, &token, state.native_auth.session_ttl_seconds),
+            secure_cookie(
+                SESSION_COOKIE,
+                &token,
+                state.native_auth.session_ttl_seconds,
+            ),
             secure_cookie(
                 REMEMBERED_BOND_COOKIE,
                 &remembered,
@@ -976,7 +992,12 @@ struct ApiError {
 }
 
 fn no_store_error(status: StatusCode, code: &'static str, message: &'static str) -> Response {
-    no_store_json(status, ErrorEnvelope { error: ApiError { code, message } })
+    no_store_json(
+        status,
+        ErrorEnvelope {
+            error: ApiError { code, message },
+        },
+    )
 }
 
 fn no_store_json<T: Serialize>(status: StatusCode, body: T) -> Response {
