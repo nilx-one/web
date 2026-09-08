@@ -15,10 +15,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    IdentityRepository, PubDressLabel,
-    rate_limit::AttemptLimiter,
-};
+use crate::{IdentityRepository, PubDressLabel, rate_limit::AttemptLimiter};
 
 const MAX_REQUEST_BYTES: usize = 2 * 1024;
 const PUBLIC_ZONE: &str = "nilx.one";
@@ -31,7 +28,10 @@ struct PublicApiState {
 
 pub fn router(repository: IdentityRepository) -> Router {
     Router::new()
-        .route("/api/v1/identity/url/resolve", post(resolve_pub_dress_label))
+        .route(
+            "/api/v1/identity/url/resolve",
+            post(resolve_pub_dress_label),
+        )
         .route("/api/v1/identity/public", get(read_public_identity))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(PublicApiState {
@@ -89,17 +89,18 @@ async fn resolve_pub_dress_label(
     }
 }
 
-async fn read_public_identity(
-    State(state): State<PublicApiState>,
-    headers: HeaderMap,
-) -> Response {
+async fn read_public_identity(State(state): State<PublicApiState>, headers: HeaderMap) -> Response {
     let Some(label) = public_label_from_host(&headers) else {
         return not_found();
     };
 
     match state.repository.find_by_pub_dress_label(&label).await {
         Ok(Some(record)) => {
-            let avatar_model = match state.repository.avatar_model(&record.identity.pub_dress).await {
+            let avatar_model = match state
+                .repository
+                .avatar_model(&record.identity.pub_dress)
+                .await
+            {
                 Ok(value) => value,
                 Err(error) => {
                     tracing::error!(%error, "public Bond avatar lookup failed");
