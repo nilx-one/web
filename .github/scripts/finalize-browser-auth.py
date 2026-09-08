@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import json
+import re
 
 
 def replace_once(path: str, old: str, new: str) -> None:
@@ -16,24 +17,18 @@ def replace_once(path: str, old: str, new: str) -> None:
     file.write_text(text.replace(old, new, 1))
 
 
-def replace_exact(path: str, old: str, new: str, expected: int) -> None:
-    file = Path(path)
-    text = file.read_text()
-    count = text.count(old)
-    if count != expected:
-        raise SystemExit(
-            f"{path}: expected {expected} matches, found {count}: {old[:100]!r}"
-        )
-    file.write_text(text.replace(old, new))
-
-
 rust = "services/identity/src/browser_web_auth.rs"
-replace_exact(
-    rust,
-    "            Err(response) => return response,",
-    "            Err(code) => return callback_failure(code),",
-    2,
+rust_file = Path(rust)
+rust_text, callback_arm_count = re.subn(
+    r"(?m)^(\s*)Err\(response\) => return response,$",
+    r"\1Err(code) => return callback_failure(code),",
+    rust_file.read_text(),
 )
+if callback_arm_count != 2:
+    raise SystemExit(
+        f"{rust}: expected two callback error arms, found {callback_arm_count}"
+    )
+rust_file.write_text(rust_text)
 replace_once(
     rust,
     ") -> Result<OAuthTransaction, Response> {",
