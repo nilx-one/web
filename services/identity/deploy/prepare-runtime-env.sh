@@ -27,8 +27,31 @@ read_existing_value() {
   ' "$runtime_env"
 }
 
+read_provider_value() {
+  key="$1"
+  awk -v wanted="$key" '
+    index($0, wanted "=") == 1 {
+      sub(/^[^=]*=/, "")
+      print
+      exit
+    }
+  ' "$provider_env"
+}
+
 generate_secret() {
   od -An -N32 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+validate_pair() {
+  name="$1"
+  first="$2"
+  second="$3"
+  if [ -n "$first" ] || [ -n "$second" ]; then
+    if [ -z "$first" ] || [ -z "$second" ]; then
+      echo "$name credentials must be configured together" >&2
+      exit 1
+    fi
+  fi
 }
 
 native_auth_secret="$(read_existing_value NATIVE_AUTH_SECRET)"
@@ -50,33 +73,27 @@ if grep -Eq '^(NATIVE_AUTH_SECRET|PASSWORD_PEPPER)=' "$provider_env"; then
   exit 1
 fi
 
-telegram_token="$(awk '
-  index($0, "TELOXIDE_TOKEN=") == 1 {
-    sub(/^[^=]*=/, "")
-    print
-    exit
-  }
-' "$provider_env")"
+telegram_token="$(read_provider_value TELOXIDE_TOKEN)"
 test -n "$telegram_token"
 
-discord_client_id="$(awk '
-  index($0, "DISCORD_CLIENT_ID=") == 1 {
-    sub(/^[^=]*=/, "")
-    print
-    exit
-  }
-' "$provider_env")"
-discord_client_secret="$(awk '
-  index($0, "DISCORD_CLIENT_SECRET=") == 1 {
-    sub(/^[^=]*=/, "")
-    print
-    exit
-  }
-' "$provider_env")"
-if [ -n "$discord_client_id" ] || [ -n "$discord_client_secret" ]; then
-  test -n "$discord_client_id"
-  test -n "$discord_client_secret"
+public_origin="$(read_provider_value PUBLIC_ORIGIN)"
+if [ -n "$public_origin" ]; then
+  case "$public_origin" in
+    https://*) ;;
+    *)
+      echo "PUBLIC_ORIGIN must use https" >&2
+      exit 1
+      ;;
+  esac
 fi
+
+telegram_oidc_client_id="$(read_provider_value TELEGRAM_OIDC_CLIENT_ID)"
+telegram_oidc_client_secret="$(read_provider_value TELEGRAM_OIDC_CLIENT_SECRET)"
+validate_pair "Telegram browser OAuth" "$telegram_oidc_client_id" "$telegram_oidc_client_secret"
+
+discord_client_id="$(read_provider_value DISCORD_CLIENT_ID)"
+discord_client_secret="$(read_provider_value DISCORD_CLIENT_SECRET)"
+validate_pair "Discord OAuth" "$discord_client_id" "$discord_client_secret"
 
 next_env="$(mktemp "$runtime_dir/.runtime.env.XXXXXX")"
 trap 'rm -f "$next_env"' EXIT HUP INT TERM
