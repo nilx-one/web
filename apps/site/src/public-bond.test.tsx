@@ -24,15 +24,16 @@ describe("public Bond host routing", () => {
   });
 
   it("keeps the readable Unicode address returned by stored allocation", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          pub_dress: "0x0небо",
-          pub_dress_url: "https://0x0небо.nilx.one",
-          avaia_pub_dress: "0небai",
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            pub_dress: "0x0небо",
+            pub_dress_url: "https://0x0небо.nilx.one",
+            avaia_pub_dress: "0небai",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
     ) as unknown as typeof fetch;
 
     await expect(readPublicBond(fetchImpl)).resolves.toEqual({
@@ -50,14 +51,15 @@ describe("public Bond host routing", () => {
   });
 
   it("renders the pub_dress rather than the DNS transport label", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          pub_dress: "0x0небо",
-          pub_dress_url: "https://0x0небо.nilx.one",
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            pub_dress: "0x0небо",
+            pub_dress_url: "https://0x0небо.nilx.one",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
     ) as unknown as typeof fetch;
 
     render(<PublicBondPage fetchImpl={fetchImpl} />);
