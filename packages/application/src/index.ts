@@ -41,6 +41,7 @@ export {
   type AvatarModel,
   type AvatarModelResult,
   type PublishedAvatarModel,
+  type StoredAvatarModel,
   RenamePubDressSlug,
   type PubDressRenameResult,
   SetProviderPassword,

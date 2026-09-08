@@ -1,7 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AvatarModel } from "@nilx-one/application";
 import { describe, expect, it } from "vitest";
 
 import { createAvatarChoiceViewState } from "./avatar-choice-view-model";
@@ -43,10 +42,7 @@ describe("avatar choice", () => {
   });
 
   it("keeps a newer explicit model distinct from no choice", () => {
-    const state = createAvatarChoiceViewState(
-      "future-study" as AvatarModel,
-      undefined,
-    );
+    const state = createAvatarChoiceViewState("future-study", undefined);
 
     expect(state.unchosen).toBe(false);
     expect(state.rendered).toBeUndefined();

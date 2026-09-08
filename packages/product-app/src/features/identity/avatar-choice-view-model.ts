@@ -5,9 +5,8 @@ import {
   AVATAR_MODELS,
   type AvatarModel,
   type AvatarModelResult,
+  type StoredAvatarModel,
 } from "@nilx-one/application";
-
-type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
 
 /**
  * The body a Bond is represented by. A stored model may be newer than this
@@ -15,7 +14,7 @@ type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
  * nothing, and only a model this client publishes may reach the renderer.
  */
 export interface AvatarOptionViewState {
-  readonly model: PublishedAvatarModel;
+  readonly model: AvatarModel;
   /** The study's own name. */
   readonly name: string;
   /** How the study reads, in the person's own terms rather than a category. */
@@ -26,7 +25,7 @@ export interface AvatarOptionViewState {
 export interface AvatarChoiceViewState {
   readonly options: readonly AvatarOptionViewState[];
   /** The model the world may draw right now. Absent until a supported choice exists. */
-  readonly rendered?: PublishedAvatarModel;
+  readonly rendered?: AvatarModel;
   /** True only while no choice has been recorded for this Bond. */
   readonly unchosen: boolean;
   /** A stored model id this client cannot render without a newer contract. */
@@ -36,16 +35,14 @@ export interface AvatarChoiceViewState {
 }
 
 const STUDIES: Readonly<
-  Record<PublishedAvatarModel, { name: string; detail: string }>
+  Record<AvatarModel, { name: string; detail: string }>
 > = {
   "sky-study": { name: "Sky", detail: "masculine study" },
   "dasha-study": { name: "Dasha", detail: "feminine study" },
   "kai-study": { name: "Kai", detail: "non-binary study" },
 };
 
-function isPublishedAvatarModel(
-  model: AvatarModel,
-): model is PublishedAvatarModel {
+function isPublishedAvatarModel(model: StoredAvatarModel): model is AvatarModel {
   return (AVATAR_MODELS as readonly string[]).includes(model);
 }
 
@@ -64,7 +61,7 @@ function chooseError(result: AvatarModelResult): string | undefined {
 }
 
 export function createAvatarChoiceViewState(
-  chosen: AvatarModel | undefined,
+  chosen: StoredAvatarModel | undefined,
   pending: AvatarModel | undefined,
   result?: AvatarModelResult,
 ): AvatarChoiceViewState {

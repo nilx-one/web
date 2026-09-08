@@ -9,14 +9,17 @@
 export const AVATAR_MODELS = ["sky-study", "dasha-study", "kai-study"] as const;
 
 export type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
+/** A model this client publishes and is allowed to send as a new choice. */
+export type AvatarModel = PublishedAvatarModel;
 /** An explicit stored model id, including ids published by a newer runtime. */
-export type AvatarModel = string;
+export type StoredAvatarModel = string;
 
 /**
- * Parses an explicit identity model id without assuming this client publishes
- * it. Rendering code must narrow against `AVATAR_MODELS` before drawing it.
+ * Parses an explicit stored identity model id without assuming this client
+ * publishes it. Rendering code must narrow against `AVATAR_MODELS` before
+ * drawing it.
  */
-export function isAvatarModel(value: unknown): value is AvatarModel {
+export function isAvatarModel(value: unknown): value is StoredAvatarModel {
   return typeof value === "string" && value.length > 0;
 }
 
@@ -24,7 +27,7 @@ export interface IdentityProjection {
   pubDress: string;
   avaiaPubDress?: string;
   /** The body this Bond chose. Absent only while it has chosen none. */
-  avatarModel?: AvatarModel;
+  avatarModel?: StoredAvatarModel;
   /**
    * The public address allocated for this Bond, absent while the identity
    * service has not allocated one. It is stored, not computed: the fold from a
@@ -208,7 +211,7 @@ export type PubDressRenameResult =
   | { kind: "service-unavailable" };
 
 export interface IdentityAccessPort {
-  chooseAvatarModel(model: PublishedAvatarModel): Promise<AvatarModelResult>;
+  chooseAvatarModel(model: AvatarModel): Promise<AvatarModelResult>;
   renameAvaiaSlug(slug: string): Promise<PubDressRenameResult>;
   renamePubDressSlug(slug: string): Promise<PubDressRenameResult>;
   setProviderPassword(
@@ -388,9 +391,7 @@ export class RegisterProviderIdentity {
 export class ChooseAvatarModel {
   public constructor(private readonly identity: IdentityAccessPort) {}
 
-  public async execute(
-    model: PublishedAvatarModel,
-  ): Promise<AvatarModelResult> {
+  public async execute(model: AvatarModel): Promise<AvatarModelResult> {
     try {
       return await this.identity.chooseAvatarModel(model);
     } catch {
