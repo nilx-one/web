@@ -27,7 +27,11 @@ rm -rf "$runtime_build"
   ./scripts/build_wasm_package.sh "$runtime_build"
 )
 
-printf '%s  %s\n' "$expected_wasm_sha256" "$runtime_build/index_bg.wasm" | sha256sum --check --status
+actual_wasm_sha256="$(sha256sum "$runtime_build/index_bg.wasm" | awk '{print $1}')"
+if [[ "$actual_wasm_sha256" != "$expected_wasm_sha256" ]]; then
+  echo "Core Wasm digest mismatch: expected $expected_wasm_sha256, got $actual_wasm_sha256" >&2
+  exit 1
+fi
 
 cat >"$runtime_build/provenance.json" <<JSON
 {
