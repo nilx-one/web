@@ -13,10 +13,16 @@
   grid-template-rows: 1fr auto;
   place-items: center;
   gap: 2rem;
-  padding: max(2rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
-    max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+  padding:
+    max(2rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.25rem, env(safe-area-inset-bottom))
+    max(1.25rem, env(safe-area-inset-left));
   background:
-    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--public-bond-accent) 11%, transparent), transparent 42rem),
+    radial-gradient(
+      circle at 50% 0%,
+      color-mix(in srgb, var(--public-bond-accent) 11%, transparent),
+      transparent 42rem
+    ),
     Canvas;
   color: CanvasText;
   color-scheme: light dark;
@@ -63,7 +69,11 @@
   overflow-wrap: anywhere;
   color: var(--public-bond-muted);
   font: 500 0.88rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
-  text-decoration-color: color-mix(in srgb, var(--public-bond-accent) 65%, transparent);
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--public-bond-accent) 65%,
+    transparent
+  );
   text-underline-offset: 0.28rem;
 }
 
