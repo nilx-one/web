@@ -40,7 +40,9 @@ class Landmarks:
             # Knee is a deterministic midpoint of the central authoring sections.
             knee = (leg[2] + leg[-3]) / 2
             p["shin_" + side] = knee[[3, 4, 0]]
-            shoe = self.lofts.get(side + "_shoe_upper", self.lofts.get(side + "_boot_foot"))
+            shoe = self.lofts.get(side + "_shoe_upper",
+                                  self.lofts.get(side + "_boot_foot",
+                                                 self.lofts.get(side + "_boot_upper")))
             p["foot_" + side] = shoe[-1][[3, 4, 0]]
             front = shoe[np.argmax(shoe[:, 2])]
             p["toe_" + side] = np.array([front[3], front[4] - front[2] * .65, front[0]])
@@ -50,7 +52,8 @@ class Landmarks:
             p["hand_" + side] = sleeve[-1]
             p["shoulder_" + side] = sleeve[0] * [0.5, 1, 1]
         p["hips"] = (p["thigh_L"] + p["thigh_R"]) / 2
-        coat = self.lofts.get("anorak_shell", self.lofts.get("tailored_jacket"))
+        coat = self.lofts.get("anorak_shell",
+                              self.lofts.get("tailored_jacket", self.lofts.get("overshirt_shell")))
         # Upper torso maximum depth; Dasha's flared hem is not her chest.
         upper_coat = coat[coat[:, 0] >= (coat[0, 0] + coat[-1, 0]) / 2]
         p["chest"] = upper_coat[np.argmax(upper_coat[:, 2])][[3, 4, 0]]

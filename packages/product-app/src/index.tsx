@@ -3,6 +3,7 @@
 
 import {
   AcknowledgeRecoveryKey,
+  ChooseAvatarModel,
   AuthenticateNativeIdentity,
   ForgetRememberedBond,
   LogoutNativeIdentity,
@@ -18,6 +19,7 @@ import {
   formatPubDress,
   type CoreRuntimePort,
   type IdentityAccessPort,
+  type AvatarModel,
   type ProviderPasswordHost,
   type PubDressSelection,
 } from "@nilx-one/application";
@@ -56,6 +58,7 @@ import {
   createPubDressStatusViewState,
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
+import { createAvatarChoiceViewState } from "./features/identity/avatar-choice-view-model";
 import {
   createAvaiaSlugViewState,
   createProfileSlugViewState,
@@ -416,6 +419,17 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       await refreshIdentityProjections();
     },
   });
+  // Choosing a body is identity state, so it is saved where the Bond is, not
+  // in this device's interface preferences.
+  const chooseAvatar = useMutation({
+    mutationFn: (model: AvatarModel) =>
+      new ChooseAvatarModel(dependencies.identity).execute(model),
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "chosen") return;
+      await refreshIdentityProjections();
+    },
+  });
   const renameAvaia = useMutation({
     mutationFn: (slug: string) =>
       new RenameAvaiaSlug(dependencies.identity).execute(slug),
@@ -703,6 +717,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         onAvaiaChange={(next: string) => {
           renameAvaia.reset();
           setAvaiaDraft(next);
+        }}
+        avatarChoice={createAvatarChoiceViewState(
+          viewModel.identity.avatarModel,
+          chooseAvatar.isPending ? chooseAvatar.variables : undefined,
+          chooseAvatar.data,
+        )}
+        onAvatarChoice={(model) => {
+          if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
         }}
         onAvaiaSubmit={() => {
           if (avaiaDraft !== undefined && !renameAvaia.isPending) {

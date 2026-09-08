@@ -8,6 +8,12 @@ import type {
   AvatarModelId,
   MapCamera,
 } from "@nilx-one/map-contract";
+// The ambient sampler is contract-level policy: the application chooses the
+// body and the moment, so it must be able to sample without the renderer.
+export {
+  sampleAmbientAvatar,
+  type AmbientAvatarSample,
+} from "@nilx-one/map-contract";
 import {
   MercatorCoordinate,
   type CustomLayerInterface,
@@ -31,40 +37,8 @@ export const AVATAR_ASSET_VERSION = "0.1.0";
 export const AVATAR_ASSET_URLS: Readonly<Record<AvatarModelId, string>> = {
   "sky-study": `/avatars/${AVATAR_ASSET_VERSION}/sky-study.glb`,
   "dasha-study": `/avatars/${AVATAR_ASSET_VERSION}/dasha-study.glb`,
+  "kai-study": `/avatars/${AVATAR_ASSET_VERSION}/kai-study.glb`,
 };
-
-const AMBIENT_CLIPS: readonly AvatarClipId[] = [
-  "idle",
-  "walk",
-  "turn_in_place",
-];
-const AMBIENT_SLOT_MS = 8_000;
-
-export interface AmbientAvatarSample {
-  readonly clipId: AvatarClipId;
-  readonly clipPhase: number;
-}
-
-/** Pure, offline ambient sampling. No inference and no network input. */
-export function sampleAmbientAvatar(
-  seed: number,
-  timeMs: number,
-  reducedMotion = false,
-): AmbientAvatarSample {
-  if (reducedMotion) {
-    return { clipId: "idle", clipPhase: 0 };
-  }
-  const slot = Math.floor(Math.max(0, timeMs) / AMBIENT_SLOT_MS);
-  let value = (seed ^ Math.imul(slot + 1, 0x9e3779b1)) >>> 0;
-  value ^= value << 13;
-  value ^= value >>> 17;
-  value ^= value << 5;
-  const clipId = AMBIENT_CLIPS[(value >>> 0) % AMBIENT_CLIPS.length] ?? "idle";
-  return {
-    clipId,
-    clipPhase: (Math.max(0, timeMs) % AMBIENT_SLOT_MS) / AMBIENT_SLOT_MS,
-  };
-}
 
 type AssetLoader = (
   modelId: AvatarModelId,

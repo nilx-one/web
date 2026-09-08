@@ -18,6 +18,7 @@ import {
   createMapRendererDouble,
   observation,
 } from "../../../../../tests/support/doubles";
+import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import {
   createAvaiaSlugViewState,
   createProfileSlugViewState,
@@ -44,6 +45,8 @@ interface ViewOverrides {
   onPrepareAvaia?: () => void;
   slugEdit?: AddressSlugViewState;
   avaiaEdit?: AddressSlugViewState;
+  avatarChoice?: ReturnType<typeof createAvatarChoiceViewState>;
+  onAvatarChoice?: (model: "sky-study" | "dasha-study" | "kai-study") => void;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -75,6 +78,12 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.avaiaEdit === undefined
       ? {}
       : { avaiaEdit: overrides.avaiaEdit }),
+    ...(overrides.avatarChoice === undefined
+      ? {}
+      : { avatarChoice: overrides.avatarChoice }),
+    ...(overrides.onAvatarChoice === undefined
+      ? {}
+      : { onAvatarChoice: overrides.onAvatarChoice }),
     ...(overrides.onSlugChange === undefined
       ? {}
       : { onSlugChange: overrides.onSlugChange }),
@@ -301,6 +310,40 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByRole("link", { name: /Connect with Discord/i }),
     ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
+  });
+
+  it("offers the three studies and reports that none is chosen yet", () => {
+    const onAvatarChoice = vi.fn();
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState(undefined, undefined),
+      onAvatarChoice,
+    });
+
+    for (const name of ["Sky", "Dasha", "Kai"]) {
+      expect(
+        screen.getByRole("radio", { name: new RegExp(name) }),
+      ).not.toBeChecked();
+    }
+    expect(
+      screen.getByText(
+        /the world draws the non-binary study until you choose/i,
+      ),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Dasha/ }));
+
+    expect(onAvatarChoice).toHaveBeenCalledExactlyOnceWith("dasha-study");
+  });
+
+  it("marks the chosen study and locks the picker while it saves", () => {
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("sky-study", "kai-study"),
+    });
+
+    expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Sky/ })).toBeDisabled();
   });
 
   it("shows each connected provider as its own control", () => {

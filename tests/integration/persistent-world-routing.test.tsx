@@ -60,6 +60,7 @@ function createAuthenticatedIdentity(): IdentityAccessPort {
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
+    chooseAvatarModel: async () => ({ kind: "service-unavailable" }),
     renameAvaiaSlug: async () => ({ kind: "service-unavailable" }),
     renamePubDressSlug: async () => ({ kind: "service-unavailable" }),
     setProviderPassword: async () => ({ kind: "service-unavailable" }),

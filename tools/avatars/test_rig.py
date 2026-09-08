@@ -34,7 +34,7 @@ def read_glb(path):
 
 class RigTests(unittest.TestCase):
     def test_exported_assets(self):
-        for model in ("sky", "dasha"):
+        for model in ("sky", "dasha", "kai"):
             with self.subTest(model=model):
                 path = ASSETS / (model + "-study.glb")
                 manifest = json.loads(path.with_suffix(".manifest.json").read_text())
@@ -85,12 +85,15 @@ class RigTests(unittest.TestCase):
                         self.assertTrue(((weights > 0).sum(axis=1) == 1).all(), part["name"])
 
     def test_shared_clips_are_identical_across_bind_poses(self):
+        # Every study answers the same clip in the same rotations, so a person
+        # choosing a model changes the body and nothing about how it moves.
         a, read_a = read_glb(ASSETS / "sky-study.glb")
-        b, read_b = read_glb(ASSETS / "dasha-study.glb")
-        for clip_a, clip_b in zip(a["animations"], b["animations"], strict=True):
-            self.assertEqual(clip_a["channels"], clip_b["channels"])
-            for x, y in zip(clip_a["samplers"], clip_b["samplers"], strict=True):
-                np.testing.assert_array_equal(read_a(x["output"]), read_b(y["output"]))
+        for model in ("dasha", "kai"):
+            b, read_b = read_glb(ASSETS / (model + "-study.glb"))
+            for clip_a, clip_b in zip(a["animations"], b["animations"], strict=True):
+                self.assertEqual(clip_a["channels"], clip_b["channels"])
+                for x, y in zip(clip_a["samplers"], clip_b["samplers"], strict=True):
+                    np.testing.assert_array_equal(read_a(x["output"]), read_b(y["output"]))
 
     def test_hard_part_uses_one_bone_even_across_nearest_joint_boundary(self):
         skeleton = np.arange(66).reshape(22, 3)

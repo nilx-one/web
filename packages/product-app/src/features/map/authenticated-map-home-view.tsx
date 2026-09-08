@@ -19,6 +19,7 @@ import {
 } from "../../shell/routes";
 import { useShellPresentation } from "../../shell/shell-presentation";
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
+import type { AvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
@@ -38,6 +39,7 @@ import {
   recenterCamera,
 } from "./location-camera-policy";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
+import { AVATAR_HANDLE_ID, createSelfAvatarHandle } from "./avatar-presence";
 import {
   createBondDockViewState,
   type AvaiaAvailability,
@@ -75,6 +77,9 @@ export interface AuthenticatedMapHomeViewProps {
    */
   readonly slugEdit?: AddressSlugViewState;
   readonly avaiaEdit?: AddressSlugViewState;
+  /** The body this Bond is represented by, and the studies it may choose. */
+  readonly avatarChoice?: AvatarChoiceViewState;
+  readonly onAvatarChoice?: (model: AvatarChoiceViewState["rendered"]) => void;
   readonly onSlugChange?: (slug: string) => void;
   readonly onSlugSubmit?: () => void;
   readonly onAvaiaChange?: (slug: string) => void;
@@ -117,6 +122,9 @@ interface IdentityDetailState {
 }
 type AppearancePreference = "light" | "dark" | "auto";
 type ResolvedAppearance = "light" | "dark";
+
+/** One ambient slot: the cadence the sampler itself changes clips on. */
+const AVATAR_AMBIENT_REFRESH_MS = 8_000;
 
 const APPEARANCE_STORAGE_KEY = "nilx-one.interface.appearance";
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
@@ -294,6 +302,8 @@ export function AuthenticatedMapHomeView({
   onPrepareAvaia,
   slugEdit,
   avaiaEdit,
+  avatarChoice,
+  onAvatarChoice,
   onSlugChange,
   onSlugSubmit,
   onAvaiaChange,
@@ -484,6 +494,46 @@ export function AuthenticatedMapHomeView({
    * The identity at the wheel is where the world looks. Focusing it is a camera
    * move to the closest scale this policy allows, never a claim of presence.
    */
+  // The Bond's own body stands where this device observed itself, and only
+  // while that observation exists. The ambient clip is resampled on the slot
+  // boundary rather than per frame: the renderer owns playback, this owns the
+  // choice of clip.
+  useEffect(() => {
+    const avatars = renderer.avatars;
+    const model = avatarChoice?.rendered;
+    if (avatars === undefined || model === undefined) return;
+    if (observedPosition === undefined) {
+      avatars.remove(AVATAR_HANDLE_ID);
+      return;
+    }
+
+    const reducedMotion = prefersReducedMotion();
+    function draw(): void {
+      const handle = createSelfAvatarHandle(
+        pubDress,
+        model as NonNullable<typeof model>,
+        location.state,
+        globalThis.performance.now(),
+        reducedMotion,
+      );
+      if (handle !== null) avatars?.upsert(handle);
+    }
+
+    draw();
+    if (reducedMotion) return () => avatars.remove(AVATAR_HANDLE_ID);
+    const timer = globalThis.setInterval(draw, AVATAR_AMBIENT_REFRESH_MS);
+    return () => {
+      globalThis.clearInterval(timer);
+      avatars.remove(AVATAR_HANDLE_ID);
+    };
+  }, [
+    avatarChoice?.rendered,
+    location.state,
+    observedPosition,
+    pubDress,
+    renderer,
+  ]);
+
   function focusWorldOnWheel(): void {
     if (observedPosition === undefined) return;
     const context = { presentation, dimension, safeArea };
@@ -700,6 +750,40 @@ export function AuthenticatedMapHomeView({
                     onChange={onAvaiaChange}
                     onSubmit={onAvaiaSubmit}
                   />
+                  {avatarChoice === undefined ? null : (
+                    <fieldset className="avatar-choice">
+                      <legend>Avatar</legend>
+                      {avatarChoice.options.map((option) => (
+                        <label
+                          key={option.model}
+                          className="interface-settings__option"
+                        >
+                          <span>
+                            <strong>{option.name}</strong>
+                            <small>{option.detail}</small>
+                          </span>
+                          <input
+                            type="radio"
+                            name="avatar-model"
+                            value={option.model}
+                            checked={option.selected}
+                            disabled={avatarChoice.busy}
+                            onChange={() => onAvatarChoice?.(option.model)}
+                          />
+                        </label>
+                      ))}
+                      <p className="profile-edit__note">
+                        {avatarChoice.unchosen
+                          ? "No study chosen yet — the world draws the non-binary study until you choose."
+                          : "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves."}
+                      </p>
+                      {avatarChoice.error === undefined ? null : (
+                        <p className="profile-edit__error" role="alert">
+                          {avatarChoice.error}
+                        </p>
+                      )}
+                    </fieldset>
+                  )}
                   <dl className="bond-profile__rows">
                     <div>
                       <dt>Providers</dt>

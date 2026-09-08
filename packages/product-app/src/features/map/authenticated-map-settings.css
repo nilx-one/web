@@ -263,6 +263,22 @@
   color: rgba(245, 243, 247, 0.88);
 }
 
+.avatar-choice {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.avatar-choice legend {
+  padding: 0;
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .provider-controls {
   display: inline-flex;
   align-items: center;

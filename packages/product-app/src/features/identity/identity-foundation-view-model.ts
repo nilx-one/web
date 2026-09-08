@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  AvatarModel,
   NativeAuthenticationResult,
   NativeIdentityContextResult,
   NativeRegistrationResult,
@@ -83,6 +84,8 @@ export type IdentityViewState =
       kind: "authenticated";
       pubDress: string;
       avaiaPubDress?: string;
+      /** The body this Bond chose, absent while it has chosen none. */
+      avatarModel?: AvatarModel;
       native: boolean;
     }
   | { kind: "unavailable"; detail: string }
@@ -100,6 +103,12 @@ function projectedAvaia(avaiaPubDress: string | undefined): {
   avaiaPubDress?: string;
 } {
   return avaiaPubDress === undefined ? {} : { avaiaPubDress };
+}
+
+function projectedAvatar(avatarModel: AvatarModel | undefined): {
+  avatarModel?: AvatarModel;
+} {
+  return avatarModel === undefined ? {} : { avatarModel };
 }
 
 export function createPubDressStatusViewState(
@@ -159,6 +168,7 @@ export function createNativeIdentityViewState(
       kind: "authenticated",
       pubDress: authentication.identity.pubDress,
       ...projectedAvaia(authentication.identity.avaiaPubDress),
+      ...projectedAvatar(authentication.identity.avatarModel),
       native: true,
     };
   }
@@ -188,6 +198,7 @@ export function createNativeIdentityViewState(
       kind: "authenticated",
       pubDress: context.identity.pubDress,
       ...projectedAvaia(context.identity.avaiaPubDress),
+      ...projectedAvatar(context.identity.avatarModel),
       native: true,
     };
   }
@@ -260,6 +271,7 @@ export function createProviderIdentityViewState(
         kind: "authenticated",
         pubDress: acknowledgement.identity.pubDress,
         ...projectedAvaia(acknowledgement.identity.avaiaPubDress),
+        ...projectedAvatar(acknowledgement.identity.avatarModel),
         native: false,
       };
     }
@@ -291,6 +303,7 @@ export function createProviderIdentityViewState(
       kind: "authenticated",
       pubDress: registration.identity.pubDress,
       ...projectedAvaia(registration.identity.avaiaPubDress),
+      ...projectedAvatar(registration.identity.avatarModel),
       native: false,
     };
   }
@@ -299,6 +312,7 @@ export function createProviderIdentityViewState(
       kind: "authenticated",
       pubDress: identity.identity.pubDress,
       ...projectedAvaia(identity.identity.avaiaPubDress),
+      ...projectedAvatar(identity.identity.avatarModel),
       native: false,
     };
   }

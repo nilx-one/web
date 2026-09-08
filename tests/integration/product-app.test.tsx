@@ -132,6 +132,7 @@ function createIdentity(
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
+    chooseAvatarModel: async () => ({ kind: "service-unavailable" }),
     renameAvaiaSlug: async () => ({ kind: "service-unavailable" }),
     renamePubDressSlug: async () => ({ kind: "service-unavailable" }),
     setProviderPassword: async () => ({ kind: "service-unavailable" }),
@@ -939,6 +940,57 @@ describe("ProductApp identity", () => {
 
     expect(renameAvaiaSlug).toHaveBeenCalledExactlyOnceWith("vesnai");
     expect(await screen.findByText("Saved. This is 0vesnai.")).toBeVisible();
+  });
+
+  it("chooses an avatar study from the profile and stands it in the world", async () => {
+    const user = userEvent.setup();
+    let avatarModel: "sky-study" | "dasha-study" | "kai-study" | undefined;
+    const chooseAvatarModel = vi
+      .fn<IdentityAccessPort["chooseAvatarModel"]>()
+      .mockImplementation(async (model) => {
+        avatarModel = model;
+        return {
+          kind: "chosen",
+          identity: { pubDress: "0x0sky", avatarModel: model },
+        };
+      });
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+    render(
+      <ProductAppRuntime
+        core={readyCore}
+        host={createHost()}
+        mapRenderer={mapRenderer}
+        identity={createIdentity({
+          readNativeContext: async () => ({
+            kind: "authenticated",
+            identity: {
+              pubDress: "0x0sky",
+              ...(avatarModel === undefined ? {} : { avatarModel }),
+            },
+          }),
+          chooseAvatarModel,
+        })}
+      />,
+    );
+
+    await screen.findByRole("button", { name: "Focus the world on 0x0sky" });
+    await user.click(
+      document.querySelector<HTMLAnchorElement>(
+        'a[href="/identity"]',
+      ) as HTMLAnchorElement,
+    );
+
+    const study = await screen.findByRole("radio", { name: /Kai/ });
+    expect(study).not.toBeChecked();
+    await user.click(study);
+
+    expect(chooseAvatarModel).toHaveBeenCalledExactlyOnceWith("kai-study");
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked(),
+    );
+    // No observation exists in this environment, so no body is placed: an
+    // avatar is drawn where the device saw itself, or not at all.
+    expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
   });
 
   it("accepts a backend-verified native host session without asking for a password", async () => {

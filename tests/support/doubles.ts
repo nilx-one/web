@@ -53,6 +53,13 @@ export function createMapRendererDouble(
       cameraListeners.add(listener);
       return () => cameraListeners.delete(listener);
     }),
+    // The avatar surface a real renderer publishes, so a test can see which
+    // body the application asked the world to draw.
+    avatars: {
+      upsert: vi.fn(),
+      remove: vi.fn(),
+      setCamera: vi.fn(),
+    },
     setAppearance: vi.fn(),
     setDimension: vi.fn(),
     setObservedPosition: vi.fn(),
