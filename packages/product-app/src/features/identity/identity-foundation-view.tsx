@@ -25,7 +25,7 @@ import type {
   PubDressStatusViewState,
 } from "./identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./pub-dress-credential-input";
-import { TelegramPasswordForm } from "./telegram-password-form";
+import { ProviderPasswordForm } from "./provider-password-form";
 import { PubDressUrlField } from "./pub-dress-url-field";
 import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 
@@ -200,7 +200,7 @@ function heading(identity: IdentityViewState): string {
 function lede(identity: IdentityViewState): string {
   switch (identity.kind) {
     case "provider-password":
-      return "Use this password to sign in to the same Bond outside Telegram.";
+      return `Use this password to sign in to the same Bond outside ${identity.provider}.`;
     case "recovery-key":
       return "This is the only native recovery proof. It appears once.";
     case "authenticated":
@@ -1059,7 +1059,7 @@ export function IdentityFoundationView({
               </>
             ) : null}
             {viewModel.identity.kind === "provider-password" ? (
-              <TelegramPasswordForm
+              <ProviderPasswordForm
                 key={viewModel.identity.pubDress}
                 pubDress={viewModel.identity.pubDress}
                 password={password}

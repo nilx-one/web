@@ -78,6 +78,27 @@ function createTelegramHost(): HostPort {
   };
 }
 
+function createDiscordHost(authenticated = true): HostPort {
+  return {
+    getSnapshot: () => ({
+      kind: "discord",
+      available: true,
+      theme: "dark",
+      safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+      authentication: {
+        kind: "discord-oauth",
+        authenticated,
+        verification: "required",
+      },
+    }),
+    subscribe: () => () => undefined,
+    ready: vi.fn(),
+    openExternal: vi.fn(),
+    impact: vi.fn(),
+    geolocation: UNSUPPORTED_GEOLOCATION,
+  };
+}
+
 function createNativeHost(authenticated = true): HostPort {
   return {
     getSnapshot: () => ({
@@ -111,7 +132,7 @@ function createIdentity(
     readProviderIdentity: async () => ({ kind: "not-registered" }),
     recoverNative: async () => ({ kind: "service-unavailable" }),
     registerNative: async () => ({ kind: "service-unavailable" }),
-    setTelegramPassword: async () => ({ kind: "service-unavailable" }),
+    setProviderPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
     resolvePubDress: async (selection) => ({
@@ -656,8 +677,8 @@ describe("ProductApp identity", () => {
   it("creates a Telegram password after address authorization and confirms recovery before entering", async () => {
     window.history.replaceState({}, "", "/telegram/");
     const user = userEvent.setup();
-    const setTelegramPassword = vi
-      .fn<IdentityAccessPort["setTelegramPassword"]>()
+    const setProviderPassword = vi
+      .fn<IdentityAccessPort["setProviderPassword"]>()
       .mockResolvedValue({
         kind: "recovery-key-required",
         identity: { pubDress: "0xaSky" },
@@ -683,7 +704,7 @@ describe("ProductApp identity", () => {
         host={createTelegramHost()}
         identity={createIdentity({
           registerProvider,
-          setTelegramPassword,
+          setProviderPassword,
           acknowledgeRecoveryKey,
         })}
         routerBasepath="/telegram"
@@ -724,14 +745,15 @@ describe("ProductApp identity", () => {
     );
     expect(save).toBeDisabled();
     expect(screen.getByText("Passwords don’t match.")).toBeVisible();
-    expect(setTelegramPassword).not.toHaveBeenCalled();
+    expect(setProviderPassword).not.toHaveBeenCalled();
     await user.clear(screen.getByLabelText("Confirm password"));
     await user.type(
       screen.getByLabelText("Confirm password"),
       "a long Telegram password",
     );
     await user.click(save);
-    expect(setTelegramPassword).toHaveBeenCalledExactlyOnceWith(
+    expect(setProviderPassword).toHaveBeenCalledExactlyOnceWith(
+      "telegram",
       "a long Telegram password",
     );
     expect(await screen.findByText("0x1-rk-test")).toBeVisible();
@@ -786,6 +808,76 @@ describe("ProductApp identity", () => {
       }
     },
   );
+
+  it("creates a Discord password for an authorized Bond and confirms recovery before entering", async () => {
+    const user = userEvent.setup();
+    const setProviderPassword = vi
+      .fn<IdentityAccessPort["setProviderPassword"]>()
+      .mockResolvedValue({
+        kind: "recovery-key-required",
+        identity: { pubDress: "0x0sky" },
+        recoveryKey: "0x1-rk-discord",
+        challenge: "discord-challenge",
+      });
+    const acknowledgeRecoveryKey = vi
+      .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
+      .mockResolvedValue({
+        kind: "authenticated",
+        identity: { pubDress: "0x0sky" },
+      });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createDiscordHost()}
+        identity={createIdentity({
+          readProviderIdentity: async () => ({
+            kind: "registered",
+            identity: { pubDress: "0x0sky" },
+            passwordRequired: true,
+          }),
+          setProviderPassword,
+          acknowledgeRecoveryKey,
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Create your password." }),
+    ).toBeVisible();
+    expect(
+      screen.getAllByText(
+        "Use this password to sign in to the same Bond outside Discord.",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByLabelText("pub_dress")).toHaveValue("0x0sky");
+    const save = screen.getByRole("button", { name: "Save password" });
+    await user.type(
+      screen.getByLabelText("Password"),
+      "a long Discord password",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "a long Discord password",
+    );
+    await user.click(save);
+    expect(setProviderPassword).toHaveBeenCalledExactlyOnceWith(
+      "discord",
+      "a long Discord password",
+    );
+    expect(await screen.findByText("0x1-rk-discord")).toBeVisible();
+    await user.click(
+      screen.getByRole("checkbox", { name: "I saved this recovery key" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
+    expect(
+      await screen.findByRole("button", {
+        name: "Open Bond profile for 0x0sky",
+      }),
+    ).toBeVisible();
+    expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
+      "discord-challenge",
+    );
+  });
 
   it("accepts a backend-verified native host session without asking for a password", async () => {
     const readProviderIdentity = vi

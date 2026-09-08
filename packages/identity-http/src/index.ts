@@ -12,6 +12,7 @@ import {
   type NativeRegistrationResult,
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
+  type ProviderPasswordHost,
   type ProviderPasswordResult,
   type PubDressLabelResolutionResult,
   type PubDressResolutionResult,
@@ -300,14 +301,18 @@ class IdentityHttpAdapter implements IdentityAccessPort {
         };
   }
 
-  public async setTelegramPassword(
+  public async setProviderPassword(
+    host: ProviderPasswordHost,
     password: string,
   ): Promise<ProviderPasswordResult> {
     const authorization = this.authorization();
     if (authorization === undefined) {
       return { kind: "rejected", reason: "authentication-required" };
     }
-    const response = await this.fetch("/api/v1/auth/telegram/password", {
+    // One operation per verified provider: the service resolves the binding
+    // from the credential this adapter already carries, and the path only says
+    // which provider proof is being presented.
+    const response = await this.fetch(`/api/v1/auth/${host}/password`, {
       method: "POST",
       cache: "no-store",
       credentials: "same-origin",
