@@ -6,8 +6,13 @@ import type {
   BondProviderConnections,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
-import type { MapRenderer, MapRendererStatus } from "@nilx-one/map-contract";
 import {
+  MAP_SCALE_ZOOM,
+  type MapRenderer,
+  type MapRendererStatus,
+} from "@nilx-one/map-contract";
+import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -711,6 +716,44 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByText("Map camera focused near this device."),
     ).toBeInTheDocument();
+  });
+
+  // Focusing a Bond is the moment a person expects to see somebody. Unscaled,
+  // a body is about three pixels tall there, so this covers the whole path:
+  // the camera arrives, the body is drawn large enough to read, and it
+  // withdraws again when the world pulls back to where a person is a place.
+  it("draws a readable body at close range and withdraws it when the world pulls back", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const upsert = vi.mocked(mapRenderer.avatars!.upsert);
+    expect(upsert).toHaveBeenCalled();
+
+    act(() => {
+      mapRenderer.moveCamera(
+        { ...mapRenderer.getCamera(), zoom: MAP_SCALE_ZOOM.building },
+        true,
+      );
+    });
+
+    const close = upsert.mock.lastCall?.[0];
+    expect(close).toMatchObject({ modelId: "dasha-study", visible: true });
+    expect(close?.scale).toBeGreaterThan(1);
+
+    act(() => {
+      mapRenderer.moveCamera(
+        { ...mapRenderer.getCamera(), zoom: MAP_SCALE_ZOOM.city },
+        true,
+      );
+    });
+
+    expect(upsert.mock.lastCall?.[0].visible).toBe(false);
   });
 
   it("keeps the world usable when the host has no location capability", async () => {

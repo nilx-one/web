@@ -374,6 +374,9 @@ export function AuthenticatedMapHomeView({
   );
   const focusState: FocusState = focusStateFor(location.state);
   const resolvedAppearance = appearance.resolved;
+  // Zoom alone drives the body's apparent size, so the avatar is not redrawn
+  // for a pan that leaves the scale untouched.
+  const cameraZoom = camera.zoom;
   const contractVersion = runtimeContract(runtime);
   const mapViewModel = createMapFoundationViewModel(mapStatus);
   const activeDetail =
@@ -514,7 +517,9 @@ export function AuthenticatedMapHomeView({
   // The Bond's own body stands where this device observed itself, and only
   // after the Bond chose a study this client can render. The ambient clip is
   // resampled on the slot boundary rather than per frame: the renderer owns
-  // playback, this owns the choice of clip.
+  // playback, this owns the choice of clip. The camera's zoom reaches the body
+  // as apparent size only — it is what lets a person be seen at all when the
+  // ground under them is still far away, and it moves nobody.
   useEffect(() => {
     const avatars = renderer.avatars;
     const model = avatarChoice?.rendered;
@@ -531,13 +536,14 @@ export function AuthenticatedMapHomeView({
     const renderedModel = model;
     const reducedMotion = prefersReducedMotion();
     function draw(): void {
-      const handle = createSelfAvatarHandle(
+      const handle = createSelfAvatarHandle({
         pubDress,
-        renderedModel,
-        location.state,
-        globalThis.performance.now(),
+        model: renderedModel,
+        location: location.state,
+        zoom: cameraZoom,
+        timeMs: globalThis.performance.now(),
         reducedMotion,
-      );
+      });
       if (handle !== null) avatarLayer.upsert(handle);
     }
 
@@ -550,6 +556,7 @@ export function AuthenticatedMapHomeView({
     };
   }, [
     avatarChoice?.rendered,
+    cameraZoom,
     location.state,
     observedPosition,
     pubDress,
