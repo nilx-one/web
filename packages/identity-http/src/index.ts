@@ -3,6 +3,9 @@
 
 import {
   formatPubDress,
+  type BrowserIdentityProvider,
+  type BrowserProviderContextResult,
+  type BrowserProviderLinkResult,
   type IdentityAccessPort,
   type IdentityProjection,
   type NativeAuthenticationResult,
@@ -47,6 +50,10 @@ function parseErrorCode(value: unknown): string | undefined {
     return undefined;
   }
   return typeof value.error.code === "string" ? value.error.code : undefined;
+}
+
+function isBrowserProvider(value: unknown): value is BrowserIdentityProvider {
+  return value === "telegram" || value === "discord";
 }
 
 class IdentityHttpAdapter implements IdentityAccessPort {
@@ -396,6 +403,71 @@ class IdentityHttpAdapter implements IdentityAccessPort {
         return { kind: "rejected", reason: "invalid-character" };
       case "pub_dress_unavailable":
         return { kind: "rejected", reason: "unavailable" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
+  public browserProviderAuthorizationUrl(
+    provider: BrowserIdentityProvider,
+  ): string {
+    return `/api/v1/auth/browser/${provider}/start`;
+  }
+
+  public async readBrowserProviderContext(): Promise<BrowserProviderContextResult> {
+    const response = await this.fetch(
+      "/api/v1/auth/browser/provider/context",
+      {
+        cache: "no-store",
+        credentials: "same-origin",
+      },
+    );
+    const body: unknown = await response.json().catch(() => undefined);
+    if (!response.ok || !isRecord(body) || !isRecord(body.available)) {
+      return { kind: "service-unavailable" };
+    }
+    if (
+      typeof body.available.telegram !== "boolean" ||
+      typeof body.available.discord !== "boolean"
+    ) {
+      return { kind: "service-unavailable" };
+    }
+    const available = {
+      telegram: body.available.telegram,
+      discord: body.available.discord,
+    };
+    if (body.state === "none") {
+      return { kind: "none", available };
+    }
+    if (body.state === "pending" && isBrowserProvider(body.provider)) {
+      return { kind: "pending", provider: body.provider, available };
+    }
+    return { kind: "service-unavailable" };
+  }
+
+  public async linkBrowserProvider(): Promise<BrowserProviderLinkResult> {
+    const response = await this.fetch("/api/v1/auth/browser/provider/link", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "x-0x1-csrf": "1" },
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (
+      response.ok &&
+      isRecord(body) &&
+      body.state === "linked" &&
+      isBrowserProvider(body.provider)
+    ) {
+      return { kind: "linked", provider: body.provider };
+    }
+    switch (parseErrorCode(body)) {
+      case "native_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "provider_proof_required":
+        return { kind: "rejected", reason: "provider-proof-required" };
+      case "provider_already_linked":
+        return { kind: "rejected", reason: "provider-already-linked" };
       default:
         return { kind: "service-unavailable" };
     }
