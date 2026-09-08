@@ -180,7 +180,7 @@ describe("identity HTTP adapter", () => {
   });
 });
 
-describe("Telegram password setup transport", () => {
+describe("Provider password setup transport", () => {
   it("sends only the password with verified host authorization and CSRF protection", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(201, {
@@ -195,7 +195,7 @@ describe("Telegram password setup transport", () => {
       getAuthorization: () => "tma signed",
     });
     await expect(
-      adapter.setTelegramPassword("a private password"),
+      adapter.setProviderPassword("telegram", "a private password"),
     ).resolves.toMatchObject({ kind: "recovery-key-required" });
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/auth/telegram/password",
@@ -210,6 +210,35 @@ describe("Telegram password setup transport", () => {
       }),
     );
   });
+  it("presents the Discord proof to the Discord setup endpoint", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(201, {
+        state: "recovery_key_required",
+        identity: { pub_dress: "0x0sky" },
+        recovery_key: "rk",
+        challenge: "challenge",
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "discord access-1",
+    });
+    await expect(
+      adapter.setProviderPassword("discord", "a private password"),
+    ).resolves.toMatchObject({ kind: "recovery-key-required" });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/auth/discord/password",
+      expect.objectContaining({
+        cache: "no-store",
+        headers: {
+          authorization: "discord access-1",
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ password: "a private password" }),
+      }),
+    );
+  });
   it("does not send a password without provider authentication", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     const adapter = createIdentityHttpAdapter({
@@ -217,7 +246,7 @@ describe("Telegram password setup transport", () => {
       getAuthorization: () => undefined,
     });
     await expect(
-      adapter.setTelegramPassword("a private password"),
+      adapter.setProviderPassword("telegram", "a private password"),
     ).resolves.toEqual({ kind: "rejected", reason: "authentication-required" });
     expect(fetch).not.toHaveBeenCalled();
   });

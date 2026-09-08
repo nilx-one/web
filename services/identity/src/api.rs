@@ -143,6 +143,7 @@ fn router_with_clock(
             "/api/v1/auth/telegram/password",
             post(set_telegram_password),
         )
+        .route("/api/v1/auth/discord/password", post(set_discord_password))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(state)
 }
@@ -987,17 +988,36 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
     }
 }
 
-// Deliberately excludes a client-selected pub_dress and never resets an active password.
 async fn set_telegram_password(
     State(state): State<ApiState>,
     headers: HeaderMap,
     Json(request): Json<ProviderPasswordRequest>,
 ) -> Response {
+    set_provider_password(state, headers, request, crate::IdentityProvider::Telegram).await
+}
+
+async fn set_discord_password(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<ProviderPasswordRequest>,
+) -> Response {
+    set_provider_password(state, headers, request, crate::IdentityProvider::Discord).await
+}
+
+// One operation per verified provider. The route only says which provider proof
+// is presented; the binding, and therefore the owner, is resolved here.
+// Deliberately excludes a client-selected pub_dress and never resets an active password.
+async fn set_provider_password(
+    state: ApiState,
+    headers: HeaderMap,
+    request: ProviderPasswordRequest,
+    expected: crate::IdentityProvider,
+) -> Response {
     if let Some(response) = reject_missing_csrf(&headers) {
         return response;
     }
     let provider = match authenticate(&state, &headers).await {
-        Ok(identity) if identity.provider == crate::IdentityProvider::Telegram => identity,
+        Ok(identity) if identity.provider == expected => identity,
         Ok(_) => return unauthorized(),
         Err(error) => return error.into_response(),
     };
@@ -1008,7 +1028,7 @@ async fn set_telegram_password(
     if let Err(retry_after) = state
         .limiter
         .consume(
-            format!("password-setup:telegram:{}", provider.subject),
+            format!("password-setup:{}:{}", expected.as_str(), provider.subject),
             now,
             8,
             3600,
@@ -1444,6 +1464,7 @@ mod tests {
             Request, StatusCode,
             header::{AUTHORIZATION, CACHE_CONTROL, SET_COOKIE},
         },
+        response::IntoResponse as _,
     };
     use hmac::{Hmac, Mac};
     use serde_json::Value;
@@ -1452,7 +1473,9 @@ mod tests {
     use url::form_urlencoded;
 
     use super::{Clock, router_with_clock};
-    use crate::{IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier};
+    use crate::{
+        DiscordOAuthClient, IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier,
+    };
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
@@ -1497,6 +1520,56 @@ mod tests {
         form_urlencoded::Serializer::new(String::new())
             .extend_pairs(fields)
             .finish()
+    }
+
+    // A stand-in for Discord's user endpoint. The bearer token names the account
+    // it belongs to, so a test can present a bound, an unbound, or a forged proof.
+    async fn discord_oauth() -> DiscordOAuthClient {
+        let api = axum::Router::new().route(
+            "/v10/users/@me",
+            axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                match headers
+                    .get(AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.strip_prefix("Bearer "))
+                    .and_then(|token| token.strip_prefix("access-"))
+                {
+                    Some(user_id) => (
+                        StatusCode::OK,
+                        axum::Json(serde_json::json!({ "id": user_id })),
+                    )
+                        .into_response(),
+                    None => StatusCode::UNAUTHORIZED.into_response(),
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let origin = format!("http://{}", listener.local_addr().expect("address"));
+        tokio::spawn(async move {
+            axum::serve(listener, api)
+                .await
+                .expect("Discord API stand-in");
+        });
+        DiscordOAuthClient::with_api_origin("client-1", "client-secret", origin)
+    }
+
+    async fn discord_app() -> axum::Router {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        router_with_clock(
+            repository,
+            TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
+            Some(discord_oauth().await),
+            NativeAuthConfig::new(
+                "test-auth-secret-that-is-at-least-thirty-two-bytes",
+                "test-password-pepper-that-is-at-least-thirty-two-bytes",
+            )
+            .expect("valid native auth configuration"),
+            Arc::new(StaticClock),
+        )
     }
 
     async fn app() -> axum::Router {
@@ -2054,6 +2127,234 @@ mod tests {
         assert_eq!(
             app.oneshot(sign_in).await.expect("response").status(),
             StatusCode::UNAUTHORIZED
+        );
+    }
+    fn discord_password_request(user_id: &str, body: &str) -> Request<Body> {
+        Request::post("/api/v1/auth/discord/password")
+            .header(AUTHORIZATION, format!("discord access-{user_id}"))
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(body.to_owned()))
+            .expect("request")
+    }
+
+    async fn register_discord_fixture(app: &axum::Router) {
+        let request = Request::post("/api/v1/identity/registration")
+            .header(AUTHORIZATION, "discord access-42")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .expect("request");
+        assert_eq!(
+            app.clone()
+                .oneshot(request)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::CREATED
+        );
+    }
+
+    #[tokio::test]
+    async fn discord_password_requires_recovery_then_supports_native_sign_in_without_reset() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let setup = app
+            .clone()
+            .oneshot(discord_password_request(
+                "42",
+                r#"{"password":"a deliberately long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(setup.status(), StatusCode::CREATED);
+        assert_eq!(setup.headers()[CACHE_CONTROL], "no-store");
+        let setup = json_body(setup).await;
+        assert_eq!(setup["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(setup["state"], "recovery_key_required");
+        assert!(setup.get("password_hash").is_none());
+        let sign_in = || {
+            Request::post("/api/v1/auth/native/session")
+                .header("content-type", "application/json")
+                .header("x-0x1-csrf", "1")
+                .body(Body::from(
+                    r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+                ))
+                .expect("request")
+        };
+        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(
+                serde_json::json!({"challenge":setup["challenge"]}).to_string(),
+            ))
+            .expect("request");
+        assert_eq!(
+            app.clone()
+                .oneshot(acknowledgement)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(sign_in())
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::OK
+        );
+        let reset = app
+            .clone()
+            .oneshot(discord_password_request(
+                "42",
+                r#"{"password":"a different long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(reset.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            json_body(reset).await["error"]["code"],
+            "password_already_set"
+        );
+        let read = Request::get("/api/v1/identity")
+            .header(AUTHORIZATION, "discord access-42")
+            .body(Body::empty())
+            .expect("request");
+        let identity = json_body(app.oneshot(read).await.expect("response")).await;
+        assert_eq!(identity["password_required"], false);
+        assert_eq!(identity["pub_dress"], "0x0sky");
+    }
+
+    #[tokio::test]
+    async fn discord_password_rejects_other_proofs_unbound_accounts_and_selected_owners() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let body = r#"{"password":"a deliberately long password"}"#;
+        let unbound = app
+            .clone()
+            .oneshot(discord_password_request("99", body))
+            .await
+            .expect("response");
+        assert_eq!(unbound.status(), StatusCode::UNAUTHORIZED);
+        let mut forged = discord_password_request("42", body);
+        forged
+            .headers_mut()
+            .insert(AUTHORIZATION, "discord forged".parse().expect("header"));
+        assert_eq!(
+            app.clone()
+                .oneshot(forged)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        // A Telegram proof never sets a Discord-authorized password, and the
+        // Telegram endpoint stays closed to a Discord proof.
+        let mut telegram_proof = discord_password_request("42", body);
+        telegram_proof.headers_mut().insert(
+            AUTHORIZATION,
+            format!("tma {}", signed_init_data(42))
+                .parse()
+                .expect("header"),
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(telegram_proof)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let mut crossed = telegram_password_request(42, body);
+        crossed
+            .headers_mut()
+            .insert(AUTHORIZATION, "discord access-42".parse().expect("header"));
+        assert_eq!(
+            app.clone()
+                .oneshot(crossed)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let mut no_csrf = discord_password_request("42", body);
+        no_csrf.headers_mut().remove("x-0x1-csrf");
+        assert_eq!(
+            app.clone()
+                .oneshot(no_csrf)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+        let selected_owner = discord_password_request(
+            "42",
+            r#"{"password":"a deliberately long password","pub_dress":"0x0other"}"#,
+        );
+        assert_eq!(
+            app.clone()
+                .oneshot(selected_owner)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        let weak = discord_password_request("42", r#"{"password":"password"}"#);
+        let weak = app.oneshot(weak).await.expect("response");
+        assert_eq!(weak.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            json_body(weak).await["error"]["code"],
+            "compromised_password"
+        );
+    }
+
+    #[tokio::test]
+    async fn discord_password_does_not_enable_native_sign_in_before_recovery_acknowledgement() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let setup = app
+            .clone()
+            .oneshot(discord_password_request(
+                "42",
+                r#"{"password":"a deliberately long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(setup.status(), StatusCode::CREATED);
+        let sign_in = Request::post("/api/v1/auth/native/session")
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1")
+            .body(Body::from(
+                r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+            ))
+            .expect("request");
+        assert_eq!(
+            app.oneshot(sign_in).await.expect("response").status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[tokio::test]
+    async fn discord_password_setup_is_rate_limited_before_hashing() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        for _ in 0..8 {
+            assert_eq!(
+                app.clone()
+                    .oneshot(discord_password_request("42", r#"{"password":"short"}"#))
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::UNPROCESSABLE_ENTITY
+            );
+        }
+        assert_eq!(
+            app.oneshot(discord_password_request("42", r#"{"password":"short"}"#))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::TOO_MANY_REQUESTS
         );
     }
 }

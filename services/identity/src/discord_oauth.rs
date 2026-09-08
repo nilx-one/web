@@ -20,7 +20,7 @@ impl DiscordOAuthClient {
         Self::with_api_origin(client_id, client_secret, DISCORD_API_ORIGIN)
     }
 
-    fn with_api_origin(
+    pub(crate) fn with_api_origin(
         client_id: impl Into<String>,
         client_secret: impl Into<String>,
         api_origin: impl Into<String>,

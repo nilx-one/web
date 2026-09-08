@@ -137,6 +137,13 @@ export type ProviderRegistrationResult =
     }
   | { kind: "service-unavailable" };
 
+/**
+ * The provider hosts that can create a native password for the Bond their
+ * verified account already owns. Both endpoints are the same operation under a
+ * different verified provider, so the host is an argument rather than a branch.
+ */
+export type ProviderPasswordHost = "telegram" | "discord";
+
 export type ProviderPasswordResult =
   | Extract<NativeRegistrationResult, { kind: "recovery-key-required" }>
   | {
@@ -151,7 +158,10 @@ export type ProviderPasswordResult =
   | { kind: "service-unavailable" };
 
 export interface IdentityAccessPort {
-  setTelegramPassword(password: string): Promise<ProviderPasswordResult>;
+  setProviderPassword(
+    host: ProviderPasswordHost,
+    password: string,
+  ): Promise<ProviderPasswordResult>;
   acknowledgeRecoveryKey(
     challenge: string,
   ): Promise<NativeAuthenticationResult>;
@@ -322,12 +332,15 @@ export class RegisterProviderIdentity {
   }
 }
 
-export class SetTelegramPassword {
+export class SetProviderPassword {
   public constructor(private readonly identity: IdentityAccessPort) {}
 
-  public async execute(password: string): Promise<ProviderPasswordResult> {
+  public async execute(
+    host: ProviderPasswordHost,
+    password: string,
+  ): Promise<ProviderPasswordResult> {
     try {
-      return await this.identity.setTelegramPassword(password);
+      return await this.identity.setProviderPassword(host, password);
     } catch {
       return { kind: "service-unavailable" };
     }

@@ -27,8 +27,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
-      - name: Resolve locked dependencies
-        run: cargo generate-lockfile --manifest-path services/identity/Cargo.toml
       - name: Check formatting
         run: cargo fmt --manifest-path services/identity/Cargo.toml --all -- --check
       - name: Run Clippy

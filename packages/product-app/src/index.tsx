@@ -11,11 +11,12 @@ import {
   ReadRuntimeReadiness,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
-  SetTelegramPassword,
+  SetProviderPassword,
   ResolvePubDress,
   formatPubDress,
   type CoreRuntimePort,
   type IdentityAccessPort,
+  type ProviderPasswordHost,
   type PubDressSelection,
 } from "@nilx-one/application";
 import {
@@ -103,6 +104,21 @@ function newIdempotencyKey(): string {
     return globalThis.crypto.randomUUID();
   }
   return `0x1-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+// Password setup belongs to a verified provider session. A host without one
+// never reaches this state, and never names a provider the service would trust.
+function providerPasswordHost(
+  kind: HostSnapshot["kind"],
+): ProviderPasswordHost | undefined {
+  switch (kind) {
+    case "telegram":
+      return "telegram";
+    case "discord":
+      return "discord";
+    default:
+      return undefined;
+  }
 }
 
 function validNativePassword(password: string): boolean {
@@ -336,9 +352,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
     },
   });
-  const telegramPassword = useMutation({
-    mutationFn: () =>
-      new SetTelegramPassword(dependencies.identity).execute(password),
+  const providerPassword = useMutation({
+    mutationFn: (host: ProviderPasswordHost) =>
+      new SetProviderPassword(dependencies.identity).execute(host, password),
     gcTime: 0,
     onSuccess: (result) => {
       if (result.kind === "recovery-key-required") setPassword("");
@@ -404,9 +420,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         providerRegistration.data,
         status,
         providerRegistration.isPending ||
-          telegramPassword.isPending ||
+          providerPassword.isPending ||
           recoveryAcknowledgement.isPending,
-        telegramPassword.data,
+        providerPassword.data,
         recoveryAcknowledgement.data,
       );
   const viewModel = createIdentityFoundationViewModel(
@@ -497,9 +513,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
 
   function submitIdentity(): void {
     if (identityState.kind === "provider-password") {
-      if (!identityState.busy && validNativePassword(password)) {
+      const providerHost = providerPasswordHost(host.kind);
+      if (
+        providerHost !== undefined &&
+        !identityState.busy &&
+        validNativePassword(password)
+      ) {
         recoveryAcknowledgement.reset();
-        telegramPassword.mutate();
+        providerPassword.mutate(providerHost);
       }
       return;
     }

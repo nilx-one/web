@@ -6,3 +6,4 @@ coverage/
 
 __pycache__/
 deploy/web/avatars/
+services/identity/target/
