@@ -6,10 +6,10 @@ import type { AvaiaConfigurationState } from "@nilx-one/application";
 /**
  * The Dock presents two identities and which of them is at the wheel.
  *
- * The identity at the wheel sits on the left: activating a Bond brings the
- * world to it. Avaia activation opens its owner-controlled profile surface;
- * runtime handover remains a separate presentation capability. Nothing here
- * writes shared-world state.
+ * Persisted configuration and local runtime availability are independent. A
+ * contract-8 client opens the Avaia profile from its card; an older client that
+ * has no configuration projection keeps the established runtime-only behavior.
+ * Nothing here writes shared-world state.
  */
 
 /** What this device can do about the Avaia runtime right now. */
@@ -96,6 +96,7 @@ export function createBondDockViewState(
 ): BondDockViewState {
   const avaiaAddress = input.avaiaPubDress ?? "Avaia";
   const hasAvaiaAddress = input.avaiaPubDress !== undefined;
+  const hasConfigurationProjection = input.avaiaConfiguration !== undefined;
   const driving = input.wheel;
   const handover: DockHandover =
     driving === "avaia"
@@ -119,25 +120,41 @@ export function createBondDockViewState(
         : `Take the wheel as ${input.pubDress}`,
   });
 
-  const avaia = (seated: "left" | "right"): DockIdentityViewState => ({
-    seat: "avaia",
-    address: avaiaAddress,
-    glyph: "AI",
-    role:
+  const avaia = (seated: "left" | "right"): DockIdentityViewState => {
+    const legacyActionable =
+      seated === "left" ? input.focusable : handover !== undefined;
+    const legacyActionLabel =
       seated === "left"
-        ? "driving"
-        : avaiaRole(input.avaiaConfiguration, input.avaia),
-    tone:
-      seated === "left"
-        ? "ready"
-        : avaiaTone(input.avaiaConfiguration, input.avaia),
-    // Runtime unavailability must never block identity/profile editing.
-    actionable: hasAvaiaAddress,
-    actionLabel:
-      input.avaiaConfiguration === "unconfigured"
-        ? `Set up ${avaiaAddress}`
-        : `Edit ${avaiaAddress}`,
-  });
+        ? `Focus the world on ${avaiaAddress}`
+        : handover === "switch"
+          ? `Hand the wheel to ${avaiaAddress}`
+          : handover === "download"
+            ? `Download the ${avaiaAddress} runtime`
+            : `${avaiaAddress} is unavailable on this device`;
+
+    return {
+      seat: "avaia",
+      address: avaiaAddress,
+      glyph: "AI",
+      role:
+        seated === "left"
+          ? "driving"
+          : avaiaRole(input.avaiaConfiguration, input.avaia),
+      tone:
+        seated === "left"
+          ? "ready"
+          : avaiaTone(input.avaiaConfiguration, input.avaia),
+      // Contract-8 identity editing is available independently of runtime.
+      actionable: hasConfigurationProjection
+        ? hasAvaiaAddress
+        : legacyActionable,
+      actionLabel: hasConfigurationProjection
+        ? input.avaiaConfiguration === "unconfigured"
+          ? `Set up ${avaiaAddress}`
+          : `Edit ${avaiaAddress}`
+        : legacyActionLabel,
+    };
+  };
 
   return {
     wheel: driving,
