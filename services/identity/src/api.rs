@@ -34,6 +34,7 @@ const MAX_REQUEST_BYTES: usize = 8 * 1024;
 const SESSION_COOKIE: &str = "__Host-ox1_session";
 const REMEMBERED_BOND_COOKIE: &str = "__Host-ox1_bond";
 const CSRF_HEADER: &str = "x-0x1-csrf";
+const PUBLIC_ZONE: &str = "nilx.one";
 
 pub trait Clock: Send + Sync {
     fn now_unix_seconds(&self) -> Result<u64, ClockError>;
@@ -470,10 +471,7 @@ async fn authenticate_native_identity(
     }
     authenticated_response(
         &state,
-        IdentityRecord {
-            pub_dress: credential.pub_dress,
-            avaia_pub_dress: None,
-        },
+        IdentityRecord::unresolved(credential.pub_dress),
         now,
         None,
     )
@@ -599,10 +597,7 @@ async fn recover_native_identity(
         Ok(true) => {
             authenticated_response(
                 &state,
-                IdentityRecord {
-                    pub_dress: pub_dress.to_string(),
-                    avaia_pub_dress: None,
-                },
+                IdentityRecord::unresolved(pub_dress.to_string()),
                 now,
                 Some(replacement_recovery_key),
             )
@@ -1733,6 +1728,10 @@ struct IdentityProjection {
     /// absence says this response does not carry one, never that none exists.
     #[serde(skip_serializing_if = "Option::is_none")]
     avatar_model: Option<String>,
+    /// Present only when the repository record carries a persisted public-label
+    /// allocation. The URL itself is a deployment projection, never stored identity state.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub_dress_url: Option<String>,
 }
 
 impl IdentityProjection {
@@ -1746,10 +1745,12 @@ impl IdentityProjection {
 
 impl From<IdentityRecord> for IdentityProjection {
     fn from(identity: IdentityRecord) -> Self {
+        let pub_dress_url = identity.readable_url(PUBLIC_ZONE);
         Self {
             pub_dress: identity.pub_dress,
             avaia_pub_dress: identity.avaia_pub_dress,
             avatar_model: None,
+            pub_dress_url,
         }
     }
 }
@@ -1920,6 +1921,10 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["identity"]["pub_dress"], "0x0sky");
         assert_eq!(body["identity"]["avaia_pub_dress"], "0skai");
+        assert_eq!(
+            body["identity"]["pub_dress_url"],
+            "https://0x0sky.nilx.one"
+        );
         assert!(body.to_string().find("provider_subject").is_none());
     }
 
@@ -2039,6 +2044,10 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["state"], "recovery_key_required");
         assert_eq!(body["identity"]["avaia_pub_dress"], "0Skai");
+        assert_eq!(
+            body["identity"]["pub_dress_url"],
+            "https://0x0sky.nilx.one"
+        );
         assert!(
             body["recovery_key"]
                 .as_str()
@@ -2094,6 +2103,10 @@ mod tests {
         assert_eq!(
             authenticated_context["identity"]["avaia_pub_dress"],
             "0Skai"
+        );
+        assert_eq!(
+            authenticated_context["identity"]["pub_dress_url"],
+            "https://0x0sky.nilx.one"
         );
     }
 
@@ -2190,6 +2203,7 @@ mod tests {
             "invalid_native_credentials"
         );
     }
+
     fn telegram_password_request(user_id: i64, body: &str) -> Request<Body> {
         Request::post("/api/v1/auth/telegram/password")
             .header(AUTHORIZATION, format!("tma {}", signed_init_data(user_id)))
@@ -2298,6 +2312,7 @@ mod tests {
         let identity = json_body(app.oneshot(read).await.expect("response")).await;
         assert_eq!(identity["password_required"], false);
         assert_eq!(identity["pub_dress"], "0x0sky");
+        assert_eq!(identity["pub_dress_url"], "https://0x0sky.nilx.one");
     }
 
     #[tokio::test]
@@ -2415,6 +2430,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS
         );
     }
+
     #[tokio::test]
     async fn telegram_password_does_not_enable_native_sign_in_before_recovery_acknowledgement() {
         let app = app().await;
@@ -2440,6 +2456,7 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
     }
+
     fn discord_password_request(user_id: &str, body: &str) -> Request<Body> {
         Request::post("/api/v1/auth/discord/password")
             .header(AUTHORIZATION, format!("discord access-{user_id}"))
@@ -2535,6 +2552,7 @@ mod tests {
         let identity = json_body(app.oneshot(read).await.expect("response")).await;
         assert_eq!(identity["password_required"], false);
         assert_eq!(identity["pub_dress"], "0x0sky");
+        assert_eq!(identity["pub_dress_url"], "https://0x0sky.nilx.one");
     }
 
     #[tokio::test]
@@ -2668,6 +2686,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS
         );
     }
+
     // A signed-in Bond, with the cookies its session and remembered hint use.
     async fn native_session_cookies(app: &axum::Router, pub_dress: &str, key: &str) -> String {
         let registration = Request::post("/api/v1/auth/native/registration")
@@ -2733,6 +2752,7 @@ mod tests {
         assert_eq!(renamed.headers()[CACHE_CONTROL], "no-store");
         let renamed = json_body(renamed).await;
         assert_eq!(renamed["pub_dress"], "0x0Rain");
+        assert_eq!(renamed["pub_dress_url"], "https://0x0rain.nilx.one");
         // The owned Avaia is a derivation of its owner's address, so it moved too.
         assert_eq!(renamed["avaia_pub_dress"], "0Rainai");
 
@@ -2743,6 +2763,10 @@ mod tests {
         let context = json_body(app.clone().oneshot(context).await.expect("context")).await;
         assert_eq!(context["state"], "authenticated");
         assert_eq!(context["identity"]["pub_dress"], "0x0Rain");
+        assert_eq!(
+            context["identity"]["pub_dress_url"],
+            "https://0x0rain.nilx.one"
+        );
 
         // The credential followed the Bond: the same password signs in under the
         // new address and no longer resolves under the previous one.
@@ -2966,6 +2990,7 @@ mod tests {
             StatusCode::TOO_MANY_REQUESTS
         );
     }
+
     fn avaia_rename_request(slug: &str) -> Request<Body> {
         Request::post("/api/v1/identity/avaia/pub_dress")
             .header("content-type", "application/json")
@@ -3078,6 +3103,7 @@ mod tests {
         assert_eq!(renamed["pub_dress"], "0x0Rain");
         assert_eq!(renamed["avaia_pub_dress"], "0Rainai");
     }
+
     #[tokio::test]
     async fn avatar_model_is_chosen_by_the_bond_and_read_back_with_its_identity() {
         let app = app().await;
@@ -3148,8 +3174,8 @@ mod tests {
         let app = app().await;
         register_telegram_fixture(&app).await;
         let request = |csrf: bool, proof: bool| {
-            let mut builder =
-                Request::post("/api/v1/identity/avatar").header("content-type", "application/json");
+            let mut builder = Request::post("/api/v1/identity/avatar")
+                .header("content-type", "application/json");
             if csrf {
                 builder = builder.header(super::CSRF_HEADER, "1");
             }
