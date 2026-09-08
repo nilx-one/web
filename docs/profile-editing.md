@@ -2,17 +2,17 @@
 
 A Bond profile presents facts the identity service owns. Most of them are
 consequences — the discriminator chosen at registration, the provider bindings,
-the projections that do not exist yet. Two of them are choices their owner may
-revisit: the Bond's own slug, and the slug of the Avaia it owns.
+the projections that do not exist yet. Three of them are choices their owner may
+revisit: the Bond's own slug, the slug of the Avaia it owns, and the avatar study
+that represents the Bond.
 
 There is one profile surface. Reading the profile and changing it are the same
 screen, because a screen that only shows what a second screen would let you
-change is a detour, not a step. It carries three choices: the Bond's slug, its
-Avaia's slug, and the avatar study the Bond is represented by. Rows that could only ever read "Not set" are
-gone rather than presented as fields no one can fill, and the providers row is
-what it says: the hosts this Bond is connected through, each its own control.
-What follows a rename — the discriminator and the provider connections — is a
-consequence, never an input.
+change is a detour, not a step. It carries those three choices. Rows that could
+only ever read "Not set" are gone rather than presented as fields no one can
+fill, and the providers row is what it says: the hosts this Bond is connected
+through, each its own control. What follows a rename — the discriminator and the
+provider connections — is a consequence, never an input.
 
 ## Authority
 
