@@ -11,6 +11,18 @@ import {
   type HostSnapshot,
 } from "@nilx-one/host-contract";
 
+import { createDiscordProxyFetch } from "./proxy";
+
+export {
+  DISCORD_PROXY_PREFIX,
+  createDiscordProxyFetch,
+  installDiscordProxyRouting,
+  isDiscordProxiedLocation,
+  resolveDiscordProxyUrl,
+  type DiscordProxyLocation,
+  type DiscordProxyScope,
+} from "./proxy";
+
 type DiscordActivityBridge = Pick<IDiscordSDK, "ready"> & {
   commands: Pick<
     IDiscordSDK["commands"],
@@ -34,6 +46,12 @@ export interface DiscordHostEnvironment {
 export interface DiscordActivitySession {
   authorization: string;
   host: HostPort;
+  /**
+   * The proxied transport the session authenticated over. Every adapter the
+   * composition root builds for this host reuses it, so no adapter has to know
+   * that Discord proxies the client's own origin.
+   */
+  fetch: typeof globalThis.fetch;
 }
 
 export interface DiscordActivityBootstrapOptions {
@@ -119,7 +137,15 @@ export function createDiscordHost(
 export async function bootstrapDiscordActivity(
   options: DiscordActivityBootstrapOptions = {},
 ): Promise<DiscordActivitySession> {
-  const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
+  // Inside an Activity the client's own absolute paths only reach the identity
+  // service through Discord's proxy, so the bootstrap transport is proxied
+  // before the first request rather than after the first failure.
+  const fetcher =
+    options.fetch ??
+    createDiscordProxyFetch(
+      globalThis.fetch.bind(globalThis),
+      globalThis.location,
+    );
   const environment = options.environment ?? window;
 
   const configResponse = await fetcher("/api/v1/auth/discord/config");
@@ -162,5 +188,6 @@ export async function bootstrapDiscordActivity(
   return {
     authorization: `discord ${accessToken}`,
     host: createDiscordHost(bridge, environment),
+    fetch: fetcher,
   };
 }

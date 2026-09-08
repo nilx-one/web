@@ -13,9 +13,11 @@ export const CORE_FIXTURE_CORPUS_VERSION = "0.1.0";
 export const CORE_FIXTURE_CORPUS_DIGEST =
   "sha256_d8524ee7a22aa07164362afb4098cf37404f61ab45fcfd48aab2de2fe9016009";
 
-const CORE_RUNTIME_BASE_URL = `/core/${CORE_CONTRACT_VERSION}`;
-const CORE_RUNTIME_MODULE_URL = `${CORE_RUNTIME_BASE_URL}/index.js`;
-const CORE_RUNTIME_WASM_URL = `${CORE_RUNTIME_BASE_URL}/index_bg.wasm`;
+/**
+ * Where the verified Core runtime is published. A host that proxies the
+ * client's own origin re-roots this base rather than republishing the artifact.
+ */
+export const CORE_RUNTIME_BASE_URL = `/core/${CORE_CONTRACT_VERSION}`;
 
 const PUB_DRESS_LABEL_ERROR_CODES = new Set<CorePubDressLabelErrorCode>([
   "not_a_pub_dress",
@@ -75,23 +77,35 @@ export interface GeneratedCoreWasmModule {
 }
 
 export type CoreWasmBindingsLoader = () => Promise<CoreWasmBindings>;
-export type CoreWasmRuntimeImporter = () => Promise<GeneratedCoreWasmModule>;
+export type CoreWasmRuntimeImporter = (
+  moduleUrl: string,
+) => Promise<GeneratedCoreWasmModule>;
+
+export interface GeneratedCoreWasmBindingsOptions {
+  /** The published runtime base, overridden only by a host that proxies it. */
+  readonly baseUrl?: string;
+  readonly importRuntime?: CoreWasmRuntimeImporter;
+}
 
 export interface CoreWasmClientOptions {
   loadBindings?: CoreWasmBindingsLoader;
 }
 
-async function importGeneratedCoreWasmRuntime(): Promise<GeneratedCoreWasmModule> {
+async function importGeneratedCoreWasmRuntime(
+  moduleUrl: string,
+): Promise<GeneratedCoreWasmModule> {
   return (await import(
-    /* @vite-ignore */ CORE_RUNTIME_MODULE_URL
+    /* @vite-ignore */ moduleUrl
   )) as GeneratedCoreWasmModule;
 }
 
 export async function loadGeneratedCoreWasmBindings(
-  importRuntime: CoreWasmRuntimeImporter = importGeneratedCoreWasmRuntime,
+  options: GeneratedCoreWasmBindingsOptions = {},
 ): Promise<CoreWasmBindings> {
-  const runtime = await importRuntime();
-  await runtime.default({ module_or_path: CORE_RUNTIME_WASM_URL });
+  const baseUrl = options.baseUrl ?? CORE_RUNTIME_BASE_URL;
+  const importRuntime = options.importRuntime ?? importGeneratedCoreWasmRuntime;
+  const runtime = await importRuntime(`${baseUrl}/index.js`);
+  await runtime.default({ module_or_path: `${baseUrl}/index_bg.wasm` });
 
   const contractVersion = runtime.contract_version();
   const fixtureCorpusVersion = runtime.fixture_corpus_version();

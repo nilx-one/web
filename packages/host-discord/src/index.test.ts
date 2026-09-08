@@ -85,6 +85,42 @@ describe("Discord Activity host", () => {
       },
     });
   });
+
+  it("reaches the identity service through the Discord proxy by default", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(jsonResponse(200, { client_id: "client-1" }))
+      .mockResolvedValueOnce(jsonResponse(200, { access_token: "access-1" }));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("location", {
+      hostname: "1234567890.discordsays.com",
+      origin: "https://1234567890.discordsays.com",
+    });
+
+    const session = await bootstrapDiscordActivity({
+      environment: { matchMedia: () => mediaQueryList() },
+      sdkFactory: () => ({
+        ready: vi.fn().mockResolvedValue(undefined),
+        commands: {
+          authorize: vi.fn().mockResolvedValue({ code: "code-1" }),
+          authenticate: vi.fn().mockResolvedValue({ user: { id: "42" } }),
+          encourageHardwareAcceleration: vi
+            .fn()
+            .mockResolvedValue({ enabled: true }),
+          openExternalLink: vi.fn().mockResolvedValue({ opened: true }),
+        },
+      }),
+    });
+
+    expect(fetch.mock.calls[0]?.[0]).toBe("/.proxy/api/v1/auth/discord/config");
+    expect(fetch.mock.calls[1]?.[0]).toBe("/.proxy/api/v1/auth/discord/token");
+
+    // Every adapter the composition root builds reuses the proxied transport.
+    await session.fetch("/api/v1/identity");
+    expect(fetch.mock.calls[2]?.[0]).toBe("/.proxy/api/v1/identity");
+
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("Discord host geolocation", () => {
