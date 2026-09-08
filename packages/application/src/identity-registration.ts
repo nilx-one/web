@@ -157,7 +157,29 @@ export type ProviderPasswordResult =
     }
   | { kind: "service-unavailable" };
 
+/**
+ * Renaming moves the same Bond to another address it may hold. The
+ * discriminator is not part of the request: the service keeps the one the Bond
+ * registered under, and the owned Avaia address follows its owner.
+ */
+export type PubDressRenameResult =
+  | { kind: "renamed"; identity: IdentityProjection }
+  | {
+      kind: "rejected";
+      reason:
+        | "authentication-required"
+        | "invalid-length"
+        | "invalid-character"
+        | "invalid-avaia-suffix"
+        | "unavailable"
+        | "avaia-unavailable"
+        | "rate-limited";
+    }
+  | { kind: "service-unavailable" };
+
 export interface IdentityAccessPort {
+  renameAvaiaSlug(slug: string): Promise<PubDressRenameResult>;
+  renamePubDressSlug(slug: string): Promise<PubDressRenameResult>;
   setProviderPassword(
     host: ProviderPasswordHost,
     password: string,
@@ -326,6 +348,30 @@ export class RegisterProviderIdentity {
   ): Promise<ProviderRegistrationResult> {
     try {
       return await this.identity.registerProvider(selection);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class RenameAvaiaSlug {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(slug: string): Promise<PubDressRenameResult> {
+    try {
+      return await this.identity.renameAvaiaSlug(slug);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class RenamePubDressSlug {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(slug: string): Promise<PubDressRenameResult> {
+    try {
+      return await this.identity.renamePubDressSlug(slug);
     } catch {
       return { kind: "service-unavailable" };
     }
