@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AvatarModel } from "@nilx-one/application";
+import { AVATAR_MODELS } from "@nilx-one/application";
 import {
   sampleAmbientAvatar,
   type AvatarHandle,
@@ -10,6 +10,8 @@ import {
 
 import type { DeviceLocationState } from "./device-location";
 import { deviceLocationPosition } from "./device-location";
+
+type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
 
 /**
  * The Bond's own body, standing where this device observed itself.
@@ -32,7 +34,7 @@ export function avatarSeed(pubDress: string): number {
 
 export function createSelfAvatarHandle(
   pubDress: string,
-  model: AvatarModel,
+  model: PublishedAvatarModel,
   location: DeviceLocationState,
   timeMs: number,
   reducedMotion: boolean,

@@ -79,7 +79,9 @@ export interface AuthenticatedMapHomeViewProps {
   readonly avaiaEdit?: AddressSlugViewState;
   /** The body this Bond is represented by, and the studies it may choose. */
   readonly avatarChoice?: AvatarChoiceViewState;
-  readonly onAvatarChoice?: (model: AvatarChoiceViewState["rendered"]) => void;
+  readonly onAvatarChoice?: (
+    model: AvatarChoiceViewState["options"][number]["model"],
+  ) => void;
   readonly onSlugChange?: (slug: string) => void;
   readonly onSlugSubmit?: () => void;
   readonly onAvaiaChange?: (slug: string) => void;
@@ -495,9 +497,9 @@ export function AuthenticatedMapHomeView({
    * move to the closest scale this policy allows, never a claim of presence.
    */
   // The Bond's own body stands where this device observed itself, and only
-  // while that observation exists. The ambient clip is resampled on the slot
-  // boundary rather than per frame: the renderer owns playback, this owns the
-  // choice of clip.
+  // after the Bond chose a study this client can render. The ambient clip is
+  // resampled on the slot boundary rather than per frame: the renderer owns
+  // playback, this owns the choice of clip.
   useEffect(() => {
     const avatars = renderer.avatars;
     const model = avatarChoice?.rendered;
@@ -511,12 +513,12 @@ export function AuthenticatedMapHomeView({
     function draw(): void {
       const handle = createSelfAvatarHandle(
         pubDress,
-        model as NonNullable<typeof model>,
+        model,
         location.state,
         globalThis.performance.now(),
         reducedMotion,
       );
-      if (handle !== null) avatars?.upsert(handle);
+      if (handle !== null) avatars.upsert(handle);
     }
 
     draw();
@@ -773,9 +775,11 @@ export function AuthenticatedMapHomeView({
                         </label>
                       ))}
                       <p className="profile-edit__note">
-                        {avatarChoice.unchosen
-                          ? "No study chosen yet — the world draws the non-binary study until you choose."
-                          : "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves."}
+                        {avatarChoice.unsupportedModel !== undefined
+                          ? `This Bond chose ${avatarChoice.unsupportedModel}, which this client cannot display. Update 0x1 to render that choice.`
+                          : avatarChoice.unchosen
+                            ? "No study chosen yet — no avatar is drawn until you choose."
+                            : "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves."}
                       </p>
                       {avatarChoice.error === undefined ? null : (
                         <p className="profile-edit__error" role="alert">

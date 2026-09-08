@@ -73,9 +73,11 @@ else; the choice is identity state, so it follows the Bond to every host rather
 than living in one device's interface preferences.
 
 No body is assigned to anyone. An identity with no choice recorded carries no
-model at all, and the world draws the neutral study until a person chooses. The
-studies share one skeleton and one set of clips, so choosing changes the body a
-person is represented by and nothing about how it moves. See
+model at all, and the world draws no avatar until a person chooses. A client that
+reads a newer explicit model id it cannot render keeps that choice distinct from
+"not chosen" and reports it as unsupported instead of substituting another body.
+The published studies share one skeleton and one set of clips, so choosing
+changes the body a person is represented by and nothing about how it moves. See
 `docs/avatar-rendering.md` for the asset pipeline and what the studies are.
 
 ## Deployment

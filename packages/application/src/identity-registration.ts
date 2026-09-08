@@ -2,28 +2,35 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * The published avatar studies a Bond may be represented by. The application
- * knows them as identity state; drawing them belongs to the map adapter.
+ * The avatar studies this client can choose and render. Identity responses may
+ * carry a newer model id; preserve that explicit choice opaquely instead of
+ * collapsing it into the absence of a choice.
  */
-export type AvatarModel = "sky-study" | "dasha-study" | "kai-study";
-
-export const AVATAR_MODELS: readonly AvatarModel[] = [
+export const AVATAR_MODELS = [
   "sky-study",
   "dasha-study",
   "kai-study",
-];
+] as const;
 
+export type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
+declare const forwardAvatarModelBrand: unique symbol;
+type ForwardAvatarModel = string & {
+  readonly [forwardAvatarModelBrand]: "forward-avatar-model";
+};
+export type AvatarModel = PublishedAvatarModel | ForwardAvatarModel;
+
+/**
+ * Parses an explicit identity model id without assuming this client publishes
+ * it. Rendering code must narrow against `AVATAR_MODELS` before drawing it.
+ */
 export function isAvatarModel(value: unknown): value is AvatarModel {
-  return (
-    typeof value === "string" &&
-    (AVATAR_MODELS as readonly string[]).includes(value)
-  );
+  return typeof value === "string";
 }
 
 export interface IdentityProjection {
   pubDress: string;
   avaiaPubDress?: string;
-  /** The body this Bond chose. Absent while it has chosen none. */
+  /** The body this Bond chose. Absent only while it has chosen none. */
   avatarModel?: AvatarModel;
   /**
    * The public address allocated for this Bond, absent while the identity

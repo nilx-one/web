@@ -1,15 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvatarModel } from "@nilx-one/application";
 import { describe, expect, it } from "vitest";
 
-import {
-  DEFAULT_AVATAR_MODEL,
-  createAvatarChoiceViewState,
-} from "./avatar-choice-view-model";
+import { createAvatarChoiceViewState } from "./avatar-choice-view-model";
 
 describe("avatar choice", () => {
-  it("offers the three published studies and selects none by default", () => {
+  it("offers the three published studies and assigns no body by default", () => {
     const state = createAvatarChoiceViewState(undefined, undefined);
 
     expect(state.options.map((option) => option.model)).toEqual([
@@ -19,10 +17,8 @@ describe("avatar choice", () => {
     ]);
     expect(state.options.every((option) => !option.selected)).toBe(true);
     expect(state.unchosen).toBe(true);
-    // Nobody is assigned a body: the world draws the neutral study until a
-    // person chooses one.
-    expect(state.rendered).toBe(DEFAULT_AVATAR_MODEL);
-    expect(state.rendered).toBe("kai-study");
+    expect(state.rendered).toBeUndefined();
+    expect(state.unsupportedModel).toBeUndefined();
   });
 
   it("marks the stored choice and draws it", () => {
@@ -44,6 +40,18 @@ describe("avatar choice", () => {
     expect(
       state.options.find((option) => option.model === "sky-study")?.selected,
     ).toBe(true);
+  });
+
+  it("keeps a newer explicit model distinct from no choice", () => {
+    const state = createAvatarChoiceViewState(
+      "future-study" as AvatarModel,
+      undefined,
+    );
+
+    expect(state.unchosen).toBe(false);
+    expect(state.rendered).toBeUndefined();
+    expect(state.unsupportedModel).toBe("future-study");
+    expect(state.options.every((option) => !option.selected)).toBe(true);
   });
 
   it("names what the service refused", () => {

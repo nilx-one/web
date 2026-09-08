@@ -7,16 +7,15 @@ import {
   type AvatarModelResult,
 } from "@nilx-one/application";
 
-/**
- * The body a Bond is represented by. Three published studies, chosen by the
- * person; nobody is assigned one. Until a choice exists the world draws the
- * neutral study, and the profile says that no choice has been made rather than
- * showing one as if it had.
- */
-export const DEFAULT_AVATAR_MODEL: AvatarModel = "kai-study";
+type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
 
+/**
+ * The body a Bond is represented by. A stored model may be newer than this
+ * client; that explicit choice remains distinct from an identity that chose
+ * nothing, and only a model this client publishes may reach the renderer.
+ */
 export interface AvatarOptionViewState {
-  readonly model: AvatarModel;
+  readonly model: PublishedAvatarModel;
   /** The study's own name. */
   readonly name: string;
   /** How the study reads, in the person's own terms rather than a category. */
@@ -26,20 +25,29 @@ export interface AvatarOptionViewState {
 
 export interface AvatarChoiceViewState {
   readonly options: readonly AvatarOptionViewState[];
-  /** The model the world draws right now, chosen or not. */
-  readonly rendered: AvatarModel;
-  /** True while no choice has been recorded for this Bond. */
+  /** The model the world may draw right now. Absent until a supported choice exists. */
+  readonly rendered?: PublishedAvatarModel;
+  /** True only while no choice has been recorded for this Bond. */
   readonly unchosen: boolean;
+  /** A stored model id this client cannot render without a newer contract. */
+  readonly unsupportedModel?: string;
   readonly busy: boolean;
   readonly error?: string;
 }
 
-const STUDIES: Readonly<Record<AvatarModel, { name: string; detail: string }>> =
-  {
-    "sky-study": { name: "Sky", detail: "masculine study" },
-    "dasha-study": { name: "Dasha", detail: "feminine study" },
-    "kai-study": { name: "Kai", detail: "non-binary study" },
-  };
+const STUDIES: Readonly<
+  Record<PublishedAvatarModel, { name: string; detail: string }>
+> = {
+  "sky-study": { name: "Sky", detail: "masculine study" },
+  "dasha-study": { name: "Dasha", detail: "feminine study" },
+  "kai-study": { name: "Kai", detail: "non-binary study" },
+};
+
+function isPublishedAvatarModel(
+  model: AvatarModel,
+): model is PublishedAvatarModel {
+  return (AVATAR_MODELS as readonly string[]).includes(model);
+}
 
 function chooseError(result: AvatarModelResult): string | undefined {
   if (result.kind === "service-unavailable")
@@ -61,18 +69,28 @@ export function createAvatarChoiceViewState(
   result?: AvatarModelResult,
 ): AvatarChoiceViewState {
   // An in-flight choice is shown as selected: the person already made it, and
-  // the service is only confirming.
-  const selected = pending ?? chosen;
+  // the service is only confirming. A future model id is kept explicit but is
+  // never cast into a body this client knows how to draw.
+  const candidate = pending ?? chosen;
+  const rendered =
+    candidate !== undefined && isPublishedAvatarModel(candidate)
+      ? candidate
+      : undefined;
+  const unsupportedModel =
+    candidate !== undefined && !isPublishedAvatarModel(candidate)
+      ? candidate
+      : undefined;
   const error = result === undefined ? undefined : chooseError(result);
   return {
     options: AVATAR_MODELS.map((model) => ({
       model,
       name: STUDIES[model].name,
       detail: STUDIES[model].detail,
-      selected: model === selected,
+      selected: model === rendered,
     })),
-    rendered: selected ?? DEFAULT_AVATAR_MODEL,
-    unchosen: selected === undefined,
+    ...(rendered === undefined ? {} : { rendered }),
+    unchosen: candidate === undefined,
+    ...(unsupportedModel === undefined ? {} : { unsupportedModel }),
     busy: pending !== undefined,
     ...(error === undefined ? {} : { error }),
   };

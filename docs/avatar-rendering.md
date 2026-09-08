@@ -97,12 +97,14 @@ Delivery: [asset pipeline #93](https://github.com/nilx-one/web/issues/93),
 
 ## Drawing one avatar
 
-The client draws exactly one avatar: the signed-in Bond's own, standing where
-this device observed itself, and only while that observation exists. It is
-presentation — never evidence of presence, never a claim about who is nearby,
-and never a second identity. The application chooses the body and the moment
-(`createSelfAvatarHandle`), the renderer owns playback, and the ambient clip is
-resampled once per slot rather than per frame. A person who asked for reduced
-motion is left standing still.
+After a Bond chooses a study this client can render, the client draws at most one
+avatar: the signed-in Bond's own, standing where this device observed itself, and
+only while that observation exists. With no recorded choice, no body is drawn. A
+newer explicit model id remains an explicit unsupported choice instead of being
+replaced by another study. The avatar is presentation — never evidence of
+presence, never a claim about who is nearby, and never a second identity. The
+application chooses the body and the moment (`createSelfAvatarHandle`), the
+renderer owns playback, and the ambient clip is resampled once per slot rather
+than per frame. A person who asked for reduced motion is left standing still.
 
 © 2026 aiaiaiai · aiaiaiai.org
