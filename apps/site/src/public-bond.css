@@ -13,8 +13,8 @@
   grid-template-rows: 1fr auto;
   place-items: center;
   gap: 2rem;
-  padding:
-    max(2rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+  padding: max(2rem, env(safe-area-inset-top))
+    max(1.25rem, env(safe-area-inset-right))
     max(1.25rem, env(safe-area-inset-bottom))
     max(1.25rem, env(safe-area-inset-left));
   background:
@@ -50,7 +50,11 @@
 
 .public-bond-kicker {
   color: var(--public-bond-muted);
-  font: 600 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    600 0.72rem/1.2 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -58,7 +62,10 @@
 .public-bond-card h1 {
   margin-top: 0.8rem;
   overflow-wrap: anywhere;
-  font: 500 clamp(2rem, 9vw, 4rem) / 1.02 ui-sans-serif, system-ui, sans-serif;
+  font:
+    500 clamp(2rem, 9vw, 4rem) / 1.02 ui-sans-serif,
+    system-ui,
+    sans-serif;
   letter-spacing: -0.055em;
 }
 
@@ -68,7 +75,11 @@
   margin-top: 0.9rem;
   overflow-wrap: anywhere;
   color: var(--public-bond-muted);
-  font: 500 0.88rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    500 0.88rem/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   text-decoration-color: color-mix(
     in srgb,
     var(--public-bond-accent) 65%,
@@ -94,14 +105,22 @@
 
 .public-bond-facts dt {
   color: var(--public-bond-muted);
-  font: 500 0.75rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    500 0.75rem/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   text-transform: lowercase;
 }
 
 .public-bond-facts dd {
   min-width: 0;
   overflow-wrap: anywhere;
-  font: 500 0.92rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    500 0.92rem/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
 }
 
 .public-bond-home {
@@ -110,7 +129,11 @@
   align-items: center;
   margin-top: 2rem;
   color: CanvasText;
-  font: 600 0.82rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    600 0.82rem/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   text-decoration: none;
 }
 
@@ -127,7 +150,11 @@
 .public-bond-page > footer {
   align-self: end;
   color: var(--public-bond-muted);
-  font: 500 0.66rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    500 0.66rem/1.4 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   letter-spacing: 0.03em;
 }
 
