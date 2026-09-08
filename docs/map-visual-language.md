@@ -38,6 +38,19 @@ At distant zoom levels, the map should remain predominantly monochrome. Cyan and
 
 City-scale fabric should already read at the bootstrap camera where the published archive supports it. Building footprints and secondary roads may appear before close zoom; volumetric building depth belongs to the later building-scale transition.
 
+## Apparent size of a body
+
+A published avatar study stands 1.80 m to 1.89 m tall, which is nothing on a map. At building scale — where focusing a Bond lands — one metre is about half a pixel, so an unscaled person is roughly three pixels: present in the scene, invisible to the eye. Zoom alone does not fix this without abandoning the scale the published styles are drawn for.
+
+So a body carries a presentation size of its own. It holds a constant readable height on screen while the ground under it is still far away, and gives that up for true scale as soon as geography can carry a person on its own — around zoom 19.5, where 1.8 m first covers the readable minimum. From there the body is exactly as tall as it is.
+
+Two rules bound it:
+
+- **Apparent size only.** The multiplier changes how tall a body is drawn and nothing else. It never moves the body, never widens the accuracy it stands in, and never survives into shared state.
+- **A body withdraws before it can lie.** Further out than street scale no body is drawn at all. The observed-position marker already says "here" at those widths, and a figure standing there would read as a person at a spot the observation cannot actually resolve.
+
+One body is drawn: the signed-in Bond's own, and only while this device holds an observation of itself. An avatar on the map is never evidence of presence, proximity, or that anyone else is nearby.
+
 ## Known data-bound limits
 
 The visual reference is intent, not evidence. Features are rendered only when the published same-origin map data supports them.
