@@ -16,7 +16,7 @@ on:
       - ".github/workflows/identity-service.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   full-ci:
@@ -24,18 +24,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
-      - name: Resolve lockfile for review branch
-        run: cargo generate-lockfile --manifest-path services/identity/Cargo.toml
-      - name: Preserve resolved lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: identity-cargo-lock
-          path: services/identity/Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
+      - name: Resolve and commit review lockfile
+        if: github.event_name == 'pull_request' && github.head_ref == 'feature/browser-provider-auth'
+        run: |
+          set -Eeuo pipefail
+          cargo generate-lockfile --manifest-path services/identity/Cargo.toml
+          if git diff --quiet -- services/identity/Cargo.lock; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/identity/Cargo.lock
+          git commit -m "chore(identity): update locked dependency graph"
+          git push origin HEAD:${GITHUB_HEAD_REF}
       - name: Check formatting
         run: cargo fmt --manifest-path services/identity/Cargo.toml --all -- --check
       - name: Run Clippy
