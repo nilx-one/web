@@ -1,0 +1,85 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Add public label concurrency proof
+
+on:
+  push:
+    branches:
+      - feature/allocate-public-bond-labels
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/allocate-public-bond-labels
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Add concurrency test
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('services/identity/src/repository.rs')
+          text = path.read_text()
+          marker = '''    #[tokio::test]
+              async fn public_label_retries_are_bounded_and_roll_back_on_exhaustion() {
+          '''
+          addition = '''    #[tokio::test]
+              async fn concurrent_dns_fold_claims_allocate_distinct_labels() {
+                  let directory = tempfile::tempdir().expect("temporary directory");
+                  let database = directory.path().join("identity.sqlite");
+                  let database_url = format!("sqlite://{}", database.display());
+                  let repository = IdentityRepository::connect(&database_url)
+                      .await
+                      .expect("repository must initialize");
+                  let first_repository = repository.clone();
+                  let second_repository = repository.clone();
+                  let lower = PubDress::from_str("0x0небо").expect("lower");
+                  let title = PubDress::from_str("0x0Небо").expect("title");
+
+                  let (first, second) = tokio::join!(
+                      first_repository.register(&lower, &ProviderIdentity::telegram(10), 100),
+                      second_repository.register(&title, &ProviderIdentity::discord("20"), 101),
+                  );
+                  let first = match first.expect("first registration") {
+                      RegistrationOutcome::Registered(record) => record,
+                      other => panic!("unexpected first outcome: {other:?}"),
+                  };
+                  let second = match second.expect("second registration") {
+                      RegistrationOutcome::Registered(record) => record,
+                      other => panic!("unexpected second outcome: {other:?}"),
+                  };
+
+                  assert_ne!(first.pub_dress_label, second.pub_dress_label);
+                  let mut suffixes = [
+                      first.pub_dress_label_suffix.as_str(),
+                      second.pub_dress_label_suffix.as_str(),
+                  ];
+                  suffixes.sort_unstable();
+                  assert_eq!(suffixes, ["", "2"]);
+              }
+
+              #[tokio::test]
+              async fn public_label_retries_are_bounded_and_roll_back_on_exhaustion() {
+          '''
+          if marker not in text:
+              raise SystemExit('exhaustion test marker not found')
+          path.write_text(text.replace(marker, addition, 1))
+          PY
+          cargo fmt --manifest-path services/identity/Cargo.toml --all
+          cargo test --manifest-path services/identity/Cargo.toml --locked --all-features concurrent_dns_fold_claims_allocate_distinct_labels
+          cargo test --manifest-path services/identity/Cargo.toml --locked --all-features
+          rm .github/workflows/add-public-label-concurrency-test.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/identity/src/repository.rs .github/workflows/add-public-label-concurrency-test.yml
+          git commit -m "test(identity): prove concurrent label allocation"
+          git push origin HEAD:feature/allocate-public-bond-labels
