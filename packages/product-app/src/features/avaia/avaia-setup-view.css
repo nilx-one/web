@@ -38,7 +38,9 @@
   flex: 0 0 36px;
   border: 1px solid var(--line-subtle, rgba(255, 255, 255, 0.14));
   border-radius: 50%;
-  font: 600 11px / 1 ui-monospace, monospace;
+  font:
+    600 11px / 1 ui-monospace,
+    monospace;
 }
 
 .avaia-setup__form {
