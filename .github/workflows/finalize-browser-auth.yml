@@ -28,10 +28,21 @@ jobs:
           from pathlib import Path
           path = Path("services/identity/src/browser_web_auth.rs")
           text = path.read_text()
-          old = "        Err(response) => return response,"
+          old = '''    let transaction = match callback_transaction(&state, &headers, &query, BrowserProvider::Discord)
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+'''
+          new = '''    let transaction = match callback_transaction(&state, &headers, &query, BrowserProvider::Discord)
+    {
+        Ok(value) => value,
+            Err(response) => return response,
+    };
+'''
           if text.count(old) != 1:
-              raise SystemExit("expected one compact Discord callback error arm")
-          path.write_text(text.replace(old, "            Err(response) => return response,", 1))
+              raise SystemExit("expected one compact Discord callback block")
+          path.write_text(text.replace(old, new, 1))
           PY
           python3 .github/scripts/finalize-browser-auth.py
           cargo fmt --manifest-path services/identity/Cargo.toml --all
