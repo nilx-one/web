@@ -155,3 +155,45 @@ describe("pub_dress status", () => {
     });
   });
 });
+
+describe("Telegram password authority", () => {
+  const host = {
+    ...browserHost,
+    kind: "telegram" as const,
+    authentication: {
+      kind: "telegram-init-data" as const,
+      initData: "signed",
+      verification: "required" as const,
+    },
+  };
+  const status = {
+    kind: "registered" as const,
+    detail: "Bond found — sign in" as const,
+  };
+  it("never offers native sign-in or password setup for an unbound occupied handle", () => {
+    expect(
+      createProviderIdentityViewState(
+        host,
+        { kind: "not-registered" },
+        undefined,
+        status,
+        false,
+      ),
+    ).toMatchObject({
+      kind: "form",
+      mode: "provider-register",
+      status: { kind: "unavailable" },
+    });
+  });
+  it("requires setup if an older backend omits credential state", () => {
+    expect(
+      createProviderIdentityViewState(
+        host,
+        { kind: "registered", identity: { pubDress: "0x0sky" } },
+        undefined,
+        status,
+        false,
+      ),
+    ).toMatchObject({ kind: "provider-password", pubDress: "0x0sky" });
+  });
+});

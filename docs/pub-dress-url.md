@@ -43,20 +43,41 @@ something the Bond failed to fill in.
 
 ## Derivation rules
 
-`packages/application/src/pub-dress-url.ts` is the client-side derivation.
+`nilx-one/core` owns derivation and composition. `packages/application/src/pub-dress-url.ts` is presentation-only: it receives Core results and never performs Unicode/IDNA mapping itself.
 
-- ASCII case fold only. `String.prototype.toLowerCase` also folds scalars this
-  module refuses, which would hide a rejection behind a silent rewrite.
-- The label must be LDH (`a-z`, `0-9`, `-`), must not end on a hyphen, and must
-  fit the 63-octet label limit.
-- Non-ASCII is refused with its own reason rather than transliterated. Choosing
-  an IDNA mapping is a normative decision: a fold invented in the Web client
-  could land one Bond's identity on another Bond's label, permanently. That
-  mapping belongs in the pinned `nilx-one/core` contract next to `PubDress`.
+- A label has two forms and both matter. The Bond reads `0x0небо.nilx.one`,
+  which is what a browser shows; DNS carries `xn--0x0-dddt1cj`. Composition
+  happens on the readable form and encodes once — appending a suffix to an
+  already-encoded `xn--` label would produce a string that no longer decodes.
+- The encoder owns the fold. Case folding is part of UTS-46 mapping, so nothing
+  here lowercases before encoding: `toLowerCase` applies Final_Sigma and would
+  give `0x0ΟΔΟΣ` a different address from the one allocated. A readable form is
+  offered only when it encodes back to exactly the same label, and otherwise the
+  Bond is shown the address it will really get.
+- Mapping is wider than case. Fullwidth `0x0ａｂ` reaches the same label as plain
+  `0x0ab`, so they are a collision pair with no case variance between them.
+- Core validates the LDH A-label boundary, UTS-46 scalar policy, hyphen rules,
+  bidirectional-text rules, joiners, and the final DNS length. Web maps Core's
+  stable rejection codes into product copy rather than reclassifying Unicode.
+- The 63-octet limit is measured on the encoded form. A 32-scalar slug is a
+  valid `pub_dress` and can still reach 105 octets once encoded.
+- Non-ASCII is encoded, not refused. `0x0небо` becomes `https://0x0небо.nilx.one`,
+  carried by DNS as `xn--0x0-dddt1cj`. The A-label comes from the pinned Core
+  runtime; Web keeps the Unicode identity readable and shows the DNS form as a
+  footnote when the two differ.
 
-Every stem keeps the `0x` prefix. That is what keeps the user namespace disjoint
-from service hosts — no Bond can fold onto `www`, `api`, or `_acme-challenge` —
-so no reserved-name blocklist has to be maintained alongside it.
+Every label begins with `0x` or, once encoded, `xn--`. That is what keeps the
+user namespace disjoint from service hosts — no Bond can fold onto `www`, `api`,
+or `_acme-challenge` — so no reserved-name blocklist has to be maintained
+alongside it. Because an ASCII stem always begins `0x`, no Bond can hand-craft a
+label starting `xn--` either, so an ACE prefix cannot be forged.
+
+One consequence of the encoding is worth knowing before it is discovered in
+production, and the surface now says it in place rather than leaving an empty
+field: **no right-to-left `pub_dress` can have an address.** RFC 5893
+requires an RTL label to begin with L, R, or AL, and every label here begins with
+the digit `0`. Hebrew and Arabic Bonds are excluded by the `0x` prefix itself,
+not by anything about their script.
 
 ## Allocation stays a server transaction
 
@@ -80,18 +101,16 @@ If Bond addresses ever serve Bond-controlled JavaScript, `__Host-` alone stops
 being sufficient and the addresses need their own registrable domain plus a
 Public Suffix List entry.
 
-## Handing the fold to core
+## Core ownership
 
-[`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) is the
-implementation instruction for `nilx-one/core`: the API surface to add next to
-`PubDress`, the rules already settled, the one open decision (the non-ASCII
-mapping), and test vectors mirroring
-`packages/application/src/pub-dress-url.test.ts` so both sides can be
-cross-checked.
+[`pub-dress-label.contract.yaml`](pub-dress-label.contract.yaml) mirrors the
+Core-owned contract consumed by Web. The normative implementation now lives in
+`nilx-one/core` and is exposed to Web through the verified Wasm boundary; the
+local document remains as a cross-repository compatibility and downstream-work
+record.
 
 ## Not yet implemented
 
-- the normative fold in `nilx-one/core`, including the IDNA decision;
 - `POST /api/v1/identity/url/resolve`, and label allocation inside the
   registration transaction, with `pub_dress_url` on the identity projection;
 - the migration adding the stored label with a `UNIQUE COLLATE NOCASE` index;
@@ -99,8 +118,12 @@ cross-checked.
 
 Until label resolution exists, `IdentityFoundationView` receives no
 `pubDressUrlResolution` and the address surface stays in its read-only preview:
-the Bond still sees the fold, and only a real collision answer opens the
-editable part.
+the Bond still sees the fold and the encoded form, and only a real collision
+answer opens the editable part.
+
+The preview uses the pinned Core runtime directly. If the Wasm label binding is
+missing or malformed, Web fails closed instead of falling back to a second
+Unicode/IDNA implementation.
 
 ---
 

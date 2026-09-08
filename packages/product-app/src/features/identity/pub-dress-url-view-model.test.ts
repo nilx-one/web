@@ -15,6 +15,7 @@ function state(overrides: Partial<PubDressUrlInput> = {}) {
     suffix: "",
     pending: false,
     resolution: undefined,
+    derivation: { kind: "label", label: "0xda-sha" },
     ...overrides,
   });
 }
@@ -31,7 +32,7 @@ describe("public address view state", () => {
     });
   });
 
-  it("previews the address before anything is known about it", () => {
+  it("previews the Core-derived address before allocation is known", () => {
     expect(state()).toMatchObject({
       kind: "preview",
       pubDress: "0xda-sha",
@@ -42,8 +43,11 @@ describe("public address view state", () => {
     });
   });
 
-  it("shows the Bond the case its address loses", () => {
-    const view = state({ selection: { discriminator: "d", slug: "A-Sha" } });
+  it("shows an ASCII fold reported by the Core A-label", () => {
+    const view = state({
+      selection: { discriminator: "d", slug: "A-Sha" },
+      derivation: { kind: "label", label: "0xda-sha" },
+    });
 
     expect(view).toMatchObject({
       kind: "preview",
@@ -51,16 +55,20 @@ describe("public address view state", () => {
       stem: "0xda-sha",
       folded: true,
     });
-    expect(view.kind === "preview" && view.detail).toContain("Lowercased");
+    expect(view.kind === "preview" && view.detail).toContain("Core maps");
   });
 
-  it("says the address is already lowercase when nothing was folded", () => {
-    expect(state()).toMatchObject({
-      detail: "This address is already lowercase",
+  it("fails closed while the Core derivation is unavailable", () => {
+    expect(state({ derivation: undefined })).toMatchObject({
+      kind: "preview",
+      status: "service-unavailable",
     });
+    expect(
+      state({ derivation: undefined, derivationPending: true }),
+    ).toMatchObject({ kind: "preview", status: "checking" });
   });
 
-  it("opens the editable part when another Bond holds the label", () => {
+  it("opens the editable part immediately when another Bond holds the label", () => {
     const view = state({ resolution: taken });
 
     expect(view).toMatchObject({
@@ -68,16 +76,31 @@ describe("public address view state", () => {
       stem: "0xda-sha",
       suffix: "",
       status: "taken",
+      detail: "Another Bond holds this address — add a distinguishing part",
     });
-    expect(view.kind === "suffix" && view.detail).toContain("Another Bond");
   });
 
-  it("keeps the stem fixed and composes the chosen part into the URL", () => {
+  it("fails closed only after a suffix needs Core composition", () => {
     expect(state({ resolution: taken, suffix: "7412" })).toMatchObject({
+      kind: "suffix",
+      suffix: "7412",
+      status: "service-unavailable",
+    });
+  });
+
+  it("keeps the stem fixed and presents Core composition", () => {
+    expect(
+      state({
+        resolution: taken,
+        suffix: "7412",
+        composition: { kind: "label", label: "0xda-sha7412" },
+      }),
+    ).toMatchObject({
       kind: "suffix",
       stem: "0xda-sha",
       suffix: "7412",
       url: "https://0xda-sha7412.nilx.one",
+      status: "taken",
     });
   });
 
@@ -85,6 +108,7 @@ describe("public address view state", () => {
     expect(
       state({
         suffix: "7412",
+        composition: { kind: "label", label: "0xda-sha7412" },
         resolution: { kind: "available", label: "0xda-sha7412" },
       }),
     ).toMatchObject({
@@ -94,16 +118,18 @@ describe("public address view state", () => {
     });
   });
 
-  it("reports a part that cannot appear in an address", () => {
-    const view = state({ resolution: taken, suffix: "7-" });
+  it("reports a Core-rejected distinguishing part", () => {
+    const view = state({
+      resolution: taken,
+      suffix: "7-",
+      composition: { kind: "error", code: "invalid_character" },
+    });
 
     expect(view).toMatchObject({ kind: "suffix", status: "invalid" });
-    // No URL is offered while the composed label is not one a resolver would
-    // accept, so nothing can present an unreachable address as reachable.
     expect(view).not.toHaveProperty("url");
   });
 
-  it("reports the pending check while the service answers", () => {
+  it("reports the pending allocation check while the service answers", () => {
     expect(state({ pending: true })).toMatchObject({
       status: "checking",
       detail: "Checking this address…",
@@ -119,13 +145,43 @@ describe("public address view state", () => {
     ).toMatchObject({ status: "invalid" });
   });
 
-  it("refuses an address it cannot represent instead of inventing one", () => {
+  it("gives a Cyrillic identity its readable form and Core A-label", () => {
     expect(
-      state({ selection: { discriminator: "0", slug: "небо" } }),
+      state({
+        selection: { discriminator: "0", slug: "небо" },
+        derivation: { kind: "label", label: "xn--0x0-dddt1cj" },
+      }),
     ).toMatchObject({
-      kind: "unrepresentable",
+      kind: "preview",
       pubDress: "0x0небо",
-      reason: "non-ascii",
+      stem: "0x0небо",
+      ascii: "xn--0x0-dddt1cj",
+      url: "https://0x0небо.nilx.one",
     });
+  });
+
+  it("omits the encoded form when Core returns the readable ASCII label", () => {
+    expect(state()).not.toHaveProperty("ascii");
+  });
+
+  it("renders Core bidi refusal without local script heuristics", () => {
+    const view = state({
+      selection: { discriminator: "0", slug: "aאב" },
+      derivation: { kind: "error", code: "bidi_rule" },
+    });
+
+    expect(view).toMatchObject({
+      kind: "unrepresentable",
+      reason: "bidi-rule",
+    });
+  });
+
+  it("renders Core scalar refusal without local Unicode classification", () => {
+    expect(
+      state({
+        selection: { discriminator: "0", slug: "a🌍" },
+        derivation: { kind: "error", code: "disallowed_scalar" },
+      }),
+    ).toMatchObject({ kind: "unrepresentable", reason: "disallowed-scalar" });
   });
 });

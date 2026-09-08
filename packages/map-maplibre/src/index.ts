@@ -5,6 +5,8 @@ import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
   MAP_SCALE_ZOOM,
+  type AvatarHandle,
+  type AvatarLayerContract,
   type MapAppearance,
   type MapCamera,
   type MapCameraChange,
@@ -36,6 +38,8 @@ import {
 // binds that published URL before the first map is created.
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Protocol } from "pmtiles";
+
+import type { AvatarCustomLayer } from "./avatar-layer";
 
 import {
   applyObservedPositionLabel,
@@ -111,6 +115,10 @@ export type MapLabelMarkerFactory = (
   element: HTMLElement,
   center: [longitude: number, latitude: number],
 ) => MapLabelMarker;
+
+export interface MapLibreRenderer extends MapRenderer {
+  readonly avatars: AvatarLayerContract;
+}
 
 export interface MapLibreRendererOptions {
   readonly styleUrls?: Readonly<Record<MapAppearance, string>>;
@@ -194,7 +202,7 @@ function ensureWorkerUrl(): void {
 
 export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
-): MapRenderer {
+): MapLibreRenderer {
   const styleUrls = options.styleUrls ?? MAP_STYLE_URLS;
   const initialCamera = options.initialCamera ?? MAP_BOOTSTRAP_CAMERA;
   const loadTimeoutMs = options.loadTimeoutMs ?? MAP_RENDER_LOAD_TIMEOUT_MS;
@@ -207,6 +215,48 @@ export function createMapLibreRenderer(
   let status: MapRendererStatus = { kind: "unmounted" };
   let camera: MapCamera = initialCamera;
   let map: MapLibreMap | undefined;
+  let avatarLayer: AvatarCustomLayer | undefined;
+  let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
+  const avatarHandles = new Map<string, AvatarHandle>();
+  let avatarCamera: MapCamera = camera;
+
+  function requestAvatarLayer(): Promise<AvatarCustomLayer> {
+    if (avatarLayer !== undefined) return Promise.resolve(avatarLayer);
+    if (avatarLayerPromise !== undefined) return avatarLayerPromise;
+    avatarLayerPromise = import("./avatar-layer").then(
+      ({ createAvatarLayer }) => {
+        const layer = createAvatarLayer({
+          requestMount: () => {
+            if (map !== undefined && firstPaintDone) ensureAvatarLayer(map);
+          },
+        });
+        avatarLayer = layer;
+        layer.setCamera(avatarCamera);
+        for (const handle of avatarHandles.values()) layer.upsert(handle);
+        if (map !== undefined && firstPaintDone && layer.hasInstances()) {
+          ensureAvatarLayer(map);
+        }
+        return layer;
+      },
+    );
+    return avatarLayerPromise;
+  }
+
+  const avatars: AvatarLayerContract = {
+    upsert(handle) {
+      avatarHandles.set(handle.id, handle);
+      if (avatarLayer !== undefined) avatarLayer.upsert(handle);
+      else void requestAvatarLayer();
+    },
+    remove(id) {
+      avatarHandles.delete(id);
+      avatarLayer?.remove(id);
+    },
+    setCamera(next) {
+      avatarCamera = next;
+      avatarLayer?.setCamera(next);
+    },
+  };
   let loadTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   // Style documents resolve before sources and tiles do, so the phase a
   // failure arrives in is what distinguishes a missing style from a missing
@@ -284,6 +334,7 @@ export function createMapLibreRenderer(
       return;
     }
     camera = readCamera(map);
+    avatars.setCamera(camera);
     for (const listener of cameraListeners) {
       listener({ camera, gesture });
     }
@@ -402,9 +453,17 @@ export function createMapLibreRenderer(
     applyLabel(mounted);
   }
 
+  function ensureAvatarLayer(mounted: MapLibreMap): void {
+    if (avatarLayer === undefined) return;
+    if (mounted.getLayer(avatarLayer.id) !== undefined) return;
+    mounted.addLayer(avatarLayer);
+  }
+
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
     applyObservedPosition(mounted);
+    if (firstPaintDone && avatarLayer?.hasInstances())
+      ensureAvatarLayer(mounted);
     presentationApplied = true;
   }
 
@@ -415,6 +474,8 @@ export function createMapLibreRenderer(
   }
 
   return {
+    avatars,
+
     mount(container) {
       if (map !== undefined) {
         return;
@@ -528,6 +589,7 @@ export function createMapLibreRenderer(
 
     setCamera(next: MapCamera, cameraOptions: MapCameraOptions = {}) {
       camera = next;
+      avatars.setCamera(next);
 
       const target = {
         center: [...next.center] as [number, number],

@@ -7,6 +7,7 @@ import type {
   NativeRegistrationResult,
   ProviderIdentityLookupResult,
   ProviderRegistrationResult,
+  ProviderPasswordResult,
   PubDressResolutionResult,
   PubDressSelection,
   RuntimeReadiness,
@@ -54,6 +55,12 @@ export type PubDressStatusViewState =
     };
 
 export type IdentityViewState =
+  | {
+      kind: "provider-password";
+      pubDress: string;
+      busy: boolean;
+      error?: string;
+    }
   | { kind: "loading"; detail: string }
   | {
       kind: "form";
@@ -220,11 +227,57 @@ export function createProviderIdentityViewState(
   registration: ProviderRegistrationResult | undefined,
   status: PubDressStatusViewState,
   pending: boolean,
+  passwordSetup?: ProviderPasswordResult,
+  acknowledgement?: NativeAuthenticationResult,
 ): IdentityViewState {
   if (!hasAuthenticatedHostSession(host)) {
     return {
       kind: "provider-required",
       detail: `Open 0x1 from ${providerLabel(host) ?? "this provider"} to continue.`,
+    };
+  }
+  const registered =
+    registration?.kind === "registered"
+      ? registration
+      : identity?.kind === "registered"
+        ? identity
+        : undefined;
+  if (
+    host.kind === "telegram" &&
+    registered !== undefined &&
+    registered.passwordRequired !== false
+  ) {
+    if (
+      acknowledgement?.kind === "authenticated" &&
+      acknowledgement.identity.pubDress === registered.identity.pubDress
+    ) {
+      return {
+        kind: "authenticated",
+        pubDress: acknowledgement.identity.pubDress,
+        ...projectedAvaia(acknowledgement.identity.avaiaPubDress),
+        native: false,
+      };
+    }
+    if (passwordSetup?.kind === "recovery-key-required") {
+      return {
+        kind: "recovery-key",
+        pubDress: passwordSetup.identity.pubDress,
+        recoveryKey: passwordSetup.recoveryKey,
+        challenge: passwordSetup.challenge,
+        busy: pending,
+        ...(acknowledgement?.kind === "rejected"
+          ? { error: nativeAuthenticationError(acknowledgement) }
+          : acknowledgement?.kind === "service-unavailable"
+            ? { error: "Couldn’t finish setup. Try again." }
+            : {}),
+      };
+    }
+    const error = providerPasswordError(passwordSetup);
+    return {
+      kind: "provider-password",
+      pubDress: registered.identity.pubDress,
+      busy: pending,
+      ...(error === undefined ? {} : { error }),
     };
   }
   if (registration?.kind === "registered") {
@@ -266,7 +319,13 @@ export function createProviderIdentityViewState(
   return {
     kind: "form",
     mode: "provider-register",
-    status,
+    status:
+      status.kind === "registered"
+        ? {
+            kind: "unavailable",
+            detail: "Unavailable — this Bond already exists",
+          }
+        : status,
     busy: pending,
     ...(error === undefined ? {} : { error }),
   };
@@ -410,5 +469,25 @@ function providerLabel(
       return "0x1 for iOS";
     case "browser":
       return undefined;
+  }
+}
+
+function providerPasswordError(
+  result: ProviderPasswordResult | undefined,
+): string | undefined {
+  if (result?.kind === "service-unavailable")
+    return "Couldn’t save your password. Try again.";
+  if (result?.kind !== "rejected") return undefined;
+  switch (result.reason) {
+    case "authentication-required":
+      return "Reopen 0x1 from Telegram to continue.";
+    case "already-set":
+      return "A password is already set. Reopen 0x1 to sign in.";
+    case "invalid-password-length":
+      return "Use 8–128 characters without surrounding whitespace or line breaks.";
+    case "compromised-password":
+      return "Choose a password that hasn’t appeared in known leaks.";
+    case "rate-limited":
+      return "Too many attempts. Wait before trying again.";
   }
 }

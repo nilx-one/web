@@ -3,6 +3,7 @@
 
 import {
   parsePubDress,
+  type CorePubDressLabelResult,
   type PubDressLabelResolutionResult,
   type PubDressSelection,
 } from "@nilx-one/application";
@@ -24,6 +25,7 @@ import type {
   PubDressStatusViewState,
 } from "./identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./pub-dress-credential-input";
+import { TelegramPasswordForm } from "./telegram-password-form";
 import { PubDressUrlField } from "./pub-dress-url-field";
 import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 
@@ -31,11 +33,13 @@ export interface IdentityFoundationViewProps {
   password: string;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
+  /** Normative public-label derivation returned by 0x1 Core. */
+  pubDressLabelDerivation?: CorePubDressLabelResult | undefined;
+  pubDressLabelDerivationPending?: boolean;
   /**
-   * Availability of the folded public label. Absent until the identity service
-   * exposes label resolution, which leaves the address surface in its
-   * read-only preview: the Bond still sees the fold, and only a real collision
-   * answer can open the editable second part.
+   * Availability of the allocated public label. Absent until the identity
+   * service exposes label resolution; only a real collision answer can open
+   * the editable second part.
    */
   pubDressUrlResolution?: PubDressLabelResolutionResult;
   onAcknowledgeRecovery(challenge: string): void;
@@ -167,6 +171,8 @@ function VisibilityGlyph({ visible }: { visible: boolean }) {
 
 function heading(identity: IdentityViewState): string {
   switch (identity.kind) {
+    case "provider-password":
+      return "Create your password.";
     case "recovery-key":
       return "Save your recovery key.";
     case "form":
@@ -193,6 +199,8 @@ function heading(identity: IdentityViewState): string {
 
 function lede(identity: IdentityViewState): string {
   switch (identity.kind) {
+    case "provider-password":
+      return "Use this password to sign in to the same Bond outside Telegram.";
     case "recovery-key":
       return "This is the only native recovery proof. It appears once.";
     case "authenticated":
@@ -311,6 +319,8 @@ function RecoveryKeyView({
 function IdentityForm({
   identity,
   password,
+  pubDressLabelDerivation,
+  pubDressLabelDerivationPending,
   pubDressUrlResolution,
   selection,
   onCredentialAutofill,
@@ -322,6 +332,8 @@ function IdentityForm({
 }: {
   identity: Extract<IdentityViewState, { kind: "form" }>;
   password: string;
+  pubDressLabelDerivation: CorePubDressLabelResult | undefined;
+  pubDressLabelDerivationPending: boolean;
   pubDressUrlResolution: PubDressLabelResolutionResult | undefined;
   selection: PubDressSelection;
   onCredentialAutofill(selection: PubDressSelection, password: string): void;
@@ -389,6 +401,8 @@ function IdentityForm({
     suffix: addressSuffix,
     pending: identity.status.kind === "checking",
     resolution: pubDressUrlResolution,
+    derivation: pubDressLabelDerivation,
+    derivationPending: pubDressLabelDerivationPending,
   });
   const credentialUsername = `0x${displayedSelection.discriminator}${displayedSelection.slug}`;
   const normalizedPassword = password.normalize("NFC");
@@ -1002,6 +1016,8 @@ function IdentityForm({
 
 export function IdentityFoundationView({
   password,
+  pubDressLabelDerivation,
+  pubDressLabelDerivationPending = false,
   pubDressUrlResolution,
   selection,
   viewModel,
@@ -1042,10 +1058,24 @@ export function IdentityFoundationView({
                 </div>
               </>
             ) : null}
-            {viewModel.identity.kind === "form" ? (
+            {viewModel.identity.kind === "provider-password" ? (
+              <TelegramPasswordForm
+                key={viewModel.identity.pubDress}
+                pubDress={viewModel.identity.pubDress}
+                password={password}
+                busy={viewModel.identity.busy}
+                {...(viewModel.identity.error === undefined
+                  ? {}
+                  : { error: viewModel.identity.error })}
+                onPasswordChange={onPasswordChange}
+                onSubmit={onSubmit}
+              />
+            ) : viewModel.identity.kind === "form" ? (
               <IdentityForm
                 identity={viewModel.identity}
                 password={password}
+                pubDressLabelDerivation={pubDressLabelDerivation}
+                pubDressLabelDerivationPending={pubDressLabelDerivationPending}
                 pubDressUrlResolution={pubDressUrlResolution}
                 selection={selection}
                 onCredentialAutofill={onCredentialAutofill}

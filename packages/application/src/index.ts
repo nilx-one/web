@@ -18,6 +18,8 @@ export {
 } from "./failure-notice";
 export {
   ReadRuntimeReadiness,
+  type CorePubDressLabelErrorCode,
+  type CorePubDressLabelResult,
   type CoreRuntimePort,
   type CoreRuntimeStatus,
   type CoreUnavailableReason,
@@ -32,6 +34,8 @@ export {
   ReadProviderIdentity,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
+  SetTelegramPassword,
+  type ProviderPasswordResult,
   ResolvePubDress,
   ResolvePubDressLabel,
   formatPubDress,
@@ -53,12 +57,13 @@ export {
   PUB_DRESS_LABEL_MAX_LENGTH,
   PUB_DRESS_URL_SUFFIX_MAX_LENGTH,
   PUB_DRESS_URL_ZONE,
-  composePubDressLabel,
-  derivePubDressLabelStem,
   formatPubDressUrl,
   normalizePubDressUrlSuffix,
+  projectCorePubDressLabel,
+  projectCorePubDressLabelComposition,
   suggestPubDressUrlSuffix,
   type PubDressLabelComposition,
+  type PubDressLabelDerivation,
   type PubDressLabelRejection,
   type PubDressLabelStem,
 } from "./pub-dress-url";

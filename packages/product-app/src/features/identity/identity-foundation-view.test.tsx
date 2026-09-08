@@ -404,6 +404,7 @@ describe("public address inside the identity form", () => {
       <IdentityFoundationView
         password=""
         selection={selection}
+        pubDressLabelDerivation={{ kind: "label", label: "0xda-sha" }}
         {...(pubDressUrlResolution ? { pubDressUrlResolution } : {})}
         viewModel={{
           hostLabel: "browser host",
@@ -444,7 +445,9 @@ describe("public address inside the identity form", () => {
 
     expect(screen.getByText("public address")).toBeInTheDocument();
     expect(screen.getAllByText("0xda-sha")).not.toHaveLength(0);
-    expect(screen.getByText(/Lowercased for the address/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Core maps this ASCII address/),
+    ).toBeInTheDocument();
   });
 
   it("does not offer an address to a Bond that already has one", () => {

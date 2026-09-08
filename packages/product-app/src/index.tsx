@@ -11,7 +11,9 @@ import {
   ReadRuntimeReadiness,
   RegisterNativeIdentity,
   RegisterProviderIdentity,
+  SetTelegramPassword,
   ResolvePubDress,
+  formatPubDress,
   type CoreRuntimePort,
   type IdentityAccessPort,
   type PubDressSelection,
@@ -214,6 +216,24 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
+  const pubDressLabelSlugLength = [...selection.slug].length;
+  const pubDressLabelEnabled =
+    pubDressLabelSlugLength >= 2 &&
+    pubDressLabelSlugLength <= 32 &&
+    dependencies.core.derivePubDressLabel !== undefined;
+  const pubDressLabelQuery = useQuery({
+    queryKey: ["core-pub-dress-label", selection.discriminator, selection.slug],
+    queryFn: () => {
+      const derive = dependencies.core.derivePubDressLabel;
+      if (derive === undefined) {
+        throw new Error("0x1 Core PubDress label derivation is unavailable");
+      }
+      return derive.call(dependencies.core, formatPubDress(selection));
+    },
+    enabled: pubDressLabelEnabled,
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
   const nativeContextQuery = useQuery({
     queryKey: ["native-identity-context"],
     queryFn: () =>
@@ -316,6 +336,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
     },
   });
+  const telegramPassword = useMutation({
+    mutationFn: () =>
+      new SetTelegramPassword(dependencies.identity).execute(password),
+    gcTime: 0,
+    onSuccess: (result) => {
+      if (result.kind === "recovery-key-required") setPassword("");
+    },
+  });
   const forgetRemembered = useMutation({
     mutationFn: () => new ForgetRememberedBond(dependencies.identity).execute(),
     onSuccess: (result) => {
@@ -375,7 +403,11 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         providerIdentityQuery.data,
         providerRegistration.data,
         status,
-        providerRegistration.isPending,
+        providerRegistration.isPending ||
+          telegramPassword.isPending ||
+          recoveryAcknowledgement.isPending,
+        telegramPassword.data,
+        recoveryAcknowledgement.data,
       );
   const viewModel = createIdentityFoundationViewModel(
     host,
@@ -405,6 +437,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     nextSelection: PubDressSelection,
     nextPassword: string,
   ): void {
+    if (!browserHost) return;
     const normalizedSelection = normalizePubDressCredentialInput(
       nextSelection,
       selection,
@@ -463,6 +496,13 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   }
 
   function submitIdentity(): void {
+    if (identityState.kind === "provider-password") {
+      if (!identityState.busy && validNativePassword(password)) {
+        recoveryAcknowledgement.reset();
+        telegramPassword.mutate();
+      }
+      return;
+    }
     if (identityState.kind !== "form" || identityState.busy) {
       return;
     }
@@ -487,6 +527,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         break;
       }
       case "provider-register":
+        if (status.kind !== "available") return;
         providerRegistration.mutate(selection);
         break;
       case "initial":
@@ -577,6 +618,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   return (
     <IdentityFoundationView
       password={password}
+      pubDressLabelDerivation={pubDressLabelQuery.data}
+      pubDressLabelDerivationPending={
+        pubDressLabelEnabled && pubDressLabelQuery.isFetching
+      }
       selection={selection}
       viewModel={viewModel}
       onCredentialAutofill={applyAutofilledCredential}
