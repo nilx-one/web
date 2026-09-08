@@ -6,10 +6,11 @@ import type {
   BondProviderType,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
-import type {
-  MapDimension,
-  MapRenderer,
-  MapRendererStatus,
+import {
+  avatarPreviewUrl,
+  type MapDimension,
+  type MapRenderer,
+  type MapRendererStatus,
 } from "@nilx-one/map-contract";
 import { StatusToastStack, type StatusToastItem } from "@nilx-one/ui";
 import { useEffect, useRef, useState } from "react";
@@ -55,6 +56,7 @@ import {
   BODY_HANDLE_IDS,
   createWheelBodyHandle,
 } from "./avatar-presence";
+
 import {
   handoverComplete,
   HANDOVER_MS,
@@ -391,13 +393,6 @@ export function AuthenticatedMapHomeView({
   // Zoom alone drives the body's apparent size, so the avatar is not redrawn
   // for a pan that leaves the scale untouched.
   const cameraZoom = camera.zoom;
-  // Whether anything will stand here at close range. Without a body the marker
-  // keeps representing the person at every scale rather than fading into
-  // nothing on the way in.
-  const bodyDrawn =
-    renderer.avatars !== undefined &&
-    avatarChoice?.rendered !== undefined &&
-    observedPosition !== undefined;
   const contractVersion = runtimeContract(runtime);
   const mapViewModel = createMapFoundationViewModel(mapStatus);
   const activeDetail =
@@ -427,16 +422,19 @@ export function AuthenticatedMapHomeView({
   // so an unnamed Avaia is still the same Avaia between renders.
   const avaiaAddress = avaiaLabel;
 
+  // The study of whoever is at the wheel: the body on the world, and the still
+  // the label falls back to once that body is too far away to read.
+  const wheelStudy =
+    avatarChoice?.rendered === undefined
+      ? undefined
+      : wheel === "bond"
+        ? avatarChoice.rendered
+        : avaiaStudy(avaiaAddress, avatarChoice.rendered);
+
   // A map that never paints must say so. Without this the shell shows an empty
   // surface and a renderer, asset, or basemap failure is indistinguishable
   // from an ordinary dark map.
   useEffect(() => renderer.subscribe(setMapStatus), [renderer]);
-
-  // The marker and the body are one representation, not two: the point stands
-  // for the person until a body can, and hands over when it does.
-  useEffect(() => {
-    renderer.setObservedPositionRole(bodyDrawn ? "body" : "person");
-  }, [bodyDrawn, renderer]);
 
   // Appearance is applied before mounting so the first paint already uses the
   // resolved style variant instead of loading light and swapping to dark.
@@ -492,8 +490,13 @@ export function AuthenticatedMapHomeView({
     renderer.setObservedPositionLabel({
       title: pubDress,
       detail: "This device",
+      // Too far out for a body, so the card shows the study it would be
+      // standing in — the same identity, at a size that survives the distance.
+      ...(wheelStudy === undefined
+        ? {}
+        : { avatarUrl: avatarPreviewUrl(wheelStudy) }),
     });
-  }, [observedPosition, pubDress, renderer]);
+  }, [observedPosition, pubDress, renderer, wheelStudy]);
 
   // The first fix of a world recenters once. Later updates move the marker;
   // they never take the camera back from the person holding it.

@@ -13,7 +13,6 @@ import {
   MAP_STYLE_URLS,
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
   OBSERVED_POSITION_EDGE_LAYER_ID,
-  OBSERVED_POSITION_LABEL_MIN_ZOOM,
   OBSERVED_POSITION_POINT_LAYER_ID,
   OBSERVED_POSITION_SOURCE_ID,
   createMapLibreRenderer,
@@ -437,65 +436,28 @@ describe("observed device position", () => {
     expect(fakeMap.remove).not.toHaveBeenCalled();
   });
 
-  // The marker and a body are one representation of one person. Without a body
-  // coming, the point has to hold at every scale or the person disappears on
-  // the way in.
-  it("keeps the marker at every scale when nothing will stand here", () => {
-    const fakeMap = makeFakeMap();
-    const renderer = readyRenderer(fakeMap);
-
-    renderer.setObservedPositionRole("person");
-    renderer.setObservedPosition(OBSERVED);
-
-    expect(
-      fakeMap.paint.get(`${OBSERVED_POSITION_POINT_LAYER_ID}.circle-opacity`),
-    ).toBe(1);
-    expect(
-      fakeMap.paint.get(`${OBSERVED_POSITION_EDGE_LAYER_ID}.circle-opacity`),
-    ).toBe(0.26);
-  });
-
-  it("hands the marker over to a body across the zoom the body arrives at", () => {
+  // The marker is always there. A body stands on it, so it has to lie on the
+  // ground: pitched into the viewport it would tilt up into the figure and
+  // read as a disc pasted across its middle.
+  it("lays every mark flat on the ground, at full strength, always", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);
 
     renderer.setObservedPosition(OBSERVED);
-    renderer.setObservedPositionRole("body");
 
-    const opacity = fakeMap.paint.get(
-      `${OBSERVED_POSITION_POINT_LAYER_ID}.circle-opacity`,
-    ) as [string, unknown[], unknown[], number, number, number, number];
-    expect(opacity[0]).toBe("interpolate");
-    expect(opacity[2]).toEqual(["zoom"]);
-    // Fully drawn below the handover, gone above it, and the body's own
-    // threshold sits between the two.
-    expect(opacity[4]).toBe(1);
-    expect(opacity[6]).toBe(0);
-    expect(opacity[3]).toBeLessThan(MAP_BODY_HANDOVER_ZOOM);
-    expect(opacity[5]).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
-
-    // The accuracy halo is what the observation actually knows, so it is never
-    // handed over: a body stands inside it, not instead of it.
-    expect(
-      fakeMap.paint.get(
-        `${OBSERVED_POSITION_ACCURACY_LAYER_ID}.circle-opacity`,
-      ),
-    ).toBeUndefined();
-  });
-
-  it("changes the handover without rebuilding the marker under it", () => {
-    const fakeMap = makeFakeMap();
-    const renderer = readyRenderer(fakeMap);
-
-    renderer.setObservedPosition(OBSERVED);
-    renderer.setObservedPositionRole("body");
-    renderer.setObservedPositionRole("person");
-
-    expect(fakeMap.addSource).toHaveBeenCalledOnce();
-    expect(fakeMap.addLayer).toHaveBeenCalledTimes(3);
-    expect(
-      fakeMap.paint.get(`${OBSERVED_POSITION_POINT_LAYER_ID}.circle-opacity`),
-    ).toBe(1);
+    for (const layerId of [
+      OBSERVED_POSITION_ACCURACY_LAYER_ID,
+      OBSERVED_POSITION_EDGE_LAYER_ID,
+      OBSERVED_POSITION_POINT_LAYER_ID,
+    ]) {
+      const paint = fakeMap.layers.get(layerId)?.paint as Record<
+        string,
+        unknown
+      >;
+      expect(paint["circle-pitch-alignment"]).toBe("map");
+      // Nothing fades with zoom: a number, never an interpolation.
+      expect(typeof paint["circle-opacity"]).toBe("number");
+    }
   });
 
   it("clears every location resource when the observation is withdrawn", () => {
@@ -560,17 +522,20 @@ describe("observed position label", () => {
     expect(markers[0]?.center).toEqual([30.53, 50.46]);
   });
 
-  it("keeps identity context for close zoom only", () => {
+  // The card and the body take turns. Close in the body is on the world and
+  // speaks for itself; further out it is gone, and the card is what is left.
+  it("shows identity context only where no body can stand", () => {
     const fakeMap = makeFakeMap();
     const { markers, createLabelMarker } = labelMarkers();
     const renderer = readyRenderer(fakeMap, createLabelMarker);
 
+    fakeMap.camera.zoom = MAP_BODY_HANDOVER_ZOOM;
     renderer.setObservedPosition(OBSERVED);
     renderer.setObservedPositionLabel({ title: "0x0sky" });
 
     expect(markers[0]?.element.hidden).toBe(true);
 
-    fakeMap.camera.zoom = OBSERVED_POSITION_LABEL_MIN_ZOOM;
+    fakeMap.camera.zoom = MAP_BODY_HANDOVER_ZOOM - 1;
     fakeMap.emit("zoom");
 
     expect(markers[0]?.element.hidden).toBe(false);

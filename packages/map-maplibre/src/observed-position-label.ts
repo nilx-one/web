@@ -51,11 +51,30 @@ export function createObservedPositionLabelElement(
 
   const card = document.createElement("div");
   card.dataset.part = "card";
+  card.style.display = "flex";
+  card.style.alignItems = "center";
+  card.style.gap = "10px";
   card.style.borderRadius = "14px";
   card.style.padding = "8px 14px";
-  card.style.textAlign = "center";
   card.style.lineHeight = "1.25";
   card.style.fontSize = "13px";
+
+  // The text is the identity; the still is the body it would be standing in if
+  // the world were close enough to see one.
+  const text = document.createElement("span");
+  text.dataset.part = "text";
+  text.style.display = "block";
+  text.style.textAlign = "left";
+
+  const study = document.createElement("img");
+  study.dataset.part = "study";
+  study.alt = "";
+  study.decoding = "async";
+  study.style.display = "block";
+  study.style.width = "28px";
+  study.style.height = "28px";
+  study.style.objectFit = "contain";
+  study.style.flex = "0 0 auto";
 
   const title = document.createElement("strong");
   title.dataset.part = "title";
@@ -72,7 +91,8 @@ export function createObservedPositionLabelElement(
   connector.style.width = "1px";
   connector.style.height = "22px";
 
-  card.append(title, detail);
+  text.append(title, detail);
+  card.append(text, study);
   element.append(card, connector);
   return element;
 }
@@ -89,6 +109,7 @@ export function applyObservedPositionLabel(
   const connector = element.querySelector<HTMLElement>(
     '[data-part="connector"]',
   );
+  const study = element.querySelector<HTMLImageElement>('[data-part="study"]');
 
   if (card !== null) {
     card.style.background = palette.surface;
@@ -106,5 +127,16 @@ export function applyObservedPositionLabel(
   }
   if (connector !== null) {
     connector.style.background = palette.connector;
+  }
+  if (study !== null) {
+    // A card with no study to show is text alone rather than a gap where a
+    // body would be: nothing is drawn for a body that was never chosen.
+    study.hidden = label.avatarUrl === undefined;
+    if (
+      label.avatarUrl !== undefined &&
+      study.getAttribute("src") !== label.avatarUrl
+    ) {
+      study.src = label.avatarUrl;
+    }
   }
 }

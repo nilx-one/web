@@ -61,11 +61,11 @@ export function avatarSeed(pubDress: string): number {
  */
 const AVATAR_HEIGHT_METERS = 1.8;
 
-/**
- * Fewer pixels than this and a body is a smear rather than a figure: too small
- * to read as a person at all, let alone to tell one study from another.
- */
-export const AVATAR_MIN_APPARENT_PIXELS = 24;
+/** The parallel Web Mercator stops at, and so the last latitude with ground. */
+const MERCATOR_LATITUDE_LIMIT = 85.051129;
+
+/** The height a body is drawn at, at every scale it appears on. */
+export const AVATAR_APPARENT_PIXELS = 24;
 
 /**
  * Further out than street scale an observation is a place, not a person. The
@@ -75,26 +75,35 @@ export const AVATAR_MIN_APPARENT_PIXELS = 24;
 export const AVATAR_MIN_ZOOM = MAP_SCALE_ZOOM.street;
 
 /**
- * How much larger than life the body is drawn so it stays readable while the
- * ground under it is still far away.
+ * How much larger than life the body is drawn, so that it is always drawn the
+ * same size.
  *
- * At building scale a person is barely three pixels tall, which is why the
- * body needs a presentation size of its own to be seen at all. This is that
- * size and nothing more: the position is untouched, only the apparent height,
- * and the multiplier falls to exactly 1 as soon as geography alone makes a
- * person legible. From there the body is as tall as it is — one truth, drawn
- * at the size the world actually gives it.
+ * At building scale a person is barely three pixels tall, which is why a body
+ * needs a presentation size of its own to be seen at all. It keeps that size
+ * at every scale it appears on rather than growing into true scale as the
+ * camera comes in: a body is who is standing there, and how big it looks
+ * should not change what it is. The position is untouched — only the apparent
+ * height — and the world's own geometry is unaffected.
  */
 export function avatarPresentationScale(
   zoom: number,
   latitude: number,
 ): number {
-  const naturalPixels =
-    AVATAR_HEIGHT_METERS / mapMetersPerPixel(latitude, zoom);
-  if (!(naturalPixels > 0) || naturalPixels >= AVATAR_MIN_APPARENT_PIXELS) {
+  // Web Mercator carries no ground past this parallel, and the metres a pixel
+  // covers there collapses towards zero — which would divide a body down to
+  // nothing rather than draw it. The projection's own limit is the answer.
+  const ground = mapMetersPerPixel(
+    Math.min(
+      Math.max(latitude, -MERCATOR_LATITUDE_LIMIT),
+      MERCATOR_LATITUDE_LIMIT,
+    ),
+    zoom,
+  );
+  const naturalPixels = AVATAR_HEIGHT_METERS / ground;
+  if (!Number.isFinite(naturalPixels) || naturalPixels <= 0) {
     return 1;
   }
-  return AVATAR_MIN_APPARENT_PIXELS / naturalPixels;
+  return AVATAR_APPARENT_PIXELS / naturalPixels;
 }
 
 /** Everything the client needs to stand a body on the world. */

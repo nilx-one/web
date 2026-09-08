@@ -40,24 +40,24 @@ City-scale fabric should already read at the bootstrap camera where the publishe
 
 ## Apparent size of a body
 
-A published avatar study stands 1.80 m to 1.89 m tall, which is nothing on a map. At building scale — where focusing a Bond lands — one metre is about half a pixel, so an unscaled person is roughly three pixels: present in the scene, invisible to the eye. Zoom alone does not fix this without abandoning the scale the published styles are drawn for.
+A published avatar study stands 1.80 m to 1.89 m tall, which is nothing on a map. At building scale — where focusing an identity lands — one metre is about half a pixel, so an unscaled person is roughly three pixels: present in the scene, invisible to the eye.
 
-So a body carries a presentation size of its own. It holds a constant readable height on screen while the ground under it is still far away, and gives that up for true scale as soon as geography can carry a person on its own — around zoom 19.5, where 1.8 m first covers the readable minimum. From there the body is exactly as tall as it is.
+So a body carries a presentation size of its own, and it is **one size at every scale it appears on**. It does not grow into true scale as the camera comes in: a body is who is standing there, and how close the camera happens to be must not change what it is.
 
 Two rules bound it:
 
 - **Apparent size only.** The multiplier changes how tall a body is drawn and nothing else. It never moves the body, never widens the accuracy it stands in, and never survives into shared state.
-- **A body withdraws before it can lie.** Further out than street scale no body is drawn at all. The observed-position marker already says "here" at those widths, and a figure standing there would read as a person at a spot the observation cannot actually resolve.
+- **A body withdraws before it can lie.** Further out than street scale no body is drawn at all — it would be too small to read. What is left is the marker and the card, and the card carries a still of the same study so the identity survives the distance.
 
 One body is drawn — the identity at the wheel — and only while this device holds an observation of itself. A body on the map is never evidence of presence, proximity, or that anyone else is nearby.
 
-## Marker and body
+## Marker and card
 
-One person is represented once. At altitude that is the observed-position marker — the accuracy the host reported, a pale edge, and the exact coordinate. Coming in past street scale a body takes over, and the two marks that stand for the person fade out across the handover rather than leaving a figure standing on top of its own dot.
+The marker is always drawn. It is three restrained circles — the accuracy the host reported, a pale edge, and the exact coordinate — and **all three lie flat on the ground**. A body stands on the marker rather than in front of it: pitched into the viewport the circles would tilt up into the figure and read as a disc pasted across its middle.
 
-The accuracy halo is not part of the handover. It is what the observation actually knows, and a body stands inside it rather than instead of it.
+The accuracy halo is what the observation actually knows. A body stands inside it, not instead of it.
 
-The handover only happens when a body is actually coming. With no study chosen there is nothing to hand over to, so the marker holds at every scale — a person must never disappear on the way in.
+The **card** and the body take turns. Closer than street scale the body is on the world and speaks for itself, and a card over its head would only repeat it. Further out the body is gone, and the card is what is left — the identity, "this device", and a still of the study beside the text, so who is standing there is still legible when it is too far to draw.
 
 ## Who is drawn
 

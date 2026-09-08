@@ -12,10 +12,9 @@ import {
   type MapCameraChange,
   type MapCameraOptions,
   type MapDimension,
-  DEFAULT_OBSERVED_POSITION_ROLE,
+  MAP_BODY_HANDOVER_ZOOM,
   type MapObservedPosition,
   type MapObservedPositionLabel,
-  type MapObservedPositionRole,
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
@@ -48,11 +47,8 @@ import {
   createObservedPositionLabelElement,
 } from "./observed-position-label";
 import {
-  HANDOVER_PAINT,
-  handoverOpacity,
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
   OBSERVED_POSITION_EDGE_LAYER_ID,
-  OBSERVED_POSITION_LABEL_MIN_ZOOM,
   OBSERVED_POSITION_POINT_LAYER_ID,
   OBSERVED_POSITION_SOURCE_ID,
   accuracyRadiusExpression,
@@ -63,7 +59,6 @@ import {
 export {
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
   OBSERVED_POSITION_EDGE_LAYER_ID,
-  OBSERVED_POSITION_LABEL_MIN_ZOOM,
   OBSERVED_POSITION_POINT_LAYER_ID,
   OBSERVED_POSITION_SOURCE_ID,
   accuracyRadiusExpression,
@@ -272,7 +267,6 @@ export function createMapLibreRenderer(
   // silently lost. This flag is what a style reload resets.
   let presentationApplied = false;
   let observedPosition: MapObservedPosition | null = null;
-  let observedRole: MapObservedPositionRole = DEFAULT_OBSERVED_POSITION_ROLE;
   let observedLabel: MapObservedPositionLabel | null = null;
   let labelMarker: MapLabelMarker | undefined;
   let labelElement: HTMLElement | undefined;
@@ -363,7 +357,10 @@ export function createMapLibreRenderer(
     if (labelElement === undefined) {
       return;
     }
-    labelElement.hidden = mounted.getZoom() < OBSERVED_POSITION_LABEL_MIN_ZOOM;
+    // The label and the body take turns: closer than the handover the body is
+    // on the world and speaks for itself, and a card over its head would only
+    // repeat it. Further out the body is gone, and the card is what is left.
+    labelElement.hidden = mounted.getZoom() >= MAP_BODY_HANDOVER_ZOOM;
   }
 
   function applyLabel(mounted: MapLibreMap): void {
@@ -434,10 +431,7 @@ export function createMapLibreRenderer(
       );
     }
 
-    for (const layer of observedPositionLayers(
-      observedPosition,
-      observedRole,
-    )) {
+    for (const layer of observedPositionLayers(observedPosition)) {
       const layerId = String(layer.id);
       if (mounted.getLayer(layerId) === undefined) {
         // Appended last, so the observation stays above the basemap and the
@@ -458,25 +452,7 @@ export function createMapLibreRenderer(
       }
     }
 
-    applyObservedPositionRole(mounted);
     applyLabel(mounted);
-  }
-
-  // The handover is a paint change on layers that already exist: whether a
-  // body is coming can change without the observation moving, and rebuilding
-  // the marker for it would drop the source the basemap draws beside.
-  function applyObservedPositionRole(mounted: MapLibreMap): void {
-    for (const { layerId, property, opacity } of HANDOVER_PAINT) {
-      if (mounted.getLayer(layerId) === undefined) continue;
-      mounted.setPaintProperty(
-        layerId,
-        property,
-        handoverOpacity(
-          observedRole,
-          opacity,
-        ) as DataDrivenPropertyValueSpecification<number>,
-      );
-    }
   }
 
   function ensureAvatarLayer(mounted: MapLibreMap): void {
@@ -672,18 +648,6 @@ export function createMapLibreRenderer(
 
       if (map !== undefined && presentationApplied) {
         applyObservedPosition(map);
-      }
-    },
-
-    setObservedPositionRole(next: MapObservedPositionRole) {
-      if (next === observedRole) {
-        return;
-      }
-
-      observedRole = next;
-
-      if (map !== undefined && presentationApplied) {
-        applyObservedPositionRole(map);
       }
     },
 

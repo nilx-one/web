@@ -7,6 +7,7 @@ import type {
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import {
+  avatarPreviewUrl,
   MAP_SCALE_ZOOM,
   type MapRenderer,
   type MapRendererStatus,
@@ -813,6 +814,29 @@ describe("AuthenticatedMapHomeView", () => {
     const first = upsert.mock.calls[0]?.[0];
     expect(first).toMatchObject({ id: "avaia", clipId: "quiesce" });
     expect(first?.clipPhase).toBeLessThan(1);
+  });
+
+  // Far out the body is gone and the card is what is left, so it has to carry
+  // the same study — the identity at the wheel, not the one spectating.
+  it("gives the card the study of whoever is at the wheel", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "ready",
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
+      .lastCall?.[0];
+    const drawn = vi.mocked(mapRenderer.avatars!.upsert).mock.lastCall?.[0]
+      .modelId;
+
+    expect(label).toMatchObject({ title: "0x0sky", detail: "This device" });
+    expect(label?.avatarUrl).toBe(avatarPreviewUrl(drawn!));
+    expect(drawn).not.toBe("dasha-study");
   });
 
   it("keeps the world usable when the host has no location capability", async () => {
