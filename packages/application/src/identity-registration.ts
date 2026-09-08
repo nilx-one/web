@@ -388,7 +388,9 @@ export class RegisterProviderIdentity {
 export class ChooseAvatarModel {
   public constructor(private readonly identity: IdentityAccessPort) {}
 
-  public async execute(model: PublishedAvatarModel): Promise<AvatarModelResult> {
+  public async execute(
+    model: PublishedAvatarModel,
+  ): Promise<AvatarModelResult> {
     try {
       return await this.identity.chooseAvatarModel(model);
     } catch {
