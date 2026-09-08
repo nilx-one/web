@@ -46,8 +46,12 @@ function parseProjection(value: unknown): PublicBondProjection | undefined {
   };
 }
 
+function asciiFoldHostname(hostname: string): string {
+  return hostname.replace(/[A-Z]/g, (character) => character.toLowerCase());
+}
+
 export function isPublicBondHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  const normalized = asciiFoldHostname(hostname).replace(/\.$/, "");
   const zone = ".nilx.one";
   if (!normalized.endsWith(zone)) {
     return false;
@@ -66,7 +70,7 @@ export async function readPublicBond(
   try {
     const response = await fetchImpl("/api/v1/identity/public", {
       cache: "no-store",
-      credentials: "same-origin",
+      credentials: "omit",
     });
     if (response.status === 404) {
       return { kind: "not-found" };
