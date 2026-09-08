@@ -71,6 +71,34 @@ describe("Dock seats", () => {
     ).toMatchObject({ handover: undefined, right: { actionable: false } });
   });
 
+  it("presents unconfigured only from persisted configuration state", () => {
+    expect(
+      createBondDockViewState({
+        ...base,
+        avaiaConfiguration: "unconfigured",
+      }),
+    ).toMatchObject({
+      right: {
+        role: "unconfigured",
+        actionable: true,
+        actionLabel: "Set up 0skai",
+      },
+    });
+
+    expect(
+      createBondDockViewState({
+        ...base,
+        avaiaConfiguration: "configured",
+      }),
+    ).toMatchObject({
+      right: {
+        role: "unavailable",
+        actionable: true,
+        actionLabel: "Edit 0skai",
+      },
+    });
+  });
+
   it("cannot focus a world with no observation to focus on", () => {
     expect(
       createBondDockViewState({ ...base, focusable: false }).left.actionable,
