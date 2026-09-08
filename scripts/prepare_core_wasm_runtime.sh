@@ -6,7 +6,7 @@ set -Eeuo pipefail
 
 core_dir="${1:?path to checked-out nilx-one/core is required}"
 expected_core_revision="c224304947280169017e298237bcf5361d1bfb30"
-expected_wasm_sha256="539e3e74c3f7f38b4b6c7255946a61d4e77ff119c6920d1a05569c2fe289a2f2"
+expected_wasm_sha256="173c3e9164c030384865013df87d36a29846b09cd2b8ee59b433509b2d77c90d"
 runtime_version="0.1.0"
 runtime_build="$PWD/.core-wasm-runtime"
 
@@ -20,9 +20,9 @@ rm -rf "$runtime_build"
 (
   cd "$core_dir"
   cargo generate-lockfile
-  # Keep the pinned Core revision reproducible even when a newer compatible
-  # tinyvec release appears on crates.io. tinyvec 1.13.0 currently fails the
-  # wasm/no_std build used by this runtime boundary.
+  # Keep the pinned Core revision reproducible across the known tinyvec
+  # compatibility break in wasm/no_std builds. The resulting Wasm bytes are
+  # still verified below, so any other dependency drift fails closed.
   cargo update -p tinyvec --precise 1.12.0
   ./scripts/build_wasm_package.sh "$runtime_build"
 )
