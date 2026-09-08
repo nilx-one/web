@@ -73,10 +73,7 @@ impl PublicIdentityRecord {
     /// proves which Bond owns that A-label.
     pub fn readable_url(&self, zone: &str) -> String {
         let label = if self.pub_dress_label.starts_with("xn--") {
-            format!(
-                "{}{}",
-                self.identity.pub_dress, self.pub_dress_label_suffix
-            )
+            format!("{}{}", self.identity.pub_dress, self.pub_dress_label_suffix)
         } else {
             self.pub_dress_label.clone()
         };
@@ -166,8 +163,8 @@ impl IdentityRepository {
 
         for row in rows {
             let raw: String = row.get("pub_dress");
-            let pub_dress = PubDress::from_str(&raw)
-                .map_err(|_| RepositoryError::CorruptHumanPubDress)?;
+            let pub_dress =
+                PubDress::from_str(&raw).map_err(|_| RepositoryError::CorruptHumanPubDress)?;
             let Some(label) = default_pub_dress_label(&pub_dress) else {
                 continue;
             };
@@ -383,14 +380,12 @@ impl IdentityRepository {
             }
         }
 
-        sqlx::query(
-            "UPDATE identities SET pub_dress = ?, pub_dress_label = ? WHERE pub_dress = ?",
-        )
-        .bind(next.as_str())
-        .bind(next_label)
-        .bind(current.as_str())
-        .execute(&mut *transaction)
-        .await?;
+        sqlx::query("UPDATE identities SET pub_dress = ?, pub_dress_label = ? WHERE pub_dress = ?")
+            .bind(next.as_str())
+            .bind(next_label)
+            .bind(current.as_str())
+            .execute(&mut *transaction)
+            .await?;
 
         let avaia_pub_dress = if let Some(existing) = existing_avaia {
             let moved = derived_avaia.unwrap_or(existing);
