@@ -355,6 +355,7 @@ async fn register_native_identity(
             "Registration committed and its recovery key was already issued.",
         ),
         Ok(NativeRegistrationOutcome::HandleUnavailable)
+        | Ok(NativeRegistrationOutcome::PublicLabelUnavailable)
         | Ok(NativeRegistrationOutcome::AvaiaUnavailable) => no_store_error(
             StatusCode::CONFLICT,
             "pub_dress_unavailable",
@@ -1419,13 +1420,13 @@ async fn register_identity(
             )
             .await
         }
-        Ok(RegistrationOutcome::HandleUnavailable) | Ok(RegistrationOutcome::AvaiaUnavailable) => {
-            api_error(
-                StatusCode::CONFLICT,
-                "pub_dress_unavailable",
-                "That pub_dress cannot be registered with its required owned Avaia. Choose another one.",
-            )
-        }
+        Ok(RegistrationOutcome::HandleUnavailable)
+        | Ok(RegistrationOutcome::PublicLabelUnavailable)
+        | Ok(RegistrationOutcome::AvaiaUnavailable) => api_error(
+            StatusCode::CONFLICT,
+            "pub_dress_unavailable",
+            "That pub_dress cannot be registered with its required owned Avaia. Choose another one.",
+        ),
         Err(error) => {
             tracing::error!(%error, "identity API registration failed");
             unavailable()
