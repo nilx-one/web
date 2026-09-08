@@ -218,7 +218,7 @@ impl IdentityRepository {
         provider_identity: &ProviderIdentity,
         now: u64,
     ) -> Result<RegistrationOutcome, RepositoryError> {
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         if let Some(mut record) = find_by_provider_in(&mut transaction, provider_identity).await? {
             if record.avaia_pub_dress.is_none() {
@@ -572,7 +572,7 @@ impl IdentityRepository {
         now: u64,
         challenge_expires_at: u64,
     ) -> Result<NativeRegistrationOutcome, RepositoryError> {
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         let replay = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM native_registration_idempotency \
@@ -1287,6 +1287,43 @@ mod tests {
             second.readable_url("nilx.one").as_deref(),
             Some("https://0x0Небо2.nilx.one")
         );
+    }
+
+    #[tokio::test]
+    async fn concurrent_dns_fold_claims_allocate_distinct_labels() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let repository = IdentityRepository::connect(&database_url)
+            .await
+            .expect("repository must initialize");
+        let first_repository = repository.clone();
+        let second_repository = repository.clone();
+        let lower = PubDress::from_str("0x0небо").expect("lower");
+        let title = PubDress::from_str("0x0Небо").expect("title");
+        let telegram = ProviderIdentity::telegram(10);
+        let discord = ProviderIdentity::discord("20");
+
+        let (first, second) = tokio::join!(
+            first_repository.register(&lower, &telegram, 100),
+            second_repository.register(&title, &discord, 101),
+        );
+        let first = match first.expect("first registration") {
+            RegistrationOutcome::Registered(record) => record,
+            other => panic!("unexpected first outcome: {other:?}"),
+        };
+        let second = match second.expect("second registration") {
+            RegistrationOutcome::Registered(record) => record,
+            other => panic!("unexpected second outcome: {other:?}"),
+        };
+
+        assert_ne!(first.pub_dress_label, second.pub_dress_label);
+        let mut suffixes = [
+            first.pub_dress_label_suffix.as_str(),
+            second.pub_dress_label_suffix.as_str(),
+        ];
+        suffixes.sort_unstable();
+        assert_eq!(suffixes, ["", "2"]);
     }
 
     #[tokio::test]
