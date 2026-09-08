@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 BASE = "4464cd629502a120d7d5ccbb7178d6333357d29a"
 CONTRACT_PATH = "services/identity/deploy/contract.version"
 TARGETS_PATH = "deploy/web/targets.json"
+PRODUCT_INDEX_PATH = "packages/product-app/src/index.tsx"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -33,6 +35,19 @@ def changed(ref_a: str, ref_b: str) -> set[str]:
     return {line for line in result.stdout.splitlines() if line}
 
 
+def resolve_product_index_conflict(text: str) -> str:
+    pattern = re.compile(
+        r"^<<<<<<<[^\n]*\n(.*?)^=======\n(.*?)^>>>>>>>[^\n]*\n",
+        re.MULTILINE | re.DOTALL,
+    )
+    merged, count = pattern.subn(lambda match: match.group(1) + match.group(2), text)
+    if count != 1 or "<<<<<<<" in merged or ">>>>>>>" in merged:
+        raise SystemExit(
+            f"{PRODUCT_INDEX_PATH}: expected exactly one composable conflict, found {count}"
+        )
+    return merged
+
+
 def three_way_merge(path: str, master: str) -> None:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -51,11 +66,14 @@ def three_way_merge(path: str, master: str) -> None:
             str(theirs_path),
             check=False,
         )
+        output = result.stdout
         if result.returncode != 0:
-            print(f"semantic merge conflict: {path}")
-            print(result.stdout)
-            raise SystemExit(1)
-        Path(path).write_text(result.stdout)
+            if path != PRODUCT_INDEX_PATH:
+                print(f"semantic merge conflict: {path}")
+                print(output)
+                raise SystemExit(1)
+            output = resolve_product_index_conflict(output)
+        Path(path).write_text(output)
 
 
 run("git", "fetch", "origin", "master", "--depth=1")
