@@ -51,6 +51,10 @@ sh tools/avatars/build.sh
 python tools/avatars/test_rig.py
 ```
 
+`python tools/avatars/preview.py --thumbnails deploy/web/avatars/0.1.0` writes
+the still each study shows in the picker; the build does this after exporting
+the GLBs, and the hashes are pinned like every other output.
+
 `python tools/avatars/preview.py sheet.png` rasterises the exported studies to a
 single PNG — front and three-quarter views, flat-shaded from the material
 palette — so a change can be looked at without a device or a scene editor. It is

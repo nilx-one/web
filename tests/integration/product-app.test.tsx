@@ -246,6 +246,12 @@ describe("ProductApp identity", () => {
     await user.click(continueButton);
 
     expect(acknowledgeRecoveryKey).toHaveBeenCalledWith("0x1c-registration");
+    // A new Bond is asked for a body once, before its world opens. Deciding
+    // later is an answer, and it opens the world with no model recorded.
+    expect(
+      await screen.findByRole("heading", { name: "Choose your body." }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
       await screen.findByRole("button", {
         name: "Focus the world on 0xaSky",
@@ -767,6 +773,8 @@ describe("ProductApp identity", () => {
       screen.getByRole("checkbox", { name: "I saved this recovery key" }),
     );
     await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
+    await screen.findByRole("heading", { name: "Choose your body." });
+    await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
       await screen.findByRole("button", {
         name: "Focus the world on 0xaSky",
@@ -872,6 +880,8 @@ describe("ProductApp identity", () => {
       screen.getByRole("checkbox", { name: "I saved this recovery key" }),
     );
     await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
+    await screen.findByRole("heading", { name: "Choose your body." });
+    await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
       await screen.findByRole("button", {
         name: "Focus the world on 0x0sky",
@@ -940,6 +950,99 @@ describe("ProductApp identity", () => {
 
     expect(renameAvaiaSlug).toHaveBeenCalledExactlyOnceWith("vesnai");
     expect(await screen.findByText("Saved. This is 0vesnai.")).toBeVisible();
+  });
+
+  it("offers a body once a Bond exists, and remembers what it chose", async () => {
+    const user = userEvent.setup();
+    let avatarModel: "sky-study" | "dasha-study" | "kai-study" | undefined;
+    const chooseAvatarModel = vi
+      .fn<IdentityAccessPort["chooseAvatarModel"]>()
+      .mockImplementation(async (model) => {
+        avatarModel = model;
+        return {
+          kind: "chosen",
+          identity: { pubDress: "0xaSky", avatarModel: model },
+        };
+      });
+    const registerNative = vi
+      .fn<IdentityAccessPort["registerNative"]>()
+      .mockResolvedValue({
+        kind: "recovery-key-required",
+        identity: { pubDress: "0xaSky" },
+        recoveryKey: "0x1-rk-once-only",
+        challenge: "0x1c-registration",
+      });
+    const acknowledgeRecoveryKey = vi
+      .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
+      .mockImplementation(async () => ({
+        kind: "authenticated",
+        identity: {
+          pubDress: "0xaSky",
+          ...(avatarModel === undefined ? {} : { avatarModel }),
+        },
+      }));
+
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({
+          registerNative,
+          acknowledgeRecoveryKey,
+          chooseAvatarModel,
+          // The session survives the choice, so the refreshed context is what
+          // carries the Bond — and the body it now has — into the world.
+          readNativeContext: async () =>
+            avatarModel === undefined
+              ? { kind: "anonymous" }
+              : {
+                  kind: "authenticated",
+                  identity: { pubDress: "0xaSky", avatarModel },
+                },
+        })}
+      />,
+    );
+
+    const discriminator = await screen.findByRole("combobox", {
+      name: "pub_dress hexadecimal discriminator",
+    });
+    await user.selectOptions(discriminator, "a");
+    await user.type(screen.getByLabelText("pub_dress"), "Sky");
+    await screen.findByText(
+      "Available — create this identity",
+      {},
+      { timeout: 2_000 },
+    );
+    await user.keyboard("{Enter}");
+    await user.type(
+      await screen.findByLabelText("Password"),
+      "a deliberately long password",
+    );
+    await user.click(screen.getByRole("button", { name: "Create 0xaSky" }));
+    await screen.findByText("0x1-rk-once-only");
+    await user.click(screen.getByLabelText("I saved this recovery key"));
+    await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
+
+    // The body is offered after the address and the password, never before:
+    // there is no Bond to represent until the recovery key is acknowledged.
+    expect(
+      await screen.findByRole("heading", { name: "Choose your body." }),
+    ).toBeVisible();
+    for (const study of ["Sky", "Dasha", "Kai"]) {
+      expect(
+        screen.getByRole("button", { name: new RegExp(study) }),
+      ).toBeVisible();
+    }
+
+    await user.click(screen.getByRole("button", { name: /Kai/ }));
+
+    expect(chooseAvatarModel).toHaveBeenCalledExactlyOnceWith("kai-study");
+    // Choosing ends the step: the world opens with that body recorded.
+    expect(
+      await screen.findByRole("button", {
+        name: "Focus the world on 0xaSky",
+      }),
+    ).toBeVisible();
   });
 
   it("chooses an avatar study from the profile and stands it in the world", async () => {

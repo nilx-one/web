@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { avatarPreviewUrl } from "@nilx-one/map-contract";
+
 import {
   AVATAR_MODELS,
   type AvatarModel,
@@ -19,6 +21,8 @@ export interface AvatarOptionViewState {
   readonly name: string;
   /** How the study reads, in the person's own terms rather than a category. */
   readonly detail: string;
+  /** A still of this very study, so the picker cannot promise another body. */
+  readonly previewUrl: string;
   readonly selected: boolean;
 }
 
@@ -86,6 +90,7 @@ export function createAvatarChoiceViewState(
       model,
       name: STUDIES[model].name,
       detail: STUDIES[model].detail,
+      previewUrl: avatarPreviewUrl(model),
       selected: model === rendered,
     })),
     ...(rendered === undefined ? {} : { rendered }),

@@ -59,6 +59,7 @@ import {
 } from "./features/identity/identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-credential-input";
 import { createAvatarChoiceViewState } from "./features/identity/avatar-choice-view-model";
+import { createAvatarChoiceStepViewState } from "./features/identity/identity-foundation-view-model";
 import {
   createAvaiaSlugViewState,
   createProfileSlugViewState,
@@ -234,6 +235,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [useRememberedHint, setUseRememberedHint] = useState(true);
   // Undefined means the profile is showing the address the service holds.
   const [slugDraft, setSlugDraft] = useState<string | undefined>(undefined);
+  // A new Bond is asked for a body once. Deciding later is a real answer, so
+  // the step is not offered again in this session.
+  const [avatarStepDeclined, setAvatarStepDeclined] = useState(false);
   const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);
   const pendingAutofillCredential = useRef<
     PendingAutofillCredential | undefined
@@ -486,10 +490,28 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         providerPassword.data,
         recoveryAcknowledgement.data,
       );
+  const avatarChoice = createAvatarChoiceViewState(
+    identityState.kind === "authenticated"
+      ? identityState.avatarModel
+      : undefined,
+    chooseAvatar.isPending ? chooseAvatar.variables : undefined,
+    chooseAvatar.data,
+  );
+  // Registration is the one moment a body is offered without being asked for:
+  // a Bond that just came into existence, before its world opens.
+  const registeredThisSession =
+    nativeRegistration.data?.kind === "recovery-key-required" ||
+    providerPassword.data?.kind === "recovery-key-required";
   const viewModel = createIdentityFoundationViewModel(
     host,
     readinessQuery.data,
-    identityState,
+    identityState.kind === "authenticated"
+      ? createAvatarChoiceStepViewState(
+          identityState,
+          avatarChoice,
+          registeredThisSession && !avatarStepDeclined,
+        )
+      : identityState,
   );
 
   useEffect(() => {
@@ -718,11 +740,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           renameAvaia.reset();
           setAvaiaDraft(next);
         }}
-        avatarChoice={createAvatarChoiceViewState(
-          viewModel.identity.avatarModel,
-          chooseAvatar.isPending ? chooseAvatar.variables : undefined,
-          chooseAvatar.data,
-        )}
+        avatarChoice={avatarChoice}
         onAvatarChoice={(model) => {
           if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
         }}
@@ -751,6 +769,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       selection={selection}
       viewModel={viewModel}
       onCredentialAutofill={applyAutofilledCredential}
+      onAvatarChoice={(model) => {
+        if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
+      }}
+      onSkipAvatarChoice={() => setAvatarStepDeclined(true)}
       onAcknowledgeRecovery={(challenge) =>
         recoveryAcknowledgement.mutate(challenge)
       }

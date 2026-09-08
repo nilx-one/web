@@ -135,6 +135,14 @@ export interface MapRenderer {
  */
 export type AvatarModelId = "sky-study" | "dasha-study" | "kai-study";
 
+/** The published asset version every study is served from. */
+export const AVATAR_ASSET_VERSION = "0.1.0";
+
+/** The still image a picker shows for a study, generated from that study. */
+export function avatarPreviewUrl(modelId: AvatarModelId): string {
+  return `/avatars/${AVATAR_ASSET_VERSION}/${modelId}.png`;
+}
+
 export const AVATAR_MODEL_IDS: readonly AvatarModelId[] = [
   "sky-study",
   "dasha-study",

@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
 import type {
   AvatarClipId,
   AvatarHandle,
@@ -32,7 +33,7 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 export const AVATAR_LAYER_ID = "nilx-one-local-avatars";
-export const AVATAR_ASSET_VERSION = "0.1.0";
+export { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
 
 export const AVATAR_ASSET_URLS: Readonly<Record<AvatarModelId, string>> = {
   "sky-study": `/avatars/${AVATAR_ASSET_VERSION}/sky-study.glb`,

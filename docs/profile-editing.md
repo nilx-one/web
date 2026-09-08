@@ -72,6 +72,12 @@ the renames. The service accepts only a published model id and stores nothing
 else; the choice is identity state, so it follows the Bond to every host rather
 than living in one device's interface preferences.
 
+A new Bond is offered a body once, right after its address, its password and
+its recovery key — the first moment there is a Bond to represent. The three
+studies are shown as themselves: each card is a still generated from that very
+study, so a picker can never promise a figure the world would not draw.
+"Decide later" is a real answer, and the profile keeps the same picker.
+
 No body is assigned to anyone. An identity with no choice recorded carries no
 model at all, and the world draws no avatar until a person chooses. A client that
 reads a newer explicit model id it cannot render keeps that choice distinct from

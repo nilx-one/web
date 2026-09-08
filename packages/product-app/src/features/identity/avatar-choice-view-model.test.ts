@@ -74,3 +74,17 @@ describe("avatar choice", () => {
     ]);
   });
 });
+
+describe("avatar choice previews", () => {
+  it("shows a still of the very study each option offers", () => {
+    expect(
+      createAvatarChoiceViewState(undefined, undefined).options.map(
+        (option) => option.previewUrl,
+      ),
+    ).toEqual([
+      "/avatars/0.1.0/sky-study.png",
+      "/avatars/0.1.0/dasha-study.png",
+      "/avatars/0.1.0/kai-study.png",
+    ]);
+  });
+});

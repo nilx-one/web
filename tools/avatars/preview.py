@@ -129,17 +129,33 @@ def write_png(path, image):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("output")
+parser.add_argument("output", nargs="?")
 parser.add_argument("--models", nargs="+", default=["sky", "dasha", "kai"])
 parser.add_argument("--angles", nargs="+", type=float, default=[0, -35])
+# The published thumbnails a client shows while a person chooses a body. They
+# are generated from the same studies, so a picker can never offer a figure the
+# world would not draw.
+parser.add_argument("--thumbnails", help="write one front-view PNG per study here")
 arguments = parser.parse_args()
 
-panels = []
-for model in arguments.models:
-    for azimuth in arguments.angles:
-        panels.append(render(ASSETS / f"{model}-study.glb", azimuth))
-    print("rendered", model, flush=True)
+if arguments.thumbnails is not None:
+    directory = Path(arguments.thumbnails)
+    directory.mkdir(parents=True, exist_ok=True)
+    for model in arguments.models:
+        panel = render(ASSETS / f"{model}-study.glb", 0)
+        # Halve the sheet resolution: a picker card never needs more.
+        thumbnail = panel.reshape(H // 2, 2, W // 2, 2, 3).mean(axis=(1, 3))
+        path = directory / f"{model}-study.png"
+        write_png(path, thumbnail.round().astype(np.uint8))
+        print("wrote", path, flush=True)
 
-sheet = np.concatenate(panels, axis=1)
-write_png(Path(arguments.output), sheet)
-print("wrote", arguments.output, sheet.shape)
+if arguments.output is not None:
+    panels = []
+    for model in arguments.models:
+        for azimuth in arguments.angles:
+            panels.append(render(ASSETS / f"{model}-study.glb", azimuth))
+        print("rendered", model, flush=True)
+
+    sheet = np.concatenate(panels, axis=1)
+    write_png(Path(arguments.output), sheet)
+    print("wrote", arguments.output, sheet.shape)

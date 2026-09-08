@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvatarChoiceViewState } from "./avatar-choice-view-model";
 import type {
   NativeAuthenticationResult,
   NativeIdentityContextResult,
@@ -73,6 +74,16 @@ export type IdentityViewState =
       rememberedPubDress?: string;
     }
   | {
+      /**
+       * The body a new Bond is offered right after it becomes one. It is a
+       * choice, not a step to get past: skipping it leaves the Bond with no
+       * model recorded, and the profile keeps the same picker.
+       */
+      kind: "avatar-choice";
+      pubDress: string;
+      choice: AvatarChoiceViewState;
+    }
+  | {
       kind: "recovery-key";
       pubDress: string;
       recoveryKey: string;
@@ -112,6 +123,21 @@ function projectedAvatar(avatarModel: StoredAvatarModel | undefined): {
   avatarModel?: StoredAvatarModel;
 } {
   return avatarModel === undefined ? {} : { avatarModel };
+}
+
+/**
+ * A newly registered Bond is asked which study represents it, once. An
+ * identity that already recorded a choice, or a person who skipped, goes
+ * straight to the world.
+ */
+export function createAvatarChoiceStepViewState(
+  identity: Extract<IdentityViewState, { kind: "authenticated" }>,
+  choice: AvatarChoiceViewState,
+  offered: boolean,
+): IdentityViewState {
+  return offered && identity.avatarModel === undefined
+    ? { kind: "avatar-choice", pubDress: identity.pubDress, choice }
+    : identity;
 }
 
 export function createPubDressStatusViewState(
