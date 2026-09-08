@@ -62,16 +62,24 @@ describe("public Bond host routing", () => {
 
     render(<PublicBondPage fetchImpl={fetchImpl} />);
 
-    expect(await screen.findByRole("heading", { name: "0x0небо" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "0x0небо" }),
+    ).toBeVisible();
     expect(screen.getByText("0x0небо.nilx.one")).toBeVisible();
-    expect(screen.queryByText("xn--0x0-dddt1cj.nilx.one")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("xn--0x0-dddt1cj.nilx.one"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not invent a Bond for an unallocated label", async () => {
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
+    const fetchImpl = vi.fn(
+      async () => new Response(null, { status: 404 }),
+    ) as unknown as typeof fetch;
 
     render(<PublicBondPage fetchImpl={fetchImpl} />);
 
-    expect(await screen.findByRole("heading", { name: "Bond not found." })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Bond not found." }),
+    ).toBeVisible();
   });
 });
