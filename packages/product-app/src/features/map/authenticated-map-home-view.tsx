@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  AvaiaProfileUpdateResult,
   BondProviderConnections,
   BondProviderType,
 } from "@nilx-one/application";
@@ -66,8 +67,11 @@ import {
 import {
   createBondDockViewState,
   type AvaiaAvailability,
+  type DockIdentityViewState,
   type DockSeat,
 } from "./bond-dock-view-model";
+import { AvaiaSetupView } from "../avaia/avaia-setup-view";
+import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 
 /** The provider types this client can present. The domain owns the list. */
 export type ConnectedProvider = BondProviderType;
@@ -112,6 +116,20 @@ export interface AuthenticatedMapHomeViewProps {
    */
   readonly slugEdit?: AddressSlugViewState;
   readonly avaiaEdit?: AddressSlugViewState;
+  /**
+   * The Avaia this Bond owns, as identity contract 8 keeps it. Without it the
+   * Dock knows of no stored configuration and stays a runtime-only Dock.
+   */
+  readonly avaiaSetup?: AvaiaSetupViewState;
+  readonly onAvaiaSetupChange?: (pubDress: string) => void;
+  /**
+   * Saves the whole address and answers with what the service stored. The
+   * answer is what closes the screen, so a return to the world is never a guess
+   * about a request that may still be in flight.
+   */
+  readonly onAvaiaSetupSubmit?: () => Promise<
+    AvaiaProfileUpdateResult | undefined
+  >;
   /** The body this Bond is represented by, and the studies it may choose. */
   readonly avatarChoice?: AvatarChoiceViewState;
   readonly onAvatarChoice?: (
@@ -146,8 +164,8 @@ function focusStateFor(location: DeviceLocationState): FocusState {
   }
 }
 
-/** Identity detail is a state of the identity surface, never a separate route. */
-type IdentityDetail = "providers";
+/** Identity detail is a state of the Dock's own stack, never a separate route. */
+type IdentityDetail = "providers" | "avaia";
 
 /**
  * Detail is scoped to the section that opened it, so leaving the identity
@@ -345,6 +363,9 @@ export function AuthenticatedMapHomeView({
   onPrepareAvaia,
   slugEdit,
   avaiaEdit,
+  avaiaSetup,
+  onAvaiaSetupChange,
+  onAvaiaSetupSubmit,
   avatarChoice,
   onAvatarChoice,
   onSlugChange,
@@ -366,6 +387,11 @@ export function AuthenticatedMapHomeView({
   const [dismissedStatus, setDismissedStatus] = useState<string | undefined>(
     undefined,
   );
+  // What the service stored, said once where every transient notice is said.
+  // It is not dismissed on a timer: a person closes it when they have read it.
+  const [avaiaSavedToast, setAvaiaSavedToast] = useState<
+    StatusToastItem | undefined
+  >(undefined);
   // Who is at the wheel is presentation: it moves nothing in the shared world.
   // The world opens on the Avaia — the Bond is spectating until he takes it.
   const [wheel, setWheel] = useState<DockSeat>("avaia");
@@ -397,10 +423,10 @@ export function AuthenticatedMapHomeView({
   const mapViewModel = createMapFoundationViewModel(mapStatus);
   const activeDetail =
     detailState?.section === section ? detailState.detail : undefined;
-  const dockScreen = section === "world" ? "home" : (activeDetail ?? section);
+  const dockScreen = activeDetail ?? (section === "world" ? "home" : section);
   // The Dock's navigation stack: the world, a Bond surface, a screen it opens.
   const dockDepth =
-    section === "world" ? 0 : activeDetail === undefined ? 1 : 2;
+    (section === "world" ? 0 : 1) + (activeDetail === undefined ? 0 : 1);
   const providers = createBondProvidersViewState(connectedProviders, {
     deepLinkProviders: providerDeepLinks,
   });
@@ -409,15 +435,23 @@ export function AuthenticatedMapHomeView({
     mapViewModel.label,
     mapViewModel.detail,
   );
-  const statusToasts =
-    statusToast === undefined || statusToast.id === dismissedStatus
+  const statusToasts = [
+    ...(statusToast === undefined || statusToast.id === dismissedStatus
       ? []
-      : [statusToast];
+      : [statusToast]),
+    ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
+  ];
   const headerActions: readonly HeaderAction[] =
     onLogout === undefined
       ? []
       : [{ id: "sign-out", label: "Sign out", perform: onLogout }];
-  const avaiaLabel = avaiaPubDress ?? "Avaia";
+  // The stored address the service answered with outranks the projection this
+  // client last carried; both are the same identity, only one is newer.
+  const storedAvaiaPubDress =
+    avaiaSetup !== undefined && avaiaSetup.address.length > 0
+      ? avaiaSetup.address
+      : avaiaPubDress;
+  const avaiaLabel = storedAvaiaPubDress ?? "Avaia";
   // One address seeds this Avaia's body, its side of its Bond, and its rhythm,
   // so an unnamed Avaia is still the same Avaia between renders.
   const avaiaAddress = avaiaLabel;
@@ -536,9 +570,12 @@ export function AuthenticatedMapHomeView({
    */
   const dock = createBondDockViewState({
     pubDress,
-    avaiaPubDress,
+    avaiaPubDress: storedAvaiaPubDress,
     wheel,
     avaia: avaiaAvailability,
+    ...(avaiaSetup?.configuration === undefined
+      ? {}
+      : { avaiaConfiguration: avaiaSetup.configuration }),
     focusable: observedPosition !== undefined,
     downloadable: onPrepareAvaia !== undefined,
   });
@@ -647,6 +684,44 @@ export function AuthenticatedMapHomeView({
     cameraMovedByPerson.current = false;
   }
 
+  /**
+   * The Avaia card opens what its owner can decide about it. A runtime that can
+   * actually be handed the wheel is the one thing that comes first, because
+   * that is a moment rather than a setting.
+   */
+  function activateDockIdentity(
+    identity: DockIdentityViewState,
+    seated: "left" | "right",
+  ): void {
+    if (identity.seat === "avaia" && dock.avaiaAction !== undefined) {
+      openDetail("avaia");
+      return;
+    }
+    if (seated === "left") {
+      focusWorldOnWheel();
+      return;
+    }
+    activateSpectator();
+  }
+
+  /**
+   * A save ends on the world. The service answers with what it stored, that
+   * answer is what the surface already reads, and only then does the screen
+   * close — so nothing here confirms a draft the service never saw. The world
+   * underneath was never a screen to come back to; it stayed mounted.
+   */
+  async function submitAvaiaSetup(): Promise<void> {
+    const result = await onAvaiaSetupSubmit?.();
+    if (result?.kind !== "updated") return;
+    setDetailState(undefined);
+    setAvaiaSavedToast({
+      id: `avaia-saved:${result.profile.pubDress}`,
+      kind: "active",
+      title: "Avaia saved",
+      description: result.profile.pubDress,
+    });
+  }
+
   /** The identity that is spectating takes the wheel, when it can. */
   function activateSpectator(): void {
     if (dock.handover === "download") {
@@ -692,17 +767,19 @@ export function AuthenticatedMapHomeView({
   }
 
   function detailEyebrow(): string {
+    if (activeDetail === "avaia") return "Owned Avaia";
     if (section === "settings") return "Application";
     return "Personal Bond";
   }
 
   function detailTitle(): string {
-    if (section === "settings") return "Settings";
     switch (activeDetail) {
       case "providers":
         return "Providers";
+      case "avaia":
+        return avaiaLabel;
       case undefined:
-        return pubDress;
+        return section === "settings" ? "Settings" : pubDress;
     }
   }
 
@@ -746,7 +823,13 @@ export function AuthenticatedMapHomeView({
           toasts={statusToasts}
           label="World status"
           placement="inline"
-          onDismiss={setDismissedStatus}
+          onDismiss={(id) => {
+            if (avaiaSavedToast?.id === id) {
+              setAvaiaSavedToast(undefined);
+              return;
+            }
+            setDismissedStatus(id);
+          }}
         />
       }
       statusRail={
@@ -770,7 +853,7 @@ export function AuthenticatedMapHomeView({
           aria-label={dockTitle()}
         >
           <DockWindow screen={dockScreen} depth={dockDepth}>
-            {section === "world" ? (
+            {section === "world" && activeDetail === undefined ? (
               <>
                 <div className="bond-dock__header">
                   <span className="bond-dock__kicker">Bond</span>
@@ -788,7 +871,7 @@ export function AuthenticatedMapHomeView({
                     className="bond-dock__bond bond-dock__bond--active"
                     type="button"
                     disabled={!dock.left.actionable}
-                    onClick={focusWorldOnWheel}
+                    onClick={() => activateDockIdentity(dock.left, "left")}
                     aria-label={dock.left.actionLabel}
                   >
                     <span className="bond-dock__glyph">{dock.left.glyph}</span>
@@ -816,7 +899,7 @@ export function AuthenticatedMapHomeView({
                     }`}
                     type="button"
                     disabled={!dock.right.actionable}
-                    onClick={activateSpectator}
+                    onClick={() => activateDockIdentity(dock.right, "right")}
                     aria-label={dock.right.actionLabel}
                   >
                     <span className="bond-dock__glyph">{dock.right.glyph}</span>
@@ -987,6 +1070,14 @@ export function AuthenticatedMapHomeView({
                       change Bond, BondChain, or shared Core state.
                     </p>
                   </>
+                ) : null}
+
+                {activeDetail === "avaia" && avaiaSetup !== undefined ? (
+                  <AvaiaSetupView
+                    state={avaiaSetup}
+                    onDraftChange={(value) => onAvaiaSetupChange?.(value)}
+                    onSubmit={() => void submitAvaiaSetup()}
+                  />
                 ) : null}
 
                 {activeDetail === "providers" ? (

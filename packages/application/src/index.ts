@@ -9,6 +9,17 @@ export {
   type WorldPosition,
 } from "./avaia-movement-controller";
 export {
+  hasAvaiaProfileAccess,
+  ReadAvaiaProfile,
+  UpdateAvaiaProfile,
+  type AvaiaConfigurationState,
+  type AvaiaProfileAccessPort,
+  type AvaiaProfileProjection,
+  type AvaiaProfileReadResult,
+  type AvaiaProfileUpdateRejection,
+  type AvaiaProfileUpdateResult,
+} from "./avaia-profile";
+export {
   BOND_PROVIDER_TYPES,
   bondProviderConnection,
   bondProviderOpenTarget,

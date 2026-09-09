@@ -14,12 +14,15 @@ import {
   ReadProviderIdentity,
   ReadRuntimeReadiness,
   RegisterNativeIdentity,
+  ReadAvaiaProfile,
   RegisterProviderIdentity,
   RenameAvaiaSlug,
   RenamePubDressSlug,
   SetProviderPassword,
   ResolvePubDress,
+  UpdateAvaiaProfile,
   formatPubDress,
+  hasAvaiaProfileAccess,
   type BondProviderType,
   type BrowserIdentityProvider,
   type CoreRuntimePort,
@@ -71,6 +74,7 @@ import {
   createAvaiaSlugViewState,
   createProfileSlugViewState,
 } from "./features/identity/profile-slug-view-model";
+import { createAvaiaSetupViewState } from "./features/avaia/avaia-setup-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
@@ -256,6 +260,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   // the step is not offered again in this session.
   const [avatarStepDeclined, setAvatarStepDeclined] = useState(false);
   const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);
+  // Undefined means the Avaia surface is showing the address the service holds.
+  const [avaiaProfileDraft, setAvaiaProfileDraft] = useState<
+    string | undefined
+  >(undefined);
   const pendingAutofillCredential = useRef<
     PendingAutofillCredential | undefined
   >(undefined);
@@ -305,6 +313,32 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     queryFn: () => new ReadProviderIdentity(dependencies.identity).execute(),
     enabled: !browserHost && hasAuthenticatedHostSession(host),
     retry: false,
+  });
+
+  // Contract 8 answers for the Avaia its owner configured. A host whose identity
+  // client does not publish that capability simply has no profile to read, and
+  // the Dock stays what it was.
+  const avaiaProfileAccess = hasAvaiaProfileAccess(dependencies.identity)
+    ? dependencies.identity
+    : undefined;
+  // Only an authenticated Bond owns an Avaia to read, so the sign-in surface
+  // asks the service nothing it would answer with an authentication error.
+  const avaiaProfileEnabled =
+    avaiaProfileAccess !== undefined &&
+    (browserHost
+      ? nativeContextQuery.data?.kind === "authenticated"
+      : providerIdentityQuery.data?.kind === "registered");
+  const avaiaProfileQuery = useQuery({
+    queryKey: ["avaia-profile"],
+    queryFn: () => {
+      if (avaiaProfileAccess === undefined) {
+        throw new Error("This host cannot read an owned Avaia profile");
+      }
+      return new ReadAvaiaProfile(avaiaProfileAccess).execute();
+    },
+    enabled: avaiaProfileEnabled,
+    retry: false,
+    staleTime: 0,
   });
 
   const nativeCanResolve =
@@ -478,6 +512,27 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     onSuccess: async (result) => {
       if (result.kind !== "renamed") return;
       setAvaiaDraft(undefined);
+      await refreshIdentityProjections();
+    },
+  });
+  // The Avaia's whole address, kept by the service. A save that the service
+  // accepted replaces the projection this client holds with the exact answer,
+  // so the surface never confirms a draft the service never saw.
+  const saveAvaiaProfile = useMutation({
+    mutationFn: (pubDress: string) => {
+      if (avaiaProfileAccess === undefined) {
+        throw new Error("This host cannot configure an owned Avaia");
+      }
+      return new UpdateAvaiaProfile(avaiaProfileAccess).execute(pubDress);
+    },
+    gcTime: 0,
+    onSuccess: async (result) => {
+      if (result.kind !== "updated") return;
+      setAvaiaProfileDraft(undefined);
+      queryClient.setQueryData(["avaia-profile"], {
+        kind: "available",
+        profile: result.profile,
+      });
       await refreshIdentityProjections();
     },
   });
@@ -820,6 +875,11 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   ]);
 
   if (viewModel.identity.kind === "authenticated") {
+    // No Avaia runtime is published yet, so there is nothing to fetch on any
+    // device. Both the Dock and the setup surface state that same device truth.
+    const deviceAvaiaAvailability = avaiaAvailability({
+      acceleratedGraphics: "gpu" in navigator,
+    });
     return (
       <AuthenticatedMapHomeView
         hostLabel={viewModel.hostLabel}
@@ -839,11 +899,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         onNavigate={(route: ShellRoute) => {
           void navigate({ to: route });
         }}
-        avaiaAvailability={avaiaAvailability({
-          // No Avaia runtime is published yet, so there is nothing to fetch on
-          // any device. The Dock states the truth rather than an intention.
-          acceleratedGraphics: "gpu" in navigator,
-        })}
+        avaiaAvailability={deviceAvaiaAvailability}
         slugEdit={createProfileSlugViewState(
           viewModel.identity.pubDress,
           slugDraft,
@@ -857,6 +913,34 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           renameAvaia.isPending,
           renameAvaia.data,
         )}
+        {...(avaiaProfileAccess === undefined
+          ? {}
+          : {
+              avaiaSetup: createAvaiaSetupViewState({
+                load: avaiaProfileQuery.data ?? { kind: "loading" },
+                fallbackAddress: viewModel.identity.avaiaPubDress,
+                draft: avaiaProfileDraft,
+                pending: saveAvaiaProfile.isPending,
+                result: saveAvaiaProfile.data,
+              }),
+              onAvaiaSetupChange: (pubDress: string) => {
+                saveAvaiaProfile.reset();
+                setAvaiaProfileDraft(pubDress);
+              },
+              // The surface waits for the service before it closes, so the
+              // answer it acts on is the one that was actually stored.
+              onAvaiaSetupSubmit: async () => {
+                if (
+                  avaiaProfileDraft === undefined ||
+                  saveAvaiaProfile.isPending
+                ) {
+                  return undefined;
+                }
+                return saveAvaiaProfile
+                  .mutateAsync(avaiaProfileDraft)
+                  .catch(() => undefined);
+              },
+            })}
         onSlugChange={(next: string) => {
           renameSlug.reset();
           setSlugDraft(next);

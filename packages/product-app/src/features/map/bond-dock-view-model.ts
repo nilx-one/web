@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvaiaConfigurationState } from "@nilx-one/application";
+
 /**
  * The Dock presents two identities and which of them is at the wheel.
  *
@@ -16,6 +18,9 @@ export type AvaiaAvailability =
   "ready" | "preparing" | "downloadable" | "unavailable";
 
 export type DockSeat = "bond" | "avaia";
+
+/** What activating an Avaia card does, once its stored profile is known. */
+export type AvaiaCardAction = "setup" | "edit" | undefined;
 
 /** What activating the identity on the right would do. */
 export type DockHandover = "switch" | "download" | undefined;
@@ -39,6 +44,11 @@ export interface BondDockViewState {
   /** Spectating. Activating it takes the wheel, or prepares the runtime. */
   readonly right: DockIdentityViewState;
   readonly handover: DockHandover;
+  /**
+   * What the Avaia card opens, when the stored profile is known and no runtime
+   * action is standing in front of it.
+   */
+  readonly avaiaAction: AvaiaCardAction;
 }
 
 export interface BondDockInput {
@@ -46,13 +56,24 @@ export interface BondDockInput {
   readonly avaiaPubDress?: string | undefined;
   readonly wheel: DockSeat;
   readonly avaia: AvaiaAvailability;
+  /**
+   * What the owner stored, which is not what this device can run. Absent means
+   * no profile has been read, and the Dock says nothing about configuration.
+   */
+  readonly avaiaConfiguration?: AvaiaConfigurationState | undefined;
   /** Whether the world has somewhere to move the camera to. */
   readonly focusable: boolean;
   /** Whether this composition can start a runtime download at all. */
   readonly downloadable: boolean;
 }
 
-function avaiaRole(availability: AvaiaAvailability): string {
+function avaiaRole(
+  configuration: AvaiaConfigurationState | undefined,
+  availability: AvaiaAvailability,
+): string {
+  // What an owner has not configured is the first thing to say about it, and
+  // it stays true whatever a device can or cannot run.
+  if (configuration === "unconfigured") return "unconfigured";
   switch (availability) {
     case "ready":
       return "ready";
@@ -84,6 +105,14 @@ export function createBondDockViewState(
 ): BondDockViewState {
   const avaiaAddress = input.avaiaPubDress ?? "Avaia";
   const driving = input.wheel;
+  // A client that has read no profile knows of no configuration to open, and
+  // keeps the runtime-only Dock it already had.
+  const avaiaAction: AvaiaCardAction =
+    input.avaiaConfiguration === undefined
+      ? undefined
+      : input.avaiaConfiguration === "unconfigured"
+        ? "setup"
+        : "edit";
   const handover: DockHandover =
     driving === "avaia"
       ? "switch"
@@ -107,31 +136,51 @@ export function createBondDockViewState(
         : `Take the wheel as ${input.pubDress}`,
   });
 
-  const avaia = (seated: "left" | "right"): DockIdentityViewState => ({
-    seat: "avaia",
-    address: avaiaAddress,
-    glyph: "AI",
-    role: seated === "left" ? "driving" : avaiaRole(input.avaia),
-    // Driving is about the wheel; the status dot is about the runtime. An
-    // Avaia can be the identity the world is showing while its runtime is not
-    // up, and the dot must not claim otherwise.
-    tone: avaiaTone(input.avaia),
-    actionable: seated === "left" ? input.focusable : handover !== undefined,
-    actionLabel:
-      seated === "left"
-        ? `Focus the world on ${avaiaAddress}`
-        : handover === "switch"
-          ? `Hand the wheel to ${avaiaAddress}`
-          : handover === "download"
-            ? `Download the ${avaiaAddress} runtime`
-            : `${avaiaAddress} is unavailable on this device`,
-  });
+  const avaia = (seated: "left" | "right"): DockIdentityViewState => {
+    // The runtime speaks first when it has something to offer, because handing
+    // over the wheel is a moment. Every other time the card opens what an owner
+    // can actually decide about their Avaia.
+    const runtimeAction = seated === "right" ? handover : undefined;
+    const setup = runtimeAction === undefined ? avaiaAction : undefined;
+
+    return {
+      seat: "avaia",
+      address: avaiaAddress,
+      glyph: "AI",
+      role:
+        seated === "left" && input.avaiaConfiguration !== "unconfigured"
+          ? "driving"
+          : avaiaRole(input.avaiaConfiguration, input.avaia),
+      // Driving is about the wheel; the status dot is about the runtime. An
+      // Avaia can be the identity the world is showing while its runtime is not
+      // up, and the dot must not claim otherwise.
+      tone: avaiaTone(input.avaia),
+      actionable:
+        setup !== undefined ||
+        (seated === "left" ? input.focusable : handover !== undefined),
+      actionLabel:
+        setup === "setup"
+          ? `Set up ${avaiaAddress}`
+          : setup === "edit"
+            ? `Edit ${avaiaAddress}`
+            : seated === "left"
+              ? `Focus the world on ${avaiaAddress}`
+              : runtimeAction === "switch"
+                ? `Hand the wheel to ${avaiaAddress}`
+                : runtimeAction === "download"
+                  ? `Download the ${avaiaAddress} runtime`
+                  : `${avaiaAddress} is unavailable on this device`,
+    };
+  };
 
   return {
     wheel: driving,
     left: driving === "bond" ? bond("left") : avaia("left"),
     right: driving === "bond" ? avaia("right") : bond("right"),
     handover,
+    // The seat the Avaia sits in decides whether the runtime is in front of it.
+    avaiaAction:
+      driving === "avaia" || handover === undefined ? avaiaAction : undefined,
   };
 }
 

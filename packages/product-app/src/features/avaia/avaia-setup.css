@@ -1,0 +1,47 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.avaia-setup {
+  display: grid;
+  gap: 1.35rem;
+}
+
+.avaia-setup__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.avaia-setup__summary > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.avaia-setup__summary strong {
+  overflow-wrap: anywhere;
+}
+
+.avaia-setup__summary small {
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+}
+
+/* The address label reads as the field it names, not as a section of its own. */
+.avaia-setup__label {
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+}
+
+.avaia-setup__readonly {
+  gap: 0.75rem;
+}
+
+.avaia-setup__readonly input:disabled {
+  opacity: 0.62;
+}
+
+.authenticated-map-home[data-theme="light"] .avaia-setup__summary small,
+.authenticated-map-home[data-theme="light"] .avaia-setup__label {
+  color: rgba(17, 19, 26, 0.62);
+}

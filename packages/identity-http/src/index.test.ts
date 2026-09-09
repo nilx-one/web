@@ -343,3 +343,169 @@ describe("Provider password setup transport", () => {
     });
   });
 });
+
+describe("Avaia profile transport", () => {
+  it("reads the stored Avaia over the session, and stores no copy of it", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        pub_dress: "0skai",
+        owner_pub_dress: "0x0sky",
+        configuration_state: "unconfigured",
+        model_ref: null,
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readAvaiaProfile()).resolves.toEqual({
+      kind: "available",
+      profile: {
+        pubDress: "0skai",
+        ownerPubDress: "0x0sky",
+        configurationState: "unconfigured",
+      },
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/v1/identity/avaia", {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {},
+    });
+  });
+
+  it("carries a provider proof when the host has one", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        pub_dress: "0skai",
+        owner_pub_dress: "0x0sky",
+        configuration_state: "configured",
+        model_ref: null,
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma signed",
+    });
+
+    await adapter.readAvaiaProfile();
+    expect(fetch).toHaveBeenCalledWith("/api/v1/identity/avaia", {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { authorization: "tma signed" },
+    });
+  });
+
+  it("sends the whole address with CSRF protection", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        pub_dress: "0vesnai",
+        owner_pub_dress: "0x0sky",
+        configuration_state: "configured",
+        model_ref: null,
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.updateAvaiaProfile("0vesnai")).resolves.toEqual({
+      kind: "updated",
+      profile: {
+        pubDress: "0vesnai",
+        ownerPubDress: "0x0sky",
+        configurationState: "configured",
+      },
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/v1/identity/avaia", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({ pub_dress: "0vesnai" }),
+    });
+  });
+
+  it("keeps the service's refusal reason", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        response(401, {
+          error: { code: "provider_authentication_required", message: "" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(422, {
+          error: { code: "avaia_owner_discriminator_mismatch", message: "" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(422, { error: { code: "invalid_avaia_suffix", message: "" } }),
+      )
+      .mockResolvedValueOnce(
+        response(409, { error: { code: "avaia_unavailable", message: "" } }),
+      )
+      .mockResolvedValueOnce(
+        response(429, { error: { code: "rate_limited", message: "" } }),
+      )
+      .mockResolvedValueOnce(
+        response(503, {
+          error: { code: "identity_service_unavailable", message: "" },
+        }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.updateAvaiaProfile("0skai")).resolves.toEqual({
+      kind: "rejected",
+      reason: "authentication-required",
+    });
+    await expect(adapter.updateAvaiaProfile("1skai")).resolves.toEqual({
+      kind: "rejected",
+      reason: "owner-discriminator-mismatch",
+    });
+    await expect(adapter.updateAvaiaProfile("0sky")).resolves.toEqual({
+      kind: "rejected",
+      reason: "invalid-address",
+    });
+    await expect(adapter.updateAvaiaProfile("0takenai")).resolves.toEqual({
+      kind: "rejected",
+      reason: "unavailable",
+    });
+    await expect(adapter.updateAvaiaProfile("0skai")).resolves.toEqual({
+      kind: "rejected",
+      reason: "rate-limited",
+    });
+    await expect(adapter.updateAvaiaProfile("0skai")).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+  });
+
+  it("treats an unreadable projection as an unavailable service", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(response(200, { pub_dress: "0skai" }))
+      .mockResolvedValueOnce(
+        response(401, {
+          error: { code: "provider_authentication_required", message: "" },
+        }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readAvaiaProfile()).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+    await expect(adapter.readAvaiaProfile()).resolves.toEqual({
+      kind: "authentication-required",
+    });
+  });
+});
