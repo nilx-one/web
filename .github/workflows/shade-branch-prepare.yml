@@ -1,0 +1,56 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Shade branch prepare
+
+on:
+  push:
+    branches: [feature/shade-presence-phase-1]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Refresh workspace lockfile
+        run: pnpm install --no-frozen-lockfile
+      - name: Format changed sources
+        run: |
+          pnpm exec prettier --write \
+            apps/site/package.json \
+            apps/site/src/main.tsx \
+            apps/telegram-mini-app/package.json \
+            apps/telegram-mini-app/src/main.tsx \
+            apps/discord-activity/package.json \
+            apps/discord-activity/src/main.tsx \
+            packages/presence-contract \
+            packages/presence-idb \
+            packages/presence-geo \
+            packages/map-shade
+      - name: Preserve prepared branch files
+        uses: actions/upload-artifact@v4
+        with:
+          name: shade-branch-prepared
+          path: |
+            pnpm-lock.yaml
+            apps/site/package.json
+            apps/site/src/main.tsx
+            apps/telegram-mini-app/package.json
+            apps/telegram-mini-app/src/main.tsx
+            apps/discord-activity/package.json
+            apps/discord-activity/src/main.tsx
+            packages/presence-contract
+            packages/presence-idb
+            packages/presence-geo
+            packages/map-shade
+          retention-days: 1
