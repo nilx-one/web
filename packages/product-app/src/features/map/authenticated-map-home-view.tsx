@@ -380,7 +380,13 @@ export function AuthenticatedMapHomeView({
     detailState?.section === section ? detailState.detail : undefined;
   const dockScreen = activeDetail ?? (section === "world" ? "home" : section);
   const dockDepth =
-    activeDetail === undefined ? (section === "world" ? 0 : 1) : section === "world" ? 1 : 2;
+    activeDetail === undefined
+      ? section === "world"
+        ? 0
+        : 1
+      : section === "world"
+        ? 1
+        : 2;
   const providers = createBondProvidersViewState(connectedProviders, {
     deepLinkProviders: providerDeepLinks,
   });
