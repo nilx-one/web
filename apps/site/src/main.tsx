@@ -6,9 +6,24 @@ import {
   createCoreWasmClient,
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
-import { createBrowserHost } from "@nilx-one/host-browser";
+import {
+  createBrowserGeolocation,
+  createBrowserHost,
+} from "@nilx-one/host-browser";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
-import { createMapLibreRenderer } from "@nilx-one/map-maplibre";
+import {
+  MAP_BOOTSTRAP_CAMERA,
+  createMapLibreRenderer,
+} from "@nilx-one/map-maplibre";
+import {
+  createRawJournalPresenter,
+  createShadeMapFactory,
+} from "@nilx-one/map-shade";
+import {
+  createPresenceGeolocation,
+  createPresenceTracker,
+} from "@nilx-one/presence-geo";
+import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -51,7 +66,32 @@ if (isPublicBondHostname(window.location.hostname)) {
   const identity = createIdentityHttpAdapter({
     getAuthorization: () => undefined,
   });
-  const mapRenderer = createMapLibreRenderer();
+
+  // Presence is deliberately outside the error reporter: this private local
+  // journal has no analytics or error-egress path. Failure degrades to the map
+  // that already existed before this feature.
+  const localPresence = createLocalPresenceJournal().catch(() => null);
+  const tracker = localPresence.then((journal) =>
+    journal === null ? null : createPresenceTracker({ store: journal.store }),
+  );
+  const browserGeolocation = createPresenceGeolocation(
+    createBrowserGeolocation(),
+    tracker,
+  );
+  const host = createBrowserHost({
+    matchMedia: (query) => window.matchMedia(query),
+    open: (url, target, features) => window.open(url, target, features),
+    geolocation: browserGeolocation,
+  });
+  const journalPresenter = createRawJournalPresenter();
+  const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
+  const mapRenderer = createMapLibreRenderer({
+    createMap: createShadeMapFactory({
+      runtime: localPresence,
+      anchor: { lng: anchorLng, lat: anchorLat },
+      onCellTap: (tap) => journalPresenter.show(tap),
+    }),
+  });
 
   reportMapRendererStatus(reporter, mapRenderer.getStatus());
   mapRenderer.subscribe((status) => reportMapRendererStatus(reporter, status));
@@ -60,7 +100,7 @@ if (isPublicBondHostname(window.location.hostname)) {
     <StrictMode>
       <ProductApp
         core={core}
-        host={createBrowserHost()}
+        host={host}
         identity={identity}
         mapRenderer={mapRenderer}
       />
