@@ -42,11 +42,11 @@ interface AvaiaProfileRequestKey {
   readonly ownerPubDress: string;
 }
 
-function matchesRequest(
-  key: AvaiaProfileRequestKey | undefined,
+function matchesRequest<T extends AvaiaProfileRequestKey>(
+  key: T | undefined,
   access: AvaiaProfileAccessPort | undefined,
   ownerPubDress: string,
-): boolean {
+): key is T {
   return key?.access === access && key.ownerPubDress === ownerPubDress;
 }
 
