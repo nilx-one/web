@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
-const LOCAL_PRESENCE_IMPORTS: Readonly<Record<string, readonly string[]>> = {
+const LOCAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   "map-shade": ["@nilx-one/presence-contract"],
   "presence-contract": [],
   "presence-geo": ["@nilx-one/host-contract", "@nilx-one/presence-contract"],
@@ -33,82 +33,75 @@ function internalImports(source: string): string[] {
   ].map((match) => match[1] ?? "");
 }
 
-function localPresenceFiles(): string[] {
-  return Object.keys(LOCAL_PRESENCE_IMPORTS).flatMap((packageName) =>
-    sourceFiles(join(ROOT, "packages", packageName, "src")),
-  );
+function packageSources(packageName: string): string[] {
+  const directory = join(ROOT, "packages", packageName, "src");
+  return sourceFiles(directory);
+}
+
+function presenceSources(): string[] {
+  return Object.keys(LOCAL_IMPORTS).flatMap(packageSources);
 }
 
 describe("Presence privacy boundary", () => {
-  it(
-    "keeps every local presence package on an explicit inward dependency surface",
-    () => {
-      const violations: string[] = [];
+  it("allows only local presence dependencies", () => {
+    const violations: string[] = [];
 
-      for (const [packageName, allowedImports] of Object.entries(
-        LOCAL_PRESENCE_IMPORTS,
-      )) {
-        for (const file of sourceFiles(
-          join(ROOT, "packages", packageName, "src"),
-        )) {
-          const source = readFileSync(file, "utf8");
-
-          for (const importedPackage of internalImports(source)) {
-            if (!allowedImports.includes(importedPackage)) {
-              violations.push(
-                `${relative(ROOT, file)} imports forbidden ${importedPackage}`,
-              );
-            }
-          }
-        }
-      }
-
-      expect(violations).toEqual([]);
-    },
-  );
-
-  it(
-    "forbids network, telemetry and debug egress from local presence code",
-    () => {
-      const forbidden: readonly [string, RegExp][] = [
-        ["4x-errors", /@aiaiaiai\/4x-errors-browser/],
-        ["identity HTTP", /@nilx-one\/identity-http/],
-        ["fetch", /\bfetch\s*\(/],
-        ["XMLHttpRequest", /\bXMLHttpRequest\b/],
-        ["sendBeacon", /\bsendBeacon\s*\(/],
-        ["WebSocket", /\bWebSocket\b/],
-        ["console", /\bconsole\./],
-      ];
-      const violations: string[] = [];
-
-      for (const file of localPresenceFiles()) {
+    for (const [packageName, allowed] of Object.entries(LOCAL_IMPORTS)) {
+      for (const file of packageSources(packageName)) {
         const source = readFileSync(file, "utf8");
 
-        for (const [boundary, pattern] of forbidden) {
-          if (pattern.test(source)) {
-            violations.push(`${relative(ROOT, file)} crosses ${boundary}`);
+        for (const imported of internalImports(source)) {
+          if (!allowed.includes(imported)) {
+            const path = relative(ROOT, file);
+            violations.push(`${path} imports forbidden ${imported}`);
           }
         }
       }
+    }
 
-      expect(violations).toEqual([]);
-    },
-  );
+    expect(violations).toEqual([]);
+  });
 
-  it("keeps network and telemetry adapters presence-blind", () => {
+  it("forbids presence egress and debug logging", () => {
+    const forbidden: readonly [string, RegExp][] = [
+      ["4x-errors", /@aiaiaiai\/4x-errors-browser/],
+      ["identity HTTP", /@nilx-one\/identity-http/],
+      ["fetch", /\bfetch\s*\(/],
+      ["XMLHttpRequest", /\bXMLHttpRequest\b/],
+      ["sendBeacon", /\bsendBeacon\s*\(/],
+      ["WebSocket", /\bWebSocket\b/],
+      ["console", /\bconsole\./],
+    ];
+    const violations: string[] = [];
+
+    for (const file of presenceSources()) {
+      const source = readFileSync(file, "utf8");
+
+      for (const [boundary, pattern] of forbidden) {
+        if (pattern.test(source)) {
+          const path = relative(ROOT, file);
+          violations.push(`${path} crosses ${boundary}`);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps network adapters presence-blind", () => {
+    const identitySources = packageSources("identity-http");
     const boundaryFiles = [
       "apps/site/src/error-reporting.ts",
       "packages/identity-http/package.json",
       "services/identity/Cargo.toml",
-      ...sourceFiles(join(ROOT, "packages/identity-http/src")).map((file) =>
-        relative(ROOT, file),
-      ),
+      ...identitySources.map((file) => relative(ROOT, file)),
     ];
     const forbidden =
       /@nilx-one\/(?:presence-[a-z-]+|map-shade)|(?:presence-contract|presence-geo|presence-idb|map-shade)/;
-    const violations = boundaryFiles.filter((file) =>
-      forbidden.test(readFileSync(join(ROOT, file), "utf8")),
-    );
+    const violations = boundaryFiles.filter((file) => {
+      const source = readFileSync(join(ROOT, file), "utf8");
+      return forbidden.test(source);
+    });
 
     expect(violations).toEqual([]);
   });
