@@ -43,7 +43,8 @@ function assertStorageCapabilities(): void {
 function request<T>(value: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     value.onsuccess = () => resolve(value.result);
-    value.onerror = () => reject(value.error ?? new Error("IndexedDB request failed"));
+    value.onerror = () =>
+      reject(value.error ?? new Error("IndexedDB request failed"));
   });
 }
 
@@ -123,7 +124,9 @@ function fold(records: readonly VisitRecord[]): VisitRecord[] {
         : previous,
     );
   }
-  return [...byEntry.values()].sort((left, right) => left.enteredAt - right.enteredAt);
+  return [...byEntry.values()].sort(
+    (left, right) => left.enteredAt - right.enteredAt,
+  );
 }
 
 export interface IdbPresenceStore extends PresenceStore {
@@ -215,7 +218,10 @@ export async function createPresenceStore(): Promise<IdbPresenceStore> {
           cursor.continue();
         };
         cursorRequest.onerror = () =>
-          reject(cursorRequest.error ?? new Error("Presence cell index could not be read"));
+          reject(
+            cursorRequest.error ??
+              new Error("Presence cell index could not be read"),
+          );
       });
       return cells;
     },
@@ -242,7 +248,9 @@ export interface IdbShadeSource extends ShadeSource {
   close(): void;
 }
 
-export async function createShadeSource(store: PresenceStore): Promise<IdbShadeSource> {
+export async function createShadeSource(
+  store: PresenceStore,
+): Promise<IdbShadeSource> {
   const lit = new Set<CellIndex>(await store.listCells());
   const listeners = new Set<(cell: CellIndex) => void>();
   const unsubscribe = store.subscribe((record) => {

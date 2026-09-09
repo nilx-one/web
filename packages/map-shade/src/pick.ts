@@ -26,7 +26,10 @@ export function createTapHandler(options: {
   readonly source: ShadeSource;
   readonly store: PresenceStore;
   readonly resolution?: number;
-}): (lngLat: { readonly lng: number; readonly lat: number }) => Promise<CellTap | null> {
+}): (lngLat: {
+  readonly lng: number;
+  readonly lat: number;
+}) => Promise<CellTap | null> {
   const resolution = options.resolution ?? PRESENCE_RESOLUTION;
   return async (lngLat) => {
     const cell = cellAtLngLat(lngLat, resolution);

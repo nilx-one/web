@@ -35,19 +35,26 @@ export interface PresenceTrackerOptions {
   readonly dwellMs?: number;
   readonly now?: () => number;
   readonly onError?: (error: unknown) => void;
-  readonly setInterval?: (listener: () => void, intervalMs: number) => IntervalHandle;
+  readonly setInterval?: (
+    listener: () => void,
+    intervalMs: number,
+  ) => IntervalHandle;
   readonly clearInterval?: (handle: IntervalHandle) => void;
 }
 
 const DWELL_TICK_MS = 5_000;
 
-export function createPresenceTracker(options: PresenceTrackerOptions): PresenceTracker {
+export function createPresenceTracker(
+  options: PresenceTrackerOptions,
+): PresenceTracker {
   const resolution = options.resolution ?? PRESENCE_RESOLUTION;
   const accuracyGateM = options.accuracyGateM ?? PRESENCE_ACCURACY_GATE_M;
   const dwellMs = options.dwellMs ?? PRESENCE_DWELL_MS;
   const now = options.now ?? (() => Date.now());
-  const schedule = options.setInterval ?? globalThis.setInterval.bind(globalThis);
-  const cancel = options.clearInterval ?? globalThis.clearInterval.bind(globalThis);
+  const schedule =
+    options.setInterval ?? globalThis.setInterval.bind(globalThis);
+  const cancel =
+    options.clearInterval ?? globalThis.clearInterval.bind(globalThis);
   let dwell: Dwell | undefined;
   let timer: IntervalHandle | undefined;
   let lastObservationKey: string | undefined;
@@ -101,7 +108,8 @@ export function createPresenceTracker(options: PresenceTrackerOptions): Presence
       const key = `${observation.observedAt}:${observation.latitude}:${observation.longitude}:${observation.accuracyMeters}`;
       if (key === lastObservationKey) return;
       lastObservationKey = key;
-      if (dwell !== undefined && observation.observedAt < dwell.lastFixAt) return;
+      if (dwell !== undefined && observation.observedAt < dwell.lastFixAt)
+        return;
 
       const cell = latLngToCell(
         observation.latitude,

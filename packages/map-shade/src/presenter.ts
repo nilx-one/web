@@ -36,7 +36,9 @@ export function createRawJournalPresenter(
 
   return {
     show(tap) {
-      body.textContent = [tap.cell, "", ...formatRecords(tap.records)].join("\n");
+      body.textContent = [tap.cell, "", ...formatRecords(tap.records)].join(
+        "\n",
+      );
       panel.hidden = false;
     },
     dispose() {

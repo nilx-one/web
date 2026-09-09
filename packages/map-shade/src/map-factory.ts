@@ -47,9 +47,9 @@ export function createShadeMapFactory(
         ) {
           return;
         }
-        const firstSymbol = map.getStyle().layers?.find(
-          (candidate) => candidate.type === "symbol",
-        )?.id;
+        const firstSymbol = map
+          .getStyle()
+          .layers?.find((candidate) => candidate.type === "symbol")?.id;
         map.addLayer(layer, firstSymbol);
       };
 

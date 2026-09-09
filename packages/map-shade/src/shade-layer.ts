@@ -133,7 +133,10 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   const spanX = region.x1 - region.x0;
   const spanY = region.y1 - region.y0;
   const pending: CellIndex[] = [];
-  const tap = createTapHandler({ source: options.source, store: options.store });
+  const tap = createTapHandler({
+    source: options.source,
+    store: options.store,
+  });
 
   let map: MapLibreMap | undefined;
   let rasterProgram: WebGLProgram | undefined;
@@ -281,7 +284,10 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
         ]),
         gl.STATIC_DRAW,
       );
-      const positionAttribute = gl.getAttribLocation(shadeProgram, "a_position");
+      const positionAttribute = gl.getAttribLocation(
+        shadeProgram,
+        "a_position",
+      );
       const uvAttribute = gl.getAttribLocation(shadeProgram, "a_uv");
       const stride = 4 * Float32Array.BYTES_PER_ELEMENT;
       gl.enableVertexAttribArray(positionAttribute);
@@ -315,7 +321,9 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       const previousFramebuffer = gl.getParameter(
         gl.FRAMEBUFFER_BINDING,
       ) as WebGLFramebuffer | null;
-      const previousClear = gl.getParameter(gl.COLOR_CLEAR_VALUE) as Float32Array;
+      const previousClear = gl.getParameter(
+        gl.COLOR_CLEAR_VALUE,
+      ) as Float32Array;
       gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
       gl.framebufferTexture2D(
         gl.FRAMEBUFFER,
@@ -370,7 +378,9 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       const previousVertexArray = gl.getParameter(
         gl.VERTEX_ARRAY_BINDING,
       ) as WebGLVertexArrayObject | null;
-      const previousActiveTexture = gl.getParameter(gl.ACTIVE_TEXTURE) as number;
+      const previousActiveTexture = gl.getParameter(
+        gl.ACTIVE_TEXTURE,
+      ) as number;
       gl.activeTexture(gl.TEXTURE0);
       const previousTexture = gl.getParameter(
         gl.TEXTURE_BINDING_2D,
@@ -433,7 +443,8 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       if (quadBuffer !== undefined) gl.deleteBuffer(quadBuffer);
       if (rasterVertexArray !== undefined)
         gl.deleteVertexArray(rasterVertexArray);
-      if (shadeVertexArray !== undefined) gl.deleteVertexArray(shadeVertexArray);
+      if (shadeVertexArray !== undefined)
+        gl.deleteVertexArray(shadeVertexArray);
       rasterProgram = undefined;
       shadeProgram = undefined;
       lightmap = undefined;
