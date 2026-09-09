@@ -14,10 +14,7 @@ import type { AvaiaConfigurationState } from "@nilx-one/application";
 
 /** What this device can do about the Avaia runtime right now. */
 export type AvaiaAvailability =
-  | "ready"
-  | "preparing"
-  | "downloadable"
-  | "unavailable";
+  "ready" | "preparing" | "downloadable" | "unavailable";
 
 export type DockSeat = "bond" | "avaia";
 
