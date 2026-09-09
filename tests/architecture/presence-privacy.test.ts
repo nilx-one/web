@@ -40,52 +40,60 @@ function localPresenceFiles(): string[] {
 }
 
 describe("Presence privacy boundary", () => {
-  it("keeps every local presence package on an explicit inward dependency surface", () => {
-    const violations: string[] = [];
+  it(
+    "keeps every local presence package on an explicit inward dependency surface",
+    () => {
+      const violations: string[] = [];
 
-    for (const [packageName, allowedImports] of Object.entries(
-      LOCAL_PRESENCE_IMPORTS,
-    )) {
-      for (const file of sourceFiles(join(ROOT, "packages", packageName, "src"))) {
-        const source = readFileSync(file, "utf8");
+      for (const [packageName, allowedImports] of Object.entries(
+        LOCAL_PRESENCE_IMPORTS,
+      )) {
+        for (const file of sourceFiles(
+          join(ROOT, "packages", packageName, "src"),
+        )) {
+          const source = readFileSync(file, "utf8");
 
-        for (const importedPackage of internalImports(source)) {
-          if (!allowedImports.includes(importedPackage)) {
-            violations.push(
-              `${relative(ROOT, file)} imports forbidden ${importedPackage}`,
-            );
+          for (const importedPackage of internalImports(source)) {
+            if (!allowedImports.includes(importedPackage)) {
+              violations.push(
+                `${relative(ROOT, file)} imports forbidden ${importedPackage}`,
+              );
+            }
           }
         }
       }
-    }
 
-    expect(violations).toEqual([]);
-  });
+      expect(violations).toEqual([]);
+    },
+  );
 
-  it("forbids network, telemetry and debug egress from local presence code", () => {
-    const forbidden: readonly [string, RegExp][] = [
-      ["4x-errors", /@aiaiaiai\/4x-errors-browser/],
-      ["identity HTTP", /@nilx-one\/identity-http/],
-      ["fetch", /\bfetch\s*\(/],
-      ["XMLHttpRequest", /\bXMLHttpRequest\b/],
-      ["sendBeacon", /\bsendBeacon\s*\(/],
-      ["WebSocket", /\bWebSocket\b/],
-      ["console", /\bconsole\./],
-    ];
-    const violations: string[] = [];
+  it(
+    "forbids network, telemetry and debug egress from local presence code",
+    () => {
+      const forbidden: readonly [string, RegExp][] = [
+        ["4x-errors", /@aiaiaiai\/4x-errors-browser/],
+        ["identity HTTP", /@nilx-one\/identity-http/],
+        ["fetch", /\bfetch\s*\(/],
+        ["XMLHttpRequest", /\bXMLHttpRequest\b/],
+        ["sendBeacon", /\bsendBeacon\s*\(/],
+        ["WebSocket", /\bWebSocket\b/],
+        ["console", /\bconsole\./],
+      ];
+      const violations: string[] = [];
 
-    for (const file of localPresenceFiles()) {
-      const source = readFileSync(file, "utf8");
+      for (const file of localPresenceFiles()) {
+        const source = readFileSync(file, "utf8");
 
-      for (const [boundary, pattern] of forbidden) {
-        if (pattern.test(source)) {
-          violations.push(`${relative(ROOT, file)} crosses ${boundary}`);
+        for (const [boundary, pattern] of forbidden) {
+          if (pattern.test(source)) {
+            violations.push(`${relative(ROOT, file)} crosses ${boundary}`);
+          }
         }
       }
-    }
 
-    expect(violations).toEqual([]);
-  });
+      expect(violations).toEqual([]);
+    },
+  );
 
   it("keeps network and telemetry adapters presence-blind", () => {
     const boundaryFiles = [
