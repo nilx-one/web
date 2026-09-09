@@ -1,0 +1,14 @@
+{
+  "name": "@nilx-one/map-shade",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@nilx-one/presence-contract": "workspace:*",
+    "h3-js": "^4.5.0"
+  },
+  "peerDependencies": {
+    "maplibre-gl": "^6.6.0"
+  }
+}
