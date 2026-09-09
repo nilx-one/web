@@ -115,7 +115,10 @@ async function loadOrCreateKey(database: IDBDatabase): Promise<CryptoKey> {
     keys.get(JOURNAL_KEY_ID),
   );
   const countRequest = request<number>(visits.count());
-  const [winner, storedVisits] = await Promise.all([winnerRequest, countRequest]);
+  const [winner, storedVisits] = await Promise.all([
+    winnerRequest,
+    countRequest,
+  ]);
   const resolved = resolveJournalKey(winner, storedVisits);
   if (resolved !== null) {
     await done;
