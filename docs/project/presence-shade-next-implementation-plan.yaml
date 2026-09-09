@@ -1,0 +1,367 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+document:
+  id: presence-shade-next-implementation-plan
+  version: 1.0.0
+  status: execution_ready
+  language: en
+  created_at: 2026-09-09
+  project: 0x1
+  repository: nilx-one/web
+  purpose: >-
+    Move Presence / Shade from the merged Phase 1 implementation into a
+    production-observed, performance-audited baseline and prepare the camera
+    contract required by any later cell-bound experience without inventing
+    Phase 2 semantics before real-world evidence exists.
+
+baseline:
+  default_branch: master
+  verified_master_sha: e9b36de1659135728b10d555dd5d040a22dde27d
+  merged_pull_requests:
+    - number: 144
+      result: presence_privacy_boundary_is_ci_enforced
+    - number: 146
+      result: local_journal_lifecycle_is_fail_closed
+  current_release:
+    client_image: ghcr.io/nilx-one/0x1-web:sha-e9b36de1659135728b10d555dd5d040a22dde27d
+    package_state: verified_success
+    production_activation: pending_manual_workflow_dispatch
+    activation_target: web
+  phase_1_invariants:
+    - local_visits_are_device_evidence_only
+    - local_visits_are_not_BondChain_facts
+    - no_consent_or_reciprocity_is_inferred_from_presence
+    - journal_is_local_append_only_and_encrypted
+    - plaintext_cell_index_is_local_rendering_index_only
+    - no_presence_egress_to_backend_analytics_errors_or_training
+    - renderer_consumes_projection_not_raw_journal
+    - key_loss_with_existing_ciphertext_fails_closed
+    - no_cross_device_sync_backup_export_or_escrow_exists
+
+north_star: >-
+  Preserve observed local movement as local evidence, render only what the
+  client can truthfully derive from it, and let real use determine whether the
+  product needs more spatial scale or temporal / Avaia channels.
+
+execution_rules:
+  branch_policy:
+    default_branch: master
+    feature_prefix: feature/
+    fix_prefix: fix/
+    one_task_per_branch_and_pr: true
+    start_from_latest_master: true
+  delivery:
+    flow:
+      - draft_pull_request
+      - full_ci
+      - require_green
+      - validate_for_deploy_when_applicable
+      - explicit_merge_authorization
+      - manual_deploy_when_applicable
+    no_direct_commits_to_master: true
+  engineering:
+    - protocol_truth_before_UI
+    - evidence_before_interpretation
+    - deterministic_state_before_effect
+    - root_cause_before_test_tolerance
+    - smallest_sufficient_change
+    - no_new_entities_without_semantic_need
+    - MapLibre_details_stay_behind_renderer_boundary
+
+release_activation:
+  id: D0
+  objective: Activate the merged Phase 1 baseline on nilx.one.
+  workflow:
+    file: .github/workflows/deploy-production.yml
+    branch: master
+    input:
+      target: web
+    expected_release_sha: e9b36de1659135728b10d555dd5d040a22dde27d
+  rationale:
+    - current_change_is_client_only
+    - identity_contract_did_not_change
+    - Telegram_and_Discord_capture_remain_unverified_under_issue_137
+    - web_is_the_smallest_safe_production_blast_radius
+  workflow_guards:
+    - consume_immutable_client_package_for_exact_release_sha
+    - verify_package_exists_before_activation
+    - retain_previous_release
+    - run_public_health_check
+    - run_map_public_health_check_for_web
+    - rollback_to_previous_release_if_activation_or_health_check_fails
+  success_evidence:
+    - deploy_workflow_conclusion_success
+    - release_sha_matches_expected_release_sha
+    - public_health_check_success
+    - public_map_health_check_success
+  must_not:
+    - rebuild_an_identical_verified_image_without_platform_requirement
+    - redeploy_identity_without_contract_need
+    - expand_capture_to_unverified_embedded_hosts
+
+slices:
+  - id: S1
+    issue: 145
+    title: Stabilize avatar wheel-handover ordering test
+    branch: fix/avatar-wheel-handover-test-ordering
+    priority: immediate
+    dependency: D0_independent
+    objective: >-
+      Remove scheduler-dependent ordering from the test without weakening the
+      semantic contract that the leaving body quiesces before the arriving body
+      appears.
+    investigation:
+      - isolate_ambient_interval_upserts_from_handover_transition_upserts
+      - control_performance_now_deterministically_in_the_test
+      - control_requestAnimationFrame_deterministically_in_the_test
+      - identify_effect_rerender_or_timer_order_that_can_emit_turn_in_place_first
+    preferred_fix_order:
+      - deterministic_test_clock_and_frame_boundary
+      - explicit_transition_observation_helper_if_needed
+      - production_change_only_if_a_real_runtime_ordering_bug_is_proven
+    forbidden:
+      - arbitrary_sleep
+      - timing_tolerance_that_can_hide_wrong_order
+      - deleting_quiesce_then_wake_assertion
+    acceptance:
+      - focused_test_repeated_many_times_without_failure
+      - semantic_quiesce_then_arrival_assertion_preserved
+      - full_ci_green
+      - no_production_behavior_change_unless_separately_justified
+
+  - id: S2
+    issue: 141
+    title: Audit Shade Phase 1 cold-load and lightmap performance
+    branch: feature/presence-shade-performance-audit
+    priority: high
+    dependency: S1_recommended_not_semantic
+    objective: >-
+      Quantify structural performance before treating Phase 1 as production
+      ready, while keeping UX acceptance in issue 134.
+    implementation:
+      benchmark_harness:
+        - deterministic_empty_journal_fixture
+        - deterministic_realistic_populated_journal_fixture
+        - deterministic_high_history_stress_fixture
+      measure:
+        - journal_open_and_key_resolution
+        - list_unique_cells
+        - decrypt_records_for_explicit_cell_read_only
+        - shade_source_initialization
+        - lightmap_texture_initialization
+        - first_render_after_projection_ready
+        - incremental_single_cell_light_cost
+        - retained_memory_for_2048x2048_R8_lightmap
+      structural_assertions:
+        - no_per_frame_journal_read
+        - no_per_frame_decryption
+        - no_full_journal_rescan_on_incremental_cell_light
+        - incremental_update_work_is_bounded
+        - renderer_never_receives_raw_visit_records
+      reporting:
+        - record_machine_browser_and_fixture_shape
+        - separate_measurement_from_acceptance_threshold
+        - keep_iOS_WebView_numbers_marked_unverified_until_measured_on_device
+    acceptance:
+      - desktop_measurements_recorded
+      - cold_load_delta_quantified
+      - incremental_cost_quantified
+      - obvious_pathological_growth_fixed_or_split_into_blocking_followup
+      - issue_141_remains_open_if_required_real_device_measurement_is_missing
+
+  - id: S3
+    issue: 138
+    title: Define the cell-bound camera coordination contract
+    branch: feature/cell-camera-coordinator
+    priority: high
+    dependency: S1_recommended
+    objective: >-
+      Create one application-level camera ownership model before any cell-bound
+      fragment is allowed to drive the camera.
+    model:
+      owner_states:
+        - person
+        - application
+      application_intents:
+        - first_fix
+        - recenter
+        - body_focus
+        - fragment_focus
+      precedence:
+        - person_gesture_overrides_all_application_intents
+        - explicit_recenter_can_return_control_to_application_for_that_transition
+        - active_handover_or_body_focus_may_be_retargeted_only_by_explicit_policy
+        - fragment_focus_never_steals_camera_after_person_gesture
+      geographic_rule: >-
+        An H3 cell may be converted into a bounded camera target for
+        presentation, but the resulting camera state is not geographic evidence
+        and is never persisted as presence truth.
+      renderer_boundary:
+        - application_uses_typed_camera_target_and_motion_contract
+        - MapLibre_instance_does_not_escape_renderer
+        - 2D_and_3D_use_same_application_intent
+        - safe_area_padding_is_part_of_camera_context
+        - reduced_motion_changes_motion_not_target_semantics
+    tests:
+      - gesture_cancels_or_blocks_application_retarget_as_defined
+      - explicit_recenter_restores_application_transition
+      - fragment_focus_respects_person_ownership
+      - body_focus_and_fragment_focus_precedence_is_deterministic
+      - interruption_and_retarget_are_deterministic
+    acceptance:
+      - one_camera_coordinator_model_documented_and_implemented
+      - precedence_tests_green
+      - no_raw_MapLibre_dependency_in_product_code
+      - contract_sufficient_for_future_cell_bound_fragment_without_adding_fragment_semantics
+
+  - id: S4
+    issue: 134
+    title: Validate Shade with one week of real movement
+    priority: product_gate
+    dependency: D0_success
+    duration: seven_normal_use_days
+    execution: manual_real_world_evidence
+    objective: >-
+      Determine whether Phase 1 spatial and time gates preserve meaning under
+      real movement; synthetic or emulator evidence cannot close this issue.
+    fixed_starting_parameters:
+      region_m: 20000
+      h3_resolution: 9
+      accuracy_gate_m: 50
+      dwell_ms: 60000
+    evidence_log:
+      record_each_day:
+        - browser_and_device_version
+        - approximate_usage_pattern_without_exporting_raw_location_history
+        - visible_false_corridors_or_false_clear_cells
+        - missed_genuine_places
+        - cold_load_subjective_and_measured_observation
+        - useful_or_useless_raw_record_examples_described_without_external_egress
+    final_questions:
+      - does_unvisited_ground_remain_dark
+      - does_genuine_visited_ground_clear_at_a_useful_rate
+      - does_transit_avoid_continuous_false_corridors
+      - is_50m_accuracy_gate_correct
+      - is_60s_dwell_correct
+      - is_H3_resolution_9_correct
+      - is_20km_fixed_region_sufficient
+      - is_accumulated_history_cold_load_acceptable
+      - are_raw_records_meaningful_enough_for_any_later_narration
+      - is_any_Phase_2_work_justified
+    output:
+      - evidence_comment_or_document_linked_to_issue_134
+      - explicit_parameter_decisions
+      - explicit_go_or_stop_decision_for_Phase_2
+
+  - id: S5
+    issue: 137
+    title: Verify Telegram and Discord geolocation firsthand
+    priority: host_gate
+    dependency: D0_independent
+    execution: manual_real_host_evidence
+    surfaces:
+      - Telegram_Mini_App_iOS
+      - Discord_supported_embedded_client
+    verify:
+      - permission_state_visibility
+      - explicit_gesture_requirement
+      - watchPosition_availability
+      - update_cadence
+      - accuracy_relative_to_50m_gate
+      - suspend_resume_behavior
+      - permission_revoke_behavior
+      - host_wrapper_error_or_timing_changes
+    classification:
+      allowed_values:
+        - supported
+        - constrained
+        - unsupported
+    implementation_rule: >-
+      Host findings must be expressed through GeolocationCapability; shared
+      product code must not branch on Telegram or Discord names.
+    gate:
+      - do_not_enable_capture_for_a_host_before_evidence_is_recorded
+      - desktop_emulation_is_not_evidence
+
+conditional_work:
+  - id: C1
+    issue: 136
+    title: Tile the presence lightmap beyond the fixed home region
+    state: blocked_by_evidence
+    unblock_when: issue_134_proves_fixed_20km_region_is_insufficient
+    must_not_start_before_unblock: true
+    required_design_before_code:
+      - deterministic_tile_addressing
+      - bounded_loaded_tile_set
+      - explicit_eviction_policy
+      - no_cell_aliasing_across_region_boundaries
+      - cold_load_proportional_to_relevant_tiles_not_lifetime_history
+      - renderer_remains_journal_blind
+
+  - id: C2
+    issue: 139
+    title: Add temporal fade and a second presence channel
+    state: blocked_by_evidence
+    unblock_when: issue_134_explicitly_justifies_Phase_2
+    must_not_start_before_unblock: true
+    constraints:
+      - no_model_required
+      - self_presence_and_Avaia_pass_are_distinct_channels
+      - Avaia_may_only_traverse_already_lit_ground
+      - Avaia_cannot_manufacture_user_presence_or_knowledge
+      - decay_is_shader_time_not_journal_rewrite
+      - source_visit_records_remain_append_only
+      - float_render_capability_has_explicit_fallback
+      - no_camera_ownership_added_here
+
+parallelism:
+  after_D0:
+    can_run_in_parallel:
+      - S4_real_world_week
+      - S5_host_evidence
+    engineering_queue:
+      - S1
+      - S2
+      - S3
+    reason: >-
+      The week-long and host-specific evidence tasks do not need to block
+      deterministic engineering slices, but conditional Phase 2 work remains
+      blocked until the evidence gates resolve.
+
+issue_closure_policy:
+  145: close_only_after_deterministic_repeated_and_full_ci_green
+  141: close_only_after_required_measurements_are_recorded
+  138: close_after_contract_implementation_and_tests_green
+  134: close_only_after_real_week_and_explicit_parameter_plus_Phase2_decisions
+  137: close_only_after_both_required_hosts_are_classified_with_real_evidence
+  136: remain_open_and_blocked_until_134_proves_need
+  139: remain_open_and_blocked_until_134_justifies_Phase2
+
+non_goals:
+  - server_side_presence_storage
+  - presence_sync
+  - presence_backup_or_export
+  - identity_owned_movement_history
+  - BondChain_from_location_or_dwell
+  - relationship_derivation_from_location
+  - consent_or_reciprocity_inference
+  - AI_narration_before_evidence_gate
+  - tiling_before_region_need_is_proven
+  - temporal_fade_before_Phase2_is_justified
+  - Telegram_or_Discord_capture_before_real_host_verification
+
+completion_definition:
+  phase_1_engineering_ready_when:
+    - issue_145_closed
+    - issue_141_has_no_blocking_pathology
+    - issue_138_camera_contract_available_for_later_work
+  phase_1_product_accepted_when:
+    - issue_134_closed_from_real_world_evidence
+    - production_web_health_remains_green
+  embedded_capture_ready_when:
+    - issue_137_closed_with_supported_or_constrained_contracts
+  phase_2_entry_condition: >-
+    Only an explicit evidence-backed decision from issue 134 may unblock issue
+    139; issue 136 is independently unblocked only by evidence that the fixed
+    region is insufficient.
