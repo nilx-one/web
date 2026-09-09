@@ -84,16 +84,12 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-async function readKeyState(
-  database: IDBDatabase,
-): Promise<CryptoKey | null> {
+async function readKeyState(database: IDBDatabase): Promise<CryptoKey | null> {
   const read = database.transaction([KEYS_STORE, VISITS_STORE], "readonly");
   const key = request<CryptoKey | undefined>(
     read.objectStore(KEYS_STORE).get(JOURNAL_KEY_ID),
   );
-  const visitCount = request<number>(
-    read.objectStore(VISITS_STORE).count(),
-  );
+  const visitCount = request<number>(read.objectStore(VISITS_STORE).count());
   const [existing, storedVisits] = await Promise.all([key, visitCount]);
   return resolveJournalKey(existing, storedVisits);
 }
@@ -111,10 +107,7 @@ async function loadOrCreateKey(database: IDBDatabase): Promise<CryptoKey> {
   // Re-check key and visit state in one serialised transaction after key
   // generation. Concurrent tabs may have created the journal while Web Crypto
   // was generating our candidate; only an empty journal may accept a new key.
-  const write = database.transaction(
-    [KEYS_STORE, VISITS_STORE],
-    "readwrite",
-  );
+  const write = database.transaction([KEYS_STORE, VISITS_STORE], "readwrite");
   const done = transactionDone(write);
   const keys = write.objectStore(KEYS_STORE);
   const visits = write.objectStore(VISITS_STORE);
@@ -122,10 +115,7 @@ async function loadOrCreateKey(database: IDBDatabase): Promise<CryptoKey> {
     keys.get(JOURNAL_KEY_ID),
   );
   const countRequest = request<number>(visits.count());
-  const [winner, storedVisits] = await Promise.all([
-    winnerRequest,
-    countRequest,
-  ]);
+  const [winner, storedVisits] = await Promise.all([winnerRequest, countRequest]);
   const resolved = resolveJournalKey(winner, storedVisits);
   if (resolved !== null) {
     await done;
