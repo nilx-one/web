@@ -199,6 +199,9 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     const previousVertexArray = gl.getParameter(
       gl.VERTEX_ARRAY_BINDING,
     ) as WebGLVertexArrayObject | null;
+    const previousArrayBuffer = gl.getParameter(
+      gl.ARRAY_BUFFER_BINDING,
+    ) as WebGLBuffer | null;
     const blendEnabled = gl.isEnabled(gl.BLEND);
     const depthEnabled = gl.isEnabled(gl.DEPTH_TEST);
 
@@ -217,6 +220,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length / 2);
     }
 
+    gl.bindBuffer(gl.ARRAY_BUFFER, previousArrayBuffer);
     gl.bindVertexArray(previousVertexArray);
     gl.useProgram(previousProgram);
     gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
@@ -362,6 +366,13 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       mountedMap.on("click", onMapClick);
     },
 
+    prerender(gl) {
+      // MapLibre's custom-layer contract reserves prerender for offscreen
+      // texture work. Keep the journal-derived raster update out of main-map
+      // rendering so render() remains one bounded quad draw.
+      flush(gl);
+    },
+
     render(gl, frame: CustomRenderMethodInput) {
       if (
         shadeProgram === undefined ||
@@ -370,7 +381,6 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       ) {
         return;
       }
-      flush(gl);
 
       const previousProgram = gl.getParameter(
         gl.CURRENT_PROGRAM,
