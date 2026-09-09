@@ -13,7 +13,7 @@
     "dev:site": "pnpm --filter @nilx-one/site dev",
     "dev:telegram": "pnpm --filter @nilx-one/telegram-mini-app dev",
     "dev:discord": "pnpm --filter @nilx-one/discord-activity dev",
-    "format": "prettier --write packages/identity-http/src/index.ts packages/product-app/src/features/avaia/avaia-setup-view.css packages/product-app/src/features/avaia/use-avaia-profile.ts packages/product-app/src/features/map/authenticated-map-home-view.tsx packages/product-app/src/features/map/avaia-setup-flow.test.tsx packages/product-app/src/features/map/bond-dock-view-model.ts && git diff -- packages/identity-http/src/index.ts packages/product-app/src/features/avaia/avaia-setup-view.css packages/product-app/src/features/avaia/use-avaia-profile.ts packages/product-app/src/features/map/authenticated-map-home-view.tsx packages/product-app/src/features/map/avaia-setup-flow.test.tsx packages/product-app/src/features/map/bond-dock-view-model.ts && false",
+    "format": "prettier --check .",
     "format:write": "prettier --write .",
     "lint": "eslint . --max-warnings=0",
     "policy": "python scripts/check_repository_policy.py MPL-2.0",
