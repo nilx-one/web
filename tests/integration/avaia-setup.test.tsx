@@ -139,25 +139,34 @@ describe("Avaia setup from the Bond dock", () => {
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
 
-    // The model that would think for it is a device fact, and says so without
-    // standing in the way of the address.
-    const model = screen.getByLabelText("AI model");
+    // A body is part of what an Avaia is, and this contract publishes no model
+    // to choose from, so the field is present and inert rather than invented.
+    const model = screen.getByLabelText("3D model");
     expect(model).toBeDisabled();
     expect(model).toHaveValue("Not available yet");
-
-    // How it looks is a separate question from what runs it.
-    expect(screen.getByRole("heading", { name: "Render model" })).toBeVisible();
-    expect(screen.getByText(/study$/)).toBeVisible();
+    // The address and that one inert field are the whole surface: no model
+    // capability is invented beside them.
+    expect(screen.getAllByRole("textbox")).toEqual([address, model]);
 
     await user.clear(address);
     await user.type(address, "0vesnai");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("0vesnai");
+
+    // The save ends on the world: the screen closes, the Dock reads the
+    // address the service answered with, and the notice is said once in the
+    // stack every transient notice is said in.
+    const notice = await screen.findByText("Avaia saved");
+    expect(notice.closest(".toast")).toHaveTextContent("0vesnai");
+    expect(screen.queryByLabelText("pub_dress")).toBeNull();
     expect(
-      await screen.findByText("Saved. This Avaia is 0vesnai."),
+      await screen.findByRole("button", { name: "Edit 0vesnai" }),
     ).toBeVisible();
-    expect(await screen.findByLabelText("pub_dress")).toHaveValue("0vesnai");
+    expect(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toBeVisible();
+    expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
   });
 
@@ -210,10 +219,39 @@ describe("Avaia setup from the Bond dock", () => {
     await user.type(address, "0takenai");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
+    // A refusal keeps the person where they were, with what they typed.
     expect(
       await screen.findByText("That address belongs to another identity."),
     ).toBeVisible();
     expect(screen.getByLabelText("pub_dress")).toHaveValue("0takenai");
+    expect(screen.queryByText("Avaia saved")).toBeNull();
+  });
+
+  it("stays configured when this device can run nothing at all", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        mapRenderer={createMapRendererDouble({ kind: "ready" })}
+        identity={withAvaiaProfile(createIdentity(), {
+          readAvaiaProfile: async () => ({
+            kind: "available",
+            profile: projection({ configurationState: "configured" }),
+          }),
+        })}
+      />,
+    );
+
+    // No runtime is published on any device, and that never unconfigures what
+    // an owner already stored.
+    const card = await screen.findByRole("button", { name: "Edit 0skai" });
+    expect(card).not.toHaveTextContent("unconfigured");
+
+    card.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByLabelText("pub_dress")).toHaveValue("0skai");
+    expect(screen.getByText("configured")).toBeVisible();
   });
 
   it("leaves a host without the capability the Dock it already had", async () => {
@@ -229,7 +267,9 @@ describe("Avaia setup from the Bond dock", () => {
     expect(
       await screen.findByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toBeVisible();
+    // Nothing is synthesised in place of a profile this host cannot read.
     expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Edit 0skai/ })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Focus the world on 0skai" }),
     ).toHaveTextContent("driving");

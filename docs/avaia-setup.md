@@ -1,9 +1,10 @@
 # Avaia setup
 
 A Bond owns one Avaia. What that Avaia _is_ — the address it answers to — is
-identity the service keeps. What a device can _run_ for it, and what the world
-_draws_ for it, are two other questions entirely. This surface holds all three
-side by side and never lets one answer for another.
+identity the service keeps. What a device could run for it is a different fact
+that this surface never confuses with the first: an Avaia is configured from
+wherever its owner happens to be standing, including a device that could load
+no model at all.
 
 ## The card that opens it
 
@@ -18,9 +19,9 @@ published yet, so today the card opens setup in every state a person can reach.
 
 The world stays mounted through all of it. The Dock travels between its screens
 — the world, the Avaia, and back — and the map underneath is never remounted,
-never animated, and never asked to become a page.
+never animated by the move, and never asked to become a page.
 
-## Three sections, three kinds of fact
+## The form
 
 **pub_dress.** The stored address, carried whole in both directions. The client
 never assembles one out of a discriminator it assumed and a name it derived: it
@@ -30,23 +31,29 @@ hold. A rejection is repeated in the service's own terms — a discriminator tha
 is not the owner's, an address another identity already holds — and the draft
 stays where it was so the person can fix it rather than retype it.
 
-A save is confirmed only once the surface already reads the address the service
-answered with. The projection this client holds is replaced by that exact
-answer, so a confirmation can never describe a draft the service never saw.
+**3D model.** Present and inert. A body is part of what an Avaia is, so the
+field belongs on the surface a person configures one from; this contract
+publishes no model capability, so there is nothing in it to choose and it says
+so rather than offering something that does not exist. Nothing about it is sent
+or stored.
 
-**AI model.** The model that would think for the Avaia runs on the device the
-Avaia is opened on. It is read here, never chosen, and it reads _Not available
-yet_ because no runtime is published — on every device, which is the truth
-rather than a placeholder. Its absence never stops the address from being
-edited: an Avaia is configured from wherever its owner happens to be standing,
-including a device that could not load a runtime if one existed.
+## What a save does
 
-**Render model.** How the Avaia appears in the shared world. It is not the AI
-model and never derives from it: a body is not a mind. The world already draws
-an Avaia as a study of its own — never its Bond's — chosen deterministically
-from its address, so this section names the study the world is actually drawing
-and stops there. Choosing a body, hair, face and skin is later work; the section
-exists now so that work has somewhere to land that is not the runtime's.
+A save ends on the world:
+
+```text
+send the whole address
+receive the profile identity contract 8 now keeps
+replace the local projection with that exact answer
+close the Avaia screen
+say "Avaia saved" once, in the top-right stack
+```
+
+The answer is what closes the screen. Nothing is confirmed before the service
+has spoken, so a confirmation can never describe a draft the service never saw,
+and the projection the Dock reads is the service's own — never a draft this
+client hoped would be accepted. The notice is not dismissed on a timer; it is
+closed when it has been read, like every other notice in this client.
 
 ## What this is not
 
@@ -54,5 +61,10 @@ Configuring an Avaia is an owner deciding about something they own. It creates
 no Interaction, completes no BondChain, asserts no relationship, and infers
 neither reciprocity nor consent. Nothing on this surface is a fact about two
 Bonds.
+
+The local AI runtime, the render model, and the character editor that would
+choose a body are real concepts and none of them is here. They are their own
+work, on their own surface, and putting them behind this address field would
+have conflated three things the protocol keeps apart.
 
 © 2026 aiaiaiai · aiaiaiai.org

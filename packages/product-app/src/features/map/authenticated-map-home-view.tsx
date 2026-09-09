@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  AvaiaProfileUpdateResult,
   BondProviderConnections,
   BondProviderType,
 } from "@nilx-one/application";
@@ -121,7 +122,14 @@ export interface AuthenticatedMapHomeViewProps {
    */
   readonly avaiaSetup?: AvaiaSetupViewState;
   readonly onAvaiaSetupChange?: (pubDress: string) => void;
-  readonly onAvaiaSetupSubmit?: () => void;
+  /**
+   * Saves the whole address and answers with what the service stored. The
+   * answer is what closes the screen, so a return to the world is never a guess
+   * about a request that may still be in flight.
+   */
+  readonly onAvaiaSetupSubmit?: () => Promise<
+    AvaiaProfileUpdateResult | undefined
+  >;
   /** The body this Bond is represented by, and the studies it may choose. */
   readonly avatarChoice?: AvatarChoiceViewState;
   readonly onAvatarChoice?: (
@@ -379,6 +387,11 @@ export function AuthenticatedMapHomeView({
   const [dismissedStatus, setDismissedStatus] = useState<string | undefined>(
     undefined,
   );
+  // What the service stored, said once where every transient notice is said.
+  // It is not dismissed on a timer: a person closes it when they have read it.
+  const [avaiaSavedToast, setAvaiaSavedToast] = useState<
+    StatusToastItem | undefined
+  >(undefined);
   // Who is at the wheel is presentation: it moves nothing in the shared world.
   // The world opens on the Avaia — the Bond is spectating until he takes it.
   const [wheel, setWheel] = useState<DockSeat>("avaia");
@@ -422,10 +435,12 @@ export function AuthenticatedMapHomeView({
     mapViewModel.label,
     mapViewModel.detail,
   );
-  const statusToasts =
-    statusToast === undefined || statusToast.id === dismissedStatus
+  const statusToasts = [
+    ...(statusToast === undefined || statusToast.id === dismissedStatus
       ? []
-      : [statusToast];
+      : [statusToast]),
+    ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
+  ];
   const headerActions: readonly HeaderAction[] =
     onLogout === undefined
       ? []
@@ -689,6 +704,24 @@ export function AuthenticatedMapHomeView({
     activateSpectator();
   }
 
+  /**
+   * A save ends on the world. The service answers with what it stored, that
+   * answer is what the surface already reads, and only then does the screen
+   * close — so nothing here confirms a draft the service never saw. The world
+   * underneath was never a screen to come back to; it stayed mounted.
+   */
+  async function submitAvaiaSetup(): Promise<void> {
+    const result = await onAvaiaSetupSubmit?.();
+    if (result?.kind !== "updated") return;
+    setDetailState(undefined);
+    setAvaiaSavedToast({
+      id: `avaia-saved:${result.profile.pubDress}`,
+      kind: "active",
+      title: "Avaia saved",
+      description: result.profile.pubDress,
+    });
+  }
+
   /** The identity that is spectating takes the wheel, when it can. */
   function activateSpectator(): void {
     if (dock.handover === "download") {
@@ -790,7 +823,13 @@ export function AuthenticatedMapHomeView({
           toasts={statusToasts}
           label="World status"
           placement="inline"
-          onDismiss={setDismissedStatus}
+          onDismiss={(id) => {
+            if (avaiaSavedToast?.id === id) {
+              setAvaiaSavedToast(undefined);
+              return;
+            }
+            setDismissedStatus(id);
+          }}
         />
       }
       statusRail={
@@ -1037,7 +1076,7 @@ export function AuthenticatedMapHomeView({
                   <AvaiaSetupView
                     state={avaiaSetup}
                     onDraftChange={(value) => onAvaiaSetupChange?.(value)}
-                    onSubmit={() => onAvaiaSetupSubmit?.()}
+                    onSubmit={() => void submitAvaiaSetup()}
                   />
                 ) : null}
 

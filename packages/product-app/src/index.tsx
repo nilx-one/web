@@ -77,7 +77,6 @@ import {
 import { createAvaiaSetupViewState } from "./features/avaia/avaia-setup-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
-import { avaiaStudy } from "./features/map/avatar-presence";
 import { MapFoundationView } from "./features/map/map-foundation-view";
 import {
   applyAppearance,
@@ -881,13 +880,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     const deviceAvaiaAvailability = avaiaAvailability({
       acceleratedGraphics: "gpu" in navigator,
     });
-    // The body the world draws for this Avaia follows the address it is known
-    // by, so the setup surface names the study the world is actually drawing.
-    const avaiaRenderAddress =
-      avaiaProfileQuery.data?.kind === "available"
-        ? avaiaProfileQuery.data.profile.pubDress
-        : viewModel.identity.avaiaPubDress;
-
     return (
       <AuthenticatedMapHomeView
         hostLabel={viewModel.hostLabel}
@@ -930,30 +922,23 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
                 draft: avaiaProfileDraft,
                 pending: saveAvaiaProfile.isPending,
                 result: saveAvaiaProfile.data,
-                // Device runtime, read beside the identity and never mistaken
-                // for it.
-                availability: deviceAvaiaAvailability,
-                ...(avatarChoice.rendered === undefined ||
-                avaiaRenderAddress === undefined
-                  ? {}
-                  : {
-                      study: avaiaStudy(
-                        avaiaRenderAddress,
-                        avatarChoice.rendered,
-                      ),
-                    }),
               }),
               onAvaiaSetupChange: (pubDress: string) => {
                 saveAvaiaProfile.reset();
                 setAvaiaProfileDraft(pubDress);
               },
-              onAvaiaSetupSubmit: () => {
+              // The surface waits for the service before it closes, so the
+              // answer it acts on is the one that was actually stored.
+              onAvaiaSetupSubmit: async () => {
                 if (
-                  avaiaProfileDraft !== undefined &&
-                  !saveAvaiaProfile.isPending
+                  avaiaProfileDraft === undefined ||
+                  saveAvaiaProfile.isPending
                 ) {
-                  saveAvaiaProfile.mutate(avaiaProfileDraft);
+                  return undefined;
                 }
+                return saveAvaiaProfile
+                  .mutateAsync(avaiaProfileDraft)
+                  .catch(() => undefined);
               },
             })}
         onSlugChange={(next: string) => {

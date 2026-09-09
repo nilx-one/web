@@ -18,7 +18,6 @@ function input(overrides: Partial<AvaiaSetupInput> = {}): AvaiaSetupInput {
   return {
     load: { kind: "available", profile },
     pending: false,
-    availability: "unavailable",
     ...overrides,
   };
 }
@@ -40,42 +39,20 @@ describe("Avaia setup surface", () => {
     expect(state.editable).toBe(true);
   });
 
-  it("edits identity while this device has no runtime at all", () => {
-    const state = createAvaiaSetupViewState(
-      input({ draft: "0vesnai", availability: "unavailable" }),
+  it("reads configuration from what was stored, and nothing else", () => {
+    expect(createAvaiaSetupViewState(input()).configuration).toBe(
+      "unconfigured",
     );
-
-    expect(state.aiModel.value).toBe("Not available yet");
-    expect(state.canSave).toBe(true);
-  });
-
-  it("reads the runtime as a device fact, never as configuration", () => {
     expect(
-      createAvaiaSetupViewState(input({ availability: "ready" })).aiModel.value,
-    ).toBe("Ready on this device");
-    expect(
-      createAvaiaSetupViewState(input({ availability: "downloadable" })).aiModel
-        .value,
-    ).toBe("Ready to download");
-    // A ready runtime says nothing about whether the owner configured anything.
-    expect(
-      createAvaiaSetupViewState(input({ availability: "ready" }))
-        .configurationLabel,
-    ).toBe("unconfigured");
-  });
-
-  it("keeps the render model independent of the model that would think", () => {
-    const drawn = createAvaiaSetupViewState(
-      input({ study: "dasha-study", availability: "unavailable" }),
-    );
-
-    expect(drawn.renderModel.value).toBe("Dasha — feminine study");
-    expect(drawn.renderModel.study?.model).toBe("dasha-study");
-    expect(drawn.aiModel.value).toBe("Not available yet");
-
-    const undrawn = createAvaiaSetupViewState(input());
-    expect(undrawn.renderModel.value).toBe("Not drawn yet");
-    expect(undrawn.renderModel.study).toBeUndefined();
+      createAvaiaSetupViewState(
+        input({
+          load: {
+            kind: "available",
+            profile: { ...profile, configurationState: "configured" },
+          },
+        }),
+      ).configuration,
+    ).toBe("configured");
   });
 
   it("offers no save until the address is actually changed", () => {
@@ -90,6 +67,9 @@ describe("Avaia setup surface", () => {
       createAvaiaSetupViewState(input({ draft: "0vesnai", pending: true }))
         .canSave,
     ).toBe(false);
+    expect(createAvaiaSetupViewState(input({ draft: "0vesnai" })).canSave).toBe(
+      true,
+    );
   });
 
   it("waits for a profile before offering anything to write", () => {
@@ -115,30 +95,25 @@ describe("Avaia setup surface", () => {
     ).toBe("An Avaia keeps the discriminator of the Bond that owns it.");
     expect(
       createAvaiaSetupViewState(
+        input({ result: { kind: "rejected", reason: "unavailable" } }),
+      ).error,
+    ).toBe("That address belongs to another identity.");
+    expect(
+      createAvaiaSetupViewState(
         input({ result: { kind: "service-unavailable" } }),
       ).error,
     ).toBe("Couldn’t save this address. Try again.");
   });
 
-  it("confirms a save only once it reads the address the service answered", () => {
-    const answered = {
-      ...profile,
-      pubDress: "0vesnai",
-      configurationState: "configured",
-    } as const;
+  it("keeps a refused draft where the person left it", () => {
+    const refused = createAvaiaSetupViewState(
+      input({
+        draft: "0takenai",
+        result: { kind: "rejected", reason: "unavailable" },
+      }),
+    );
 
-    expect(
-      createAvaiaSetupViewState(
-        input({ result: { kind: "updated", profile: answered } }),
-      ).saved,
-    ).toBeUndefined();
-    expect(
-      createAvaiaSetupViewState(
-        input({
-          load: { kind: "available", profile: answered },
-          result: { kind: "updated", profile: answered },
-        }),
-      ).saved,
-    ).toBe("0vesnai");
+    expect(refused.draft).toBe("0takenai");
+    expect(refused.canSave).toBe(true);
   });
 });

@@ -51,9 +51,10 @@ nothing to do with who is holding the wheel.
 
 Configuration and runtime are read apart on the card as well. The role beside
 the address says `unconfigured` when that is what the service stored, whatever
-this device could run; the status dot keeps stating the runtime, because that is
-what a dot about a runtime is for. The one thing that comes before setup is a
-runtime that can actually take the wheel — a moment rather than a setting —
+this device could run, and an Avaia that was configured stays configured on a
+device that can run nothing; the status dot keeps stating the runtime, because
+that is what a dot about a runtime is for. The one thing that comes before setup
+is a runtime that can actually take the wheel — a moment rather than a setting —
 which no device can offer while nothing is published.
 
 A client whose identity service has not reached contract 8 reads no profile at

@@ -171,6 +171,18 @@ describe("Avaia configuration on the Dock", () => {
     });
   });
 
+  it("stays configured on a device that can run nothing", () => {
+    const dock = createBondDockViewState({
+      ...base,
+      avaia: "unavailable",
+      avaiaConfiguration: "configured",
+    });
+
+    // The runtime word is the runtime's; it never rewrites what was stored.
+    expect(dock.avaiaAction).toBe("edit");
+    expect(dock.right).toMatchObject({ role: "unavailable", tone: "idle" });
+  });
+
   it("keeps an unconfigured Avaia unconfigured whatever the device can run", () => {
     const dock = createBondDockViewState({
       ...base,

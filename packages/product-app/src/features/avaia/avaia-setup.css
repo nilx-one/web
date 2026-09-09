@@ -27,15 +27,6 @@
   font-size: 0.78rem;
 }
 
-.avaia-setup__section {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.avaia-setup__section h3 {
-  margin: 0;
-}
-
 /* The address label reads as the field it names, not as a section of its own. */
 .avaia-setup__label {
   color: rgba(245, 243, 247, 0.62);
@@ -50,31 +41,7 @@
   opacity: 0.62;
 }
 
-.avaia-setup__render {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.avaia-setup__study {
-  width: 2.75rem;
-  height: 2.75rem;
-  border: 1px solid rgba(245, 243, 247, 0.16);
-  border-radius: 0.9rem;
-  object-fit: cover;
-}
-
-.avaia-setup__render-value {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .authenticated-map-home[data-theme="light"] .avaia-setup__summary small,
 .authenticated-map-home[data-theme="light"] .avaia-setup__label {
   color: rgba(17, 19, 26, 0.62);
-}
-
-.authenticated-map-home[data-theme="light"] .avaia-setup__study {
-  border-color: rgba(28, 33, 50, 0.12);
 }
