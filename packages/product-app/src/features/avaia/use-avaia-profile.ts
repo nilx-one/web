@@ -4,6 +4,7 @@
 import {
   ReadAvaiaProfile,
   UpdateAvaiaProfile,
+  type AvaiaProfileAccessPort,
   type AvaiaProfileProjection,
   type AvaiaProfileReadResult,
   type AvaiaProfileUpdateResult,
@@ -24,6 +25,31 @@ export interface AvaiaProfileController {
   resetSave(): void;
 }
 
+interface AvaiaProfileReadSnapshot {
+  readonly access: AvaiaProfileAccessPort;
+  readonly ownerPubDress: string;
+  readonly result: AvaiaProfileReadResult;
+}
+
+interface AvaiaProfileSaveSnapshot {
+  readonly access: AvaiaProfileAccessPort;
+  readonly ownerPubDress: string;
+  readonly result: AvaiaProfileUpdateResult;
+}
+
+interface AvaiaProfileRequestKey {
+  readonly access: AvaiaProfileAccessPort;
+  readonly ownerPubDress: string;
+}
+
+function matchesRequest(
+  key: AvaiaProfileRequestKey | undefined,
+  access: AvaiaProfileAccessPort | undefined,
+  ownerPubDress: string,
+): boolean {
+  return key?.access === access && key.ownerPubDress === ownerPubDress;
+}
+
 /**
  * Local cached projection of identity contract 8. The service owns validation
  * and ownership. A successful write replaces this projection immediately with
@@ -31,52 +57,59 @@ export interface AvaiaProfileController {
  */
 export function useAvaiaProfile(ownerPubDress: string): AvaiaProfileController {
   const access = useAvaiaProfileAccess();
-  const [load, setLoad] = useState<AvaiaProfileLoadState>({
-    kind: "unsupported",
-  });
-  const [saving, setSaving] = useState(false);
-  const [saveResult, setSaveResult] = useState<
-    AvaiaProfileUpdateResult | undefined
+  const [readSnapshot, setReadSnapshot] = useState<
+    AvaiaProfileReadSnapshot | undefined
+  >(undefined);
+  const [savingFor, setSavingFor] = useState<
+    AvaiaProfileRequestKey | undefined
+  >(undefined);
+  const [saveSnapshot, setSaveSnapshot] = useState<
+    AvaiaProfileSaveSnapshot | undefined
   >(undefined);
 
   useEffect(() => {
-    let cancelled = false;
-    setSaveResult(undefined);
-    if (access === undefined) {
-      setLoad({ kind: "unsupported" });
-      return () => {
-        cancelled = true;
-      };
-    }
+    if (access === undefined) return;
 
-    setLoad({ kind: "loading" });
+    let cancelled = false;
+    const request = { access, ownerPubDress };
     void new ReadAvaiaProfile(access).execute().then((result) => {
-      if (!cancelled) setLoad(result);
+      if (cancelled) return;
+      setReadSnapshot({ ...request, result });
     });
     return () => {
       cancelled = true;
     };
   }, [access, ownerPubDress]);
 
+  const load: AvaiaProfileLoadState =
+    access === undefined
+      ? { kind: "unsupported" }
+      : matchesRequest(readSnapshot, access, ownerPubDress)
+        ? readSnapshot.result
+        : { kind: "loading" };
   const profile = load.kind === "available" ? load.profile : undefined;
+  const saving = matchesRequest(savingFor, access, ownerPubDress);
+  const saveResult = matchesRequest(saveSnapshot, access, ownerPubDress)
+    ? saveSnapshot.result
+    : undefined;
 
   async function save(pubDress: string): Promise<AvaiaProfileUpdateResult> {
     if (access === undefined) {
-      const result: AvaiaProfileUpdateResult = {
-        kind: "service-unavailable",
-      };
-      setSaveResult(result);
-      return result;
+      return { kind: "service-unavailable" };
     }
 
-    setSaving(true);
-    setSaveResult(undefined);
+    const request = { access, ownerPubDress };
+    setSavingFor(request);
+    setSaveSnapshot(undefined);
     const result = await new UpdateAvaiaProfile(access).execute(pubDress);
     if (result.kind === "updated") {
-      setLoad({ kind: "available", profile: result.profile });
+      setReadSnapshot({
+        ...request,
+        result: { kind: "available", profile: result.profile },
+      });
     }
-    setSaveResult(result);
-    setSaving(false);
+    setSaveSnapshot({ ...request, result });
+    setSavingFor(undefined);
     return result;
   }
 
@@ -86,6 +119,6 @@ export function useAvaiaProfile(ownerPubDress: string): AvaiaProfileController {
     saving,
     saveResult,
     save,
-    resetSave: () => setSaveResult(undefined),
+    resetSave: () => setSaveSnapshot(undefined),
   };
 }
