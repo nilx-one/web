@@ -8,6 +8,10 @@ import type {
   VisitRecord,
 } from "@nilx-one/presence-contract";
 
+import { resolveJournalKey } from "./key-lifecycle";
+
+export { PresenceJournalKeyMissingError } from "./key-lifecycle";
+
 const DB_NAME = "nilx-presence";
 const DB_VERSION = 1;
 const VISITS_STORE = "visits";
@@ -80,12 +84,19 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-async function loadOrCreateKey(database: IDBDatabase): Promise<CryptoKey> {
-  const read = database.transaction(KEYS_STORE, "readonly");
-  const existing = await request<CryptoKey | undefined>(
+async function readKeyState(database: IDBDatabase): Promise<CryptoKey | null> {
+  const read = database.transaction([KEYS_STORE, VISITS_STORE], "readonly");
+  const key = request<CryptoKey | undefined>(
     read.objectStore(KEYS_STORE).get(JOURNAL_KEY_ID),
   );
-  if (existing !== undefined) return existing;
+  const visitCount = request<number>(read.objectStore(VISITS_STORE).count());
+  const [existing, storedVisits] = await Promise.all([key, visitCount]);
+  return resolveJournalKey(existing, storedVisits);
+}
+
+async function loadOrCreateKey(database: IDBDatabase): Promise<CryptoKey> {
+  const existing = await readKeyState(database);
+  if (existing !== null) return existing;
 
   const candidate = await globalThis.crypto.subtle.generateKey(
     { name: "AES-GCM", length: 256 },
@@ -93,17 +104,29 @@ async function loadOrCreateKey(database: IDBDatabase): Promise<CryptoKey> {
     ["encrypt", "decrypt"],
   );
 
-  // Read and write in one serialised transaction so concurrent tabs converge
-  // on one non-extractable device key rather than replacing each other.
-  const write = database.transaction(KEYS_STORE, "readwrite");
+  // Re-check key and visit state in one serialised transaction after key
+  // generation. Concurrent tabs may have created the journal while Web Crypto
+  // was generating our candidate; only an empty journal may accept a new key.
+  const write = database.transaction([KEYS_STORE, VISITS_STORE], "readwrite");
+  const done = transactionDone(write);
   const keys = write.objectStore(KEYS_STORE);
-  const winner = await request<CryptoKey | undefined>(keys.get(JOURNAL_KEY_ID));
-  if (winner !== undefined) {
-    await transactionDone(write);
-    return winner;
+  const visits = write.objectStore(VISITS_STORE);
+  const winnerRequest = request<CryptoKey | undefined>(
+    keys.get(JOURNAL_KEY_ID),
+  );
+  const countRequest = request<number>(visits.count());
+  const [winner, storedVisits] = await Promise.all([
+    winnerRequest,
+    countRequest,
+  ]);
+  const resolved = resolveJournalKey(winner, storedVisits);
+  if (resolved !== null) {
+    await done;
+    return resolved;
   }
+
   await request(keys.put(candidate, JOURNAL_KEY_ID));
-  await transactionDone(write);
+  await done;
   return candidate;
 }
 
