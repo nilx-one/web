@@ -26,23 +26,13 @@ interface Dwell {
   lit: boolean;
 }
 
-type IntervalHandle = ReturnType<typeof globalThis.setInterval>;
-
 export interface PresenceTrackerOptions {
   readonly store: PresenceStore;
   readonly resolution?: number;
   readonly accuracyGateM?: number;
   readonly dwellMs?: number;
-  readonly now?: () => number;
   readonly onError?: (error: unknown) => void;
-  readonly setInterval?: (
-    listener: () => void,
-    intervalMs: number,
-  ) => IntervalHandle;
-  readonly clearInterval?: (handle: IntervalHandle) => void;
 }
-
-const DWELL_TICK_MS = 5_000;
 
 export function createPresenceTracker(
   options: PresenceTrackerOptions,
@@ -50,13 +40,7 @@ export function createPresenceTracker(
   const resolution = options.resolution ?? PRESENCE_RESOLUTION;
   const accuracyGateM = options.accuracyGateM ?? PRESENCE_ACCURACY_GATE_M;
   const dwellMs = options.dwellMs ?? PRESENCE_DWELL_MS;
-  const now = options.now ?? (() => Date.now());
-  const schedule =
-    options.setInterval ?? globalThis.setInterval.bind(globalThis);
-  const cancel =
-    options.clearInterval ?? globalThis.clearInterval.bind(globalThis);
   let dwell: Dwell | undefined;
-  let timer: IntervalHandle | undefined;
   let lastObservationKey: string | undefined;
   let writes: Promise<void> = Promise.resolve();
 
@@ -78,7 +62,15 @@ export function createPresenceTracker(
   }
 
   function light(current: Dwell): void {
-    if (current.lit || now() - current.enteredAt < dwellMs) return;
+    // Presence is derived only from observations, never from elapsed wall time.
+    // One accurate fix cannot become a visit merely because no later fix
+    // arrived: accepted observations in the same H3 cell must span the dwell.
+    if (
+      current.lit ||
+      current.lastFixAt - current.enteredAt < dwellMs
+    ) {
+      return;
+    }
     current.lit = true;
     append(record(current, null));
   }
@@ -86,13 +78,6 @@ export function createPresenceTracker(
   function close(current: Dwell): void {
     if (!current.lit) return;
     append(record(current, current.lastFixAt));
-  }
-
-  function ensureTimer(): void {
-    if (timer !== undefined) return;
-    timer = schedule(() => {
-      if (dwell !== undefined) light(dwell);
-    }, DWELL_TICK_MS);
   }
 
   return {
@@ -116,7 +101,6 @@ export function createPresenceTracker(
         observation.longitude,
         resolution,
       );
-      ensureTimer();
 
       if (dwell?.cell === cell) {
         dwell.lastFixAt = observation.observedAt;
@@ -142,10 +126,6 @@ export function createPresenceTracker(
     },
 
     stop() {
-      if (timer !== undefined) {
-        cancel(timer);
-        timer = undefined;
-      }
       if (dwell !== undefined) {
         close(dwell);
         dwell = undefined;
