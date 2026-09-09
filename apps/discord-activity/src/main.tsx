@@ -13,7 +13,15 @@ import {
   resolveDiscordProxyUrl,
 } from "@nilx-one/host-discord";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
-import { createMapLibreRenderer } from "@nilx-one/map-maplibre";
+import {
+  MAP_BOOTSTRAP_CAMERA,
+  createMapLibreRenderer,
+} from "@nilx-one/map-maplibre";
+import {
+  createRawJournalPresenter,
+  createShadeMapFactory,
+} from "@nilx-one/map-shade";
+import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -53,8 +61,9 @@ function reportBootstrapFailure(mount: HTMLElement, error: unknown): void {
 
 async function main(): Promise<void> {
   // An Activity runs in an embedded browser, so the host reuses the browser
-  // geolocation capability; Discord's own restrictions arrive as capability
-  // results rather than as a Discord branch in the map feature.
+  // geolocation capability. Presence capture remains intentionally unwired
+  // until Discord's permission policy has been verified firsthand; ordinary
+  // map geolocation remains exactly as it was.
   const session = await bootstrapDiscordActivity({
     environment: {
       matchMedia: (query: string) => window.matchMedia(query),
@@ -75,7 +84,16 @@ async function main(): Promise<void> {
     fetch: session.fetch,
     getAuthorization: () => session.authorization,
   });
-  const mapRenderer = createMapLibreRenderer();
+  const localPresence = createLocalPresenceJournal().catch(() => null);
+  const journalPresenter = createRawJournalPresenter();
+  const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
+  const mapRenderer = createMapLibreRenderer({
+    createMap: createShadeMapFactory({
+      runtime: localPresence,
+      anchor: { lng: anchorLng, lat: anchorLat },
+      onCellTap: (tap) => journalPresenter.show(tap),
+    }),
+  });
 
   root.render(
     <StrictMode>
