@@ -1,0 +1,12 @@
+{
+  "name": "@nilx-one/presence-geo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@nilx-one/host-contract": "workspace:*",
+    "@nilx-one/presence-contract": "workspace:*",
+    "h3-js": "^4.5.0"
+  }
+}
