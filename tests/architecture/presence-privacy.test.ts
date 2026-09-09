@@ -12,10 +12,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const LOCAL_PRESENCE_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   "map-shade": ["@nilx-one/presence-contract"],
   "presence-contract": [],
-  "presence-geo": [
-    "@nilx-one/host-contract",
-    "@nilx-one/presence-contract",
-  ],
+  "presence-geo": ["@nilx-one/host-contract", "@nilx-one/presence-contract"],
   "presence-idb": ["@nilx-one/presence-contract"],
 };
 
@@ -49,9 +46,7 @@ describe("Presence privacy boundary", () => {
     for (const [packageName, allowedImports] of Object.entries(
       LOCAL_PRESENCE_IMPORTS,
     )) {
-      for (const file of sourceFiles(
-        join(ROOT, "packages", packageName, "src"),
-      )) {
+      for (const file of sourceFiles(join(ROOT, "packages", packageName, "src"))) {
         const source = readFileSync(file, "utf8");
 
         for (const importedPackage of internalImports(source)) {
