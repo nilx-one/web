@@ -97,6 +97,9 @@ describe("Presence privacy boundary", () => {
       "apps/site/src/error-reporting.ts",
       "packages/identity-http/package.json",
       "services/identity/Cargo.toml",
+      ...sourceFiles(join(ROOT, "packages/identity-http/src")).map((file) =>
+        relative(ROOT, file),
+      ),
     ];
     const forbidden =
       /@nilx-one\/(?:presence-[a-z-]+|map-shade)|(?:presence-contract|presence-geo|presence-idb|map-shade)/;
