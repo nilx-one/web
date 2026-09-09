@@ -12,7 +12,9 @@ two identities stays the honest em dash until a Relationship projection exists.
 identity: the camera moves to the closest scale the map policy allows, over the
 observation the host already provides. A camera centred on a coordinate is
 presentation, never evidence of presence, and with no observation there is
-nothing to focus, so the control is inert rather than misleading.
+nothing to focus, so the control is inert rather than misleading. An Avaia is
+the exception, and says so below: its card opens its own setup, and the world is
+recentred from the location control that exists for exactly that.
 
 **Right — the identity spectating.** Activating it hands the wheel over, when
 that is possible at all. A Bond can always take the wheel back from its Avaia.
@@ -39,13 +41,32 @@ and a host that cannot fetch a runtime never offers a download it could not
 perform. WebLLM support is a device capability, not a preference: a device
 without accelerated graphics reports `unavailable` even once a runtime exists.
 
+## The Avaia's own card
+
+The Avaia card opens what its owner can decide about it: **Set up** while the
+identity service reports nothing configured, **Edit** once it does. Both open
+the same screen — see [Avaia setup](avaia-setup.md) — and both are reachable
+whichever seat the Avaia is sitting in, because configuring an identity has
+nothing to do with who is holding the wheel.
+
+Configuration and runtime are read apart on the card as well. The role beside
+the address says `unconfigured` when that is what the service stored, whatever
+this device could run; the status dot keeps stating the runtime, because that is
+what a dot about a runtime is for. The one thing that comes before setup is a
+runtime that can actually take the wheel — a moment rather than a setting —
+which no device can offer while nothing is published.
+
+A client whose identity service has not reached contract 8 reads no profile at
+all. It has no configuration to state and no surface to open, so its Dock stays
+exactly the runtime-only Dock described above.
+
 ## Navigation
 
 The Dock's header names the Bond on the left and carries one action on the
 right: **edit ✍️** opens the Bond edit surface at `/identity`. The Bond address
 in the app header remains the identity affordance and remains a real link, so
-the Dock's left side stays what it should be — the world's focus control, not a
-second way to read a profile.
+the Dock's pair stays what it should be — the world's focus control and each
+identity's own affordance, not a second way to read a Bond profile.
 
 ## One window, two screens
 

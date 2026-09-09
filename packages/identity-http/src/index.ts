@@ -16,6 +16,10 @@ import {
   type NativeRegistrationResult,
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
+  type AvaiaProfileAccessPort,
+  type AvaiaProfileProjection,
+  type AvaiaProfileReadResult,
+  type AvaiaProfileUpdateResult,
   type AvatarModel,
   type AvatarModelResult,
   type ProviderPasswordHost,
@@ -53,6 +57,28 @@ function parseIdentity(value: unknown): IdentityProjection | undefined {
   };
 }
 
+/**
+ * The stored Avaia, carried exactly as the service answered. `model_ref` is
+ * reserved by the contract and is not projected: no model a device may or may
+ * not run is identity truth about the Avaia.
+ */
+function parseAvaiaProfile(value: unknown): AvaiaProfileProjection | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.pub_dress !== "string" ||
+    typeof value.owner_pub_dress !== "string" ||
+    (value.configuration_state !== "unconfigured" &&
+      value.configuration_state !== "configured")
+  ) {
+    return undefined;
+  }
+  return {
+    pubDress: value.pub_dress,
+    ownerPubDress: value.owner_pub_dress,
+    configurationState: value.configuration_state,
+  };
+}
+
 function parseErrorCode(value: unknown): string | undefined {
   if (!isRecord(value) || !isRecord(value.error)) {
     return undefined;
@@ -64,7 +90,9 @@ function isBrowserProvider(value: unknown): value is BrowserIdentityProvider {
   return value === "telegram" || value === "discord";
 }
 
-class IdentityHttpAdapter implements IdentityAccessPort {
+class IdentityHttpAdapter
+  implements IdentityAccessPort, AvaiaProfileAccessPort
+{
   private readonly fetch: typeof globalThis.fetch;
 
   public constructor(private readonly options: IdentityHttpAdapterOptions) {
@@ -404,6 +432,69 @@ class IdentityHttpAdapter implements IdentityAccessPort {
     }
   }
 
+  // Contract 8 keeps the Avaia the owner configured. The address travels whole
+  // in both directions: the service is the authority on what a valid one is,
+  // and this client never assembles one out of parts it assumed.
+  public async readAvaiaProfile(): Promise<AvaiaProfileReadResult> {
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/avaia", {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: authorization === undefined ? {} : { authorization },
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const profile = parseAvaiaProfile(body);
+      if (profile !== undefined) {
+        return { kind: "available", profile };
+      }
+    }
+    return parseErrorCode(body) === "provider_authentication_required"
+      ? { kind: "authentication-required" }
+      : { kind: "service-unavailable" };
+  }
+
+  public async updateAvaiaProfile(
+    pubDress: string,
+  ): Promise<AvaiaProfileUpdateResult> {
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/avaia", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        ...(authorization === undefined ? {} : { authorization }),
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({ pub_dress: pubDress }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const profile = parseAvaiaProfile(body);
+      if (profile !== undefined) {
+        return { kind: "updated", profile };
+      }
+    }
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "avaia_owner_discriminator_mismatch":
+        return { kind: "rejected", reason: "owner-discriminator-mismatch" };
+      case "avaia_unavailable":
+        return { kind: "rejected", reason: "unavailable" };
+      case "invalid_avaia_length":
+      case "invalid_avaia_character":
+      case "invalid_avaia_discriminator":
+      case "invalid_avaia_suffix":
+        return { kind: "rejected", reason: "invalid-address" };
+      case "rate_limited":
+        return { kind: "rejected", reason: "rate-limited" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
   public async renameAvaiaSlug(slug: string): Promise<PubDressRenameResult> {
     return this.renameAddress("/api/v1/identity/avaia/pub_dress", slug);
   }
@@ -645,6 +736,6 @@ class IdentityHttpAdapter implements IdentityAccessPort {
 
 export function createIdentityHttpAdapter(
   options: IdentityHttpAdapterOptions,
-): IdentityAccessPort {
+): IdentityAccessPort & AvaiaProfileAccessPort {
   return new IdentityHttpAdapter(options);
 }

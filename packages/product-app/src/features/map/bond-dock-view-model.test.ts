@@ -85,6 +85,104 @@ describe("Dock seats", () => {
   });
 });
 
+describe("Avaia configuration on the Dock", () => {
+  it("says nothing about configuration until a profile has been read", () => {
+    const dock = createBondDockViewState(base);
+
+    expect(dock.avaiaAction).toBeUndefined();
+    expect(dock.right).toMatchObject({
+      role: "unavailable",
+      actionable: false,
+      actionLabel: "0skai is unavailable on this device",
+    });
+  });
+
+  it("opens setup for an Avaia its owner has not configured", () => {
+    const dock = createBondDockViewState({
+      ...base,
+      avaiaConfiguration: "unconfigured",
+    });
+
+    expect(dock.avaiaAction).toBe("setup");
+    expect(dock.right).toMatchObject({
+      role: "unconfigured",
+      tone: "idle",
+      actionable: true,
+      actionLabel: "Set up 0skai",
+    });
+  });
+
+  it("opens the same surface again once it is configured", () => {
+    const dock = createBondDockViewState({
+      ...base,
+      avaiaConfiguration: "configured",
+    });
+
+    expect(dock.avaiaAction).toBe("edit");
+    expect(dock.right).toMatchObject({
+      actionable: true,
+      actionLabel: "Edit 0skai",
+    });
+  });
+
+  it("edits a configured Avaia from the wheel it is already at", () => {
+    const dock = createBondDockViewState({
+      ...base,
+      wheel: "avaia",
+      avaiaConfiguration: "configured",
+    });
+
+    expect(dock.left).toMatchObject({
+      seat: "avaia",
+      role: "driving",
+      actionable: true,
+      actionLabel: "Edit 0skai",
+    });
+    expect(dock.right).toMatchObject({ seat: "bond", role: "spectate" });
+  });
+
+  it("offers setup with no runtime, and no observation to focus", () => {
+    const dock = createBondDockViewState({
+      ...base,
+      wheel: "avaia",
+      focusable: false,
+      avaiaConfiguration: "unconfigured",
+    });
+
+    expect(dock.left).toMatchObject({
+      role: "unconfigured",
+      actionable: true,
+      actionLabel: "Set up 0skai",
+    });
+  });
+
+  it("lets a runtime that can take the wheel say so first", () => {
+    const dock = createBondDockViewState({
+      ...base,
+      avaia: "ready",
+      avaiaConfiguration: "configured",
+    });
+
+    expect(dock.handover).toBe("switch");
+    expect(dock.avaiaAction).toBeUndefined();
+    expect(dock.right).toMatchObject({
+      tone: "ready",
+      actionLabel: "Hand the wheel to 0skai",
+    });
+  });
+
+  it("keeps an unconfigured Avaia unconfigured whatever the device can run", () => {
+    const dock = createBondDockViewState({
+      ...base,
+      avaia: "ready",
+      avaiaConfiguration: "unconfigured",
+    });
+
+    // The role is what the owner stored; the dot is what this device can run.
+    expect(dock.right).toMatchObject({ role: "unconfigured", tone: "ready" });
+  });
+});
+
 describe("Avaia runtime availability", () => {
   it("is unavailable while there is nothing published to download", () => {
     expect(avaiaAvailability({ acceleratedGraphics: true })).toBe(
