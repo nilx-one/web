@@ -42,20 +42,29 @@ describe("Dock seats", () => {
     });
   });
 
-  it("hands the wheel over only when the runtime is ready", () => {
+  it("hands the wheel over whatever this device can run", () => {
+    // The wheel is presentation: it decides which body the world draws, and a
+    // device that can run no model still draws one.
+    expect(createBondDockViewState(base)).toMatchObject({
+      preparesRuntime: false,
+      right: {
+        role: "unavailable",
+        tone: "idle",
+        actionable: true,
+        actionLabel: "Hand the wheel to 0skai",
+      },
+    });
     expect(createBondDockViewState({ ...base, avaia: "ready" })).toMatchObject({
-      handover: "switch",
-      right: { role: "ready", actionable: true },
+      right: { role: "ready", tone: "ready", actionable: true },
     });
     expect(
       createBondDockViewState({ ...base, avaia: "preparing" }),
     ).toMatchObject({
-      handover: undefined,
-      right: { role: "preparing", actionable: false, tone: "working" },
+      right: { role: "preparing", actionable: true, tone: "working" },
     });
   });
 
-  it("offers a download only when this host can fetch one", () => {
+  it("asks for a runtime this host could fetch as it hands the wheel over", () => {
     expect(
       createBondDockViewState({
         ...base,
@@ -63,12 +72,21 @@ describe("Dock seats", () => {
         downloadable: true,
       }),
     ).toMatchObject({
-      handover: "download",
-      right: { role: "download", actionLabel: "Download the 0skai runtime" },
+      preparesRuntime: true,
+      right: { role: "download", actionLabel: "Hand the wheel to 0skai" },
     });
+    // Nothing to fetch, or no way to fetch it: the wheel still changes hands.
     expect(
       createBondDockViewState({ ...base, avaia: "downloadable" }),
-    ).toMatchObject({ handover: undefined, right: { actionable: false } });
+    ).toMatchObject({ preparesRuntime: false, right: { actionable: true } });
+    expect(
+      createBondDockViewState({
+        ...base,
+        wheel: "avaia",
+        avaia: "downloadable",
+        downloadable: true,
+      }).preparesRuntime,
+    ).toBe(false);
   });
 
   it("cannot focus a world with no observation to focus on", () => {
@@ -87,100 +105,31 @@ describe("Dock seats", () => {
 
 describe("Avaia configuration on the Dock", () => {
   it("says nothing about configuration until a profile has been read", () => {
-    const dock = createBondDockViewState(base);
+    const dock = createBondDockViewState({ ...base, wheel: "avaia" });
 
-    expect(dock.avaiaAction).toBeUndefined();
-    expect(dock.right).toMatchObject({
-      role: "unavailable",
-      actionable: false,
-      actionLabel: "0skai is unavailable on this device",
-    });
+    expect(dock.left).toMatchObject({ seat: "avaia", role: "driving" });
+    // With no Avaia to configure, the Dock's action stays the Bond's.
+    expect(dock.configure).toEqual({ seat: "bond", label: "Edit 0x0sky" });
   });
 
-  it("opens setup for an Avaia its owner has not configured", () => {
-    const dock = createBondDockViewState({
-      ...base,
-      avaiaConfiguration: "unconfigured",
-    });
-
-    expect(dock.avaiaAction).toBe("setup");
-    expect(dock.right).toMatchObject({
+  it("states what an owner has not configured, in either seat", () => {
+    expect(
+      createBondDockViewState({ ...base, avaiaConfiguration: "unconfigured" })
+        .right,
+    ).toMatchObject({
       role: "unconfigured",
-      tone: "idle",
-      actionable: true,
-      actionLabel: "Set up 0skai",
-    });
-  });
-
-  it("opens the same surface again once it is configured", () => {
-    const dock = createBondDockViewState({
-      ...base,
-      avaiaConfiguration: "configured",
-    });
-
-    expect(dock.avaiaAction).toBe("edit");
-    expect(dock.right).toMatchObject({
-      actionable: true,
-      actionLabel: "Edit 0skai",
-    });
-  });
-
-  it("edits a configured Avaia from the wheel it is already at", () => {
-    const dock = createBondDockViewState({
-      ...base,
-      wheel: "avaia",
-      avaiaConfiguration: "configured",
-    });
-
-    expect(dock.left).toMatchObject({
-      seat: "avaia",
-      role: "driving",
-      actionable: true,
-      actionLabel: "Edit 0skai",
-    });
-    expect(dock.right).toMatchObject({ seat: "bond", role: "spectate" });
-  });
-
-  it("offers setup with no runtime, and no observation to focus", () => {
-    const dock = createBondDockViewState({
-      ...base,
-      wheel: "avaia",
-      focusable: false,
-      avaiaConfiguration: "unconfigured",
-    });
-
-    expect(dock.left).toMatchObject({
-      role: "unconfigured",
-      actionable: true,
-      actionLabel: "Set up 0skai",
-    });
-  });
-
-  it("lets a runtime that can take the wheel say so first", () => {
-    const dock = createBondDockViewState({
-      ...base,
-      avaia: "ready",
-      avaiaConfiguration: "configured",
-    });
-
-    expect(dock.handover).toBe("switch");
-    expect(dock.avaiaAction).toBeUndefined();
-    expect(dock.right).toMatchObject({
-      tone: "ready",
       actionLabel: "Hand the wheel to 0skai",
     });
-  });
-
-  it("stays configured on a device that can run nothing", () => {
-    const dock = createBondDockViewState({
-      ...base,
-      avaia: "unavailable",
-      avaiaConfiguration: "configured",
+    expect(
+      createBondDockViewState({
+        ...base,
+        wheel: "avaia",
+        avaiaConfiguration: "unconfigured",
+      }).left,
+    ).toMatchObject({
+      role: "unconfigured",
+      actionLabel: "Focus the world on 0skai",
     });
-
-    // The runtime word is the runtime's; it never rewrites what was stored.
-    expect(dock.avaiaAction).toBe("edit");
-    expect(dock.right).toMatchObject({ role: "unavailable", tone: "idle" });
   });
 
   it("keeps an unconfigured Avaia unconfigured whatever the device can run", () => {
@@ -192,6 +141,42 @@ describe("Avaia configuration on the Dock", () => {
 
     // The role is what the owner stored; the dot is what this device can run.
     expect(dock.right).toMatchObject({ role: "unconfigured", tone: "ready" });
+  });
+
+  it("stays configured on a device that can run nothing", () => {
+    expect(
+      createBondDockViewState({
+        ...base,
+        avaia: "unavailable",
+        avaiaConfiguration: "configured",
+      }).right,
+    ).toMatchObject({ role: "unavailable", tone: "idle" });
+  });
+});
+
+describe("What the Dock configures", () => {
+  it("configures the Bond while the Bond is driving", () => {
+    expect(
+      createBondDockViewState({ ...base, avaiaConfiguration: "configured" })
+        .configure,
+    ).toEqual({ seat: "bond", label: "Edit 0x0sky" });
+  });
+
+  it("configures the Avaia while the Avaia is driving", () => {
+    expect(
+      createBondDockViewState({
+        ...base,
+        wheel: "avaia",
+        avaiaConfiguration: "unconfigured",
+      }).configure,
+    ).toEqual({ seat: "avaia", label: "Set up 0skai" });
+    expect(
+      createBondDockViewState({
+        ...base,
+        wheel: "avaia",
+        avaiaConfiguration: "configured",
+      }).configure,
+    ).toEqual({ seat: "avaia", label: "Edit 0skai" });
   });
 });
 

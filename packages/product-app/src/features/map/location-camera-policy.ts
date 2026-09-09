@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  MAP_BODY_HANDOVER_ZOOM,
   MAP_SCALE_ZOOM,
   mapMetersPerPixel,
   type MapCamera,
@@ -33,6 +34,13 @@ export const RECENTER_MIN_SCALE: MapScale = "neighborhood";
 
 /** Focusing an identity goes as close as the published styles stay legible. */
 export const CLOSE_UP_SCALE: MapScale = "building";
+
+/**
+ * The scale a body is drawn from. Taking the wheel lands at least this close so
+ * that the identity which just took it is actually standing on the world rather
+ * than being announced by a card.
+ */
+export const BODY_VISIBLE_SCALE: MapScale = "street";
 
 /**
  * A narrow viewport shows less ground at the same zoom, so it starts slightly
@@ -161,6 +169,42 @@ export function closeUpCamera(
     zoom,
     bearing: 0,
     pitch: locationCameraPitch(zoom, context.dimension),
+  };
+}
+
+/**
+ * Where the camera goes when an identity takes the wheel.
+ *
+ * It comes in far enough to see the body that just arrived, and no further: a
+ * camera already closer than that is where a person put it, so it is left
+ * alone rather than pulled back to a policy's idea of the right distance.
+ */
+export function bodyVisibleCamera(
+  position: ObservedGeolocation,
+  current: MapCamera,
+  context: LocationCameraContext,
+): MapCamera {
+  // A narrow viewport is normally given a little more ground, but here that
+  // offset would put the camera under the zoom a body is drawn from — and a
+  // handover nobody can see is not a handover. The body's own scale is the
+  // floor.
+  const minimum = Math.max(
+    MAP_BODY_HANDOVER_ZOOM,
+    locationCameraZoom(BODY_VISIBLE_SCALE, context.presentation),
+  );
+  const raised = current.zoom < minimum;
+  const zoom = raised ? minimum : current.zoom;
+
+  return {
+    center: [position.longitude, position.latitude],
+    zoom,
+    bearing: current.bearing,
+    pitch:
+      context.dimension === "flat"
+        ? 0
+        : raised
+          ? locationCameraPitch(zoom, "volumetric")
+          : current.pitch,
   };
 }
 

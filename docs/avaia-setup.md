@@ -6,16 +6,18 @@ that this surface never confuses with the first: an Avaia is configured from
 wherever its owner happens to be standing, including a device that could load
 no model at all.
 
-## The card that opens it
+## What opens it
 
-The Avaia sits in the Dock beside the Bond that owns it. Its card opens this
-surface: **Set up** while nothing has been configured, **Edit** once something
-has. Both open the same screen, because the difference between configuring an
-Avaia and changing it is a sentence in a label, not a second screen.
+The Avaia sits in the Dock beside the Bond that owns it, and the Dock's own
+action configures whoever is at the wheel. With the Avaia driving that action is
+this surface: **Set up** while nothing has been configured, **Edit** once
+something has. Both open the same screen, because the difference between
+configuring an Avaia and changing it is a sentence in a label, not a second
+screen.
 
-One thing comes before setup on that card: a runtime that can actually be handed
-the wheel. Taking the wheel is a moment; a setting is not. No Avaia runtime is
-published yet, so today the card opens setup in every state a person can reach.
+The cards themselves mean something else, and keep meaning it: one brings the
+world to the identity driving, the other hands the wheel over. Configuring is
+not driving, and neither is a way of doing the other.
 
 The world stays mounted through all of it. The Dock travels between its screens
 — the world, the Avaia, and back — and the map underneath is never remounted,

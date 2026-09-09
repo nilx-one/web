@@ -1,12 +1,17 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { MAP_SCALE_ZOOM, type MapCamera } from "@nilx-one/map-contract";
+import {
+  MAP_BODY_HANDOVER_ZOOM,
+  MAP_SCALE_ZOOM,
+  type MapCamera,
+} from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import { observation } from "../../../../../tests/support/doubles";
 import {
   FIRST_FIX_SCALE,
+  bodyVisibleCamera,
   cameraFramesPosition,
   cameraMotion,
   firstFixCamera,
@@ -96,6 +101,55 @@ describe("recenter policy", () => {
     });
 
     expect(camera.pitch).toBe(0);
+  });
+});
+
+describe("taking the wheel", () => {
+  const current: MapCamera = {
+    center: [24.03, 49.84],
+    zoom: MAP_SCALE_ZOOM.city,
+    bearing: 18,
+    pitch: 0,
+  };
+
+  it("comes in far enough to see the body that just arrived", () => {
+    const camera = bodyVisibleCamera(observation(), current, VOLUMETRIC);
+
+    expect(camera.center).toEqual([30.5234, 50.4501]);
+    expect(camera.zoom).toBe(MAP_BODY_HANDOVER_ZOOM);
+    expect(camera.bearing).toBe(18);
+    expect(camera.pitch).toBeGreaterThan(0);
+  });
+
+  it("clears the body's own scale on a narrow viewport too", () => {
+    // The compact offset would otherwise land under the zoom a body is drawn
+    // from, and a handover nobody can see is not a handover.
+    const camera = bodyVisibleCamera(observation(), current, {
+      ...VOLUMETRIC,
+      presentation: "compact",
+    });
+
+    expect(camera.zoom).toBeGreaterThanOrEqual(MAP_BODY_HANDOVER_ZOOM);
+  });
+
+  it("leaves a camera that is already closer where the person put it", () => {
+    const camera = bodyVisibleCamera(
+      observation(),
+      { ...current, zoom: MAP_SCALE_ZOOM.building, pitch: 44 },
+      VOLUMETRIC,
+    );
+
+    expect(camera.zoom).toBe(MAP_SCALE_ZOOM.building);
+    expect(camera.pitch).toBe(44);
+  });
+
+  it("flattens the camera in explicit 2D", () => {
+    expect(
+      bodyVisibleCamera(observation(), current, {
+        ...VOLUMETRIC,
+        dimension: "flat",
+      }).pitch,
+    ).toBe(0);
   });
 });
 

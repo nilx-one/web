@@ -44,6 +44,7 @@ import { LocationControl } from "./location-control";
 import { useDeviceLocation } from "./use-device-location";
 import { createLocationControlViewModel } from "./location-control-view-model";
 import {
+  bodyVisibleCamera,
   cameraFramesPosition,
   cameraMotion,
   closeUpCamera,
@@ -67,7 +68,6 @@ import {
 import {
   createBondDockViewState,
   type AvaiaAvailability,
-  type DockIdentityViewState,
   type DockSeat,
 } from "./bond-dock-view-model";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
@@ -404,6 +404,7 @@ export function AuthenticatedMapHomeView({
   // The camera the renderer actually holds, and whether a person put it there.
   const [camera, setCamera] = useState(() => renderer.getCamera());
   const cameraMovedByPerson = useRef(false);
+  const reachForBody = useRef<() => void>(() => undefined);
   const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
@@ -659,6 +660,35 @@ export function AuthenticatedMapHomeView({
     wheel,
   ]);
 
+  /**
+   * A body on the world answers for itself.
+   *
+   * Reaching for it means the same thing as reaching for the card of whoever is
+   * driving — bring the world to them — and it also puts the Dock back on the
+   * pair, because that is the screen a body belongs to. A renderer that draws
+   * no bodies, or draws them where nothing can be pointed at, publishes no
+   * activation and this simply never runs: the Dock offers both outcomes to a
+   * keyboard regardless.
+   */
+  useEffect(() => {
+    // What the camera would move to depends on where this device is and on the
+    // shell it is drawn in, and both change under a subscription that should
+    // not be torn down and rebuilt for either. The renderer keeps one listener;
+    // this keeps it pointed at the current answer.
+    reachForBody.current = () => {
+      setDetailState(undefined);
+      if (section !== "world") navigate(WORLD_ROUTE);
+      focusWorldOnWheel();
+    };
+  });
+
+  useEffect(() => {
+    const subscribe = renderer.subscribeBodyActivation;
+    if (subscribe === undefined) return;
+
+    return subscribe.call(renderer, () => reachForBody.current());
+  }, [renderer]);
+
   // A handover ends on its own: the wheel is already where it is going, and
   // clearing it is what returns the arrived body to the ambient rhythm.
   useEffect(() => {
@@ -685,23 +715,24 @@ export function AuthenticatedMapHomeView({
   }
 
   /**
-   * The Avaia card opens what its owner can decide about it. A runtime that can
-   * actually be handed the wheel is the one thing that comes first, because
-   * that is a moment rather than a setting.
+   * The pair has two meanings, one per side. The identity at the wheel brings
+   * the world to it; the one spectating takes the wheel from it.
    */
-  function activateDockIdentity(
-    identity: DockIdentityViewState,
-    seated: "left" | "right",
-  ): void {
-    if (identity.seat === "avaia" && dock.avaiaAction !== undefined) {
-      openDetail("avaia");
-      return;
-    }
+  function activateDockIdentity(seated: "left" | "right"): void {
     if (seated === "left") {
       focusWorldOnWheel();
       return;
     }
     activateSpectator();
+  }
+
+  /** The Dock's own action configures whoever is currently driving. */
+  function activateConfigure(): void {
+    if (dock.configure.seat === "avaia") {
+      openDetail("avaia");
+      return;
+    }
+    navigate(IDENTITY_ROUTE);
   }
 
   /**
@@ -722,19 +753,29 @@ export function AuthenticatedMapHomeView({
     });
   }
 
-  /** The identity that is spectating takes the wheel, when it can. */
+  /**
+   * The identity that is spectating takes the wheel.
+   *
+   * It is not a swap at one instant: the body driving settles and leaves, and
+   * the one taking over arrives on the world — so the camera comes in far
+   * enough for that to be something a person can watch happen. A device that
+   * could fetch the runtime is asked for it here too: taking the wheel is one
+   * gesture, and what a device fetches to serve it is not a second decision.
+   */
   function activateSpectator(): void {
-    if (dock.handover === "download") {
-      onPrepareAvaia?.();
-      return;
-    }
-    if (dock.handover === "switch") {
-      // Taking the wheel is not a swap at one instant: the body driving
-      // settles and leaves, and the one taking over arrives on the world.
-      const to: DockSeat = wheel === "bond" ? "avaia" : "bond";
-      setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
-      setWheel(to);
-    }
+    if (dock.preparesRuntime) onPrepareAvaia?.();
+
+    const to: DockSeat = wheel === "bond" ? "avaia" : "bond";
+    setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
+    setWheel(to);
+
+    if (observedPosition === undefined) return;
+    const context = { presentation, dimension, safeArea };
+    renderer.setCamera(bodyVisibleCamera(observedPosition, camera, context), {
+      motion: cameraMotion(prefersReducedMotion()),
+      padding: locationCameraPadding(context),
+    });
+    cameraMovedByPerson.current = false;
   }
 
   function activateLocationControl(): void {
@@ -860,8 +901,8 @@ export function AuthenticatedMapHomeView({
                   <button
                     className="bond-dock__edit"
                     type="button"
-                    aria-label="Edit this Bond"
-                    onClick={() => navigate(IDENTITY_ROUTE)}
+                    aria-label={dock.configure.label}
+                    onClick={activateConfigure}
                   >
                     edit <span aria-hidden="true">✍️</span>
                   </button>
@@ -871,7 +912,7 @@ export function AuthenticatedMapHomeView({
                     className="bond-dock__bond bond-dock__bond--active"
                     type="button"
                     disabled={!dock.left.actionable}
-                    onClick={() => activateDockIdentity(dock.left, "left")}
+                    onClick={() => activateDockIdentity("left")}
                     aria-label={dock.left.actionLabel}
                   >
                     <span className="bond-dock__glyph">{dock.left.glyph}</span>
@@ -899,7 +940,7 @@ export function AuthenticatedMapHomeView({
                     }`}
                     type="button"
                     disabled={!dock.right.actionable}
-                    onClick={() => activateDockIdentity(dock.right, "right")}
+                    onClick={() => activateDockIdentity("right")}
                     aria-label={dock.right.actionLabel}
                   >
                     <span className="bond-dock__glyph">{dock.right.glyph}</span>

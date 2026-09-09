@@ -27,12 +27,15 @@ import { vi } from "vitest";
 export interface MapRendererDouble extends MapRenderer {
   /** Publishes a camera change as the renderer would after a move. */
   moveCamera(camera: MapCamera, gesture: boolean): void;
+  /** Publishes a person reaching for a body the world is drawing. */
+  activateBody(id: string): void;
 }
 
 export function createMapRendererDouble(
   status: MapRendererStatus = { kind: "ready" },
 ): MapRendererDouble {
   const cameraListeners = new Set<(change: MapCameraChange) => void>();
+  const bodyListeners = new Set<(activation: { id: string }) => void>();
   let camera: MapCamera = DEFAULT_MAP_CAMERA;
 
   return {
@@ -53,6 +56,12 @@ export function createMapRendererDouble(
       cameraListeners.add(listener);
       return () => cameraListeners.delete(listener);
     }),
+    subscribeBodyActivation: vi.fn(
+      (listener: (activation: { id: string }) => void) => {
+        bodyListeners.add(listener);
+        return () => bodyListeners.delete(listener);
+      },
+    ),
     // The avatar surface a real renderer publishes, so a test can see which
     // body the application asked the world to draw.
     avatars: {
@@ -69,6 +78,9 @@ export function createMapRendererDouble(
       for (const listener of cameraListeners) {
         listener({ camera: next, gesture });
       }
+    },
+    activateBody(id) {
+      for (const listener of [...bodyListeners]) listener({ id });
     },
   };
 }

@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { MAP_SCALE_ZOOM, mapMetersPerPixel } from "@nilx-one/map-contract";
+import {
+  MAP_BODY_HANDOVER_ZOOM,
+  MAP_SCALE_ZOOM,
+  mapMetersPerPixel,
+} from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -181,6 +185,7 @@ describe("apparent size of a body", () => {
   });
 
   it("withdraws the body where an observation is a place, not a person", () => {
+    expect(AVATAR_MIN_ZOOM).toBe(MAP_BODY_HANDOVER_ZOOM);
     expect(AVATAR_MIN_ZOOM).toBe(MAP_SCALE_ZOOM.street);
     expect(wheelBodyHandle({ zoom: AVATAR_MIN_ZOOM })?.visible).toBe(true);
     expect(wheelBodyHandle({ zoom: AVATAR_MIN_ZOOM - 0.01 })?.visible).toBe(
