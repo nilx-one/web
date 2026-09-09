@@ -13,9 +13,7 @@ import { useEffect, useState } from "react";
 import { useAvaiaProfileAccess } from "./avaia-profile-context";
 
 export type AvaiaProfileLoadState =
-  | { kind: "unsupported" }
-  | { kind: "loading" }
-  | AvaiaProfileReadResult;
+  { kind: "unsupported" } | { kind: "loading" } | AvaiaProfileReadResult;
 
 export interface AvaiaProfileController {
   readonly load: AvaiaProfileLoadState;
