@@ -12,6 +12,7 @@ import {
   type MapCameraChange,
   type MapCameraOptions,
   type MapDimension,
+  MAP_BODY_HANDOVER_ZOOM,
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapRenderer,
@@ -48,7 +49,6 @@ import {
 import {
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
   OBSERVED_POSITION_EDGE_LAYER_ID,
-  OBSERVED_POSITION_LABEL_MIN_ZOOM,
   OBSERVED_POSITION_POINT_LAYER_ID,
   OBSERVED_POSITION_SOURCE_ID,
   accuracyRadiusExpression,
@@ -59,7 +59,6 @@ import {
 export {
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
   OBSERVED_POSITION_EDGE_LAYER_ID,
-  OBSERVED_POSITION_LABEL_MIN_ZOOM,
   OBSERVED_POSITION_POINT_LAYER_ID,
   OBSERVED_POSITION_SOURCE_ID,
   accuracyRadiusExpression,
@@ -358,7 +357,10 @@ export function createMapLibreRenderer(
     if (labelElement === undefined) {
       return;
     }
-    labelElement.hidden = mounted.getZoom() < OBSERVED_POSITION_LABEL_MIN_ZOOM;
+    // The label and the body take turns: closer than the handover the body is
+    // on the world and speaks for itself, and a card over its head would only
+    // repeat it. Further out the body is gone, and the card is what is left.
+    labelElement.hidden = mounted.getZoom() >= MAP_BODY_HANDOVER_ZOOM;
   }
 
   function applyLabel(mounted: MapLibreMap): void {

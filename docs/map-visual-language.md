@@ -40,16 +40,44 @@ City-scale fabric should already read at the bootstrap camera where the publishe
 
 ## Apparent size of a body
 
-A published avatar study stands 1.80 m to 1.89 m tall, which is nothing on a map. At building scale — where focusing a Bond lands — one metre is about half a pixel, so an unscaled person is roughly three pixels: present in the scene, invisible to the eye. Zoom alone does not fix this without abandoning the scale the published styles are drawn for.
+A published avatar study stands 1.80 m to 1.89 m tall, which is nothing on a map. At building scale — where focusing an identity lands — one metre is about half a pixel, so an unscaled person is roughly three pixels: present in the scene, invisible to the eye.
 
-So a body carries a presentation size of its own. It holds a constant readable height on screen while the ground under it is still far away, and gives that up for true scale as soon as geography can carry a person on its own — around zoom 19.5, where 1.8 m first covers the readable minimum. From there the body is exactly as tall as it is.
+So a body carries a presentation size of its own, and it is **one size at every scale it appears on**. It does not grow into true scale as the camera comes in: a body is who is standing there, and how close the camera happens to be must not change what it is.
 
 Two rules bound it:
 
 - **Apparent size only.** The multiplier changes how tall a body is drawn and nothing else. It never moves the body, never widens the accuracy it stands in, and never survives into shared state.
-- **A body withdraws before it can lie.** Further out than street scale no body is drawn at all. The observed-position marker already says "here" at those widths, and a figure standing there would read as a person at a spot the observation cannot actually resolve.
+- **A body withdraws before it can lie.** Further out than street scale no body is drawn at all — it would be too small to read. What is left is the marker and the card, and the card carries a still of the same study so the identity survives the distance.
 
-One body is drawn: the signed-in Bond's own, and only while this device holds an observation of itself. An avatar on the map is never evidence of presence, proximity, or that anyone else is nearby.
+One body is drawn — the identity at the wheel — and only while this device holds an observation of itself. A body on the map is never evidence of presence, proximity, or that anyone else is nearby.
+
+## Marker and card
+
+The marker is always drawn. It is three restrained circles — the accuracy the host reported, a pale edge, and the exact coordinate — and **all three lie flat on the ground**. A body stands on the marker rather than in front of it: pitched into the viewport the circles would tilt up into the figure and read as a disc pasted across its middle.
+
+The accuracy halo is what the observation actually knows. A body stands inside it, not instead of it.
+
+The **card** and the body take turns. Closer than street scale the body is on the world and speaks for itself, and a card over its head would only repeat it. Further out the body is gone, and the card is what is left — the identity, "this device", and a still of the study beside the text, so who is standing there is still legible when it is too far to draw.
+
+## Who is drawn
+
+One body: the identity at the wheel. The Dock already names it — one identity drives, the other spectates — and the world is that same statement drawn on the ground. Two bodies standing as peers would say something the Dock does not.
+
+The world opens on the **Avaia**, in a study the Bond is not wearing. The Bond spectates on the right of the Dock until he takes the wheel.
+
+Where a body stands is the one thing this client actually observed: its own device position. An Avaia is not there in any sense the protocol asserts — an Avaia may be anywhere, on an errand or a walk or at home, and where it is will come from an integration that knows. Until one does, the world can only draw it at the client's own anchor, and that is a limit of what is known rather than a claim about where it is.
+
+An Avaia's runtime has nothing to do with whether it has a body. A body is the identity; the Dock's status dot is the machinery behind it, and the two are reported separately.
+
+## Handing the wheel over
+
+Taking the wheel is not one model replacing another at the same instant. The body that is leaving plays `quiesce` and goes; the body arriving plays `wake` and comes out onto the world. These are the two non-looping clips every published study carries, and the ambient sampler deliberately never reaches for them — they exist for this.
+
+The two halves run in sequence, not overlapped, so the two identities are never both standing on the same spot. Each holds its own handle for as long as the handover runs, which is what lets the arriving study load while the other one is still settling.
+
+Who is at the wheel is presentation. It moves nobody, asserts nothing about where anyone is, and is never written back.
+
+No other identity is drawn. Nothing in the client carries a position for another Bond, and a body invented for one would be a presence claim the protocol never made.
 
 ## Known data-bound limits
 

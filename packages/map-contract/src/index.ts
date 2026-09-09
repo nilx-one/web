@@ -65,6 +65,15 @@ export const MAP_SCALE_ZOOM: Readonly<Record<MapScale, number>> = Object.freeze(
   },
 );
 
+/**
+ * The scale a body stands on the world from. Closer than this a body is drawn
+ * and speaks for itself; further out it would be too small to read, so the
+ * label carries the identity instead — and shows the study as a still, since
+ * the body itself is no longer legible. Renderer and application share this so
+ * the two never both speak, and never both fall silent.
+ */
+export const MAP_BODY_HANDOVER_ZOOM: number = MAP_SCALE_ZOOM.street;
+
 // Web Mercator ground resolution at zoom 0 for the 512 px tile scheme both
 // the renderer and the application reason in.
 const EQUATOR_METERS_PER_PIXEL = 156_543.03392804097 / 2;
@@ -100,6 +109,12 @@ export interface MapObservedPosition {
 export interface MapObservedPositionLabel {
   readonly title: string;
   readonly detail?: string;
+  /**
+   * A still of the study standing here, shown beside the text once the body
+   * itself is too small to read. It is the same body, at a size that survives
+   * the distance — never a second identity, and never a claim of its own.
+   */
+  readonly avatarUrl?: string;
 }
 
 export type MapRendererStatus =

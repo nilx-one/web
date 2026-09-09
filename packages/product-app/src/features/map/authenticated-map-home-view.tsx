@@ -6,10 +6,11 @@ import type {
   BondProviderType,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
-import type {
-  MapDimension,
-  MapRenderer,
-  MapRendererStatus,
+import {
+  avatarPreviewUrl,
+  type MapDimension,
+  type MapRenderer,
+  type MapRendererStatus,
 } from "@nilx-one/map-contract";
 import { StatusToastStack, type StatusToastItem } from "@nilx-one/ui";
 import { useEffect, useRef, useState } from "react";
@@ -50,7 +51,18 @@ import {
   recenterCamera,
 } from "./location-camera-policy";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
-import { AVATAR_HANDLE_ID, createSelfAvatarHandle } from "./avatar-presence";
+import {
+  avaiaStudy,
+  BODY_HANDLE_IDS,
+  createWheelBodyHandle,
+} from "./avatar-presence";
+
+import {
+  handoverComplete,
+  HANDOVER_MS,
+  wheelBody,
+  type WheelHandover,
+} from "./wheel-handover";
 import {
   createBondDockViewState,
   type AvaiaAvailability,
@@ -355,7 +367,11 @@ export function AuthenticatedMapHomeView({
     undefined,
   );
   // Who is at the wheel is presentation: it moves nothing in the shared world.
-  const [wheel, setWheel] = useState<DockSeat>("bond");
+  // The world opens on the Avaia — the Bond is spectating until he takes it.
+  const [wheel, setWheel] = useState<DockSeat>("avaia");
+  const [handover, setHandover] = useState<WheelHandover | undefined>(
+    undefined,
+  );
   const [dimension, setDimension] = useState<MapDimension>(
     readDimensionPreference,
   );
@@ -402,6 +418,18 @@ export function AuthenticatedMapHomeView({
       ? []
       : [{ id: "sign-out", label: "Sign out", perform: onLogout }];
   const avaiaLabel = avaiaPubDress ?? "Avaia";
+  // One address seeds this Avaia's body, its side of its Bond, and its rhythm,
+  // so an unnamed Avaia is still the same Avaia between renders.
+  const avaiaAddress = avaiaLabel;
+
+  // The study of whoever is at the wheel: the body on the world, and the still
+  // the label falls back to once that body is too far away to read.
+  const wheelStudy =
+    avatarChoice?.rendered === undefined
+      ? undefined
+      : wheel === "bond"
+        ? avatarChoice.rendered
+        : avaiaStudy(avaiaAddress, avatarChoice.rendered);
 
   // A map that never paints must say so. Without this the shell shows an empty
   // surface and a renderer, asset, or basemap failure is indistinguishable
@@ -462,8 +490,13 @@ export function AuthenticatedMapHomeView({
     renderer.setObservedPositionLabel({
       title: pubDress,
       detail: "This device",
+      // Too far out for a body, so the card shows the study it would be
+      // standing in — the same identity, at a size that survives the distance.
+      ...(wheelStudy === undefined
+        ? {}
+        : { avatarUrl: avatarPreviewUrl(wheelStudy) }),
     });
-  }, [observedPosition, pubDress, renderer]);
+  }, [observedPosition, pubDress, renderer, wheelStudy]);
 
   // The first fix of a world recenters once. Later updates move the marker;
   // they never take the camera back from the person holding it.
@@ -514,54 +547,95 @@ export function AuthenticatedMapHomeView({
    * The identity at the wheel is where the world looks. Focusing it is a camera
    * move to the closest scale this policy allows, never a claim of presence.
    */
-  // The Bond's own body stands where this device observed itself, and only
-  // after the Bond chose a study this client can render. The ambient clip is
-  // resampled on the slot boundary rather than per frame: the renderer owns
-  // playback, this owns the choice of clip. The camera's zoom reaches the body
-  // as apparent size only — it is what lets a person be seen at all when the
-  // ground under them is still far away, and it moves nobody.
+  // The body of whichever identity is at the wheel.
+  //
+  // The world draws one: the Dock says who is driving, and this is that
+  // identity standing on the world. Where it stands is the one thing this
+  // client observed — its own device position. Handing the wheel over is a
+  // body settling and leaving, then the other arriving, so a handover holds
+  // both handles for as long as it runs and the arriving study can load while
+  // the other one is still going.
   useEffect(() => {
     const avatars = renderer.avatars;
-    const model = avatarChoice?.rendered;
-    if (avatars === undefined || model === undefined) return;
+    const bondStudy = avatarChoice?.rendered;
+    if (avatars === undefined || bondStudy === undefined) return;
     if (observedPosition === undefined) {
-      avatars.remove(AVATAR_HANDLE_ID);
+      for (const id of Object.values(BODY_HANDLE_IDS)) avatars.remove(id);
       return;
     }
 
-    // Capture the narrowed capability and published model before the timer
-    // closure. TypeScript correctly treats these aliases as stable values, and
-    // the effect still exits before drawing when either capability is absent.
     const avatarLayer = avatars;
-    const renderedModel = model;
     const reducedMotion = prefersReducedMotion();
-    function draw(): void {
-      const handle = createSelfAvatarHandle({
-        pubDress,
-        model: renderedModel,
+    const study = (seat: DockSeat) =>
+      seat === "bond" ? bondStudy : avaiaStudy(avaiaAddress, bondStudy);
+    const address = (seat: DockSeat) =>
+      seat === "bond" ? pubDress : avaiaAddress;
+
+    let frame: number | undefined;
+
+    function draw(nowMs: number): void {
+      const body = wheelBody(wheel, handover, nowMs);
+      const handle = createWheelBodyHandle({
+        body,
+        address: address(body.seat),
+        study: study(body.seat),
         location: location.state,
         zoom: cameraZoom,
-        timeMs: globalThis.performance.now(),
+        timeMs: nowMs,
         reducedMotion,
       });
       if (handle !== null) avatarLayer.upsert(handle);
+
+      // Only the identity in the seat this instant is on the world: the other
+      // handle is dropped rather than left standing behind the one driving.
+      for (const [seat, id] of Object.entries(BODY_HANDLE_IDS)) {
+        if (seat !== body.seat) avatarLayer.remove(id);
+      }
+
+      // A handover is the only thing here that needs frames, and it ends.
+      frame =
+        handover !== undefined && !handoverComplete(handover, nowMs)
+          ? globalThis.requestAnimationFrame(draw)
+          : undefined;
     }
 
-    draw();
-    if (reducedMotion) return () => avatarLayer.remove(AVATAR_HANDLE_ID);
-    const timer = globalThis.setInterval(draw, AVATAR_AMBIENT_REFRESH_MS);
+    draw(globalThis.performance.now());
+    const ambient = globalThis.setInterval(
+      () => draw(globalThis.performance.now()),
+      AVATAR_AMBIENT_REFRESH_MS,
+    );
+
     return () => {
-      globalThis.clearInterval(timer);
-      avatarLayer.remove(AVATAR_HANDLE_ID);
+      if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
+      globalThis.clearInterval(ambient);
+      for (const id of Object.values(BODY_HANDLE_IDS)) avatarLayer.remove(id);
     };
   }, [
+    avaiaAddress,
     avatarChoice?.rendered,
     cameraZoom,
+    handover,
     location.state,
     observedPosition,
     pubDress,
     renderer,
+    wheel,
   ]);
+
+  // A handover ends on its own: the wheel is already where it is going, and
+  // clearing it is what returns the arrived body to the ambient rhythm.
+  useEffect(() => {
+    if (handover === undefined) return;
+    const remaining = Math.max(
+      0,
+      handover.startedMs + HANDOVER_MS - globalThis.performance.now(),
+    );
+    const settled = globalThis.setTimeout(
+      () => setHandover(undefined),
+      remaining,
+    );
+    return () => globalThis.clearTimeout(settled);
+  }, [handover]);
 
   function focusWorldOnWheel(): void {
     if (observedPosition === undefined) return;
@@ -580,7 +654,11 @@ export function AuthenticatedMapHomeView({
       return;
     }
     if (dock.handover === "switch") {
-      setWheel(wheel === "bond" ? "avaia" : "bond");
+      // Taking the wheel is not a swap at one instant: the body driving
+      // settles and leaves, and the one taking over arrives on the world.
+      const to: DockSeat = wheel === "bond" ? "avaia" : "bond";
+      setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
+      setWheel(to);
     }
   }
 

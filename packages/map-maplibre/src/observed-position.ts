@@ -11,9 +11,6 @@ export const OBSERVED_POSITION_ACCURACY_LAYER_ID = "observed-position-accuracy";
 export const OBSERVED_POSITION_EDGE_LAYER_ID = "observed-position-edge";
 export const OBSERVED_POSITION_POINT_LAYER_ID = "observed-position-point";
 
-/** The label is identity context, so it only earns its room at street scale. */
-export const OBSERVED_POSITION_LABEL_MIN_ZOOM = 14;
-
 const ACCENT = "#37d7e5";
 
 // Presentation clamps. They bound what is drawn; the observation itself is
@@ -94,6 +91,10 @@ export function observedPositionSource(
  * Three restrained circles rather than a conventional pin: the accuracy the
  * host reported, a pale edge that keeps the point legible over near-white
  * buildings, and the exact coordinate itself.
+ *
+ * All three lie flat on the ground. The marker is always drawn, so a body has
+ * to be able to stand on it: pitched into the viewport it would tilt up into
+ * the figure and read as a disc pasted over its middle.
  */
 export function observedPositionLayers(
   position: MapObservedPosition,
@@ -124,7 +125,7 @@ export function observedPositionLayers(
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 2,
         "circle-stroke-opacity": 0.9,
-        "circle-pitch-alignment": "viewport",
+        "circle-pitch-alignment": "map",
       },
     },
     {
@@ -138,7 +139,7 @@ export function observedPositionLayers(
         "circle-stroke-color": "#0b3f47",
         "circle-stroke-width": 1,
         "circle-stroke-opacity": 0.28,
-        "circle-pitch-alignment": "viewport",
+        "circle-pitch-alignment": "map",
       },
     },
   ];

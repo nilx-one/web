@@ -5,13 +5,14 @@ import { MAP_SCALE_ZOOM, mapMetersPerPixel } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
-  AVATAR_HANDLE_ID,
-  AVATAR_MIN_APPARENT_PIXELS,
+  AVATAR_APPARENT_PIXELS,
   AVATAR_MIN_ZOOM,
+  avaiaStudy,
   avatarPresentationScale,
   avatarSeed,
-  createSelfAvatarHandle,
-  type SelfAvatarInput,
+  BODY_HANDLE_IDS,
+  createWheelBodyHandle,
+  type WheelBodyInput,
 } from "./avatar-presence";
 import type { DeviceLocationState } from "./device-location";
 
@@ -27,10 +28,11 @@ const located: DeviceLocationState = {
   },
 };
 
-function selfAvatar(overrides: Partial<SelfAvatarInput> = {}) {
-  return createSelfAvatarHandle({
-    pubDress: "0x0sky",
-    model: "dasha-study",
+function wheelBodyHandle(overrides: Partial<WheelBodyInput> = {}) {
+  return createWheelBodyHandle({
+    body: { seat: "bond" },
+    address: "0x0sky",
+    study: "dasha-study",
     location: located,
     zoom: MAP_SCALE_ZOOM.building,
     timeMs: 0,
@@ -47,10 +49,10 @@ function apparentPixels(zoom: number, scale: number): number {
   return (STUDY_HEIGHT_METERS * scale) / mapMetersPerPixel(LATITUDE, zoom);
 }
 
-describe("self avatar presence", () => {
+describe("the body at the wheel", () => {
   it("stands the chosen body where the device observed itself", () => {
-    expect(selfAvatar()).toMatchObject({
-      id: AVATAR_HANDLE_ID,
+    expect(wheelBodyHandle()).toMatchObject({
+      id: BODY_HANDLE_IDS.bond,
       modelId: "dasha-study",
       lngLat: [30.5234, LATITUDE],
       bearingDeg: 0,
@@ -64,7 +66,9 @@ describe("self avatar presence", () => {
       { kind: "denied" },
       { kind: "unsupported" },
     ] as DeviceLocationState[]) {
-      expect(selfAvatar({ model: "kai-study", location: state })).toBeNull();
+      expect(
+        wheelBodyHandle({ study: "kai-study", location: state }),
+      ).toBeNull();
     }
   });
 
@@ -75,60 +79,113 @@ describe("self avatar presence", () => {
 
   it("holds still when the person asked for reduced motion", () => {
     expect(
-      selfAvatar({ model: "sky-study", timeMs: 12_345, reducedMotion: true }),
+      wheelBodyHandle({
+        study: "sky-study",
+        timeMs: 12_345,
+        reducedMotion: true,
+      }),
     ).toMatchObject({ clipId: "idle", clipPhase: 0 });
   });
 
+  // Each identity gets its own handle, so an arriving study can load while the
+  // one it is replacing is still settling.
+  it("gives each seat a handle of its own", () => {
+    expect(wheelBodyHandle({ body: { seat: "avaia" } })?.id).toBe(
+      BODY_HANDLE_IDS.avaia,
+    );
+    expect(BODY_HANDLE_IDS.avaia).not.toBe(BODY_HANDLE_IDS.bond);
+  });
+
+  // Arriving and leaving are things a body is doing, so the handover clip wins
+  // over the ambient rhythm — including under reduced motion, where it is what
+  // makes the change legible at all, and it plays once.
+  it("plays the handover clip the wheel is running, not the ambient one", () => {
+    for (const reducedMotion of [false, true]) {
+      expect(
+        wheelBodyHandle({
+          body: { seat: "bond", clipId: "wake", clipPhase: 0.5 },
+          timeMs: 20_000,
+          reducedMotion,
+        }),
+      ).toMatchObject({ clipId: "wake", clipPhase: 0.5 });
+    }
+  });
+
   it("resamples the ambient clip across slots without changing the body", () => {
-    const first = selfAvatar({ model: "kai-study" });
-    const later = selfAvatar({ model: "kai-study", timeMs: 20_000 });
+    const first = wheelBodyHandle({ study: "kai-study" });
+    const later = wheelBodyHandle({ study: "kai-study", timeMs: 20_000 });
 
     expect(first?.modelId).toBe(later?.modelId);
     expect(first?.clipPhase).not.toBe(later?.clipPhase);
   });
 });
 
+describe("which body an Avaia wears", () => {
+  // Two identities that take turns on one spot have to be told apart, and the
+  // study is the only thing distinguishing them at a glance.
+  it("never wears its Bond's own study", () => {
+    for (const bond of ["sky-study", "dasha-study", "kai-study"] as const) {
+      expect(avaiaStudy("0x0sky.avaia", bond)).not.toBe(bond);
+    }
+  });
+
+  it("wears the same study every time it is drawn", () => {
+    expect(avaiaStudy("0x0sky.avaia", "sky-study")).toBe(
+      avaiaStudy("0x0sky.avaia", "sky-study"),
+    );
+  });
+});
+
 describe("apparent size of a body", () => {
-  // The point of the policy: arriving at the Bond's own scale has to show a
-  // person, and unscaled geography draws one about three pixels tall there.
-  it("makes the body readable at the scale focusing a Bond lands on", () => {
+  // The point of the policy: arriving at the scale focusing lands on has to
+  // show a person, and unscaled geography draws one about three pixels tall.
+  it("makes the body readable at the scale focusing an identity lands on", () => {
     const zoom = MAP_SCALE_ZOOM.building;
     expect(apparentPixels(zoom, 1)).toBeLessThan(5);
     expect(apparentPixels(zoom, avatarPresentationScale(zoom, LATITUDE))).toBe(
-      AVATAR_MIN_APPARENT_PIXELS,
+      AVATAR_APPARENT_PIXELS,
     );
   });
 
-  it("holds the same readable height across the scales it covers", () => {
-    for (const zoom of [15, 16, MAP_SCALE_ZOOM.building, 17, 18, 19]) {
+  // One size, everywhere. A body is who is standing there, and coming closer
+  // must not change what it is — including past the zoom where geography could
+  // carry a person on its own.
+  it("draws the body the same size at every scale, near and far", () => {
+    for (const zoom of [15, 16, MAP_SCALE_ZOOM.building, 18, 19, 20, 22]) {
       expect(
         apparentPixels(zoom, avatarPresentationScale(zoom, LATITUDE)),
-      ).toBeCloseTo(AVATAR_MIN_APPARENT_PIXELS, 6);
+      ).toBeCloseTo(AVATAR_APPARENT_PIXELS, 6);
     }
   });
 
-  // Past the crossover the world itself is close enough, and a body that kept
-  // its presentation size would start lying about how tall a person is.
-  it("hands the body back to true scale once geography can carry it", () => {
-    expect(avatarPresentationScale(20, LATITUDE)).toBe(1);
-    expect(avatarPresentationScale(22, LATITUDE)).toBe(1);
-    expect(avatarPresentationScale(19, LATITUDE)).toBeGreaterThan(1);
-  });
-
-  it("never shrinks a body below the size the world gives it", () => {
-    for (const zoom of [15, 17, 19, 19.5, 20, 21]) {
-      expect(avatarPresentationScale(zoom, LATITUDE)).toBeGreaterThanOrEqual(1);
+  it("holds that size at any latitude", () => {
+    for (const latitude of [0, LATITUDE, -33.87, 78.2]) {
+      const scale = avatarPresentationScale(18, latitude);
+      const height = (1.8 * scale) / mapMetersPerPixel(latitude, 18);
+      expect(height).toBeCloseTo(AVATAR_APPARENT_PIXELS, 6);
     }
   });
 
-  it("resolves a latitude with no ground under it to true scale", () => {
-    expect(avatarPresentationScale(18, 90)).toBe(1);
+  // Past Web Mercator's last parallel the ground a pixel covers collapses, and
+  // dividing by it would shrink a body to nothing instead of drawing it.
+  it("holds the size at the pole rather than dividing a body away", () => {
+    for (const latitude of [90, -90, 85.5]) {
+      const scale = avatarPresentationScale(18, latitude);
+      expect(scale).toBe(avatarPresentationScale(18, 85.051129));
+      expect(scale).toBeGreaterThan(0);
+    }
+  });
+
+  it("draws a body at a broken latitude rather than nothing at all", () => {
+    expect(avatarPresentationScale(18, Number.NaN)).toBe(1);
   });
 
   it("withdraws the body where an observation is a place, not a person", () => {
     expect(AVATAR_MIN_ZOOM).toBe(MAP_SCALE_ZOOM.street);
-    expect(selfAvatar({ zoom: AVATAR_MIN_ZOOM })?.visible).toBe(true);
-    expect(selfAvatar({ zoom: AVATAR_MIN_ZOOM - 0.01 })?.visible).toBe(false);
-    expect(selfAvatar({ zoom: MAP_SCALE_ZOOM.city })?.visible).toBe(false);
+    expect(wheelBodyHandle({ zoom: AVATAR_MIN_ZOOM })?.visible).toBe(true);
+    expect(wheelBodyHandle({ zoom: AVATAR_MIN_ZOOM - 0.01 })?.visible).toBe(
+      false,
+    );
+    expect(wheelBodyHandle({ zoom: MAP_SCALE_ZOOM.city })?.visible).toBe(false);
   });
 });

@@ -7,6 +7,7 @@ import type {
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import {
+  avatarPreviewUrl,
   MAP_SCALE_ZOOM,
   type MapRenderer,
   type MapRendererStatus,
@@ -154,19 +155,17 @@ describe("AuthenticatedMapHomeView", () => {
 
     renderView({ mapRenderer });
 
-    // The Bond is at the wheel, so it is the Avaia that spectates — and with no
-    // runtime to fetch, spectating is all it can do.
+    // The world opens on the Avaia, so it is the Bond who spectates until he
+    // takes the wheel.
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
-    ).toHaveTextContent("You");
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).toHaveTextContent("driving");
     expect(
       screen.getByLabelText("No reciprocal relationship asserted"),
     ).toHaveTextContent("—");
     expect(
-      screen.getByRole("button", {
-        name: "0skai is unavailable on this device",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toHaveTextContent("spectate");
     expect(screen.getByText("0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
@@ -210,36 +209,43 @@ describe("AuthenticatedMapHomeView", () => {
     ).not.toBeNull();
   });
 
-  it("takes the wheel to the Avaia and leaves the Bond spectating", () => {
+  it("hands the wheel to the Bond when he takes it, and back again", () => {
     renderView({ avaiaAvailability: "ready" });
 
-    const handover = screen.getByRole("button", {
-      name: "Hand the wheel to 0skai",
+    // The Avaia opens the world; the Bond is the one who can take it from her.
+    const take = screen.getByRole("button", {
+      name: "Take the wheel as 0x0sky",
     });
-    expect(handover).toBeEnabled();
-    expect(handover).toHaveTextContent("ready");
+    expect(take).toBeEnabled();
+    expect(take).toHaveTextContent("spectate");
 
-    fireEvent.click(handover);
-
-    expect(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-    ).toHaveTextContent("spectate");
-    expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
-    ).toHaveTextContent("driving");
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-    );
+    fireEvent.click(take);
 
     expect(
       screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
     ).toHaveTextContent("You");
+    expect(
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+    ).toHaveTextContent("ready");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).toHaveTextContent("driving");
   });
 
   it("offers the runtime download only when this host can fetch one", () => {
     const onPrepareAvaia = vi.fn();
     renderView({ avaiaAvailability: "downloadable", onPrepareAvaia });
+
+    // Fetching a runtime is offered to a spectating Avaia, so the Bond takes
+    // the wheel first and the Avaia moves to the seat that offers it.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
 
     const download = screen.getByRole("button", {
       name: "Download the 0skai runtime",
@@ -250,6 +256,9 @@ describe("AuthenticatedMapHomeView", () => {
 
     cleanup();
     renderView({ avaiaAvailability: "downloadable" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
     expect(
       screen.getByRole("button", {
         name: "0skai is unavailable on this device",
@@ -270,7 +279,7 @@ describe("AuthenticatedMapHomeView", () => {
     const firstFix = setCamera.mock.calls.length;
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
     );
 
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
@@ -718,10 +727,11 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
-  // Focusing a Bond is the moment a person expects to see somebody. Unscaled,
-  // a body is about three pixels tall there, so this covers the whole path:
-  // the camera arrives, the body is drawn large enough to read, and it
-  // withdraws again when the world pulls back to where a person is a place.
+  // Focusing an identity is the moment a person expects to see somebody.
+  // Unscaled, a body is about three pixels tall there, so this covers the
+  // whole path: the camera arrives, the body is drawn large enough to read,
+  // and it withdraws again when the world pulls back to where an observation
+  // is a place rather than a person.
   it("draws a readable body at close range and withdraws it when the world pulls back", async () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
 
@@ -743,7 +753,7 @@ describe("AuthenticatedMapHomeView", () => {
     });
 
     const close = upsert.mock.lastCall?.[0];
-    expect(close).toMatchObject({ modelId: "dasha-study", visible: true });
+    expect(close).toMatchObject({ visible: true });
     expect(close?.scale).toBeGreaterThan(1);
 
     act(() => {
@@ -754,6 +764,79 @@ describe("AuthenticatedMapHomeView", () => {
     });
 
     expect(upsert.mock.lastCall?.[0].visible).toBe(false);
+  });
+
+  // The world shows one body: the identity driving. It opens on the Avaia, in
+  // a study the Bond is not wearing, and the AI runtime has nothing to do with
+  // it — a body is the identity, not the machinery behind it.
+  it("draws one body, the Avaia's, before anyone takes the wheel", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "unavailable",
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const drawn = vi
+      .mocked(mapRenderer.avatars!.upsert)
+      .mock.calls.map(([handle]) => handle);
+    expect(new Set(drawn.map((handle) => handle.id))).toEqual(
+      new Set(["avaia"]),
+    );
+    expect(drawn.at(-1)?.modelId).not.toBe("dasha-study");
+    // The seat nobody is in is dropped rather than left standing behind.
+    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("bond");
+  });
+
+  it("settles the leaving body before the arriving one, rather than swapping", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "ready",
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const upsert = vi.mocked(mapRenderer.avatars!.upsert);
+    upsert.mockClear();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+
+    // The Bond does not blink into place: the Avaia settles first, and only
+    // then does he come out and wake on the world.
+    const first = upsert.mock.calls[0]?.[0];
+    expect(first).toMatchObject({ id: "avaia", clipId: "quiesce" });
+    expect(first?.clipPhase).toBeLessThan(1);
+  });
+
+  // Far out the body is gone and the card is what is left, so it has to carry
+  // the same study — the identity at the wheel, not the one spectating.
+  it("gives the card the study of whoever is at the wheel", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "ready",
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
+      .lastCall?.[0];
+    const drawn = vi.mocked(mapRenderer.avatars!.upsert).mock.lastCall?.[0]
+      .modelId;
+
+    expect(label).toMatchObject({ title: "0x0sky", detail: "This device" });
+    expect(label?.avatarUrl).toBe(avatarPreviewUrl(drawn!));
+    expect(drawn).not.toBe("dasha-study");
   });
 
   it("keeps the world usable when the host has no location capability", async () => {
