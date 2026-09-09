@@ -1,0 +1,61 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Shade branch prepare
+
+on:
+  push:
+    branches: [feature/shade-presence-phase-1]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Refresh workspace lockfile
+        run: pnpm install --no-frozen-lockfile
+      - name: Format changed sources
+        run: |
+          pnpm exec prettier --write \
+            apps/site/package.json \
+            apps/site/src/main.tsx \
+            apps/telegram-mini-app/package.json \
+            apps/telegram-mini-app/src/main.tsx \
+            apps/discord-activity/package.json \
+            apps/discord-activity/src/main.tsx \
+            packages/presence-contract \
+            packages/presence-idb \
+            packages/presence-geo \
+            packages/map-shade
+      - name: Commit prepared branch files
+        run: |
+          set -Eeuo pipefail
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            pnpm-lock.yaml \
+            apps/site/package.json \
+            apps/site/src/main.tsx \
+            apps/telegram-mini-app/package.json \
+            apps/telegram-mini-app/src/main.tsx \
+            apps/discord-activity/package.json \
+            apps/discord-activity/src/main.tsx \
+            packages/presence-contract \
+            packages/presence-idb \
+            packages/presence-geo \
+            packages/map-shade
+          git commit -m 'chore: apply shade branch preparation'
+          git push origin HEAD:feature/shade-presence-phase-1
