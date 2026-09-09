@@ -65,10 +65,7 @@ export function createPresenceTracker(
     // Presence is derived only from observations, never from elapsed wall time.
     // One accurate fix cannot become a visit merely because no later fix
     // arrived: accepted observations in the same H3 cell must span the dwell.
-    if (
-      current.lit ||
-      current.lastFixAt - current.enteredAt < dwellMs
-    ) {
+    if (current.lit || current.lastFixAt - current.enteredAt < dwellMs) {
       return;
     }
     current.lit = true;
