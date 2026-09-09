@@ -13,11 +13,16 @@ import {
   type MapCameraOptions,
   type MapDimension,
   MAP_BODY_HANDOVER_ZOOM,
+  MAP_BODY_HEIGHT_METERS,
+  mapMetersPerPixel,
+  type MapBodyActivation,
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapRenderer,
   type MapRendererStatus,
+  type MapScreenPoint,
 } from "@nilx-one/map-contract";
+import { bodyAtPoint, type DrawnBody } from "./body-hit-test";
 import {
   GPUInitializationError,
   Map as MapLibreMap,
@@ -272,6 +277,9 @@ export function createMapLibreRenderer(
   let labelElement: HTMLElement | undefined;
   const listeners = new Set<(next: MapRendererStatus) => void>();
   const cameraListeners = new Set<(change: MapCameraChange) => void>();
+  const bodyActivationListeners = new Set<
+    (activation: MapBodyActivation) => void
+  >();
 
   function clearLoadTimer(): void {
     if (loadTimer === undefined) {
@@ -351,6 +359,28 @@ export function createMapLibreRenderer(
       "visibility",
       dimension === "flat" ? "none" : "visible",
     );
+  }
+
+  /**
+   * Where the bodies currently stand on the screen. The handles are the ones
+   * the application is already drawing, so this projects what is on the world
+   * rather than deriving a second geography of its own.
+   */
+  function drawnBodies(mounted: MapLibreMap): DrawnBody[] {
+    const zoom = mounted.getZoom();
+    return [...avatarHandles.values()]
+      .filter((handle) => handle.visible)
+      .map((handle) => {
+        const [longitude, latitude] = handle.lngLat;
+        const feet = mounted.project([longitude, latitude]);
+        return {
+          id: handle.id,
+          feet: { x: feet.x, y: feet.y },
+          heightPixels:
+            (MAP_BODY_HEIGHT_METERS * handle.scale) /
+            mapMetersPerPixel(latitude, zoom),
+        };
+      });
   }
 
   function updateLabelVisibility(mounted: MapLibreMap): void {
@@ -540,6 +570,18 @@ export function createMapLibreRenderer(
         mountedMap.on("zoom", () => {
           updateLabelVisibility(mountedMap);
         });
+        // MapLibre already separates a click from a drag, so a pan that begins
+        // on a body stays a pan. What is left is a person reaching for what
+        // they can see, and the renderer only says which body that was.
+        mountedMap.on("click", (event: { point?: MapScreenPoint }) => {
+          const point = event?.point;
+          if (point === undefined) return;
+          const id = bodyAtPoint(drawnBodies(mountedMap), point);
+          if (id === undefined) return;
+          for (const listener of [...bodyActivationListeners]) {
+            listener({ id });
+          }
+        });
         mountedMap.once("load", () => {
           styleResolved = true;
           firstPaintDone = true;
@@ -587,6 +629,11 @@ export function createMapLibreRenderer(
     subscribeCamera(listener) {
       cameraListeners.add(listener);
       return () => cameraListeners.delete(listener);
+    },
+
+    subscribeBodyActivation(listener) {
+      bodyActivationListeners.add(listener);
+      return () => bodyActivationListeners.delete(listener);
     },
 
     setCamera(next: MapCamera, cameraOptions: MapCameraOptions = {}) {

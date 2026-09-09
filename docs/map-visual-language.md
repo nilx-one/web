@@ -59,6 +59,16 @@ The accuracy halo is what the observation actually knows. A body stands inside i
 
 The **card** and the body take turns. Closer than street scale the body is on the world and speaks for itself, and a card over its head would only repeat it. Further out the body is gone, and the card is what is left — the identity, "this device", and a still of the study beside the text, so who is standing there is still legible when it is too far to draw.
 
+One number decides which of the two is on the world, and the map contract publishes it. The renderer hides the card by it and the application draws the body by it, so the turn is a single fact rather than two that could drift into a width showing both or neither.
+
+## Reaching for a body
+
+A body is the most direct thing on the screen, so activating it means what a person means by pointing at it: bring the world to that identity. The camera goes to the closest scale the policy allows, and the Dock returns to the pair — a body belongs to that screen, not to whatever surface happened to be open.
+
+What answers the reach is a target around the body rather than the pixels it covers: a body is drawn about as tall as a fingertip is wide, and a person aiming at one is not aiming at 24 pixels. Where two bodies overlap — which is what a handover looks like while it runs — the nearer one answers.
+
+Pointing is not the only way there. The Dock offers the same two outcomes from controls a keyboard can reach, so nothing that can only be done by pointing at a canvas is the only way to do it.
+
 ## Who is drawn
 
 One body: the identity at the wheel. The Dock already names it — one identity drives, the other spectates — and the world is that same statement drawn on the ground. Two bodies standing as peers would say something the Dock does not.
@@ -74,6 +84,10 @@ An Avaia's runtime has nothing to do with whether it has a body. A body is the i
 Taking the wheel is not one model replacing another at the same instant. The body that is leaving plays `quiesce` and goes; the body arriving plays `wake` and comes out onto the world. These are the two non-looping clips every published study carries, and the ambient sampler deliberately never reaches for them — they exist for this.
 
 The two halves run in sequence, not overlapped, so the two identities are never both standing on the same spot. Each holds its own handle for as long as the handover runs, which is what lets the arriving study load while the other one is still settling.
+
+Taking the wheel also brings the camera in far enough to see the body that arrived, and no further: a camera already closer than the scale a body is drawn from is where a person put it, and is left there.
+
+An Avaia takes the wheel whatever this device can run. The runtime is a fact about the device, stated by the Dock's status dot; it is not a gate on which body the world draws, and an Avaia with no runtime is still an identity its Bond owns and can watch the world as. Where a runtime could be fetched and the host can fetch one, taking the wheel is also what asks for it — one gesture, not two.
 
 Who is at the wheel is presentation. It moves nobody, asserts nothing about where anyone is, and is never written back.
 

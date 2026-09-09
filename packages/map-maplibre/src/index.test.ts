@@ -50,6 +50,8 @@ interface FakeMap {
   readonly getLayer: (id: string) => unknown;
   readonly getCenter: () => { lng: number; lat: number };
   readonly getZoom: () => number;
+  /** A projection that is linear in degrees: enough to place a body on screen. */
+  readonly project: (lngLat: [number, number]) => { x: number; y: number };
   readonly getBearing: () => number;
   readonly getPitch: () => number;
   readonly camera: FakeCamera;
@@ -59,7 +61,11 @@ interface FakeMap {
   readonly layout: Map<string, unknown>;
   emit(
     event: string,
-    payload?: { error?: unknown; originalEvent?: unknown },
+    payload?: {
+      error?: unknown;
+      originalEvent?: unknown;
+      point?: { x: number; y: number };
+    },
   ): void;
   /** A style swap discards everything the renderer added, as MapLibre does. */
   reloadStyle(): void;
@@ -121,6 +127,10 @@ function makeFakeMap(): FakeMap {
     getLayer: (id) => layers.get(id),
     getCenter: () => ({ lng: camera.center[0], lat: camera.center[1] }),
     getZoom: () => camera.zoom,
+    project: ([longitude, latitude]) => ({
+      x: 200 + (longitude - camera.center[0]) * 1_000,
+      y: 300 - (latitude - camera.center[1]) * 1_000,
+    }),
     getBearing: () => camera.bearing,
     getPitch: () => camera.pitch,
     camera,
@@ -647,5 +657,82 @@ describe("presentation dimension", () => {
     expect(
       fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
     ).toBe("none");
+  });
+});
+
+describe("reaching for a body on the world", () => {
+  const AT_CENTER = { longitude: 30.5234, latitude: 50.4501 };
+
+  function standBody(renderer: ReturnType<typeof readyRenderer>): void {
+    renderer.avatars?.upsert({
+      id: "bond",
+      modelId: "sky-study",
+      lngLat: [AT_CENTER.longitude, AT_CENTER.latitude],
+      bearingDeg: 0,
+      clipId: "idle",
+      clipPhase: 0,
+      scale: 1,
+      visible: true,
+    });
+  }
+
+  it("tells the application which body a person reached for", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const activated = vi.fn();
+    renderer.subscribeBodyActivation?.(activated);
+    standBody(renderer);
+
+    // The fake projection puts the observation's own coordinate at (200, 300).
+    fakeMap.emit("click", { point: { x: 200, y: 296 } });
+
+    expect(activated).toHaveBeenCalledExactlyOnceWith({ id: "bond" });
+  });
+
+  it("stays silent for a click on open ground", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const activated = vi.fn();
+    renderer.subscribeBodyActivation?.(activated);
+    standBody(renderer);
+
+    fakeMap.emit("click", { point: { x: 600, y: 600 } });
+    fakeMap.emit("click");
+
+    expect(activated).not.toHaveBeenCalled();
+  });
+
+  it("stays silent for a body the world is not drawing", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const activated = vi.fn();
+    renderer.subscribeBodyActivation?.(activated);
+    renderer.avatars?.upsert({
+      id: "bond",
+      modelId: "sky-study",
+      lngLat: [AT_CENTER.longitude, AT_CENTER.latitude],
+      bearingDeg: 0,
+      clipId: "idle",
+      clipPhase: 0,
+      scale: 1,
+      visible: false,
+    });
+
+    fakeMap.emit("click", { point: { x: 200, y: 296 } });
+
+    expect(activated).not.toHaveBeenCalled();
+  });
+
+  it("stops telling a listener that unsubscribed", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const activated = vi.fn();
+    const unsubscribe = renderer.subscribeBodyActivation?.(activated);
+    standBody(renderer);
+
+    unsubscribe?.();
+    fakeMap.emit("click", { point: { x: 200, y: 296 } });
+
+    expect(activated).not.toHaveBeenCalled();
   });
 });

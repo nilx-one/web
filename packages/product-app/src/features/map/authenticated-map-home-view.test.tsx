@@ -237,33 +237,35 @@ describe("AuthenticatedMapHomeView", () => {
     ).toHaveTextContent("driving");
   });
 
-  it("offers the runtime download only when this host can fetch one", () => {
+  it("asks this host for a runtime as the Avaia takes the wheel", () => {
     const onPrepareAvaia = vi.fn();
     renderView({ avaiaAvailability: "downloadable", onPrepareAvaia });
 
-    // Fetching a runtime is offered to a spectating Avaia, so the Bond takes
+    // A fetchable runtime is offered to a spectating Avaia, so the Bond takes
     // the wheel first and the Avaia moves to the seat that offers it.
     fireEvent.click(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+    );
 
-    const download = screen.getByRole("button", {
-      name: "Download the 0skai runtime",
-    });
-    expect(download).toHaveTextContent("download");
-    fireEvent.click(download);
     expect(onPrepareAvaia).toHaveBeenCalledOnce();
 
+    // A host that cannot fetch one still hands the wheel over.
     cleanup();
     renderView({ avaiaAvailability: "downloadable" });
     fireEvent.click(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
+    const avaia = screen.getByRole("button", {
+      name: "Hand the wheel to 0skai",
+    });
+    expect(avaia).toBeEnabled();
+    fireEvent.click(avaia);
     expect(
-      screen.getByRole("button", {
-        name: "0skai is unavailable on this device",
-      }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toBeVisible();
   });
 
   it("focuses the world on the identity at the wheel", async () => {
@@ -287,11 +289,67 @@ describe("AuthenticatedMapHomeView", () => {
     expect(camera?.zoom).toBeGreaterThan(15);
   });
 
+  it("comes in far enough to see the identity that just took the wheel", async () => {
+    const mapRenderer = renderer();
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    const setCamera = vi.mocked(mapRenderer.setCamera);
+    const firstFix = setCamera.mock.calls.length;
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+
+    // The seats swap, and the camera lands at or inside the scale a body is
+    // drawn from, so the arrival is something a person can watch happen.
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+    ).toBeVisible();
+    expect(setCamera.mock.calls.length).toBe(firstFix + 1);
+    const [camera] = setCamera.mock.calls.at(-1) ?? [];
+    expect(camera?.zoom).toBeGreaterThanOrEqual(MAP_SCALE_ZOOM.street);
+    expect(mapRenderer.unmount).not.toHaveBeenCalled();
+  });
+
+  it("brings the world to a body a person reached for", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    const setCamera = vi.mocked(mapRenderer.setCamera);
+    const firstFix = setCamera.mock.calls.length;
+
+    act(() => mapRenderer.activateBody("avaia"));
+
+    expect(setCamera.mock.calls.length).toBe(firstFix + 1);
+    const [camera] = setCamera.mock.calls.at(-1) ?? [];
+    expect(camera?.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.street);
+    expect(mapRenderer.unmount).not.toHaveBeenCalled();
+  });
+
+  it("puts the Dock back on the pair when a body is reached for", () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+    const onNavigate = vi.fn();
+    renderView({ mapRenderer, onNavigate, section: "settings" });
+
+    act(() => mapRenderer.activateBody("bond"));
+
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
+  });
+
   it("opens the Bond edit surface from the Dock header", () => {
     const onNavigate = vi.fn();
 
     renderView({ onNavigate });
-    const edit = screen.getByRole("button", { name: "Edit this Bond" });
+    const edit = screen.getByRole("button", { name: "Edit 0x0sky" });
 
     expect(edit).toHaveTextContent("edit");
     fireEvent.click(edit);
@@ -303,7 +361,7 @@ describe("AuthenticatedMapHomeView", () => {
     renderView({ section: "identity" });
 
     expect(
-      screen.queryByRole("button", { name: "Edit this Bond" }),
+      screen.queryByRole("button", { name: "Edit 0x0sky" }),
     ).not.toBeInTheDocument();
   });
 

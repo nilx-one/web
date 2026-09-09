@@ -125,13 +125,17 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    // An Avaia nobody has configured says so, and offers the one thing that
-    // can be done about it.
-    const card = await screen.findByRole("button", { name: "Set up 0skai" });
-    expect(card).toHaveTextContent("unconfigured");
+    // An Avaia nobody has configured says so on its card, and the Dock's own
+    // action offers the one thing that can be done about it.
+    const configure = await screen.findByRole("button", {
+      name: "Set up 0skai",
+    });
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).toHaveTextContent("unconfigured");
     expect(renderer.mount).toHaveBeenCalledOnce();
 
-    await user.click(card);
+    await user.click(configure);
 
     const address = await screen.findByLabelText("pub_dress");
     expect(address).toHaveValue("0skai");
@@ -245,10 +249,12 @@ describe("Avaia setup from the Bond dock", () => {
 
     // No runtime is published on any device, and that never unconfigures what
     // an owner already stored.
-    const card = await screen.findByRole("button", { name: "Edit 0skai" });
-    expect(card).not.toHaveTextContent("unconfigured");
+    const configure = await screen.findByRole("button", { name: "Edit 0skai" });
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).not.toHaveTextContent("unconfigured");
 
-    card.focus();
+    configure.focus();
     await user.keyboard("{Enter}");
     expect(await screen.findByLabelText("pub_dress")).toHaveValue("0skai");
     expect(screen.getByText("configured")).toBeVisible();

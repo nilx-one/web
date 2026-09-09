@@ -74,6 +74,42 @@ export const MAP_SCALE_ZOOM: Readonly<Record<MapScale, number>> = Object.freeze(
  */
 export const MAP_BODY_HANDOVER_ZOOM: number = MAP_SCALE_ZOOM.street;
 
+/**
+ * The height a published study stands at. The three studies measure 1.80 m to
+ * 1.89 m from the ground, and the shortest is what both sides hold themselves
+ * against: the application scales a body against it, and the renderer measures
+ * the reach of one by it.
+ */
+export const MAP_BODY_HEIGHT_METERS = 1.8;
+
+/**
+ * The reach of a drawn body, as a square of screen pixels around where it
+ * stands. A body is drawn 24 px tall, which is smaller than a fingertip, so
+ * what answers a tap is this target rather than the pixels the body happens to
+ * cover. It is the size interface guidance has settled on for anything a person
+ * is expected to hit on a touch screen.
+ */
+export const MAP_BODY_TARGET_PIXELS = 44;
+
+/** A point in the renderer's own viewport, in CSS pixels from its top left. */
+export interface MapScreenPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A person reaching for a body the world is drawing.
+ *
+ * It says which body was reached for and nothing about what that means: the
+ * renderer answers where a person pointed, and the application decides what
+ * activating an identity does. Activation is presentation — it moves a camera,
+ * never shared-world state.
+ */
+export interface MapBodyActivation {
+  /** The avatar handle the activated body was drawn from. */
+  readonly id: string;
+}
+
 // Web Mercator ground resolution at zoom 0 for the 512 px tile scheme both
 // the renderer and the application reason in.
 const EQUATOR_METERS_PER_PIXEL = 156_543.03392804097 / 2;
@@ -141,6 +177,15 @@ export interface MapRenderer {
    * own body — and an avatar on the map is never evidence of presence.
    */
   readonly avatars?: AvatarLayerContract;
+  /**
+   * Notifies when a person activates a body this renderer drew. Absent on a
+   * renderer that draws no bodies, or draws them where nothing can be pointed
+   * at — an application that finds it absent simply offers the same outcome
+   * from the interface it already has.
+   */
+  subscribeBodyActivation?(
+    listener: (activation: MapBodyActivation) => void,
+  ): () => void;
 }
 
 /**

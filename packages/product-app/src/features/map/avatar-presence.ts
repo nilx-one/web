@@ -4,7 +4,8 @@
 import type { AVATAR_MODELS } from "@nilx-one/application";
 import {
   AVATAR_MODEL_IDS,
-  MAP_SCALE_ZOOM,
+  MAP_BODY_HANDOVER_ZOOM,
+  MAP_BODY_HEIGHT_METERS,
   mapMetersPerPixel,
   sampleAmbientAvatar,
   type AvatarHandle,
@@ -55,11 +56,12 @@ export function avatarSeed(pubDress: string): number {
 }
 
 /**
- * The height a published study stands at. The three studies measure 1.80 m to
- * 1.89 m from the ground, so the shortest is what the readable minimum below is
- * held against: every study clears it, none is scaled up further than it needs.
+ * The height a published study stands at, which the map contract publishes so
+ * that the renderer measures the reach of a body by the same number the world
+ * draws it at. Every study clears it, and none is scaled up further than it
+ * needs.
  */
-const AVATAR_HEIGHT_METERS = 1.8;
+const AVATAR_HEIGHT_METERS = MAP_BODY_HEIGHT_METERS;
 
 /** The parallel Web Mercator stops at, and so the last latitude with ground. */
 const MERCATOR_LATITUDE_LIMIT = 85.051129;
@@ -71,8 +73,12 @@ export const AVATAR_APPARENT_PIXELS = 24;
  * Further out than street scale an observation is a place, not a person. The
  * position marker already says "here" at those widths, and a body standing
  * there would claim a precision the observation does not have.
+ *
+ * It is the map contract's own threshold rather than a second copy of it: the
+ * renderer hides the card by the same number the body appears at, so the two
+ * take turns instead of drifting into a width that shows both or neither.
  */
-export const AVATAR_MIN_ZOOM = MAP_SCALE_ZOOM.street;
+export const AVATAR_MIN_ZOOM = MAP_BODY_HANDOVER_ZOOM;
 
 /**
  * How much larger than life the body is drawn, so that it is always drawn the
