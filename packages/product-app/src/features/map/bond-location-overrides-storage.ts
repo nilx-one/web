@@ -86,10 +86,14 @@ export function readBondLocationOverrides(
     }
 
     try {
-      overrides = setBondLocationOverride(overrides, candidate.counterpartPubDress, {
-        longitude: candidate.longitude,
-        latitude: candidate.latitude,
-      });
+      overrides = setBondLocationOverride(
+        overrides,
+        candidate.counterpartPubDress,
+        {
+          longitude: candidate.longitude,
+          latitude: candidate.latitude,
+        },
+      );
     } catch {
       return { kind: "corrupt" };
     }
