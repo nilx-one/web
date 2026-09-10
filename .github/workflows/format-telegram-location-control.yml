@@ -1,0 +1,51 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Format Telegram location control
+
+on:
+  push:
+    branches:
+      - feature/telegram-location-control
+
+permissions:
+  contents: write
+
+concurrency:
+  group: format-telegram-location-control
+  cancel-in-progress: true
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply repository formatters
+        run: |
+          cargo fmt --manifest-path services/identity/Cargo.toml --all
+          pnpm exec prettier --write \
+            apps/telegram-mini-app/src/location-control.ts \
+            apps/telegram-mini-app/src/location-control.test.ts \
+            apps/telegram-mini-app/src/main.tsx
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add services/identity apps/telegram-mini-app/src
+          git commit -m "style: apply repository formatters"
+          git push origin HEAD:feature/telegram-location-control
