@@ -72,11 +72,7 @@ const CATALOGS: Readonly<
 };
 
 function supportedLocale(tag: string): ProductLocale | undefined {
-  const language = tag
-    .trim()
-    .replaceAll("_", "-")
-    .toLowerCase()
-    .split("-")[0];
+  const language = tag.trim().replaceAll("_", "-").toLowerCase().split("-")[0];
   if (language === "uk") return "uk-UA";
   if (language === "en") return "en";
   return undefined;
