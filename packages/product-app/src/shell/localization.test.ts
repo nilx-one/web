@@ -19,7 +19,14 @@ afterEach(() => {
 
 describe("frontend localization", () => {
   it("treats every Ukrainian language tag as Ukrainian regardless of region", () => {
-    for (const language of ["uk", "uk-UA", "uk_UA", "uk-GB", "uk-RU", "uk-anything"]) {
+    for (const language of [
+      "uk",
+      "uk-UA",
+      "uk_UA",
+      "uk-GB",
+      "uk-RU",
+      "uk-anything",
+    ]) {
       expect(resolveLocale("auto", [], [language])).toBe("uk-UA");
     }
   });
