@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     str::FromStr,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -11,10 +11,14 @@ use std::{
 use axum::{
     Json, Router,
     extract::State,
-    http::{HeaderMap, StatusCode, header::{AUTHORIZATION, CACHE_CONTROL}},
+    http::{
+        HeaderMap, StatusCode,
+        header::{AUTHORIZATION, CACHE_CONTROL},
+    },
     response::{IntoResponse, Response},
     routing::get,
 };
+use ox1_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
 use serde::Serialize;
 use sqlx::{
     Row, SqlitePool,
@@ -28,109 +32,37 @@ use crate::{IdentityRepository, TelegramInitDataVerifier};
 const TELEGRAM_AUTH_SCHEME: &str = "tma ";
 const DEFAULT_INTENT_TTL: Duration = Duration::from_secs(5 * 60);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TelegramAccessRole {
+/// Application authorization role for a human Bond.
+///
+/// This is not a Bond kind or protocol authority class. The role only gates
+/// application capabilities such as choosing an explicit manual map position.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BondAccessRole {
     User,
     Admin,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct TelegramAdminPolicy {
-    admin_user_ids: Arc<HashSet<i64>>,
-}
-
-impl TelegramAdminPolicy {
-    pub fn from_csv(value: &str) -> Result<Self, TelegramAdminPolicyError> {
-        let mut admin_user_ids = HashSet::new();
-        for raw in value.split(',').map(str::trim).filter(|part| !part.is_empty()) {
-            let user_id = raw
-                .parse::<i64>()
-                .map_err(|_| TelegramAdminPolicyError::InvalidUserId(raw.to_owned()))?;
-            admin_user_ids.insert(user_id);
-        }
-        Ok(Self {
-            admin_user_ids: Arc::new(admin_user_ids),
-        })
-    }
-
-    pub fn role_for(&self, telegram_user_id: i64) -> TelegramAccessRole {
-        if self.admin_user_ids.contains(&telegram_user_id) {
-            TelegramAccessRole::Admin
-        } else {
-            TelegramAccessRole::User
-        }
-    }
-
-    pub fn is_admin(&self, telegram_user_id: i64) -> bool {
-        self.role_for(telegram_user_id) == TelegramAccessRole::Admin
-    }
-}
-
-#[derive(Debug, Error, Eq, PartialEq)]
-pub enum TelegramAdminPolicyError {
-    #[error("invalid Telegram admin user id: {0}")]
-    InvalidUserId(String),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-pub struct LocationPoint {
-    pub longitude: f64,
-    pub latitude: f64,
-}
-
-impl LocationPoint {
-    pub fn new(longitude: f64, latitude: f64) -> Result<Self, LocationControlError> {
-        if !longitude.is_finite()
-            || !latitude.is_finite()
-            || !(-180.0..=180.0).contains(&longitude)
-            || !(-90.0..=90.0).contains(&latitude)
-        {
-            return Err(LocationControlError::InvalidPoint);
-        }
-        Ok(Self {
-            longitude,
-            latitude,
-        })
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BondLocationMode {
-    Live,
-    Manual,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BondLocationControl {
-    pub mode: BondLocationMode,
-    /// Last factual coordinate received through the explicit current-position flow.
-    pub observed_position: Option<LocationPoint>,
-    pub observed_at: Option<u64>,
-    /// Presentation-only point. It never replaces `observed_position`.
-    pub manual_position: Option<LocationPoint>,
-    pub manual_set_at: Option<u64>,
-}
-
-impl Default for BondLocationControl {
-    fn default() -> Self {
-        Self {
-            mode: BondLocationMode::Live,
-            observed_position: None,
-            observed_at: None,
-            manual_position: None,
-            manual_set_at: None,
-        }
+/// Current deployment authorization policy.
+///
+/// Authority is resolved only after provider authentication has identified the
+/// Bond. Provider usernames, Telegram display data, and Telegram numeric IDs do
+/// not grant admin rights.
+#[must_use]
+pub fn role_for_pub_dress(pub_dress: &PubDress) -> BondAccessRole {
+    match pub_dress.as_str() {
+        "0x0небо" | "0x0sky" => BondAccessRole::Admin,
+        _ => BondAccessRole::User,
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct LocationControlRepository {
+pub struct BondLocationRepository {
     pool: SqlitePool,
 }
 
-impl LocationControlRepository {
-    pub async fn connect(database_url: &str) -> Result<Self, LocationControlError> {
+impl BondLocationRepository {
+    pub async fn connect(database_url: &str) -> Result<Self, BondLocationRepositoryError> {
         let max_connections = if database_url.contains(":memory:") { 1 } else { 5 };
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
@@ -146,141 +78,87 @@ impl LocationControlRepository {
         Ok(Self { pool })
     }
 
-    pub async fn read(&self, pub_dress: &str) -> Result<BondLocationControl, LocationControlError> {
+    /// Reads the active owner-submitted location. No row means this Bond has
+    /// never submitted application location state.
+    pub async fn read(
+        &self,
+        pub_dress: &str,
+    ) -> Result<Option<BondLocation>, BondLocationRepositoryError> {
         let row = sqlx::query(
-            "SELECT mode, observed_longitude, observed_latitude, observed_at, \
-                    manual_longitude, manual_latitude, manual_set_at \
-             FROM bond_location_control WHERE pub_dress = ?",
+            "SELECT mode, longitude_e7, latitude_e7, updated_at \
+             FROM bond_locations WHERE pub_dress = ?",
         )
         .bind(pub_dress)
         .fetch_optional(&self.pool)
         .await?;
         let Some(row) = row else {
-            return Ok(BondLocationControl::default());
+            return Ok(None);
         };
 
         let mode = match row.get::<String, _>("mode").as_str() {
             "live" => BondLocationMode::Live,
             "manual" => BondLocationMode::Manual,
-            _ => return Err(LocationControlError::CorruptState),
+            _ => return Err(BondLocationRepositoryError::CorruptState),
         };
-        let observed_position = optional_point(
-            row.get::<Option<f64>, _>("observed_longitude"),
-            row.get::<Option<f64>, _>("observed_latitude"),
-        )?;
-        let observed_at = optional_u64(row.get::<Option<i64>, _>("observed_at"))?;
-        let manual_position = optional_point(
-            row.get::<Option<f64>, _>("manual_longitude"),
-            row.get::<Option<f64>, _>("manual_latitude"),
-        )?;
-        let manual_set_at = optional_u64(row.get::<Option<i64>, _>("manual_set_at"))?;
+        let longitude_e7 = i32::try_from(row.get::<i64, _>("longitude_e7"))
+            .map_err(|_| BondLocationRepositoryError::CorruptState)?;
+        let latitude_e7 = i32::try_from(row.get::<i64, _>("latitude_e7"))
+            .map_err(|_| BondLocationRepositoryError::CorruptState)?;
+        let coordinate = GeoCoordinate::new(longitude_e7, latitude_e7)
+            .map_err(|_| BondLocationRepositoryError::CorruptState)?;
+        let updated_at = u64::try_from(row.get::<i64, _>("updated_at"))
+            .map_err(|_| BondLocationRepositoryError::CorruptState)?;
 
-        if observed_position.is_some() != observed_at.is_some()
-            || manual_position.is_some() != manual_set_at.is_some()
-            || (mode == BondLocationMode::Live && manual_position.is_some())
-            || (mode == BondLocationMode::Manual && manual_position.is_none())
-        {
-            return Err(LocationControlError::CorruptState);
-        }
-
-        Ok(BondLocationControl {
+        Ok(Some(BondLocation::new(
+            coordinate,
             mode,
-            observed_position,
-            observed_at,
-            manual_position,
-            manual_set_at,
-        })
+            DecimalU64::new(updated_at),
+        )))
     }
 
-    /// Stores factual location received from the explicit current-position flow
-    /// and returns the Bond to ordinary live/device mode. Any old manual point is
-    /// removed so it cannot silently become active again later.
-    pub async fn record_live(
+    /// Replaces the one active location projection for this Bond.
+    ///
+    /// Replacing `manual` with `live` is therefore an explicit new observation,
+    /// not a mode toggle that resurrects an older device coordinate.
+    pub async fn write(
         &self,
         pub_dress: &str,
-        point: LocationPoint,
-        observed_at: u64,
-    ) -> Result<(), LocationControlError> {
+        location: BondLocation,
+    ) -> Result<(), BondLocationRepositoryError> {
+        let mode = match location.mode {
+            BondLocationMode::Live => "live",
+            BondLocationMode::Manual => "manual",
+        };
+        let updated_at = i64::try_from(location.updated_at.get())
+            .map_err(|_| BondLocationRepositoryError::TimestampOutOfRange)?;
         sqlx::query(
-            "INSERT INTO bond_location_control \
-             (pub_dress, mode, observed_longitude, observed_latitude, observed_at) \
-             VALUES (?, 'live', ?, ?, ?) \
+            "INSERT INTO bond_locations \
+             (pub_dress, mode, longitude_e7, latitude_e7, updated_at) \
+             VALUES (?, ?, ?, ?, ?) \
              ON CONFLICT(pub_dress) DO UPDATE SET \
-               mode = 'live', \
-               observed_longitude = excluded.observed_longitude, \
-               observed_latitude = excluded.observed_latitude, \
-               observed_at = excluded.observed_at, \
-               manual_longitude = NULL, \
-               manual_latitude = NULL, \
-               manual_set_at = NULL",
+               mode = excluded.mode, \
+               longitude_e7 = excluded.longitude_e7, \
+               latitude_e7 = excluded.latitude_e7, \
+               updated_at = excluded.updated_at",
         )
         .bind(pub_dress)
-        .bind(point.longitude)
-        .bind(point.latitude)
-        .bind(to_i64(observed_at)?)
+        .bind(mode)
+        .bind(i64::from(location.coordinate.longitude_e7()))
+        .bind(i64::from(location.coordinate.latitude_e7()))
+        .bind(updated_at)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
-
-    /// Selects presentation location while preserving the last factual
-    /// observation, if one exists. Manual location is not observation evidence.
-    pub async fn set_manual(
-        &self,
-        pub_dress: &str,
-        point: LocationPoint,
-        set_at: u64,
-    ) -> Result<(), LocationControlError> {
-        sqlx::query(
-            "INSERT INTO bond_location_control \
-             (pub_dress, mode, manual_longitude, manual_latitude, manual_set_at) \
-             VALUES (?, 'manual', ?, ?, ?) \
-             ON CONFLICT(pub_dress) DO UPDATE SET \
-               mode = 'manual', \
-               manual_longitude = excluded.manual_longitude, \
-               manual_latitude = excluded.manual_latitude, \
-               manual_set_at = excluded.manual_set_at",
-        )
-        .bind(pub_dress)
-        .bind(point.longitude)
-        .bind(point.latitude)
-        .bind(to_i64(set_at)?)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-}
-
-fn optional_point(
-    longitude: Option<f64>,
-    latitude: Option<f64>,
-) -> Result<Option<LocationPoint>, LocationControlError> {
-    match (longitude, latitude) {
-        (None, None) => Ok(None),
-        (Some(longitude), Some(latitude)) => LocationPoint::new(longitude, latitude).map(Some),
-        _ => Err(LocationControlError::CorruptState),
-    }
-}
-
-fn optional_u64(value: Option<i64>) -> Result<Option<u64>, LocationControlError> {
-    value
-        .map(|value| u64::try_from(value).map_err(|_| LocationControlError::CorruptState))
-        .transpose()
-}
-
-fn to_i64(value: u64) -> Result<i64, LocationControlError> {
-    i64::try_from(value).map_err(|_| LocationControlError::TimestampOutOfRange)
 }
 
 #[derive(Debug, Error)]
-pub enum LocationControlError {
-    #[error("location control database failure: {0}")]
+pub enum BondLocationRepositoryError {
+    #[error("Bond location database failure: {0}")]
     Database(#[from] sqlx::Error),
-    #[error("invalid geographic point")]
-    InvalidPoint,
-    #[error("location control timestamp is outside the supported range")]
+    #[error("Bond location timestamp is outside the supported range")]
     TimestampOutOfRange,
-    #[error("stored location control state violates its contract")]
+    #[error("stored Bond location violates its contract")]
     CorruptState,
 }
 
@@ -303,6 +181,7 @@ impl Default for TelegramLocationIntents {
 }
 
 impl TelegramLocationIntents {
+    #[must_use]
     pub fn new(ttl: Duration) -> Self {
         Self {
             pending: Arc::new(Mutex::new(HashMap::new())),
@@ -328,29 +207,31 @@ impl TelegramLocationIntents {
 #[derive(Clone)]
 struct LocationControlApiState {
     identities: IdentityRepository,
-    location: LocationControlRepository,
+    locations: BondLocationRepository,
     telegram_verifier: TelegramInitDataVerifier,
 }
 
 pub fn location_control_router(
     identities: IdentityRepository,
-    location: LocationControlRepository,
+    locations: BondLocationRepository,
     telegram_verifier: TelegramInitDataVerifier,
 ) -> Router {
     Router::new()
         .route("/api/v1/location-control", get(read_location_control))
         .with_state(LocationControlApiState {
             identities,
-            location,
+            locations,
             telegram_verifier,
         })
 }
 
+/// Authenticated operational projection consumed by the Telegram-hosted Web
+/// client. `location: null` means no Bond location has been submitted yet; the
+/// ordinary device-location mode remains available.
 #[derive(Serialize)]
 struct LocationControlProjection {
-    mode: BondLocationMode,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    position: Option<LocationPoint>,
+    role: BondAccessRole,
+    location: Option<BondLocation>,
 }
 
 async fn read_location_control(
@@ -377,24 +258,27 @@ async fn read_location_control(
         Ok(Some(identity)) => identity,
         Ok(None) => return status(StatusCode::NOT_FOUND),
         Err(error) => {
-            tracing::error!(%error, "location-control identity lookup failed");
+            tracing::error!(%error, "Bond location identity lookup failed");
             return status(StatusCode::SERVICE_UNAVAILABLE);
         }
     };
-    match state.location.read(&identity.pub_dress).await {
-        Ok(control) => no_store_json(
+    let pub_dress = match identity.pub_dress.parse::<PubDress>() {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "stored Bond pub_dress is invalid");
+            return status(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+    match state.locations.read(pub_dress.as_str()).await {
+        Ok(location) => no_store_json(
             StatusCode::OK,
             LocationControlProjection {
-                mode: control.mode,
-                position: if control.mode == BondLocationMode::Manual {
-                    control.manual_position
-                } else {
-                    None
-                },
+                role: role_for_pub_dress(&pub_dress),
+                location,
             },
         ),
         Err(error) => {
-            tracing::error!(%error, "location-control read failed");
+            tracing::error!(%error, "Bond location read failed");
             status(StatusCode::SERVICE_UNAVAILABLE)
         }
     }
@@ -420,30 +304,40 @@ fn no_store_json<T: Serialize>(code: StatusCode, value: T) -> Response {
 mod tests {
     use std::time::Duration;
 
+    use ox1_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
+
     use super::{
-        BondLocationMode, LocationControlRepository, LocationPoint, PendingLocationIntent,
-        TelegramAccessRole, TelegramAdminPolicy, TelegramLocationIntents,
+        BondAccessRole, BondLocationRepository, PendingLocationIntent, TelegramLocationIntents,
+        role_for_pub_dress,
     };
-    use crate::{IdentityRepository, ProviderIdentity, PubDress, RegistrationOutcome};
+    use crate::{IdentityRepository, ProviderIdentity, RegistrationOutcome};
 
     #[test]
-    fn admin_policy_defaults_to_user_and_promotes_only_configured_ids() {
-        let policy = TelegramAdminPolicy::from_csv("7, 13").expect("policy must parse");
-        assert_eq!(policy.role_for(6), TelegramAccessRole::User);
-        assert_eq!(policy.role_for(7), TelegramAccessRole::Admin);
-        assert!(policy.is_admin(13));
+    fn only_current_admin_pub_dresses_have_admin_capability() {
+        let sky: PubDress = "0x0sky".parse().expect("admin pub_dress");
+        let nebo: PubDress = "0x0небо".parse().expect("admin pub_dress");
+        let case_variant: PubDress = "0x0Sky".parse().expect("ordinary pub_dress");
+        let other: PubDress = "0x0alice".parse().expect("ordinary pub_dress");
+
+        assert_eq!(role_for_pub_dress(&sky), BondAccessRole::Admin);
+        assert_eq!(role_for_pub_dress(&nebo), BondAccessRole::Admin);
+        assert_eq!(role_for_pub_dress(&case_variant), BondAccessRole::User);
+        assert_eq!(role_for_pub_dress(&other), BondAccessRole::User);
     }
 
     #[tokio::test]
     async fn location_intent_is_explicit_and_single_use() {
         let intents = TelegramLocationIntents::new(Duration::from_secs(60));
         intents.begin(7, PendingLocationIntent::Manual).await;
-        assert_eq!(intents.consume(7).await, Some(PendingLocationIntent::Manual));
+        assert_eq!(
+            intents.consume(7).await,
+            Some(PendingLocationIntent::Manual)
+        );
         assert_eq!(intents.consume(7).await, None);
     }
 
     #[tokio::test]
-    async fn manual_position_preserves_observation_and_current_returns_to_live() {
+    async fn one_active_location_preserves_live_vs_manual_provenance() {
         let database = tempfile::NamedTempFile::new().expect("temporary database");
         let database_url = format!("sqlite://{}", database.path().display());
         let identities = IdentityRepository::connect(&database_url)
@@ -454,38 +348,80 @@ mod tests {
             .register(&pub_dress, &ProviderIdentity::telegram(7), 10)
             .await
             .expect("registration");
-        assert!(matches!(registration, RegistrationOutcome::Registered(_)));
+        assert!(matches!(
+            registration,
+            RegistrationOutcome::Registered(_)
+        ));
 
-        let location = LocationControlRepository::connect(&database_url)
+        let locations = BondLocationRepository::connect(&database_url)
             .await
-            .expect("location repository");
-        let observed = LocationPoint::new(30.5234, 50.4501).expect("observed point");
-        location
-            .record_live(pub_dress.as_str(), observed, 20)
+            .expect("Bond location repository");
+        assert_eq!(
+            locations.read(pub_dress.as_str()).await.expect("read empty"),
+            None
+        );
+
+        let observed = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("observed point");
+        locations
+            .write(
+                pub_dress.as_str(),
+                BondLocation::new(
+                    observed,
+                    BondLocationMode::Live,
+                    DecimalU64::new(20),
+                ),
+            )
             .await
             .expect("record live");
-        let manual = LocationPoint::new(2.3522, 48.8566).expect("manual point");
-        location
-            .set_manual(pub_dress.as_str(), manual, 30)
+        let live = locations
+            .read(pub_dress.as_str())
+            .await
+            .expect("read live")
+            .expect("live location");
+        assert_eq!(live.coordinate, observed);
+        assert_eq!(live.mode, BondLocationMode::Live);
+        assert_eq!(live.updated_at.get(), 20);
+
+        let manual = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("manual point");
+        locations
+            .write(
+                pub_dress.as_str(),
+                BondLocation::new(
+                    manual,
+                    BondLocationMode::Manual,
+                    DecimalU64::new(30),
+                ),
+            )
             .await
             .expect("set manual");
-
-        let controlled = location.read(pub_dress.as_str()).await.expect("read manual");
+        let controlled = locations
+            .read(pub_dress.as_str())
+            .await
+            .expect("read manual")
+            .expect("manual location");
+        assert_eq!(controlled.coordinate, manual);
         assert_eq!(controlled.mode, BondLocationMode::Manual);
-        assert_eq!(controlled.observed_position, Some(observed));
-        assert_eq!(controlled.observed_at, Some(20));
-        assert_eq!(controlled.manual_position, Some(manual));
+        assert_eq!(controlled.updated_at.get(), 30);
 
-        let current = LocationPoint::new(30.5240, 50.4510).expect("current point");
-        location
-            .record_live(pub_dress.as_str(), current, 40)
+        let current = GeoCoordinate::from_degrees(30.5240, 50.4510).expect("current point");
+        locations
+            .write(
+                pub_dress.as_str(),
+                BondLocation::new(
+                    current,
+                    BondLocationMode::Live,
+                    DecimalU64::new(40),
+                ),
+            )
             .await
             .expect("return live");
-        let live = location.read(pub_dress.as_str()).await.expect("read live");
-        assert_eq!(live.mode, BondLocationMode::Live);
-        assert_eq!(live.observed_position, Some(current));
-        assert_eq!(live.observed_at, Some(40));
-        assert_eq!(live.manual_position, None);
-        assert_eq!(live.manual_set_at, None);
+        let returned = locations
+            .read(pub_dress.as_str())
+            .await
+            .expect("read returned live")
+            .expect("returned location");
+        assert_eq!(returned.coordinate, current);
+        assert_eq!(returned.mode, BondLocationMode::Live);
+        assert_eq!(returned.updated_at.get(), 40);
     }
 }
