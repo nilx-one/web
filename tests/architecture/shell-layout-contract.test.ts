@@ -93,13 +93,28 @@ describe("shell layout contract", () => {
     expect(region).toContain("justify-content: flex-end");
   });
 
-  it("stacks world, Dock, header, toasts and overlays in that order", () => {
-    expect(layerDepth(".app-shell__world")).toBe(0);
-    expect(layerDepth(".app-shell__bottom")).toBeGreaterThan(
-      layerDepth(".app-shell__world"),
+  it("lets the map watermark rise above the Dock without lifting the world", () => {
+    const world = rule(shellCss, ".app-shell__world");
+    const watermark = ".authenticated-map-home .maplibregl-ctrl-bottom-left";
+
+    expect(world).not.toMatch(/z-index:/);
+    expect(rule(shellCss, watermark)).toContain("pointer-events: none");
+    expect(layerDepth(watermark)).toBeGreaterThan(
+      layerDepth(".app-shell__bottom"),
     );
     expect(layerDepth(".app-shell__header")).toBeGreaterThan(
+      layerDepth(watermark),
+    );
+  });
+
+  it("stacks Dock, watermark, header, toasts and overlays in that order", () => {
+    const watermark = ".authenticated-map-home .maplibregl-ctrl-bottom-left";
+
+    expect(layerDepth(watermark)).toBeGreaterThan(
       layerDepth(".app-shell__bottom"),
+    );
+    expect(layerDepth(".app-shell__header")).toBeGreaterThan(
+      layerDepth(watermark),
     );
     expect(layerDepth(".app-shell__toasts")).toBeGreaterThan(
       layerDepth(".app-shell__header"),
