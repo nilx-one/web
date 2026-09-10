@@ -28,52 +28,93 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+import {
+  createManualLocationMapRenderer,
+  locationControlFingerprint,
+  readTelegramLocationControl,
+} from "./location-control";
+
 const container = document.querySelector<HTMLElement>("#root");
 
 if (container === null) {
   throw new Error("0x1 root element is missing");
 }
 
-// A Mini App runs in an embedded browser, so the host reuses the browser
-// geolocation capability rather than growing a Telegram-specific one. Presence
-// capture remains intentionally unwired until its iOS behavior is verified
-// firsthand; the existing host location still drives ordinary map presentation.
-const telegramBridge = resolveTelegramWebApp(window);
-declareHostLanguages(telegramLanguageTags(telegramBridge));
-const host = createTelegramHost(telegramBridge, {
-  geolocation: createBrowserGeolocation(),
-});
-const core = createCoreWasmClient({
-  loadBindings: loadGeneratedCoreWasmBindings,
-});
-const identity = createIdentityHttpAdapter({
-  getAuthorization: () => {
-    const authentication = host.getSnapshot().authentication;
-    return authentication.kind === "telegram-init-data" &&
-      authentication.initData.length > 0
-      ? `tma ${authentication.initData}`
-      : undefined;
-  },
-});
-const localPresence = createLocalPresenceJournal().catch(() => null);
-const journalPresenter = createRawJournalPresenter();
-const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
-const mapRenderer = createMapLibreRenderer({
-  createMap: createShadeMapFactory({
-    runtime: localPresence,
-    anchor: { lng: anchorLng, lat: anchorLat },
-    onCellTap: (tap) => journalPresenter.show(tap),
-  }),
-});
+async function bootstrap(): Promise<void> {
+  const telegramBridge = resolveTelegramWebApp(window);
+  declareHostLanguages(telegramLanguageTags(telegramBridge));
 
-createRoot(container).render(
-  <StrictMode>
-    <ProductApp
-      core={core}
-      host={host}
-      identity={identity}
-      mapRenderer={mapRenderer}
-      routerBasepath="/telegram"
-    />
-  </StrictMode>,
-);
+  // Location control is read before the host receives a geolocation
+  // capability. Only an explicit live answer enables browser GPS; unknown
+  // server state therefore cannot accidentally reveal the device position.
+  const locationControl = await readTelegramLocationControl(
+    telegramBridge?.initData ?? "",
+  );
+  const host = createTelegramHost(
+    telegramBridge,
+    locationControl.kind === "live"
+      ? { geolocation: createBrowserGeolocation() }
+      : {},
+  );
+  const core = createCoreWasmClient({
+    loadBindings: loadGeneratedCoreWasmBindings,
+  });
+  const identity = createIdentityHttpAdapter({
+    getAuthorization: () => {
+      const authentication = host.getSnapshot().authentication;
+      return authentication.kind === "telegram-init-data" &&
+        authentication.initData.length > 0
+        ? `tma ${authentication.initData}`
+        : undefined;
+    },
+  });
+  const localPresence = createLocalPresenceJournal().catch(() => null);
+  const journalPresenter = createRawJournalPresenter();
+  const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
+  const baseMapRenderer = createMapLibreRenderer({
+    createMap: createShadeMapFactory({
+      runtime: localPresence,
+      anchor: { lng: anchorLng, lat: anchorLat },
+      onCellTap: (tap) => journalPresenter.show(tap),
+    }),
+  });
+  const mapRenderer =
+    locationControl.kind === "manual"
+      ? createManualLocationMapRenderer(
+          baseMapRenderer,
+          locationControl.position,
+        )
+      : baseMapRenderer;
+
+  // Telegram commonly keeps a Mini App alive while the user returns to the
+  // bot. Re-read when it becomes visible; a changed mode needs a fresh
+  // composition because geolocation authority is intentionally immutable for
+  // the lifetime of one host instance.
+  const initialLocationFingerprint = locationControlFingerprint(locationControl);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    void readTelegramLocationControl(telegramBridge?.initData ?? "").then(
+      (next) => {
+        if (
+          locationControlFingerprint(next) !== initialLocationFingerprint
+        ) {
+          window.location.reload();
+        }
+      },
+    );
+  });
+
+  createRoot(container).render(
+    <StrictMode>
+      <ProductApp
+        core={core}
+        host={host}
+        identity={identity}
+        mapRenderer={mapRenderer}
+        routerBasepath="/telegram"
+      />
+    </StrictMode>,
+  );
+}
+
+void bootstrap();
