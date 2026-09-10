@@ -18,6 +18,7 @@ import {
   type MapBodyActivation,
   type MapObservedPosition,
   type MapObservedPositionLabel,
+  type MapPointSelection,
   type MapRenderer,
   type MapRendererStatus,
   type MapScreenPoint,
@@ -120,6 +121,11 @@ export type MapLabelMarkerFactory = (
   center: [longitude: number, latitude: number],
 ) => MapLabelMarker;
 
+export type MapSelectionMarkerFactory = (
+  map: MapLibreMap,
+  center: [longitude: number, latitude: number],
+) => MapLabelMarker;
+
 export interface MapLibreRenderer extends MapRenderer {
   readonly avatars: AvatarLayerContract;
 }
@@ -131,6 +137,7 @@ export interface MapLibreRendererOptions {
   readonly initialCamera?: MapCamera;
   readonly createMap?: MapFactory;
   readonly createLabelMarker?: MapLabelMarkerFactory;
+  readonly createSelectionMarker?: MapSelectionMarkerFactory;
   readonly loadTimeoutMs?: number;
 }
 
@@ -152,6 +159,17 @@ function createMapLibreLabelMarker(
     setLngLat: (next) => {
       marker.setLngLat(next);
     },
+    remove: () => marker.remove(),
+  };
+}
+
+function createMapLibreSelectionMarker(
+  map: MapLibreMap,
+  center: [longitude: number, latitude: number],
+): MapLabelMarker {
+  const marker = new Marker({ anchor: "bottom" }).setLngLat(center).addTo(map);
+  return {
+    setLngLat: (next) => marker.setLngLat(next),
     remove: () => marker.remove(),
   };
 }
@@ -204,6 +222,17 @@ function ensureWorkerUrl(): void {
   workerUrlBound = true;
 }
 
+function validPoint(point: MapPointSelection): boolean {
+  return (
+    Number.isFinite(point.longitude) &&
+    Number.isFinite(point.latitude) &&
+    point.longitude >= -180 &&
+    point.longitude <= 180 &&
+    point.latitude >= -90 &&
+    point.latitude <= 90
+  );
+}
+
 export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapLibreRenderer {
@@ -214,6 +243,8 @@ export function createMapLibreRenderer(
     options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
   const createLabelMarker =
     options.createLabelMarker ?? createMapLibreLabelMarker;
+  const createSelectionMarker =
+    options.createSelectionMarker ?? createMapLibreSelectionMarker;
   let appearance = options.initialAppearance ?? DEFAULT_MAP_APPEARANCE;
   let dimension = options.initialDimension ?? DEFAULT_MAP_DIMENSION;
   let status: MapRendererStatus = { kind: "unmounted" };
@@ -275,11 +306,14 @@ export function createMapLibreRenderer(
   let observedLabel: MapObservedPositionLabel | null = null;
   let labelMarker: MapLabelMarker | undefined;
   let labelElement: HTMLElement | undefined;
+  let selectionPoint: MapPointSelection | null = null;
+  let selectionMarker: MapLabelMarker | undefined;
   const listeners = new Set<(next: MapRendererStatus) => void>();
   const cameraListeners = new Set<(change: MapCameraChange) => void>();
   const bodyActivationListeners = new Set<
     (activation: MapBodyActivation) => void
   >();
+  const pointSelectionListeners = new Set<(point: MapPointSelection) => void>();
 
   function clearLoadTimer(): void {
     if (loadTimer === undefined) {
@@ -420,6 +454,24 @@ export function createMapLibreRenderer(
     updateLabelVisibility(mounted);
   }
 
+  function applySelectionPoint(mounted: MapLibreMap): void {
+    if (selectionPoint === null) {
+      selectionMarker?.remove();
+      selectionMarker = undefined;
+      return;
+    }
+
+    const center: [number, number] = [
+      selectionPoint.longitude,
+      selectionPoint.latitude,
+    ];
+    if (selectionMarker === undefined) {
+      selectionMarker = createSelectionMarker(mounted, center);
+    } else {
+      selectionMarker.setLngLat(center);
+    }
+  }
+
   function removeObservedPositionLayers(mounted: MapLibreMap): void {
     for (const layerId of [
       OBSERVED_POSITION_ACCURACY_LAYER_ID,
@@ -494,6 +546,7 @@ export function createMapLibreRenderer(
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
     applyObservedPosition(mounted);
+    applySelectionPoint(mounted);
     if (firstPaintDone && avatarLayer?.hasInstances())
       ensureAvatarLayer(mounted);
     presentationApplied = true;
@@ -503,6 +556,11 @@ export function createMapLibreRenderer(
     labelMarker?.remove();
     labelMarker = undefined;
     labelElement = undefined;
+  }
+
+  function releaseSelectionMarker(): void {
+    selectionMarker?.remove();
+    selectionMarker = undefined;
   }
 
   return {
@@ -570,18 +628,39 @@ export function createMapLibreRenderer(
         mountedMap.on("zoom", () => {
           updateLabelVisibility(mountedMap);
         });
-        // MapLibre already separates a click from a drag, so a pan that begins
-        // on a body stays a pan. What is left is a person reaching for what
-        // they can see, and the renderer only says which body that was.
-        mountedMap.on("click", (event: { point?: MapScreenPoint }) => {
-          const point = event?.point;
-          if (point === undefined) return;
-          const id = bodyAtPoint(drawnBodies(mountedMap), point);
-          if (id === undefined) return;
-          for (const listener of [...bodyActivationListeners]) {
-            listener({ id });
-          }
-        });
+        // Point-selection mode consumes the tap before ordinary world actions.
+        // That keeps an editor gesture from also activating a body underneath.
+        mountedMap.on(
+          "click",
+          (event: {
+            point?: MapScreenPoint;
+            lngLat?: { lng: number; lat: number };
+          }) => {
+            if (pointSelectionListeners.size > 0) {
+              const selected = event?.lngLat;
+              if (selected !== undefined) {
+                const point: MapPointSelection = {
+                  longitude: selected.lng,
+                  latitude: selected.lat,
+                };
+                if (validPoint(point)) {
+                  for (const listener of [...pointSelectionListeners]) {
+                    listener({ ...point });
+                  }
+                }
+              }
+              return;
+            }
+
+            const point = event?.point;
+            if (point === undefined) return;
+            const id = bodyAtPoint(drawnBodies(mountedMap), point);
+            if (id === undefined) return;
+            for (const listener of [...bodyActivationListeners]) {
+              listener({ id });
+            }
+          },
+        );
         mountedMap.once("load", () => {
           styleResolved = true;
           firstPaintDone = true;
@@ -605,6 +684,7 @@ export function createMapLibreRenderer(
 
     unmount() {
       releaseLabel();
+      releaseSelectionMarker();
       map?.remove();
       map = undefined;
       styleResolved = false;
@@ -634,6 +714,11 @@ export function createMapLibreRenderer(
     subscribeBodyActivation(listener) {
       bodyActivationListeners.add(listener);
       return () => bodyActivationListeners.delete(listener);
+    },
+
+    subscribePointSelection(listener) {
+      pointSelectionListeners.add(listener);
+      return () => pointSelectionListeners.delete(listener);
     },
 
     setCamera(next: MapCamera, cameraOptions: MapCameraOptions = {}) {
@@ -704,6 +789,11 @@ export function createMapLibreRenderer(
       if (map !== undefined && presentationApplied) {
         applyLabel(map);
       }
+    },
+
+    setSelectionPoint(next: MapPointSelection | null) {
+      selectionPoint = next === null ? null : { ...next };
+      if (map !== undefined) applySelectionPoint(map);
     },
   };
 }
