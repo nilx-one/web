@@ -254,7 +254,7 @@ describe("ProductApp identity", () => {
     await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
       await screen.findByRole("button", {
-        name: "Take the wheel as 0xaSky",
+        name: "Focus the world on 0xaSky",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Authenticated as/)).toBeNull();
@@ -358,7 +358,7 @@ describe("ProductApp identity", () => {
     expect(registerNative).not.toHaveBeenCalled();
     expect(
       await screen.findByRole("button", {
-        name: "Take the wheel as 0xfrSb2",
+        name: "Focus the world on 0xfrSb2",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Authenticated as/)).toBeNull();
@@ -769,7 +769,7 @@ describe("ProductApp identity", () => {
     );
     expect(await screen.findByText("0x1-rk-test")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "Take the wheel as 0xaSky" }),
+      screen.queryByRole("button", { name: "Focus the world on 0xaSky" }),
     ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "I saved this recovery key" }),
@@ -779,7 +779,7 @@ describe("ProductApp identity", () => {
     await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
       await screen.findByRole("button", {
-        name: "Take the wheel as 0xaSky",
+        name: "Focus the world on 0xaSky",
       }),
     ).toBeVisible();
     expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
@@ -812,7 +812,7 @@ describe("ProductApp identity", () => {
       } else {
         expect(
           await screen.findByRole("button", {
-            name: "Take the wheel as 0x0sky",
+            name: "Focus the world on 0x0sky",
           }),
         ).toBeVisible();
         expect(
@@ -886,7 +886,7 @@ describe("ProductApp identity", () => {
     await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
       await screen.findByRole("button", {
-        name: "Take the wheel as 0x0sky",
+        name: "Focus the world on 0x0sky",
       }),
     ).toBeVisible();
     expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
@@ -918,7 +918,7 @@ describe("ProductApp identity", () => {
       />,
     );
 
-    await screen.findByRole("button", { name: "Take the wheel as 0x0sky" });
+    await screen.findByRole("button", { name: "Focus the world on 0x0sky" });
     await user.click(
       document.querySelector<HTMLAnchorElement>(
         'a[href="/identity"]',
@@ -1027,7 +1027,7 @@ describe("ProductApp identity", () => {
     // Choosing ends the step: the world opens with that body recorded.
     expect(
       await screen.findByRole("button", {
-        name: "Take the wheel as 0xaSky",
+        name: "Focus the world on 0xaSky",
       }),
     ).toBeVisible();
   });
@@ -1063,7 +1063,7 @@ describe("ProductApp identity", () => {
       />,
     );
 
-    await screen.findByRole("button", { name: "Take the wheel as 0x0sky" });
+    await screen.findByRole("button", { name: "Focus the world on 0x0sky" });
     await user.click(
       document.querySelector<HTMLAnchorElement>(
         'a[href="/identity"]',
@@ -1100,7 +1100,7 @@ describe("ProductApp identity", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "Take the wheel as 0x0sky",
+        name: "Focus the world on 0x0sky",
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Authenticated as/)).toBeNull();

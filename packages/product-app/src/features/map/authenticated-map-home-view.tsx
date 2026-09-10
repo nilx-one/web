@@ -386,8 +386,9 @@ export function AuthenticatedMapHomeView({
     StatusToastItem | undefined
   >(undefined);
   // Who is at the wheel is presentation: it moves nothing in the shared world.
-  // The world opens on the Avaia — the Bond is spectating until he takes it.
-  const [wheel, setWheel] = useState<DockSeat>("avaia");
+  // The authenticated world opens on this Bond; its Avaia takes the wheel only
+  // after an explicit handover, so the first body is the Bond's stored choice.
+  const [wheel, setWheel] = useState<DockSeat>("bond");
   const [handover, setHandover] = useState<WheelHandover | undefined>(
     undefined,
   );

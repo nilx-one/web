@@ -108,7 +108,7 @@ describe("persistent authenticated world routing", () => {
     );
 
     await screen.findByRole("button", {
-      name: "Take the wheel as 0x0sky",
+      name: "Focus the world on 0x0sky",
     });
     const initialMap = mapContainer();
     expect(renderer.mount).toHaveBeenCalledOnce();
