@@ -23,24 +23,15 @@ jobs:
 
           path = Path("packages/product-app/src/index.tsx")
           text = path.read_text()
-          before = '''    const deviceAvaiaAvailability = avaiaAvailability({
-              acceleratedGraphics: "gpu" in navigator,
-            });
-            return (
-'''
-          after = '''    const deviceAvaiaAvailability = avaiaAvailability({
-              acceleratedGraphics: "gpu" in navigator,
-            });
-            const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
-            return (
-'''
-          if before not in text:
-            raise SystemExit("authenticated block marker not found")
-          text = text.replace(before, after, 1)
-          fallback = ''': viewModel.identity.avaiaPubDress;'''
+          marker = '    const deviceAvaiaAvailability = avaiaAvailability({'
+          marker_index = text.index(marker)
+          return_index = text.index('    return (', marker_index)
+          capture = '    const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;' + chr(10)
+          text = text[:return_index] + capture + text[return_index:]
+          fallback = ': viewModel.identity.avaiaPubDress;'
           if fallback not in text:
             raise SystemExit("Avaia fallback marker not found")
-          text = text.replace(fallback, ''': ownedAvaiaPubDress;''', 1)
+          text = text.replace(fallback, ': ownedAvaiaPubDress;', 1)
           path.write_text(text)
       - name: Commit correction and remove helper workflow
         shell: bash
