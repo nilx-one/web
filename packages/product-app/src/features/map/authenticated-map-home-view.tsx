@@ -110,12 +110,10 @@ export interface AuthenticatedMapHomeViewProps {
   /** Starts fetching that runtime. Absent means this host cannot fetch it. */
   readonly onPrepareAvaia?: () => void;
   /**
-   * The two addresses this Bond may name: its own, and its Avaia's. Without
-   * them the profile presents the addresses it already has and offers nothing
-   * to change.
+   * The Bond address may be renamed here. Its owned Avaia is edited only on
+   * the dedicated Owned Avaia surface, so this profile has one address editor.
    */
   readonly slugEdit?: AddressSlugViewState;
-  readonly avaiaEdit?: AddressSlugViewState;
   /**
    * The Avaia this Bond owns, as identity contract 8 keeps it. Without it the
    * Dock knows of no stored configuration and stays a runtime-only Dock.
@@ -137,8 +135,6 @@ export interface AuthenticatedMapHomeViewProps {
   ) => void;
   readonly onSlugChange?: (slug: string) => void;
   readonly onSlugSubmit?: () => void;
-  readonly onAvaiaChange?: (slug: string) => void;
-  readonly onAvaiaSubmit?: () => void;
   readonly onLogout?: () => void;
   readonly onNavigate?: (route: ShellRoute) => void;
 }
@@ -362,7 +358,6 @@ export function AuthenticatedMapHomeView({
   avaiaAvailability = "unavailable",
   onPrepareAvaia,
   slugEdit,
-  avaiaEdit,
   avaiaSetup,
   onAvaiaSetupChange,
   onAvaiaSetupSubmit,
@@ -370,8 +365,6 @@ export function AuthenticatedMapHomeView({
   onAvatarChoice,
   onSlugChange,
   onSlugSubmit,
-  onAvaiaChange,
-  onAvaiaSubmit,
   onLogout,
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
@@ -984,14 +977,6 @@ export function AuthenticatedMapHomeView({
                       fallback={pubDress}
                       onChange={onSlugChange}
                       onSubmit={onSlugSubmit}
-                    />
-                    <AddressField
-                      id="avaia-slug"
-                      label="avaia"
-                      state={avaiaEdit}
-                      fallback={avaiaLabel}
-                      onChange={onAvaiaChange}
-                      onSubmit={onAvaiaSubmit}
                     />
                     {avatarChoice === undefined ? null : (
                       <fieldset className="avatar-choice">

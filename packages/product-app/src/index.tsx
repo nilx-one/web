@@ -16,7 +16,6 @@ import {
   RegisterNativeIdentity,
   ReadAvaiaProfile,
   RegisterProviderIdentity,
-  RenameAvaiaSlug,
   RenamePubDressSlug,
   SetProviderPassword,
   ResolvePubDress,
@@ -70,10 +69,7 @@ import { normalizePubDressCredentialInput } from "./features/identity/pub-dress-
 import { createAvatarChoiceViewState } from "./features/identity/avatar-choice-view-model";
 import { useBondProviderConnections } from "./features/identity/use-bond-provider-connections";
 import { createAvatarChoiceStepViewState } from "./features/identity/identity-foundation-view-model";
-import {
-  createAvaiaSlugViewState,
-  createProfileSlugViewState,
-} from "./features/identity/profile-slug-view-model";
+import { createProfileSlugViewState } from "./features/identity/profile-slug-view-model";
 import {
   composeAvaiaPubDress,
   createAvaiaSetupViewState,
@@ -262,7 +258,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   // A new Bond is asked for a body once. Deciding later is a real answer, so
   // the step is not offered again in this session.
   const [avatarStepDeclined, setAvatarStepDeclined] = useState(false);
-  const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);
   // Undefined means the Avaia setup surface uses its stored slug stem.
   const [avaiaProfileSlugStemDraft, setAvaiaProfileSlugStemDraft] = useState<
     string | undefined
@@ -505,16 +500,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     gcTime: 0,
     onSuccess: async (result) => {
       if (result.kind !== "chosen") return;
-      await refreshIdentityProjections();
-    },
-  });
-  const renameAvaia = useMutation({
-    mutationFn: (slug: string) =>
-      new RenameAvaiaSlug(dependencies.identity).execute(slug),
-    gcTime: 0,
-    onSuccess: async (result) => {
-      if (result.kind !== "renamed") return;
-      setAvaiaDraft(undefined);
       await refreshIdentityProjections();
     },
   });
@@ -910,13 +895,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           renameSlug.isPending,
           renameSlug.data,
         )}
-        avaiaEdit={createAvaiaSlugViewState(
-          viewModel.identity.avaiaPubDress,
-          viewModel.identity.pubDress,
-          avaiaDraft,
-          renameAvaia.isPending,
-          renameAvaia.data,
-        )}
         {...(avaiaProfileAccess === undefined
           ? {}
           : {
@@ -964,18 +942,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             renameSlug.mutate(slugDraft);
           }
         }}
-        onAvaiaChange={(next: string) => {
-          renameAvaia.reset();
-          setAvaiaDraft(next);
-        }}
         avatarChoice={avatarChoice}
         onAvatarChoice={(model) => {
           if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
-        }}
-        onAvaiaSubmit={() => {
-          if (avaiaDraft !== undefined && !renameAvaia.isPending) {
-            renameAvaia.mutate(avaiaDraft);
-          }
         }}
         {...(viewModel.identity.avaiaPubDress === undefined
           ? {}
