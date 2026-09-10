@@ -36,6 +36,7 @@ describe("frontend localization", () => {
       "uk-UA",
     );
     expect(resolveLocale("auto", [], ["en-GB", "uk-UA"])).toBe("en");
+    expect(resolveLocale("auto", [], ["en-UA"])).toBe("en");
   });
 
   it("lets supported host language evidence outrank the embedded browser", () => {
