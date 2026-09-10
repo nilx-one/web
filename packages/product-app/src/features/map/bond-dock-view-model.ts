@@ -115,10 +115,10 @@ export function createBondDockViewState(
   // world from, so the runtime is stated on the card and gates nothing.
   const preparesRuntime =
     driving === "bond" && input.avaia === "downloadable" && input.downloadable;
-  // A client that has read no profile knows of no Avaia to configure, and
-  // keeps the Bond action it already had.
+  // Configuration state can change the wording, but never which identity the
+  // action targets: the left seat is the source of truth for the Dock action.
   const configure: DockConfigureAction =
-    driving === "avaia" && input.avaiaConfiguration !== undefined
+    driving === "avaia"
       ? {
           seat: "avaia",
           label:

@@ -59,13 +59,14 @@ all, states no configuration, and keeps exactly the Dock described above.
 
 ## Navigation
 
-The Dock's header carries one action, and it configures whoever is driving:
-with the Bond at the wheel it opens the Bond edit surface at `/identity`, and
-with the Avaia at the wheel it opens [Avaia setup](avaia-setup.md) — **Set up**
-while nothing has been configured, **Edit** once something has. Its accessible
-name is the identity it would configure rather than a bare "edit", because which
-identity that is depends on who is at the wheel. A host that reads no Avaia
-profile has nothing of the Avaia's to configure and keeps the Bond action.
+The Dock's header carries one `edit` action, and it configures the identity
+currently selected on the left. With the Bond at the wheel it opens the Bond
+edit surface at `/identity`; with the Avaia at the wheel it opens
+[Avaia setup](avaia-setup.md). Configuration state may change the accessible
+name to **Set up** while nothing has been configured or **Edit** otherwise, but
+it never changes which identity the action targets. Its accessible name includes
+the identity it would configure rather than exposing a bare "edit" to assistive
+technology.
 
 Configuring is not driving: opening it changes no seat and moves no camera.
 

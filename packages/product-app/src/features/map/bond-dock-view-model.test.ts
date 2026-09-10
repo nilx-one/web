@@ -104,12 +104,11 @@ describe("Dock seats", () => {
 });
 
 describe("Avaia configuration on the Dock", () => {
-  it("says nothing about configuration until a profile has been read", () => {
+  it("keeps the selected Avaia as the edit target before its profile is read", () => {
     const dock = createBondDockViewState({ ...base, wheel: "avaia" });
 
     expect(dock.left).toMatchObject({ seat: "avaia", role: "driving" });
-    // With no Avaia to configure, the Dock's action stays the Bond's.
-    expect(dock.configure).toEqual({ seat: "bond", label: "Edit 0x0sky" });
+    expect(dock.configure).toEqual({ seat: "avaia", label: "Edit 0skai" });
   });
 
   it("states what an owner has not configured, in either seat", () => {
