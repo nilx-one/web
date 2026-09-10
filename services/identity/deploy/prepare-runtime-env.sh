@@ -89,6 +89,13 @@ fi
 
 telegram_oidc_client_id="$(read_provider_value TELEGRAM_OIDC_CLIENT_ID)"
 telegram_oidc_client_secret="$(read_provider_value TELEGRAM_OIDC_CLIENT_SECRET)"
+telegram_oidc_from_provider=false
+if [ -n "$telegram_oidc_client_id" ] || [ -n "$telegram_oidc_client_secret" ]; then
+  telegram_oidc_from_provider=true
+else
+  telegram_oidc_client_id="$(read_existing_value TELEGRAM_OIDC_CLIENT_ID)"
+  telegram_oidc_client_secret="$(read_existing_value TELEGRAM_OIDC_CLIENT_SECRET)"
+fi
 validate_pair "Telegram browser OAuth" "$telegram_oidc_client_id" "$telegram_oidc_client_secret"
 
 discord_client_id="$(read_provider_value DISCORD_CLIENT_ID)"
@@ -101,6 +108,10 @@ trap 'rm -f "$next_env"' EXIT HUP INT TERM
 {
   printf 'NATIVE_AUTH_SECRET=%s\n' "$native_auth_secret"
   printf 'PASSWORD_PEPPER=%s\n' "$password_pepper"
+  if [ "$telegram_oidc_from_provider" = false ] && [ -n "$telegram_oidc_client_id" ]; then
+    printf 'TELEGRAM_OIDC_CLIENT_ID=%s\n' "$telegram_oidc_client_id"
+    printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$telegram_oidc_client_secret"
+  fi
   cat "$provider_env"
 } >"$next_env"
 chmod 0600 "$next_env"
