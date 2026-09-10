@@ -1244,21 +1244,21 @@ mod tests {
         .expect("legacy data");
         legacy.close().await;
 
-        let address = PubDress::from_str("0x0Sky").expect("valid address");
+        let address = "0x0Sky";
         let repository = IdentityRepository::connect(&database_url)
             .await
             .expect("upgrade");
         assert_eq!(
-            repository.avatar_model(&address).await.expect("old choice"),
+            repository.avatar_model(address).await.expect("old choice"),
             Some("dasha-study".to_owned())
         );
         repository
-            .set_avatar_model(&address, "dasha-v2-study")
+            .set_avatar_model(address, "dasha-v2-study")
             .await
             .expect("fourth choice accepted");
         assert!(
             repository
-                .set_avatar_model(&address, "not-published")
+                .set_avatar_model(address, "not-published")
                 .await
                 .is_err()
         );
@@ -1268,7 +1268,7 @@ mod tests {
             .await
             .expect("idempotent reopen");
         assert_eq!(
-            reopened.avatar_model(&address).await.expect("new choice"),
+            reopened.avatar_model(address).await.expect("new choice"),
             Some("dasha-v2-study".to_owned())
         );
         let owner: String = sqlx::query_scalar(
