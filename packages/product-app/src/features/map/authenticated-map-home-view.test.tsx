@@ -813,7 +813,9 @@ describe("AuthenticatedMapHomeView", () => {
     );
     expect(drawn.at(-1)?.modelId).toBe("dasha-study");
     // The seat nobody is in is dropped rather than left standing behind.
-    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("avaia");
+    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith(
+      "avaia",
+    );
   });
 
   it("settles the leaving body before the arriving one, rather than swapping", async () => {
