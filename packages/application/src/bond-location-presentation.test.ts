@@ -18,7 +18,11 @@ const other = "0x2other";
 
 describe("per-Bond location presentation", () => {
   it("uses the observed position when the counterpart has no override", () => {
-    const resolved = resolveBondLocationPresentation(other, observed, new Map());
+    const resolved = resolveBondLocationPresentation(
+      other,
+      observed,
+      new Map(),
+    );
 
     expect(resolved).toEqual({
       counterpartPubDress: other,
@@ -75,14 +79,21 @@ describe("per-Bond location presentation", () => {
     });
   });
 
-  it("fails closed instead of leaking the observed position from a corrupt override", () => {
-    const corrupt = new Map<string, WorldPosition>([
-      [target, { longitude: Number.NaN, latitude: 48.8566 }],
-    ]);
-    const resolved = resolveBondLocationPresentation(target, observed, corrupt);
+  it(
+    "fails closed instead of leaking the observed position from a corrupt override",
+    () => {
+      const corrupt = new Map<string, WorldPosition>([
+        [target, { longitude: Number.NaN, latitude: 48.8566 }],
+      ]);
+      const resolved = resolveBondLocationPresentation(
+        target,
+        observed,
+        corrupt,
+      );
 
-    expect(resolved).toBeUndefined();
-  });
+      expect(resolved).toBeUndefined();
+    },
+  );
 
   it("fails closed for an invalid counterpart address", () => {
     const resolved = resolveBondLocationPresentation(
@@ -94,22 +105,27 @@ describe("per-Bond location presentation", () => {
     expect(resolved).toBeUndefined();
   });
 
-  it("rejects invalid override configuration before it enters policy state", () => {
-    const configureInvalidPosition = () => {
-      setBondLocationOverride(new Map(), target, {
-        longitude: 181,
-        latitude: 48.8566,
-      });
-    };
-    const configureInvalidCounterpart = () => {
-      setBondLocationOverride(new Map(), "friend", presentedElsewhere);
-    };
+  it(
+    "rejects invalid override configuration before it enters policy state",
+    () => {
+      const configureInvalidPosition = () => {
+        setBondLocationOverride(new Map(), target, {
+          longitude: 181,
+          latitude: 48.8566,
+        });
+      };
+      const configureInvalidCounterpart = () => {
+        setBondLocationOverride(new Map(), "friend", presentedElsewhere);
+      };
 
-    expect(configureInvalidPosition).toThrowError("invalid-location-override");
-    expect(configureInvalidCounterpart).toThrowError(
-      "invalid-counterpart-pub-dress",
-    );
-  });
+      expect(configureInvalidPosition).toThrowError(
+        "invalid-location-override",
+      );
+      expect(configureInvalidCounterpart).toThrowError(
+        "invalid-counterpart-pub-dress",
+      );
+    },
+  );
 
   it("updates policy immutably and snapshots caller-owned positions", () => {
     const original: BondLocationOverrides = new Map();
