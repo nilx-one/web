@@ -80,10 +80,7 @@ async function bootstrap(): Promise<void> {
   });
   const mapRenderer =
     locationControl.kind === "manual"
-      ? createManualLocationMapRenderer(
-          baseMapRenderer,
-          locationControl.position,
-        )
+      ? createManualLocationMapRenderer(baseMapRenderer, locationControl.position)
       : baseMapRenderer;
 
   // Telegram commonly keeps a Mini App alive while the user returns to the
@@ -95,9 +92,7 @@ async function bootstrap(): Promise<void> {
     if (document.visibilityState !== "visible") return;
     void readTelegramLocationControl(telegramBridge?.initData ?? "").then(
       (next) => {
-        if (
-          locationControlFingerprint(next) !== initialLocationFingerprint
-        ) {
+        if (locationControlFingerprint(next) !== initialLocationFingerprint) {
           window.location.reload();
         }
       },
