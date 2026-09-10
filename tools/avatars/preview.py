@@ -132,11 +132,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("output", nargs="?")
 parser.add_argument("--models", nargs="+", default=["sky", "dasha", "kai"])
 parser.add_argument("--angles", nargs="+", type=float, default=[0, -35])
+parser.add_argument("--asset-dir", type=Path, default=ASSETS)
 # The published thumbnails a client shows while a person chooses a body. They
 # are generated from the same studies, so a picker can never offer a figure the
 # world would not draw.
 parser.add_argument("--thumbnails", help="write one front-view PNG per study here")
 arguments = parser.parse_args()
+ASSETS = arguments.asset_dir
 
 if arguments.thumbnails is not None:
     directory = Path(arguments.thumbnails)

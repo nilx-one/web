@@ -47,6 +47,7 @@ const STUDIES: Readonly<Record<AvatarModel, AvatarStudy>> = {
   "sky-study": { name: "Sky", detail: "masculine study" },
   "dasha-study": { name: "Dasha", detail: "feminine study" },
   "kai-study": { name: "Kai", detail: "non-binary study" },
+  "dasha-v2-study": { name: "Dasha 2.0", detail: "feminine study" },
 };
 
 /** How a published study is named wherever a body is described, not only here. */

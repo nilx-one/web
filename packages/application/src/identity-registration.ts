@@ -6,7 +6,12 @@
  * carry a newer model id; preserve that explicit choice opaquely instead of
  * collapsing it into the absence of a choice.
  */
-export const AVATAR_MODELS = ["sky-study", "dasha-study", "kai-study"] as const;
+export const AVATAR_MODELS = [
+  "sky-study",
+  "dasha-study",
+  "kai-study",
+  "dasha-v2-study",
+] as const;
 
 export type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
 /** A model this client publishes and is allowed to send as a new choice. */

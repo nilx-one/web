@@ -54,7 +54,9 @@ interface ViewOverrides {
   onPrepareAvaia?: () => void;
   slugEdit?: AddressSlugViewState;
   avatarChoice?: ReturnType<typeof createAvatarChoiceViewState>;
-  onAvatarChoice?: (model: "sky-study" | "dasha-study" | "kai-study") => void;
+  onAvatarChoice?: (
+    model: "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study",
+  ) => void;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -394,7 +396,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getAllByText("Not connected")).toHaveLength(2);
   });
 
-  it("offers the three studies, assigns none, and draws no fallback body", async () => {
+  it("offers the four studies, assigns none, and draws no fallback body", async () => {
     const onAvatarChoice = vi.fn();
     const mapRenderer = renderer();
     renderView({
@@ -405,9 +407,11 @@ describe("AuthenticatedMapHomeView", () => {
       onAvatarChoice,
     });
 
-    for (const name of ["Sky", "Dasha", "Kai"]) {
+    for (const name of ["Sky", "Dasha", "Kai", "Dasha 2.0"]) {
       expect(
-        screen.getByRole("radio", { name: new RegExp(name) }),
+        screen.getByRole("radio", {
+          name: new RegExp(`${name}(?! 2\\.0)`),
+        }),
       ).not.toBeChecked();
     }
     expect(
@@ -417,7 +421,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.avatars).toBeDefined();
     expect(vi.mocked(mapRenderer.avatars!.upsert)).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("radio", { name: /Dasha/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Dasha(?! 2\.0)/ }));
 
     expect(onAvatarChoice).toHaveBeenCalledExactlyOnceWith("dasha-study");
   });
@@ -434,9 +438,11 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByText(/future-study, which this client cannot display/i),
     ).toBeVisible();
-    for (const name of ["Sky", "Dasha", "Kai"]) {
+    for (const name of ["Sky", "Dasha", "Kai", "Dasha 2.0"]) {
       expect(
-        screen.getByRole("radio", { name: new RegExp(name) }),
+        screen.getByRole("radio", {
+          name: new RegExp(`${name}(?! 2\\.0)`),
+        }),
       ).not.toBeChecked();
     }
   });

@@ -6,13 +6,14 @@ import { describe, expect, it } from "vitest";
 import { createAvatarChoiceViewState } from "./avatar-choice-view-model";
 
 describe("avatar choice", () => {
-  it("offers the three published studies and assigns no body by default", () => {
+  it("offers the four published studies and assigns no body by default", () => {
     const state = createAvatarChoiceViewState(undefined, undefined);
 
     expect(state.options.map((option) => option.model)).toEqual([
       "sky-study",
       "dasha-study",
       "kai-study",
+      "dasha-v2-study",
     ]);
     expect(state.options.every((option) => !option.selected)).toBe(true);
     expect(state.unchosen).toBe(true);
@@ -71,6 +72,7 @@ describe("avatar choice", () => {
       { name: "Sky", detail: "masculine study" },
       { name: "Dasha", detail: "feminine study" },
       { name: "Kai", detail: "non-binary study" },
+      { name: "Dasha 2.0", detail: "feminine study" },
     ]);
   });
 });
@@ -85,6 +87,7 @@ describe("avatar choice previews", () => {
       "/avatars/0.1.0/sky-study.png",
       "/avatars/0.1.0/dasha-study.png",
       "/avatars/0.1.0/kai-study.png",
+      "/avatars/0.2.0/dasha-v2-study.png",
     ]);
   });
 });

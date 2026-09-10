@@ -941,7 +941,8 @@ describe("ProductApp identity", () => {
 
   it("offers a body once a Bond exists, and remembers what it chose", async () => {
     const user = userEvent.setup();
-    let avatarModel: "sky-study" | "dasha-study" | "kai-study" | undefined;
+    let avatarModel:
+      Parameters<IdentityAccessPort["chooseAvatarModel"]>[0] | undefined;
     const chooseAvatarModel = vi
       .fn<IdentityAccessPort["chooseAvatarModel"]>()
       .mockImplementation(async (model) => {
@@ -1015,9 +1016,11 @@ describe("ProductApp identity", () => {
     expect(
       await screen.findByRole("heading", { name: "Choose your body." }),
     ).toBeVisible();
-    for (const study of ["Sky", "Dasha", "Kai"]) {
+    for (const study of ["Sky", "Dasha", "Kai", "Dasha 2.0"]) {
       expect(
-        screen.getByRole("button", { name: new RegExp(study) }),
+        screen.getByRole("button", {
+          name: new RegExp(`${study}(?! 2\\.0)`),
+        }),
       ).toBeVisible();
     }
 
@@ -1034,7 +1037,8 @@ describe("ProductApp identity", () => {
 
   it("chooses an avatar study from the profile and stands it in the world", async () => {
     const user = userEvent.setup();
-    let avatarModel: "sky-study" | "dasha-study" | "kai-study" | undefined;
+    let avatarModel:
+      Parameters<IdentityAccessPort["chooseAvatarModel"]>[0] | undefined;
     const chooseAvatarModel = vi
       .fn<IdentityAccessPort["chooseAvatarModel"]>()
       .mockImplementation(async (model) => {
@@ -1070,13 +1074,13 @@ describe("ProductApp identity", () => {
       ) as HTMLAnchorElement,
     );
 
-    const study = await screen.findByRole("radio", { name: /Kai/ });
+    const study = await screen.findByRole("radio", { name: /Dasha 2\.0/ });
     expect(study).not.toBeChecked();
     await user.click(study);
 
-    expect(chooseAvatarModel).toHaveBeenCalledExactlyOnceWith("kai-study");
+    expect(chooseAvatarModel).toHaveBeenCalledExactlyOnceWith("dasha-v2-study");
     await waitFor(() =>
-      expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked(),
+      expect(screen.getByRole("radio", { name: /Dasha 2\.0/ })).toBeChecked(),
     );
     // No observation exists in this environment, so no body is placed: an
     // avatar is drawn where the device saw itself, or not at all.
