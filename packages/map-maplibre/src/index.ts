@@ -313,9 +313,7 @@ export function createMapLibreRenderer(
   const bodyActivationListeners = new Set<
     (activation: MapBodyActivation) => void
   >();
-  const pointSelectionListeners = new Set<
-    (point: MapPointSelection) => void
-  >();
+  const pointSelectionListeners = new Set<(point: MapPointSelection) => void>();
 
   function clearLoadTimer(): void {
     if (loadTimer === undefined) {
