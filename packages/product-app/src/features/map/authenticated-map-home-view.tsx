@@ -37,6 +37,7 @@ import {
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
+import { BondArtificialPositionSettings } from "./bond-artificial-position-settings";
 import {
   deviceLocationPosition,
   type DeviceLocationState,
@@ -1042,6 +1043,10 @@ export function AuthenticatedMapHomeView({
                 {section === "settings" ? (
                   <>
                     <LanguageSettings />
+                    <BondArtificialPositionSettings
+                      ownerPubDress={pubDress}
+                      renderer={renderer}
+                    />
                     <fieldset className="interface-settings__appearance">
                       <legend>Appearance</legend>
                       {(["light", "dark", "auto"] as const).map((mode) => (
