@@ -49,6 +49,16 @@ type AssetLoader = (
   signal: AbortSignal,
 ) => Promise<GLTF>;
 
+/**
+ * The mark of a node whose visibility the application decides.
+ *
+ * A namespaced name is a part of a modular character — a body region, a worn
+ * item; a bare name is the asset's own, a bone or an armature, and is never
+ * touched. The renderer needs no more than that: what the namespaces mean is
+ * the application's to know.
+ */
+const APPLICATION_NODE_MARK = ":";
+
 interface AvatarInstance {
   handle: AvatarHandle;
   root?: Object3D;
@@ -91,6 +101,26 @@ function defaultLoadAsset(
         reject(error);
       },
     );
+  });
+}
+
+/**
+ * Show what this body is wearing, and only that.
+ *
+ * A modular study carries every wearable it publishes in the one asset, so
+ * changing clothes is this and nothing more: no second fetch, no swapped
+ * skeleton, no reload of the identity underneath. The renderer is told which
+ * names to draw and never works out what an outfit is — with no names given,
+ * the asset is drawn exactly as it was authored.
+ */
+export function applyAvatarNodeVisibility(
+  root: Object3D,
+  visibleNodes: readonly string[] | undefined,
+): void {
+  if (visibleNodes === undefined || visibleNodes.length === 0) return;
+  root.traverse((object) => {
+    if (!object.name.includes(APPLICATION_NODE_MARK)) return;
+    object.visible = visibleNodes.includes(object.name);
   });
 }
 
@@ -148,6 +178,11 @@ export function createAvatarLayer(
     );
   }
 
+  function applyVisibility(instance: AvatarInstance): void {
+    if (instance.root === undefined) return;
+    applyAvatarNodeVisibility(instance.root, instance.handle.visibleNodes);
+  }
+
   function place(instance: AvatarInstance): void {
     const root = instance.root;
     if (root === undefined) return;
@@ -180,6 +215,7 @@ export function createAvatarLayer(
       );
       scene.add(root);
       place(instance);
+      applyVisibility(instance);
       applyClip(instance);
       map?.triggerRepaint();
     } catch {
@@ -242,6 +278,7 @@ export function createAvatarLayer(
       ) {
         existing.handle = handle;
         place(existing);
+        applyVisibility(existing);
         applyClip(existing);
         map?.triggerRepaint();
         return;

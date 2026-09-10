@@ -3,6 +3,7 @@
 
 import type {
   AvatarModel,
+  AvatarModelResult,
   BondProviderConnections,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
@@ -29,6 +30,7 @@ import {
   observation,
 } from "../../../../../tests/support/doubles";
 import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
+import { forgetAvatarChoices } from "../identity/avatar-wardrobe-store";
 import { createProfileSlugViewState } from "../identity/profile-slug-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
@@ -56,7 +58,7 @@ interface ViewOverrides {
   avatarChoice?: ReturnType<typeof createAvatarChoiceViewState>;
   onAvatarChoice?: (
     model: "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study",
-  ) => void;
+  ) => Promise<AvatarModelResult | undefined>;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -130,6 +132,9 @@ function dock(container: HTMLElement): HTMLElement {
 
 beforeEach(() => {
   window.localStorage.clear();
+  // The wardrobe keeps a module-level snapshot so React can compare it, so
+  // clearing storage alone would leave the previous test's outfit in memory.
+  forgetAvatarChoices();
 });
 
 afterEach(() => {
@@ -396,8 +401,8 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getAllByText("Not connected")).toHaveLength(2);
   });
 
-  it("offers the four studies, assigns none, and draws no fallback body", async () => {
-    const onAvatarChoice = vi.fn();
+  it("assigns no study, draws no fallback body, and offers the four in the editor", async () => {
+    const onAvatarChoice = vi.fn(async () => undefined);
     const mapRenderer = renderer();
     renderView({
       section: "identity",
@@ -407,13 +412,6 @@ describe("AuthenticatedMapHomeView", () => {
       onAvatarChoice,
     });
 
-    for (const name of ["Sky", "Dasha", "Kai", "Dasha 2.0"]) {
-      expect(
-        screen.getByRole("radio", {
-          name: new RegExp(`${name}(?! 2\\.0)`),
-        }),
-      ).not.toBeChecked();
-    }
     expect(
       screen.getByText(/no avatar is drawn until you choose/i),
     ).toBeVisible();
@@ -421,9 +419,23 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.avatars).toBeDefined();
     expect(vi.mocked(mapRenderer.avatars!.upsert)).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("radio", { name: /Dasha(?! 2\.0)/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Choose your 3D model/ }),
+    );
 
-    expect(onAvatarChoice).toHaveBeenCalledExactlyOnceWith("dasha-study");
+    for (const name of ["Sky", "Dasha", "Kai", "Dasha 2.0"]) {
+      expect(
+        screen.getByRole("radio", {
+          name: new RegExp(`${name}(?! 2\\.0)`),
+        }),
+      ).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole("radio", { name: /Dasha(?! 2\.0)/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() =>
+      expect(onAvatarChoice).toHaveBeenCalledExactlyOnceWith("dasha-study"),
+    );
   });
 
   it("reports a newer stored study without substituting another body", () => {
@@ -438,23 +450,115 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByText(/future-study, which this client cannot display/i),
     ).toBeVisible();
-    for (const name of ["Sky", "Dasha", "Kai", "Dasha 2.0"]) {
-      expect(
-        screen.getByRole("radio", {
-          name: new RegExp(`${name}(?! 2\\.0)`),
-        }),
-      ).not.toBeChecked();
-    }
+    // A stored study this client cannot draw is not replaced by one it can:
+    // the field says nothing was chosen here rather than naming another body.
+    expect(
+      screen.getByRole("button", { name: /Choose your 3D model/ }),
+    ).toBeInTheDocument();
   });
 
-  it("marks the chosen study and locks the picker while it saves", () => {
+  it("names the chosen study on the field, and opens the editor on it", () => {
     renderView({
       section: "identity",
-      avatarChoice: createAvatarChoiceViewState("sky-study", "kai-study"),
+      avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
     });
 
-    expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /Sky/ })).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Sky/,
+      }),
+    );
+
+    expect(screen.getByRole("radio", { name: /Sky/ })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    // A sculpted study has no wardrobe, and says so rather than offering one.
+    expect(screen.getByText(/one sculpted study/i)).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Hair" })).toBeNull();
+  });
+
+  it("offers Dasha 2.0's wardrobe, and only hers", () => {
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("dasha-v2-study", undefined),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Dasha 2\.0/,
+      }),
+    );
+
+    expect(screen.getByRole("heading", { name: "Hair" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Black tee" })).toBeChecked();
+    expect(
+      screen.getByRole("switch", { name: "Silver earrings" }),
+    ).toBeChecked();
+
+    // A dress is the whole garment: the separates come off in the same change.
+    fireEvent.click(screen.getByRole("radio", { name: "Indigo shift" }));
+    expect(screen.getByRole("radio", { name: "Indigo shift" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Black tee" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    // Cancel puts back exactly what was saved.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Dasha 2\.0/,
+      }),
+    );
+    expect(screen.getByRole("radio", { name: "Black tee" })).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: "Indigo shift" }),
+    ).not.toBeChecked();
+  });
+
+  it("keeps a saved outfit across a reload, and draws it on the world", async () => {
+    const mapRenderer = renderer();
+    const view = renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("dasha-v2-study", undefined),
+      onAvatarChoice: vi.fn(async () => undefined),
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Dasha 2\.0/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Loose length" }));
+    fireEvent.click(screen.getByRole("radio", { name: "White sneakers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Change your 3D model/ }),
+      ).toBeInTheDocument(),
+    );
+    view.unmount();
+
+    renderView({
+      section: "identity",
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-v2-study", undefined),
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Dasha 2\.0/,
+      }),
+    );
+    expect(screen.getByRole("radio", { name: "Loose length" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "White sneakers" })).toBeChecked();
+
+    // The world draws the same outfit the editor is showing.
+    await vi.waitFor(() =>
+      expect(vi.mocked(mapRenderer.avatars!.upsert)).toHaveBeenCalled(),
+    );
+    const handle = vi.mocked(mapRenderer.avatars!.upsert).mock.lastCall?.[0];
+    expect(handle?.visibleNodes).toContain("wear:hair/loose-long");
+    expect(handle?.visibleNodes).toContain("wear:shoes/sneakers-white");
+    expect(handle?.visibleNodes).not.toContain("wear:shoes/loafers-black");
   });
 
   it("shows connected providers as marks that open the external account", () => {

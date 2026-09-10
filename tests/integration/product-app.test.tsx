@@ -1074,13 +1074,25 @@ describe("ProductApp identity", () => {
       ) as HTMLAnchorElement,
     );
 
+    // The body is reached through the 3D model field, and nothing is sent
+    // until the draft is saved.
+    await user.click(
+      await screen.findByRole("button", { name: /Choose your 3D model/ }),
+    );
     const study = await screen.findByRole("radio", { name: /Dasha 2\.0/ });
     expect(study).not.toBeChecked();
     await user.click(study);
+    expect(chooseAvatarModel).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(chooseAvatarModel).toHaveBeenCalledExactlyOnceWith("dasha-v2-study");
     await waitFor(() =>
-      expect(screen.getByRole("radio", { name: /Dasha 2\.0/ })).toBeChecked(),
+      expect(
+        screen.getByRole("button", {
+          name: /Change your 3D model — currently Dasha 2\.0/,
+        }),
+      ).toBeInTheDocument(),
     );
     // No observation exists in this environment, so no body is placed: an
     // avatar is drawn where the device saw itself, or not at all.

@@ -1,0 +1,239 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* The body a subject is represented by, wherever that subject is configured.
+   The whole field is the target: a person reaching for the little figure is
+   reaching for the body, not for a picture beside a separate control. */
+.avatar-field {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.9rem;
+  margin-block: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(245, 243, 247, 0.14);
+  border-radius: 1rem;
+  color: inherit;
+  background: rgba(245, 243, 247, 0.04);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.avatar-field:hover {
+  background: rgba(245, 243, 247, 0.07);
+}
+
+.avatar-field__figure {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 4rem;
+  border-radius: 0.7rem;
+  background: rgba(245, 243, 247, 0.06);
+}
+
+.avatar-field__still,
+.avatar-field__preview,
+.avatar-field .avatar-preview {
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-field__still {
+  object-fit: cover;
+  object-position: top center;
+}
+
+.avatar-field__empty {
+  color: rgba(245, 243, 247, 0.45);
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.avatar-field__text {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.15rem;
+}
+
+.avatar-field__text small {
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+}
+
+.avatar-field__disclosure {
+  flex: 0 0 auto;
+  color: rgba(245, 243, 247, 0.5);
+  font-size: 1.2rem;
+}
+
+.avatar-preview {
+  display: block;
+  position: relative;
+}
+
+.avatar-preview__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-preview__still {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* The editor. Everything here is a draft until Save, so the preview answers
+   immediately and nothing else does. */
+.avatar-editor {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.avatar-editor__stage {
+  display: grid;
+  place-items: center;
+  min-height: 15rem;
+  border-radius: 1.1rem;
+  background: rgba(245, 243, 247, 0.05);
+}
+
+.avatar-editor__stage .avatar-preview {
+  width: 100%;
+  height: 15rem;
+}
+
+.avatar-editor__models {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.avatar-editor__models legend {
+  padding: 0;
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.avatar-editor__model {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid rgba(245, 243, 247, 0.12);
+  border-radius: 0.85rem;
+  cursor: pointer;
+}
+
+.avatar-editor__model--selected {
+  border-color: rgba(245, 243, 247, 0.4);
+  background: rgba(245, 243, 247, 0.07);
+}
+
+.avatar-editor__model img {
+  width: 2.1rem;
+  height: 2.8rem;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.avatar-editor__model span {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.1rem;
+}
+
+.avatar-editor__model small {
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+}
+
+.avatar-editor__note {
+  margin: 0;
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.82rem;
+}
+
+.wardrobe h3 {
+  margin: 0 0 0.5rem;
+  color: rgba(245, 243, 247, 0.72);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.wardrobe__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wardrobe__item {
+  display: grid;
+  width: 100%;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(245, 243, 247, 0.12);
+  border-radius: 0.75rem;
+  color: inherit;
+  background: rgba(245, 243, 247, 0.04);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.wardrobe__item img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  background: rgba(245, 243, 247, 0.06);
+}
+
+.wardrobe__item--worn {
+  border-color: rgba(245, 243, 247, 0.45);
+  background: rgba(245, 243, 247, 0.1);
+}
+
+.wardrobe__item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.avatar-editor__actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.avatar-editor__actions button {
+  min-height: 2.5rem;
+  padding-inline: 1.1rem;
+  border: 1px solid rgba(245, 243, 247, 0.18);
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(245, 243, 247, 0.05);
+  font: inherit;
+  cursor: pointer;
+}
+
+.avatar-editor__save {
+  border-color: rgba(245, 243, 247, 0.42);
+  background: rgba(245, 243, 247, 0.14);
+}
+
+.avatar-editor__actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

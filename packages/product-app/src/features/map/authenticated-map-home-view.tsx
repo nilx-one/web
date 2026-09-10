@@ -1,10 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type {
-  AvaiaProfileUpdateResult,
-  BondProviderConnections,
-  BondProviderType,
+import {
+  AVATAR_CATALOG,
+  type AvaiaProfileUpdateResult,
+  type AvatarModelResult,
+  type AvatarSelection,
+  type BondProviderConnections,
+  type BondProviderType,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import {
@@ -27,9 +30,26 @@ import {
   type ShellRoute,
   type ShellSection,
 } from "../../shell/routes";
+import { prefersReducedMotion } from "../../shell/motion";
 import { useShellPresentation } from "../../shell/shell-presentation";
 import type { RuntimeViewState } from "../identity/identity-foundation-view-model";
 import type { AvatarChoiceViewState } from "../identity/avatar-choice-view-model";
+import { AvatarEditorView } from "../identity/avatar-editor-view";
+import {
+  chooseDraftModel,
+  createAvatarEditorViewState,
+  createAvatarFieldViewState,
+  draftFromSelection,
+  draftSelection,
+  equipInDraft,
+  type AvatarDraft,
+  type AvatarSubject,
+} from "../identity/avatar-editor-view-model";
+import { AvatarModelField } from "../identity/avatar-model-field";
+import {
+  useAvatarSelection,
+  useCommitAvatarSelection,
+} from "../identity/use-avatar-selection";
 import {
   createBondProvidersViewState,
   type ProviderRowViewState,
@@ -37,6 +57,7 @@ import {
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
+import "../identity/avatar-editor.css";
 import { BondArtificialPositionSettings } from "./bond-artificial-position-settings";
 import {
   deviceLocationPosition,
@@ -132,9 +153,14 @@ export interface AuthenticatedMapHomeViewProps {
   >;
   /** The body this Bond is represented by, and the studies it may choose. */
   readonly avatarChoice?: AvatarChoiceViewState;
+  /**
+   * Choose the body this Bond is represented by. It answers with what the
+   * service said, because the editor cannot commit an outfit for a body the
+   * service refused — a half-saved body is not what anyone asked for.
+   */
   readonly onAvatarChoice?: (
     model: AvatarChoiceViewState["options"][number]["model"],
-  ) => void;
+  ) => Promise<AvatarModelResult | undefined>;
   readonly onSlugChange?: (slug: string) => void;
   readonly onSlugSubmit?: () => void;
   readonly onLogout?: () => void;
@@ -163,7 +189,7 @@ function focusStateFor(location: DeviceLocationState): FocusState {
 }
 
 /** Identity detail is a state of the Dock's own stack, never a separate route. */
-type IdentityDetail = "providers" | "avaia";
+type IdentityDetail = "providers" | "avaia" | "avatar";
 
 /**
  * Detail is scoped to the section that opened it, so leaving the identity
@@ -172,6 +198,11 @@ type IdentityDetail = "providers" | "avaia";
 interface IdentityDetailState {
   readonly section: ShellSection;
   readonly detail: IdentityDetail;
+  /**
+   * Whose body the avatar editor was opened for, which is also where Back
+   * returns to: an editor reached from an Avaia goes back to that Avaia.
+   */
+  readonly subject?: AvatarSubject;
 }
 /** One ambient slot: the cadence the sampler itself changes clips on. */
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
@@ -192,12 +223,6 @@ function readDimensionPreference(): MapDimension {
     // Storage is optional. The interface remains usable with an in-memory preference.
   }
   return "volumetric";
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
-  );
 }
 
 /** A transient renderer state belongs in the toast stack, not on the Dock. */
@@ -453,6 +478,23 @@ export function AuthenticatedMapHomeView({
   // so an unnamed Avaia is still the same Avaia between renders.
   const avaiaAddress = avaiaLabel;
 
+  const [avatarDraft, setAvatarDraft] = useState<AvatarDraft | undefined>(
+    undefined,
+  );
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | undefined>(undefined);
+  const commitAvatar = useCommitAvatarSelection();
+  // The body a Bond chose is the service's; what it wears is this device's.
+  // Reading them together in one place keeps the two halves from being
+  // resolved differently on different screens.
+  const bondAvatar = useAvatarSelection(pubDress, avatarChoice?.rendered);
+  const avaiaAvatar = useAvatarSelection(
+    avaiaAddress,
+    bondAvatar === undefined
+      ? undefined
+      : avaiaStudy(avaiaAddress, bondAvatar.modelId),
+  );
+
   // The study of whoever is at the wheel: the body on the world, and the still
   // the label falls back to once that body is too far away to read.
   const wheelStudy =
@@ -555,8 +597,83 @@ export function AuthenticatedMapHomeView({
     onNavigate?.(route);
   }
 
-  function openDetail(detail: IdentityDetail): void {
-    setDetailState({ section, detail });
+  function openDetail(detail: IdentityDetail, subject?: AvatarSubject): void {
+    setDetailState({
+      section,
+      detail,
+      ...(subject === undefined ? {} : { subject }),
+    });
+  }
+
+  /**
+   * Open the body a subject is represented by, with a draft that starts as
+   * exactly what is saved. Nothing in the editor is persisted until Save, so
+   * the draft is discarded whenever the editor is left.
+   */
+  function openAvatarEditor(subject: AvatarSubject): void {
+    const selection = subject === "bond" ? bondAvatar : avaiaAvatar;
+    // An identity that has chosen nothing still needs a way in. The editor
+    // opens on the first published study with nothing saved behind it, so the
+    // first choice is already something to save.
+    setAvatarDraft(
+      draftFromSelection(
+        selection ?? {
+          modelId: AVATAR_CATALOG[0]?.id ?? "sky-study",
+          appearance: {},
+        },
+      ),
+    );
+    setAvatarError(undefined);
+    openDetail("avatar", subject);
+  }
+
+  function closeAvatarEditor(): void {
+    const returnTo = detailState?.subject === "avaia" ? "avaia" : undefined;
+    setAvatarDraft(undefined);
+    setAvatarError(undefined);
+    setDetailState(
+      returnTo === undefined ? undefined : { section, detail: returnTo },
+    );
+  }
+
+  /**
+   * Commit a draft.
+   *
+   * The body a Bond chose is identity state, so it goes to the service and the
+   * outcome is what the editor reports. What that body wears is this device's
+   * and is written here. A model the service refuses leaves the outfit
+   * unwritten too: a half-saved body is not what a person asked for.
+   */
+  async function saveAvatarDraft(): Promise<void> {
+    const subject = detailState?.subject ?? "bond";
+    if (avatarDraft === undefined) return;
+    const persisted = subject === "bond" ? bondAvatar : avaiaAvatar;
+    const selection = draftSelection(avatarDraft);
+    const address = subject === "bond" ? pubDress : avaiaAddress;
+
+    if (
+      subject === "bond" &&
+      selection.modelId !== persisted?.modelId &&
+      onAvatarChoice !== undefined
+    ) {
+      setAvatarSaving(true);
+      const outcome = await onAvatarChoice(selection.modelId);
+      setAvatarSaving(false);
+      if (outcome?.kind !== "chosen") {
+        setAvatarError(
+          avatarChoice?.error ?? "Couldn’t save this choice. Try again.",
+        );
+        return;
+      }
+    }
+
+    commitAvatar({
+      subject,
+      address,
+      selection,
+      modelIsLocal: subject !== "bond",
+    });
+    closeAvatarEditor();
   }
 
   /**
@@ -604,6 +721,10 @@ export function AuthenticatedMapHomeView({
       seat === "bond" ? bondStudy : avaiaStudy(avaiaAddress, bondStudy);
     const address = (seat: DockSeat) =>
       seat === "bond" ? pubDress : avaiaAddress;
+    // What each identity is wearing, resolved exactly once and drawn by the
+    // world the same way the settings preview and the editor draw it.
+    const worn = (seat: DockSeat) =>
+      seat === "bond" ? bondAvatar?.appearance : avaiaAvatar?.appearance;
 
     let frame: number | undefined;
 
@@ -613,6 +734,7 @@ export function AuthenticatedMapHomeView({
         body,
         address: address(body.seat),
         study: study(body.seat),
+        appearance: worn(body.seat),
         location: location.state,
         zoom: cameraZoom,
         timeMs: nowMs,
@@ -646,7 +768,9 @@ export function AuthenticatedMapHomeView({
     };
   }, [
     avaiaAddress,
+    avaiaAvatar?.appearance,
     avatarChoice?.rendered,
+    bondAvatar?.appearance,
     cameraZoom,
     handover,
     location.state,
@@ -800,10 +924,19 @@ export function AuthenticatedMapHomeView({
       navigate(WORLD_ROUTE);
       return;
     }
+    if (activeDetail === "avatar") {
+      // Leaving the editor is the same as cancelling it: a draft that was
+      // never saved does not survive the way out.
+      closeAvatarEditor();
+      return;
+    }
     setDetailState(undefined);
   }
 
   function detailEyebrow(): string {
+    if (activeDetail === "avatar") {
+      return detailState?.subject === "avaia" ? avaiaLabel : pubDress;
+    }
     if (activeDetail === "avaia") return "Owned Avaia";
     if (section === "settings") return "Application";
     return "Personal Bond";
@@ -813,6 +946,8 @@ export function AuthenticatedMapHomeView({
     switch (activeDetail) {
       case "providers":
         return "Providers";
+      case "avatar":
+        return "3D model";
       case "avaia":
         return avaiaLabel;
       case undefined:
@@ -982,27 +1117,11 @@ export function AuthenticatedMapHomeView({
                       onSubmit={onSlugSubmit}
                     />
                     {avatarChoice === undefined ? null : (
-                      <fieldset className="avatar-choice">
-                        <legend>Avatar</legend>
-                        {avatarChoice.options.map((option) => (
-                          <label
-                            key={option.model}
-                            className="interface-settings__option"
-                          >
-                            <span>
-                              <strong>{option.name}</strong>
-                              <small>{option.detail}</small>
-                            </span>
-                            <input
-                              type="radio"
-                              name="avatar-model"
-                              value={option.model}
-                              checked={option.selected}
-                              disabled={avatarChoice.busy}
-                              onChange={() => onAvatarChoice?.(option.model)}
-                            />
-                          </label>
-                        ))}
+                      <div className="avatar-choice">
+                        <AvatarModelField
+                          state={createAvatarFieldViewState("bond", bondAvatar)}
+                          onOpen={() => openAvatarEditor("bond")}
+                        />
                         <p className="profile-edit__note">
                           {avatarChoice.unsupportedModel !== undefined
                             ? `This Bond chose ${avatarChoice.unsupportedModel}, which this client cannot display. Update 0x1 to render that choice.`
@@ -1015,7 +1134,7 @@ export function AuthenticatedMapHomeView({
                             {avatarChoice.error}
                           </p>
                         )}
-                      </fieldset>
+                      </div>
                     )}
                     <dl className="bond-profile__rows">
                       <div>
@@ -1107,10 +1226,46 @@ export function AuthenticatedMapHomeView({
                 ) : null}
 
                 {activeDetail === "avaia" && avaiaSetup !== undefined ? (
-                  <AvaiaSetupView
-                    state={avaiaSetup}
-                    onDraftChange={(value) => onAvaiaSetupChange?.(value)}
-                    onSubmit={() => void submitAvaiaSetup()}
+                  <>
+                    <AvaiaSetupView
+                      state={avaiaSetup}
+                      onDraftChange={(value) => onAvaiaSetupChange?.(value)}
+                      onSubmit={() => void submitAvaiaSetup()}
+                    />
+                    <AvatarModelField
+                      state={createAvatarFieldViewState("avaia", avaiaAvatar)}
+                      onOpen={() => openAvatarEditor("avaia")}
+                    />
+                  </>
+                ) : null}
+
+                {activeDetail === "avatar" && avatarDraft !== undefined ? (
+                  <AvatarEditorView
+                    state={createAvatarEditorViewState({
+                      subject: detailState?.subject ?? "bond",
+                      ...((detailState?.subject === "avaia"
+                        ? avaiaAvatar
+                        : bondAvatar) === undefined
+                        ? {}
+                        : {
+                            persisted: (detailState?.subject === "avaia"
+                              ? avaiaAvatar
+                              : bondAvatar) as AvatarSelection,
+                          }),
+                      draft: avatarDraft,
+                      busy: avatarSaving,
+                      ...(avatarError === undefined
+                        ? {}
+                        : { error: avatarError }),
+                    })}
+                    onChooseModel={(model) =>
+                      setAvatarDraft(chooseDraftModel(avatarDraft, model))
+                    }
+                    onEquip={(itemId) =>
+                      setAvatarDraft(equipInDraft(avatarDraft, itemId))
+                    }
+                    onCancel={closeAvatarEditor}
+                    onSave={() => void saveAvatarDraft()}
                   />
                 ) : null}
 

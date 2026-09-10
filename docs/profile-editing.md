@@ -117,6 +117,42 @@ The published studies share one skeleton and one set of clips, so choosing
 changes the body a person is represented by and nothing about how it moves. See
 `docs/avatar-rendering.md` for the asset pipeline and what the studies are.
 
+## The 3D model field, and the editor behind it
+
+Bond settings and Avaia settings each carry a **3D model** field: the name of
+the study that subject is represented by, a small preview of the body as it is
+actually saved, and a disclosure. The whole field opens the editor — a person
+reaching for the little figure is reaching for the body, not for a picture
+beside a separate control.
+
+The editor shows a large live preview, the four-model picker, and, for a study
+that publishes a wardrobe, controls for what that body wears. Choosing a model
+updates the preview at once; nothing reaches the service until **Save**, and
+**Cancel** puts back exactly what was there. Moving between studies keeps what
+each one was wearing, so coming back to a body finds it as it was left. An
+appearance is never carried across: what one study wears means nothing to
+another, and a silent translation would put a person in clothes they never
+chose.
+
+**Only Dasha 2.0 is editable.** Sky, Dasha and Kai are single sculpted
+studies: they publish no slots and no items, and the editor says so rather
+than offering controls that would change nothing.
+
+The body is identity state and goes to the service. What the body wears does
+not: the identity contract publishes no field for an appearance, so this client
+keeps it on the device, per study, and the editor says so. A model the service
+refuses leaves the outfit unwritten too — a half-saved body is not what anyone
+asked for. It follows that an outfit does not travel between devices yet.
+
+An Avaia's body is its own. Where nothing has been chosen for it, it is derived
+from its address so that an Avaia never wears the study of the Bond that owns
+it; a choice made in the editor is kept on the device, because the contract has
+no field for an Avaia's body either.
+
+Settings, the editor and the world all resolve a body through one resolver, so
+the same saved state cannot look like one person in a preview and another one
+standing on the map.
+
 ## Deployment
 
 Identity runtime contract **5** provides both rename endpoints and the avatar

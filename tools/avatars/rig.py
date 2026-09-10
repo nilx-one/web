@@ -69,8 +69,14 @@ def smooth(value):
     return t * t * (3 - 2 * t)
 
 
-def weights_for(vertices, name, group, skeleton):
-    """Same position + semantic part family always produces the same weights."""
+def weights_for(vertices, name, group, skeleton, family=None):
+    """Same position + semantic part family always produces the same weights.
+
+    `family` names the deforming family outright, for geometry whose own name
+    does not carry it — a modular character's bare body has no garment name to
+    read a family off. Omitting it keeps the original name-derived routing, so
+    a study built before families existed is bound exactly as it was.
+    """
     count = len(vertices)
     weights = np.zeros((count, len(TOPOLOGY)))
     side = name[0] if name.startswith(("L_", "R_")) else None
@@ -85,7 +91,46 @@ def weights_for(vertices, name, group, skeleton):
             weights[:, INDEX[previous]] -= t
             weights[:, INDEX[following]] += t
 
-    if name == "neck":
+    def arm_bound():
+        bones = ["upperarm_" + side, "forearm_" + side, "hand_" + side]
+        points = skeleton[[INDEX[b] for b in bones]]
+        # Project to the polyline, preserving elbow/wrist arc length.
+        vectors = np.diff(points, axis=0)
+        lengths = np.linalg.norm(vectors, axis=1)
+        t = np.clip(np.einsum("nsi,si->ns", vertices[:, None] - points[:-1], vectors) / lengths**2, 0, 1)
+        projected = points[:-1] + t[:, :, None] * vectors
+        segment = np.argmin(np.linalg.norm(vertices[:, None] - projected, axis=2), axis=1)
+        along = (np.r_[0, np.cumsum(lengths)][segment] + t[np.arange(count), segment] * lengths[segment])
+        elbow = smooth((along - lengths[0] + .05) / .10)
+        wrist = smooth((along - lengths.sum() + .10) / .10)
+        weights[:, INDEX[bones[0]]] = 1 - elbow
+        weights[:, INDEX[bones[1]]] = elbow - wrist
+        weights[:, INDEX[bones[2]]] = wrist
+
+    if family == "head":
+        rigid("head")
+    elif family == "neck":
+        vertical(["chest", "neck", "head"],
+                 [skeleton[INDEX["neck"], 2], skeleton[INDEX["head"], 2]], .035)
+    elif family == "arm":
+        arm_bound()
+    elif family == "hand":
+        rigid("hand_" + side)
+    elif family == "leg":
+        vertical(["shin_" + side, "thigh_" + side, "hips"],
+                 [skeleton[INDEX["shin_" + side], 2], skeleton[INDEX["thigh_" + side], 2]], .06)
+    elif family == "foot":
+        rigid("foot_" + side)
+    elif family == "torso":
+        vertical(["hips", "spine", "chest"],
+                 [skeleton[INDEX["spine"], 2], skeleton[INDEX["chest"], 2]], .06)
+    elif family == "nearest":
+        # One bone per hard part, selected by centroid, never per-vertex tearing.
+        nearest = 1 + np.argmin(np.linalg.norm(skeleton[1:] - vertices.mean(axis=0), axis=1))
+        weights[:, nearest] = 1
+    elif family is not None:
+        raise ValueError("unknown deforming family: " + family)
+    elif name == "neck":
         vertical(["chest", "neck", "head"],
                  [skeleton[INDEX["neck"], 2], skeleton[INDEX["head"], 2]], .035)
     elif group in ("head", "face", "hair"):
@@ -262,6 +307,129 @@ def export_avatar(parts, palette, skeleton, landmarks, out, model_id, *, version
                 "skin": {"influences_per_vertex": 4, "primitive_count": len(primitives)},
                 "parts": records, "palette": palette, "mesh_count": len(parts),
                 "vertices": sum(len(p[1].vertices) for p in parts), "triangles": sum(len(p[1].faces) for p in parts),
+                "size_bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "clips": [a["name"] for a in glb.doc["animations"]],
+                "design": "User-supplied artistic study; not biometric or presence evidence. In-place animation; no IK."}
+    (out / (model_id + ".manifest.json")).write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    print(json.dumps({k: manifest[k] for k in ("model_id", "vertices", "triangles", "size_bytes", "sha256")}))
+
+
+def _skeleton_nodes(skeleton):
+    """Bone nodes and inverse bind positions, shared by every export path."""
+    positions = skeleton @ Y_UP.T
+    nodes = []
+    for i, (name, parent) in enumerate(TOPOLOGY):
+        node = {"name": name, "translation": (positions[i] - (positions[parent] if parent >= 0 else 0)).tolist()}
+        children = [j for j, (_, p) in enumerate(TOPOLOGY) if p == i]
+        if children:
+            node["children"] = children
+        nodes.append(node)
+    return nodes, positions
+
+
+def export_modular_avatar(groups, palette, skeleton, out, model_id, *, version, wardrobe):
+    """Export one character whose body regions and wearables are separate nodes.
+
+    Every group becomes its own glTF mesh node bound to the same skin, so an
+    outfit change is a visibility change on an already-loaded skeleton rather
+    than a second character being fetched and swapped in. Identity — body,
+    face, hands — and wardrobe therefore cannot come apart: there is one
+    skeleton, one bind pose and one set of clips for all of them.
+
+    A group is (name, kind, semantic id, parts), where each part carries its
+    own deforming family so that a bare thigh and a trouser leg follow the
+    same bones without either having to be named after the other.
+    """
+    glb = Glb()
+    glb.doc["asset"]["generator"] = "nilx-one procedural avatar " + version
+    nodes, positions = _skeleton_nodes(skeleton)
+    inverse = np.tile(np.eye(4), (len(nodes), 1, 1))
+    inverse[:, :3, 3] = -positions
+    ibm = glb.accessor(inverse.transpose(0, 2, 1).reshape(-1, 16).astype("<f4"), "MAT4")
+
+    materials = []
+    material_index = {}
+
+    def material_for(name):
+        if name not in material_index:
+            colour, roughness, metallic = palette[name]
+            materials.append({"name": name, "doubleSided": True, "pbrMetallicRoughness": {
+                "baseColorFactor": [int(colour[i:i+2], 16) / 255 for i in (1, 3, 5)] + [1],
+                "roughnessFactor": roughness, "metallicFactor": metallic}})
+            material_index[name] = len(materials) - 1
+        return material_index[name]
+
+    meshes = []
+    records = []
+    node_records = []
+    all_primitives = []
+    for group_name, kind, semantic, parts in groups:
+        if not parts:
+            raise ValueError("empty avatar node: " + group_name)
+        grouped = defaultdict(list)
+        for part in parts:
+            grouped[part[2]].append(part)
+        primitives = []
+        for material, entries in grouped.items():
+            vertices, normals, indices, joints, weights = [], [], [], [], []
+            offset = 0
+            for name, mesh, _, part_group, family in entries:
+                js, ws = weights_for(mesh.vertices, name, part_group, skeleton, family)
+                vertices.append(mesh.vertices @ Y_UP.T)
+                normals.append(mesh.vertex_normals @ Y_UP.T)
+                indices.append(mesh.faces + offset)
+                joints.append(js)
+                weights.append(ws)
+                records.append({"name": name, "node": group_name, "group": part_group,
+                                "material": material, "family": family,
+                                "primitive": len(primitives), "vertex_offset": offset,
+                                "vertex_count": len(mesh.vertices)})
+                offset += len(mesh.vertices)
+            primitives.append({"attributes": {
+                "POSITION": glb.accessor(np.vstack(vertices).astype("<f4"), "VEC3", bounds=True),
+                "NORMAL": glb.accessor(np.vstack(normals).astype("<f4"), "VEC3"),
+                "JOINTS_0": glb.accessor(np.vstack(joints), "VEC4", 5123),
+                "WEIGHTS_0": glb.accessor(np.vstack(weights), "VEC4")},
+                "indices": glb.accessor(np.vstack(indices).reshape(-1).astype("<u4"), "SCALAR", 5125),
+                "material": material_for(material)})
+        all_primitives.extend(primitives)
+        meshes.append({"name": group_name, "primitives": primitives})
+        node_records.append({"name": group_name, "kind": kind, "id": semantic,
+                             "primitives": len(primitives),
+                             "vertices": sum(len(p[1].vertices) for p in parts),
+                             "triangles": sum(len(p[1].faces) for p in parts)})
+
+    for primitive in all_primitives:
+        for accessor_id in primitive["attributes"].values():
+            glb.doc["bufferViews"][glb.doc["accessors"][accessor_id]["bufferView"]]["target"] = 34962
+        glb.doc["bufferViews"][glb.doc["accessors"][primitive["indices"]]["bufferView"]]["target"] = 34963
+
+    mesh_nodes = list(range(len(nodes), len(nodes) + len(meshes)))
+    for index, mesh in enumerate(meshes):
+        nodes.append({"name": mesh["name"], "mesh": index, "skin": 0})
+    glb.doc.update(nodes=nodes,
+                   skins=[{"name": "shared-study-rig", "joints": list(range(len(TOPOLOGY))),
+                           "skeleton": 0, "inverseBindMatrices": ibm}],
+                   meshes=meshes, materials=materials, animations=clips(glb),
+                   scenes=[{"nodes": [0] + mesh_nodes}], scene=0)
+    path = out / (model_id + ".glb")
+    glb.write(path)
+    every = [part for _, _, _, parts in groups for part in parts]
+    manifest = {"model_id": model_id, "version": version, "authoring_up": "Z", "export_up": "Y",
+                "modular": True,
+                "skeleton": {"bones": [b for b, _ in TOPOLOGY], "parents": [p for _, p in TOPOLOGY],
+                             "rest_translations": [n["translation"] for n in nodes[:len(TOPOLOGY)]]},
+                "skin": {"influences_per_vertex": 4, "primitive_count": len(all_primitives)},
+                "nodes": node_records, "parts": records, "palette": palette,
+                "rig_version": wardrobe["rig_version"],
+                "slots": wardrobe["slots"],
+                "body_regions": wardrobe["body_regions"],
+                "always_visible": wardrobe["always_visible"],
+                "default_outfit": wardrobe["default_outfit"],
+                "wardrobe": wardrobe["items"],
+                "mesh_count": len(every),
+                "vertices": sum(len(p[1].vertices) for p in every),
+                "triangles": sum(len(p[1].faces) for p in every),
                 "size_bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 "clips": [a["name"] for a in glb.doc["animations"]],
                 "design": "User-supplied artistic study; not biometric or presence evidence. In-place animation; no IK."}

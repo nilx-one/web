@@ -10,7 +10,7 @@ The proportions are artistic design choices, not measurements of the subject.
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from rig import Landmarks, export_avatar
+from rig import Landmarks, export_modular_avatar
 LANDMARKS = Landmarks()
 import argparse
 import numpy as np
@@ -19,7 +19,7 @@ import trimesh
 from trimesh.visual.material import PBRMaterial
 from trimesh.visual.texture import TextureVisuals
 
-parser=argparse.ArgumentParser(); parser.add_argument('--output',default='deploy/web/avatars/0.2.0'); args=parser.parse_args()
+parser=argparse.ArgumentParser(); parser.add_argument('--output',default='deploy/web/avatars/0.3.0'); args=parser.parse_args()
 OUT=Path(args.output).resolve(); OUT.mkdir(parents=True,exist_ok=True)
 PARTS=[]
 PALETTE={
@@ -31,7 +31,12 @@ PALETTE={
  'cotton':('#252428',.92,0), 'cotton_seam':('#353438',.95,0),
  'trouser':('#ded5c5',.89,0), 'stitch':('#b8ab95',.94,0),
  'leather':('#202126',.32,.04), 'sole':('#12151a',.78,0),
- 'silver':('#c6cbd0',.19,.90)
+ 'silver':('#c6cbd0',.19,.90),
+ # Materials the alternative wearables are cut from. A wardrobe item owns its
+ # own cloth: nothing recolours a garment that is already on the body.
+ 'charcoal':('#3b3d43',.90,0), 'indigo':('#3c4570',.86,0),
+ 'canvas':('#eeece4',.88,0), 'rubber':('#cfccc2',.72,0),
+ 'lace_cord':('#dedbd0',.95,0)
 }
 def rgb(h): return [int(h[i:i+2],16) for i in (1,3,5)]
 MATERIALS={k:PBRMaterial(name=k,baseColorFactor=rgb(v[0])+[255],roughnessFactor=v[1],metallicFactor=v[2],doubleSided=True) for k,v in PALETTE.items()}
@@ -184,7 +189,12 @@ for s,side in [(-1,'L'),(1,'R')]:
     shoulder=np.array([s*.151,.005,1.351]);elbow=np.array([s*.244,.002,1.172])
     wrist=np.array([s*.285,-.012,.986])
     sleeve_points=[shoulder,[s*.195,.004,1.307],elbow,wrist]
-    tube(side+'_sleeve',sleeve_points,[.047,.044,.032,.022],'skin',52,24,'clothing',.91)
+    # The arm is bare geometry in two regions, so a sleeve can hide the part of
+    # it that it encloses without hiding the forearm below the hem.
+    tube(side+'_upper_arm',[shoulder,[s*.195,.004,1.307],elbow],
+         [.047,.044,.032],'skin',30,24,'clothing',.91)
+    tube(side+'_lower_arm',[elbow,[s*.265,-.005,1.079],wrist],
+         [.032,.027,.022],'skin',26,24,'clothing',.91)
     # Re-register after adding the short cloth sleeve: rig landmarks describe
     # the arm, never the sleeve's shorter hem-to-shoulder length.
     tube(side+'_short_sleeve',[shoulder,[s*.197,.004,1.309],[s*.213,.004,1.273]],
@@ -355,5 +365,177 @@ for s,side in [(-1,'L'),(1,'R')]:
         tube(side+f'_lash_{k}',[[x,y,z],[x+s*.002,y-.002,z+.003],
              [x+s*.004,y-.001,z+.004]], [.00038,.00029,.00010],'brow',7,4,'face')
 
+
+# ── The body under the clothes ───────────────────────────────────────────────
+# Dasha 2.0 is a character, not one sculpted outfit: there is a body beneath
+# every garment, cut into the regions a garment may cover. Nothing here is
+# removed when cloth goes on — a covered region is hidden and comes back
+# exactly as it was, so no sequence of changes can leave her missing a part of
+# herself.
+loft('bare_torso',[(1.000,.118,.074,0,0),(1.095,.120,.074,0,0),
+     (1.16,.125,.080,0,0),(1.25,.140,.094,0,0),(1.32,.155,.086,0,.006),
+     (1.37,.165,.064,0,.008),(1.399,.134,.054,0,.006),
+     (1.424,.053,.041,0,.009)],'skin',44,64,'bare')
+# One leg profile, cut into the regions a garment may cover. The cut sits
+# below every published hem, so a skirt covers the top of what is visible
+# instead of a hem and a region boundary each ending somewhere different.
+BARE_LEG=[(.150,.048,.044,-.004),(.21,.049,.045,-.002),(.32,.051,.048,.002),
+          (.49,.050,.050,.003),(.61,.052,.054,.004),(.78,.066,.064,.005),
+          (.90,.076,.070,.003),(.99,.077,.071,0)]
+def bare_leg(cx,low,high,scale=1.0):
+    from scipy.interpolate import PchipInterpolator as _P
+    sec=np.asarray([[z,rx,ry,cy] for z,rx,ry,cy in BARE_LEG])
+    fit=_P(sec[:,0],sec[:,1:],axis=0)
+    stops=sorted({low,high}|{z for z in sec[:,0] if low<z<high})
+    return [(z,float(fit(z)[0])*scale,float(fit(z)[1])*scale,
+             cx*float(np.interp(z,[.78,.99],[1,.78])) if z>.78 else cx,
+             float(fit(z)[2])) for z in stops]
+for s,side in [(-1,'L'),(1,'R')]:
+    cx=s*.084
+    loft(side+'_bare_shin',bare_leg(cx,.150,.61),'skin',24,48,'bare')
+    loft(side+'_bare_thigh',bare_leg(cx,.59,.84),'skin',22,48,'bare')
+    # The pelvis is the two leg tops merged, exactly the way the trousers merge
+    # them, so the seam between a hidden hip and a visible thigh cannot open.
+    hip=loft(side+'_bare_hip',bare_leg(cx,.82,.99),'skin',20,48,'bare')
+    v=hip.vertices;z=v[:,2]
+    sec=np.asarray(bare_leg(cx,.150,.99))
+    cross=PchipInterpolator(sec[:,0],sec[:,1:],axis=0)(z)
+    angle=np.arctan2((s*v[:,0]-s*cross[:,2])/cross[:,0],
+                     -(v[:,1]-cross[:,3])/cross[:,1])
+    blend=np.clip((z-.83)/.16,0,1);blend=blend*blend*(3-2*blend)
+    v[:,0]=v[:,0]*(1-blend)+s*.128*np.maximum(0,np.sin(angle))*blend
+    v[:,1]=v[:,1]*(1-blend)+(-.079*np.cos(angle))*blend
+    v[:,2]+=blend*.062
+    loft(side+'_bare_foot',[(0,.042,.096,cx,-.040),(.014,.048,.110,cx,-.043),
+         (.038,.048,.107,cx,-.041),(.072,.045,.091,cx,-.028),
+         (.112,.039,.064,cx,-.005),(.155,.033,.039,cx,.004)],'skin',24,48,'bare')
+    for k,dx in enumerate([-.029,-.013,.002,.016,.028]):
+        radius=.0112-.0016*k
+        x=cx+s*dx;z=.014+.001*k
+        tube(side+f'_bare_toe_{k}',[[x,-.124+.006*k,z],[x,-.135+.006*k,z+.001],
+             [x,-.142+.006*k,z]],[radius*.9,radius,radius*.35],'skin',9,10,'bare')
+
+# ── A second hairstyle ───────────────────────────────────────────────────────
+# The same scalp surface carries both styles, so changing hair never changes
+# the shape of her head. Loose length falls behind the shoulders and is bound
+# to the head like the bun: no cloth or hair simulation is claimed here.
+grid_mesh('loose_scalp',[[scalp(a,v,.001) for a in np.linspace(0,2*np.pi,112,endpoint=False)]
+          for v in np.linspace(.002,1,58)],'hair',True,'hair',reverse=True)
+for k,a in enumerate(np.linspace(1.28,2*np.pi-1.28,34)):
+    crown=scalp(a,1,.003)
+    fall=[]
+    for tt in np.linspace(0,1,5):
+        fall.append([crown[0]*(1-.22*tt)+.004*np.sin(6*tt+k),
+                     crown[1]+.030*tt+.052*tt*tt,
+                     crown[2]-(crown[2]-1.305)*tt])
+    strip(f'loose_lock_{k:02d}',fall,[.006,.020,.025,.020,.007],.004,
+          ['hair','hair_light','hair','hair_shadow'][k%4],
+          (np.sin(a),-np.cos(a),.20),40,'hair',8)
+for s,side in [(-1,'L'),(1,'R')]:
+    for k in range(3):
+        x=s*(.118+k*.005)
+        tube(side+f'_loose_wisp_{k}',[[s*.090,-.086,1.779],[x,-.070,1.700],
+             [x+s*.008,-.030,1.618],[x+s*.004,.020,1.545-k*.014]],
+             [.0012,.0018,.0004],'hair_light' if k==1 else 'hair',35,6,'hair')
+
+# ── A second top ─────────────────────────────────────────────────────────────
+loft('shell_top',[(1.020,.120,.077,0,0),(1.10,.123,.078,0,0),
+     (1.18,.128,.083,0,0),(1.26,.145,.097,0,0),(1.32,.159,.089,0,.006),
+     (1.36,.166,.070,0,.008),(1.382,.150,.062,0,.006)],'trouser',40,64,'clothing')
+
+# ── A second bottom, and a dress that is the whole garment ───────────────────
+loft('skirt_shell',[(.60,.150,.128,0,.004),(.72,.135,.113,0,.004),
+     (.84,.122,.096,0,.002),(.95,.117,.082,0,0),(1.030,.127,.081,0,0),
+     (1.062,.132,.084,0,0)],'charcoal',44,64,'clothing')
+loft('skirt_waistband',[(1.028,.129,.082,0,0),(1.056,.135,.086,0,0),
+     (1.066,.131,.083,0,0)],'charcoal',8,64,'clothing')
+loft('shift_shell',[(.585,.144,.122,0,.004),(.74,.128,.106,0,.004),
+     (.86,.119,.092,0,.002),(.97,.115,.080,0,0),(1.06,.118,.077,0,0),
+     (1.16,.124,.081,0,0),(1.25,.140,.094,0,0),(1.31,.152,.086,0,.006),
+     (1.36,.158,.066,0,.008),(1.386,.140,.058,0,.006)],'indigo',60,64,'clothing')
+
+# ── A second pair of shoes ───────────────────────────────────────────────────
+for s,side in [(-1,'L'),(1,'R')]:
+    cx=s*.084
+    loft(side+'_sneaker_upper',[(.026,.050,.112,cx,-.048),(.042,.057,.125,cx,-.052),
+         (.070,.058,.120,cx,-.049),(.098,.055,.100,cx,-.030),
+         (.130,.048,.070,cx,-.004),(.168,.040,.045,cx,.008)],'canvas',32,48,'shoes')
+    loft(side+'_sneaker_sole',[(0,.050,.114,cx,-.049),(.012,.059,.128,cx,-.052),
+         (.030,.060,.129,cx,-.052),(.044,.056,.123,cx,-.050)],'rubber',10,48,'shoes')
+    tube(side+'_sneaker_toe',[[cx-.042,-.100,.055],[cx,-.116,.062],
+         [cx+.042,-.100,.055]],[.018,.020,.018],'rubber',20,10,'shoes',.75)
+    for k in range(4):
+        z=.096+k*.020
+        tube(side+f'_sneaker_lace_{k}',[[cx-.030,-.060+k*.010,z],
+             [cx,-.070+k*.010,z+.008],[cx+.030,-.060+k*.010,z]],
+             [.0022,.0022],'lace_cord',18,6,'shoes')
+    loft(side+'_sneaker_sock',[(.130,.032,.036,cx,.004),(.20,.035,.038,cx,.004),
+         (.245,.033,.037,cx,.004)],'cotton',12,32,'shoes')
+
+# ── Which part of the character each piece of geometry belongs to ────────────
+# Routing is a table rather than a build order, so the geometry above stays
+# readable as anatomy and tailoring while the character it composes is
+# declared in one place. A part that matches no rule stops the build: geometry
+# that quietly belonged to nothing would be geometry nobody could ever see.
+import json
+WARDROBE_TABLE=json.loads((Path(__file__).resolve().parent/'wardrobe.json').read_text())
+BODY_REGIONS=WARDROBE_TABLE['always_visible']+WARDROBE_TABLE['body_regions']
+WARDROBE=[item['id'] for item in WARDROBE_TABLE['items']]
+
+def route(name,group):
+    if name.endswith('_earring'):return 'wear:accessory/earrings-silver','head'
+    if group=='hair':
+        loose=name.startswith('loose_') or '_loose_' in name
+        return ('wear:hair/loose-long' if loose else 'wear:hair/swept-bun'),'head'
+    if name=='neck':return 'body:head','neck'
+    if group in ('head','face'):return 'body:head','head'
+    if group=='hands':return 'body:hands','hand'
+    if '_upper_arm' in name:return 'body:upper_arms','arm'
+    if '_lower_arm' in name:return 'body:lower_arms','arm'
+    if name=='bare_torso':return 'body:torso','torso'
+    if '_bare_hip' in name:return 'body:hips','leg'
+    if '_bare_thigh' in name:return 'body:upper_legs','leg'
+    if '_bare_shin' in name:return 'body:lower_legs','leg'
+    if '_bare_foot' in name or '_bare_toe_' in name:return 'body:feet','foot'
+    if '_sneaker_' in name:return 'wear:shoes/sneakers-white','foot'
+    if '_shoe_' in name or name.endswith('_sock'):return 'wear:shoes/loafers-black','foot'
+    if name=='shell_top':return 'wear:top/shell-ecru','torso'
+    if 'skirt_' in name:return 'wear:bottom/skirt-charcoal','torso'
+    if name=='shift_shell':return 'wear:dress/shift-indigo','torso'
+    if name.endswith('_short_sleeve') or name.endswith('_shoulder'):
+        return 'wear:top/tee-black','arm'
+    if name in ('overshirt_shell','neck_binding'):return 'wear:top/tee-black','torso'
+    if name.endswith('_leg') or 'jogger' in name:return 'wear:bottom/trousers-ecru','leg'
+    if (name in ('waistband','fly_seam','waist_button')
+            or '_pocket' in name or '_belt_loop' in name):
+        return 'wear:bottom/trousers-ecru','torso'
+    raise ValueError('unrouted part: %s (%s)' % (name,group))
+
+ORDER=['body:'+region for region in BODY_REGIONS]+['wear:'+item for item in WARDROBE]
+BUCKETS={key:[] for key in ORDER}
+for name,mesh,material,group in PARTS:
+    node,family=route(name,group)
+    BUCKETS[node].append((name,mesh,material,group,family))
+GROUPS=[(key,
+         'body-region' if key.startswith('body:') else 'wardrobe-item',
+         key.split(':',1)[1],
+         BUCKETS[key]) for key in ORDER]
+
+# Nothing may be published as wearable without geometry, and no geometry may
+# be routed to a node the wardrobe never offers: an item a person could choose
+# and never see is the same defect as a garment nobody can reach.
+for key,_,semantic,parts in GROUPS:
+    if not parts:
+        raise ValueError('wardrobe entry with no geometry: '+key)
+for item in WARDROBE_TABLE['items']:
+    for region in item['hides']:
+        if region not in WARDROBE_TABLE['body_regions']:
+            raise ValueError('%s hides an unpublished region: %s'%(item['id'],region))
+for slot,worn in WARDROBE_TABLE['default_outfit'].items():
+    for item_id in ([worn] if isinstance(worn,str) else worn):
+        if item_id not in WARDROBE:
+            raise ValueError('default outfit wears an unpublished item: '+item_id)
+
 SKELETON=LANDMARKS.skeleton()
-export_avatar(PARTS,PALETTE,SKELETON,LANDMARKS,OUT,'dasha-v2-study',version='0.2.0')
+export_modular_avatar(GROUPS,PALETTE,SKELETON,OUT,'dasha-v2-study',
+                      version=WARDROBE_TABLE['asset_version'],wardrobe=WARDROBE_TABLE)

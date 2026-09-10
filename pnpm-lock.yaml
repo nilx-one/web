@@ -212,7 +212,14 @@ importers:
         specifier: workspace:*
         version: link:../application
 
-  packages/graphics: {}
+  packages/graphics:
+    dependencies:
+      '@types/three':
+        specifier: ^0.185.4
+        version: 0.185.4
+      three:
+        specifier: ^0.185.1
+        version: 0.185.1
 
   packages/host-browser:
     dependencies:
@@ -300,6 +307,9 @@ importers:
       '@nilx-one/application':
         specifier: workspace:*
         version: link:../application
+      '@nilx-one/graphics':
+        specifier: workspace:*
+        version: link:../graphics
       '@nilx-one/host-contract':
         specifier: workspace:*
         version: link:../host-contract

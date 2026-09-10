@@ -3,9 +3,12 @@
 
 import { describe, expect, it } from "vitest";
 
+import { Object3D } from "three";
+
 import {
   AVATAR_ASSET_URLS,
   AVATAR_LAYER_ID,
+  applyAvatarNodeVisibility,
   createAvatarLayer,
   sampleAmbientAvatar,
 } from "./avatar-layer";
@@ -17,7 +20,7 @@ describe("avatar presentation contract", () => {
       "/avatars/0.1.0/dasha-study.glb",
     );
     expect(AVATAR_ASSET_URLS["dasha-v2-study"]).toBe(
-      "/avatars/0.2.0/dasha-v2-study.glb",
+      "/avatars/0.3.0/dasha-v2-study.glb",
     );
   });
 
@@ -48,5 +51,65 @@ describe("avatar presentation contract", () => {
     });
     layer.remove("local-study-preview");
     layer.dispose();
+  });
+});
+
+describe("drawing what a body is wearing", () => {
+  function character(): Object3D {
+    const root = new Object3D();
+    for (const name of [
+      "body:head",
+      "body:torso",
+      "body:feet",
+      "wear:top/tee-black",
+      "wear:shoes/loafers-black",
+      "wear:dress/shift-indigo",
+    ]) {
+      const node = new Object3D();
+      node.name = name;
+      root.add(node);
+    }
+    return root;
+  }
+
+  function drawn(root: Object3D): string[] {
+    return root.children
+      .filter((child) => child.visible)
+      .map((child) => child.name);
+  }
+
+  it("shows the nodes it was given names for and hides the rest", () => {
+    const root = character();
+    applyAvatarNodeVisibility(root, [
+      "body:head",
+      "body:feet",
+      "wear:dress/shift-indigo",
+    ]);
+    expect(drawn(root)).toEqual([
+      "body:head",
+      "body:feet",
+      "wear:dress/shift-indigo",
+    ]);
+  });
+
+  it("changes an outfit without touching anything else in the scene", () => {
+    const root = character();
+    const untouched = new Object3D();
+    untouched.name = "Armature";
+    root.add(untouched);
+    applyAvatarNodeVisibility(root, ["body:head", "wear:top/tee-black"]);
+    applyAvatarNodeVisibility(root, ["body:head", "wear:dress/shift-indigo"]);
+    expect(drawn(root)).toEqual([
+      "body:head",
+      "wear:dress/shift-indigo",
+      "Armature",
+    ]);
+  });
+
+  it("draws a sculpted study exactly as it was authored", () => {
+    const root = character();
+    applyAvatarNodeVisibility(root, undefined);
+    applyAvatarNodeVisibility(root, []);
+    expect(drawn(root)).toHaveLength(root.children.length);
   });
 });
