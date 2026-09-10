@@ -14,18 +14,22 @@ CREATE TABLE IF NOT EXISTS bond_location_control (
     CHECK (
         (observed_longitude IS NULL AND observed_latitude IS NULL AND observed_at IS NULL)
         OR (
-            observed_longitude BETWEEN -180.0 AND 180.0
-            AND observed_latitude BETWEEN -90.0 AND 90.0
+            observed_longitude IS NOT NULL
+            AND observed_latitude IS NOT NULL
             AND observed_at IS NOT NULL
+            AND observed_longitude BETWEEN -180.0 AND 180.0
+            AND observed_latitude BETWEEN -90.0 AND 90.0
         )
     ),
     CHECK (
         (mode = 'live' AND manual_longitude IS NULL AND manual_latitude IS NULL AND manual_set_at IS NULL)
         OR (
             mode = 'manual'
+            AND manual_longitude IS NOT NULL
+            AND manual_latitude IS NOT NULL
+            AND manual_set_at IS NOT NULL
             AND manual_longitude BETWEEN -180.0 AND 180.0
             AND manual_latitude BETWEEN -90.0 AND 90.0
-            AND manual_set_at IS NOT NULL
         )
     )
 ) STRICT;
