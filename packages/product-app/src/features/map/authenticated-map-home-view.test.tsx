@@ -808,7 +808,9 @@ describe("AuthenticatedMapHomeView", () => {
     const drawn = vi
       .mocked(mapRenderer.avatars!.upsert)
       .mock.calls.map(([handle]) => handle);
-    expect(new Set(drawn.map((handle) => handle.id))).toEqual(new Set(["bond"]));
+    expect(new Set(drawn.map((handle) => handle.id))).toEqual(
+      new Set(["bond"]),
+    );
     expect(drawn.at(-1)?.modelId).toBe("dasha-study");
     // The seat nobody is in is dropped rather than left standing behind.
     expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("avaia");
