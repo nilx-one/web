@@ -7,11 +7,13 @@ import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  AVATAR_BODY_REGIONS,
   AVATAR_SLOTS,
   WARDROBE_ITEMS,
   avatarModelDefinition,
   resolveAvatarAppearance,
 } from "./avatar-appearance";
+import { AVATAR_IDENTITY_REGIONS } from "./avatar-scene";
 
 /**
  * The clothes a person can choose and the clothes that exist are one table.
@@ -111,6 +113,11 @@ describe("the published wardrobe and the built asset", () => {
       asBuilt[slot] = value;
     }
     expect(JSON.parse(JSON.stringify(worn))).toEqual(asBuilt);
+  });
+
+  it("cut the body into the same regions", () => {
+    expect([...AVATAR_BODY_REGIONS]).toEqual([...table.body_regions]);
+    expect([...AVATAR_IDENTITY_REGIONS]).toEqual([...table.always_visible]);
   });
 
   it("never let a garment hide a region the body always shows", () => {

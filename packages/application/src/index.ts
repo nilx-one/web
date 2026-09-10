@@ -41,6 +41,14 @@ export {
   type WardrobeItem,
 } from "./avatar-appearance";
 export {
+  AVATAR_IDENTITY_NODES,
+  AVATAR_IDENTITY_REGIONS,
+  resolveAvatarScene,
+  resolveSelectedAvatarScene,
+  sceneDrawsNode,
+  type ResolvedAvatarScene,
+} from "./avatar-scene";
+export {
   createAvaiaMovementController,
   type AvaiaMovementController,
   type AvaiaMovementControllerOptions,
