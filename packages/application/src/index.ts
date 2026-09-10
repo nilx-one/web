@@ -20,6 +20,14 @@ export {
   type AvaiaProfileUpdateResult,
 } from "./avaia-profile";
 export {
+  removeBondLocationOverride,
+  resolveBondLocationPresentation,
+  setBondLocationOverride,
+  type BondLocationOverrides,
+  type BondLocationPresentation,
+  type BondLocationPresentationSource,
+} from "./bond-location-presentation";
+export {
   BOND_PROVIDER_TYPES,
   bondProviderConnection,
   bondProviderOpenTarget,
