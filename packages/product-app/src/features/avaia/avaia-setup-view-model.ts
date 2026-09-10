@@ -25,8 +25,8 @@ export const AVAIA_ADDRESS_SUFFIX = "ai";
 interface AvaiaAddressParts {
   /** The owner's immutable hexadecimal discriminator. */
   readonly prefix: string;
-  /** The only address text the owner edits on this surface. */
-  readonly editableName: string;
+  /** Mutable UI portion before the protocol-required `ai` ending. */
+  readonly slugStem: string;
   readonly suffix: typeof AVAIA_ADDRESS_SUFFIX;
 }
 
@@ -47,9 +47,23 @@ function avaiaAddressParts(address: string): AvaiaAddressParts | undefined {
 
   return {
     prefix: discriminator,
-    editableName: address.slice(1, -AVAIA_ADDRESS_SUFFIX.length),
+    slugStem: address.slice(1, -AVAIA_ADDRESS_SUFFIX.length),
     suffix: AVAIA_ADDRESS_SUFFIX,
   };
+}
+
+/**
+ * Build the service request from the canonical stored address and the only
+ * mutable editor value. The allocated discriminator and required `ai` ending
+ * are always inherited from contract-owned state, never from editable text.
+ */
+export function composeAvaiaPubDress(
+  currentAddress: string,
+  slugStem: string,
+): string | undefined {
+  const parts = avaiaAddressParts(currentAddress);
+  if (parts === undefined) return undefined;
+  return `${parts.prefix}${slugStem}${parts.suffix}`;
 }
 
 export interface AvaiaSetupViewState {
@@ -58,13 +72,13 @@ export interface AvaiaSetupViewState {
   /** Persisted owner decision. Absent while nothing has been read. */
   readonly configuration?: AvaiaConfigurationState;
   readonly configurationLabel: string;
-  /** The whole canonical draft retained for the service update contract. */
-  readonly draft: string;
   /** Contract-owned address text rendered outside the editable control. */
   readonly prefix: string;
   readonly suffix: typeof AVAIA_ADDRESS_SUFFIX;
-  /** The text between owner discriminator and the mandatory `ai` suffix. */
-  readonly editableName: string;
+  /** Only mutable UI state; the canonical Avaia slug still ends in `ai`. */
+  readonly slugStem: string;
+  /** Full candidate reconstructed only for comparison/service submission. */
+  readonly candidatePubDress: string;
   readonly editable: boolean;
   readonly busy: boolean;
   readonly canSave: boolean;
@@ -78,7 +92,8 @@ export interface AvaiaSetupInput {
   readonly load: AvaiaProfileLoadState;
   /** The address the identity projection already carries, if any. */
   readonly fallbackAddress?: string | undefined;
-  readonly draft?: string | undefined;
+  /** Mutable editor state only; discriminator and `ai` never enter this draft. */
+  readonly draftSlugStem?: string | undefined;
   readonly pending: boolean;
   readonly result?: AvaiaProfileUpdateResult | undefined;
 }
@@ -136,14 +151,14 @@ export function createAvaiaSetupViewState(
   const profile =
     input.load.kind === "available" ? input.load.profile : undefined;
   const address = profile?.pubDress ?? input.fallbackAddress ?? "";
-  const draft = input.draft ?? address;
   const storedParts = avaiaAddressParts(address);
-  const draftParts = avaiaAddressParts(draft);
-  const editable =
-    profile !== undefined &&
-    storedParts !== undefined &&
-    draftParts !== undefined;
-  const changed = draft !== address;
+  const slugStem = input.draftSlugStem ?? storedParts?.slugStem ?? "";
+  const candidatePubDress =
+    storedParts === undefined
+      ? address
+      : `${storedParts.prefix}${slugStem}${storedParts.suffix}`;
+  const editable = profile !== undefined && storedParts !== undefined;
+  const changed = candidatePubDress !== address;
   const error =
     input.result === undefined ? undefined : saveError(input.result);
   const status = loadStatus(input.load);
@@ -154,10 +169,10 @@ export function createAvaiaSetupViewState(
       ? {}
       : { configuration: profile.configurationState }),
     configurationLabel: configurationLabel(profile?.configurationState),
-    draft,
-    prefix: draftParts?.prefix ?? storedParts?.prefix ?? "",
+    prefix: storedParts?.prefix ?? "",
     suffix: AVAIA_ADDRESS_SUFFIX,
-    editableName: draftParts?.editableName ?? "",
+    slugStem,
+    candidatePubDress,
     editable,
     busy: input.pending,
     canSave: editable && changed && !input.pending,

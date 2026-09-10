@@ -32,15 +32,15 @@ describe("AvaiaSetupView", () => {
 
     const input = screen.getByLabelText("pub_dress");
     expect(input).toHaveValue("sk");
-    expect(
-      container.querySelector(".profile-edit__discriminator"),
-    ).toHaveTextContent("0");
+    expect(container.querySelector(".profile-edit__discriminator")).toHaveTextContent(
+      "0",
+    );
     const suffix = container.querySelector(".profile-edit__affix");
     expect(suffix).toHaveTextContent("ai");
     expect(suffix?.tagName).toBe("SPAN");
 
     fireEvent.change(input, { target: { value: "sync." } });
 
-    expect(onDraftChange).toHaveBeenCalledExactlyOnceWith("0sync.ai");
+    expect(onDraftChange).toHaveBeenCalledExactlyOnceWith("sync.");
   });
 });

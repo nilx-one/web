@@ -9,6 +9,7 @@ import "./avaia-setup.css";
 
 export interface AvaiaSetupViewProps {
   readonly state: AvaiaSetupViewState;
+  /** Receives only the mutable portion between discriminator and `ai`. */
   onDraftChange(value: string): void;
   onSubmit(): void;
 }
@@ -59,15 +60,11 @@ export function AvaiaSetupView({
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
-            value={state.editableName}
+            value={state.slugStem}
             disabled={!state.editable || state.busy}
             aria-describedby="avaia-pub-dress-note"
             aria-invalid={state.error !== undefined}
-            onChange={(event) =>
-              onDraftChange(
-                `${state.prefix}${event.currentTarget.value}${state.suffix}`,
-              )
-            }
+            onChange={(event) => onDraftChange(event.currentTarget.value)}
           />
           <span className="profile-edit__affix" aria-hidden="true">
             {state.suffix}
