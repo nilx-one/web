@@ -24,7 +24,9 @@ describe("LanguageSettings", () => {
     render(<LanguageSettings />);
 
     expect(screen.getByRole("group", { name: "Мова" })).toBeVisible();
-    expect(screen.getByRole("radio", { name: /Автоматично/i })).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: "Використовувати визначену мову" }),
+    ).toBeChecked();
     expect(screen.getByText("Визначено: Українська")).toBeVisible();
   });
 
