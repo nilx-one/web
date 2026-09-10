@@ -1,20 +1,27 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type {
-  MapCamera,
-  MapObservedPosition,
-  MapObservedPositionLabel,
-  MapPointSelection,
-  MapRenderer,
-  MapRendererStatus,
-} from "@nilx-one/map-contract";
+import type { createMapLibreRenderer } from "@nilx-one/map-maplibre";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   createManualLocationMapRenderer,
   readTelegramLocationControl,
+  type TelegramLocationPoint,
 } from "./location-control";
+
+type TelegramMapRenderer = ReturnType<typeof createMapLibreRenderer>;
+type MapStatus = ReturnType<TelegramMapRenderer["getStatus"]>;
+type MapCamera = ReturnType<TelegramMapRenderer["getCamera"]>;
+type ObservedPosition = Parameters<
+  TelegramMapRenderer["setObservedPosition"]
+>[0];
+type ObservedPositionLabel = Parameters<
+  TelegramMapRenderer["setObservedPositionLabel"]
+>[0];
+type SelectedPoint = Parameters<
+  NonNullable<TelegramMapRenderer["setSelectionPoint"]>
+>[0];
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -24,17 +31,22 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 function fakeRenderer() {
-  let status: MapRendererStatus = { kind: "unmounted" };
-  const observed: Array<MapObservedPosition | null> = [];
-  const labels: Array<MapObservedPositionLabel | null> = [];
-  const selections: Array<MapPointSelection | null> = [];
+  let status: MapStatus = { kind: "unmounted" };
+  const observed: ObservedPosition[] = [];
+  const labels: ObservedPositionLabel[] = [];
+  const selections: SelectedPoint[] = [];
   const camera: MapCamera = {
     center: [30.5234, 50.4501],
     zoom: 11,
     bearing: 0,
     pitch: 0,
   };
-  const renderer: MapRenderer = {
+  const renderer: TelegramMapRenderer = {
+    avatars: {
+      upsert() {},
+      remove() {},
+      setCamera() {},
+    },
     mount() {
       status = { kind: "ready" };
     },
@@ -64,6 +76,12 @@ function fakeRenderer() {
     },
     setSelectionPoint(point) {
       selections.push(point);
+    },
+    subscribePointSelection() {
+      return () => undefined;
+    },
+    subscribeBodyActivation() {
+      return () => undefined;
     },
   };
   return { renderer, observed, labels, selections };
@@ -112,7 +130,10 @@ describe("Telegram location control", () => {
 
   it("never presents an observed position while manual mode is active", () => {
     const base = fakeRenderer();
-    const manual = { longitude: 2.3522, latitude: 48.8566 };
+    const manual: TelegramLocationPoint = {
+      longitude: 2.3522,
+      latitude: 48.8566,
+    };
     const renderer = createManualLocationMapRenderer(base.renderer, manual);
 
     renderer.setObservedPosition({
