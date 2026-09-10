@@ -140,7 +140,9 @@ export function createAvaiaSetupViewState(
   const storedParts = avaiaAddressParts(address);
   const draftParts = avaiaAddressParts(draft);
   const editable =
-    profile !== undefined && storedParts !== undefined && draftParts !== undefined;
+    profile !== undefined &&
+    storedParts !== undefined &&
+    draftParts !== undefined;
   const changed = draft !== address;
   const error =
     input.result === undefined ? undefined : saveError(input.result);
