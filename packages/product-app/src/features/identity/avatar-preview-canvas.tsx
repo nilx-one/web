@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { ResolvedAvatarScene } from "@nilx-one/application";
-import {
-  createAvatarPreview,
-  type AvatarPreview,
-  type AvatarPreviewFraming,
-  type AvatarPreviewStatus,
+import type {
+  AvatarPreview,
+  AvatarPreviewBody,
+  AvatarPreviewFraming,
+  AvatarPreviewStatus,
 } from "@nilx-one/graphics";
 import { avatarAssetUrl, avatarPreviewUrl } from "@nilx-one/map-contract";
 import { useEffect, useRef, useState } from "react";
@@ -40,48 +40,68 @@ export function AvatarPreviewCanvas({
 }: AvatarPreviewCanvasProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const previewRef = useRef<AvatarPreview | null>(null);
+  const pendingRef = useRef<AvatarPreviewBody | null>(null);
+  const framingRef = useRef<AvatarPreviewFraming>(framing);
   const [status, setStatus] = useState<AvatarPreviewStatus>({ kind: "idle" });
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
-    const preview = createAvatarPreview(canvas, {
-      reducedMotion: !animated || prefersReducedMotion(),
-      ...(animated ? { clipId: "idle" } : {}),
-      onStatus: setStatus,
-    });
-    previewRef.current = preview;
+    let live = true;
+    let preview: AvatarPreview | undefined;
+    let observer: ResizeObserver | undefined;
 
     const measure = () => {
       const box = canvas.getBoundingClientRect();
-      preview.resize(box.width, box.height);
+      preview?.resize(box.width, box.height);
     };
-    measure();
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? undefined
-        : new ResizeObserver(measure);
-    observer?.observe(canvas);
+
+    // The renderer is a scene library, and most sessions never open a body.
+    // Fetching it when one is actually shown keeps it out of what everyone
+    // downloads to reach the world.
+    void import("@nilx-one/graphics").then(({ createAvatarPreview }) => {
+      if (!live) return;
+      preview = createAvatarPreview(canvas, {
+        reducedMotion: !animated || prefersReducedMotion(),
+        ...(animated ? { clipId: "idle" } : {}),
+        onStatus: setStatus,
+      });
+      previewRef.current = preview;
+      preview.setFraming(framingRef.current);
+      measure();
+      if (pendingRef.current !== null) preview.show(pendingRef.current);
+      observer =
+        typeof ResizeObserver === "undefined"
+          ? undefined
+          : new ResizeObserver(measure);
+      observer?.observe(canvas);
+    });
 
     return () => {
+      live = false;
       observer?.disconnect();
       previewRef.current = null;
       // Closing a surface gives its body back rather than keeping every study
       // a person looked at while they were deciding.
-      preview.dispose();
+      preview?.dispose();
     };
   }, [animated]);
 
   useEffect(() => {
+    framingRef.current = framing;
     previewRef.current?.setFraming(framing);
   }, [framing]);
 
   useEffect(() => {
-    previewRef.current?.show({
+    // Held whether or not the renderer has arrived, so a body chosen while it
+    // was still loading is the one that ends up standing there.
+    const body = {
       key: scene.key,
       assetUrl: avatarAssetUrl(scene.modelId),
       visibleNodes: scene.visibleNodes,
-    });
+    };
+    pendingRef.current = body;
+    previewRef.current?.show(body);
   }, [scene.key, scene.modelId, scene.visibleNodes]);
 
   const failed = status.kind === "unavailable";
