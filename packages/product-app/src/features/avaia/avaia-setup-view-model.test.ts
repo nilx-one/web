@@ -84,9 +84,8 @@ describe("Avaia setup surface", () => {
       createAvaiaSetupViewState(input({ draftSlugStem: "sk" })).canSave,
     ).toBe(false);
     expect(
-      createAvaiaSetupViewState(
-        input({ draftSlugStem: "vesn", pending: true }),
-      ).canSave,
+      createAvaiaSetupViewState(input({ draftSlugStem: "vesn", pending: true }))
+        .canSave,
     ).toBe(false);
     expect(
       createAvaiaSetupViewState(input({ draftSlugStem: "vesn" })).canSave,
