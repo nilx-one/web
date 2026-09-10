@@ -260,7 +260,8 @@ describe("Avaia setup from the Bond dock", () => {
     expect(screen.getByText("configured")).toBeVisible();
   });
 
-  it("leaves a host without the capability the Dock it already had", async () => {
+  it("keeps the selected Avaia target without inventing profile capability", async () => {
+    const user = userEvent.setup();
     render(
       <ProductApp
         core={readyCore}
@@ -273,12 +274,21 @@ describe("Avaia setup from the Bond dock", () => {
     expect(
       await screen.findByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toBeVisible();
-    // Nothing is synthesised in place of a profile this host cannot read.
+    // Selection still owns the edit target even when this older identity port
+    // cannot read or update an Avaia profile.
+    const edit = screen.getByRole("button", { name: "Edit 0skai" });
     expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Edit 0skai/ })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Focus the world on 0skai" }),
     ).toHaveTextContent("driving");
+
+    await user.click(edit);
+
+    // The Dock may name the selected identity, but it must not synthesise an
+    // editable profile or save path that the host contract does not expose.
+    expect(screen.getByRole("heading", { name: "0skai" })).toBeVisible();
+    expect(screen.queryByLabelText("pub_dress")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 
   it("has no automatically detectable accessibility violations", async () => {
