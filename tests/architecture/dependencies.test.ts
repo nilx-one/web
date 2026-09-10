@@ -20,6 +20,13 @@ const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   "host-telegram": ["@nilx-one/host-contract"],
   "map-contract": [],
   "map-maplibre": ["@nilx-one/map-contract"],
+  // The shade renderer sees cell membership and nothing else. It has no route
+  // to the journal at all: no store package, and no host capability.
+  "map-shade": ["@nilx-one/presence-contract"],
+  "presence-contract": [],
+  "presence-geo": ["@nilx-one/host-contract", "@nilx-one/presence-contract"],
+  "presence-idb": ["@nilx-one/presence-contract"],
+  "presence-panel": ["@nilx-one/presence-contract"],
   "product-app": [
     "@nilx-one/application",
     "@nilx-one/host-contract",
@@ -189,6 +196,36 @@ describe("Clean Architecture boundaries", () => {
     }
 
     expect(violations).toEqual([]);
+  });
+
+  it("keeps journal contents out of the shade renderer", () => {
+    // The renderer is given cell membership and nothing else. If it could read
+    // a record it would not need the tap, and the tap is what keeps journal
+    // text something a person asks for rather than something the map emits.
+    const violations: string[] = [];
+
+    for (const file of sourceFiles(join(ROOT, "packages/map-shade/src"))) {
+      const source = readFileSync(file, "utf8");
+
+      if (/PresenceStore|VisitRecord|recordsForCell|enteredAt/.test(source)) {
+        violations.push(relative(ROOT, file));
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps the platform geolocation API out of presence capture", () => {
+    // Capture reads the host capability like every other feature does, so a
+    // Telegram WebView or a sandboxed Discord iframe answers for itself
+    // instead of being special-cased here.
+    const source = readFileSync(
+      join(ROOT, "packages/presence-geo/src/index.ts"),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(/navigator\.|getCurrentPosition\(/);
+    expect(source).toContain("@nilx-one/host-contract");
   });
 
   it("never introduces a Canvas 2D rendering fallback", () => {

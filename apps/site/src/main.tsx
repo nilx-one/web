@@ -8,7 +8,16 @@ import {
 } from "@nilx-one/core-wasm";
 import { createBrowserHost } from "@nilx-one/host-browser";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
-import { createMapLibreRenderer } from "@nilx-one/map-maplibre";
+import {
+  MAP_BOOTSTRAP_CAMERA,
+  createMapLibreRenderer,
+} from "@nilx-one/map-maplibre";
+import { createShadeLayer } from "@nilx-one/map-shade";
+import { createShadeSource, toShadeSource } from "@nilx-one/presence-contract";
+import { createPresenceCapture } from "@nilx-one/presence-geo";
+import { createPresenceIdbStore } from "@nilx-one/presence-idb";
+import { createPresenceJournalPanel } from "@nilx-one/presence-panel";
+import "@nilx-one/presence-panel/styles.css";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -26,6 +35,9 @@ if (container === null) {
 }
 
 const root = createRoot(container);
+
+/** Where the shade lightmap is centred. Bootstrap geography, as the camera is. */
+const PRESENCE_ANCHOR = MAP_BOOTSTRAP_CAMERA.center;
 
 if (isPublicBondHostname(window.location.hostname)) {
   // A Bond subdomain is a public identity surface, not an authenticated world
@@ -51,7 +63,47 @@ if (isPublicBondHostname(window.location.hostname)) {
   const identity = createIdentityHttpAdapter({
     getAuthorization: () => undefined,
   });
-  const mapRenderer = createMapLibreRenderer();
+  const host = createBrowserHost();
+
+  // Presence: the journal underneath, the shade over the ground, and the tap
+  // between them. The renderer is handed the narrowed source, so it can learn
+  // which cells are lit and nothing else about them.
+  const presenceStore = createPresenceIdbStore({
+    indexedDB: window.indexedDB,
+    crypto: window.crypto,
+  });
+  const shadeSource = createShadeSource(presenceStore);
+  const journalPanel = createPresenceJournalPanel(presenceStore);
+  // Outside the React root on purpose: createRoot clears its container's
+  // children when it renders, which would take the panel with them.
+  document.body.append(journalPanel.element);
+
+  const shadeLayer = createShadeLayer({
+    source: toShadeSource(shadeSource),
+    // Bootstrap geography, same as the camera's. Anchoring the lightmap on
+    // where a person actually lives is an open question, not a Phase 1 answer.
+    anchor: {
+      longitude: PRESENCE_ANCHOR[0],
+      latitude: PRESENCE_ANCHOR[1],
+    },
+  });
+  shadeLayer.subscribeCellActivation((cell) => {
+    void journalPanel.show(cell);
+  });
+
+  const mapRenderer = createMapLibreRenderer({
+    groundLayers: [shadeLayer],
+  });
+
+  // Started before capture: an empty journal still draws, and a surface that
+  // can never capture still shows whatever was recorded earlier.
+  void shadeSource.start();
+
+  const presenceCapture = createPresenceCapture({
+    store: presenceStore,
+    geolocation: host.geolocation,
+  });
+  void presenceCapture.start();
 
   reportMapRendererStatus(reporter, mapRenderer.getStatus());
   mapRenderer.subscribe((status) => reportMapRendererStatus(reporter, status));
@@ -60,7 +112,7 @@ if (isPublicBondHostname(window.location.hostname)) {
     <StrictMode>
       <ProductApp
         core={core}
-        host={createBrowserHost()}
+        host={host}
         identity={identity}
         mapRenderer={mapRenderer}
       />

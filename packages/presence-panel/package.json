@@ -1,0 +1,13 @@
+{
+  "name": "@nilx-one/presence-panel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "dependencies": {
+    "@nilx-one/presence-contract": "workspace:*"
+  }
+}

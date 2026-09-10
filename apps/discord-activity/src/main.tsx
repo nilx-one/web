@@ -13,7 +13,15 @@ import {
   resolveDiscordProxyUrl,
 } from "@nilx-one/host-discord";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
-import { createMapLibreRenderer } from "@nilx-one/map-maplibre";
+import {
+  MAP_BOOTSTRAP_CAMERA,
+  createMapLibreRenderer,
+} from "@nilx-one/map-maplibre";
+import { createShadeLayer } from "@nilx-one/map-shade";
+import { createShadeSource, toShadeSource } from "@nilx-one/presence-contract";
+import { createPresenceIdbStore } from "@nilx-one/presence-idb";
+import { createPresenceJournalPanel } from "@nilx-one/presence-panel";
+import "@nilx-one/presence-panel/styles.css";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -75,7 +83,42 @@ async function main(): Promise<void> {
     fetch: session.fetch,
     getAuthorization: () => session.authorization,
   });
-  const mapRenderer = createMapLibreRenderer();
+  // Presence, render side only. The journal is read and the shade is drawn; no
+  // capture is composed here.
+  //
+  // An Activity runs in a sandboxed iframe, and geolocation is assumed
+  // withheld by permissions policy until something proves otherwise. That was
+  // not provable from the build container, so capture stays unwired rather
+  // than wired on an assumption. The host capability is already the place that
+  // would answer it, and it answers "unsupported" today.
+  const presenceStore = createPresenceIdbStore({
+    indexedDB: window.indexedDB,
+    crypto: window.crypto,
+  });
+  const shadeSource = createShadeSource(presenceStore);
+  const journalPanel = createPresenceJournalPanel(presenceStore);
+  // Outside the React root on purpose: createRoot clears its container's
+  // children when it renders, which would take the panel with them.
+  document.body.append(journalPanel.element);
+
+  const shadeLayer = createShadeLayer({
+    source: toShadeSource(shadeSource),
+    anchor: {
+      longitude: MAP_BOOTSTRAP_CAMERA.center[0],
+      latitude: MAP_BOOTSTRAP_CAMERA.center[1],
+    },
+  });
+  shadeLayer.subscribeCellActivation((cell) => {
+    void journalPanel.show(cell);
+  });
+
+  // An empty journal is a fully dark map, which is the correct picture of
+  // having recorded nothing — not a broken screen.
+  void shadeSource.start();
+
+  const mapRenderer = createMapLibreRenderer({
+    groundLayers: [shadeLayer],
+  });
 
   root.render(
     <StrictMode>

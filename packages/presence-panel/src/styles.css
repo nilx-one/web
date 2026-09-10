@@ -1,0 +1,63 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/*
+ * Ugly on purpose. Phase 1 is for reading real journal output and deciding
+ * whether it is worth narrating; anything more considered than "legible"
+ * would be answering that question early.
+ */
+
+.presence-journal {
+  position: fixed;
+  inset-block-end: 1rem;
+  inset-inline-start: 1rem;
+  z-index: 10;
+  max-block-size: 40vh;
+  max-inline-size: min(32rem, calc(100vw - 2rem));
+  overflow: auto;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 4px;
+  background: rgb(0 0 0 / 85%);
+  color: rgb(255 255 255 / 92%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.presence-journal__heading {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.presence-journal__heading h2 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.presence-journal__cell {
+  flex: 1;
+  overflow: hidden;
+  color: rgb(255 255 255 / 60%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presence-journal table {
+  border-collapse: collapse;
+  inline-size: 100%;
+}
+
+.presence-journal th,
+.presence-journal td {
+  padding: 0.125rem 0.5rem 0.125rem 0;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.presence-journal th {
+  color: rgb(255 255 255 / 55%);
+  font-weight: 400;
+}

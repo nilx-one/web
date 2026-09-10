@@ -30,6 +30,7 @@ import {
   addProtocol,
   getWorkerUrl,
   setWorkerUrl,
+  type CustomLayerInterface,
   type DataDrivenPropertyValueSpecification,
   type GeoJSONSource,
   type LayerSpecification,
@@ -125,6 +126,15 @@ export interface MapLibreRenderer extends MapRenderer {
 }
 
 export interface MapLibreRendererOptions {
+  /**
+   * Custom layers drawn on the ground, beneath the style's symbols so labels
+   * stay readable through them.
+   *
+   * The adapter mounts and re-mounts them across style changes; it never
+   * builds one and never learns what any of them draw. A composition root is
+   * what decides a ground layer exists at all.
+   */
+  readonly groundLayers?: readonly CustomLayerInterface[];
   readonly styleUrls?: Readonly<Record<MapAppearance, string>>;
   readonly initialAppearance?: MapAppearance;
   readonly initialDimension?: MapDimension;
@@ -214,6 +224,7 @@ export function createMapLibreRenderer(
     options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
   const createLabelMarker =
     options.createLabelMarker ?? createMapLibreLabelMarker;
+  const groundLayers = options.groundLayers ?? [];
   let appearance = options.initialAppearance ?? DEFAULT_MAP_APPEARANCE;
   let dimension = options.initialDimension ?? DEFAULT_MAP_DIMENSION;
   let status: MapRendererStatus = { kind: "unmounted" };
@@ -485,6 +496,46 @@ export function createMapLibreRenderer(
     applyLabel(mounted);
   }
 
+  /**
+   * The id of the first symbol layer in the current style, which is where a
+   * ground layer is inserted so it covers the basemap without burying the
+   * labels drawn over it.
+   */
+  function firstSymbolLayerId(mounted: MapLibreMap): string | undefined {
+    // The style is only readable once it has loaded. Where it is not, the
+    // layer is appended instead of being placed, which is the same outcome a
+    // style with no symbols in it gets.
+    const layers = mounted.getStyle?.()?.layers;
+    if (layers === undefined) {
+      return undefined;
+    }
+    for (const layer of layers) {
+      if (layer.type === "symbol") {
+        return layer.id;
+      }
+    }
+    return undefined;
+  }
+
+  function ensureGroundLayers(mounted: MapLibreMap): void {
+    // Nothing composed a ground layer, so the style is not inspected at all.
+    if (groundLayers.length === 0) {
+      return;
+    }
+    const before = firstSymbolLayerId(mounted);
+    for (const layer of groundLayers) {
+      if (mounted.getLayer(layer.id) !== undefined) {
+        continue;
+      }
+      // A style with no symbols at all still gets the layer, appended last.
+      if (before === undefined) {
+        mounted.addLayer(layer);
+      } else {
+        mounted.addLayer(layer, before);
+      }
+    }
+  }
+
   function ensureAvatarLayer(mounted: MapLibreMap): void {
     if (avatarLayer === undefined) return;
     if (mounted.getLayer(avatarLayer.id) !== undefined) return;
@@ -493,6 +544,9 @@ export function createMapLibreRenderer(
 
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
+    // Ground first: the observation and the bodies belong above the shade,
+    // and a style change re-adds all three in the same order.
+    ensureGroundLayers(mounted);
     applyObservedPosition(mounted);
     if (firstPaintDone && avatarLayer?.hasInstances())
       ensureAvatarLayer(mounted);
