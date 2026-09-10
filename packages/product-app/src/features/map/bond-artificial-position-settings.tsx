@@ -23,7 +23,9 @@ export interface BondArtificialPositionSettingsProps {
   readonly renderer: MapRenderer;
 }
 
-function readInitialState(ownerPubDress: string): BondLocationOverridesReadResult {
+function readInitialState(
+  ownerPubDress: string,
+): BondLocationOverridesReadResult {
   if (typeof window === "undefined") {
     return { kind: "unavailable", overrides: new Map() };
   }
