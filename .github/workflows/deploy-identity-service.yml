@@ -27,6 +27,8 @@ on:
         required: false
       TELOXIDE_TOKEN:
         required: false
+      TELEGRAM_OIDC_CLIENT_SECRET:
+        required: false
       DISCORD_CLIENT_SECRET:
         required: false
 
@@ -51,6 +53,8 @@ jobs:
       SSH_USER: ${{ secrets.SSH_USER }}
       SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
       TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+      TELEGRAM_OIDC_CLIENT_ID: ${{ vars.TELEGRAM_OIDC_CLIENT_ID }}
+      TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
       DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
       DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
@@ -74,6 +78,10 @@ jobs:
           test -n "$SSH_PRIVATE_KEY"
           test -n "$TELOXIDE_TOKEN"
           test -n "$IDENTITY_DEPLOYMENT_PATH"
+          if [ -n "$TELEGRAM_OIDC_CLIENT_ID" ] || [ -n "$TELEGRAM_OIDC_CLIENT_SECRET" ]; then
+            test -n "$TELEGRAM_OIDC_CLIENT_ID"
+            test -n "$TELEGRAM_OIDC_CLIENT_SECRET"
+          fi
           if [ -n "$DISCORD_CLIENT_ID" ] || [ -n "$DISCORD_CLIENT_SECRET" ]; then
             test -n "$DISCORD_CLIENT_ID"
             test -n "$DISCORD_CLIENT_SECRET"
@@ -201,6 +209,10 @@ jobs:
             compose.yaml deploy.sh check-public.sh prepare-runtime-env.sh
           umask 077
           printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN" >"$provider_file"
+          if [ -n "$TELEGRAM_OIDC_CLIENT_ID" ] && [ -n "$TELEGRAM_OIDC_CLIENT_SECRET" ]; then
+            printf 'TELEGRAM_OIDC_CLIENT_ID=%s\n' "$TELEGRAM_OIDC_CLIENT_ID" >>"$provider_file"
+            printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$TELEGRAM_OIDC_CLIENT_SECRET" >>"$provider_file"
+          fi
           if [ -n "$DISCORD_CLIENT_ID" ] && [ -n "$DISCORD_CLIENT_SECRET" ]; then
             printf 'DISCORD_CLIENT_ID=%s\n' "$DISCORD_CLIENT_ID" >>"$provider_file"
             printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET" >>"$provider_file"
