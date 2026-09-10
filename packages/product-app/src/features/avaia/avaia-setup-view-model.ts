@@ -20,6 +20,37 @@ export type AvaiaProfileLoadState =
 
 /** The model field the contract publishes no capability for. Read, never sent. */
 export const AVAIA_MODEL_UNAVAILABLE = "Not available yet";
+export const AVAIA_ADDRESS_SUFFIX = "ai";
+
+interface AvaiaAddressParts {
+  /** The owner's immutable hexadecimal discriminator. */
+  readonly prefix: string;
+  /** The only address text the owner edits on this surface. */
+  readonly editableName: string;
+  readonly suffix: typeof AVAIA_ADDRESS_SUFFIX;
+}
+
+/**
+ * Stored Avaia addresses are already canonical service facts. Splitting them is
+ * presentation only: it lets the editor keep contract-owned affixes outside
+ * the text input without inventing a second address source of truth.
+ */
+function avaiaAddressParts(address: string): AvaiaAddressParts | undefined {
+  const discriminator = address[0];
+  if (
+    discriminator === undefined ||
+    !/^[0-9a-f]$/.test(discriminator) ||
+    !address.endsWith(AVAIA_ADDRESS_SUFFIX)
+  ) {
+    return undefined;
+  }
+
+  return {
+    prefix: discriminator,
+    editableName: address.slice(1, -AVAIA_ADDRESS_SUFFIX.length),
+    suffix: AVAIA_ADDRESS_SUFFIX,
+  };
+}
 
 export interface AvaiaSetupViewState {
   /** The stored address, or the address this client last projected. */
@@ -27,8 +58,13 @@ export interface AvaiaSetupViewState {
   /** Persisted owner decision. Absent while nothing has been read. */
   readonly configuration?: AvaiaConfigurationState;
   readonly configurationLabel: string;
-  /** The whole address being written, which is the stored one until typed. */
+  /** The whole canonical draft retained for the service update contract. */
   readonly draft: string;
+  /** Contract-owned address text rendered outside the editable control. */
+  readonly prefix: string;
+  readonly suffix: typeof AVAIA_ADDRESS_SUFFIX;
+  /** The text between owner discriminator and the mandatory `ai` suffix. */
+  readonly editableName: string;
   readonly editable: boolean;
   readonly busy: boolean;
   readonly canSave: boolean;
@@ -101,7 +137,12 @@ export function createAvaiaSetupViewState(
     input.load.kind === "available" ? input.load.profile : undefined;
   const address = profile?.pubDress ?? input.fallbackAddress ?? "";
   const draft = input.draft ?? address;
-  const editable = profile !== undefined;
+  const storedParts = avaiaAddressParts(address);
+  const draftParts = avaiaAddressParts(draft);
+  const editable =
+    profile !== undefined &&
+    storedParts !== undefined &&
+    draftParts !== undefined;
   const changed = draft !== address;
   const error =
     input.result === undefined ? undefined : saveError(input.result);
@@ -114,10 +155,13 @@ export function createAvaiaSetupViewState(
       : { configuration: profile.configurationState }),
     configurationLabel: configurationLabel(profile?.configurationState),
     draft,
+    prefix: draftParts?.prefix ?? storedParts?.prefix ?? "",
+    suffix: AVAIA_ADDRESS_SUFFIX,
+    editableName: draftParts?.editableName ?? "",
     editable,
     busy: input.pending,
-    canSave: editable && changed && draft.trim().length > 0 && !input.pending,
-    note: "0x1 keeps the whole address. It carries this Bond’s discriminator and ends in ai.",
+    canSave: editable && changed && !input.pending,
+    note: "Case-sensitive · the owner discriminator and ai suffix are fixed by 0x1.",
     ...(status === undefined ? {} : { status }),
     ...(error === undefined ? {} : { error }),
   };

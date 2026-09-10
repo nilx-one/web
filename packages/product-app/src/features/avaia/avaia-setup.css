@@ -33,6 +33,19 @@
   font-size: 0.78rem;
 }
 
+.avaia-setup__address .profile-edit__discriminator,
+.avaia-setup__address .profile-edit__affix {
+  flex: 0 0 auto;
+  color: rgba(245, 243, 247, 0.62);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.avaia-setup__address .profile-edit__affix {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 650;
+}
+
 .avaia-setup__readonly {
   gap: 0.75rem;
 }
@@ -42,6 +55,12 @@
 }
 
 .authenticated-map-home[data-theme="light"] .avaia-setup__summary small,
-.authenticated-map-home[data-theme="light"] .avaia-setup__label {
+.authenticated-map-home[data-theme="light"] .avaia-setup__label,
+.authenticated-map-home[data-theme="light"]
+  .avaia-setup__address
+  .profile-edit__discriminator,
+.authenticated-map-home[data-theme="light"]
+  .avaia-setup__address
+  .profile-edit__affix {
   color: rgba(17, 19, 26, 0.62);
 }
