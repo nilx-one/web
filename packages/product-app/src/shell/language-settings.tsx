@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { chooseLocale, useLocalization, type LocalePreference } from "./localization";
+import {
+  chooseLocale,
+  useLocalization,
+  type LocalePreference,
+} from "./localization";
 
 const LANGUAGE_OPTIONS: readonly LocalePreference[] = ["auto", "en", "uk-UA"];
 
