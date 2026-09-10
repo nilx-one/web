@@ -1,6 +1,19 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+export {
+  applyPreviewVisibility,
+  createAvatarPreview,
+  disposeTree,
+  framePreviewCamera,
+  heldAvatarAssets,
+  type AvatarPreview,
+  type AvatarPreviewBody,
+  type AvatarPreviewFraming,
+  type AvatarPreviewOptions,
+  type AvatarPreviewStatus,
+} from "./avatar-preview";
+
 export type GraphicsBackend = "webgpu" | "webgl2" | "unsupported";
 
 export interface GraphicsCapabilities {
