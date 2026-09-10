@@ -29,10 +29,7 @@ import {
   observation,
 } from "../../../../../tests/support/doubles";
 import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
-import {
-  createAvaiaSlugViewState,
-  createProfileSlugViewState,
-} from "../identity/profile-slug-view-model";
+import { createProfileSlugViewState } from "../identity/profile-slug-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
 import type { AvaiaAvailability } from "./bond-dock-view-model";
@@ -56,15 +53,12 @@ interface ViewOverrides {
   avaiaAvailability?: AvaiaAvailability;
   onPrepareAvaia?: () => void;
   slugEdit?: AddressSlugViewState;
-  avaiaEdit?: AddressSlugViewState;
   avatarChoice?: ReturnType<typeof createAvatarChoiceViewState>;
   onAvatarChoice?: (model: "sky-study" | "dasha-study" | "kai-study") => void;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
   onSlugSubmit?: () => void;
-  onAvaiaChange?: (slug: string) => void;
-  onAvaiaSubmit?: () => void;
 }
 
 function renderView(overrides: ViewOverrides = {}) {
@@ -93,9 +87,6 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.slugEdit === undefined
       ? {}
       : { slugEdit: overrides.slugEdit }),
-    ...(overrides.avaiaEdit === undefined
-      ? {}
-      : { avaiaEdit: overrides.avaiaEdit }),
     ...(overrides.avatarChoice === undefined
       ? {}
       : { avatarChoice: overrides.avatarChoice }),
@@ -108,12 +99,6 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.onSlugSubmit === undefined
       ? {}
       : { onSlugSubmit: overrides.onSlugSubmit }),
-    ...(overrides.onAvaiaChange === undefined
-      ? {}
-      : { onAvaiaChange: overrides.onAvaiaChange }),
-    ...(overrides.onAvaiaSubmit === undefined
-      ? {}
-      : { onAvaiaSubmit: overrides.onAvaiaSubmit }),
   };
 
   return render(
@@ -378,7 +363,6 @@ describe("AuthenticatedMapHomeView", () => {
     renderView({
       section: "identity",
       slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
-      avaiaEdit: createAvaiaSlugViewState("0skai", "0x0sky", undefined, false),
     });
 
     expect(screen.getByRole("heading", { name: "0x0sky" })).toBeVisible();
@@ -387,7 +371,7 @@ describe("AuthenticatedMapHomeView", () => {
       screen.queryByRole("button", { name: "Edit" }),
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("pub_dress")).toHaveValue("sky");
-    expect(screen.getByLabelText("avaia")).toHaveValue("skai");
+    expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
     expect(screen.getByText("Providers")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Add a provider" }),
@@ -521,31 +505,23 @@ describe("AuthenticatedMapHomeView", () => {
     );
   });
 
-  it("names the Bond and its Avaia from the same surface", () => {
+  it("edits only the Bond address on the Personal Bond surface", () => {
     const onSlugChange = vi.fn();
-    const onAvaiaChange = vi.fn();
     renderView({
       section: "identity",
       slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
-      avaiaEdit: createAvaiaSlugViewState("0skai", "0x0sky", undefined, false),
       onSlugChange,
-      onAvaiaChange,
     });
 
-    const save = screen.getAllByRole("button", { name: "Save" });
-    expect(save).toHaveLength(2);
-    expect(save[0]).toBeDisabled();
-    expect(save[1]).toBeDisabled();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("pub_dress"), {
       target: { value: "rain" },
     });
-    fireEvent.change(screen.getByLabelText("avaia"), {
-      target: { value: "rainai" },
-    });
 
     expect(onSlugChange).toHaveBeenCalledExactlyOnceWith("rain");
-    expect(onAvaiaChange).toHaveBeenCalledExactlyOnceWith("rainai");
   });
 
   it("saves a changed slug and reports what the service answered", () => {

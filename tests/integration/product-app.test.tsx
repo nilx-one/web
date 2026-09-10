@@ -894,20 +894,14 @@ describe("ProductApp identity", () => {
     );
   });
 
-  it("names the Bond and its Avaia from the one profile surface", async () => {
+  it("names only the Bond from the Personal Bond profile surface", async () => {
     const user = userEvent.setup();
     let pubDress = "0x0sky";
-    let avaiaPubDress = "0skai";
+    const avaiaPubDress = "0skai";
     const renamePubDressSlug = vi
       .fn<IdentityAccessPort["renamePubDressSlug"]>()
       .mockImplementation(async (slug) => {
         pubDress = `0x0${slug}`;
-        return { kind: "renamed", identity: { pubDress, avaiaPubDress } };
-      });
-    const renameAvaiaSlug = vi
-      .fn<IdentityAccessPort["renameAvaiaSlug"]>()
-      .mockImplementation(async (slug) => {
-        avaiaPubDress = `0${slug}`;
         return { kind: "renamed", identity: { pubDress, avaiaPubDress } };
       });
     render(
@@ -920,7 +914,6 @@ describe("ProductApp identity", () => {
             identity: { pubDress, avaiaPubDress },
           }),
           renamePubDressSlug,
-          renameAvaiaSlug,
         })}
       />,
     );
@@ -933,25 +926,17 @@ describe("ProductApp identity", () => {
     );
     const slug = await screen.findByLabelText("pub_dress");
     expect(slug).toHaveValue("sky");
-    expect(screen.getAllByRole("button", { name: "Save" })[0]).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
 
     await user.clear(slug);
     await user.type(slug, "rain");
-    await user.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(renamePubDressSlug).toHaveBeenCalledExactlyOnceWith("rain");
     expect(await screen.findByText("Saved. This is 0x0rain.")).toBeVisible();
     expect(await screen.findByLabelText("pub_dress")).toHaveValue("rain");
-
-    // The same surface names the Avaia this Bond owns.
-    const avaia = screen.getByLabelText("avaia");
-    expect(avaia).toHaveValue("skai");
-    await user.clear(avaia);
-    await user.type(avaia, "vesnai");
-    await user.click(screen.getAllByRole("button", { name: "Save" })[1]!);
-
-    expect(renameAvaiaSlug).toHaveBeenCalledExactlyOnceWith("vesnai");
-    expect(await screen.findByText("Saved. This is 0vesnai.")).toBeVisible();
+    expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
   });
 
   it("offers a body once a Bond exists, and remembers what it chose", async () => {
