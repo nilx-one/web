@@ -193,20 +193,29 @@ export interface MapRenderer {
  * skeleton and the same clips, so choosing one changes the body a person is
  * represented by and nothing about how it moves.
  */
-export type AvatarModelId = "sky-study" | "dasha-study" | "kai-study";
+export type AvatarModelId =
+  "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study";
 
-/** The published asset version every study is served from. */
+/** The original studies retain their immutable published paths. */
 export const AVATAR_ASSET_VERSION = "0.1.0";
+
+export const AVATAR_ASSET_VERSIONS: Readonly<Record<AvatarModelId, string>> = {
+  "sky-study": AVATAR_ASSET_VERSION,
+  "dasha-study": AVATAR_ASSET_VERSION,
+  "kai-study": AVATAR_ASSET_VERSION,
+  "dasha-v2-study": "0.2.0",
+};
 
 /** The still image a picker shows for a study, generated from that study. */
 export function avatarPreviewUrl(modelId: AvatarModelId): string {
-  return `/avatars/${AVATAR_ASSET_VERSION}/${modelId}.png`;
+  return `/avatars/${AVATAR_ASSET_VERSIONS[modelId]}/${modelId}.png`;
 }
 
 export const AVATAR_MODEL_IDS: readonly AvatarModelId[] = [
   "sky-study",
   "dasha-study",
   "kai-study",
+  "dasha-v2-study",
 ];
 export type AvatarClipId =
   "idle" | "walk" | "turn_in_place" | "wake" | "quiesce";

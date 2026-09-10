@@ -128,7 +128,12 @@ describe("which body an Avaia wears", () => {
   // Two identities that take turns on one spot have to be told apart, and the
   // study is the only thing distinguishing them at a glance.
   it("never wears its Bond's own study", () => {
-    for (const bond of ["sky-study", "dasha-study", "kai-study"] as const) {
+    for (const bond of [
+      "sky-study",
+      "dasha-study",
+      "kai-study",
+      "dasha-v2-study",
+    ] as const) {
       expect(avaiaStudy("0x0sky.avaia", bond)).not.toBe(bond);
     }
   });

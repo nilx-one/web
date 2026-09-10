@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
+import { AVATAR_ASSET_VERSIONS } from "@nilx-one/map-contract";
 import type {
   AvatarClipId,
   AvatarHandle,
@@ -23,6 +23,8 @@ import {
 } from "maplibre-gl";
 import {
   AnimationMixer,
+  DirectionalLight,
+  HemisphereLight,
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
@@ -36,9 +38,10 @@ export const AVATAR_LAYER_ID = "nilx-one-local-avatars";
 export { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
 
 export const AVATAR_ASSET_URLS: Readonly<Record<AvatarModelId, string>> = {
-  "sky-study": `/avatars/${AVATAR_ASSET_VERSION}/sky-study.glb`,
-  "dasha-study": `/avatars/${AVATAR_ASSET_VERSION}/dasha-study.glb`,
-  "kai-study": `/avatars/${AVATAR_ASSET_VERSION}/kai-study.glb`,
+  "sky-study": `/avatars/${AVATAR_ASSET_VERSIONS["sky-study"]}/sky-study.glb`,
+  "dasha-study": `/avatars/${AVATAR_ASSET_VERSIONS["dasha-study"]}/dasha-study.glb`,
+  "kai-study": `/avatars/${AVATAR_ASSET_VERSIONS["kai-study"]}/kai-study.glb`,
+  "dasha-v2-study": `/avatars/${AVATAR_ASSET_VERSIONS["dasha-v2-study"]}/dasha-v2-study.glb`,
 };
 
 type AssetLoader = (
@@ -101,6 +104,13 @@ export function createAvatarLayer(
   const assetCache = new Map<AvatarModelId, Promise<GLTF>>();
   const abortController = new AbortController();
   const scene = new Scene();
+  // Custom layers have their own Three scene: MapLibre's map lighting does
+  // not illuminate the GLB's PBR materials. Mercator uses Z as vertical.
+  const ambient = new HemisphereLight(0xffffff, 0x6e665e, 2);
+  ambient.position.set(0, 0, 1);
+  const sunlight = new DirectionalLight(0xfff1df, 2.2);
+  sunlight.position.set(-1, -1, 2);
+  scene.add(ambient, sunlight);
   const camera = new PerspectiveCamera();
   let map: MapLibreMap | undefined;
   let renderer: WebGLRenderer | undefined;

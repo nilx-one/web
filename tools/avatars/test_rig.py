@@ -34,9 +34,10 @@ def read_glb(path):
 
 class RigTests(unittest.TestCase):
     def test_exported_assets(self):
-        for model in ("sky", "dasha", "kai"):
+        for model in ("sky", "dasha", "kai", "dasha-v2"):
             with self.subTest(model=model):
-                path = ASSETS / (model + "-study.glb")
+                directory = ASSETS if model != "dasha-v2" else ASSETS.parent / "0.2.0"
+                path = directory / (model + "-study.glb")
                 manifest = json.loads(path.with_suffix(".manifest.json").read_text())
                 doc, read = read_glb(path)
                 self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), manifest["sha256"])
@@ -88,8 +89,9 @@ class RigTests(unittest.TestCase):
         # Every study answers the same clip in the same rotations, so a person
         # choosing a model changes the body and nothing about how it moves.
         a, read_a = read_glb(ASSETS / "sky-study.glb")
-        for model in ("dasha", "kai"):
-            b, read_b = read_glb(ASSETS / (model + "-study.glb"))
+        for model in ("dasha", "kai", "dasha-v2"):
+            directory = ASSETS if model != "dasha-v2" else ASSETS.parent / "0.2.0"
+            b, read_b = read_glb(directory / (model + "-study.glb"))
             for clip_a, clip_b in zip(a["animations"], b["animations"], strict=True):
                 self.assertEqual(clip_a["channels"], clip_b["channels"])
                 for x, y in zip(clip_a["samplers"], clip_b["samplers"], strict=True):

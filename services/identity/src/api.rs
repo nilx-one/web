@@ -1184,7 +1184,12 @@ async fn rename_pub_dress(
 
 /// The published avatar studies. A body is chosen, never assigned: an address
 /// with no choice recorded carries no model at all.
-const AVATAR_MODELS: [&str; 3] = ["sky-study", "dasha-study", "kai-study"];
+const AVATAR_MODELS: [&str; 4] = [
+    "sky-study",
+    "dasha-study",
+    "kai-study",
+    "dasha-v2-study",
+];
 
 async fn choose_avatar_model(
     State(state): State<ApiState>,
@@ -3145,11 +3150,11 @@ mod tests {
         // A choice replaces the previous one; the address itself is untouched.
         let chosen = app
             .clone()
-            .oneshot(choose("dasha-study"))
+            .oneshot(choose("dasha-v2-study"))
             .await
             .expect("response");
         let chosen = json_body(chosen).await;
-        assert_eq!(chosen["avatar_model"], "dasha-study");
+        assert_eq!(chosen["avatar_model"], "dasha-v2-study");
         assert_eq!(chosen["pub_dress"], "0x0Sky");
 
         let unknown = app

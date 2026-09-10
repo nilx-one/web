@@ -201,8 +201,10 @@ def clips(glb):
     return animations
 
 
-def export_avatar(parts, palette, skeleton, landmarks, out, model_id):
+def export_avatar(parts, palette, skeleton, landmarks, out, model_id, *, version="0.1.0"):
     glb = Glb()
+    if version != "0.1.0":
+        glb.doc["asset"]["generator"] = "nilx-one procedural avatar " + version
     positions = skeleton @ Y_UP.T
     nodes = []
     for i, (name, parent) in enumerate(TOPOLOGY):
@@ -254,7 +256,7 @@ def export_avatar(parts, palette, skeleton, landmarks, out, model_id):
                    animations=clips(glb), scenes=[{"nodes": [0, len(TOPOLOGY)]}], scene=0)
     path = out / (model_id + ".glb")
     glb.write(path)
-    manifest = {"model_id": model_id, "version": "0.1.0", "authoring_up": "Z", "export_up": "Y",
+    manifest = {"model_id": model_id, "version": version, "authoring_up": "Z", "export_up": "Y",
                 "skeleton": {"bones": [b for b, _ in TOPOLOGY], "parents": [p for _, p in TOPOLOGY],
                              "rest_translations": [n["translation"] for n in nodes[:-1]]},
                 "skin": {"influences_per_vertex": 4, "primitive_count": len(primitives)},

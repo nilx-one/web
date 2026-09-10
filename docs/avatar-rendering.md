@@ -4,10 +4,10 @@ Web owns the procedural asset pipeline; Core remains free of scene libraries,
 animation data and authoring geometry. The supplied Sky and Dasha studies are
 artistic interpretations, not biometric measurements or evidence of presence.
 
-Three studies are published: **Sky** (masculine), **Dasha** (feminine) and
-**Kai** (non-binary). Kai is built from the same helper library and the same
+Four studies are published: **Sky** (masculine), **Dasha** (feminine) and
+**Kai** (non-binary), plus **Dasha 2.0** (feminine). Kai is built from the same helper library and the same
 skeleton as the other two, with a shoulder-to-hip ratio between them, a
-straight torso and no feature exaggerated toward either. All three are
+straight torso and no feature exaggerated toward either. All four are
 artistic studies: none of them is a claim about any person's body, gender or
 presentation, and a person chooses which represents them rather than being
 assigned one (`docs/profile-editing.md`).
@@ -40,6 +40,26 @@ This resolves the cross-model translation mismatch without promising foot
 planting or locomotion-speed synchronization. Turn is an anticipatory gesture;
 the caller supplies actual bearing. Mode names select presentation clips only;
 they do not activate AI authority or create interactions.
+
+## Dasha 2.0 — asset contract 0.2.0
+
+`tools/avatars/dasha2/build_model.py` authors a separate fourth study,
+`dasha-v2-study`: swept chestnut hair with a low bun, grey-green eyes,
+silver earrings, a black short-sleeved shirt, ecru trousers and black loafers.
+It uses the same 22-node rig and five in-place clips. The mesh is a procedural
+interpretation of the supplied references; it does not reproduce their cinematic
+render quality. No reference photograph is packaged or fetched by the runtime.
+
+Only this model uses `/avatars/0.2.0/`; the original three retain their immutable
+0.1.0 URLs and bytes. The picker thumbnail is rasterized from the actual GLB.
+The new asset has 100,398 vertices, 195,550 triangles and 7,201,752 bytes,
+still exceeding the draft's 6 MB target. Runtime WebGL deformation and physical
+phone performance have not been visually measured for this model.
+
+Identity contract 9 expands the persisted avatar catalog through migration 0008.
+It preserves existing choices, owned identities and provider links, and is
+idempotent on reopen. Deploy identity contract 9 before a Web package requiring
+it. This migration does not reset the identity database.
 
 ## Build and verification
 
@@ -76,7 +96,7 @@ artistic-study descriptions are retained in the generators.
 Tests reconstruct global bind matrices and prove inverse-bind cancellation,
 normalized weights, valid indices, rigid-part binding, unchanged geometry counts,
 identical cross-model rotation tracks and clip endpoints — the last across all
-three studies, so choosing a body never changes how it moves. These checks do not
+four studies, so choosing a body never changes how it moves. These checks do not
 substitute for Blender inspection or measurements on a physical phone.
 
 ## Performance evidence

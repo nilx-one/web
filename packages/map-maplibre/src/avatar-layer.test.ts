@@ -16,6 +16,9 @@ describe("avatar presentation contract", () => {
     expect(AVATAR_ASSET_URLS["dasha-study"]).toBe(
       "/avatars/0.1.0/dasha-study.glb",
     );
+    expect(AVATAR_ASSET_URLS["dasha-v2-study"]).toBe(
+      "/avatars/0.2.0/dasha-v2-study.glb",
+    );
   });
 
   it("samples ambient clips deterministically without inference input", () => {

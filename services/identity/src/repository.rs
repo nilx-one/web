@@ -165,7 +165,24 @@ impl IdentityRepository {
                 .execute(&self.pool)
                 .await?;
         }
+        self.migrate_avatar_catalog().await?;
         self.backfill_pub_dress_labels().await?;
+        Ok(())
+    }
+
+    async fn migrate_avatar_catalog(&self) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let schema: String = sqlx::query_scalar(
+            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'identities'",
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !schema.contains("'dasha-v2-study'") {
+            sqlx::raw_sql(include_str!("../migrations/0008_dasha_v2_avatar.sql"))
+                .execute(&mut *transaction)
+                .await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -1187,6 +1204,95 @@ mod tests {
         identity_for_pub_dress,
     };
     use crate::{AvaiaPubDress, PubDress, PubDressLabel};
+
+    #[tokio::test]
+    async fn fourth_avatar_upgrade_preserves_existing_identities_and_provider_bindings() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("legacy-avatars.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let options = sqlx::sqlite::SqliteConnectOptions::from_str(&database_url)
+            .expect("database URL")
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let legacy = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .expect("legacy connection");
+        for migration in [
+            include_str!("../migrations/0001_identities.sql"),
+            include_str!("../migrations/0002_provider_accounts.sql"),
+            include_str!("../migrations/0003_native_auth.sql"),
+            include_str!("../migrations/0004_owned_avaia_identity.sql"),
+            include_str!("../migrations/0005_avatar_model.sql"),
+            include_str!("../migrations/0006_pub_dress_label.sql"),
+        ] {
+            sqlx::raw_sql(migration)
+                .execute(&legacy)
+                .await
+                .expect("historical migration");
+        }
+        sqlx::raw_sql(
+            "INSERT INTO identities (pub_dress, avatar_model) VALUES ('0x0Sky', 'dasha-study');
+             INSERT INTO identities (pub_dress, identity_kind, owner_pub_dress)
+                 VALUES ('0Skai', 'avaia', '0x0Sky');
+             INSERT INTO identity_providers (provider, provider_subject, pub_dress)
+                 VALUES ('telegram', '12345', '0x0Sky');",
+        )
+        .execute(&legacy)
+        .await
+        .expect("legacy data");
+        legacy.close().await;
+
+        let address = "0x0Sky";
+        let repository = IdentityRepository::connect(&database_url)
+            .await
+            .expect("upgrade");
+        assert_eq!(
+            repository.avatar_model(address).await.expect("old choice"),
+            Some("dasha-study".to_owned())
+        );
+        repository
+            .set_avatar_model(address, "dasha-v2-study")
+            .await
+            .expect("fourth choice accepted");
+        assert!(
+            repository
+                .set_avatar_model(address, "not-published")
+                .await
+                .is_err()
+        );
+        repository.pool.close().await;
+
+        let reopened = IdentityRepository::connect(&database_url)
+            .await
+            .expect("idempotent reopen");
+        assert_eq!(
+            reopened.avatar_model(address).await.expect("new choice"),
+            Some("dasha-v2-study".to_owned())
+        );
+        let owner: String = sqlx::query_scalar(
+            "SELECT owner_pub_dress FROM identities WHERE pub_dress = '0Skai'",
+        )
+        .fetch_one(&reopened.pool)
+        .await
+        .expect("owned identity survives");
+        assert_eq!(owner, "0x0Sky");
+        let provider: String = sqlx::query_scalar(
+            "SELECT pub_dress FROM identity_providers WHERE provider_subject = '12345'",
+        )
+        .fetch_one(&reopened.pool)
+        .await
+        .expect("provider survives");
+        assert_eq!(provider, "0x0Sky");
+        assert!(
+            sqlx::query("PRAGMA foreign_key_check")
+                .fetch_all(&reopened.pool)
+                .await
+                .expect("foreign key check")
+                .is_empty()
+        );
+    }
 
     #[tokio::test]
     async fn owned_avaia_migration_is_idempotent_on_reopen() {
