@@ -24,26 +24,29 @@ function input(overrides: Partial<AvaiaSetupInput> = {}): AvaiaSetupInput {
 }
 
 describe("Avaia setup surface", () => {
-  it("presents the stored address while exposing only its editable slug stem", () => {
-    const state = createAvaiaSetupViewState(
-      input({
-        load: {
-          kind: "available",
-          profile: { ...profile, pubDress: "0vesnai" },
-        },
-        fallbackAddress: "0skai",
-      }),
-    );
+  it(
+    "presents the stored address while exposing only its editable slug stem",
+    () => {
+      const state = createAvaiaSetupViewState(
+        input({
+          load: {
+            kind: "available",
+            profile: { ...profile, pubDress: "0vesnai" },
+          },
+          fallbackAddress: "0skai",
+        }),
+      );
 
-    expect(state).toMatchObject({
-      address: "0vesnai",
-      prefix: "0",
-      slugStem: "vesn",
-      suffix: "ai",
-      candidatePubDress: "0vesnai",
-      editable: true,
-    });
-  });
+      expect(state).toMatchObject({
+        address: "0vesnai",
+        prefix: "0",
+        slugStem: "vesn",
+        suffix: "ai",
+        candidatePubDress: "0vesnai",
+        editable: true,
+      });
+    },
+  );
 
   it("keeps both contract-owned affixes out of draft state", () => {
     const state = createAvaiaSetupViewState(input({ draftSlugStem: "sync." }));
