@@ -3,7 +3,9 @@
 
 import {
   createFailureNotice,
+  type FailureKind,
   type FailureNotice,
+  type FailureNoticeCopy,
   type FailureReport,
 } from "@nilx-one/application";
 import { ToastRegion, type ToastRegionItem } from "@nilx-one/ui";
@@ -18,6 +20,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { useLocalization, type Translate } from "../../shell/localization";
 import { useToastViewportNode } from "../../shell/toast-viewport";
 
 export interface PublishFailureOptions {
@@ -36,7 +39,7 @@ export type PublishFailure = (
 
 interface PresentedFailure {
   readonly id: string;
-  readonly notice: FailureNotice;
+  readonly report: FailureReport;
   readonly onRetry?: () => void;
 }
 
@@ -44,11 +47,53 @@ const FailureNoticeContext = createContext<PublishFailure | undefined>(
   undefined,
 );
 
+function copyForKind(kind: FailureKind, t: Translate): FailureNoticeCopy {
+  const retryLabel = t("failure.retry");
+  switch (kind) {
+    case "unavailable":
+      return {
+        title: t("failure.unavailable.title"),
+        description: t("failure.unavailable.description"),
+        retryLabel,
+      };
+    case "withheld":
+      return {
+        title: t("failure.withheld.title"),
+        description: t("failure.withheld.description"),
+        retryLabel,
+      };
+    case "gated":
+      return {
+        title: t("failure.gated.title"),
+        description: t("failure.gated.description"),
+        retryLabel,
+      };
+    case "rejected":
+      return {
+        title: t("failure.rejected.title"),
+        description: t("failure.rejected.description"),
+        retryLabel,
+      };
+    case "exhausted":
+      return {
+        title: t("failure.exhausted.title"),
+        description: t("failure.exhausted.description"),
+        retryLabel,
+      };
+  }
+}
+
+function localizedNotice(report: FailureReport, t: Translate): FailureNotice {
+  return createFailureNotice(report, copyForKind(report.kind, t));
+}
+
 function toToastItem(
   entry: PresentedFailure,
   dismiss: (id: string) => void,
+  t: Translate,
 ): ToastRegionItem {
-  const { notice, onRetry } = entry;
+  const notice = localizedNotice(entry.report, t);
+  const { onRetry } = entry;
 
   return {
     id: entry.id,
@@ -82,6 +127,7 @@ export interface FailureNoticeProviderProps {
 export function FailureNoticeProvider({
   children,
 }: FailureNoticeProviderProps) {
+  const { t } = useLocalization();
   const [presented, setPresented] = useState<readonly PresentedFailure[]>([]);
   const sequence = useRef(0);
 
@@ -93,7 +139,7 @@ export function FailureNoticeProvider({
       ...current,
       {
         id,
-        notice: createFailureNotice(report),
+        report,
         ...(options.onRetry === undefined ? {} : { onRetry: options.onRetry }),
       },
     ]);
@@ -104,20 +150,25 @@ export function FailureNoticeProvider({
   }, []);
 
   const toasts = useMemo(
-    () => presented.map((entry) => toToastItem(entry, dismiss)),
-    [presented, dismiss],
+    () => presented.map((entry) => toToastItem(entry, dismiss, t)),
+    [presented, dismiss, t],
   );
 
   return (
     <FailureNoticeContext.Provider value={publish}>
       {children}
-      <FailureToastRegion toasts={toasts} onDismiss={dismiss} />
+      <FailureToastRegion
+        toasts={toasts}
+        label={t("failure.region")}
+        onDismiss={dismiss}
+      />
     </FailureNoticeContext.Provider>
   );
 }
 
 interface FailureToastRegionProps {
   readonly toasts: readonly ToastRegionItem[];
+  readonly label: string;
   onDismiss(id: string): void;
 }
 
@@ -126,12 +177,16 @@ interface FailureToastRegionProps {
  * transient feedback never opens a second competing column. Without a shell —
  * the pre-authentication surface — the region anchors itself.
  */
-function FailureToastRegion({ toasts, onDismiss }: FailureToastRegionProps) {
+function FailureToastRegion({
+  toasts,
+  label,
+  onDismiss,
+}: FailureToastRegionProps) {
   const viewport = useToastViewportNode();
   const region = (
     <ToastRegion
       toasts={toasts}
-      label="Failure notices"
+      label={label}
       placement={viewport === undefined ? "viewport" : "inline"}
       onDismiss={onDismiss}
     />

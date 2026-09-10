@@ -20,6 +20,7 @@ import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
+import { LanguageSettings } from "../../shell/language-settings";
 import {
   IDENTITY_ROUTE,
   WORLD_ROUTE,
@@ -1040,6 +1041,7 @@ export function AuthenticatedMapHomeView({
 
                 {section === "settings" ? (
                   <>
+                    <LanguageSettings />
                     <fieldset className="interface-settings__appearance">
                       <legend>Appearance</legend>
                       {(["light", "dark", "auto"] as const).map((mode) => (

@@ -4,8 +4,9 @@
 import type { FailureReport } from "@nilx-one/application";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { chooseLocale } from "../../shell/localization";
 import {
   ToastViewport,
   ToastViewportProvider,
@@ -38,6 +39,11 @@ function renderProducer(props: ProducerProps) {
     </FailureNoticeProvider>,
   );
 }
+
+afterEach(() => {
+  chooseLocale("auto");
+  window.localStorage.clear();
+});
 
 describe("FailureNoticeProvider", () => {
   it("keeps a labelled live region mounted before any failure arrives", () => {
@@ -75,6 +81,27 @@ describe("FailureNoticeProvider", () => {
 
     expect(onRetry).toHaveBeenCalledOnce();
     expect(screen.queryByText("Request unanswered")).toBeNull();
+  });
+
+  it("renders an existing semantic failure in the selected frontend locale", async () => {
+    chooseLocale("uk-UA");
+    const user = userEvent.setup();
+
+    renderProducer({
+      report: {
+        code: "inference_unavailable",
+        kind: "unavailable",
+        retryable: true,
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Publish failure" }));
+
+    expect(screen.getByText("Запит без відповіді")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Сповіщення про помилки" }),
+    ).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("uk-UA");
   });
 
   it("never offers to ask an authority the same question twice", async () => {
@@ -139,7 +166,11 @@ describe("FailureNoticeProvider", () => {
     const user = userEvent.setup();
 
     renderProducer({
-      report: { code: "budget_exhausted", kind: "exhausted", retryable: false },
+      report: {
+        code: "budget_exhausted",
+        kind: "exhausted",
+        retryable: false,
+      },
     });
 
     const publish = screen.getByRole("button", { name: "Publish failure" });

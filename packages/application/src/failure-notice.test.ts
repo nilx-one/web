@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   createFailureNotice,
   type FailureKind,
+  type FailureNoticeCopy,
   type FailureReport,
 } from "./failure-notice";
 
@@ -18,86 +19,41 @@ function report(overrides: Partial<FailureReport> = {}): FailureReport {
   };
 }
 
+function copy(kind: FailureKind): FailureNoticeCopy {
+  return {
+    title: `title:${kind}`,
+    description: `description:${kind}.`,
+    retryLabel: "retry",
+  };
+}
+
 describe("createFailureNotice", () => {
-  it("asks a person to try again only when the runtime marked the failure retryable", () => {
+  it("keeps language outside the application while preserving retry authority", () => {
     const notice = createFailureNotice(
-      report({
-        code: "inference_unavailable",
-        kind: "unavailable",
-        retryable: true,
-      }),
+      report({ kind: "unavailable", retryable: true }),
+      copy("unavailable"),
     );
 
     expect(notice).toMatchObject({
       tone: "attention",
-      title: "Request unanswered",
-      action: { intent: "retry", label: "Try again" },
+      title: "title:unavailable",
+      description: "description:unavailable.",
+      action: { intent: "retry", label: "retry" },
     });
-    expect(notice.description).toBe(
-      "Nothing could answer this request, so nothing was decided and nothing was substituted.",
-    );
   });
 
-  it("presents a withheld decision calmly and never offers to ask again", () => {
+  it("presents a withheld decision calmly and never invents a retry", () => {
     const notice = createFailureNotice(
-      report({
-        code: "authority_withheld",
-        kind: "withheld",
-        retryable: false,
-      }),
+      report({ kind: "withheld", retryable: false }),
+      copy("withheld"),
     );
 
     expect(notice.tone).toBe("neutral");
-    expect(notice.title).toBe("Declined by authority");
-    expect(notice.description).toBe(
-      "Authority was asked and the answer was no; this is a decision, not a malfunction.",
-    );
+    expect(notice.title).toBe("title:withheld");
     expect(notice.action).toBeUndefined();
   });
 
-  it("explains a gated runtime as a mode rather than a fault", () => {
-    const notice = createFailureNotice(
-      report({ code: "runtime_dormant", kind: "gated", retryable: false }),
-    );
-
-    expect(notice).toMatchObject({
-      tone: "neutral",
-      title: "Not acting right now",
-    });
-    expect(notice.description).toBe(
-      "The runtime is dormant or winding down, so it is not acting in its current mode.",
-    );
-  });
-
-  it("routes a contract rejection to an operator", () => {
-    const notice = createFailureNotice(
-      report({ code: "contract_rejected", kind: "rejected", retryable: false }),
-    );
-
-    expect(notice).toMatchObject({
-      tone: "critical",
-      title: "Request rejected",
-    });
-    expect(notice.description).toBe(
-      "The request contradicted the contract and was refused; an operator needs to look at this.",
-    );
-  });
-
-  it("routes an exhausted counter to an operator", () => {
-    const notice = createFailureNotice(
-      report({ code: "budget_exhausted", kind: "exhausted", retryable: false }),
-    );
-
-    expect(notice).toMatchObject({
-      tone: "critical",
-      title: "Limit reached",
-    });
-    expect(notice.description).toBe(
-      "A counter for this operation hit its ceiling; an operator needs to look at this.",
-    );
-  });
-
-  it("covers every kind in the upstream taxonomy with one tone and one sentence", () => {
+  it("maps the closed upstream taxonomy to presentation tone", () => {
     const kinds: readonly FailureKind[] = [
       "unavailable",
       "withheld",
@@ -107,7 +63,7 @@ describe("createFailureNotice", () => {
     ];
 
     const notices = kinds.map((kind) =>
-      createFailureNotice(report({ kind, retryable: false })),
+      createFailureNotice(report({ kind, retryable: false }), copy(kind)),
     );
 
     expect(notices.map((notice) => notice.tone)).toEqual([
@@ -120,22 +76,24 @@ describe("createFailureNotice", () => {
     expect(new Set(notices.map((notice) => notice.title)).size).toBe(
       kinds.length,
     );
-    for (const notice of notices) {
-      expect(notice.description.endsWith(".")).toBe(true);
-    }
   });
 
   it("treats the retryable flag as the authority rather than the kind", () => {
     expect(
-      createFailureNotice(report({ kind: "unavailable", retryable: false }))
-        .action,
+      createFailureNotice(
+        report({ kind: "unavailable", retryable: false }),
+        copy("unavailable"),
+      ).action,
     ).toBeUndefined();
     expect(
-      createFailureNotice(report({ kind: "withheld", retryable: true })).action,
-    ).toEqual({ intent: "retry", label: "Try again" });
+      createFailureNotice(
+        report({ kind: "withheld", retryable: true }),
+        copy("withheld"),
+      ).action,
+    ).toEqual({ intent: "retry", label: "retry" });
   });
 
-  it("keeps correlation handles out of the sentences a person reads", () => {
+  it("keeps correlation handles out of the localized sentences", () => {
     const notice = createFailureNotice(
       report({
         code: "authority_withheld",
@@ -144,6 +102,7 @@ describe("createFailureNotice", () => {
         operation_id: "op-71c",
         session_id: "se-40b",
       }),
+      copy("withheld"),
     );
 
     expect(notice.reference).toBe(
@@ -156,7 +115,10 @@ describe("createFailureNotice", () => {
 
   it("omits absent correlation handles instead of printing placeholders", () => {
     expect(
-      createFailureNotice(report({ code: "inference_unavailable" })).reference,
+      createFailureNotice(
+        report({ code: "inference_unavailable" }),
+        copy("unavailable"),
+      ).reference,
     ).toBe("code inference_unavailable");
   });
 });

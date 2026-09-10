@@ -43,6 +43,7 @@ export {
   type FailureKind,
   type FailureNotice,
   type FailureNoticeAction,
+  type FailureNoticeCopy,
   type FailureNoticeTone,
   type FailureReport,
 } from "./failure-notice";

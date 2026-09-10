@@ -7,12 +7,16 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createTelegramHost,
   resolveTelegramWebApp,
+  telegramLanguageTags,
   type TelegramWebAppBridge,
 } from "./index";
 
 function createBridge(): TelegramWebAppBridge {
   return {
     initData: "signed-by-telegram-but-not-yet-verified",
+    initDataUnsafe: {
+      user: { language_code: "uk-UA" },
+    },
     colorScheme: "dark",
     safeAreaInset: { top: 12, bottom: 7 },
     HapticFeedback: {
@@ -74,6 +78,20 @@ describe("TelegramHost", () => {
     );
     expect(resolveTelegramWebApp({ Telegram: {} })).toBeUndefined();
     expect(resolveTelegramWebApp(undefined)).toBeUndefined();
+  });
+
+  it("projects Telegram account language only as presentation evidence", () => {
+    expect(telegramLanguageTags(createBridge())).toEqual(["uk-UA"]);
+    expect(
+      telegramLanguageTags({
+        ...createBridge(),
+        initDataUnsafe: { user: { language_code: "  uk-RU  " } },
+      }),
+    ).toEqual(["uk-RU"]);
+
+    const { initDataUnsafe: _ignored, ...bridgeWithoutUnsafeData } =
+      createBridge();
+    expect(telegramLanguageTags(bridgeWithoutUnsafeData)).toEqual([]);
   });
 });
 

@@ -18,7 +18,7 @@ export interface FailureReport {
   readonly session_id?: string;
 }
 
-/** Presentation vocabulary owned by this client, not a mirror of `kind`. */
+/** Presentation vocabulary owned by the client, not a mirror of `kind`. */
 export type FailureNoticeTone = "attention" | "critical" | "neutral";
 
 export interface FailureNoticeAction {
@@ -34,49 +34,23 @@ export interface FailureNotice {
   readonly reference?: string;
 }
 
-interface FailureCopy {
+/** Human-facing copy is injected by the presentation boundary that owns locale. */
+export interface FailureNoticeCopy {
   readonly title: string;
-  readonly tone: FailureNoticeTone;
   readonly description: string;
+  readonly retryLabel: string;
 }
 
-function copyForKind(kind: FailureKind): FailureCopy {
+function toneForKind(kind: FailureKind): FailureNoticeTone {
   switch (kind) {
     case "unavailable":
-      return {
-        tone: "attention",
-        title: "Request unanswered",
-        description:
-          "Nothing could answer this request, so nothing was decided and nothing was substituted.",
-      };
+      return "attention";
     case "withheld":
-      return {
-        tone: "neutral",
-        title: "Declined by authority",
-        description:
-          "Authority was asked and the answer was no; this is a decision, not a malfunction.",
-      };
     case "gated":
-      return {
-        tone: "neutral",
-        title: "Not acting right now",
-        description:
-          "The runtime is dormant or winding down, so it is not acting in its current mode.",
-      };
+      return "neutral";
     case "rejected":
-      return {
-        tone: "critical",
-        title: "Request rejected",
-        description:
-          "The request contradicted the contract and was refused; an operator needs to look at this.",
-      };
     case "exhausted":
-      return {
-        tone: "critical",
-        title: "Limit reached",
-        description:
-          "A counter for this operation hit its ceiling; an operator needs to look at this.",
-      };
+      return "critical";
   }
 }
 
@@ -95,18 +69,27 @@ function reference(report: FailureReport): string {
 }
 
 /**
- * Projects one upstream failure report onto the toast surface. A retry
- * affordance is offered when — and only when — the runtime marked the failure
- * retryable; the client never infers retryability from the kind or the code.
+ * Projects one upstream failure report onto the toast surface. The application
+ * owns semantic tone, correlation reference, and retry intent; the rendering
+ * frontend supplies localized words. Retry is still offered when — and only
+ * when — the runtime marked the report retryable.
  */
-export function createFailureNotice(report: FailureReport): FailureNotice {
-  const copy = copyForKind(report.kind);
-
+export function createFailureNotice(
+  report: FailureReport,
+  copy: FailureNoticeCopy,
+): FailureNotice {
   return {
-    ...copy,
+    tone: toneForKind(report.kind),
+    title: copy.title,
+    description: copy.description,
     reference: reference(report),
     ...(report.retryable
-      ? { action: { intent: "retry" as const, label: "Try again" } }
+      ? {
+          action: {
+            intent: "retry" as const,
+            label: copy.retryLabel,
+          },
+        }
       : {}),
   };
 }
