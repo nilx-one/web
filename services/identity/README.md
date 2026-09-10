@@ -3,11 +3,12 @@
 The identity service owns phase-0 native Web credentials, one-time recovery
 keys, browser sessions, and remembered-Bond hints. A user can register and sign
 in with only an exact, case-sensitive `pub_dress` and password. Provider
-adapters remain isolated for later optional bindings.
+adapters remain isolated from protocol truth and may be bound explicitly to an
+authenticated Bond.
 
 The service is an adapter, not protocol authority. Canonical `pub_dress` validation comes from a pinned `nilx-one/core` contract; provider identity, messenger transport, persistence, and provider verification stay outside `nilx-one/0x1`.
 
-Provider accounts are namespaced as `(provider, provider_subject)`. Telegram and Discord IDs therefore never collide merely because their numeric values happen to match. The storage model also permits multiple provider bindings to point at one identity when an explicit account-linking flow is introduced; this PR does not invent such a link without proof from both sides.
+Provider accounts are namespaced as `(provider, provider_subject)`. Telegram and Discord IDs therefore never collide merely because their numeric values happen to match. Multiple provider bindings may point at one identity only through an explicit linking flow with evidence from the authenticated Bond and the provider authorization; matching names or numeric IDs never imply equivalence.
 
 ## Native Web API
 
@@ -32,11 +33,21 @@ compromised values and stores versioned Argon2id verifiers with 19 MiB memory,
 two iterations, and one lane. Authentication uses generic failures, a dummy
 hash path, and source/address/global rate limits.
 
-## Inactive provider adapters
+## Browser provider authorization
 
-- Telegram and Discord code remains buildable for later binding work.
-- The Web surface renders both provider controls as visible but disabled.
-- No Telegram Mini App or Discord Activity route is published in phase 0.
+The canonical browser host supports explicit Telegram and Discord authorization for both sign-in and provider connection:
+
+- `GET /auth?provider=telegram&intent=connect` starts Telegram OpenID Connect for the currently authenticated Bond.
+- `GET /auth?provider=discord&intent=connect` starts Discord OAuth2 for the currently authenticated Bond.
+- `GET /api/v1/auth/browser/provider/context` reports whether each browser provider is configured and whether a provider proof is pending.
+- Telegram callback: `https://nilx.one/api/v1/auth/browser/telegram/callback`.
+- Discord callback: `https://nilx.one/api/v1/auth/browser/discord/callback`.
+
+Both flows use an OAuth transaction cookie, state, and PKCE S256. A connect transaction captures the authenticated Bond before leaving 0x1; after the provider callback only that Bond may receive the binding. Provider authorization does not create mutuality, a Relationship, or a BondChain interaction.
+
+Telegram browser authorization requires `TELEGRAM_OIDC_CLIENT_ID` and `TELEGRAM_OIDC_CLIENT_SECRET`. Discord browser authorization requires `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`. Provider-side configuration must allow the exact callback URI generated from `PUBLIC_ORIGIN`.
+
+Production runtime preparation preserves an already-provisioned Telegram OIDC credential pair when a deployment provider payload does not contain Telegram OIDC credentials. This keeps the browser authorization capability stable across deployments without moving the Telegram client secret into repository files. An incomplete credential pair is rejected before activation.
 
 The bot does not accept a `pub_dress` candidate as chat text. Telegram chat is an entry point, not a second registration implementation.
 
@@ -57,11 +68,12 @@ Availability is advisory. The database insert remains the only collision boundar
 
 ## Secret boundary
 
-`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`, and
-`DISCORD_CLIENT_SECRET` are server-only runtime secrets. The native authentication
-secret and password pepper must be independent values of at least 32 bytes. None
-may be exposed through Vite, browser configuration, repository files, build
-output, Telegram Mini App JavaScript, or Discord Activity JavaScript.
+`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`,
+`TELEGRAM_OIDC_CLIENT_SECRET`, and `DISCORD_CLIENT_SECRET` are server-only runtime
+secrets. The native authentication secret and password pepper must be independent
+values of at least 32 bytes. None may be exposed through Vite, browser
+configuration, repository files, build output, Telegram Mini App JavaScript, or
+Discord Activity JavaScript.
 
 Production keeps `NATIVE_AUTH_SECRET` and `PASSWORD_PEPPER` server-owned. On the
 first production activation the deploy layer creates independent random values
@@ -70,16 +82,18 @@ those exact values. This prevents a deployment from accidentally rotating the
 password pepper or invalidating native authentication state. Provider credentials
 remain supplied by the production environment and may be updated independently.
 
-`DISCORD_CLIENT_ID` is public OAuth configuration and is intentionally exposed through the bounded config endpoint so the Activity and service cannot drift between application IDs.
+`DISCORD_CLIENT_ID` and `TELEGRAM_OIDC_CLIENT_ID` are public OAuth configuration. The Discord application ID is also exposed through the bounded config endpoint so the Activity and service cannot drift between application IDs.
 
 ## Run
 
 For local or manual execution, set `NATIVE_AUTH_SECRET` and `PASSWORD_PEPPER`.
-Provider credentials may remain unset while phase-0 provider controls are inactive.
-Optional runtime settings:
+Browser provider credentials may remain unset only when their corresponding
+browser authorization flow is intentionally unavailable. Optional runtime
+settings:
 
 - `DATABASE_URL` — default `sqlite://identity.db`;
 - `HTTP_BIND` — default `0.0.0.0:8080`;
+- `PUBLIC_ORIGIN` — default `https://nilx.one`;
 - `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` — default `300`.
 
 Then run:
@@ -88,8 +102,7 @@ Then run:
 cargo run --manifest-path services/identity/Cargo.toml
 ```
 
-Supplying only one Discord credential is a configuration error. Provider
-credentials do not activate a public provider host by themselves.
+Supplying only one credential from either browser-provider pair is a configuration error.
 
 ## Runtime package
 
@@ -97,10 +110,7 @@ credentials do not activate a public provider host by themselves.
 
 CI validates the service and deployment contract. Packaging publishes an immutable GHCR image. Production activation is a separate manual workflow. The production deploy composes provider credentials with the persistent server-owned native secrets into a `0600` runtime environment file.
 
-Before activation commits a release, it verifies the public Web shell, the
-unpublished provider routes, and the provider-neutral unauthenticated `401`
-identity boundary. A proxy `502` fails activation and enters the existing
-rollback path.
+Before activation commits a release, it verifies the public Web shell, the provider-neutral unauthenticated `401` identity boundary, and that both browser provider adapters report available. A proxy `502` or missing browser provider configuration fails activation and enters the existing rollback path.
 
 ## Verify
 
