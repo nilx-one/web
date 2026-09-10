@@ -23,6 +23,8 @@
   min-height: 100dvh;
   overflow: hidden;
   -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
   user-select: none;
 }
 
@@ -31,8 +33,10 @@
    selectable so editing, caret movement and copy/paste keep working. */
 .app-shell input,
 .app-shell textarea,
-.app-shell [contenteditable="true"] {
+.app-shell [contenteditable]:not([contenteditable="false"]) {
   -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
   user-select: text;
 }
 
