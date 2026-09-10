@@ -30,6 +30,24 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
+function locationProjection(
+  mode: "live" | "manual",
+  longitudeE7: string,
+  latitudeE7: string,
+) {
+  return {
+    role: "admin",
+    location: {
+      coordinate: {
+        longitude_e7: longitudeE7,
+        latitude_e7: latitudeE7,
+      },
+      mode,
+      updated_at: "1800000000",
+    },
+  };
+}
+
 function fakeRenderer() {
   let status: MapStatus = { kind: "unmounted" };
   const observed: ObservedPosition[] = [];
@@ -88,12 +106,12 @@ function fakeRenderer() {
 }
 
 describe("Telegram location control", () => {
-  it("accepts a validated manual point", async () => {
+  it("accepts a canonical manual Bond location", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(200, {
-        mode: "manual",
-        position: { longitude: 2.3522, latitude: 48.8566 },
-      }),
+      jsonResponse(
+        200,
+        locationProjection("manual", "23522000", "488566000"),
+      ),
     );
 
     await expect(
@@ -104,17 +122,44 @@ describe("Telegram location control", () => {
     });
   });
 
-  it("fails closed when manual state is malformed or unavailable", async () => {
-    const malformed = vi.fn(async () =>
-      jsonResponse(200, {
-        mode: "manual",
-        position: { longitude: 2.3522, latitude: 91 },
-      }),
+  it("uses ordinary live mode when the Bond has no submitted location", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, { role: "user", location: null }),
+    );
+    await expect(
+      readTelegramLocationControl("signed", fetchImpl as typeof fetch),
+    ).resolves.toEqual({ kind: "live" });
+  });
+
+  it("treats a stored live Bond location as live device mode", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, locationProjection("live", "305234000", "504501000")),
+    );
+    await expect(
+      readTelegramLocationControl("signed", fetchImpl as typeof fetch),
+    ).resolves.toEqual({ kind: "live" });
+  });
+
+  it("fails closed on malformed location, role, or service state", async () => {
+    const malformedCoordinate = vi.fn(async () =>
+      jsonResponse(
+        200,
+        locationProjection("manual", "23522000", "900000001"),
+      ),
+    );
+    const malformedRole = vi.fn(async () =>
+      jsonResponse(200, { role: "owner", location: null }),
     );
     const unavailable = vi.fn(async () => jsonResponse(503, {}));
 
     await expect(
-      readTelegramLocationControl("signed", malformed as typeof fetch),
+      readTelegramLocationControl(
+        "signed",
+        malformedCoordinate as typeof fetch,
+      ),
+    ).resolves.toEqual({ kind: "unavailable" });
+    await expect(
+      readTelegramLocationControl("signed", malformedRole as typeof fetch),
     ).resolves.toEqual({ kind: "unavailable" });
     await expect(
       readTelegramLocationControl("signed", unavailable as typeof fetch),
