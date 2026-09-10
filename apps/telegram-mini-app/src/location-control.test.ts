@@ -133,7 +133,10 @@ describe("Telegram location control", () => {
 
   it("treats a stored live Bond location as live device mode", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(200, locationProjection("live", "305234000", "504501000")),
+      jsonResponse(
+        200,
+        locationProjection("live", "305234000", "504501000"),
+      ),
     );
     await expect(
       readTelegramLocationControl("signed", fetchImpl as typeof fetch),
