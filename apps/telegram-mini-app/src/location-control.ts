@@ -1,16 +1,27 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type {
-  MapPointSelection,
-  MapRenderer,
-} from "@nilx-one/map-contract";
+import type { createMapLibreRenderer } from "@nilx-one/map-maplibre";
+
+type TelegramMapRenderer = ReturnType<typeof createMapLibreRenderer>;
+
+type PointSelectionListener = Parameters<
+  NonNullable<TelegramMapRenderer["subscribePointSelection"]>
+>[0];
+type BodyActivationListener = Parameters<
+  NonNullable<TelegramMapRenderer["subscribeBodyActivation"]>
+>[0];
+
+export interface TelegramLocationPoint {
+  readonly longitude: number;
+  readonly latitude: number;
+}
 
 export type TelegramLocationControlState =
   | { readonly kind: "live" }
   | {
       readonly kind: "manual";
-      readonly position: MapPointSelection;
+      readonly position: TelegramLocationPoint;
     }
   | { readonly kind: "unavailable" };
 
@@ -18,7 +29,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function parsePoint(value: unknown): MapPointSelection | undefined {
+function parsePoint(value: unknown): TelegramLocationPoint | undefined {
   if (
     !isRecord(value) ||
     typeof value.longitude !== "number" ||
@@ -94,21 +105,21 @@ export async function readTelegramLocationControl(
  * its point temporarily wins; clearing the editor restores the manual point.
  */
 export function createManualLocationMapRenderer(
-  renderer: MapRenderer,
-  manualPosition: MapPointSelection,
-): MapRenderer {
+  renderer: TelegramMapRenderer,
+  manualPosition: TelegramLocationPoint,
+): TelegramMapRenderer {
   const manual = { ...manualPosition };
   renderer.setObservedPosition(null);
   renderer.setObservedPositionLabel(null);
-  renderer.setSelectionPoint?.(manual);
+  renderer.setSelectionPoint(manual);
 
   return {
-    ...(renderer.avatars === undefined ? {} : { avatars: renderer.avatars }),
+    avatars: renderer.avatars,
     mount(container) {
       renderer.mount(container);
       renderer.setObservedPosition(null);
       renderer.setObservedPositionLabel(null);
-      renderer.setSelectionPoint?.(manual);
+      renderer.setSelectionPoint(manual);
     },
     unmount() {
       renderer.unmount();
@@ -140,35 +151,15 @@ export function createManualLocationMapRenderer(
     setObservedPositionLabel() {
       renderer.setObservedPositionLabel(null);
     },
-    ...(renderer.setSelectionPoint === undefined
-      ? {}
-      : {
-          setSelectionPoint(point: MapPointSelection | null) {
-            renderer.setSelectionPoint?.(point === null ? manual : point);
-          },
-        }),
-    ...(renderer.subscribePointSelection === undefined
-      ? {}
-      : {
-          subscribePointSelection(
-            listener: Parameters<
-              NonNullable<MapRenderer["subscribePointSelection"]>
-            >[0],
-          ) {
-            return renderer.subscribePointSelection?.(listener) ?? (() => undefined);
-          },
-        }),
-    ...(renderer.subscribeBodyActivation === undefined
-      ? {}
-      : {
-          subscribeBodyActivation(
-            listener: Parameters<
-              NonNullable<MapRenderer["subscribeBodyActivation"]>
-            >[0],
-          ) {
-            return renderer.subscribeBodyActivation?.(listener) ?? (() => undefined);
-          },
-        }),
+    setSelectionPoint(point) {
+      renderer.setSelectionPoint(point === null ? manual : point);
+    },
+    subscribePointSelection(listener: PointSelectionListener) {
+      return renderer.subscribePointSelection(listener);
+    },
+    subscribeBodyActivation(listener: BodyActivationListener) {
+      return renderer.subscribeBodyActivation(listener);
+    },
   };
 }
 
