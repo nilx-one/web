@@ -898,7 +898,7 @@ export function AuthenticatedMapHomeView({
                     aria-label={dock.configure.label}
                     onClick={activateConfigure}
                   >
-                    edit <span aria-hidden="true">✍️</span>
+                    edit
                   </button>
                 </div>
                 <div className="bond-dock__pair">
