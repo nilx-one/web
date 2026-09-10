@@ -24,7 +24,7 @@ function input(overrides: Partial<AvaiaSetupInput> = {}): AvaiaSetupInput {
 }
 
 describe("Avaia setup surface", () => {
-  it("presents the stored address while exposing only its editable slug stem", () => {
+  it("exposes only the editable Avaia slug stem", () => {
     const state = createAvaiaSetupViewState(
       input({
         load: {
