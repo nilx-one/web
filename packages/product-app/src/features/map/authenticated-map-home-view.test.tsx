@@ -140,17 +140,17 @@ describe("AuthenticatedMapHomeView", () => {
 
     renderView({ mapRenderer });
 
-    // The world opens on the Avaia, so it is the Bond who spectates until he
-    // takes the wheel.
+    // Authentication opens on the Bond represented by this device; its Avaia
+    // remains the other identity until an explicit handover.
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
-    ).toHaveTextContent("driving");
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    ).toHaveTextContent("You");
     expect(
       screen.getByLabelText("No reciprocal relationship asserted"),
     ).toHaveTextContent("—");
     expect(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-    ).toHaveTextContent("spectate");
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+    ).toHaveTextContent("unavailable");
     expect(screen.getByText("0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
@@ -194,43 +194,37 @@ describe("AuthenticatedMapHomeView", () => {
     ).not.toBeNull();
   });
 
-  it("hands the wheel to the Bond when he takes it, and back again", () => {
+  it("hands the wheel to the Avaia and back to the Bond", () => {
     renderView({ avaiaAvailability: "ready" });
 
-    // The Avaia opens the world; the Bond is the one who can take it from her.
-    const take = screen.getByRole("button", {
-      name: "Take the wheel as 0x0sky",
+    const handToAvaia = screen.getByRole("button", {
+      name: "Hand the wheel to 0skai",
     });
-    expect(take).toBeEnabled();
-    expect(take).toHaveTextContent("spectate");
+    expect(handToAvaia).toBeEnabled();
+    expect(handToAvaia).toHaveTextContent("ready");
 
-    fireEvent.click(take);
-
-    expect(
-      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
-    ).toHaveTextContent("You");
-    expect(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
-    ).toHaveTextContent("ready");
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
-    );
+    fireEvent.click(handToAvaia);
 
     expect(
       screen.getByRole("button", { name: "Focus the world on 0skai" }),
     ).toHaveTextContent("driving");
+    expect(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toHaveTextContent("spectate");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    ).toHaveTextContent("You");
   });
 
   it("asks this host for a runtime as the Avaia takes the wheel", () => {
     const onPrepareAvaia = vi.fn();
     renderView({ avaiaAvailability: "downloadable", onPrepareAvaia });
 
-    // A fetchable runtime is offered to a spectating Avaia, so the Bond takes
-    // the wheel first and the Avaia moves to the seat that offers it.
-    fireEvent.click(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-    );
     fireEvent.click(
       screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
     );
@@ -240,9 +234,6 @@ describe("AuthenticatedMapHomeView", () => {
     // A host that cannot fetch one still hands the wheel over.
     cleanup();
     renderView({ avaiaAvailability: "downloadable" });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-    );
     const avaia = screen.getByRole("button", {
       name: "Hand the wheel to 0skai",
     });
@@ -266,7 +257,7 @@ describe("AuthenticatedMapHomeView", () => {
     const firstFix = setCamera.mock.calls.length;
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
     );
 
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
@@ -285,16 +276,16 @@ describe("AuthenticatedMapHomeView", () => {
     const firstFix = setCamera.mock.calls.length;
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
     );
 
     // The seats swap, and the camera lands at or inside the scale a body is
     // drawn from, so the arrival is something a person can watch happen.
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toBeVisible();
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
@@ -312,7 +303,7 @@ describe("AuthenticatedMapHomeView", () => {
     const setCamera = vi.mocked(mapRenderer.setCamera);
     const firstFix = setCamera.mock.calls.length;
 
-    act(() => mapRenderer.activateBody("avaia"));
+    act(() => mapRenderer.activateBody("bond"));
 
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
@@ -330,30 +321,13 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
   });
 
-  it("edits the selected left Avaia from the Dock header without decorative text", () => {
+  it("opens the Bond edit surface from the Dock header", () => {
     const onNavigate = vi.fn();
 
     renderView({ onNavigate });
-    const edit = screen.getByRole("button", { name: "Edit 0skai" });
-
-    expect(edit).toHaveTextContent(/^edit$/);
-    expect(edit).not.toHaveTextContent("✍️");
-    fireEvent.click(edit);
-
-    expect(screen.getByRole("heading", { name: "0skai" })).toBeVisible();
-    expect(onNavigate).not.toHaveBeenCalled();
-  });
-
-  it("edits the Bond when the Bond is selected on the left", () => {
-    const onNavigate = vi.fn();
-
-    renderView({ onNavigate });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-    );
     const edit = screen.getByRole("button", { name: "Edit 0x0sky" });
 
-    expect(edit).toHaveTextContent(/^edit$/);
+    expect(edit).toHaveTextContent("edit");
     fireEvent.click(edit);
 
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
@@ -817,10 +791,10 @@ describe("AuthenticatedMapHomeView", () => {
     expect(upsert.mock.lastCall?.[0].visible).toBe(false);
   });
 
-  // The world shows one body: the identity driving. It opens on the Avaia, in
-  // a study the Bond is not wearing, and the AI runtime has nothing to do with
-  // it — a body is the identity, not the machinery behind it.
-  it("draws one body, the Avaia's, before anyone takes the wheel", async () => {
+  // Authentication starts with the Bond represented by this device. Its stored
+  // avatar choice therefore reaches the first body without waiting for a
+  // presentation handover to repair which identity the world is drawing.
+  it("draws the Bond's selected study immediately after authentication", async () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
 
     renderView({
@@ -835,11 +809,13 @@ describe("AuthenticatedMapHomeView", () => {
       .mocked(mapRenderer.avatars!.upsert)
       .mock.calls.map(([handle]) => handle);
     expect(new Set(drawn.map((handle) => handle.id))).toEqual(
-      new Set(["avaia"]),
+      new Set(["bond"]),
     );
-    expect(drawn.at(-1)?.modelId).not.toBe("dasha-study");
+    expect(drawn.at(-1)?.modelId).toBe("dasha-study");
     // The seat nobody is in is dropped rather than left standing behind.
-    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("bond");
+    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith(
+      "avaia",
+    );
   });
 
   it("settles the leaving body before the arriving one, rather than swapping", async () => {
@@ -857,13 +833,13 @@ describe("AuthenticatedMapHomeView", () => {
     upsert.mockClear();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
     );
 
-    // The Bond does not blink into place: the Avaia settles first, and only
-    // then does he come out and wake on the world.
+    // The Bond does not blink away: it settles first, and only then does the
+    // Avaia come out and wake on the world.
     const first = upsert.mock.calls[0]?.[0];
-    expect(first).toMatchObject({ id: "avaia", clipId: "quiesce" });
+    expect(first).toMatchObject({ id: "bond", clipId: "quiesce" });
     expect(first?.clipPhase).toBeLessThan(1);
   });
 
@@ -887,7 +863,7 @@ describe("AuthenticatedMapHomeView", () => {
 
     expect(label).toMatchObject({ title: "0x0sky", detail: "This device" });
     expect(label?.avatarUrl).toBe(avatarPreviewUrl(drawn!));
-    expect(drawn).not.toBe("dasha-study");
+    expect(drawn).toBe("dasha-study");
   });
 
   it("keeps the world usable when the host has no location capability", async () => {
