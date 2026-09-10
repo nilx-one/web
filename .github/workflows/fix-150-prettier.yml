@@ -1,0 +1,35 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Fix issue 150 formatting
+
+on:
+  push:
+    branches:
+      - fix/150-pub-dress-slug-only
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write packages/product-app/src/features/avaia/avaia-setup-view-model.test.ts
+      - name: Commit formatting and remove helper workflow
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git rm .github/workflows/fix-150-prettier.yml
+          git add packages/product-app/src/features/avaia/avaia-setup-view-model.test.ts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "style: format Avaia slug-only tests"
+          git push origin HEAD:fix/150-pub-dress-slug-only
