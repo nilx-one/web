@@ -18,9 +18,9 @@ const other = "0x2other";
 
 describe("per-Bond location presentation", () => {
   it("uses the observed position when the counterpart has no override", () => {
-    expect(
-      resolveBondLocationPresentation(other, observed, new Map()),
-    ).toEqual({
+    const resolved = resolveBondLocationPresentation(other, observed, new Map());
+
+    expect(resolved).toEqual({
       counterpartPubDress: other,
       position: observed,
       source: "observed",
@@ -33,21 +33,27 @@ describe("per-Bond location presentation", () => {
       target,
       presentedElsewhere,
     );
+    const targetPresentation = resolveBondLocationPresentation(
+      target,
+      observed,
+      overrides,
+    );
+    const otherPresentation = resolveBondLocationPresentation(
+      other,
+      observed,
+      overrides,
+    );
 
-    expect(
-      resolveBondLocationPresentation(target, observed, overrides),
-    ).toEqual({
+    expect(targetPresentation).toEqual({
       counterpartPubDress: target,
       position: presentedElsewhere,
       source: "override",
     });
-    expect(resolveBondLocationPresentation(other, observed, overrides)).toEqual(
-      {
-        counterpartPubDress: other,
-        position: observed,
-        source: "observed",
-      },
-    );
+    expect(otherPresentation).toEqual({
+      counterpartPubDress: other,
+      position: observed,
+      source: "observed",
+    });
   });
 
   it("can present an override without a device observation", () => {
@@ -56,10 +62,13 @@ describe("per-Bond location presentation", () => {
       target,
       presentedElsewhere,
     );
+    const resolved = resolveBondLocationPresentation(
+      target,
+      undefined,
+      overrides,
+    );
 
-    expect(
-      resolveBondLocationPresentation(target, undefined, overrides),
-    ).toEqual({
+    expect(resolved).toEqual({
       counterpartPubDress: target,
       position: presentedElsewhere,
       source: "override",
@@ -70,28 +79,36 @@ describe("per-Bond location presentation", () => {
     const corrupt = new Map<string, WorldPosition>([
       [target, { longitude: Number.NaN, latitude: 48.8566 }],
     ]);
+    const resolved = resolveBondLocationPresentation(target, observed, corrupt);
 
-    expect(
-      resolveBondLocationPresentation(target, observed, corrupt),
-    ).toBeUndefined();
+    expect(resolved).toBeUndefined();
   });
 
   it("fails closed for an invalid counterpart address", () => {
-    expect(
-      resolveBondLocationPresentation("friend", observed, new Map()),
-    ).toBeUndefined();
+    const resolved = resolveBondLocationPresentation(
+      "friend",
+      observed,
+      new Map(),
+    );
+
+    expect(resolved).toBeUndefined();
   });
 
   it("rejects invalid override configuration before it enters policy state", () => {
-    expect(() =>
+    const configureInvalidPosition = () => {
       setBondLocationOverride(new Map(), target, {
         longitude: 181,
         latitude: 48.8566,
-      }),
-    ).toThrowError("invalid-location-override");
-    expect(() =>
-      setBondLocationOverride(new Map(), "friend", presentedElsewhere),
-    ).toThrowError("invalid-counterpart-pub-dress");
+      });
+    };
+    const configureInvalidCounterpart = () => {
+      setBondLocationOverride(new Map(), "friend", presentedElsewhere);
+    };
+
+    expect(configureInvalidPosition).toThrowError("invalid-location-override");
+    expect(configureInvalidCounterpart).toThrowError(
+      "invalid-counterpart-pub-dress",
+    );
   });
 
   it("updates policy immutably and snapshots caller-owned positions", () => {
