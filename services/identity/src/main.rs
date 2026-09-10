@@ -238,9 +238,7 @@ async fn handle_message(
         .unwrap_or_default();
 
     match command {
-        "/start" => {
-            start_registration(&bot, &message, state.as_ref(), telegram_user_id).await?
-        }
+        "/start" => start_registration(&bot, &message, state.as_ref(), telegram_user_id).await?,
         "/whoami" => show_identity(&bot, &message, state.as_ref(), telegram_user_id).await?,
         "/current_position" | CURRENT_POSITION_BUTTON => {
             begin_current_position(&bot, &message, state.as_ref(), telegram_user_id).await?
@@ -324,13 +322,8 @@ async fn handle_location(
     longitude: f64,
     latitude: f64,
 ) -> ResponseResult<()> {
-    let Some((identity, role)) = registered_identity(
-        bot,
-        message,
-        &state.repository,
-        telegram_user_id,
-    )
-    .await?
+    let Some((identity, role)) =
+        registered_identity(bot, message, &state.repository, telegram_user_id).await?
     else {
         return Ok(());
     };
@@ -429,13 +422,8 @@ async fn begin_manual_position(
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
-    let Some((_identity, role)) = registered_identity(
-        bot,
-        message,
-        &state.repository,
-        telegram_user_id,
-    )
-    .await?
+    let Some((_identity, role)) =
+        registered_identity(bot, message, &state.repository, telegram_user_id).await?
     else {
         return Ok(());
     };
@@ -479,8 +467,8 @@ async fn send_help(
 }
 
 fn control_keyboard(role: BondAccessRole) -> KeyboardMarkup {
-    let keyboard = KeyboardMarkup::new([[KeyboardButton::new(CURRENT_POSITION_BUTTON)]])
-        .resize_keyboard();
+    let keyboard =
+        KeyboardMarkup::new([[KeyboardButton::new(CURRENT_POSITION_BUTTON)]]).resize_keyboard();
     if role == BondAccessRole::Admin {
         keyboard.append_row([KeyboardButton::new(SET_POSITION_BUTTON)])
     } else {
@@ -490,7 +478,7 @@ fn control_keyboard(role: BondAccessRole) -> KeyboardMarkup {
 
 fn current_position_request_keyboard() -> KeyboardMarkup {
     KeyboardMarkup::new([[
-        KeyboardButton::new("Передати поточну позицію").request(ButtonRequest::Location),
+        KeyboardButton::new("Передати поточну позицію").request(ButtonRequest::Location)
     ]])
     .resize_keyboard()
     .one_time_keyboard()
