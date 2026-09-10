@@ -454,6 +454,11 @@ button.provider-control {
   color: rgba(17, 19, 26, 0.62);
 }
 
+.authenticated-map-home[data-theme="light"] .profile-edit__discriminator,
+.authenticated-map-home[data-theme="light"] .profile-edit__affix {
+  color: rgba(17, 19, 26, 0.68);
+}
+
 .authenticated-map-home[data-theme="light"] .bond-dock__edit,
 .authenticated-map-home[data-theme="light"] .interface-settings__back {
   border-color: rgba(28, 33, 50, 0.16);
