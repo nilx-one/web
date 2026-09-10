@@ -9,10 +9,11 @@ use std::{
 };
 
 use identity_bot::{
-    BrowserOAuthConfig, DiscordOAuthClient, IdentityRepository, LocationControlRepository,
-    LocationPoint, NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent,
-    ProviderLinkRepository, TelegramAdminPolicy, TelegramInitDataVerifier, TelegramLocationIntents,
-    api, browser_web_auth, location_control_router, public_api,
+    BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository, BrowserOAuthConfig,
+    DecimalU64, DiscordOAuthClient, GeoCoordinate, IdentityRecord, IdentityRepository,
+    NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,
+    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth,
+    location_control_router, public_api, role_for_pub_dress,
 };
 use teloxide::{
     prelude::*,
@@ -29,14 +30,13 @@ const MINI_APP_URL: &str = "https://nilx.one/telegram/";
 const DEFAULT_PUBLIC_ORIGIN: &str = "https://nilx.one";
 const CURRENT_POSITION_BUTTON: &str = "Поточна позиція";
 const SET_POSITION_BUTTON: &str = "Встановити позицію";
-const USER_HELP: &str = "Commands:\n/start — open pub_dress registration\n/whoami — show your identity record\n/current_position — передати поточну позицію й повернути live mode\n/recover — explain the current recovery boundary";
+const USER_HELP: &str = "Commands:\n/start — open pub_dress registration\n/whoami — show your Bond identity and location\n/current_position — передати поточну позицію й повернути live mode\n/recover — explain the current recovery boundary";
 const ADMIN_HELP: &str = "\n/set_position — обрати довільну точку й перейти в manual mode";
 
 #[derive(Clone)]
 struct TelegramBotState {
     repository: IdentityRepository,
-    location: LocationControlRepository,
-    admins: TelegramAdminPolicy,
+    locations: BondLocationRepository,
     intents: TelegramLocationIntents,
 }
 
@@ -71,10 +71,6 @@ async fn main() {
         env::var("PASSWORD_PEPPER").expect("PASSWORD_PEPPER must be configured"),
     )
     .expect("native authentication secrets must satisfy the minimum length");
-    let admins = TelegramAdminPolicy::from_csv(
-        &env::var("TELEGRAM_ADMIN_USER_IDS").unwrap_or_default(),
-    )
-    .expect("TELEGRAM_ADMIN_USER_IDS must be a comma-separated list of Telegram user IDs");
 
     let telegram_browser_oauth = oauth_credentials_from_environment(
         "TELEGRAM_OIDC_CLIENT_ID",
@@ -100,9 +96,9 @@ async fn main() {
         .initialize_avaia_configuration()
         .await
         .expect("Avaia configuration storage must initialize");
-    let location = LocationControlRepository::connect(&database_url)
+    let locations = BondLocationRepository::connect(&database_url)
         .await
-        .expect("Bond location control storage must initialize");
+        .expect("Bond location storage must initialize");
     let provider_links = ProviderLinkRepository::connect(&database_url)
         .await
         .expect("provider link database connection must initialize");
@@ -118,7 +114,7 @@ async fn main() {
         TelegramInitDataVerifier::new(bot_token, init_data_max_age_seconds);
     let location_api = location_control_router(
         repository.clone(),
-        location.clone(),
+        locations.clone(),
         telegram_activity_verifier.clone(),
     );
     let avaia_api = api::avaia_router(
@@ -143,8 +139,7 @@ async fn main() {
 
     let telegram_state = Arc::new(TelegramBotState {
         repository,
-        location,
-        admins,
+        locations,
         intents: TelegramLocationIntents::default(),
     });
 
@@ -219,7 +214,15 @@ async fn handle_message(
     };
 
     if let Some(location) = message.location() {
-        handle_location(&bot, &message, state.as_ref(), telegram_user_id, location.longitude, location.latitude).await?;
+        handle_location(
+            &bot,
+            &message,
+            state.as_ref(),
+            telegram_user_id,
+            location.longitude,
+            location.latitude,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -236,18 +239,9 @@ async fn handle_message(
 
     match command {
         "/start" => {
-            start_registration(
-                &bot,
-                &message,
-                &state.repository,
-                telegram_user_id,
-                state.admins.is_admin(telegram_user_id),
-            )
-            .await?
+            start_registration(&bot, &message, state.as_ref(), telegram_user_id).await?
         }
-        "/whoami" => {
-            show_identity(&bot, &message, &state.repository, telegram_user_id).await?
-        }
+        "/whoami" => show_identity(&bot, &message, state.as_ref(), telegram_user_id).await?,
         "/current_position" | CURRENT_POSITION_BUTTON => {
             begin_current_position(&bot, &message, state.as_ref(), telegram_user_id).await?
         }
@@ -255,22 +249,71 @@ async fn handle_message(
             begin_manual_position(&bot, &message, state.as_ref(), telegram_user_id).await?
         }
         "/recover" => {
+            let role = role_for_telegram(&state.repository, telegram_user_id).await;
             bot.send_message(
                 message.chat.id,
                 "Stage 1 recovery follows your active Telegram sessions and Telegram 2FA. 0x1 does not hold a seed phrase or a separate recovery secret yet.",
             )
-            .reply_markup(control_keyboard(state.admins.is_admin(telegram_user_id)))
+            .reply_markup(control_keyboard(role))
             .await?;
         }
         "/help" => {
-            send_help(&bot, &message, state.admins.is_admin(telegram_user_id)).await?;
+            send_help(&bot, &message, state.as_ref(), telegram_user_id).await?;
         }
         _ => {
-            send_help(&bot, &message, state.admins.is_admin(telegram_user_id)).await?;
+            send_help(&bot, &message, state.as_ref(), telegram_user_id).await?;
         }
     }
 
     Ok(())
+}
+
+fn role_for_identity(identity: &IdentityRecord) -> BondAccessRole {
+    identity
+        .pub_dress
+        .parse()
+        .map_or(BondAccessRole::User, |pub_dress| {
+            role_for_pub_dress(&pub_dress)
+        })
+}
+
+async fn role_for_telegram(
+    repository: &IdentityRepository,
+    telegram_user_id: i64,
+) -> BondAccessRole {
+    match repository.find_by_telegram(telegram_user_id).await {
+        Ok(Some(identity)) => role_for_identity(&identity),
+        Ok(None) => BondAccessRole::User,
+        Err(error) => {
+            error!(%error, "identity lookup failed while resolving access role");
+            BondAccessRole::User
+        }
+    }
+}
+
+async fn registered_identity(
+    bot: &Bot,
+    message: &Message,
+    repository: &IdentityRepository,
+    telegram_user_id: i64,
+) -> ResponseResult<Option<(IdentityRecord, BondAccessRole)>> {
+    match repository.find_by_telegram(telegram_user_id).await {
+        Ok(Some(identity)) => {
+            let role = role_for_identity(&identity);
+            Ok(Some((identity, role)))
+        }
+        Ok(None) => {
+            bot.send_message(message.chat.id, "Спочатку зареєструйте Bond через /start.")
+                .await?;
+            Ok(None)
+        }
+        Err(error) => {
+            error!(%error, "identity lookup failed for location control");
+            bot.send_message(message.chat.id, "Identity lookup тимчасово недоступний.")
+                .await?;
+            Ok(None)
+        }
+    }
 }
 
 async fn handle_location(
@@ -281,39 +324,38 @@ async fn handle_location(
     longitude: f64,
     latitude: f64,
 ) -> ResponseResult<()> {
-    let is_admin = state.admins.is_admin(telegram_user_id);
+    let Some((identity, role)) = registered_identity(
+        bot,
+        message,
+        &state.repository,
+        telegram_user_id,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
+
     let Some(intent) = state.intents.consume(telegram_user_id).await else {
         bot.send_message(
             message.chat.id,
             "Спочатку оберіть «Поточна позиція» або, для admin, «Встановити позицію».",
         )
-        .reply_markup(control_keyboard(is_admin))
+        .reply_markup(control_keyboard(role))
         .await?;
         return Ok(());
     };
-    if intent == PendingLocationIntent::Manual && !is_admin {
-        bot.send_message(message.chat.id, "Встановлення manual position доступне лише admin.")
-            .reply_markup(control_keyboard(false))
-            .await?;
+    if intent == PendingLocationIntent::Manual && role != BondAccessRole::Admin {
+        bot.send_message(
+            message.chat.id,
+            "Встановлення manual position доступне лише admin.",
+        )
+        .reply_markup(control_keyboard(BondAccessRole::User))
+        .await?;
         return Ok(());
     }
 
-    let identity = match state.repository.find_by_telegram(telegram_user_id).await {
-        Ok(Some(identity)) => identity,
-        Ok(None) => {
-            bot.send_message(message.chat.id, "Спочатку зареєструйте Bond через /start.")
-                .await?;
-            return Ok(());
-        }
-        Err(error) => {
-            error!(%error, "identity lookup failed while recording location");
-            bot.send_message(message.chat.id, "Location control тимчасово недоступний.")
-                .await?;
-            return Ok(());
-        }
-    };
-    let point = match LocationPoint::new(longitude, latitude) {
-        Ok(point) => point,
+    let coordinate = match GeoCoordinate::from_degrees(longitude, latitude) {
+        Ok(coordinate) => coordinate,
         Err(error) => {
             error!(%error, "Telegram supplied an invalid location point");
             bot.send_message(message.chat.id, "Telegram передав некоректну координату.")
@@ -321,46 +363,37 @@ async fn handle_location(
             return Ok(());
         }
     };
-    let observed_at = match SystemTime::now().duration_since(UNIX_EPOCH) {
+    let updated_at = match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(value) => value.as_secs(),
         Err(_) => {
-            bot.send_message(message.chat.id, "Location control тимчасово недоступний.")
+            bot.send_message(message.chat.id, "Bond location тимчасово недоступний.")
                 .await?;
             return Ok(());
         }
     };
-
-    let result = match intent {
-        PendingLocationIntent::Current => {
-            state
-                .location
-                .record_live(&identity.pub_dress, point, observed_at)
-                .await
-        }
-        PendingLocationIntent::Manual => {
-            state
-                .location
-                .set_manual(&identity.pub_dress, point, observed_at)
-                .await
-        }
+    let mode = match intent {
+        PendingLocationIntent::Current => BondLocationMode::Live,
+        PendingLocationIntent::Manual => BondLocationMode::Manual,
     };
-    if let Err(error) = result {
-        error!(%error, "Bond location control write failed");
-        bot.send_message(message.chat.id, "Location control тимчасово недоступний.")
+    let location = BondLocation::new(coordinate, mode, DecimalU64::new(updated_at));
+
+    if let Err(error) = state.locations.write(&identity.pub_dress, location).await {
+        error!(%error, "Bond location write failed");
+        bot.send_message(message.chat.id, "Bond location тимчасово недоступний.")
             .await?;
         return Ok(());
     }
 
     let acknowledgement = match intent {
         PendingLocationIntent::Current => {
-            "Поточну позицію прийнято. Режим: live — карта знову використовує device location."
+            "Поточну позицію прийнято. Bond.location оновлено; режим: live."
         }
         PendingLocationIntent::Manual => {
-            "Позицію встановлено. Режим: manual — device location на карті не використовується."
+            "Позицію встановлено. Bond.location оновлено; режим: manual — device location на карті не використовується."
         }
     };
     bot.send_message(message.chat.id, acknowledgement)
-        .reply_markup(control_keyboard(is_admin))
+        .reply_markup(control_keyboard(role))
         .await?;
     Ok(())
 }
@@ -371,7 +404,10 @@ async fn begin_current_position(
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
-    if !identity_exists(bot, message, &state.repository, telegram_user_id).await? {
+    if registered_identity(bot, message, &state.repository, telegram_user_id)
+        .await?
+        .is_none()
+    {
         return Ok(());
     }
     state
@@ -380,7 +416,7 @@ async fn begin_current_position(
         .await;
     bot.send_message(
         message.chat.id,
-        "Натисніть кнопку нижче: Telegram передасть саме вашу поточну геолокацію, після чого Bond повернеться в live mode.",
+        "Натисніть кнопку нижче: Telegram передасть вашу поточну геолокацію, Bond.location оновиться і режим стане live.",
     )
     .reply_markup(current_position_request_keyboard())
     .await?;
@@ -393,13 +429,23 @@ async fn begin_manual_position(
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
-    if !state.admins.is_admin(telegram_user_id) {
-        bot.send_message(message.chat.id, "Встановлення manual position доступне лише admin.")
-            .reply_markup(control_keyboard(false))
-            .await?;
+    let Some((_identity, role)) = registered_identity(
+        bot,
+        message,
+        &state.repository,
+        telegram_user_id,
+    )
+    .await?
+    else {
         return Ok(());
-    }
-    if !identity_exists(bot, message, &state.repository, telegram_user_id).await? {
+    };
+    if role != BondAccessRole::Admin {
+        bot.send_message(
+            message.chat.id,
+            "Встановлення manual position доступне лише admin.",
+        )
+        .reply_markup(control_keyboard(BondAccessRole::User))
+        .await?;
         return Ok(());
     }
     state
@@ -408,50 +454,34 @@ async fn begin_manual_position(
         .await;
     bot.send_message(
         message.chat.id,
-        "Відкрийте Telegram Location, оберіть довільну точку на мапі та надішліть її протягом 5 хвилин. Вона стане manual position цього Bond.",
+        "Відкрийте Telegram Location, оберіть довільну точку на мапі та надішліть її протягом 5 хвилин. Вона стане вашим Bond.location у manual mode.",
     )
     .await?;
     Ok(())
 }
 
-async fn identity_exists(
+async fn send_help(
     bot: &Bot,
     message: &Message,
-    repository: &IdentityRepository,
+    state: &TelegramBotState,
     telegram_user_id: i64,
-) -> ResponseResult<bool> {
-    match repository.find_by_telegram(telegram_user_id).await {
-        Ok(Some(_)) => Ok(true),
-        Ok(None) => {
-            bot.send_message(message.chat.id, "Спочатку зареєструйте Bond через /start.")
-                .await?;
-            Ok(false)
-        }
-        Err(error) => {
-            error!(%error, "identity lookup failed for location control");
-            bot.send_message(message.chat.id, "Identity lookup тимчасово недоступний.")
-                .await?;
-            Ok(false)
-        }
-    }
-}
-
-async fn send_help(bot: &Bot, message: &Message, is_admin: bool) -> ResponseResult<()> {
-    let help = if is_admin {
+) -> ResponseResult<()> {
+    let role = role_for_telegram(&state.repository, telegram_user_id).await;
+    let help = if role == BondAccessRole::Admin {
         format!("{USER_HELP}{ADMIN_HELP}")
     } else {
         USER_HELP.to_owned()
     };
     bot.send_message(message.chat.id, help)
-        .reply_markup(control_keyboard(is_admin))
+        .reply_markup(control_keyboard(role))
         .await?;
     Ok(())
 }
 
-fn control_keyboard(is_admin: bool) -> KeyboardMarkup {
+fn control_keyboard(role: BondAccessRole) -> KeyboardMarkup {
     let keyboard = KeyboardMarkup::new([[KeyboardButton::new(CURRENT_POSITION_BUTTON)]])
         .resize_keyboard();
-    if is_admin {
+    if role == BondAccessRole::Admin {
         keyboard.append_row([KeyboardButton::new(SET_POSITION_BUTTON)])
     } else {
         keyboard
@@ -469,17 +499,17 @@ fn current_position_request_keyboard() -> KeyboardMarkup {
 async fn start_registration(
     bot: &Bot,
     message: &Message,
-    repository: &IdentityRepository,
+    state: &TelegramBotState,
     telegram_user_id: i64,
-    is_admin: bool,
 ) -> ResponseResult<()> {
-    match repository.find_by_telegram(telegram_user_id).await {
+    match state.repository.find_by_telegram(telegram_user_id).await {
         Ok(Some(identity)) => {
+            let role = role_for_identity(&identity);
             bot.send_message(
                 message.chat.id,
                 format!("You are already registered as {}.", identity.pub_dress),
             )
-            .reply_markup(control_keyboard(is_admin))
+            .reply_markup(control_keyboard(role))
             .await?;
         }
         Ok(None) => {
@@ -511,13 +541,28 @@ fn registration_keyboard() -> InlineKeyboardMarkup {
 async fn show_identity(
     bot: &Bot,
     message: &Message,
-    repository: &IdentityRepository,
+    state: &TelegramBotState,
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
-    match repository.find_by_telegram(telegram_user_id).await {
+    match state.repository.find_by_telegram(telegram_user_id).await {
         Ok(Some(identity)) => {
+            let role = role_for_identity(&identity);
+            let location = match state.locations.read(&identity.pub_dress).await {
+                Ok(location) => location,
+                Err(error) => {
+                    error!(%error, "Bond location lookup failed");
+                    bot.send_message(
+                        message.chat.id,
+                        "Bond location lookup is temporarily unavailable.",
+                    )
+                    .await?;
+                    return Ok(());
+                }
+            };
             let identity_record = serde_json::json!({
                 "pub_dress": identity.pub_dress,
+                "role": role,
+                "location": location,
                 "identity_providers": [format!("tg:{telegram_user_id}")],
                 "stage": "provider-backed"
             });
@@ -526,6 +571,7 @@ async fn show_identity(
                 serde_json::to_string_pretty(&identity_record)
                     .expect("identity record JSON serialization must succeed"),
             )
+            .reply_markup(control_keyboard(role))
             .await?;
         }
         Ok(None) => {
@@ -546,10 +592,12 @@ async fn show_identity(
 
 #[cfg(test)]
 mod tests {
+    use identity_bot::BondAccessRole;
     use serde_json::json;
 
     use super::{
-        MINI_APP_URL, control_keyboard, current_position_request_keyboard, registration_keyboard,
+        MINI_APP_URL, SET_POSITION_BUTTON, control_keyboard, current_position_request_keyboard,
+        registration_keyboard,
     };
 
     #[test]
@@ -577,11 +625,16 @@ mod tests {
 
     #[test]
     fn manual_position_control_is_visible_only_to_admins() {
-        let user_keyboard = serde_json::to_value(control_keyboard(false)).expect("user keyboard");
-        let admin_keyboard = serde_json::to_value(control_keyboard(true)).expect("admin keyboard");
+        let user_keyboard =
+            serde_json::to_value(control_keyboard(BondAccessRole::User)).expect("user keyboard");
+        let admin_keyboard =
+            serde_json::to_value(control_keyboard(BondAccessRole::Admin)).expect("admin keyboard");
 
         assert_eq!(user_keyboard["keyboard"].as_array().map(Vec::len), Some(1));
         assert_eq!(admin_keyboard["keyboard"].as_array().map(Vec::len), Some(2));
-        assert_eq!(admin_keyboard["keyboard"][1][0]["text"], SET_POSITION_BUTTON);
+        assert_eq!(
+            admin_keyboard["keyboard"][1][0]["text"],
+            SET_POSITION_BUTTON
+        );
     }
 }
