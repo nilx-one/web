@@ -88,9 +88,10 @@ describe("TelegramHost", () => {
         initDataUnsafe: { user: { language_code: "  uk-RU  " } },
       }),
     ).toEqual(["uk-RU"]);
-    expect(
-      telegramLanguageTags({ ...createBridge(), initDataUnsafe: undefined }),
-    ).toEqual([]);
+
+    const { initDataUnsafe: _ignored, ...bridgeWithoutUnsafeData } =
+      createBridge();
+    expect(telegramLanguageTags(bridgeWithoutUnsafeData)).toEqual([]);
   });
 });
 
