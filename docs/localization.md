@@ -37,7 +37,7 @@ Host language evidence is presentation-only and must be supplied by the host ada
 
 Language-family matching precedes region matching. Any tag whose primary language subtag is `uk` — including `uk`, `uk-UA`, `uk_UA`, `uk-GB`, `uk-RU`, or another `uk-*` variant — resolves to the canonical supported locale `uk-UA`. Likewise, any supported English family variant such as `en`, `en-US`, or `en-UA` resolves to `en`. Region subtags never change the language family.
 
-An explicit choice, when a UI exposes it, is persisted only as local interface state under `nilx-one.interface.locale`. The resolved locale is written to the document `lang` attribute for accessibility and browser semantics.
+The Settings surface exposes `Auto`, `English`, and `Українська`. `Auto` also names the locale it currently resolves to. Selecting an explicit language rerenders the product immediately without logout or reload and persists only local interface state under `nilx-one.interface.locale`. The resolved locale is written to the document `lang` attribute for accessibility and browser semantics.
 
 ## Ownership
 
