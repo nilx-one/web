@@ -9,6 +9,7 @@ import { createBrowserGeolocation } from "@nilx-one/host-browser";
 import {
   createTelegramHost,
   resolveTelegramWebApp,
+  telegramLanguageTags,
 } from "@nilx-one/host-telegram";
 import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@nilx-one/map-shade";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
 import { ProductApp } from "@nilx-one/product-app";
+import { declareHostLanguages } from "@nilx-one/product-app/localization";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
@@ -36,7 +38,9 @@ if (container === null) {
 // geolocation capability rather than growing a Telegram-specific one. Presence
 // capture remains intentionally unwired until its iOS behavior is verified
 // firsthand; the existing host location still drives ordinary map presentation.
-const host = createTelegramHost(resolveTelegramWebApp(window), {
+const telegramBridge = resolveTelegramWebApp(window);
+declareHostLanguages(telegramLanguageTags(telegramBridge));
+const host = createTelegramHost(telegramBridge, {
   geolocation: createBrowserGeolocation(),
 });
 const core = createCoreWasmClient({

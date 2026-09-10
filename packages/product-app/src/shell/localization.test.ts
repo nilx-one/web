@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   chooseLocale,
+  declareHostLanguages,
   readLocalePreference,
   resolveLocale,
   translate,
@@ -12,22 +13,37 @@ import {
 
 afterEach(() => {
   chooseLocale("auto");
+  declareHostLanguages([]);
   window.localStorage.clear();
 });
 
 describe("frontend localization", () => {
-  it("matches supported languages from ordered browser preferences", () => {
-    expect(resolveLocale("auto", ["fr-FR", "uk-UA", "en-US"])).toBe("uk-UA");
-    expect(resolveLocale("auto", ["uk_UA"])).toBe("uk-UA");
-    expect(resolveLocale("auto", ["en-GB"])).toBe("en");
+  it("treats every Ukrainian language tag as Ukrainian regardless of region", () => {
+    for (const language of ["uk", "uk-UA", "uk_UA", "uk-GB", "uk-RU", "uk-anything"]) {
+      expect(resolveLocale("auto", [], [language])).toBe("uk-UA");
+    }
   });
 
-  it("falls back deterministically when the device language is unsupported", () => {
-    expect(resolveLocale("auto", ["fr-FR", "de-DE"])).toBe("en");
+  it("matches the first supported language from ordered device preferences", () => {
+    expect(resolveLocale("auto", [], ["fr-FR", "uk-UA", "en-US"])).toBe(
+      "uk-UA",
+    );
+    expect(resolveLocale("auto", [], ["en-GB", "uk-UA"])).toBe("en");
   });
 
-  it("lets an explicit local preference outrank the device", () => {
-    expect(resolveLocale("uk-UA", ["en-US"])).toBe("uk-UA");
+  it("lets supported host language evidence outrank the embedded browser", () => {
+    expect(resolveLocale("auto", ["uk-RU"], ["en-US"])).toBe("uk-UA");
+    expect(resolveLocale("auto", ["en-US"], ["uk-UA"])).toBe("en");
+  });
+
+  it("falls through unsupported host evidence before using English fallback", () => {
+    expect(resolveLocale("auto", ["fr-FR"], ["uk-UA"])).toBe("uk-UA");
+    expect(resolveLocale("auto", ["fr-FR"], ["de-DE"])).toBe("en");
+  });
+
+  it("lets an explicit local preference outrank every detected language", () => {
+    expect(resolveLocale("en", ["uk-UA"], ["uk-UA"])).toBe("en");
+    expect(resolveLocale("uk-UA", ["en-US"], ["en-US"])).toBe("uk-UA");
     chooseLocale("uk-UA");
     expect(readLocalePreference()).toBe("uk-UA");
   });

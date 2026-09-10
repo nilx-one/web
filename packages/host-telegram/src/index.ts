@@ -20,8 +20,16 @@ export interface TelegramHostComposition {
   readonly geolocation?: GeolocationCapability;
 }
 
+export interface TelegramWebAppUser {
+  /** ISO language hint from Telegram. It is presentation evidence, not auth truth. */
+  readonly language_code?: string;
+}
+
 export interface TelegramWebAppBridge {
   initData: string;
+  initDataUnsafe?: {
+    readonly user?: TelegramWebAppUser;
+  };
   colorScheme: "dark" | "light";
   safeAreaInset?: Partial<SafeAreaInsets>;
   HapticFeedback?: {
@@ -120,6 +128,18 @@ class TelegramHost implements HostPort {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+/**
+ * Read Telegram's account language as an unverified presentation hint. The
+ * signed initData remains the only input that may cross the authentication
+ * boundary; this value only helps `auto` choose interface copy.
+ */
+export function telegramLanguageTags(
+  bridge: TelegramWebAppBridge | undefined,
+): readonly string[] {
+  const language = bridge?.initDataUnsafe?.user?.language_code?.trim();
+  return language === undefined || language.length === 0 ? [] : [language];
 }
 
 export function resolveTelegramWebApp(

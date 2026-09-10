@@ -6,7 +6,7 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 /** A real language locale the product can render today. */
 export type ProductLocale = "en" | "uk-UA";
 
-/** `auto` follows the browser/device language; an explicit locale is local UI state. */
+/** `auto` follows available host/device language evidence; an explicit locale is local UI state. */
 export type LocalePreference = ProductLocale | "auto";
 
 export const LOCALE_STORAGE_KEY = "nilx-one.interface.locale";
@@ -78,17 +78,32 @@ function supportedLocale(tag: string): ProductLocale | undefined {
   return undefined;
 }
 
-/** Resolve once from explicit local preference, then ordered device languages, then English. */
-export function resolveLocale(
-  preference: LocalePreference,
-  deviceLanguages: readonly string[],
-): ProductLocale {
-  if (preference !== "auto") return preference;
-  for (const language of deviceLanguages) {
+function firstSupportedLocale(
+  languages: readonly string[],
+): ProductLocale | undefined {
+  for (const language of languages) {
     const locale = supportedLocale(language);
     if (locale !== undefined) return locale;
   }
-  return DEFAULT_LOCALE;
+  return undefined;
+}
+
+/**
+ * Resolve from explicit local preference, then ordered host evidence, then
+ * ordered browser/device languages, then English. Region subtags never change
+ * the language family: every `uk-*` tag resolves to the Ukrainian catalog.
+ */
+export function resolveLocale(
+  preference: LocalePreference,
+  hostLanguages: readonly string[],
+  deviceLanguages: readonly string[],
+): ProductLocale {
+  if (preference !== "auto") return preference;
+  return (
+    firstSupportedLocale(hostLanguages) ??
+    firstSupportedLocale(deviceLanguages) ??
+    DEFAULT_LOCALE
+  );
 }
 
 export function translate(locale: ProductLocale, key: TranslationKey): string {
@@ -96,6 +111,7 @@ export function translate(locale: ProductLocale, key: TranslationKey): string {
 }
 
 let sessionPreference: LocalePreference | undefined;
+let hostLanguageEvidence: readonly string[] = [];
 const listeners = new Set<() => void>();
 let deviceLanguageWatched = false;
 
@@ -111,7 +127,7 @@ export function readLocalePreference(): LocalePreference {
       return stored;
     }
   } catch {
-    // Storage is optional. The interface remains usable with device language.
+    // Storage is optional. The interface remains usable with detected language.
   }
   return "auto";
 }
@@ -127,14 +143,31 @@ export function chooseLocale(preference: LocalePreference): void {
   notify();
 }
 
+/**
+ * Supply ordered host language hints before the product mounts. These hints are
+ * presentation evidence only: they must never be promoted to authentication or
+ * protocol truth. An empty list removes host-specific evidence.
+ */
+export function declareHostLanguages(languages: readonly string[]): void {
+  const next = languages.map((language) => language.trim()).filter(Boolean);
+  if (
+    next.length === hostLanguageEvidence.length &&
+    next.every((language, index) => language === hostLanguageEvidence[index])
+  ) {
+    return;
+  }
+  hostLanguageEvidence = next;
+  notify();
+}
+
 function deviceLanguages(): readonly string[] {
   if (typeof navigator === "undefined") return [];
   if (navigator.languages.length > 0) return navigator.languages;
   return navigator.language.length > 0 ? [navigator.language] : [];
 }
 
-function currentDeviceLocale(): ProductLocale {
-  return resolveLocale("auto", deviceLanguages());
+function currentAutoLocale(): ProductLocale {
+  return resolveLocale("auto", hostLanguageEvidence, deviceLanguages());
 }
 
 function subscribe(listener: () => void): () => void {
@@ -159,12 +192,12 @@ export function useLocalization(): LocalizationState {
     readLocalePreference,
     () => "auto" as LocalePreference,
   );
-  const deviceLocale = useSyncExternalStore(
+  const autoLocale = useSyncExternalStore(
     subscribe,
-    currentDeviceLocale,
+    currentAutoLocale,
     () => DEFAULT_LOCALE,
   );
-  const resolved = preference === "auto" ? deviceLocale : preference;
+  const resolved = preference === "auto" ? autoLocale : preference;
   const t = useCallback<Translate>(
     (key) => translate(resolved, key),
     [resolved],
