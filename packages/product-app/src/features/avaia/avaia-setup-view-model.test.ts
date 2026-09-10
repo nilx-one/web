@@ -23,7 +23,7 @@ function input(overrides: Partial<AvaiaSetupInput> = {}): AvaiaSetupInput {
 }
 
 describe("Avaia setup surface", () => {
-  it("presents the whole stored address rather than a name it assembled", () => {
+  it("presents the stored address while exposing only its editable middle", () => {
     const state = createAvaiaSetupViewState(
       input({
         load: {
@@ -34,9 +34,22 @@ describe("Avaia setup surface", () => {
       }),
     );
 
-    expect(state.address).toBe("0vesnai");
-    expect(state.draft).toBe("0vesnai");
-    expect(state.editable).toBe(true);
+    expect(state).toMatchObject({
+      address: "0vesnai",
+      draft: "0vesnai",
+      prefix: "0",
+      editableName: "vesn",
+      suffix: "ai",
+      editable: true,
+    });
+  });
+
+  it("keeps the canonical ai suffix out of editable state", () => {
+    expect(createAvaiaSetupViewState(input())).toMatchObject({
+      prefix: "0",
+      editableName: "sk",
+      suffix: "ai",
+    });
   });
 
   it("reads configuration from what was stored, and nothing else", () => {
