@@ -17,7 +17,7 @@ describe("avatar presentation contract", () => {
       "/avatars/0.1.0/dasha-study.glb",
     );
     expect(AVATAR_ASSET_URLS["dasha-v2-study"]).toBe(
-      "/avatars/0.2.0/dasha-v2-study.glb",
+      "/avatars/0.3.0/dasha-v2-study.glb",
     );
   });
 

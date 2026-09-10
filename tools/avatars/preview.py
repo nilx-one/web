@@ -40,22 +40,41 @@ def read_glb(path):
     return doc, accessor
 
 
-def render(path, azimuth):
+def render(path, azimuth, visible=None, focus=None):
+    """Rasterise one study. `visible` names the mesh nodes to draw.
+
+    `focus` names the nodes a caller wants framed, and is answered with the
+    screen box they occupy. A wardrobe still that showed the whole body would
+    be the same picture for every pair of shoes; the box is what lets the
+    still be of the item.
+
+    A modular character carries every wearable it publishes in one asset, so a
+    look at it is a look at one resolved outfit rather than at all of them at
+    once. Framing is measured from the whole character either way, so two
+    outfits of the same body are photographed from the same distance.
+    """
     doc, accessor = read_glb(path)
     colour = np.full((H, W, 3), BG, dtype=np.float64)
     depth = np.full((H, W), -np.inf)
 
     triangles, tint = [], []
+    bounds, focused = [], []
     for mesh in doc["meshes"]:
         for primitive in mesh["primitives"]:
             position = accessor(primitive["attributes"]["POSITION"]).astype(np.float64)
             normal = accessor(primitive["attributes"]["NORMAL"]).astype(np.float64)
             index = accessor(primitive["indices"]).reshape(-1, 3).astype(np.int64)
             base = doc["materials"][primitive["material"]]["pbrMetallicRoughness"]["baseColorFactor"][:3]
+            bounds.append(position)
+            if focus is not None and mesh.get("name") in focus:
+                focused.append(position)
+            if visible is not None and mesh.get("name") not in visible:
+                continue
             triangles.append((position, normal, index))
             tint.append(np.array(base, dtype=np.float64))
+    drawn = triangles
 
-    every = np.vstack([p for p, _, _ in triangles])
+    every = np.vstack(bounds)
     low, high = every.min(axis=0), every.max(axis=0)
     height = high[1] - low[1]
     scale = (H * 0.92) / height
@@ -68,7 +87,7 @@ def render(path, azimuth):
     light = np.array([0.30, 0.55, 0.78])
     light /= np.linalg.norm(light)
 
-    for (position, normal, index), base in zip(triangles, tint):
+    for (position, normal, index), base in zip(drawn, tint):
         view = (position - centre) @ rotation.T
         screen = np.empty_like(view)
         screen[:, 0] = W / 2 + view[:, 0] * scale
@@ -110,7 +129,13 @@ def render(path, azimuth):
                 continue
             window[nearer] = z[nearer]
             colour[y0:y1, x0:x1][nearer] = np.clip(base * lit * 255, 0, 255)
-    return colour.astype(np.uint8)
+    box = None
+    if focused:
+        view = (np.vstack(focused) - centre) @ rotation.T
+        xs = W / 2 + view[:, 0] * scale
+        ys = H / 2 - view[:, 1] * scale
+        box = (xs.min(), ys.min(), xs.max(), ys.max())
+    return colour.astype(np.uint8), box
 
 
 def write_png(path, image):
@@ -137,25 +162,133 @@ parser.add_argument("--asset-dir", type=Path, default=ASSETS)
 # are generated from the same studies, so a picker can never offer a figure the
 # world would not draw.
 parser.add_argument("--thumbnails", help="write one front-view PNG per study here")
+# A modular character's wardrobe is shown item by item, so each item gets a
+# still of that item on this body — never a swatch standing in for cloth
+# nobody rendered.
+parser.add_argument("--wardrobe", action="store_true",
+                    help="also write one still per wardrobe item of a modular study")
 arguments = parser.parse_args()
 ASSETS = arguments.asset_dir
+
+
+THUMBNAIL = 240
+
+
+def halve(panel):
+    """A picker card never needs the sheet's resolution."""
+    return panel.reshape(H // 2, 2, W // 2, 2, 3).mean(axis=(1, 3)).round().astype(np.uint8)
+
+
+def crop_square(panel, box, size=THUMBNAIL):
+    """A square still of what a box encloses, with room around it to read.
+
+    Nearest-neighbour resampling keeps this dependency-free and exactly
+    reproducible; a picker card is a look at cloth, not a print.
+    """
+    x0, y0, x1, y1 = box
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    half = max((x1 - x0), (y1 - y0)) * 0.72
+    half = min(max(half, 60.0), min(W, H) / 2)
+    cx = min(max(cx, half), W - half)
+    cy = min(max(cy, half), H - half)
+    left, top = int(round(cx - half)), int(round(cy - half))
+    span = max(int(round(half * 2)), 1)
+    window = panel[top:top + span, left:left + span]
+    rows = (np.arange(size) * window.shape[0] // size).clip(0, window.shape[0] - 1)
+    columns = (np.arange(size) * window.shape[1] // size).clip(0, window.shape[1] - 1)
+    return window[rows][:, columns]
+
+
+def read_manifest(model):
+    path = ASSETS / f"{model}-study.manifest.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def outfit_nodes(manifest, worn):
+    """The mesh nodes one resolved outfit draws.
+
+    A region is drawn unless something worn encloses it; the body's own
+    always-visible regions are never hidden by anything. This is the same rule
+    the runtime resolves, kept here so a still and the world agree.
+    """
+    hides = set()
+    for item in manifest["wardrobe"]:
+        if item["id"] in worn:
+            hides.update(item["hides"])
+    nodes = {"body:" + region for region in manifest["always_visible"]}
+    nodes.update("body:" + region for region in manifest["body_regions"]
+                 if region not in hides)
+    nodes.update("wear:" + item for item in worn)
+    return nodes
+
+
+def default_worn(manifest):
+    worn = []
+    for value in manifest["default_outfit"].values():
+        worn.extend([value] if isinstance(value, str) else value)
+    return worn
+
+
+def item_slug(item_id):
+    return item_id.replace("/", "-")
+
 
 if arguments.thumbnails is not None:
     directory = Path(arguments.thumbnails)
     directory.mkdir(parents=True, exist_ok=True)
     for model in arguments.models:
-        panel = render(ASSETS / f"{model}-study.glb", 0)
-        # Halve the sheet resolution: a picker card never needs more.
-        thumbnail = panel.reshape(H // 2, 2, W // 2, 2, 3).mean(axis=(1, 3))
+        asset = ASSETS / f"{model}-study.glb"
+        manifest = read_manifest(model)
+        modular = manifest is not None and manifest.get("modular")
+        worn = default_worn(manifest) if modular else []
+        visible = outfit_nodes(manifest, worn) if modular else None
         path = directory / f"{model}-study.png"
-        write_png(path, thumbnail.round().astype(np.uint8))
+        panel, _ = render(asset, 0, visible)
+        write_png(path, halve(panel))
         print("wrote", path, flush=True)
+        if modular and arguments.wardrobe:
+            for item in manifest["wardrobe"]:
+                # Each item is shown on a body dressed the way this study is
+                # published, with only its own slot replaced — so a person sees
+                # the change they are actually about to make.
+                # The same compatibility rule the runtime enforces: a dress is
+                # the whole garment, so a still of one is never a dress drawn
+                # over the separates it replaces.
+                schema = {entry["slot"]: entry for entry in manifest["slots"]}
+                blocked = {item["slot"], *schema[item["slot"]]["conflicts"]}
+                blocked.update(other for other, entry in schema.items()
+                               if item["slot"] in entry["conflicts"])
+                slot_of = {other["id"]: other["slot"] for other in manifest["wardrobe"]}
+                if item["slot"] == "accessories":
+                    others = [entry for entry in worn if entry != item["id"]]
+                else:
+                    others = [entry for entry in worn if slot_of[entry] not in blocked]
+                shown = others + [item["id"]]
+                path = directory / f"{model}-study.{item_slug(item['id'])}.png"
+                panel, box = render(asset, 0, outfit_nodes(manifest, shown),
+                                    focus={"wear:" + item["id"]})
+                write_png(path, crop_square(panel, box))
+                print("wrote", path, flush=True)
 
 if arguments.output is not None:
     panels = []
     for model in arguments.models:
-        for azimuth in arguments.angles:
-            panels.append(render(ASSETS / f"{model}-study.glb", azimuth))
+        asset = ASSETS / f"{model}-study.glb"
+        manifest = read_manifest(model)
+        modular = manifest is not None and manifest.get("modular")
+        outfits = ([outfit_nodes(manifest, default_worn(manifest))] if modular
+                   else [None])
+        if modular and arguments.wardrobe:
+            outfits = [outfit_nodes(manifest, worn) for worn in [
+                default_worn(manifest),
+                ["hair/loose-long", "top/shell-ecru", "bottom/skirt-charcoal",
+                 "shoes/sneakers-white", "accessory/earrings-silver"],
+                ["hair/loose-long", "dress/shift-indigo", "shoes/loafers-black"],
+                ["hair/swept-bun"],
+            ]]
+        for visible in outfits:
+            for azimuth in arguments.angles:
+                panels.append(render(asset, azimuth, visible)[0])
         print("rendered", model, flush=True)
 
     sheet = np.concatenate(panels, axis=1)

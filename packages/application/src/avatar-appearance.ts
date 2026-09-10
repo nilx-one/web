@@ -207,8 +207,10 @@ function dasha2Item(
 export const WARDROBE_ITEMS: readonly WardrobeItem[] = [
   dasha2Item("hair/swept-bun", "hair", "Swept bun", []),
   dasha2Item("hair/loose-long", "hair", "Loose length", []),
-  dasha2Item("top/tee-black", "top", "Black tee", ["torso", "upper_arms"]),
-  dasha2Item("top/tank-ecru", "top", "Ecru tank", ["torso"]),
+  // A short sleeve does not enclose the arm below its hem, so the arm regions
+  // stay published for a long-sleeved item and hidden by nothing yet.
+  dasha2Item("top/tee-black", "top", "Black tee", ["torso"]),
+  dasha2Item("top/shell-ecru", "top", "Ecru shell", ["torso"]),
   dasha2Item("bottom/trousers-ecru", "bottom", "Ecru trousers", [
     "hips",
     "upper_legs",
@@ -218,7 +220,7 @@ export const WARDROBE_ITEMS: readonly WardrobeItem[] = [
     "hips",
     "upper_legs",
   ]),
-  dasha2Item("dress/slip-indigo", "dress", "Indigo slip", [
+  dasha2Item("dress/shift-indigo", "dress", "Indigo shift", [
     "torso",
     "hips",
     "upper_legs",

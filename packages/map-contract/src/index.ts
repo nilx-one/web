@@ -203,12 +203,49 @@ export const AVATAR_ASSET_VERSIONS: Readonly<Record<AvatarModelId, string>> = {
   "sky-study": AVATAR_ASSET_VERSION,
   "dasha-study": AVATAR_ASSET_VERSION,
   "kai-study": AVATAR_ASSET_VERSION,
-  "dasha-v2-study": "0.2.0",
+  "dasha-v2-study": "0.3.0",
 };
 
 /** The still image a picker shows for a study, generated from that study. */
 export function avatarPreviewUrl(modelId: AvatarModelId): string {
   return `/avatars/${AVATAR_ASSET_VERSIONS[modelId]}/${modelId}.png`;
+}
+
+/**
+ * The still a wardrobe shows for one item, generated from that item on this
+ * body. A picker never stands a swatch in for cloth nobody rendered, so the
+ * path is derived from the item's own semantic id rather than authored beside
+ * it — an item with no still is a missing file, not a silently different one.
+ */
+export function avatarWardrobeThumbnailUrl(
+  modelId: AvatarModelId,
+  itemId: string,
+): string {
+  const slug = itemId.replaceAll("/", "-");
+  return `/avatars/${AVATAR_ASSET_VERSIONS[modelId]}/${modelId}.${slug}.png`;
+}
+
+/**
+ * The rigged geometry a study is drawn from. Every consumer resolves it here,
+ * so settings, the editor and the world can never be looking at different
+ * bytes for the same chosen body.
+ */
+export function avatarAssetUrl(modelId: AvatarModelId): string {
+  return `/avatars/${AVATAR_ASSET_VERSIONS[modelId]}/${modelId}.glb`;
+}
+
+/**
+ * The mesh node a body region is drawn as, and the node a worn item is drawn
+ * as. A modular study carries every wearable it publishes in one asset, so
+ * changing clothes is a change of visibility on a body that is already
+ * standing there — never a second character fetched and swapped in.
+ */
+export function avatarBodyRegionNode(region: string): string {
+  return `body:${region}`;
+}
+
+export function avatarWardrobeNode(itemId: string): string {
+  return `wear:${itemId}`;
 }
 
 export const AVATAR_MODEL_IDS: readonly AvatarModelId[] = [

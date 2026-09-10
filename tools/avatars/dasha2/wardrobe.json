@@ -1,0 +1,127 @@
+{
+  "model_id": "dasha-v2-study",
+  "asset_version": "0.3.0",
+  "rig_version": "study-rig-1",
+  "note": "The wardrobe Dasha 2.0 publishes. The asset build proves every item here has geometry and every routed node is listed here; the Web catalog is checked against the same file, so the clothes a person can choose and the clothes that exist cannot drift apart.",
+  "slots": [
+    {
+      "slot": "hair",
+      "cardinality": "one",
+      "conflicts": []
+    },
+    {
+      "slot": "top",
+      "cardinality": "zero-or-one",
+      "conflicts": ["dress"]
+    },
+    {
+      "slot": "bottom",
+      "cardinality": "zero-or-one",
+      "conflicts": ["dress"]
+    },
+    {
+      "slot": "dress",
+      "cardinality": "zero-or-one",
+      "conflicts": ["top", "bottom"]
+    },
+    {
+      "slot": "outerwear",
+      "cardinality": "zero-or-one",
+      "conflicts": []
+    },
+    {
+      "slot": "shoes",
+      "cardinality": "zero-or-one",
+      "conflicts": []
+    },
+    {
+      "slot": "headwear",
+      "cardinality": "zero-or-one",
+      "conflicts": []
+    },
+    {
+      "slot": "accessories",
+      "cardinality": "many",
+      "conflicts": []
+    }
+  ],
+  "body_regions": [
+    "torso",
+    "upper_arms",
+    "lower_arms",
+    "hips",
+    "upper_legs",
+    "lower_legs",
+    "feet"
+  ],
+  "always_visible": ["head", "hands"],
+  "default_outfit": {
+    "hair": "hair/swept-bun",
+    "top": "top/tee-black",
+    "bottom": "bottom/trousers-ecru",
+    "shoes": "shoes/loafers-black",
+    "accessories": ["accessory/earrings-silver"]
+  },
+  "items": [
+    {
+      "id": "hair/swept-bun",
+      "slot": "hair",
+      "name": "Swept bun",
+      "hides": []
+    },
+    {
+      "id": "hair/loose-long",
+      "slot": "hair",
+      "name": "Loose length",
+      "hides": []
+    },
+    {
+      "id": "top/tee-black",
+      "slot": "top",
+      "name": "Black tee",
+      "hides": ["torso"]
+    },
+    {
+      "id": "top/shell-ecru",
+      "slot": "top",
+      "name": "Ecru shell",
+      "hides": ["torso"]
+    },
+    {
+      "id": "bottom/trousers-ecru",
+      "slot": "bottom",
+      "name": "Ecru trousers",
+      "hides": ["hips", "upper_legs", "lower_legs"]
+    },
+    {
+      "id": "bottom/skirt-charcoal",
+      "slot": "bottom",
+      "name": "Charcoal skirt",
+      "hides": ["hips", "upper_legs"]
+    },
+    {
+      "id": "dress/shift-indigo",
+      "slot": "dress",
+      "name": "Indigo shift",
+      "hides": ["torso", "hips", "upper_legs"]
+    },
+    {
+      "id": "shoes/loafers-black",
+      "slot": "shoes",
+      "name": "Black loafers",
+      "hides": ["feet"]
+    },
+    {
+      "id": "shoes/sneakers-white",
+      "slot": "shoes",
+      "name": "White sneakers",
+      "hides": ["feet"]
+    },
+    {
+      "id": "accessory/earrings-silver",
+      "slot": "accessories",
+      "name": "Silver earrings",
+      "hides": []
+    }
+  ]
+}

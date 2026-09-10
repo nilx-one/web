@@ -132,7 +132,7 @@ describe("deterministic defaults", () => {
   });
 
   it("resolves the same stored value to the same appearance every time", () => {
-    const stored = { top: "top/tank-ecru", hair: "hair/loose-long" };
+    const stored = { top: "top/shell-ecru", hair: "hair/loose-long" };
     const once = resolveAvatarAppearance(DASHA_2, stored);
     const twice = resolveAvatarAppearance(DASHA_2, stored);
     expect(once).toEqual(twice);
@@ -142,9 +142,11 @@ describe("deterministic defaults", () => {
   });
 
   it("fills a required slot that stored nothing", () => {
-    const resolved = resolveAvatarAppearance(DASHA_2, { top: "top/tank-ecru" });
+    const resolved = resolveAvatarAppearance(DASHA_2, {
+      top: "top/shell-ecru",
+    });
     expect(resolved.hair).toBe("hair/swept-bun");
-    expect(resolved.top).toBe("top/tank-ecru");
+    expect(resolved.top).toBe("top/shell-ecru");
   });
 
   it("keeps a required slot filled even when it stored something unknown", () => {
@@ -180,9 +182,9 @@ describe("slot compatibility", () => {
   it("takes a top and a bottom off when a dress goes on", () => {
     const dressed = equip(
       resolveAvatarAppearance(DASHA_2, undefined),
-      "dress/slip-indigo",
+      "dress/shift-indigo",
     );
-    expect(dressed.dress).toBe("dress/slip-indigo");
+    expect(dressed.dress).toBe("dress/shift-indigo");
     expect(dressed.top).toBeUndefined();
     expect(dressed.bottom).toBeUndefined();
     expect(validateAvatarAppearance(DASHA_2, dressed)).toEqual({
@@ -193,18 +195,18 @@ describe("slot compatibility", () => {
   it("takes the dress off when a top goes back on", () => {
     const dressed = equip(
       resolveAvatarAppearance(DASHA_2, undefined),
-      "dress/slip-indigo",
+      "dress/shift-indigo",
     );
-    const inATop = equip(dressed, "top/tank-ecru");
+    const inATop = equip(dressed, "top/shell-ecru");
     expect(inATop.dress).toBeUndefined();
-    expect(inATop.top).toBe("top/tank-ecru");
+    expect(inATop.top).toBe("top/shell-ecru");
   });
 
   it("refuses a stored combination that wears a dress over a top", () => {
     const validation = validateAvatarAppearance(DASHA_2, {
       hair: "hair/swept-bun",
       top: "top/tee-black",
-      dress: "dress/slip-indigo",
+      dress: "dress/shift-indigo",
     });
     expect(validation.kind).toBe("invalid");
     expect(
@@ -220,7 +222,7 @@ describe("slot compatibility", () => {
     const resolved = resolveAvatarAppearance(DASHA_2, {
       hair: "hair/swept-bun",
       top: "top/tee-black",
-      dress: "dress/slip-indigo",
+      dress: "dress/shift-indigo",
     });
     expect(resolved.top).toBe("top/tee-black");
     expect(resolved.dress).toBeUndefined();
@@ -284,7 +286,6 @@ describe("body region visibility", () => {
     const dressed = resolveAvatarAppearance(DASHA_2, undefined);
     expect(hiddenBodyRegions(DASHA_2, dressed)).toEqual([
       "torso",
-      "upper_arms",
       "hips",
       "upper_legs",
       "lower_legs",
@@ -300,13 +301,20 @@ describe("body region visibility", () => {
     expect(hiddenBodyRegions(DASHA_2, appearance)).not.toContain("feet");
   });
 
-  it("uncovers the arms when a sleeveless top replaces a sleeved one", () => {
-    const sleeveless = equip(
+  it("uncovers the shin a trouser leg covered when a skirt replaces it", () => {
+    const inASkirt = equip(
       resolveAvatarAppearance(DASHA_2, undefined),
-      "top/tank-ecru",
+      "bottom/skirt-charcoal",
     );
-    expect(hiddenBodyRegions(DASHA_2, sleeveless)).not.toContain("upper_arms");
-    expect(hiddenBodyRegions(DASHA_2, sleeveless)).toContain("torso");
+    expect(hiddenBodyRegions(DASHA_2, inASkirt)).not.toContain("lower_legs");
+    expect(hiddenBodyRegions(DASHA_2, inASkirt)).toContain("upper_legs");
+  });
+
+  it("leaves the arms bare: no published item encloses one yet", () => {
+    for (const item of WARDROBE_ITEMS) {
+      expect(item.hides).not.toContain("upper_arms");
+      expect(item.hides).not.toContain("lower_arms");
+    }
   });
 
   it("hides nothing for a study that wears nothing separately", () => {
@@ -366,10 +374,10 @@ describe("resolving a whole selection", () => {
 
   it("pairs a published model with an appearance it may wear", () => {
     const selection = resolveAvatarSelection(DASHA_2, {
-      dress: "dress/slip-indigo",
+      dress: "dress/shift-indigo",
     });
     expect(selection?.modelId).toBe(DASHA_2);
-    expect(selection?.appearance.dress).toBe("dress/slip-indigo");
+    expect(selection?.appearance.dress).toBe("dress/shift-indigo");
     expect(
       validateAvatarAppearance(DASHA_2, selection?.appearance ?? {}),
     ).toEqual({ kind: "valid" });

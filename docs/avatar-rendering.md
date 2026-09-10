@@ -5,7 +5,8 @@ animation data and authoring geometry. The supplied Sky and Dasha studies are
 artistic interpretations, not biometric measurements or evidence of presence.
 
 Four studies are published: **Sky** (masculine), **Dasha** (feminine) and
-**Kai** (non-binary), plus **Dasha 2.0** (feminine). Kai is built from the same helper library and the same
+**Kai** (non-binary), plus **Dasha 2.0** (feminine), the only one whose
+clothes can be changed. Kai is built from the same helper library and the same
 skeleton as the other two, with a shoulder-to-hip ratio between them, a
 straight torso and no feature exaggerated toward either. All four are
 artistic studies: none of them is a claim about any person's body, gender or
@@ -41,25 +42,55 @@ planting or locomotion-speed synchronization. Turn is an anticipatory gesture;
 the caller supplies actual bearing. Mode names select presentation clips only;
 they do not activate AI authority or create interactions.
 
-## Dasha 2.0 — asset contract 0.2.0
+## Dasha 2.0 — modular asset contract 0.3.0
 
 `tools/avatars/dasha2/build_model.py` authors a separate fourth study,
-`dasha-v2-study`: swept chestnut hair with a low bun, grey-green eyes,
-silver earrings, a black short-sleeved shirt, ecru trousers and black loafers.
-It uses the same 22-node rig and five in-place clips. The mesh is a procedural
-interpretation of the supplied references; it does not reproduce their cinematic
-render quality. No reference photograph is packaged or fetched by the runtime.
+`dasha-v2-study`: grey-green eyes, silver earrings, and clothes that come off.
+It uses the same 22-node rig and the same five in-place clips as the other
+three. The mesh is a procedural interpretation of the supplied references; it
+does not reproduce their cinematic render quality. No reference photograph is
+packaged or fetched by the runtime.
 
-Only this model uses `/avatars/0.2.0/`; the original three retain their immutable
-0.1.0 URLs and bytes. The picker thumbnail is rasterized from the actual GLB.
-The new asset has 100,398 vertices, 195,550 triangles and 7,201,752 bytes,
-still exceeding the draft's 6 MB target. Runtime WebGL deformation and physical
-phone performance have not been visually measured for this model.
+She is a character rather than one sculpted outfit. The asset carries a bare
+body cut into the regions a garment may cover — `torso`, `upper_arms`,
+`lower_arms`, `hips`, `upper_legs`, `lower_legs`, `feet` — plus `head` and
+`hands`, which nothing may hide: a body that could lose its own face to a
+change of clothes is not the same body afterwards. Every body region and every
+wearable is its own glTF mesh node bound to the same skin, so **changing an
+outfit is a visibility change on a skeleton that is already standing there**,
+never a second character fetched and swapped in. Identity and wardrobe cannot
+come apart, because there is one skeleton, one bind pose and one set of clips
+for all of them.
 
-Identity contract 9 expands the persisted avatar catalog through migration 0008.
-It preserves existing choices, owned identities and provider links, and is
-idempotent on reopen. Deploy identity contract 9 before a Web package requiring
-it. This migration does not reset the identity database.
+Ten items ship across six slots: two hairstyles, two tops, two bottoms, one
+dress, two pairs of shoes and one accessory. Covering is visibility and never
+geometry — a garment hides the region it encloses and unequipping it restores
+exactly what was there, so no sequence of changes is destructive. A short
+sleeve does not enclose the arm below its hem, so the arm regions stay
+published for a long-sleeved item and are hidden by nothing yet.
+
+`tools/avatars/dasha2/wardrobe.json` is the one table both sides read: the
+asset build proves every item in it has geometry and that every routed node is
+listed, and `packages/application` is checked against the same file in
+`avatar-asset-contract.test.ts`. What a person can choose and what actually
+exists therefore cannot drift apart. Slot compatibility lives there too — a
+dress is the whole garment, so it is the same cloth as a top and a bottom
+rather than a layer over them.
+
+Only this model uses `/avatars/0.3.0/`; the original three retain their
+immutable 0.1.0 URLs and bytes, which the pinned hashes prove. The picker
+thumbnail is rasterized from the actual GLB, and so is a still per wardrobe
+item — cropped to the item, on a body dressed the way this study is published,
+so a picker never stands a swatch in for cloth nobody rendered. The asset has
+147,374 vertices, 286,310 triangles and 10,567,624 bytes for the whole
+wardrobe, which is less than Sky or Dasha and still exceeds the draft's 6 MB
+target. Runtime WebGL deformation and physical phone performance have not been
+visually measured for this model. Neither hair nor cloth simulation is
+implemented: loose hair follows the head bone like the bun does.
+
+Identity contract 9 expands the persisted avatar catalog through migration 0008. It preserves existing choices, owned identities and provider links, and
+is idempotent on reopen. Deploy identity contract 9 before a Web package
+requiring it. This migration does not reset the identity database.
 
 ## Build and verification
 
@@ -73,7 +104,10 @@ python tools/avatars/test_rig.py
 
 `python tools/avatars/preview.py --thumbnails deploy/web/avatars/0.1.0` writes
 the still each study shows in the picker; the build does this after exporting
-the GLBs, and the hashes are pinned like every other output.
+the GLBs, and the hashes are pinned like every other output. Adding
+`--wardrobe` also writes one still per wardrobe item of a modular study, each
+resolved under the same compatibility rule the runtime enforces — so a still
+of a dress is never a dress drawn over the separates it replaces.
 
 `python tools/avatars/preview.py sheet.png` rasterises the exported studies to a
 single PNG — front and three-quarter views, flat-shaded from the material
@@ -87,7 +121,8 @@ validation. Release packaging reproduces the same hashes. A geometry, rig,
 material or clip change after publication requires a new asset version/path.
 
 The runtime serves `/avatars/0.1.0/{modelId}.glb` — `sky-study`, `dasha-study`
-and `kai-study` — from its own static origin,
+and `kai-study` — and `/avatars/0.3.0/dasha-v2-study.glb`, from its own static
+origin,
 independently of the selected Web host, with immutable caching and real 404s.
 No decoder, texture, animation, photograph or reference image is downloaded from
 an external origin. Source archives were provided by the user; their existing
