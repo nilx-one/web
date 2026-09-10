@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AVATAR_MODELS } from "@nilx-one/application";
+import {
+  resolveAvatarScene,
+  type AVATAR_MODELS,
+  type AvatarAppearance,
+} from "@nilx-one/application";
 import {
   AVATAR_MODEL_IDS,
   MAP_BODY_HANDOVER_ZOOM,
@@ -119,6 +123,11 @@ export interface WheelBodyInput {
   /** The address that seeds this identity's own ambient rhythm. */
   readonly address: string;
   readonly study: PublishedAvatarModel;
+  /**
+   * What this identity is wearing. Absent means nothing was ever chosen, which
+   * the study's own default answers — never an empty body.
+   */
+  readonly appearance?: AvatarAppearance | undefined;
   readonly location: DeviceLocationState;
   /** The camera the body is being drawn under, which sets its apparent size. */
   readonly zoom: number;
@@ -138,6 +147,7 @@ export function createWheelBodyHandle({
   body,
   address,
   study,
+  appearance,
   location,
   zoom,
   timeMs,
@@ -154,6 +164,9 @@ export function createWheelBodyHandle({
   // so it is not left to the ambient sampler. Reduced motion still gets the
   // clip: it is what makes the change legible, and it plays once.
   const handing = body.clipId !== undefined;
+  // The same resolver the settings preview and the editor draw from, so a
+  // person cannot be wearing one thing in the editor and another on the world.
+  const scene = resolveAvatarScene(study, appearance);
 
   return {
     id: BODY_HANDLE_IDS[body.seat],
@@ -168,5 +181,6 @@ export function createWheelBodyHandle({
     clipPhase: handing ? (body.clipPhase ?? 0) : ambient.clipPhase,
     scale: avatarPresentationScale(zoom, position.latitude),
     visible: zoom >= AVATAR_MIN_ZOOM,
+    visibleNodes: scene.visibleNodes,
   };
 }

@@ -2,13 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
-  avatarAssetUrl,
-  avatarBodyRegionNode,
-  avatarPreviewUrl,
-  avatarWardrobeNode,
-} from "@nilx-one/map-contract";
-
-import {
   AVATAR_BODY_REGIONS,
   avatarModelDefinition,
   equippedWardrobe,
@@ -21,6 +14,25 @@ import {
   type WardrobeItem,
 } from "./avatar-appearance";
 import type { AvatarModel } from "./identity-registration";
+
+/**
+ * How the asset names the parts an appearance shows and hides.
+ *
+ * A namespaced name is a part the application decides the visibility of; a
+ * bare name is the asset's own — a bone, an armature — and is never touched.
+ * The domain owns the namespaces because it owns what a body is made of; a
+ * renderer only has to know that a namespaced node is not its business to
+ * decide about.
+ */
+export const AVATAR_NODE_SEPARATOR = ":";
+
+export function avatarBodyRegionNode(region: string): string {
+  return `body${AVATAR_NODE_SEPARATOR}${region}`;
+}
+
+export function avatarWardrobeNode(itemId: string): string {
+  return `wear${AVATAR_NODE_SEPARATOR}${itemId}`;
+}
 
 /**
  * The parts of a body it keeps whatever it is wearing.
@@ -49,14 +61,11 @@ export interface ResolvedAvatarScene {
   readonly modelId: AvatarModel;
   /** The appearance actually drawn, after every unsupported entry is dropped. */
   readonly appearance: AvatarAppearance;
-  /** The rigged geometry this body is drawn from. */
-  readonly assetUrl: string;
   /**
-   * A published still of this study. `stillShowsThisAppearance` says whether it
-   * is a still of this very outfit or only of the study — a small preview may
-   * fall back to it, and should not claim more than it shows.
+   * Whether the study's published still is a still of this very outfit rather
+   * than only of the study. A small preview may fall back to that still, and
+   * should not claim more than it shows.
    */
-  readonly stillUrl: string;
   readonly stillShowsThisAppearance: boolean;
   /**
    * The mesh nodes this appearance draws. Empty for a study that publishes
@@ -104,8 +113,6 @@ export function resolveAvatarScene(
   return {
     modelId,
     appearance: resolved,
-    assetUrl: avatarAssetUrl(modelId),
-    stillUrl: avatarPreviewUrl(modelId),
     stillShowsThisAppearance:
       serialized === serializeAvatarAppearance(model.defaultAppearance),
     visibleNodes,

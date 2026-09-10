@@ -11,6 +11,9 @@ import {
 } from "./avatar-appearance";
 import {
   AVATAR_IDENTITY_NODES,
+  AVATAR_NODE_SEPARATOR,
+  avatarBodyRegionNode,
+  avatarWardrobeNode,
   resolveAvatarScene,
   resolveSelectedAvatarScene,
   sceneDrawsNode,
@@ -25,16 +28,18 @@ function equip(appearance: AvatarAppearance, itemId: string): AvatarAppearance {
 }
 
 describe("one resolved body", () => {
-  it("points every consumer at the same geometry", () => {
+  it("names the character's own parts apart from the asset's", () => {
     const scene = resolveAvatarScene(DASHA_2, undefined);
-    expect(scene.assetUrl).toBe("/avatars/0.3.0/dasha-v2-study.glb");
-    expect(scene.stillUrl).toBe("/avatars/0.3.0/dasha-v2-study.png");
     expect(scene.modular).toBe(true);
+    for (const node of scene.visibleNodes) {
+      expect(node).toContain(AVATAR_NODE_SEPARATOR);
+    }
+    expect(avatarBodyRegionNode("torso")).toBe("body:torso");
+    expect(avatarWardrobeNode("top/tee-black")).toBe("wear:top/tee-black");
   });
 
   it("draws a baked study exactly as it was authored", () => {
     const scene = resolveAvatarScene("sky-study", undefined);
-    expect(scene.assetUrl).toBe("/avatars/0.1.0/sky-study.glb");
     expect(scene.modular).toBe(false);
     expect(scene.visibleNodes).toEqual([]);
     expect(scene.equipped).toEqual([]);
@@ -113,7 +118,7 @@ describe("the same state always draws the same body", () => {
       equip(before.appearance, "shoes/sneakers-white"),
     );
     expect(after.key).not.toBe(before.key);
-    expect(after.assetUrl).toBe(before.assetUrl);
+    expect(after.modelId).toBe(before.modelId);
   });
 
   it("resolves an appearance authored for another study to that study's own", () => {

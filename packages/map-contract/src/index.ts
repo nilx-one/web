@@ -234,20 +234,6 @@ export function avatarAssetUrl(modelId: AvatarModelId): string {
   return `/avatars/${AVATAR_ASSET_VERSIONS[modelId]}/${modelId}.glb`;
 }
 
-/**
- * The mesh node a body region is drawn as, and the node a worn item is drawn
- * as. A modular study carries every wearable it publishes in one asset, so
- * changing clothes is a change of visibility on a body that is already
- * standing there — never a second character fetched and swapped in.
- */
-export function avatarBodyRegionNode(region: string): string {
-  return `body:${region}`;
-}
-
-export function avatarWardrobeNode(itemId: string): string {
-  return `wear:${itemId}`;
-}
-
 export const AVATAR_MODEL_IDS: readonly AvatarModelId[] = [
   "sky-study",
   "dasha-study",
@@ -273,6 +259,14 @@ export interface AvatarHandle {
   readonly clipPhase: number;
   readonly scale: number;
   readonly visible: boolean;
+  /**
+   * The mesh nodes of this study's asset that this body draws, resolved by the
+   * application from what the person is wearing. Absent — or empty — means the
+   * asset is drawn exactly as it was authored, which is what a single sculpted
+   * study is. The renderer only shows and hides what it is given names for: it
+   * never decides what an outfit is, and never reads appearance state.
+   */
+  readonly visibleNodes?: readonly string[];
 }
 
 /**

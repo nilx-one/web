@@ -43,6 +43,9 @@ export {
 export {
   AVATAR_IDENTITY_NODES,
   AVATAR_IDENTITY_REGIONS,
+  AVATAR_NODE_SEPARATOR,
+  avatarBodyRegionNode,
+  avatarWardrobeNode,
   resolveAvatarScene,
   resolveSelectedAvatarScene,
   sceneDrawsNode,
