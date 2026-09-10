@@ -9,7 +9,7 @@ import {
   type WorldPosition,
 } from "@nilx-one/application";
 import type { MapPointSelection, MapRenderer } from "@nilx-one/map-contract";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useLocalization } from "../../shell/localization";
 import {
@@ -48,48 +48,51 @@ export function BondArtificialPositionSettings({
   renderer,
 }: BondArtificialPositionSettingsProps) {
   const localization = useLocalization();
-  const copy =
-    localization.resolved === "uk-UA"
-      ? {
-          legend: "Штучна позиція",
-          target: "Bond.pub_dress",
-          targetPlaceholder: "0x1friend",
-          targetHint: "Вкажіть Bond, лише для якого діятиме ця позиція.",
-          invalidTarget: "Потрібен pub_dress іншого Bond.",
-          notSelected: "Не обрано",
-          tapMap: "Торкніться точки на мапі…",
-          choose: "Обрати на мапі",
-          replace: "Змінити на мапі",
-          clear: "Очистити",
-          cancel: "Скасувати",
-          unavailable: "Цей renderer не підтримує вибір точки на мапі.",
-          storageUnavailable:
-            "Сховище недоступне: зміна діятиме лише в цій сесії.",
-          corrupt:
-            "Збережена політика пошкоджена. Вона не буде замінена реальною позицією.",
-          reset: "Скинути пошкоджену політику",
-          note: "Реальна геопозиція пристрою не змінюється. Override адресований лише вказаному Bond.",
-        }
-      : {
-          legend: "Artificial position",
-          target: "Bond.pub_dress",
-          targetPlaceholder: "0x1friend",
-          targetHint: "Name the Bond for which this position alone applies.",
-          invalidTarget: "Enter another Bond's valid pub_dress.",
-          notSelected: "Not selected",
-          tapMap: "Tap a point on the map…",
-          choose: "Choose on map",
-          replace: "Change on map",
-          clear: "Clear",
-          cancel: "Cancel",
-          unavailable: "This renderer cannot select a point on the map.",
-          storageUnavailable:
-            "Storage is unavailable: this change lasts for this session only.",
-          corrupt:
-            "The saved policy is corrupt. It will not fall back to the real position.",
-          reset: "Reset corrupt policy",
-          note: "The device's real location does not change. This override is addressed only to the named Bond.",
-        };
+  const copy = useMemo(
+    () =>
+      localization.resolved === "uk-UA"
+        ? {
+            legend: "Штучна позиція",
+            target: "Bond.pub_dress",
+            targetPlaceholder: "0x1friend",
+            targetHint: "Вкажіть Bond, лише для якого діятиме ця позиція.",
+            invalidTarget: "Потрібен pub_dress іншого Bond.",
+            notSelected: "Не обрано",
+            tapMap: "Торкніться точки на мапі…",
+            choose: "Обрати на мапі",
+            replace: "Змінити на мапі",
+            clear: "Очистити",
+            cancel: "Скасувати",
+            unavailable: "Цей renderer не підтримує вибір точки на мапі.",
+            storageUnavailable:
+              "Сховище недоступне: зміна діятиме лише в цій сесії.",
+            corrupt:
+              "Збережена політика пошкоджена. Вона не буде замінена реальною позицією.",
+            reset: "Скинути пошкоджену політику",
+            note: "Реальна геопозиція пристрою не змінюється. Override адресований лише вказаному Bond.",
+          }
+        : {
+            legend: "Artificial position",
+            target: "Bond.pub_dress",
+            targetPlaceholder: "0x1friend",
+            targetHint: "Name the Bond for which this position alone applies.",
+            invalidTarget: "Enter another Bond's valid pub_dress.",
+            notSelected: "Not selected",
+            tapMap: "Tap a point on the map…",
+            choose: "Choose on map",
+            replace: "Change on map",
+            clear: "Clear",
+            cancel: "Cancel",
+            unavailable: "This renderer cannot select a point on the map.",
+            storageUnavailable:
+              "Storage is unavailable: this change lasts for this session only.",
+            corrupt:
+              "The saved policy is corrupt. It will not fall back to the real position.",
+            reset: "Reset corrupt policy",
+            note: "The device's real location does not change. This override is addressed only to the named Bond.",
+          },
+    [localization.resolved],
+  );
   const [counterpartDraft, setCounterpartDraft] = useState("");
   const [store, setStore] = useState(() => readInitialState(ownerPubDress));
   const [picking, setPicking] = useState(false);
@@ -110,22 +113,25 @@ export function BondArtificialPositionSettings({
   const canPick =
     counterpartValid && overrides !== undefined && pickerSupported;
 
-  function persist(next: BondLocationOverrides): void {
-    if (typeof window === "undefined") {
-      setStore({ kind: "unavailable", overrides: next });
-      return;
-    }
-    const result = writeBondLocationOverrides(
-      window.localStorage,
-      ownerPubDress,
-      next,
-    );
-    setStore(
-      result === "saved"
-        ? { kind: "ready", overrides: next }
-        : { kind: "unavailable", overrides: next },
-    );
-  }
+  const persist = useCallback(
+    (next: BondLocationOverrides): void => {
+      if (typeof window === "undefined") {
+        setStore({ kind: "unavailable", overrides: next });
+        return;
+      }
+      const result = writeBondLocationOverrides(
+        window.localStorage,
+        ownerPubDress,
+        next,
+      );
+      setStore(
+        result === "saved"
+          ? { kind: "ready", overrides: next }
+          : { kind: "unavailable", overrides: next },
+      );
+    },
+    [ownerPubDress],
+  );
 
   useEffect(() => {
     setPicking(false);
@@ -174,6 +180,7 @@ export function BondArtificialPositionSettings({
     counterpartPubDress,
     counterpartValid,
     overrides,
+    persist,
     picking,
     renderer,
   ]);
@@ -196,7 +203,10 @@ export function BondArtificialPositionSettings({
     <fieldset className="interface-settings__appearance">
       <legend>{copy.legend}</legend>
       <div className="profile-edit__form">
-        <label className="interface-settings__eyebrow" htmlFor="artificial-position-bond">
+        <label
+          className="interface-settings__eyebrow"
+          htmlFor="artificial-position-bond"
+        >
           {copy.target}
         </label>
         <div className="profile-edit__address">
