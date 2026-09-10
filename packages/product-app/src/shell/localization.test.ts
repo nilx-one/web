@@ -17,9 +17,7 @@ afterEach(() => {
 
 describe("frontend localization", () => {
   it("matches supported languages from ordered browser preferences", () => {
-    expect(resolveLocale("auto", ["fr-FR", "uk-UA", "en-US"])).toBe(
-      "uk-UA",
-    );
+    expect(resolveLocale("auto", ["fr-FR", "uk-UA", "en-US"])).toBe("uk-UA");
     expect(resolveLocale("auto", ["uk_UA"])).toBe("uk-UA");
     expect(resolveLocale("auto", ["en-GB"])).toBe("en");
   });

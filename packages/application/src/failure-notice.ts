@@ -8,11 +8,7 @@
  * from `code`, and never treats `code` as anything but an opaque handle.
  */
 export type FailureKind =
-  | "unavailable"
-  | "withheld"
-  | "gated"
-  | "rejected"
-  | "exhausted";
+  "unavailable" | "withheld" | "gated" | "rejected" | "exhausted";
 
 export interface FailureReport {
   readonly code: string;
