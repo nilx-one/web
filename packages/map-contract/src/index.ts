@@ -98,6 +98,16 @@ export interface MapScreenPoint {
 }
 
 /**
+ * A geographic point chosen explicitly by a person while the map is acting as
+ * an editor. It is presentation input only: it is never an observation,
+ * presence evidence, BondChain fact, or Relationship state.
+ */
+export interface MapPointSelection {
+  readonly longitude: number;
+  readonly latitude: number;
+}
+
+/**
  * A person reaching for a body the world is drawing.
  *
  * It says which body was reached for and nothing about what that means: the
@@ -171,6 +181,20 @@ export interface MapRenderer {
   setDimension(dimension: MapDimension): void;
   setObservedPosition(position: MapObservedPosition | null): void;
   setObservedPositionLabel(label: MapObservedPositionLabel | null): void;
+  /**
+   * Shows the current editor point without conflating it with the observed
+   * device position. Optional because non-interactive renderers need not expose
+   * map editing at all.
+   */
+  setSelectionPoint?(point: MapPointSelection | null): void;
+  /**
+   * While at least one listener is present, a map tap selects geography instead
+   * of activating a body. The application owns the meaning and persistence of
+   * the selected point.
+   */
+  subscribePointSelection?(
+    listener: (point: MapPointSelection) => void,
+  ): () => void;
   /**
    * The avatar surface, present when this renderer draws avatars at all. The
    * application drives exactly one handle through it — the signed-in Bond's
