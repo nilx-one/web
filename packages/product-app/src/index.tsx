@@ -883,6 +883,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     const deviceAvaiaAvailability = avaiaAvailability({
       acceleratedGraphics: "gpu" in navigator,
     });
+    const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
       <AuthenticatedMapHomeView
         hostLabel={viewModel.hostLabel}
@@ -936,7 +937,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
                 const currentAvaiaAddress =
                   avaiaProfileQuery.data?.kind === "available"
                     ? avaiaProfileQuery.data.profile.pubDress
-                    : viewModel.identity.avaiaPubDress;
+                    : ownedAvaiaPubDress;
                 if (
                   avaiaProfileSlugStemDraft === undefined ||
                   currentAvaiaAddress === undefined ||
