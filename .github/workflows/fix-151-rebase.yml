@@ -1,0 +1,74 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Reapply issue 151 on issue 150
+
+on:
+  push:
+    branches:
+      - fix/151-remove-bond-avaia-editor
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Keep Personal Bond editor Bond-owned only
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("packages/product-app/src/index.tsx")
+          text = path.read_text()
+          nl = chr(10)
+          text = text.replace('  RenameAvaiaSlug,' + nl, '', 1)
+          old_import = (
+              'import {' + nl
+              + '  createAvaiaSlugViewState,' + nl
+              + '  createProfileSlugViewState,' + nl
+              + '} from "./features/identity/profile-slug-view-model";' + nl
+          )
+          new_import = (
+              'import { createProfileSlugViewState } from "./features/identity/profile-slug-view-model";' + nl
+          )
+          if old_import not in text:
+            raise SystemExit("Avaia slug import marker not found")
+          text = text.replace(old_import, new_import, 1)
+          text = text.replace(
+              '  const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);' + nl,
+              '',
+              1,
+          )
+          start = text.index('  const renameAvaia = useMutation({')
+          end = text.index('  // The service still owns the whole canonical address.', start)
+          text = text[:start] + text[end:]
+          start = text.index('        avaiaEdit={createAvaiaSlugViewState(')
+          end = text.index('        {...(avaiaProfileAccess === undefined', start)
+          text = text[:start] + text[end:]
+          start = text.index('        onAvaiaChange={(next: string) => {')
+          end = text.index('        avatarChoice={avatarChoice}', start)
+          text = text[:start] + text[end:]
+          start = text.index('        onAvaiaSubmit={() => {')
+          end = text.index('        {...(viewModel.identity.avaiaPubDress === undefined', start)
+          text = text[:start] + text[end:]
+          path.write_text(text)
+      - run: pnpm exec prettier --write packages/product-app/src/index.tsx
+      - name: Commit rebased correction and remove helper workflow
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git rm .github/workflows/fix-151-rebase.yml
+          git add packages/product-app/src/index.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: preserve Owned Avaia editor after Personal Bond cleanup"
+          git push origin HEAD:fix/151-remove-bond-avaia-editor
