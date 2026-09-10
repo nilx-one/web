@@ -35,6 +35,12 @@ const EN_MESSAGES = {
   "header.navigation": "0x1 navigation",
   "header.settings": "Settings",
   "header.more": "More",
+  "settings.language.legend": "Language",
+  "settings.language.auto": "Auto",
+  "settings.language.detected.en": "Detected: English",
+  "settings.language.detected.uk": "Detected: Ukrainian",
+  "settings.language.english": "English",
+  "settings.language.ukrainian": "Українська",
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -62,6 +68,12 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "header.navigation": "Навігація 0x1",
   "header.settings": "Налаштування",
   "header.more": "Більше",
+  "settings.language.legend": "Мова",
+  "settings.language.auto": "Автоматично",
+  "settings.language.detected.en": "Визначено: English",
+  "settings.language.detected.uk": "Визначено: Українська",
+  "settings.language.english": "English",
+  "settings.language.ukrainian": "Українська",
 };
 
 const CATALOGS: Readonly<
