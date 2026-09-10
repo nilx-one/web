@@ -52,16 +52,25 @@
   --shell-inset: 1.5rem;
 }
 
-/* The world fills the viewport and persists behind every overlay. */
+/* The world fills the viewport and persists behind every overlay. It does not
+   establish a stacking context: the map itself remains on the world plane,
+   while a renderer-owned watermark can rise above contextual Dock chrome. */
 .app-shell__world {
   position: absolute;
-  z-index: 0;
   inset: 0;
+}
+
+/* Branding belongs to the map, but clipping it behind the Dock makes the
+   overlap look accidental. Raise only MapLibre's bottom-left control layer;
+   input still reaches the Dock through the non-interactive watermark layer. */
+.authenticated-map-home .maplibregl-ctrl-bottom-left {
+  z-index: 3;
+  pointer-events: none;
 }
 
 .app-shell__header {
   position: absolute;
-  z-index: 3;
+  z-index: 4;
   top: calc(var(--shell-inset) + var(--safe-top, 0px));
   right: calc(var(--shell-inset) + var(--safe-right, 0px));
   left: calc(var(--shell-inset) + var(--safe-left, 0px));
@@ -76,7 +85,7 @@
 /* Anchored top right, always below the header, never inside the Dock. */
 .app-shell__toasts {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   top: calc(
     var(--shell-inset) + var(--safe-top, 0px) + var(--shell-header-block) +
       var(--shell-gap)
@@ -155,7 +164,7 @@
 
 .app-shell__overlay {
   position: absolute;
-  z-index: 5;
+  z-index: 6;
   inset: 0;
   pointer-events: none;
 }
