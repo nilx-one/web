@@ -33,29 +33,48 @@ esac
 public_origin="${public_origin%/}"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
-body_file="$work_dir/identity-auth-boundary.body"
-attempt=1
+body_file="$work_dir/identity-public-check.body"
 
-while [ "$attempt" -le "$health_retry" ]; do
-  status="$(
-    curl --silent --show-error \
-      --connect-timeout 5 \
-      --max-time 15 \
-      --output "$body_file" \
-      --write-out '%{http_code}' \
-      "$public_origin/api/v1/identity" || true
-  )"
+request_until() {
+  path="$1"
+  expected_status="$2"
+  expected_body="$3"
+  label="$4"
+  attempt=1
 
-  if [ "$status" = 401 ] && grep -Fq '"code":"provider_authentication_required"' "$body_file"; then
-    echo "public boundary healthy: identity-auth-boundary ($status)"
-    exit 0
-  fi
+  while [ "$attempt" -le "$health_retry" ]; do
+    status="$(
+      curl --silent --show-error \
+        --connect-timeout 5 \
+        --max-time 15 \
+        --output "$body_file" \
+        --write-out '%{http_code}' \
+        "$public_origin$path" || true
+    )"
 
-  if [ "$attempt" -lt "$health_retry" ]; then
-    sleep "$health_retry_delay"
-  fi
-  attempt=$((attempt + 1))
-done
+    if [ "$status" = "$expected_status" ] && grep -Fq "$expected_body" "$body_file"; then
+      echo "public boundary healthy: $label ($status)"
+      return 0
+    fi
 
-echo "public boundary failed: identity-auth-boundary expected 401 from $public_origin/api/v1/identity, got ${status:-request-failed}" >&2
-exit 1
+    if [ "$attempt" -lt "$health_retry" ]; then
+      sleep "$health_retry_delay"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  echo "public boundary failed: $label expected $expected_status and $expected_body from $public_origin$path, got ${status:-request-failed}" >&2
+  return 1
+}
+
+request_until \
+  '/api/v1/identity' \
+  401 \
+  '"code":"provider_authentication_required"' \
+  'identity-auth-boundary'
+
+request_until \
+  '/api/v1/auth/browser/provider/context' \
+  200 \
+  '"available":{"telegram":true,"discord":true}' \
+  'browser-provider-availability'
