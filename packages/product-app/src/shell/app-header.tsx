@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import "./app-header.css";
+import { useLocalization } from "./localization";
 import {
   IDENTITY_ROUTE,
   SETTINGS_ROUTE,
@@ -110,6 +111,7 @@ export function AppHeader({
   actions = [],
   onNavigate,
 }: AppHeaderProps) {
+  const { t } = useLocalization();
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -164,13 +166,16 @@ export function AppHeader({
           className="app-header__brand"
           route={WORLD_ROUTE}
           section={section}
-          label="0x1 world"
+          label={t("header.world")}
           onNavigate={onNavigate}
         >
           0x1
         </ShellLink>
         {presentation === "wide" ? (
-          <nav className="app-header__routes" aria-label="0x1 navigation">
+          <nav
+            className="app-header__routes"
+            aria-label={t("header.navigation")}
+          >
             <ShellLink
               className="app-header__route"
               route={IDENTITY_ROUTE}
@@ -210,7 +215,7 @@ export function AppHeader({
             className="app-header__settings"
             route={SETTINGS_ROUTE}
             section={section}
-            label="Settings"
+            label={t("header.settings")}
             onNavigate={onNavigate}
           >
             <span aria-hidden="true">⚙︎</span>
@@ -221,7 +226,7 @@ export function AppHeader({
             className="app-header__overflow-trigger"
             type="button"
             ref={triggerRef}
-            aria-label="More"
+            aria-label={t("header.more")}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-controls={menuId}
@@ -235,7 +240,7 @@ export function AppHeader({
               id={menuId}
               ref={menuRef}
               role="menu"
-              aria-label="More"
+              aria-label={t("header.more")}
             >
               {/* The host is already announced by the indicator beside the
                   trigger, so the menu repeats it visually only. */}
@@ -251,7 +256,7 @@ export function AppHeader({
                   onNavigate={onNavigate}
                   onFollow={() => closeMenu(false)}
                 >
-                  Settings
+                  {t("header.settings")}
                 </ShellLink>
               ) : null}
               {actions.map((action) => (
