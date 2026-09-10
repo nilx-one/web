@@ -44,6 +44,11 @@ export function LanguageSettings() {
             name="language"
             value={preference}
             checked={localization.preference === preference}
+            aria-label={
+              preference === "auto"
+                ? localization.t("settings.language.autoAction")
+                : undefined
+            }
             onChange={() => chooseLocale(preference)}
           />
         </label>
