@@ -36,7 +36,10 @@ pepper_first="$(value_of PASSWORD_PEPPER "$runtime")"
 [ "$(stat -c '%a' "$runtime")" = 600 ]
 
 {
+  printf '%s\n' 'PUBLIC_ORIGIN=https://nilx.one'
   printf '%s\n' 'TELOXIDE_TOKEN=second-token'
+  printf '%s\n' 'TELEGRAM_OIDC_CLIENT_ID=telegram-client'
+  printf '%s\n' 'TELEGRAM_OIDC_CLIENT_SECRET=telegram-secret'
   printf '%s\n' 'DISCORD_CLIENT_ID=1234'
   printf '%s\n' 'DISCORD_CLIENT_SECRET=discord-secret'
 } >"$provider"
@@ -44,9 +47,21 @@ sh "$prepare" "$runtime" "$provider"
 
 [ "$(value_of NATIVE_AUTH_SECRET "$runtime")" = "$native_first" ]
 [ "$(value_of PASSWORD_PEPPER "$runtime")" = "$pepper_first" ]
+[ "$(value_of PUBLIC_ORIGIN "$runtime")" = https://nilx.one ]
 [ "$(value_of TELOXIDE_TOKEN "$runtime")" = second-token ]
+[ "$(value_of TELEGRAM_OIDC_CLIENT_ID "$runtime")" = telegram-client ]
+[ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
 [ "$(value_of DISCORD_CLIENT_ID "$runtime")" = 1234 ]
 [ "$(value_of DISCORD_CLIENT_SECRET "$runtime")" = discord-secret ]
+
+{
+  printf '%s\n' 'TELOXIDE_TOKEN=missing-pair'
+  printf '%s\n' 'TELEGRAM_OIDC_CLIENT_ID=telegram-client'
+} >"$provider"
+if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
+  echo "incomplete Telegram browser OAuth credentials unexpectedly succeeded" >&2
+  exit 1
+fi
 
 {
   printf '%s\n' 'TELOXIDE_TOKEN=attempted-override'
