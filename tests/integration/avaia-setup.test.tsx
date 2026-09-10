@@ -138,7 +138,7 @@ describe("Avaia setup from the Bond dock", () => {
     await user.click(configure);
 
     const address = await screen.findByLabelText("pub_dress");
-    expect(address).toHaveValue("0skai");
+    expect(address).toHaveValue("sk");
     // The world is the environment, not a screen the Dock replaced.
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
@@ -148,12 +148,12 @@ describe("Avaia setup from the Bond dock", () => {
     const model = screen.getByLabelText("3D model");
     expect(model).toBeDisabled();
     expect(model).toHaveValue("Not available yet");
-    // The address and that one inert field are the whole surface: no model
-    // capability is invented beside them.
+    // The mutable middle and that one inert field are the whole textbox surface:
+    // protocol-owned address affixes stay outside the editable control.
     expect(screen.getAllByRole("textbox")).toEqual([address, model]);
 
     await user.clear(address);
-    await user.type(address, "0vesnai");
+    await user.type(address, "vesn");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("0vesnai");
@@ -191,7 +191,7 @@ describe("Avaia setup from the Bond dock", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "Edit 0skai" }));
-    expect(await screen.findByLabelText("pub_dress")).toHaveValue("0skai");
+    expect(await screen.findByLabelText("pub_dress")).toHaveValue("sk");
     expect(screen.getByRole("heading", { name: "0skai" })).toBeVisible();
   });
 
@@ -220,14 +220,14 @@ describe("Avaia setup from the Bond dock", () => {
     );
     const address = await screen.findByLabelText("pub_dress");
     await user.clear(address);
-    await user.type(address, "0takenai");
+    await user.type(address, "taken");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     // A refusal keeps the person where they were, with what they typed.
     expect(
       await screen.findByText("That address belongs to another identity."),
     ).toBeVisible();
-    expect(screen.getByLabelText("pub_dress")).toHaveValue("0takenai");
+    expect(screen.getByLabelText("pub_dress")).toHaveValue("taken");
     expect(screen.queryByText("Avaia saved")).toBeNull();
   });
 
@@ -256,7 +256,7 @@ describe("Avaia setup from the Bond dock", () => {
 
     configure.focus();
     await user.keyboard("{Enter}");
-    expect(await screen.findByLabelText("pub_dress")).toHaveValue("0skai");
+    expect(await screen.findByLabelText("pub_dress")).toHaveValue("sk");
     expect(screen.getByText("configured")).toBeVisible();
   });
 
