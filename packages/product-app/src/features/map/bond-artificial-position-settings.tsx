@@ -135,11 +135,6 @@ export function BondArtificialPositionSettings({
     [ownerPubDress],
   );
 
-  useEffect(() => {
-    setPicking(false);
-    setError(undefined);
-  }, [counterpartPubDress]);
-
   // A stored point is shown only while this settings surface names that Bond.
   // It is a draft/editor marker, not the renderer's observed-position marker.
   useEffect(() => {
@@ -220,7 +215,11 @@ export function BondArtificialPositionSettings({
             spellCheck={false}
             placeholder={copy.targetPlaceholder}
             value={counterpartDraft}
-            onChange={(event) => setCounterpartDraft(event.currentTarget.value)}
+            onChange={(event) => {
+              setCounterpartDraft(event.currentTarget.value);
+              setPicking(false);
+              setError(undefined);
+            }}
           />
         </div>
         <p className="profile-edit__note">
