@@ -330,13 +330,30 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
   });
 
-  it("opens the Bond edit surface from the Dock header", () => {
+  it("edits the selected left Avaia from the Dock header without decorative text", () => {
     const onNavigate = vi.fn();
 
     renderView({ onNavigate });
+    const edit = screen.getByRole("button", { name: "Edit 0skai" });
+
+    expect(edit).toHaveTextContent(/^edit$/);
+    expect(edit).not.toHaveTextContent("✍️");
+    fireEvent.click(edit);
+
+    expect(screen.getByRole("heading", { name: "0skai" })).toBeVisible();
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("edits the Bond when the Bond is selected on the left", () => {
+    const onNavigate = vi.fn();
+
+    renderView({ onNavigate });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
     const edit = screen.getByRole("button", { name: "Edit 0x0sky" });
 
-    expect(edit).toHaveTextContent("edit");
+    expect(edit).toHaveTextContent(/^edit$/);
     fireEvent.click(edit);
 
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
