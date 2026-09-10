@@ -111,7 +111,7 @@ export function createManualLocationMapRenderer(
   const manual = { ...manualPosition };
   renderer.setObservedPosition(null);
   renderer.setObservedPositionLabel(null);
-  renderer.setSelectionPoint(manual);
+  renderer.setSelectionPoint?.(manual);
 
   return {
     avatars: renderer.avatars,
@@ -119,7 +119,7 @@ export function createManualLocationMapRenderer(
       renderer.mount(container);
       renderer.setObservedPosition(null);
       renderer.setObservedPositionLabel(null);
-      renderer.setSelectionPoint(manual);
+      renderer.setSelectionPoint?.(manual);
     },
     unmount() {
       renderer.unmount();
@@ -152,13 +152,13 @@ export function createManualLocationMapRenderer(
       renderer.setObservedPositionLabel(null);
     },
     setSelectionPoint(point) {
-      renderer.setSelectionPoint(point === null ? manual : point);
+      renderer.setSelectionPoint?.(point === null ? manual : point);
     },
     subscribePointSelection(listener: PointSelectionListener) {
-      return renderer.subscribePointSelection(listener);
+      return renderer.subscribePointSelection?.(listener) ?? (() => undefined);
     },
     subscribeBodyActivation(listener: BodyActivationListener) {
-      return renderer.subscribeBodyActivation(listener);
+      return renderer.subscribeBodyActivation?.(listener) ?? (() => undefined);
     },
   };
 }
