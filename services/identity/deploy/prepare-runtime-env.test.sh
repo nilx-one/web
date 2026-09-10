@@ -55,6 +55,17 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of DISCORD_CLIENT_SECRET "$runtime")" = discord-secret ]
 
 {
+  printf '%s\n' 'TELOXIDE_TOKEN=third-token'
+  printf '%s\n' 'DISCORD_CLIENT_ID=1234'
+  printf '%s\n' 'DISCORD_CLIENT_SECRET=discord-secret'
+} >"$provider"
+sh "$prepare" "$runtime" "$provider"
+
+[ "$(value_of TELOXIDE_TOKEN "$runtime")" = third-token ]
+[ "$(value_of TELEGRAM_OIDC_CLIENT_ID "$runtime")" = telegram-client ]
+[ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
+
+{
   printf '%s\n' 'TELOXIDE_TOKEN=missing-pair'
   printf '%s\n' 'TELEGRAM_OIDC_CLIENT_ID=telegram-client'
 } >"$provider"
