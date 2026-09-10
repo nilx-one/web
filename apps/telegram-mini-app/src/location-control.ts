@@ -12,6 +12,8 @@ type BodyActivationListener = Parameters<
   NonNullable<TelegramMapRenderer["subscribeBodyActivation"]>
 >[0];
 
+const GEO_E7_SCALE = 10_000_000;
+
 export interface TelegramLocationPoint {
   readonly longitude: number;
   readonly latitude: number;
@@ -29,34 +31,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function parsePoint(value: unknown): TelegramLocationPoint | undefined {
+function parseCanonicalE7(value: unknown): number | undefined {
   if (
-    !isRecord(value) ||
-    typeof value.longitude !== "number" ||
-    typeof value.latitude !== "number" ||
-    !Number.isFinite(value.longitude) ||
-    !Number.isFinite(value.latitude) ||
-    value.longitude < -180 ||
-    value.longitude > 180 ||
-    value.latitude < -90 ||
-    value.latitude > 90
+    typeof value !== "string" ||
+    !/^-?(0|[1-9][0-9]*)$/.test(value) ||
+    value === "-0"
+  ) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function validTimestamp(value: unknown): boolean {
+  return typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value);
+}
+
+function parseCoordinate(value: unknown): TelegramLocationPoint | undefined {
+  if (!isRecord(value)) return undefined;
+  const longitudeE7 = parseCanonicalE7(value.longitude_e7);
+  const latitudeE7 = parseCanonicalE7(value.latitude_e7);
+  if (
+    longitudeE7 === undefined ||
+    latitudeE7 === undefined ||
+    longitudeE7 < -180 * GEO_E7_SCALE ||
+    longitudeE7 > 180 * GEO_E7_SCALE ||
+    latitudeE7 < -90 * GEO_E7_SCALE ||
+    latitudeE7 > 90 * GEO_E7_SCALE
   ) {
     return undefined;
   }
   return {
-    longitude: value.longitude,
-    latitude: value.latitude,
+    longitude: longitudeE7 / GEO_E7_SCALE,
+    latitude: latitudeE7 / GEO_E7_SCALE,
   };
 }
 
 /**
- * Reads the server-owned control mode before the world is composed. A failed
- * or malformed answer is deliberately not treated as `live`: if the service
- * might hold a manual point, enabling device geolocation on uncertainty could
- * reveal the real position the manual mode was meant to replace on the map.
+ * Reads authenticated Bond location control before the world is composed.
  *
- * `404` is the one safe live answer: an unregistered Telegram account owns no
- * Bond and therefore cannot have persisted manual control state yet.
+ * Only a valid `live`/empty location answer enables device geolocation. A
+ * malformed or unavailable response fails closed because the service might
+ * hold a manual point whose purpose is to suppress the real device position.
  */
 export async function readTelegramLocationControl(
   initData: string,
@@ -72,6 +88,8 @@ export async function readTelegramLocationControl(
       credentials: "same-origin",
       headers: { authorization: `tma ${initData}` },
     });
+    // An unregistered Telegram account owns no Bond and therefore cannot hold
+    // a manual Bond location. Registration may still use ordinary host GPS.
     if (response.status === 404) {
       return { kind: "live" };
     }
@@ -80,17 +98,28 @@ export async function readTelegramLocationControl(
     }
 
     const body: unknown = await response.json();
-    if (!isRecord(body)) {
+    if (
+      !isRecord(body) ||
+      (body.role !== "user" && body.role !== "admin") ||
+      !("location" in body)
+    ) {
       return { kind: "unavailable" };
     }
-    if (body.mode === "live") {
+    if (body.location === null) {
       return { kind: "live" };
     }
-    if (body.mode === "manual") {
-      const position = parsePoint(body.position);
-      return position === undefined
-        ? { kind: "unavailable" }
-        : { kind: "manual", position };
+    if (!isRecord(body.location) || !validTimestamp(body.location.updated_at)) {
+      return { kind: "unavailable" };
+    }
+    const position = parseCoordinate(body.location.coordinate);
+    if (position === undefined) {
+      return { kind: "unavailable" };
+    }
+    if (body.location.mode === "live") {
+      return { kind: "live" };
+    }
+    if (body.location.mode === "manual") {
+      return { kind: "manual", position };
     }
     return { kind: "unavailable" };
   } catch {
@@ -99,10 +128,11 @@ export async function readTelegramLocationControl(
 }
 
 /**
- * Manual location is presentation state, never a fabricated host observation.
- * The base renderer's explicit point marker is reused for the selected manual
- * point while every observed-position write is suppressed. If an editor opens,
- * its point temporarily wins; clearing the editor restores the manual point.
+ * Manual Bond location is presentation state, never a fabricated host
+ * observation. The base renderer's explicit editor-point marker is reused for
+ * the declared point while every observed-position write is suppressed. If an
+ * editor opens, its point temporarily wins; clearing it restores the manual
+ * Bond location.
  */
 export function createManualLocationMapRenderer(
   renderer: TelegramMapRenderer,
