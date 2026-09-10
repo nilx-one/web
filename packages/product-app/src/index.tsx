@@ -943,9 +943,11 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           }
         }}
         avatarChoice={avatarChoice}
-        onAvatarChoice={(model) => {
-          if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
-        }}
+        onAvatarChoice={async (model) =>
+          chooseAvatar.isPending
+            ? undefined
+            : chooseAvatar.mutateAsync(model).catch(() => undefined)
+        }
         {...(viewModel.identity.avaiaPubDress === undefined
           ? {}
           : { avaiaPubDress: viewModel.identity.avaiaPubDress })}

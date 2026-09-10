@@ -307,6 +307,9 @@ importers:
       '@nilx-one/application':
         specifier: workspace:*
         version: link:../application
+      '@nilx-one/graphics':
+        specifier: workspace:*
+        version: link:../graphics
       '@nilx-one/host-contract':
         specifier: workspace:*
         version: link:../host-contract

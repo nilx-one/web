@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@nilx-one/application": "workspace:*",
+    "@nilx-one/graphics": "workspace:*",
     "@nilx-one/host-contract": "workspace:*",
     "@nilx-one/map-contract": "workspace:*",
     "@nilx-one/ui": "workspace:*",
