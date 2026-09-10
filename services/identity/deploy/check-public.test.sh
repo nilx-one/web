@@ -41,6 +41,10 @@ case "$url" in
     printf '%s\n' '{"error":{"code":"provider_authentication_required"}}' >"$output_file"
     printf '%s' "${MOCK_IDENTITY_STATUS:-401}"
     ;;
+  https://nilx.one/api/v1/auth/browser/provider/context)
+    printf '%s\n' "${MOCK_PROVIDER_BODY:-{\"state\":\"none\",\"available\":{\"telegram\":true,\"discord\":true}}}" >"$output_file"
+    printf '%s' "${MOCK_PROVIDER_STATUS:-200}"
+    ;;
   *)
     printf '%s\n' 'unexpected URL' >"$output_file"
     printf '%s' 404
@@ -63,3 +67,13 @@ if PATH="$mock_bin:$PATH" \
 fi
 
 grep -Fq 'identity-auth-boundary expected 401' "$failure_log"
+
+if PATH="$mock_bin:$PATH" \
+  MOCK_PROVIDER_BODY='{"state":"none","available":{"telegram":false,"discord":true}}' \
+  HEALTH_RETRY=1 \
+  sh "$(dirname "$0")/check-public.sh" >"$failure_log" 2>&1; then
+  echo "public smoke unexpectedly accepted unavailable Telegram browser auth" >&2
+  exit 1
+fi
+
+grep -Fq 'browser-provider-availability expected 200' "$failure_log"
