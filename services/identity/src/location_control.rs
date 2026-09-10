@@ -63,7 +63,11 @@ pub struct BondLocationRepository {
 
 impl BondLocationRepository {
     pub async fn connect(database_url: &str) -> Result<Self, BondLocationRepositoryError> {
-        let max_connections = if database_url.contains(":memory:") { 1 } else { 5 };
+        let max_connections = if database_url.contains(":memory:") {
+            1
+        } else {
+            5
+        };
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
             .foreign_keys(true)
@@ -286,17 +290,19 @@ async fn read_location_control(
 
 fn status(code: StatusCode) -> Response {
     let mut response = code.into_response();
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, "no-store".parse().expect("valid Cache-Control"));
+    response.headers_mut().insert(
+        CACHE_CONTROL,
+        "no-store".parse().expect("valid Cache-Control"),
+    );
     response
 }
 
 fn no_store_json<T: Serialize>(code: StatusCode, value: T) -> Response {
     let mut response = (code, Json(value)).into_response();
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, "no-store".parse().expect("valid Cache-Control"));
+    response.headers_mut().insert(
+        CACHE_CONTROL,
+        "no-store".parse().expect("valid Cache-Control"),
+    );
     response
 }
 
@@ -348,16 +354,16 @@ mod tests {
             .register(&pub_dress, &ProviderIdentity::telegram(7), 10)
             .await
             .expect("registration");
-        assert!(matches!(
-            registration,
-            RegistrationOutcome::Registered(_)
-        ));
+        assert!(matches!(registration, RegistrationOutcome::Registered(_)));
 
         let locations = BondLocationRepository::connect(&database_url)
             .await
             .expect("Bond location repository");
         assert_eq!(
-            locations.read(pub_dress.as_str()).await.expect("read empty"),
+            locations
+                .read(pub_dress.as_str())
+                .await
+                .expect("read empty"),
             None
         );
 
@@ -365,11 +371,7 @@ mod tests {
         locations
             .write(
                 pub_dress.as_str(),
-                BondLocation::new(
-                    observed,
-                    BondLocationMode::Live,
-                    DecimalU64::new(20),
-                ),
+                BondLocation::new(observed, BondLocationMode::Live, DecimalU64::new(20)),
             )
             .await
             .expect("record live");
@@ -386,11 +388,7 @@ mod tests {
         locations
             .write(
                 pub_dress.as_str(),
-                BondLocation::new(
-                    manual,
-                    BondLocationMode::Manual,
-                    DecimalU64::new(30),
-                ),
+                BondLocation::new(manual, BondLocationMode::Manual, DecimalU64::new(30)),
             )
             .await
             .expect("set manual");
@@ -407,11 +405,7 @@ mod tests {
         locations
             .write(
                 pub_dress.as_str(),
-                BondLocation::new(
-                    current,
-                    BondLocationMode::Live,
-                    DecimalU64::new(40),
-                ),
+                BondLocation::new(current, BondLocationMode::Live, DecimalU64::new(40)),
             )
             .await
             .expect("return live");
