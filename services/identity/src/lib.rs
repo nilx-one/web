@@ -8,6 +8,7 @@ pub mod api {
 pub mod browser_web_auth;
 pub mod credentials;
 pub mod discord_oauth;
+pub mod location_control;
 pub mod provider_link;
 pub mod public_api;
 pub mod rate_limit;
@@ -23,6 +24,11 @@ pub use credentials::{
     TokenFactory,
 };
 pub use discord_oauth::{DiscordAccessToken, DiscordOAuthClient, DiscordOAuthError};
+pub use location_control::{
+    BondLocationControl, BondLocationMode, LocationControlError, LocationControlRepository,
+    LocationPoint, PendingLocationIntent, TelegramAccessRole, TelegramAdminPolicy,
+    TelegramAdminPolicyError, TelegramLocationIntents, location_control_router,
+};
 pub use ox1_contracts::{
     AvaiaPubDress, AvaiaPubDressError, PubDress, PubDressError, PubDressLabel, PubDressLabelError,
 };
