@@ -48,7 +48,10 @@ export function AvaiaSetupView({
         <label className="avaia-setup__label" htmlFor="avaia-pub-dress">
           pub_dress
         </label>
-        <div className="profile-edit__address">
+        <div className="profile-edit__address avaia-setup__address">
+          <span className="profile-edit__discriminator" aria-hidden="true">
+            {state.prefix}
+          </span>
           <input
             id="avaia-pub-dress"
             name="avaia-pub-dress"
@@ -56,12 +59,19 @@ export function AvaiaSetupView({
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
-            value={state.draft}
+            value={state.editableName}
             disabled={!state.editable || state.busy}
             aria-describedby="avaia-pub-dress-note"
             aria-invalid={state.error !== undefined}
-            onChange={(event) => onDraftChange(event.currentTarget.value)}
+            onChange={(event) =>
+              onDraftChange(
+                `${state.prefix}${event.currentTarget.value}${state.suffix}`,
+              )
+            }
           />
+          <span className="profile-edit__affix" aria-hidden="true">
+            {state.suffix}
+          </span>
           <button
             className="profile-edit__save"
             type="submit"
