@@ -148,8 +148,8 @@ describe("Avaia setup from the Bond dock", () => {
     const model = screen.getByLabelText("3D model");
     expect(model).toBeDisabled();
     expect(model).toHaveValue("Not available yet");
-    // The mutable middle and that one inert field are the whole textbox surface:
-    // protocol-owned address affixes stay outside the editable control.
+    // The address and that one inert field are the whole surface: no model
+    // capability is invented beside them.
     expect(screen.getAllByRole("textbox")).toEqual([address, model]);
 
     await user.clear(address);
@@ -195,7 +195,7 @@ describe("Avaia setup from the Bond dock", () => {
     expect(screen.getByRole("heading", { name: "0skai" })).toBeVisible();
   });
 
-  it("keeps the service's refusal, and the address a person typed", async () => {
+  it("keeps the service's refusal, and the slug stem a person typed", async () => {
     const user = userEvent.setup();
     render(
       <ProductApp

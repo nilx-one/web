@@ -74,7 +74,10 @@ import {
   createAvaiaSlugViewState,
   createProfileSlugViewState,
 } from "./features/identity/profile-slug-view-model";
-import { createAvaiaSetupViewState } from "./features/avaia/avaia-setup-view-model";
+import {
+  composeAvaiaPubDress,
+  createAvaiaSetupViewState,
+} from "./features/avaia/avaia-setup-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
@@ -260,8 +263,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   // the step is not offered again in this session.
   const [avatarStepDeclined, setAvatarStepDeclined] = useState(false);
   const [avaiaDraft, setAvaiaDraft] = useState<string | undefined>(undefined);
-  // Undefined means the Avaia surface is showing the address the service holds.
-  const [avaiaProfileDraft, setAvaiaProfileDraft] = useState<
+  // Undefined means the Avaia setup surface uses its stored slug stem.
+  const [avaiaProfileSlugStemDraft, setAvaiaProfileSlugStemDraft] = useState<
     string | undefined
   >(undefined);
   const pendingAutofillCredential = useRef<
@@ -515,9 +518,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       await refreshIdentityProjections();
     },
   });
-  // The Avaia's whole address, kept by the service. A save that the service
-  // accepted replaces the projection this client holds with the exact answer,
-  // so the surface never confirms a draft the service never saw.
+  // The service still owns the whole canonical address. This mutation receives
+  // only a candidate reconstructed from stored immutable affixes plus the local
+  // slug-stem draft; the editable state itself never carries a full address.
   const saveAvaiaProfile = useMutation({
     mutationFn: (pubDress: string) => {
       if (avaiaProfileAccess === undefined) {
@@ -528,7 +531,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     gcTime: 0,
     onSuccess: async (result) => {
       if (result.kind !== "updated") return;
-      setAvaiaProfileDraft(undefined);
+      setAvaiaProfileSlugStemDraft(undefined);
       queryClient.setQueryData(["avaia-profile"], {
         kind: "available",
         profile: result.profile,
@@ -880,6 +883,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     const deviceAvaiaAvailability = avaiaAvailability({
       acceleratedGraphics: "gpu" in navigator,
     });
+    const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
       <AuthenticatedMapHomeView
         hostLabel={viewModel.hostLabel}
@@ -919,25 +923,35 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
               avaiaSetup: createAvaiaSetupViewState({
                 load: avaiaProfileQuery.data ?? { kind: "loading" },
                 fallbackAddress: viewModel.identity.avaiaPubDress,
-                draft: avaiaProfileDraft,
+                draftSlugStem: avaiaProfileSlugStemDraft,
                 pending: saveAvaiaProfile.isPending,
                 result: saveAvaiaProfile.data,
               }),
-              onAvaiaSetupChange: (pubDress: string) => {
+              onAvaiaSetupChange: (slugStem: string) => {
                 saveAvaiaProfile.reset();
-                setAvaiaProfileDraft(pubDress);
+                setAvaiaProfileSlugStemDraft(slugStem);
               },
               // The surface waits for the service before it closes, so the
               // answer it acts on is the one that was actually stored.
               onAvaiaSetupSubmit: async () => {
+                const currentAvaiaAddress =
+                  avaiaProfileQuery.data?.kind === "available"
+                    ? avaiaProfileQuery.data.profile.pubDress
+                    : ownedAvaiaPubDress;
                 if (
-                  avaiaProfileDraft === undefined ||
+                  avaiaProfileSlugStemDraft === undefined ||
+                  currentAvaiaAddress === undefined ||
                   saveAvaiaProfile.isPending
                 ) {
                   return undefined;
                 }
+                const pubDress = composeAvaiaPubDress(
+                  currentAvaiaAddress,
+                  avaiaProfileSlugStemDraft,
+                );
+                if (pubDress === undefined) return undefined;
                 return saveAvaiaProfile
-                  .mutateAsync(avaiaProfileDraft)
+                  .mutateAsync(pubDress)
                   .catch(() => undefined);
               },
             })}

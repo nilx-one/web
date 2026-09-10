@@ -41,6 +41,6 @@ describe("AvaiaSetupView", () => {
 
     fireEvent.change(input, { target: { value: "sync." } });
 
-    expect(onDraftChange).toHaveBeenCalledExactlyOnceWith("0sync.ai");
+    expect(onDraftChange).toHaveBeenCalledExactlyOnceWith("sync.");
   });
 });

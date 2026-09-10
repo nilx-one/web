@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  composeAvaiaPubDress,
   createAvaiaSetupViewState,
   type AvaiaSetupInput,
 } from "./avaia-setup-view-model";
@@ -23,7 +24,7 @@ function input(overrides: Partial<AvaiaSetupInput> = {}): AvaiaSetupInput {
 }
 
 describe("Avaia setup surface", () => {
-  it("presents the stored address while exposing only its editable middle", () => {
+  it("exposes only the editable Avaia slug stem", () => {
     const state = createAvaiaSetupViewState(
       input({
         load: {
@@ -36,20 +37,29 @@ describe("Avaia setup surface", () => {
 
     expect(state).toMatchObject({
       address: "0vesnai",
-      draft: "0vesnai",
       prefix: "0",
-      editableName: "vesn",
+      slugStem: "vesn",
       suffix: "ai",
+      candidatePubDress: "0vesnai",
       editable: true,
     });
   });
 
-  it("keeps the canonical ai suffix out of editable state", () => {
-    expect(createAvaiaSetupViewState(input())).toMatchObject({
+  it("keeps both contract-owned affixes out of draft state", () => {
+    const state = createAvaiaSetupViewState(input({ draftSlugStem: "sync." }));
+
+    expect(state).toMatchObject({
       prefix: "0",
-      editableName: "sk",
+      slugStem: "sync.",
       suffix: "ai",
+      candidatePubDress: "0sync.ai",
     });
+  });
+
+  it("reconstructs a service request from the stored discriminator", () => {
+    expect(composeAvaiaPubDress("0skai", "sync.")).toBe("0sync.ai");
+    expect(composeAvaiaPubDress("fvesnai", "new")).toBe("fnewai");
+    expect(composeAvaiaPubDress("not-an-avaia", "new")).toBeUndefined();
   });
 
   it("reads configuration from what was stored, and nothing else", () => {
@@ -68,21 +78,18 @@ describe("Avaia setup surface", () => {
     ).toBe("configured");
   });
 
-  it("offers no save until the address is actually changed", () => {
+  it("offers no save until the slug stem is actually changed", () => {
     expect(createAvaiaSetupViewState(input()).canSave).toBe(false);
-    expect(createAvaiaSetupViewState(input({ draft: "0skai" })).canSave).toBe(
-      false,
-    );
-    expect(createAvaiaSetupViewState(input({ draft: "  " })).canSave).toBe(
-      false,
-    );
     expect(
-      createAvaiaSetupViewState(input({ draft: "0vesnai", pending: true }))
+      createAvaiaSetupViewState(input({ draftSlugStem: "sk" })).canSave,
+    ).toBe(false);
+    expect(
+      createAvaiaSetupViewState(input({ draftSlugStem: "vesn", pending: true }))
         .canSave,
     ).toBe(false);
-    expect(createAvaiaSetupViewState(input({ draft: "0vesnai" })).canSave).toBe(
-      true,
-    );
+    expect(
+      createAvaiaSetupViewState(input({ draftSlugStem: "vesn" })).canSave,
+    ).toBe(true);
   });
 
   it("waits for a profile before offering anything to write", () => {
@@ -101,7 +108,7 @@ describe("Avaia setup surface", () => {
     expect(
       createAvaiaSetupViewState(
         input({
-          draft: "1skai",
+          draftSlugStem: "sk",
           result: { kind: "rejected", reason: "owner-discriminator-mismatch" },
         }),
       ).error,
@@ -118,15 +125,16 @@ describe("Avaia setup surface", () => {
     ).toBe("Couldn’t save this address. Try again.");
   });
 
-  it("keeps a refused draft where the person left it", () => {
+  it("keeps a refused slug draft where the person left it", () => {
     const refused = createAvaiaSetupViewState(
       input({
-        draft: "0takenai",
+        draftSlugStem: "taken",
         result: { kind: "rejected", reason: "unavailable" },
       }),
     );
 
-    expect(refused.draft).toBe("0takenai");
+    expect(refused.slugStem).toBe("taken");
+    expect(refused.candidatePubDress).toBe("0takenai");
     expect(refused.canSave).toBe(true);
   });
 });
