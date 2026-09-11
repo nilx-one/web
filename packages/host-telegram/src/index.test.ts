@@ -74,6 +74,16 @@ describe("TelegramHost", () => {
     expect(bridge.expand).toHaveBeenCalledOnce();
   });
 
+  it("maps shared impact requests to Telegram native haptics", () => {
+    const bridge = createBridge();
+    const host = createTelegramHost(bridge);
+
+    host.impact("light");
+
+    expect(bridge.HapticFeedback?.impactOccurred).toHaveBeenCalledOnce();
+    expect(bridge.HapticFeedback?.impactOccurred).toHaveBeenCalledWith("light");
+  });
+
   it("resolves only a structurally compatible Telegram bridge", () => {
     const bridge = createBridge();
 
