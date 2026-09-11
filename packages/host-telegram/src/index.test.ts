@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createTelegramHost,
   resolveTelegramWebApp,
+  syncTelegramChrome,
   telegramLanguageTags,
   type TelegramWebAppBridge,
 } from "./index";
@@ -22,6 +23,9 @@ function createBridge(): TelegramWebAppBridge {
     HapticFeedback: {
       impactOccurred: vi.fn(),
     },
+    setHeaderColor: vi.fn(),
+    setBackgroundColor: vi.fn(),
+    setBottomBarColor: vi.fn(),
     ready: vi.fn(),
     expand: vi.fn(),
     openLink: vi.fn(),
@@ -116,5 +120,41 @@ describe("TelegramHost geolocation", () => {
     expect(createTelegramHost(createBridge()).geolocation).toBe(
       UNSUPPORTED_GEOLOCATION,
     );
+  });
+});
+
+describe("Telegram chrome appearance", () => {
+  it.each([
+    ["light" as const, "#f3f8fc"],
+    ["dark" as const, "#121116"],
+  ])("paints every supported host surface for %s appearance", (appearance, color) => {
+    const bridge = createBridge();
+
+    syncTelegramChrome(bridge, appearance);
+
+    expect(bridge.setHeaderColor).toHaveBeenCalledWith(color);
+    expect(bridge.setBackgroundColor).toHaveBeenCalledWith(color);
+    expect(bridge.setBottomBarColor).toHaveBeenCalledWith(color);
+  });
+
+  it("degrades to a no-op when Telegram exposes no chrome setters", () => {
+    const bridge = createBridge();
+    delete bridge.setHeaderColor;
+    delete bridge.setBackgroundColor;
+    delete bridge.setBottomBarColor;
+
+    expect(() => syncTelegramChrome(bridge, "dark")).not.toThrow();
+    expect(() => syncTelegramChrome(undefined, "light")).not.toThrow();
+  });
+
+  it("keeps independent host capabilities isolated when one setter rejects", () => {
+    const bridge = createBridge();
+    bridge.setHeaderColor = vi.fn(() => {
+      throw new Error("unsupported header color");
+    });
+
+    expect(() => syncTelegramChrome(bridge, "dark")).not.toThrow();
+    expect(bridge.setBackgroundColor).toHaveBeenCalledWith("#121116");
+    expect(bridge.setBottomBarColor).toHaveBeenCalledWith("#121116");
   });
 });
