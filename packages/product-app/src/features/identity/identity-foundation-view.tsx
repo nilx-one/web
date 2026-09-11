@@ -1038,6 +1038,7 @@ function IdentityForm({
           placeholder={showsPassword ? "password" : undefined}
           aria-label={showsPassword ? "Password" : undefined}
           aria-hidden={!showsPassword}
+          aria-invalid={identity.error !== undefined}
           disabled={identity.busy}
           tabIndex={showsPassword ? undefined : -1}
           style={
