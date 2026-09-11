@@ -47,7 +47,7 @@ describe("cell-bound fragment camera policy", () => {
     const bounds = fragmentZoomBounds(VOLUMETRIC);
     const target = fragmentCamera(
       ANCHOR,
-      camera(MAP_SCALE_ZOOM.country),
+      camera(MAP_SCALE_ZOOM.city),
       VOLUMETRIC,
     );
 
