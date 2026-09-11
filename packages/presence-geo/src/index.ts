@@ -15,7 +15,25 @@ import {
   type PresenceTracker,
   type VisitRecord,
 } from "@nilx-one/presence-contract";
-import { latLngToCell } from "h3-js";
+import { cellToLatLng, latLngToCell } from "h3-js";
+
+/**
+ * Adapter-owned projection of an opaque H3 cell into geographic presentation
+ * geometry. The application can frame this centre without learning H3 APIs or
+ * treating the centre as presence evidence.
+ */
+export interface CellCameraAnchor {
+  readonly cell: CellIndex;
+  readonly center: readonly [longitude: number, latitude: number];
+}
+
+export function cellCameraAnchor(cell: CellIndex): CellCameraAnchor {
+  const [latitude, longitude] = cellToLatLng(cell);
+  return {
+    cell,
+    center: [longitude, latitude],
+  };
+}
 
 interface Dwell {
   readonly cell: CellIndex;
