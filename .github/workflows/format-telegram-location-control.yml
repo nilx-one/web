@@ -1,0 +1,40 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Verify Telegram location control branch
+
+on:
+  push:
+    branches:
+      - feature/telegram-location-control
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-telegram-location-control
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify generated lock is current
+        run: cargo check --manifest-path services/identity/Cargo.toml --locked --all-features
+      - name: Verify repository formatting
+        run: |
+          cargo fmt --manifest-path services/identity/Cargo.toml --all -- --check
+          pnpm exec prettier --check \
+            apps/telegram-mini-app/src/location-control.ts \
+            apps/telegram-mini-app/src/location-control.test.ts \
+            apps/telegram-mini-app/src/main.tsx
