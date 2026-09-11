@@ -4,8 +4,8 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { chooseLocale } from "../../shell/localization";
 import { observation } from "../../../../../tests/support/doubles";
+import { chooseLocale } from "../../shell/localization";
 import { LocationControl } from "./location-control";
 import { createLocationControlViewModel } from "./location-control-view-model";
 
@@ -49,6 +49,8 @@ describe("LocationControl localization", () => {
     expect(
       screen.getByRole("button", { name: "Увімкнути геолокацію" }),
     ).toBeVisible();
-    expect(screen.getByText("Показати цей пристрій на мапі.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Показати цей пристрій на мапі."),
+    ).toBeInTheDocument();
   });
 });
