@@ -138,6 +138,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -327,7 +328,6 @@ describe("AuthenticatedMapHomeView", () => {
 
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
   });
-
   it("opens the Bond edit surface from the Dock header", () => {
     const onNavigate = vi.fn();
 
@@ -929,6 +929,11 @@ describe("AuthenticatedMapHomeView", () => {
   });
 
   it("settles the leaving body before the arriving one, rather than swapping", async () => {
+    // The avatar effect has an unrelated ambient interval. With real timers,
+    // its queued callback can land after mockClear() but before React commits
+    // the click-driven handover effect, making an ambient clip look like the
+    // first post-click handover draw. Own the clock here instead of racing it.
+    vi.useFakeTimers();
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
 
     renderView({
@@ -937,7 +942,11 @@ describe("AuthenticatedMapHomeView", () => {
       avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
       avaiaAvailability: "ready",
     });
-    await screen.findByRole("button", { name: "Map centred on this device" });
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Map centred on this device" }),
+      ).toBeVisible(),
+    );
 
     const upsert = vi.mocked(mapRenderer.avatars!.upsert);
     upsert.mockClear();
