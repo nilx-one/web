@@ -45,8 +45,7 @@ const EN_MESSAGES = {
   "location.locating.label": "Locating this device",
   "location.locating.hint": "Waiting for a position from this device.",
   "location.unavailable.retryLabel": "Location unavailable, try again",
-  "location.unavailable.recenterLabel":
-    "Recenter on the last known position",
+  "location.unavailable.recenterLabel": "Recenter on the last known position",
   "location.unavailable.timeoutHint": "This device did not answer in time.",
   "location.unavailable.positionHint":
     "This device could not resolve a position.",
