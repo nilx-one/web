@@ -13,6 +13,7 @@ type BodyActivationListener = Parameters<
 >[0];
 
 const GEO_E7_SCALE = 10_000_000;
+const LOCATION_CONTROL_REQUEST_TIMEOUT_MS = 2_000;
 
 export interface TelegramLocationPoint {
   readonly longitude: number;
@@ -26,6 +27,10 @@ export type TelegramLocationControlState =
       readonly position: TelegramLocationPoint;
     }
   | { readonly kind: "unavailable" };
+
+interface TelegramLocationControlReadOptions {
+  readonly timeoutMs?: number;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -67,27 +72,62 @@ function parseCoordinate(value: unknown): TelegramLocationPoint | undefined {
   };
 }
 
+async function fetchLocationControl(
+  initData: string,
+  fetchImpl: typeof globalThis.fetch,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  try {
+    const timeout = new Promise<Response>((_resolve, reject) => {
+      timeoutId = globalThis.setTimeout(() => {
+        controller.abort();
+        reject(new Error("Telegram location control request timed out"));
+      }, timeoutMs);
+    });
+
+    return await Promise.race([
+      fetchImpl("/api/v1/location-control", {
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { authorization: `tma ${initData}` },
+        signal: controller.signal,
+      }),
+      timeout,
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
+}
+
 /**
  * Reads authenticated Bond location control before the world is composed.
  *
  * Only a valid `live`/empty location answer enables device geolocation. A
- * malformed or unavailable response fails closed because the service might
- * hold a manual point whose purpose is to suppress the real device position.
+ * malformed, unavailable, or slow response fails closed because the service
+ * might hold a manual point whose purpose is to suppress the real device
+ * position. Startup is bounded so an optional location projection can never
+ * leave the Mini App on an empty root indefinitely.
  */
 export async function readTelegramLocationControl(
   initData: string,
   fetchImpl: typeof globalThis.fetch = globalThis.fetch.bind(globalThis),
+  options: TelegramLocationControlReadOptions = {},
 ): Promise<TelegramLocationControlState> {
   if (initData.length === 0) {
     return { kind: "unavailable" };
   }
 
   try {
-    const response = await fetchImpl("/api/v1/location-control", {
-      cache: "no-store",
-      credentials: "same-origin",
-      headers: { authorization: `tma ${initData}` },
-    });
+    const response = await fetchLocationControl(
+      initData,
+      fetchImpl,
+      options.timeoutMs ?? LOCATION_CONTROL_REQUEST_TIMEOUT_MS,
+    );
     // An unregistered Telegram account owns no Bond and therefore cannot hold
     // a manual Bond location. Registration may still use ordinary host GPS.
     if (response.status === 404) {

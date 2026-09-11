@@ -8,7 +8,7 @@
 		@health path /health
 		respond @health 200
 
-		@identity_api path /auth /api/v1/identity /api/v1/identity/* /api/v1/auth/*
+		@identity_api path /auth /api/v1/identity /api/v1/identity/* /api/v1/auth/* /api/v1/location-control
 		reverse_proxy @identity_api ox1-identity:8080
 
 		@avatar_assets path /avatars/*
