@@ -28,16 +28,38 @@ export interface LocationControlViewModel {
   readonly intent: "request" | "recenter" | "none";
 }
 
+export type LocationControlTranslationKey =
+  | "location.unsupported.label"
+  | "location.unsupported.hint"
+  | "location.denied.label"
+  | "location.denied.hint"
+  | "location.enable.label"
+  | "location.enable.hint"
+  | "location.locating.label"
+  | "location.locating.hint"
+  | "location.unavailable.retryLabel"
+  | "location.unavailable.recenterLabel"
+  | "location.unavailable.timeoutHint"
+  | "location.unavailable.positionHint"
+  | "location.centered.label"
+  | "location.recenter.label"
+  | "location.accuracy.approx";
+
+export type LocationControlTranslate = (
+  key: LocationControlTranslationKey,
+) => string;
+
 export function createLocationControlViewModel(
   location: DeviceLocationState,
   cameraCentered: boolean,
+  t: LocationControlTranslate,
 ): LocationControlViewModel {
   switch (location.kind) {
     case "unsupported":
       return {
         state: "unsupported",
-        label: "Location unavailable on this host",
-        hint: "This host provides no device location.",
+        label: t("location.unsupported.label"),
+        hint: t("location.unsupported.hint"),
         disabled: true,
         busy: false,
         intent: "none",
@@ -45,8 +67,8 @@ export function createLocationControlViewModel(
     case "denied":
       return {
         state: "denied",
-        label: "Location permission denied",
-        hint: "Location is blocked for this site in your browser settings.",
+        label: t("location.denied.label"),
+        hint: t("location.denied.hint"),
         disabled: false,
         busy: false,
         intent: "request",
@@ -56,8 +78,8 @@ export function createLocationControlViewModel(
     case "permission-required":
       return {
         state: "permission-required",
-        label: "Enable location",
-        hint: "Show this device on the map.",
+        label: t("location.enable.label"),
+        hint: t("location.enable.hint"),
         disabled: false,
         busy: location.kind === "checking-permission",
         intent: "request",
@@ -65,8 +87,8 @@ export function createLocationControlViewModel(
     case "locating":
       return {
         state: "locating",
-        label: "Locating this device",
-        hint: "Waiting for a position from this device.",
+        label: t("location.locating.label"),
+        hint: t("location.locating.hint"),
         disabled: true,
         busy: true,
         intent: "none",
@@ -76,33 +98,35 @@ export function createLocationControlViewModel(
         state: "unavailable",
         label:
           location.position === undefined
-            ? "Location unavailable, try again"
-            : "Recenter on the last known position",
+            ? t("location.unavailable.retryLabel")
+            : t("location.unavailable.recenterLabel"),
         hint:
           location.reason === "timeout"
-            ? "This device did not answer in time."
-            : "This device could not resolve a position.",
+            ? t("location.unavailable.timeoutHint")
+            : t("location.unavailable.positionHint"),
         disabled: false,
         busy: false,
         intent: location.position === undefined ? "request" : "recenter",
       };
-    case "active":
+    case "active": {
+      const hint = `${t("location.accuracy.approx")} ${Math.round(location.position.accuracyMeters)} m.`;
       return cameraCentered
         ? {
             state: "centered",
-            label: "Map centred on this device",
-            hint: `Accuracy about ${Math.round(location.position.accuracyMeters)} m.`,
+            label: t("location.centered.label"),
+            hint,
             disabled: false,
             busy: false,
             intent: "recenter",
           }
         : {
             state: "displaced",
-            label: "Recenter on this device",
-            hint: `Accuracy about ${Math.round(location.position.accuracyMeters)} m.`,
+            label: t("location.recenter.label"),
+            hint,
             disabled: false,
             busy: false,
             intent: "recenter",
           };
+    }
   }
 }
