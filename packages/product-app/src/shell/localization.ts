@@ -45,7 +45,8 @@ const EN_MESSAGES = {
   "location.locating.label": "Locating this device",
   "location.locating.hint": "Waiting for a position from this device.",
   "location.unavailable.retryLabel": "Location unavailable, try again",
-  "location.unavailable.recenterLabel": "Recenter on the last known position",
+  "location.unavailable.recenterLabel":
+    "Recenter on the last known position",
   "location.unavailable.timeoutHint": "This device did not answer in time.",
   "location.unavailable.positionHint":
     "This device could not resolve a position.",
@@ -95,7 +96,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "location.enable.hint": "Показати цей пристрій на мапі.",
   "location.locating.label": "Визначаємо місцезнаходження",
   "location.locating.hint": "Очікуємо координати від цього пристрою.",
-  "location.unavailable.retryLabel": "Геолокація недоступна — спробувати ще раз",
+  "location.unavailable.retryLabel":
+    "Геолокація недоступна — спробувати ще раз",
   "location.unavailable.recenterLabel":
     "Повернутися до останньої відомої позиції",
   "location.unavailable.timeoutHint": "Пристрій не відповів вчасно.",
