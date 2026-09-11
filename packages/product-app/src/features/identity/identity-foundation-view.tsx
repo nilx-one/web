@@ -482,6 +482,8 @@ function IdentityForm({
     (addressConfirmed &&
       identity.mode === "register" &&
       availablePulseComplete);
+  const showsSignInAction = identity.mode === "sign-in";
+  const showsPasswordSurface = showsPassword || showsSignInAction;
   const addressCollapsed = showsPassword;
   const providerRegistration = identity.mode === "provider-register";
   // Only a Bond creating an identity chooses an address. Signing in to an
@@ -1016,10 +1018,10 @@ function IdentityForm({
 
       <div
         ref={passwordFieldRef}
-        className={`password-field${showsPassword ? "" : " password-field--autofill-proxy"}`}
+        className={`password-field${showsPasswordSurface ? "" : " password-field--autofill-proxy"}`}
         data-reflection={reflectionTone}
         data-validation={passwordValidation}
-        aria-hidden={!showsPassword}
+        aria-hidden={!showsPasswordSurface}
       >
         <input
           ref={passwordRef}
@@ -1035,9 +1037,14 @@ function IdentityForm({
           }
           placeholder={showsPassword ? "password" : undefined}
           aria-label={showsPassword ? "Password" : undefined}
-          aria-invalid={identity.error !== undefined}
+          aria-hidden={!showsPassword}
           disabled={identity.busy}
           tabIndex={showsPassword ? undefined : -1}
+          style={
+            showsSignInAction && !showsPassword
+              ? { opacity: 0, pointerEvents: "none" }
+              : undefined
+          }
           onAnimationStart={handleAutofillAnimation("password")}
           onInput={(event) => {
             if (
@@ -1070,7 +1077,7 @@ function IdentityForm({
             <VisibilityGlyph visible={passwordVisible} />
           </button>
         ) : null}
-        {showsPassword ? (
+        {showsPassword || showsSignInAction ? (
           <button
             className="integrated-action"
             type="submit"
