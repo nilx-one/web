@@ -28,6 +28,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+import { startTelegramChromeAppearanceSync } from "./appearance";
 import {
   createManualLocationMapRenderer,
   locationControlFingerprint,
@@ -42,6 +43,7 @@ async function bootstrap(): Promise<void> {
 
   const telegramBridge = resolveTelegramWebApp(window);
   declareHostLanguages(telegramLanguageTags(telegramBridge));
+  startTelegramChromeAppearanceSync(telegramBridge);
 
   // Location control is read before the host receives a geolocation
   // capability. Only an explicit live answer enables browser GPS; unknown
