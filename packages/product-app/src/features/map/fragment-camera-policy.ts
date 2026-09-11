@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { MAP_SCALE_ZOOM, type MapCamera, type MapScale } from "@nilx-one/map-contract";
+import {
+  MAP_SCALE_ZOOM,
+  type MapCamera,
+  type MapScale,
+} from "@nilx-one/map-contract";
 
 import {
   locationCameraPitch,
@@ -37,10 +41,7 @@ export function fragmentCamera(
   current: MapCamera,
   context: LocationCameraContext,
 ): MapCamera {
-  const minimum = locationCameraZoom(
-    FRAGMENT_MIN_SCALE,
-    context.presentation,
-  );
+  const minimum = locationCameraZoom(FRAGMENT_MIN_SCALE, context.presentation);
   const maximum = Math.max(
     minimum,
     locationCameraZoom(FRAGMENT_MAX_SCALE, context.presentation),
@@ -66,10 +67,7 @@ export function fragmentZoomBounds(context: LocationCameraContext): {
   readonly minimum: number;
   readonly maximum: number;
 } {
-  const minimum = locationCameraZoom(
-    FRAGMENT_MIN_SCALE,
-    context.presentation,
-  );
+  const minimum = locationCameraZoom(FRAGMENT_MIN_SCALE, context.presentation);
   return {
     minimum,
     maximum: Math.max(
