@@ -100,8 +100,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "location.unavailable.recenterLabel":
     "Повернутися до останньої відомої позиції",
   "location.unavailable.timeoutHint": "Пристрій не відповів вчасно.",
-  "location.unavailable.positionHint":
-    "Пристрою не вдалося визначити позицію.",
+  "location.unavailable.positionHint": "Пристрою не вдалося визначити позицію.",
   "location.centered.label": "Мапа центрована на цьому пристрої",
   "location.recenter.label": "Центрувати на цьому пристрої",
   "location.accuracy.approx": "Точність близько",
