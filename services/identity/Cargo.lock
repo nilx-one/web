@@ -1348,7 +1348,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "ox1-contracts"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=c224304947280169017e298237bcf5361d1bfb30#c224304947280169017e298237bcf5361d1bfb30"
+source = "git+https://github.com/nilx-one/core?rev=6023d6d8d92059dacc11868e877112322bbc1266#6023d6d8d92059dacc11868e877112322bbc1266"
 dependencies = [
  "idna",
  "idna_adapter",

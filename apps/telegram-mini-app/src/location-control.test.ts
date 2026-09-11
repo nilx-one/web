@@ -108,10 +108,7 @@ function fakeRenderer() {
 describe("Telegram location control", () => {
   it("accepts a canonical manual Bond location", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(
-        200,
-        locationProjection("manual", "23522000", "488566000"),
-      ),
+      jsonResponse(200, locationProjection("manual", "23522000", "488566000")),
     );
 
     await expect(
@@ -133,10 +130,7 @@ describe("Telegram location control", () => {
 
   it("treats a stored live Bond location as live device mode", async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse(
-        200,
-        locationProjection("live", "305234000", "504501000"),
-      ),
+      jsonResponse(200, locationProjection("live", "305234000", "504501000")),
     );
     await expect(
       readTelegramLocationControl("signed", fetchImpl as typeof fetch),
@@ -145,10 +139,7 @@ describe("Telegram location control", () => {
 
   it("fails closed on malformed location, role, or service state", async () => {
     const malformedCoordinate = vi.fn(async () =>
-      jsonResponse(
-        200,
-        locationProjection("manual", "23522000", "900000001"),
-      ),
+      jsonResponse(200, locationProjection("manual", "23522000", "900000001")),
     );
     const malformedRole = vi.fn(async () =>
       jsonResponse(200, { role: "owner", location: null }),

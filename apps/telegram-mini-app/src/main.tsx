@@ -80,14 +80,18 @@ async function bootstrap(): Promise<void> {
   });
   const mapRenderer =
     locationControl.kind === "manual"
-      ? createManualLocationMapRenderer(baseMapRenderer, locationControl.position)
+      ? createManualLocationMapRenderer(
+          baseMapRenderer,
+          locationControl.position,
+        )
       : baseMapRenderer;
 
   // Telegram commonly keeps a Mini App alive while the user returns to the
   // bot. Re-read when it becomes visible; a changed mode needs a fresh
   // composition because geolocation authority is intentionally immutable for
   // the lifetime of one host instance.
-  const initialLocationFingerprint = locationControlFingerprint(locationControl);
+  const initialLocationFingerprint =
+    locationControlFingerprint(locationControl);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
     void readTelegramLocationControl(telegramBridge?.initData ?? "").then(
