@@ -6,9 +6,10 @@ import type {
   PresenceStore,
   VisitRecord,
 } from "@nilx-one/presence-contract";
+import { latLngToCell } from "h3-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createPresenceTracker } from "./index";
+import { cellCameraAnchor, createPresenceTracker } from "./index";
 
 function memoryStore(records: VisitRecord[]): PresenceStore {
   return {
@@ -33,6 +34,19 @@ async function settle(): Promise<void> {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("cell camera anchor", () => {
+  it("projects an opaque H3 cell to its geographic centre without changing the cell identity", () => {
+    const cell = latLngToCell(50.4501, 30.5234, 9);
+    const anchor = cellCameraAnchor(cell);
+
+    expect(anchor.cell).toBe(cell);
+    expect(anchor.center[0]).toBeGreaterThan(30.51);
+    expect(anchor.center[0]).toBeLessThan(30.54);
+    expect(anchor.center[1]).toBeGreaterThan(50.44);
+    expect(anchor.center[1]).toBeLessThan(50.46);
+  });
+});
 
 describe("presence tracker", () => {
   it("lights only after accepted fixes span the dwell and appends a closing record on exit", async () => {
