@@ -163,9 +163,7 @@ describe("Telegram location control", () => {
   it("bounds startup when location control never answers", async () => {
     vi.useFakeTimers();
     try {
-      const fetchImpl = vi.fn(
-        () => new Promise<Response>(() => undefined),
-      );
+      const fetchImpl = vi.fn(() => new Promise<Response>(() => undefined));
       const pending = readTelegramLocationControl(
         "signed",
         fetchImpl as typeof fetch,
