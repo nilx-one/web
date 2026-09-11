@@ -35,6 +35,9 @@ export interface TelegramWebAppBridge {
   HapticFeedback?: {
     impactOccurred(style: "light" | "medium" | "heavy"): void;
   };
+  setHeaderColor?(color: string): void;
+  setBackgroundColor?(color: string): void;
+  setBottomBarColor?(color: string): void;
   ready(): void;
   expand(): void;
   openLink(url: string): void;
@@ -46,6 +49,59 @@ export interface TelegramWebAppBridge {
     event: "themeChanged" | "viewportChanged",
     listener: () => void,
   ): void;
+}
+
+export type TelegramChromeAppearance = "light" | "dark";
+
+const TELEGRAM_CHROME_COLOR: Readonly<
+  Record<TelegramChromeAppearance, string>
+> = {
+  light: "#f3f8fc",
+  dark: "#121116",
+};
+
+function safelyApplyTelegramChrome(effect: (() => void) | undefined): void {
+  if (effect === undefined) {
+    return;
+  }
+
+  try {
+    effect();
+  } catch {
+    // Chrome synchronization is optional presentation. A partial or older
+    // Telegram runtime must never break the shared Web product.
+  }
+}
+
+/**
+ * Translate the already-resolved shared appearance into Telegram-owned chrome.
+ * Appearance authority stays outside this adapter; this function only paints
+ * host surfaces when the runtime exposes the corresponding capability.
+ */
+export function syncTelegramChrome(
+  bridge: TelegramWebAppBridge | undefined,
+  appearance: TelegramChromeAppearance,
+): void {
+  if (bridge === undefined) {
+    return;
+  }
+
+  const color = TELEGRAM_CHROME_COLOR[appearance];
+  safelyApplyTelegramChrome(
+    bridge.setHeaderColor === undefined
+      ? undefined
+      : () => bridge.setHeaderColor?.(color),
+  );
+  safelyApplyTelegramChrome(
+    bridge.setBackgroundColor === undefined
+      ? undefined
+      : () => bridge.setBackgroundColor?.(color),
+  );
+  safelyApplyTelegramChrome(
+    bridge.setBottomBarColor === undefined
+      ? undefined
+      : () => bridge.setBottomBarColor?.(color),
+  );
 }
 
 function safeInset(value: number | undefined): number {
