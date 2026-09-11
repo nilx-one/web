@@ -56,21 +56,18 @@ describe("cell-bound fragment camera policy", () => {
     expect(target.pitch).toBeGreaterThanOrEqual(0);
   });
 
-  it(
-    "bounds a close camera at street scale instead of forcing a building close-up",
-    () => {
-      const bounds = fragmentZoomBounds(VOLUMETRIC);
-      const target = fragmentCamera(
-        ANCHOR,
-        camera(MAP_SCALE_ZOOM.building, 48),
-        VOLUMETRIC,
-      );
+  it("bounds a close camera at street scale instead of forcing a building close-up", () => {
+    const bounds = fragmentZoomBounds(VOLUMETRIC);
+    const target = fragmentCamera(
+      ANCHOR,
+      camera(MAP_SCALE_ZOOM.building, 48),
+      VOLUMETRIC,
+    );
 
-      expect(FRAGMENT_MAX_SCALE).toBe("street");
-      expect(target.zoom).toBe(bounds.maximum);
-      expect(target.zoom).toBeLessThan(MAP_SCALE_ZOOM.building);
-    },
-  );
+    expect(FRAGMENT_MAX_SCALE).toBe("street");
+    expect(target.zoom).toBe(bounds.maximum);
+    expect(target.zoom).toBeLessThan(MAP_SCALE_ZOOM.building);
+  });
 
   it("preserves a camera already inside the bounded range", () => {
     const target = fragmentCamera(
