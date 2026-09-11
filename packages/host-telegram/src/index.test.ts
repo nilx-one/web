@@ -127,15 +127,18 @@ describe("Telegram chrome appearance", () => {
   it.each([
     ["light" as const, "#f3f8fc"],
     ["dark" as const, "#121116"],
-  ])("paints every supported host surface for %s appearance", (appearance, color) => {
-    const bridge = createBridge();
+  ])(
+    "paints every supported host surface for %s appearance",
+    (appearance, color) => {
+      const bridge = createBridge();
 
-    syncTelegramChrome(bridge, appearance);
+      syncTelegramChrome(bridge, appearance);
 
-    expect(bridge.setHeaderColor).toHaveBeenCalledWith(color);
-    expect(bridge.setBackgroundColor).toHaveBeenCalledWith(color);
-    expect(bridge.setBottomBarColor).toHaveBeenCalledWith(color);
-  });
+      expect(bridge.setHeaderColor).toHaveBeenCalledWith(color);
+      expect(bridge.setBackgroundColor).toHaveBeenCalledWith(color);
+      expect(bridge.setBottomBarColor).toHaveBeenCalledWith(color);
+    },
+  );
 
   it("degrades to a no-op when Telegram exposes no chrome setters", () => {
     const bridge = createBridge();
