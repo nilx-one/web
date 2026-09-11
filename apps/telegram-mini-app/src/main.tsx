@@ -34,13 +34,12 @@ import {
   readTelegramLocationControl,
 } from "./location-control";
 
-const container = document.querySelector<HTMLElement>("#root");
-
-if (container === null) {
-  throw new Error("0x1 root element is missing");
-}
-
 async function bootstrap(): Promise<void> {
+  const container = document.querySelector<HTMLElement>("#root");
+  if (container === null) {
+    throw new Error("0x1 root element is missing");
+  }
+
   const telegramBridge = resolveTelegramWebApp(window);
   declareHostLanguages(telegramLanguageTags(telegramBridge));
 
