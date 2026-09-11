@@ -59,6 +59,52 @@ describe("FailureNoticeProvider", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("requests one light host impact for a newly published failure without repeating on rerender", async () => {
+    const user = userEvent.setup();
+    const impact = vi.fn();
+    const report: FailureReport = {
+      code: "contract_rejected",
+      kind: "rejected",
+      retryable: false,
+    };
+    const options: PublishFailureOptions = { feedback: { impact } };
+    const view = renderProducer({ report, options });
+
+    await user.click(screen.getByRole("button", { name: "Publish failure" }));
+
+    expect(impact).toHaveBeenCalledOnce();
+    expect(impact).toHaveBeenCalledWith("light");
+
+    view.rerender(
+      <FailureNoticeProvider>
+        <Producer report={report} options={options} />
+      </FailureNoticeProvider>,
+    );
+
+    expect(impact).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the failure visible when host feedback itself fails", async () => {
+    const user = userEvent.setup();
+    const impact = vi.fn(() => {
+      throw new Error("haptics unavailable");
+    });
+
+    renderProducer({
+      report: {
+        code: "contract_rejected",
+        kind: "rejected",
+        retryable: false,
+      },
+      options: { feedback: { impact } },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Publish failure" }));
+
+    expect(impact).toHaveBeenCalledOnce();
+    expect(screen.getByText("Request rejected")).toBeInTheDocument();
+  });
+
   it("puts an unavailable report on screen with the retry the caller can honour", async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();

@@ -8,6 +8,7 @@ import {
   type FailureNoticeCopy,
   type FailureReport,
 } from "@nilx-one/application";
+import type { HostPort } from "@nilx-one/host-contract";
 import { ToastRegion, type ToastRegionItem } from "@nilx-one/ui";
 import {
   createContext,
@@ -30,6 +31,12 @@ export interface PublishFailureOptions {
    * caller can actually reissue the operation.
    */
   readonly onRetry?: () => void;
+  /**
+   * Optional host presentation capability for this newly surfaced failure.
+   * The failure remains the fact; the host alone decides how an impact maps
+   * to Telegram haptics, another platform effect, or a safe no-op.
+   */
+  readonly feedback?: Pick<HostPort, "impact">;
 }
 
 export type PublishFailure = (
@@ -134,6 +141,13 @@ export function FailureNoticeProvider({
   const publish = useCallback<PublishFailure>((report, options = {}) => {
     sequence.current += 1;
     const id = `failure-${sequence.current}`;
+
+    try {
+      options.feedback?.impact("light");
+    } catch {
+      // Host effects are best-effort presentation. A failed haptic/vibration
+      // must never hide, delay, or otherwise alter the failure event itself.
+    }
 
     setPresented((current) => [
       ...current,
