@@ -45,25 +45,32 @@ describe("cell-bound fragment camera policy", () => {
 
   it("bounds a far-out camera at neighborhood scale", () => {
     const bounds = fragmentZoomBounds(VOLUMETRIC);
-    const target = fragmentCamera(ANCHOR, camera(MAP_SCALE_ZOOM.country), VOLUMETRIC);
+    const target = fragmentCamera(
+      ANCHOR,
+      camera(MAP_SCALE_ZOOM.country),
+      VOLUMETRIC,
+    );
 
     expect(FRAGMENT_MIN_SCALE).toBe("neighborhood");
     expect(target.zoom).toBe(bounds.minimum);
     expect(target.pitch).toBeGreaterThanOrEqual(0);
   });
 
-  it("bounds a close camera at street scale instead of forcing a building close-up", () => {
-    const bounds = fragmentZoomBounds(VOLUMETRIC);
-    const target = fragmentCamera(
-      ANCHOR,
-      camera(MAP_SCALE_ZOOM.building, 48),
-      VOLUMETRIC,
-    );
+  it(
+    "bounds a close camera at street scale instead of forcing a building close-up",
+    () => {
+      const bounds = fragmentZoomBounds(VOLUMETRIC);
+      const target = fragmentCamera(
+        ANCHOR,
+        camera(MAP_SCALE_ZOOM.building, 48),
+        VOLUMETRIC,
+      );
 
-    expect(FRAGMENT_MAX_SCALE).toBe("street");
-    expect(target.zoom).toBe(bounds.maximum);
-    expect(target.zoom).toBeLessThan(MAP_SCALE_ZOOM.building);
-  });
+      expect(FRAGMENT_MAX_SCALE).toBe("street");
+      expect(target.zoom).toBe(bounds.maximum);
+      expect(target.zoom).toBeLessThan(MAP_SCALE_ZOOM.building);
+    },
+  );
 
   it("preserves a camera already inside the bounded range", () => {
     const target = fragmentCamera(
