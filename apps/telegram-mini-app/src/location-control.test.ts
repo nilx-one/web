@@ -160,6 +160,27 @@ describe("Telegram location control", () => {
     ).resolves.toEqual({ kind: "unavailable" });
   });
 
+  it("bounds startup when location control never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(
+        () => new Promise<Response>(() => undefined),
+      );
+      const pending = readTelegramLocationControl(
+        "signed",
+        fetchImpl as typeof fetch,
+        { timeoutMs: 25 },
+      );
+
+      await vi.advanceTimersByTimeAsync(25);
+
+      await expect(pending).resolves.toEqual({ kind: "unavailable" });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("treats an unregistered Telegram account as live", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(404, {}));
     await expect(
