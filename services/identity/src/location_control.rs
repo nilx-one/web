@@ -201,9 +201,7 @@ impl TelegramLocationIntents {
     }
 
     pub async fn consume(&self, telegram_user_id: i64) -> Option<PendingLocationIntent> {
-        let Some((intent, started)) = self.pending.lock().await.remove(&telegram_user_id) else {
-            return None;
-        };
+        let (intent, started) = self.pending.lock().await.remove(&telegram_user_id)?;
         (started.elapsed() <= self.ttl).then_some(intent)
     }
 }
