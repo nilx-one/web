@@ -27,7 +27,7 @@ describe("location control", () => {
     expect(model.state).toBe("unsupported");
     expect(model.disabled).toBe(true);
     expect(model.intent).toBe("none");
-    expect(model.label).not.toBe("");
+    expect(model.labelKey).toBe("location.unsupported.label");
   });
 
   it("keeps a denied permission askable only by an explicit gesture", () => {
@@ -57,6 +57,8 @@ describe("location control", () => {
 
     expect(model.state).toBe("unavailable");
     expect(model.intent).toBe("recenter");
+    expect(model.labelKey).toBe("location.unavailable.recenterLabel");
+    expect(model.hintKey).toBe("location.unavailable.timeoutHint");
   });
 
   it("asks again when a transient failure left nothing to recenter on", () => {
@@ -66,6 +68,7 @@ describe("location control", () => {
     );
 
     expect(model.intent).toBe("request");
+    expect(model.labelKey).toBe("location.unavailable.retryLabel");
   });
 
   it("blocks a second request while one is already resolving", () => {
@@ -76,14 +79,15 @@ describe("location control", () => {
     expect(model.busy).toBe(true);
   });
 
-  it("states location in words, never in colour alone", () => {
-    const position = observation({ accuracyMeters: 18 });
+  it("keeps accessibility copy semantic until presentation resolves locale", () => {
+    const position = observation({ accuracyMeters: 18.4 });
     const model = createLocationControlViewModel(
       { kind: "active", position },
       true,
     );
 
-    expect(model.label).toContain("this device");
-    expect(model.hint).toContain("18");
+    expect(model.labelKey).toBe("location.centered.label");
+    expect(model.hintKey).toBe("location.accuracy.approx");
+    expect(model.accuracyMeters).toBe(18);
   });
 });

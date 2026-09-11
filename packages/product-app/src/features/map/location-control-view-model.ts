@@ -17,11 +17,29 @@ export type LocationControlState =
   | "displaced"
   | "centered";
 
+export type LocationControlTranslationKey =
+  | "location.unsupported.label"
+  | "location.unsupported.hint"
+  | "location.denied.label"
+  | "location.denied.hint"
+  | "location.enable.label"
+  | "location.enable.hint"
+  | "location.locating.label"
+  | "location.locating.hint"
+  | "location.unavailable.retryLabel"
+  | "location.unavailable.recenterLabel"
+  | "location.unavailable.timeoutHint"
+  | "location.unavailable.positionHint"
+  | "location.centered.label"
+  | "location.recenter.label"
+  | "location.accuracy.approx";
+
 export interface LocationControlViewModel {
   readonly state: LocationControlState;
-  /** Accessible name. State is never conveyed by the accent colour alone. */
-  readonly label: string;
-  readonly hint: string;
+  /** Presentation resolves these typed keys through the active locale. */
+  readonly labelKey: LocationControlTranslationKey;
+  readonly hintKey: LocationControlTranslationKey;
+  readonly accuracyMeters?: number;
   readonly disabled: boolean;
   readonly busy: boolean;
   /** What tapping the control does now: ask the host, or move the camera. */
@@ -36,8 +54,8 @@ export function createLocationControlViewModel(
     case "unsupported":
       return {
         state: "unsupported",
-        label: "Location unavailable on this host",
-        hint: "This host provides no device location.",
+        labelKey: "location.unsupported.label",
+        hintKey: "location.unsupported.hint",
         disabled: true,
         busy: false,
         intent: "none",
@@ -45,8 +63,8 @@ export function createLocationControlViewModel(
     case "denied":
       return {
         state: "denied",
-        label: "Location permission denied",
-        hint: "Location is blocked for this site in your browser settings.",
+        labelKey: "location.denied.label",
+        hintKey: "location.denied.hint",
         disabled: false,
         busy: false,
         intent: "request",
@@ -56,8 +74,8 @@ export function createLocationControlViewModel(
     case "permission-required":
       return {
         state: "permission-required",
-        label: "Enable location",
-        hint: "Show this device on the map.",
+        labelKey: "location.enable.label",
+        hintKey: "location.enable.hint",
         disabled: false,
         busy: location.kind === "checking-permission",
         intent: "request",
@@ -65,8 +83,8 @@ export function createLocationControlViewModel(
     case "locating":
       return {
         state: "locating",
-        label: "Locating this device",
-        hint: "Waiting for a position from this device.",
+        labelKey: "location.locating.label",
+        hintKey: "location.locating.hint",
         disabled: true,
         busy: true,
         intent: "none",
@@ -74,14 +92,14 @@ export function createLocationControlViewModel(
     case "unavailable":
       return {
         state: "unavailable",
-        label:
+        labelKey:
           location.position === undefined
-            ? "Location unavailable, try again"
-            : "Recenter on the last known position",
-        hint:
+            ? "location.unavailable.retryLabel"
+            : "location.unavailable.recenterLabel",
+        hintKey:
           location.reason === "timeout"
-            ? "This device did not answer in time."
-            : "This device could not resolve a position.",
+            ? "location.unavailable.timeoutHint"
+            : "location.unavailable.positionHint",
         disabled: false,
         busy: false,
         intent: location.position === undefined ? "request" : "recenter",
@@ -90,16 +108,18 @@ export function createLocationControlViewModel(
       return cameraCentered
         ? {
             state: "centered",
-            label: "Map centred on this device",
-            hint: `Accuracy about ${Math.round(location.position.accuracyMeters)} m.`,
+            labelKey: "location.centered.label",
+            hintKey: "location.accuracy.approx",
+            accuracyMeters: Math.round(location.position.accuracyMeters),
             disabled: false,
             busy: false,
             intent: "recenter",
           }
         : {
             state: "displaced",
-            label: "Recenter on this device",
-            hint: `Accuracy about ${Math.round(location.position.accuracyMeters)} m.`,
+            labelKey: "location.recenter.label",
+            hintKey: "location.accuracy.approx",
+            accuracyMeters: Math.round(location.position.accuracyMeters),
             disabled: false,
             busy: false,
             intent: "recenter",

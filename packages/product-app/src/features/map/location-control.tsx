@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { useLocalization } from "../../shell/localization";
 import "./location-control.css";
 import type { LocationControlViewModel } from "./location-control-view-model";
 
@@ -18,12 +19,19 @@ export function LocationControl({
   viewModel,
   onActivate,
 }: LocationControlProps) {
+  const { t } = useLocalization();
+  const label = t(viewModel.labelKey);
+  const hint =
+    viewModel.accuracyMeters === undefined
+      ? t(viewModel.hintKey)
+      : `${t(viewModel.hintKey)} ${viewModel.accuracyMeters} m.`;
+
   return (
     <div className="location-control" data-state={viewModel.state}>
       <button
         className="location-control__button"
         type="button"
-        aria-label={viewModel.label}
+        aria-label={label}
         aria-describedby="location-control-hint"
         aria-busy={viewModel.busy}
         disabled={viewModel.disabled}
@@ -32,7 +40,7 @@ export function LocationControl({
         <span className="location-control__glyph" aria-hidden="true" />
       </button>
       <span className="visually-hidden" id="location-control-hint">
-        {viewModel.hint}
+        {hint}
       </span>
     </div>
   );
