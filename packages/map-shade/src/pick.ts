@@ -42,7 +42,7 @@ export function createTapHandler(options: {
 }
 
 export function formatRecords(records: readonly VisitRecord[]): string[] {
-  return records.map((record) => {
+  return foldVisits(records).map((record) => {
     const entered = new Date(record.enteredAt).toISOString();
     const left =
       record.leftAt === null ? "open" : new Date(record.leftAt).toISOString();
@@ -52,4 +52,30 @@ export function formatRecords(records: readonly VisitRecord[]): string[] {
         : `${Math.max(0, Math.round((record.leftAt - record.enteredAt) / 60_000))}m`;
     return `${entered}  ${left}  ${duration}  ${record.fixCount} fixes  ±${Math.round(record.bestAccuracyM)}m  ${record.source}`;
   });
+}
+
+/**
+ * The journal is append-only: a visit lands as an open record when the cell
+ * lights and a closing record when the dwell ends. Presentation folds the two
+ * halves back into one visit; storage keeps both facts.
+ */
+export function foldVisits(
+  records: readonly VisitRecord[],
+): readonly VisitRecord[] {
+  const byVisit = new Map<string, VisitRecord>();
+  for (const record of records) {
+    const key = `${record.cell}:${record.enteredAt}`;
+    const existing = byVisit.get(key);
+    if (existing === undefined) {
+      byVisit.set(key, record);
+      continue;
+    }
+    byVisit.set(key, {
+      ...existing,
+      leftAt: existing.leftAt ?? record.leftAt,
+      fixCount: Math.max(existing.fixCount, record.fixCount),
+      bestAccuracyM: Math.min(existing.bestAccuracyM, record.bestAccuracyM),
+    });
+  }
+  return [...byVisit.values()];
 }
