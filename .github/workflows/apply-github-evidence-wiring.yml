@@ -59,12 +59,201 @@ jobs:
           python .github/scripts/apply-github-evidence-wiring.py
           python - <<'PY'
           from pathlib import Path
+
           path = Path('services/identity/src/github_evidence.rs')
           text = path.read_text()
           old = '.signer\n        .verify(&cookie)\n        .filter(|transaction| transaction.expires_at > now)'
           new = '.signer\n        .verify::<EvidenceTransaction>(&cookie)\n        .filter(|transaction| transaction.expires_at > now)'
           if text.count(old) != 1:
               raise SystemExit('expected evidence transaction verification site')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              '    fn with_endpoints(mut self, authorize: Url, token: Url, api_root: Url) -> Self {',
+              '    #[cfg(test)]\n    fn with_endpoints(mut self, authorize: Url, token: Url, api_root: Url) -> Self {',
+              1,
+          )
+
+          replacements = [
+              (
+                  '''        if let Some(bound_subject) = sqlx::query_scalar::<_, String>(
+            "SELECT provider_subject FROM identity_providers WHERE pub_dress = ? AND provider = 'github' LIMIT 1",
+        )
+        .bind(pub_dress.as_str())
+        .fetch_optional(&mut *transaction)
+        .await?
+        {
+            if bound_subject != github_user_id {
+                transaction.commit().await?;
+                return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
+            }
+        }
+''',
+                  '''        if let Some(bound_subject) = sqlx::query_scalar::<_, String>(
+            "SELECT provider_subject FROM identity_providers WHERE pub_dress = ? AND provider = 'github' LIMIT 1",
+        )
+        .bind(pub_dress.as_str())
+        .fetch_optional(&mut *transaction)
+        .await?
+            && bound_subject != github_user_id
+        {
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
+        }
+''',
+              ),
+              (
+                  '''        if let Some(bound_pub_dress) = sqlx::query_scalar::<_, String>(
+            "SELECT pub_dress FROM identity_providers WHERE provider = 'github' AND provider_subject = ? LIMIT 1",
+        )
+        .bind(&github_user_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        {
+            if bound_pub_dress != pub_dress.as_str() {
+                transaction.commit().await?;
+                return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
+            }
+        }
+''',
+                  '''        if let Some(bound_pub_dress) = sqlx::query_scalar::<_, String>(
+            "SELECT pub_dress FROM identity_providers WHERE provider = 'github' AND provider_subject = ? LIMIT 1",
+        )
+        .bind(&github_user_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+            && bound_pub_dress != pub_dress.as_str()
+        {
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
+        }
+''',
+              ),
+              (
+                  '''        if let Some(existing) = &existing_for_bond {
+            if existing != &github_user_id {
+                transaction.commit().await?;
+                return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
+            }
+        }
+''',
+                  '''        if let Some(existing) = &existing_for_bond
+            && existing != &github_user_id
+        {
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
+        }
+''',
+              ),
+              (
+                  '''        if let Some(existing_pub_dress) = sqlx::query_scalar::<_, String>(
+            "SELECT pub_dress FROM github_evidence_connections WHERE github_user_id = ?",
+        )
+        .bind(&github_user_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        {
+            if existing_pub_dress != pub_dress.as_str() {
+                transaction.commit().await?;
+                return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
+            }
+        }
+''',
+                  '''        if let Some(existing_pub_dress) = sqlx::query_scalar::<_, String>(
+            "SELECT pub_dress FROM github_evidence_connections WHERE github_user_id = ?",
+        )
+        .bind(&github_user_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+            && existing_pub_dress != pub_dress.as_str()
+        {
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
+        }
+''',
+              ),
+          ]
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit('expected collapsible evidence invariant site')
+              text = text.replace(old, new, 1)
+
+          old_import = '''    use super::{EvidenceTransaction, EvidenceTransactionSigner, GithubEvidenceConnectOutcome, GithubEvidenceRepository, GithubUser};
+    use crate::{IdentityRepository, NativeAuthConfig, ProviderIdentity, ProviderLinkRepository, PubDress};
+'''
+          new_import = '''    use super::{
+        EvidenceTransaction, EvidenceTransactionSigner, GithubEvidenceConfig,
+        GithubEvidenceConnectOutcome, GithubEvidenceRepository, GithubUser,
+    };
+    use crate::{
+        IdentityRepository, NativeAuthConfig, ProviderIdentity, ProviderLinkRepository,
+        ProviderSecretCipher, PubDress,
+    };
+    use url::Url;
+'''
+          if text.count(old_import) != 1:
+              raise SystemExit('expected evidence test imports')
+          text = text.replace(old_import, new_import, 1)
+
+          marker = '''    #[test]
+    fn transaction_signature_is_bound_to_payload() {
+'''
+          test = '''    #[test]
+    fn test_provider_endpoints_are_explicitly_overridable() {
+        let cipher = ProviderSecretCipher::from_hex_key(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .expect("cipher");
+        let config = GithubEvidenceConfig::new(
+            Url::parse("https://nilx.one").expect("origin"),
+            None,
+            cipher,
+        )
+        .with_endpoints(
+            Url::parse("http://127.0.0.1:4101/authorize").expect("authorize"),
+            Url::parse("http://127.0.0.1:4101/token").expect("token"),
+            Url::parse("http://127.0.0.1:4101/").expect("api root"),
+        );
+        assert_eq!(config.api_root.as_str(), "http://127.0.0.1:4101/");
+    }
+
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('expected evidence test insertion site')
+          text = text.replace(marker, test + marker, 1)
+          path.write_text(text)
+
+          path = Path('services/identity/src/provider_secret.rs')
+          text = path.read_text()
+          old = '''fn decode_hex(value: &str) -> Result<Vec<u8>, ProviderSecretError> {
+    if value.len() % 2 != 0 || !value.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+        return Err(ProviderSecretError::InvalidKey);
+    }
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let text = std::str::from_utf8(pair).map_err(|_| ProviderSecretError::InvalidKey)?;
+            u8::from_str_radix(text, 16).map_err(|_| ProviderSecretError::InvalidKey)
+        })
+        .collect()
+}
+'''
+          new = '''fn decode_hex(value: &str) -> Result<Vec<u8>, ProviderSecretError> {
+    if !value.len().is_multiple_of(2) || !value.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+        return Err(ProviderSecretError::InvalidKey);
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&value[index..index + 2], 16)
+                .map_err(|_| ProviderSecretError::InvalidKey)
+        })
+        .collect()
+}
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected hex decoder')
           path.write_text(text.replace(old, new, 1))
           PY
       - name: Validate identity capability
@@ -79,8 +268,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add services/identity/Cargo.toml services/identity/Cargo.lock \
-            services/identity/src/github_evidence.rs services/identity/src/main.rs \
-            services/identity/deploy/prepare-runtime-env.sh \
+            services/identity/src/github_evidence.rs services/identity/src/provider_secret.rs \
+            services/identity/src/main.rs services/identity/deploy/prepare-runtime-env.sh \
             services/identity/deploy/prepare-runtime-env.test.sh \
             services/identity/deploy/env.example .github/workflows/deploy-identity-service.yml
           git commit -m "feat: wire GitHub evidence capability into identity runtime"
