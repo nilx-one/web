@@ -67,9 +67,7 @@ interface ViewOverrides {
 
 function renderView(overrides: ViewOverrides = {}) {
   const optionalProps = {
-    ...(overrides.connectedProviders === undefined
-      ? {}
-      : { connectedProviders: overrides.connectedProviders }),
+    connectedProviders: overrides.connectedProviders ?? [],
     ...(overrides.providerDeepLinks === undefined
       ? {}
       : { providerDeepLinks: overrides.providerDeepLinks }),
@@ -398,7 +396,10 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByRole("link", { name: "Connect Discord" }),
     ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");
-    expect(screen.getAllByText("Not connected")).toHaveLength(2);
+    expect(
+      screen.getByRole("link", { name: "Connect GitHub" }),
+    ).toHaveAttribute("href", "/auth?provider=github&intent=connect");
+    expect(screen.getAllByText("Not connected")).toHaveLength(3);
   });
 
   it("assigns no study, draws no fallback body, and offers the four in the editor", async () => {
@@ -677,13 +678,14 @@ describe("AuthenticatedMapHomeView", () => {
 
     expect(screen.getByRole("heading", { name: "Providers" })).toBeVisible();
     expect(screen.getByText("Connected")).toBeVisible();
-    expect(screen.getByText("Not connected")).toBeVisible();
+    expect(screen.getAllByText("Not connected")).toHaveLength(2);
     // Connected: reachable and detachable. Unconnected: connectable.
     expect(screen.getByRole("link", { name: "Open Telegram" })).toBeVisible();
     expect(
       screen.queryByRole("link", { name: "Connect Telegram" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Connect Discord" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Connect GitHub" })).toBeVisible();
 
     fireEvent.click(
       screen.getByRole("button", {
