@@ -1,7 +1,7 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: Apply GitHub evidence acceptance tests
+name: Apply GitHub evidence invariants
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - feature/github-evidence-connection
     paths:
       - .github/workflows/apply-github-evidence-wiring.yml
-      - .github/scripts/add-github-evidence-acceptance-tests.py
+      - .github/scripts/enforce-github-evidence-invariants.py
 
 permissions:
   contents: write
@@ -24,8 +24,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-      - name: Apply acceptance tests
-        run: python .github/scripts/add-github-evidence-acceptance-tests.py
+      - name: Apply invariants
+        run: python .github/scripts/enforce-github-evidence-invariants.py
       - name: Validate identity capability
         run: |
           cargo fmt --manifest-path services/identity/Cargo.toml --all
@@ -33,10 +33,12 @@ jobs:
           cargo clippy --manifest-path services/identity/Cargo.toml --all-targets -- -D warnings
           sh services/identity/deploy/prepare-runtime-env.test.sh
           git diff --check
-      - name: Commit verified acceptance tests
+      - name: Commit verified invariant changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/identity/src/github_evidence.rs
-          git commit -m "test: cover GitHub evidence OAuth lifecycle"
+          git add services/identity/src/provider_link.rs services/identity/src/main.rs \
+            services/identity/deploy/prepare-runtime-env.sh \
+            services/identity/deploy/prepare-runtime-env.test.sh
+          git commit -m "fix: keep GitHub auth and evidence identities aligned"
           git push origin HEAD:feature/github-evidence-connection
