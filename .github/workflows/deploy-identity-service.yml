@@ -31,6 +31,8 @@ on:
         required: false
       DISCORD_CLIENT_SECRET:
         required: false
+      GITHUB_AUTH_CLIENT_SECRET:
+        required: false
 
 permissions:
   actions: read
@@ -57,6 +59,8 @@ jobs:
       TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
       DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
       DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+      GITHUB_AUTH_CLIENT_ID: ${{ vars.GITHUB_AUTH_CLIENT_ID }}
+      GITHUB_AUTH_CLIENT_SECRET: ${{ secrets.GITHUB_AUTH_CLIENT_SECRET }}
       SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
       IDENTITY_DEPLOYMENT_PATH: ${{ vars.IDENTITY_DEPLOYMENT_PATH || '.local/share/nilx-one/identity' }}
 
@@ -85,6 +89,10 @@ jobs:
           if [ -n "$DISCORD_CLIENT_ID" ] || [ -n "$DISCORD_CLIENT_SECRET" ]; then
             test -n "$DISCORD_CLIENT_ID"
             test -n "$DISCORD_CLIENT_SECRET"
+          fi
+          if [ -n "$GITHUB_AUTH_CLIENT_ID" ] || [ -n "$GITHUB_AUTH_CLIENT_SECRET" ]; then
+            test -n "$GITHUB_AUTH_CLIENT_ID"
+            test -n "$GITHUB_AUTH_CLIENT_SECRET"
           fi
 
       - name: Configure SSH
@@ -216,6 +224,10 @@ jobs:
           if [ -n "$DISCORD_CLIENT_ID" ] && [ -n "$DISCORD_CLIENT_SECRET" ]; then
             printf 'DISCORD_CLIENT_ID=%s\n' "$DISCORD_CLIENT_ID" >>"$provider_file"
             printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET" >>"$provider_file"
+          fi
+          if [ -n "$GITHUB_AUTH_CLIENT_ID" ] && [ -n "$GITHUB_AUTH_CLIENT_SECRET" ]; then
+            printf 'GITHUB_AUTH_CLIENT_ID=%s\n' "$GITHUB_AUTH_CLIENT_ID" >>"$provider_file"
+            printf 'GITHUB_AUTH_CLIENT_SECRET=%s\n' "$GITHUB_AUTH_CLIENT_SECRET" >>"$provider_file"
           fi
           scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
             "$archive" "/tmp/0x1-identity-image-${IDENTITY_RELEASE_SHA}.tar.gz" "$provider_file" \
