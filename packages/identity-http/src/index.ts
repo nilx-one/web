@@ -4,8 +4,12 @@
 import {
   isAvatarModel,
   formatPubDress,
+  isBondProviderType,
+  type BondProviderType,
   type BrowserIdentityProvider,
+  type BrowserProviderConnectionsResult,
   type BrowserProviderContextResult,
+  type BrowserProviderDisconnectResult,
   type BrowserProviderLinkResult,
   type IdentityAccessPort,
   type IdentityProjection,
@@ -673,8 +677,72 @@ class IdentityHttpAdapter
         return { kind: "rejected", reason: "provider-proof-required" };
       case "provider_already_linked":
         return { kind: "rejected", reason: "provider-already-linked" };
+      case "provider_type_already_linked":
+        return { kind: "rejected", reason: "provider-type-already-linked" };
       case "native_session_changed":
         return { kind: "rejected", reason: "session-changed" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
+  public async readBrowserProviderConnections(): Promise<BrowserProviderConnectionsResult> {
+    const response = await this.fetch(
+      "/api/v1/auth/browser/provider/connections",
+      {
+        cache: "no-store",
+        credentials: "same-origin",
+      },
+    );
+    const body: unknown = await response.json().catch(() => undefined);
+    if (
+      response.ok &&
+      isRecord(body) &&
+      body.state === "available" &&
+      Array.isArray(body.providers) &&
+      body.providers.every(isBondProviderType)
+    ) {
+      return {
+        kind: "available",
+        connections: body.providers.map((provider) => ({ provider })),
+      };
+    }
+    return parseErrorCode(body) === "native_authentication_required"
+      ? { kind: "authentication-required" }
+      : { kind: "service-unavailable" };
+  }
+
+  public async disconnectBrowserProvider(
+    provider: BondProviderType,
+  ): Promise<BrowserProviderDisconnectResult> {
+    const response = await this.fetch(
+      "/api/v1/auth/browser/provider/disconnect",
+      {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ provider }),
+      },
+    );
+    const body: unknown = await response.json().catch(() => undefined);
+    if (
+      response.ok &&
+      isRecord(body) &&
+      body.state === "disconnected" &&
+      typeof body.provider === "string" &&
+      isBondProviderType(body.provider)
+    ) {
+      return { kind: "disconnected", provider: body.provider };
+    }
+    switch (parseErrorCode(body)) {
+      case "native_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "provider_not_connected":
+        return { kind: "rejected", reason: "not-connected" };
       default:
         return { kind: "service-unavailable" };
     }

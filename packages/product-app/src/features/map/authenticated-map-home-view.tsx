@@ -379,7 +379,7 @@ export function AuthenticatedMapHomeView({
   runtime,
   safeArea,
   section = "world",
-  connectedProviders = [],
+  connectedProviders,
   providerDeepLinks = [],
   onDisconnectProvider,
   avaiaAvailability = "unavailable",
@@ -449,9 +449,12 @@ export function AuthenticatedMapHomeView({
   // The Dock's navigation stack: the world, a Bond surface, a screen it opens.
   const dockDepth =
     (section === "world" ? 0 : 1) + (activeDetail === undefined ? 0 : 1);
-  const providers = createBondProvidersViewState(connectedProviders, {
-    deepLinkProviders: providerDeepLinks,
-  });
+  const providers =
+    connectedProviders === undefined
+      ? undefined
+      : createBondProvidersViewState(connectedProviders, {
+          deepLinkProviders: providerDeepLinks,
+        });
   const statusToast = mapStatusToast(
     mapStatus,
     mapViewModel.label,
@@ -1140,19 +1143,25 @@ export function AuthenticatedMapHomeView({
                       <div>
                         <dt>Providers</dt>
                         <dd>
-                          <span className="provider-controls">
-                            {providers.connected.map((row) => (
-                              <ProviderMark key={row.provider} row={row} />
-                            ))}
-                            <button
-                              className="provider-control provider-control--add"
-                              type="button"
-                              aria-label="Add a provider"
-                              onClick={() => openDetail("providers")}
-                            >
-                              +
-                            </button>
-                          </span>
+                          {providers === undefined ? (
+                            <small className="profile-edit__note" role="status">
+                              Loading…
+                            </small>
+                          ) : (
+                            <span className="provider-controls">
+                              {providers.connected.map((row) => (
+                                <ProviderMark key={row.provider} row={row} />
+                              ))}
+                              <button
+                                className="provider-control provider-control--add"
+                                type="button"
+                                aria-label="Add a provider"
+                                onClick={() => openDetail("providers")}
+                              >
+                                +
+                              </button>
+                            </span>
+                          )}
                         </dd>
                       </div>
                     </dl>
@@ -1271,55 +1280,67 @@ export function AuthenticatedMapHomeView({
 
                 {activeDetail === "providers" ? (
                   <div className="provider-management">
-                    <ul className="provider-management__list">
-                      {providers.rows.map((row) => (
-                        <li key={row.provider} data-connected={row.connected}>
-                          <span
-                            className={`provider-control${
-                              row.connected
-                                ? " provider-control--connected"
-                                : " provider-control--idle"
-                            }`}
-                            aria-hidden="true"
-                          >
-                            {row.glyph}
-                          </span>
-                          <span>
-                            <strong>{row.label}</strong>
-                            <small>{row.status}</small>
-                          </span>
-                          {row.connected ? (
-                            <span className="provider-management__actions">
-                              <ProviderMark row={row} label="Open" />
-                              <button
-                                className="provider-management__disconnect"
-                                type="button"
-                                aria-label={row.disconnectLabel}
-                                title={row.disconnectLabel}
-                                onClick={() =>
-                                  onDisconnectProvider?.(row.provider)
-                                }
-                              >
-                                <span aria-hidden="true">🗑</span>
-                              </button>
-                            </span>
-                          ) : (
-                            <a
-                              className="provider-management__connect"
-                              href={row.connectHref}
-                              aria-label={row.connectLabel}
+                    {providers === undefined ? (
+                      <p className="interface-settings__note" role="status">
+                        Loading provider connections…
+                      </p>
+                    ) : (
+                      <>
+                        <ul className="provider-management__list">
+                          {providers.rows.map((row) => (
+                            <li
+                              key={row.provider}
+                              data-connected={row.connected}
                             >
-                              Connect
-                            </a>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="interface-settings__note">
-                      A provider account is an identity this Bond points at, one
-                      account per provider. Disconnecting detaches it from this
-                      Bond; it never deletes the account on the provider.
-                    </p>
+                              <span
+                                className={`provider-control${
+                                  row.connected
+                                    ? " provider-control--connected"
+                                    : " provider-control--idle"
+                                }`}
+                                aria-hidden="true"
+                              >
+                                {row.glyph}
+                              </span>
+                              <span>
+                                <strong>{row.label}</strong>
+                                <small>{row.status}</small>
+                              </span>
+                              {row.connected ? (
+                                <span className="provider-management__actions">
+                                  <ProviderMark row={row} label="Open" />
+                                  <button
+                                    className="provider-management__disconnect"
+                                    type="button"
+                                    aria-label={row.disconnectLabel}
+                                    title={row.disconnectLabel}
+                                    onClick={() =>
+                                      onDisconnectProvider?.(row.provider)
+                                    }
+                                  >
+                                    <span aria-hidden="true">🗑</span>
+                                  </button>
+                                </span>
+                              ) : (
+                                <a
+                                  className="provider-management__connect"
+                                  href={row.connectHref}
+                                  aria-label={row.connectLabel}
+                                >
+                                  Connect
+                                </a>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="interface-settings__note">
+                          A provider account is an identity this Bond points at,
+                          one account per provider. Disconnecting detaches it
+                          from this Bond; it never deletes the account on the
+                          provider.
+                        </p>
+                      </>
+                    )}
                   </div>
                 ) : null}
               </div>

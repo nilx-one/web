@@ -14,7 +14,7 @@
  * account, and nothing here should ever be given the ability to.
  */
 
-export const BOND_PROVIDER_TYPES = ["telegram", "discord"] as const;
+export const BOND_PROVIDER_TYPES = ["telegram", "discord", "github"] as const;
 
 export type BondProviderType = (typeof BOND_PROVIDER_TYPES)[number];
 
@@ -173,20 +173,28 @@ export function bondProviderOpenTargets(
     return targets;
   }
 
-  const id = discordAccountId(account);
-  if (id !== undefined) {
-    if (deepLinkCapable) {
-      targets.push({ kind: "deep-link", url: `discord://-/users/${id}` });
+  if (account.provider === "discord") {
+    const id = discordAccountId(account);
+    if (id !== undefined) {
+      if (deepLinkCapable) {
+        targets.push({ kind: "deep-link", url: `discord://-/users/${id}` });
+      }
+      targets.push({
+        kind: "canonical-web",
+        url: `https://discord.com/users/${id}`,
+      });
     }
     targets.push({
-      kind: "canonical-web",
-      url: `https://discord.com/users/${id}`,
+      kind: "provider-page",
+      url: "https://discord.com/channels/@me",
     });
+    return targets;
   }
-  targets.push({
-    kind: "provider-page",
-    url: "https://discord.com/channels/@me",
-  });
+
+  // The identity-only GitHub binding deliberately stores no login or OAuth
+  // token. Without an account address, opening GitHub itself is the only target
+  // this attachment can truthfully resolve.
+  targets.push({ kind: "provider-page", url: "https://github.com" });
   return targets;
 }
 

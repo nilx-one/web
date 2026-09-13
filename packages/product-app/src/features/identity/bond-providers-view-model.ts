@@ -56,11 +56,25 @@ export interface BondProvidersViewOptions {
 }
 
 function providerLabel(provider: BondProviderType): string {
-  return provider === "telegram" ? "Telegram" : "Discord";
+  switch (provider) {
+    case "telegram":
+      return "Telegram";
+    case "discord":
+      return "Discord";
+    case "github":
+      return "GitHub";
+  }
 }
 
 function providerGlyph(provider: BondProviderType): string {
-  return provider === "telegram" ? "TG" : "DC";
+  switch (provider) {
+    case "telegram":
+      return "TG";
+    case "discord":
+      return "DC";
+    case "github":
+      return "GH";
+  }
 }
 
 export function providerConnectHref(provider: BondProviderType): string {
