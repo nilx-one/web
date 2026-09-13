@@ -1,0 +1,361 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Deploy Identity Dependency
+
+on:
+  workflow_call:
+    inputs:
+      release_sha:
+        description: Release commit whose dependency graph is being activated
+        required: true
+        type: string
+      required_contract:
+        description: Minimum identity contract required by selected client targets
+        required: true
+        type: number
+      force:
+        description: Redeploy the latest verified identity package even when the active contract is sufficient
+        required: true
+        type: boolean
+    secrets:
+      SSH_HOST:
+        required: false
+      SSH_USER:
+        required: false
+      SSH_PRIVATE_KEY:
+        required: false
+      TELOXIDE_TOKEN:
+        required: false
+      TELEGRAM_OIDC_CLIENT_SECRET:
+        required: false
+      DISCORD_CLIENT_SECRET:
+        required: false
+      GITHUB_AUTH_CLIENT_SECRET:
+        required: false
+      GITHUB_EVIDENCE_CLIENT_SECRET:
+        required: false
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    name: Ensure identity contract ${{ inputs.required_contract }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      REQUIRED_IDENTITY_CONTRACT: ${{ inputs.required_contract }}
+      FORCE_IDENTITY: ${{ inputs.force }}
+      IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-identity
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+      TELEGRAM_OIDC_CLIENT_ID: ${{ vars.TELEGRAM_OIDC_CLIENT_ID }}
+      TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
+      DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
+      DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+      GITHUB_AUTH_CLIENT_ID: ${{ vars.GITHUB_AUTH_CLIENT_ID }}
+      GITHUB_AUTH_CLIENT_SECRET: ${{ secrets.GITHUB_AUTH_CLIENT_SECRET }}
+      GITHUB_EVIDENCE_CLIENT_ID: ${{ vars.GITHUB_EVIDENCE_CLIENT_ID }}
+      GITHUB_EVIDENCE_CLIENT_SECRET: ${{ secrets.GITHUB_EVIDENCE_CLIENT_SECRET }}
+      SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
+      IDENTITY_DEPLOYMENT_PATH: ${{ vars.IDENTITY_DEPLOYMENT_PATH || '.local/share/nilx-one/identity' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Validate dependency request
+        run: |
+          set -Eeuo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUIRED_IDENTITY_CONTRACT" =~ ^[0-9]+$ ]]
+          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
+          (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$TELOXIDE_TOKEN"
+          test -n "$IDENTITY_DEPLOYMENT_PATH"
+          if [ -n "$TELEGRAM_OIDC_CLIENT_ID" ] || [ -n "$TELEGRAM_OIDC_CLIENT_SECRET" ]; then
+            test -n "$TELEGRAM_OIDC_CLIENT_ID"
+            test -n "$TELEGRAM_OIDC_CLIENT_SECRET"
+          fi
+          if [ -n "$DISCORD_CLIENT_ID" ] || [ -n "$DISCORD_CLIENT_SECRET" ]; then
+            test -n "$DISCORD_CLIENT_ID"
+            test -n "$DISCORD_CLIENT_SECRET"
+          fi
+          if [ -n "$GITHUB_AUTH_CLIENT_ID" ] || [ -n "$GITHUB_AUTH_CLIENT_SECRET" ]; then
+            test -n "$GITHUB_AUTH_CLIENT_ID"
+            test -n "$GITHUB_AUTH_CLIENT_SECRET"
+          fi
+          if [ -n "$GITHUB_EVIDENCE_CLIENT_ID" ] || [ -n "$GITHUB_EVIDENCE_CLIENT_SECRET" ]; then
+            test -n "$GITHUB_EVIDENCE_CLIENT_ID"
+            test -n "$GITHUB_EVIDENCE_CLIENT_SECRET"
+          fi
+          if [ -n "$GITHUB_AUTH_CLIENT_ID" ] && [ -n "$GITHUB_EVIDENCE_CLIENT_ID" ] && [ "$GITHUB_AUTH_CLIENT_ID" = "$GITHUB_EVIDENCE_CLIENT_ID" ]; then
+            echo "GitHub browser authentication and evidence access must use different OAuth clients" >&2
+            exit 1
+          fi
+
+      - name: Configure SSH
+        run: |
+          set -Eeuo pipefail
+          install -m 0700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" >"$HOME/.ssh/id_ed25519"
+          chmod 0600 "$HOME/.ssh/id_ed25519"
+          ssh-keyscan -T 10 -p "$SSH_PORT" -H "$SSH_HOST" >"$HOME/.ssh/known_hosts"
+          test -s "$HOME/.ssh/known_hosts"
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" true
+
+      - id: dependency
+        name: Inspect active identity contract
+        run: |
+          set -Eeuo pipefail
+          active_contract="$(
+            ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+              "container_id=\$(docker ps --filter label=one.nilx.service=identity --format '{{.ID}}' | head -n 1); if [ -n \"\$container_id\" ]; then docker inspect --format '{{ index .Config.Labels \"one.nilx.identity.contract\" }}' \"\$container_id\" 2>/dev/null || true; fi"
+          )"
+
+          if ! [[ "$active_contract" =~ ^[0-9]+$ ]]; then
+            active_contract=0
+          fi
+
+          deploy_required=false
+          if [ "$FORCE_IDENTITY" = true ] || (( active_contract < REQUIRED_IDENTITY_CONTRACT )); then
+            deploy_required=true
+          fi
+
+          echo "active_contract=$active_contract" >>"$GITHUB_OUTPUT"
+          echo "deploy_required=$deploy_required" >>"$GITHUB_OUTPUT"
+          echo "Active identity contract: $active_contract"
+          echo "Required identity contract: $REQUIRED_IDENTITY_CONTRACT"
+          echo "Identity deployment required: $deploy_required"
+
+      - id: package
+        if: steps.dependency.outputs.deploy_required == 'true'
+        name: Resolve latest verified identity package in release ancestry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          package_ready=false
+
+          for attempt in $(seq 1 40); do
+            response="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/package-identity-service.yml/runs" \
+              -f per_page=100)"
+
+            candidate=''
+            while IFS=$'\t' read -r sha status conclusion url; do
+              [ -n "$sha" ] || continue
+              if git merge-base --is-ancestor "$sha" "$RELEASE_SHA"; then
+                candidate="$sha"$'\t'"$status"$'\t'"$conclusion"$'\t'"$url"
+                break
+              fi
+            done < <(jq -r '.workflow_runs[] | [.head_sha, .status, (.conclusion // ""), .html_url] | @tsv' <<<"$response")
+
+            if [ -z "$candidate" ]; then
+              echo "No Package Identity Service run is registered in the release ancestry yet (attempt $attempt/40)."
+              sleep 10
+              continue
+            fi
+
+            IFS=$'\t' read -r package_sha package_status package_conclusion package_url <<<"$candidate"
+            if [ "$package_status" = completed ]; then
+              if [ "$package_conclusion" != success ]; then
+                echo "Latest identity package in release ancestry failed: $package_conclusion" >&2
+                echo "$package_url" >&2
+                exit 1
+              fi
+              package_ready=true
+              break
+            fi
+
+            echo "Identity package $package_sha is $package_status (attempt $attempt/40)."
+            sleep 10
+          done
+
+          if [ "$package_ready" != true ]; then
+            echo "Timed out waiting for the identity package required by $RELEASE_SHA." >&2
+            exit 1
+          fi
+
+          echo "package_sha=$package_sha" >>"$GITHUB_OUTPUT"
+          echo "IDENTITY_IMAGE=${IMAGE_REPOSITORY}:sha-${package_sha}" >>"$GITHUB_ENV"
+          echo "IDENTITY_RELEASE_SHA=$package_sha" >>"$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.dependency.outputs.deploy_required == 'true'
+      - name: Authenticate to GHCR
+        if: steps.dependency.outputs.deploy_required == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify identity package contract
+        if: steps.dependency.outputs.deploy_required == 'true'
+        run: |
+          set -Eeuo pipefail
+          docker buildx imagetools inspect "$IDENTITY_IMAGE" >/dev/null
+          docker pull "$IDENTITY_IMAGE"
+          identity_contract="$(docker inspect --format '{{ index .Config.Labels "one.nilx.identity.contract" }}' "$IDENTITY_IMAGE")"
+          [[ "$identity_contract" =~ ^[0-9]+$ ]]
+          if (( identity_contract < REQUIRED_IDENTITY_CONTRACT )); then
+            echo "Verified identity package provides contract $identity_contract, but $REQUIRED_IDENTITY_CONTRACT is required" >&2
+            exit 1
+          fi
+          echo "IDENTITY_CONTRACT=$identity_contract" >>"$GITHUB_ENV"
+          docker save "$IDENTITY_IMAGE" | gzip > "/tmp/0x1-identity-image-${IDENTITY_RELEASE_SHA}.tar.gz"
+
+      - name: Upload identity package, descriptors, and provider secrets
+        if: steps.dependency.outputs.deploy_required == 'true'
+        run: |
+          set -Eeuo pipefail
+          archive="/tmp/0x1-identity-${IDENTITY_RELEASE_SHA}.tar.gz"
+          provider_file="/tmp/0x1-identity-provider-${IDENTITY_RELEASE_SHA}.env"
+          trap 'rm -f "$provider_file"' EXIT
+          tar -czf "$archive" -C services/identity/deploy \
+            compose.yaml deploy.sh check-public.sh prepare-runtime-env.sh
+          umask 077
+          printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN" >"$provider_file"
+          if [ -n "$TELEGRAM_OIDC_CLIENT_ID" ] && [ -n "$TELEGRAM_OIDC_CLIENT_SECRET" ]; then
+            printf 'TELEGRAM_OIDC_CLIENT_ID=%s\n' "$TELEGRAM_OIDC_CLIENT_ID" >>"$provider_file"
+            printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$TELEGRAM_OIDC_CLIENT_SECRET" >>"$provider_file"
+          fi
+          if [ -n "$DISCORD_CLIENT_ID" ] && [ -n "$DISCORD_CLIENT_SECRET" ]; then
+            printf 'DISCORD_CLIENT_ID=%s\n' "$DISCORD_CLIENT_ID" >>"$provider_file"
+            printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET" >>"$provider_file"
+          fi
+          if [ -n "$GITHUB_AUTH_CLIENT_ID" ] && [ -n "$GITHUB_AUTH_CLIENT_SECRET" ]; then
+            printf 'GITHUB_AUTH_CLIENT_ID=%s\n' "$GITHUB_AUTH_CLIENT_ID" >>"$provider_file"
+            printf 'GITHUB_AUTH_CLIENT_SECRET=%s\n' "$GITHUB_AUTH_CLIENT_SECRET" >>"$provider_file"
+          fi
+          if [ -n "$GITHUB_EVIDENCE_CLIENT_ID" ] && [ -n "$GITHUB_EVIDENCE_CLIENT_SECRET" ]; then
+            printf 'GITHUB_EVIDENCE_CLIENT_ID=%s\n' "$GITHUB_EVIDENCE_CLIENT_ID" >>"$provider_file"
+            printf 'GITHUB_EVIDENCE_CLIENT_SECRET=%s\n' "$GITHUB_EVIDENCE_CLIENT_SECRET" >>"$provider_file"
+          fi
+          scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
+            "$archive" "/tmp/0x1-identity-image-${IDENTITY_RELEASE_SHA}.tar.gz" "$provider_file" \
+            "$SSH_USER@$SSH_HOST:/tmp/"
+
+      - name: Activate identity dependency
+        if: steps.dependency.outputs.deploy_required == 'true'
+        run: |
+          set -Eeuo pipefail
+          ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
+            "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$IDENTITY_DEPLOYMENT_PATH' RELEASE_SHA='$IDENTITY_RELEASE_SHA' IDENTITY_IMAGE='$IDENTITY_IMAGE' IDENTITY_CONTRACT='$IDENTITY_CONTRACT' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          deploy_path="$DEPLOY_PATH"
+          case "$deploy_path" in
+            /*) ;;
+            *) deploy_path="$HOME/$deploy_path" ;;
+          esac
+
+          archive="/tmp/0x1-identity-${RELEASE_SHA}.tar.gz"
+          image_archive="/tmp/0x1-identity-image-${RELEASE_SHA}.tar.gz"
+          uploaded_provider="/tmp/0x1-identity-provider-${RELEASE_SHA}.env"
+          releases_dir="$deploy_path/releases"
+          release_dir="$releases_dir/$RELEASE_SHA"
+          current_link="$deploy_path/current"
+          secrets_dir="$deploy_path/secrets"
+          runtime_env="$secrets_dir/runtime.env"
+          previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+          trap 'rm -f "$uploaded_provider"' EXIT
+
+          mkdir -p "$releases_dir" "$secrets_dir"
+          chmod 0700 "$secrets_dir"
+          test -s "$uploaded_provider"
+
+          test -s "$image_archive"
+          gunzip -c "$image_archive" | docker load >/dev/null
+          rm -f "$image_archive"
+          docker image inspect "$IDENTITY_IMAGE" >/dev/null
+
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir"
+          tar -xzf "$archive" -C "$release_dir"
+          rm -f "$archive"
+          sh "$release_dir/prepare-runtime-env.sh" "$runtime_env" "$uploaded_provider"
+          rm -f "$uploaded_provider"
+          printf '%s\n' "$IDENTITY_IMAGE" >"$release_dir/.image"
+          printf '%s\n' "$IDENTITY_CONTRACT" >"$release_dir/.contract"
+
+          activate_current() {
+            cd "$release_dir"
+            IDENTITY_IMAGE="$IDENTITY_IMAGE" \
+            IDENTITY_ENV_FILE="$runtime_env" \
+            IDENTITY_CONTRACT="$IDENTITY_CONTRACT" \
+            RELEASE_SHA="$RELEASE_SHA" \
+              sh ./deploy.sh
+            PUBLIC_ORIGIN='https://nilx.one' HEALTH_RETRY=18 HEALTH_RETRY_DELAY=5 sh ./check-public.sh
+          }
+
+          rollback() {
+            [ -n "$previous_release" ] || return 0
+            [ -f "$previous_release/.image" ] || return 0
+            previous_image="$(cat "$previous_release/.image")"
+            previous_sha="$(basename "$previous_release")"
+            docker image inspect "$previous_image" >/dev/null 2>&1 || return 0
+
+            if [ -f "$previous_release/.contract" ]; then
+              previous_contract="$(cat "$previous_release/.contract")"
+              (
+                cd "$previous_release"
+                IDENTITY_IMAGE="$previous_image" \
+                IDENTITY_ENV_FILE="$runtime_env" \
+                IDENTITY_CONTRACT="$previous_contract" \
+                RELEASE_SHA="$previous_sha" \
+                  sh ./deploy.sh
+              ) || true
+              return 0
+            fi
+
+            (
+              cd "$previous_release"
+              IDENTITY_IMAGE="$previous_image" \
+              IDENTITY_ENV_FILE="$runtime_env" \
+              RELEASE_SHA="$previous_sha" \
+                sh ./deploy.sh
+            ) || true
+          }
+
+          if ! activate_current; then
+            rollback
+            exit 1
+          fi
+
+          ln -sfn "$release_dir" "$current_link"
+          find "$releases_dir" \
+            -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf
+          REMOTE
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "### 0x1 identity dependency"
+            echo
+            echo "- release request: \`$RELEASE_SHA\`"
+            echo "- required contract: \`$REQUIRED_IDENTITY_CONTRACT\`"
+            echo "- previous active contract: \`${{ steps.dependency.outputs.active_contract }}\`"
+            echo "- deployment required: \`${{ steps.dependency.outputs.deploy_required }}\`"
+            if [ "${{ steps.dependency.outputs.deploy_required }}" = true ]; then
+              echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
+              echo "- activated contract: \`${IDENTITY_CONTRACT:-unknown}\`"
+            fi
+            echo "- result: \`${{ job.status }}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
