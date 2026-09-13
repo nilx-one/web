@@ -44,6 +44,16 @@ jobs:
               "    r'''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'",
               1,
           )
+          text = text.replace(
+              "old = '''          if [ -n \"$GITHUB_AUTH_CLIENT_ID\" ] && [ -n \"$GITHUB_AUTH_CLIENT_SECRET\" ]; then",
+              "old = r'''          if [ -n \"$GITHUB_AUTH_CLIENT_ID\" ] && [ -n \"$GITHUB_AUTH_CLIENT_SECRET\" ]; then",
+              1,
+          )
+          text = text.replace(
+              "    + '''          if [ -n \"$GITHUB_EVIDENCE_CLIENT_ID\" ] && [ -n \"$GITHUB_EVIDENCE_CLIENT_SECRET\" ]; then",
+              "    + r'''          if [ -n \"$GITHUB_EVIDENCE_CLIENT_ID\" ] && [ -n \"$GITHUB_EVIDENCE_CLIENT_SECRET\" ]; then",
+              1,
+          )
           path.write_text(text)
           PY
           python .github/scripts/apply-github-evidence-wiring.py
