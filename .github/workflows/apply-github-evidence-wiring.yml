@@ -34,6 +34,16 @@ jobs:
               'if text.count(old) < 1:',
               1,
           )
+          text = text.replace(
+              "needle = '''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-override'",
+              "needle = r'''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-override'",
+              1,
+          )
+          text = text.replace(
+              "    '''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'",
+              "    r'''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'",
+              1,
+          )
           path.write_text(text)
           PY
           python .github/scripts/apply-github-evidence-wiring.py
