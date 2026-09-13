@@ -79,15 +79,14 @@ pub enum ProviderSecretError {
 }
 
 fn decode_hex(value: &str) -> Result<Vec<u8>, ProviderSecretError> {
-    if value.len() % 2 != 0 || !value.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+    if !value.len().is_multiple_of(2) || !value.as_bytes().iter().all(u8::is_ascii_hexdigit) {
         return Err(ProviderSecretError::InvalidKey);
     }
-    value
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|pair| {
-            let text = std::str::from_utf8(pair).map_err(|_| ProviderSecretError::InvalidKey)?;
-            u8::from_str_radix(text, 16).map_err(|_| ProviderSecretError::InvalidKey)
+    (0..value.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&value[index..index + 2], 16)
+                .map_err(|_| ProviderSecretError::InvalidKey)
         })
         .collect()
 }
@@ -101,10 +100,18 @@ mod tests {
     #[test]
     fn seals_without_exposing_plaintext_and_uses_fresh_nonces() {
         let cipher = ProviderSecretCipher::from_hex_key(KEY).expect("cipher");
-        let first = cipher.seal("gho_secret-token", b"github:0x0sky:42").expect("seal");
-        let second = cipher.seal("gho_secret-token", b"github:0x0sky:42").expect("seal");
+        let first = cipher
+            .seal("gho_secret-token", b"github:0x0sky:42")
+            .expect("seal");
+        let second = cipher
+            .seal("gho_secret-token", b"github:0x0sky:42")
+            .expect("seal");
         assert_ne!(first, second);
-        assert!(!first.windows("gho_secret-token".len()).any(|window| window == b"gho_secret-token"));
+        assert!(
+            !first
+                .windows("gho_secret-token".len())
+                .any(|window| window == b"gho_secret-token")
+        );
         assert_eq!(
             cipher.open(&first, b"github:0x0sky:42").expect("open"),
             "gho_secret-token"

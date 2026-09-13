@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{str::FromStr, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     Json, Router,
@@ -21,12 +24,12 @@ use subtle::ConstantTimeEq as _;
 use url::Url;
 
 use crate::{
-    IdentityRepository, NativeAuthConfig, OAuthClientCredentials, ProviderSecretCipher, PubDress,
-    SecretDigester,
+    IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,
+    ProviderSecretCipher, PubDress, SecretDigester,
 };
-use crate::browser_web_auth::authenticated_native_session;
 
 const EVIDENCE_TRANSACTION_COOKIE: &str = "__Host-ox1_github_evidence";
+const SESSION_COOKIE: &str = "__Host-ox1_session";
 const CSRF_HEADER: &str = "x-0x1-csrf";
 const TRANSACTION_TTL_SECONDS: u64 = 10 * 60;
 const GITHUB_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";
@@ -73,6 +76,7 @@ impl GithubEvidenceConfig {
     }
 
     #[cfg(test)]
+    #[cfg(test)]
     fn with_endpoints(mut self, authorize: Url, token: Url, api_root: Url) -> Self {
         self.endpoints = GithubEvidenceEndpoints {
             authorize,
@@ -113,7 +117,11 @@ pub enum GithubEvidenceConnectOutcome {
 
 impl GithubEvidenceRepository {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
-        let max_connections = if database_url.contains(":memory:") { 1 } else { 5 };
+        let max_connections = if database_url.contains(":memory:") {
+            1
+        } else {
+            5
+        };
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(false)
             .foreign_keys(true)
@@ -122,6 +130,11 @@ impl GithubEvidenceRepository {
             .max_connections(max_connections)
             .connect_with(options)
             .await?;
+        sqlx::raw_sql(include_str!(
+            "../migrations/0012_github_evidence_connection.sql"
+        ))
+        .execute(&pool)
+        .await?;
         Ok(Self { pool })
     }
 
@@ -161,11 +174,10 @@ impl GithubEvidenceRepository {
         .bind(pub_dress.as_str())
         .fetch_optional(&mut *transaction)
         .await?
+            && bound_subject != github_user_id
         {
-            if bound_subject != github_user_id {
-                transaction.commit().await?;
-                return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
-            }
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
         }
         if let Some(bound_pub_dress) = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM identity_providers WHERE provider = 'github' AND provider_subject = ? LIMIT 1",
@@ -173,11 +185,10 @@ impl GithubEvidenceRepository {
         .bind(&github_user_id)
         .fetch_optional(&mut *transaction)
         .await?
+            && bound_pub_dress != pub_dress.as_str()
         {
-            if bound_pub_dress != pub_dress.as_str() {
-                transaction.commit().await?;
-                return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
-            }
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
         }
 
         let existing_for_bond = sqlx::query_scalar::<_, String>(
@@ -186,11 +197,11 @@ impl GithubEvidenceRepository {
         .bind(pub_dress.as_str())
         .fetch_optional(&mut *transaction)
         .await?;
-        if let Some(existing) = &existing_for_bond {
-            if existing != &github_user_id {
-                transaction.commit().await?;
-                return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
-            }
+        if let Some(existing) = &existing_for_bond
+            && existing != &github_user_id
+        {
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch);
         }
         if let Some(existing_pub_dress) = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM github_evidence_connections WHERE github_user_id = ?",
@@ -198,11 +209,10 @@ impl GithubEvidenceRepository {
         .bind(&github_user_id)
         .fetch_optional(&mut *transaction)
         .await?
+            && existing_pub_dress != pub_dress.as_str()
         {
-            if existing_pub_dress != pub_dress.as_str() {
-                transaction.commit().await?;
-                return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
-            }
+            transaction.commit().await?;
+            return Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected);
         }
 
         sqlx::query(
@@ -349,13 +359,8 @@ async fn start_connection(
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(identity) = authenticated_native_session(
-        &state.identities,
-        &state.native_auth,
-        &headers,
-        now,
-    )
-    .await
+    let Some(identity) =
+        authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return no_store_error(
             StatusCode::UNAUTHORIZED,
@@ -387,16 +392,20 @@ async fn start_connection(
         return service_unavailable();
     };
     let mut authorize = state.config.endpoints.authorize.clone();
-    authorize.query_pairs_mut()
+    authorize
+        .query_pairs_mut()
         .append_pair("client_id", &credentials.client_id)
         .append_pair("redirect_uri", state.config.callback_url().as_str())
         .append_pair("state", &oauth_state)
         .append_pair("code_challenge", &challenge)
-        .append_pair("code_challenge_method", "S256")
-        .append_pair("prompt", "select_account");
+        .append_pair("code_challenge_method", "S256");
     redirect_with_cookie(
         authorize.as_str(),
-        secure_cookie(EVIDENCE_TRANSACTION_COOKIE, &cookie_value, TRANSACTION_TTL_SECONDS),
+        secure_cookie(
+            EVIDENCE_TRANSACTION_COOKIE,
+            &cookie_value,
+            TRANSACTION_TTL_SECONDS,
+        ),
     )
 }
 
@@ -416,7 +425,7 @@ async fn callback(
     };
     let Some(transaction) = state
         .signer
-        .verify(&cookie)
+        .verify::<EvidenceTransaction>(&cookie)
         .filter(|transaction| transaction.expires_at > now)
     else {
         return callback_failure("github_evidence_transaction_expired");
@@ -430,13 +439,8 @@ async fn callback(
     let Some(code) = query.code.as_deref() else {
         return callback_failure("github_evidence_code_missing");
     };
-    let Some(identity) = authenticated_native_session(
-        &state.identities,
-        &state.native_auth,
-        &headers,
-        now,
-    )
-    .await
+    let Some(identity) =
+        authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return callback_failure("native_authentication_required");
     };
@@ -451,6 +455,7 @@ async fn callback(
         Err(reason) => return callback_failure(reason),
     };
     if !token.scope.trim().is_empty() {
+        let _ = revoke_token(&state, credentials, &token.access_token).await;
         return callback_failure("github_evidence_scope_rejected");
     }
     let inspection = match inspect_token(&state, credentials, &token.access_token).await {
@@ -459,6 +464,7 @@ async fn callback(
         Err(_) => return callback_failure("github_evidence_unavailable"),
     };
     if !inspection.scopes.is_empty() {
+        let _ = revoke_token(&state, credentials, &token.access_token).await;
         return callback_failure("github_evidence_scope_rejected");
     }
     let pub_dress = match identity.pub_dress.parse::<PubDress>() {
@@ -473,6 +479,7 @@ async fn callback(
         Ok(value) => value,
         Err(error) => {
             tracing::error!(%error, "GitHub evidence token encryption failed");
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
             return callback_failure("github_evidence_unavailable");
         }
     };
@@ -488,16 +495,20 @@ async fn callback(
             )
         }
         Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch) => {
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
             callback_failure("github_evidence_identity_mismatch")
         }
         Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected) => {
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
             callback_failure("github_evidence_account_in_use")
         }
         Ok(GithubEvidenceConnectOutcome::BondMissing) => {
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
             callback_failure("native_authentication_required")
         }
         Err(error) => {
             tracing::error!(%error, "GitHub evidence connection persistence failed");
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
             callback_failure("github_evidence_unavailable")
         }
     }
@@ -519,20 +530,12 @@ struct GithubEvidenceResponse {
     diagnostic: Option<String>,
 }
 
-async fn read_connection(
-    State(state): State<GithubEvidenceState>,
-    headers: HeaderMap,
-) -> Response {
+async fn read_connection(State(state): State<GithubEvidenceState>, headers: HeaderMap) -> Response {
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(identity) = authenticated_native_session(
-        &state.identities,
-        &state.native_auth,
-        &headers,
-        now,
-    )
-    .await
+    let Some(identity) =
+        authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return no_store_error(
             StatusCode::UNAUTHORIZED,
@@ -575,7 +578,10 @@ async fn read_connection(
         Ok(token) => token,
         Err(error) => {
             tracing::error!(%error, "GitHub evidence token decryption failed");
-            let _ = state.connections.mark_degraded(&pub_dress, "credential_unreadable", now).await;
+            let _ = state
+                .connections
+                .mark_degraded(&pub_dress, "credential_unreadable", now)
+                .await;
             record.connection_state = "degraded".to_owned();
             record.diagnostic = Some("credential_unreadable".to_owned());
             record.refreshed_at = now;
@@ -584,9 +590,14 @@ async fn read_connection(
     };
     match inspect_token(&state, credentials, &token).await {
         Ok(TokenInspection::Valid(inspection))
-            if inspection.scopes.is_empty() && inspection.user.id.to_string() == record.github_user_id =>
+            if inspection.scopes.is_empty()
+                && inspection.user.id.to_string() == record.github_user_id =>
         {
-            if let Err(error) = state.connections.refresh(&pub_dress, &inspection.user, now).await {
+            if let Err(error) = state
+                .connections
+                .refresh(&pub_dress, &inspection.user, now)
+                .await
+            {
                 tracing::error!(%error, "GitHub evidence refresh persistence failed");
                 return service_unavailable();
             }
@@ -599,14 +610,20 @@ async fn read_connection(
             projection_response(&record, true, None)
         }
         Ok(TokenInspection::Valid(_)) => {
-            let _ = state.connections.mark_degraded(&pub_dress, "credential_scope_or_identity_changed", now).await;
+            let _ = state
+                .connections
+                .mark_degraded(&pub_dress, "credential_scope_or_identity_changed", now)
+                .await;
             record.connection_state = "degraded".to_owned();
             record.diagnostic = Some("credential_scope_or_identity_changed".to_owned());
             record.refreshed_at = now;
             projection_response(&record, true, None)
         }
         Ok(TokenInspection::Revoked) => {
-            let _ = state.connections.mark_degraded(&pub_dress, "token_revoked", now).await;
+            let _ = state
+                .connections
+                .mark_degraded(&pub_dress, "token_revoked", now)
+                .await;
             record.connection_state = "degraded".to_owned();
             record.diagnostic = Some("token_revoked".to_owned());
             record.refreshed_at = now;
@@ -616,11 +633,12 @@ async fn read_connection(
     }
 }
 
-async fn disconnect(
-    State(state): State<GithubEvidenceState>,
-    headers: HeaderMap,
-) -> Response {
-    if headers.get(CSRF_HEADER).and_then(|value| value.to_str().ok()) != Some("1") {
+async fn disconnect(State(state): State<GithubEvidenceState>, headers: HeaderMap) -> Response {
+    if headers
+        .get(CSRF_HEADER)
+        .and_then(|value| value.to_str().ok())
+        != Some("1")
+    {
         return no_store_error(
             StatusCode::FORBIDDEN,
             "csrf_protection_required",
@@ -630,13 +648,8 @@ async fn disconnect(
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(identity) = authenticated_native_session(
-        &state.identities,
-        &state.native_auth,
-        &headers,
-        now,
-    )
-    .await
+    let Some(identity) =
+        authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return no_store_error(
             StatusCode::UNAUTHORIZED,
@@ -698,10 +711,7 @@ async fn disconnect(
         }
     }
     match state.connections.delete(&pub_dress).await {
-        Ok(true) => no_store_json(
-            StatusCode::OK,
-            serde_json::json!({"state": "disconnected"}),
-        ),
+        Ok(true) => no_store_json(StatusCode::OK, serde_json::json!({"state": "disconnected"})),
         Ok(false) => no_store_error(
             StatusCode::NOT_FOUND,
             "github_evidence_not_connected",
@@ -747,7 +757,8 @@ async fn exchange_code(
     code: &str,
     verifier: &str,
 ) -> Result<GithubTokenResponse, &'static str> {
-    let response = state.http
+    let response = state
+        .http
         .post(state.config.endpoints.token.clone())
         .header(header::ACCEPT, "application/json")
         .form(&[
@@ -763,7 +774,10 @@ async fn exchange_code(
     if !response.status().is_success() {
         return Err("github_evidence_token_exchange_failed");
     }
-    response.json::<GithubTokenResponse>().await.map_err(|_| "github_evidence_token_exchange_failed")
+    response
+        .json::<GithubTokenResponse>()
+        .await
+        .map_err(|_| "github_evidence_token_exchange_failed")
 }
 
 async fn inspect_token(
@@ -771,10 +785,14 @@ async fn inspect_token(
     credentials: &OAuthClientCredentials,
     token: &str,
 ) -> Result<TokenInspection, ()> {
-    let endpoint = state.config.endpoints.api_root
+    let endpoint = state
+        .config
+        .endpoints
+        .api_root
         .join(&format!("/applications/{}/token", credentials.client_id))
         .map_err(|_| ())?;
-    let response = state.http
+    let response = state
+        .http
         .post(endpoint)
         .basic_auth(&credentials.client_id, Some(&credentials.client_secret))
         .header(header::ACCEPT, "application/vnd.github+json")
@@ -783,7 +801,11 @@ async fn inspect_token(
         .await
         .map_err(|_| ())?;
     match response.status() {
-        StatusCode::OK => response.json::<GithubTokenInspection>().await.map(TokenInspection::Valid).map_err(|_| ()),
+        StatusCode::OK => response
+            .json::<GithubTokenInspection>()
+            .await
+            .map(TokenInspection::Valid)
+            .map_err(|_| ()),
         StatusCode::NOT_FOUND => Ok(TokenInspection::Revoked),
         _ => Err(()),
     }
@@ -794,10 +816,14 @@ async fn revoke_token(
     credentials: &OAuthClientCredentials,
     token: &str,
 ) -> Result<(), ()> {
-    let endpoint = state.config.endpoints.api_root
+    let endpoint = state
+        .config
+        .endpoints
+        .api_root
         .join(&format!("/applications/{}/token", credentials.client_id))
         .map_err(|_| ())?;
-    let response = state.http
+    let response = state
+        .http
         .delete(endpoint)
         .basic_auth(&credentials.client_id, Some(&credentials.client_secret))
         .header(header::ACCEPT, "application/vnd.github+json")
@@ -805,7 +831,11 @@ async fn revoke_token(
         .send()
         .await
         .map_err(|_| ())?;
-    if response.status() == StatusCode::NO_CONTENT { Ok(()) } else { Err(()) }
+    if response.status() == StatusCode::NO_CONTENT {
+        Ok(())
+    } else {
+        Err(())
+    }
 }
 
 fn projection_response(
@@ -847,7 +877,9 @@ struct EvidenceTransactionSigner {
 }
 
 impl EvidenceTransactionSigner {
-    fn new(digester: SecretDigester) -> Self { Self { digester } }
+    fn new(digester: SecretDigester) -> Self {
+        Self { digester }
+    }
 
     fn issue(&self, transaction: &EvidenceTransaction) -> Option<String> {
         let payload = serde_json::to_vec(transaction).ok()?;
@@ -880,6 +912,19 @@ fn random_url_token(bytes: usize) -> Option<String> {
 
 fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
     left.len() == right.len() && bool::from(left.ct_eq(right))
+}
+
+async fn authenticated_native_session(
+    repository: &IdentityRepository,
+    native_auth: &NativeAuthConfig,
+    headers: &HeaderMap,
+    now: u64,
+) -> Option<IdentityRecord> {
+    let token = read_cookie(headers, SESSION_COOKIE)?;
+    let hash = native_auth
+        .secret_digester()
+        .digest("native-session", &token);
+    repository.find_native_session(&hash, now).await.ok()?
 }
 
 fn read_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -923,7 +968,10 @@ fn no_store_json<T: Serialize>(status: StatusCode, body: T) -> Response {
 }
 
 fn no_store_error(status: StatusCode, error: &str, message: &str) -> Response {
-    no_store_json(status, serde_json::json!({"error": error, "message": message}))
+    no_store_json(
+        status,
+        serde_json::json!({"error": error, "message": message}),
+    )
 }
 
 fn service_unavailable() -> Response {
@@ -939,11 +987,16 @@ fn add_no_store_headers(response: &mut Response) {
         header::CACHE_CONTROL,
         HeaderValue::from_static("no-store, max-age=0"),
     );
-    response.headers_mut().insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    response
+        .headers_mut()
+        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
 }
 
 fn now_unix_seconds() -> Option<u64> {
-    SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|value| value.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|value| value.as_secs())
 }
 
 fn i64_from_u64(value: u64) -> i64 {
@@ -958,25 +1011,39 @@ fn u64_from_i64(value: i64) -> u64 {
 mod tests {
     use std::str::FromStr;
 
-    use super::{EvidenceTransaction, EvidenceTransactionSigner, GithubEvidenceConnectOutcome, GithubEvidenceRepository, GithubUser};
-    use crate::{IdentityRepository, NativeAuthConfig, ProviderIdentity, ProviderLinkRepository, PubDress};
+    use super::{
+        EvidenceTransaction, EvidenceTransactionSigner, GithubEvidenceConfig,
+        GithubEvidenceConnectOutcome, GithubEvidenceRepository, GithubUser,
+    };
+    use crate::{
+        IdentityRepository, NativeAuthConfig, ProviderIdentity, ProviderLinkRepository,
+        ProviderSecretCipher, PubDress,
+    };
+    use url::Url;
 
     fn auth() -> NativeAuthConfig {
         NativeAuthConfig::new("a".repeat(32), "b".repeat(32)).expect("native auth")
     }
 
-    async fn register_bond(identities: &IdentityRepository, pub_dress: &str, seed: &str) -> PubDress {
+    async fn register_bond(
+        identities: &IdentityRepository,
+        pub_dress: &str,
+        seed: &str,
+    ) -> PubDress {
         let bond = PubDress::from_str(pub_dress).expect("Bond");
-        identities.register_native(
-            &bond,
-            "hash",
-            1,
-            format!("recovery-{seed}").as_bytes(),
-            format!("challenge-{seed}").as_bytes(),
-            format!("idempotency-{seed}").as_bytes(),
-            100,
-            200,
-        ).await.expect("registration");
+        identities
+            .register_native(
+                &bond,
+                "hash",
+                1,
+                format!("recovery-{seed}").as_bytes(),
+                format!("challenge-{seed}").as_bytes(),
+                format!("idempotency-{seed}").as_bytes(),
+                100,
+                200,
+            )
+            .await
+            .expect("registration");
         bond
     }
 
@@ -987,6 +1054,25 @@ mod tests {
             html_url: format!("https://github.com/{login}"),
             avatar_url: format!("https://avatars.example/{id}"),
         }
+    }
+
+    #[test]
+    fn test_provider_endpoints_are_explicitly_overridable() {
+        let cipher = ProviderSecretCipher::from_hex_key(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .expect("cipher");
+        let config = GithubEvidenceConfig::new(
+            Url::parse("https://nilx.one").expect("origin"),
+            None,
+            cipher,
+        )
+        .with_endpoints(
+            Url::parse("http://127.0.0.1:4101/authorize").expect("authorize"),
+            Url::parse("http://127.0.0.1:4101/token").expect("token"),
+            Url::parse("http://127.0.0.1:4101/").expect("api root"),
+        );
+        assert_eq!(config.endpoints.api_root.as_str(), "http://127.0.0.1:4101/");
     }
 
     #[test]
@@ -1003,25 +1089,47 @@ mod tests {
         assert_eq!(verified.pub_dress, "0x0sky");
         let mut tampered = signed.into_bytes();
         tampered[0] = if tampered[0] == b'a' { b'b' } else { b'a' };
-        assert!(signer.verify::<EvidenceTransaction>(std::str::from_utf8(&tampered).expect("utf8")).is_none());
+        assert!(
+            signer
+                .verify::<EvidenceTransaction>(std::str::from_utf8(&tampered).expect("utf8"))
+                .is_none()
+        );
     }
 
     #[tokio::test]
     async fn evidence_account_cannot_drift_from_the_bonds_github_provider() {
         let directory = tempfile::tempdir().expect("directory");
-        let database_url = format!("sqlite://{}", directory.path().join("identity.sqlite").display());
-        let identities = IdentityRepository::connect(&database_url).await.expect("identities");
-        let links = ProviderLinkRepository::connect(&database_url).await.expect("links");
-        let evidence = GithubEvidenceRepository::connect(&database_url).await.expect("evidence");
+        let database_url = format!(
+            "sqlite://{}",
+            directory.path().join("identity.sqlite").display()
+        );
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identities");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("links");
+        let evidence = GithubEvidenceRepository::connect(&database_url)
+            .await
+            .expect("evidence");
         let bond = register_bond(&identities, "0x0sky", "one").await;
-        links.link(&bond, &ProviderIdentity::github(42)).await.expect("provider link");
+        links
+            .link(&bond, &ProviderIdentity::github(42))
+            .await
+            .expect("provider link");
 
         assert_eq!(
-            evidence.connect_account(&bond, &user(43, "other"), b"sealed", 10).await.expect("connect"),
+            evidence
+                .connect_account(&bond, &user(43, "other"), b"sealed", 10)
+                .await
+                .expect("connect"),
             GithubEvidenceConnectOutcome::ProviderIdentityMismatch
         );
         assert_eq!(
-            evidence.connect_account(&bond, &user(42, "same"), b"sealed", 10).await.expect("connect"),
+            evidence
+                .connect_account(&bond, &user(42, "same"), b"sealed", 10)
+                .await
+                .expect("connect"),
             GithubEvidenceConnectOutcome::Connected
         );
     }
@@ -1029,18 +1137,31 @@ mod tests {
     #[tokio::test]
     async fn one_github_evidence_account_cannot_span_bonds() {
         let directory = tempfile::tempdir().expect("directory");
-        let database_url = format!("sqlite://{}", directory.path().join("identity.sqlite").display());
-        let identities = IdentityRepository::connect(&database_url).await.expect("identities");
-        let evidence = GithubEvidenceRepository::connect(&database_url).await.expect("evidence");
+        let database_url = format!(
+            "sqlite://{}",
+            directory.path().join("identity.sqlite").display()
+        );
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identities");
+        let evidence = GithubEvidenceRepository::connect(&database_url)
+            .await
+            .expect("evidence");
         let first = register_bond(&identities, "0x0sky", "first").await;
         let second = register_bond(&identities, "0x1sky", "second").await;
         let github = user(42, "same");
         assert_eq!(
-            evidence.connect_account(&first, &github, b"sealed", 10).await.expect("first"),
+            evidence
+                .connect_account(&first, &github, b"sealed", 10)
+                .await
+                .expect("first"),
             GithubEvidenceConnectOutcome::Connected
         );
         assert_eq!(
-            evidence.connect_account(&second, &github, b"sealed", 11).await.expect("second"),
+            evidence
+                .connect_account(&second, &github, b"sealed", 11)
+                .await
+                .expect("second"),
             GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected
         );
     }

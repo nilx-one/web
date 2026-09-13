@@ -10,10 +10,11 @@ use std::{
 
 use identity_bot::{
     BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository, BrowserOAuthConfig,
-    DecimalU64, DiscordOAuthClient, GeoCoordinate, IdentityRecord, IdentityRepository,
-    NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,
-    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth,
-    location_control_router, public_api, role_for_pub_dress,
+    DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig, GithubEvidenceRepository,
+    IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,
+    PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, TelegramInitDataVerifier,
+    TelegramLocationIntents, api, browser_web_auth, github_evidence, location_control_router,
+    public_api, role_for_pub_dress,
 };
 use teloxide::{
     prelude::*,
@@ -87,6 +88,16 @@ async fn main() {
         "GITHUB_AUTH_CLIENT_SECRET",
         "GitHub browser authentication",
     );
+    let github_evidence_oauth = oauth_credentials_from_environment(
+        "GITHUB_EVIDENCE_CLIENT_ID",
+        "GITHUB_EVIDENCE_CLIENT_SECRET",
+        "GitHub evidence connection",
+    );
+    let github_evidence_cipher = ProviderSecretCipher::from_hex_key(
+        &env::var("GITHUB_EVIDENCE_ENCRYPTION_KEY")
+            .expect("GITHUB_EVIDENCE_ENCRYPTION_KEY must be configured"),
+    )
+    .expect("GITHUB_EVIDENCE_ENCRYPTION_KEY must be a 32-byte hexadecimal key");
     let discord_activity_oauth = discord_credentials.as_ref().map(|credentials| {
         DiscordOAuthClient::new(
             credentials.client_id.clone(),
@@ -107,17 +118,26 @@ async fn main() {
     let provider_links = ProviderLinkRepository::connect(&database_url)
         .await
         .expect("provider link database connection must initialize");
+    let github_evidence_connections = GithubEvidenceRepository::connect(&database_url)
+        .await
+        .expect("GitHub evidence database connection must initialize");
     let bot = Bot::new(bot_token.clone());
     let provider_api = browser_web_auth::router(
         repository.clone(),
         provider_links,
         native_auth.clone(),
         BrowserOAuthConfig::new(
-            public_origin,
+            public_origin.clone(),
             telegram_browser_oauth,
             discord_credentials,
             github_browser_oauth,
         ),
+    );
+    let github_evidence_api = github_evidence::router(
+        repository.clone(),
+        github_evidence_connections,
+        native_auth.clone(),
+        GithubEvidenceConfig::new(public_origin, github_evidence_oauth, github_evidence_cipher),
     );
     let public_api = public_api::router(repository.clone());
     let telegram_activity_verifier =
@@ -142,6 +162,7 @@ async fn main() {
     .merge(avaia_api)
     .merge(location_api)
     .merge(provider_api)
+    .merge(github_evidence_api)
     .merge(public_api);
     let listener = tokio::net::TcpListener::bind(http_bind)
         .await
