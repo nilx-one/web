@@ -32,6 +32,9 @@ const TELEGRAM_ISSUER: &str = "https://oauth.telegram.org";
 const DISCORD_AUTHORIZE_URL: &str = "https://discord.com/oauth2/authorize";
 const DISCORD_TOKEN_URL: &str = "https://discord.com/api/v10/oauth2/token";
 const DISCORD_CURRENT_USER_URL: &str = "https://discord.com/api/v10/users/@me";
+const GITHUB_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";
+const GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+const GITHUB_CURRENT_USER_URL: &str = "https://api.github.com/user";
 const OAUTH_TRANSACTION_COOKIE: &str = "__Host-ox1_oauth";
 const PENDING_PROVIDER_COOKIE: &str = "__Host-ox1_provider";
 const SESSION_COOKIE: &str = "__Host-ox1_session";
@@ -60,6 +63,7 @@ pub struct BrowserOAuthConfig {
     public_origin: Url,
     telegram: Option<OAuthClientCredentials>,
     discord: Option<OAuthClientCredentials>,
+    github: Option<OAuthClientCredentials>,
 }
 
 impl BrowserOAuthConfig {
@@ -67,11 +71,13 @@ impl BrowserOAuthConfig {
         public_origin: Url,
         telegram: Option<OAuthClientCredentials>,
         discord: Option<OAuthClientCredentials>,
+        github: Option<OAuthClientCredentials>,
     ) -> Self {
         Self {
             public_origin,
             telegram,
             discord,
+            github,
         }
     }
 
@@ -117,6 +123,7 @@ pub fn router(
             "/api/v1/auth/browser/discord/callback",
             get(discord_callback),
         )
+        .route("/api/v1/auth/browser/github/callback", get(github_callback))
         .route(
             "/api/v1/auth/browser/provider/context",
             get(read_provider_context),
@@ -133,6 +140,7 @@ pub fn router(
 enum BrowserProvider {
     Telegram,
     Discord,
+    Github,
 }
 
 impl BrowserProvider {
@@ -140,6 +148,7 @@ impl BrowserProvider {
         match self {
             Self::Telegram => "telegram",
             Self::Discord => "discord",
+            Self::Github => "github",
         }
     }
 
@@ -147,6 +156,7 @@ impl BrowserProvider {
         match self {
             Self::Telegram => "/api/v1/auth/browser/telegram/callback",
             Self::Discord => "/api/v1/auth/browser/discord/callback",
+            Self::Github => "/api/v1/auth/browser/github/callback",
         }
     }
 
@@ -154,6 +164,7 @@ impl BrowserProvider {
         match value {
             "telegram" => Some(Self::Telegram),
             "discord" => Some(Self::Discord),
+            "github" => Some(Self::Github),
             _ => None,
         }
     }
@@ -163,6 +174,7 @@ impl BrowserProvider {
             provider: match self {
                 Self::Telegram => IdentityProvider::Telegram,
                 Self::Discord => IdentityProvider::Discord,
+                Self::Github => IdentityProvider::Github,
             },
             subject,
         }
@@ -248,7 +260,7 @@ async fn start_browser_auth(
         return no_store_error(
             StatusCode::BAD_REQUEST,
             "browser_provider_invalid",
-            "Choose telegram or discord as the browser provider.",
+            "Choose telegram, discord, or github as the browser provider.",
         );
     };
     let intent = match query.intent.as_deref() {
@@ -265,11 +277,13 @@ async fn start_browser_auth(
     let client = match provider {
         BrowserProvider::Telegram => state.config.telegram.as_ref(),
         BrowserProvider::Discord => state.config.discord.as_ref(),
+        BrowserProvider::Github => state.config.github.as_ref(),
     };
     let Some(client) = client else {
         return provider_unavailable(match provider {
             BrowserProvider::Telegram => "telegram_browser_auth_not_configured",
             BrowserProvider::Discord => "discord_browser_auth_not_configured",
+            BrowserProvider::Github => "github_browser_auth_not_configured",
         });
     };
     let Some(now) = now_unix_seconds() else {
@@ -317,6 +331,7 @@ fn start_provider(
     let mut authorization_url = match Url::parse(match provider {
         BrowserProvider::Telegram => TELEGRAM_AUTHORIZE_URL,
         BrowserProvider::Discord => DISCORD_AUTHORIZE_URL,
+        BrowserProvider::Github => GITHUB_AUTHORIZE_URL,
     }) {
         Ok(value) => value,
         Err(_) => return service_unavailable(),
@@ -326,17 +341,19 @@ fn start_provider(
         query
             .append_pair("client_id", &client.client_id)
             .append_pair("redirect_uri", callback.as_str())
-            .append_pair("response_type", "code")
             .append_pair("state", &state_token)
             .append_pair("code_challenge", &code_challenge)
-            .append_pair("code_challenge_method", "S256")
-            .append_pair(
-                "scope",
-                match provider {
-                    BrowserProvider::Telegram => "openid profile",
-                    BrowserProvider::Discord => "identify",
-                },
-            );
+            .append_pair("code_challenge_method", "S256");
+        if provider != BrowserProvider::Github {
+            query.append_pair("response_type", "code");
+        }
+        if let Some(scope) = match provider {
+            BrowserProvider::Telegram => Some("openid profile"),
+            BrowserProvider::Discord => Some("identify"),
+            BrowserProvider::Github => None,
+        } {
+            query.append_pair("scope", scope);
+        }
     }
 
     redirect_with_cookies(
@@ -496,6 +513,86 @@ async fn discord_callback(
     .await
 }
 
+async fn github_callback(
+    State(state): State<BrowserAuthState>,
+    headers: HeaderMap,
+    Query(query): Query<OAuthCallbackQuery>,
+) -> Response {
+    let transaction = match callback_transaction(&state, &headers, &query, BrowserProvider::Github)
+    {
+        Ok(value) => value,
+        Err(code) => return callback_failure(code),
+    };
+    let Some(client) = state.config.github.as_ref() else {
+        return callback_failure("github_browser_auth_not_configured");
+    };
+    let callback = state.config.callback_url(BrowserProvider::Github);
+    let response = match state
+        .http
+        .post(GITHUB_TOKEN_URL)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .form(&[
+            ("client_id", client.client_id.as_str()),
+            ("client_secret", client.client_secret.as_str()),
+            ("code", query.code.as_deref().unwrap_or_default()),
+            ("redirect_uri", callback.as_str()),
+            ("code_verifier", transaction.code_verifier.as_str()),
+        ])
+        .send()
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "GitHub browser code exchange failed");
+            return callback_failure("provider_authentication_unavailable");
+        }
+    };
+    if !response.status().is_success() {
+        tracing::warn!(status = %response.status(), "GitHub browser code exchange rejected");
+        return callback_failure("github_authentication_failed");
+    }
+    let token = match response.json::<GithubTokenResponse>().await {
+        Ok(value) if !value.access_token.is_empty() => value,
+        Ok(_) => return callback_failure("github_authentication_failed"),
+        Err(error) => {
+            tracing::warn!(%error, "GitHub browser token response was invalid");
+            return callback_failure("github_authentication_failed");
+        }
+    };
+    let response = match state
+        .http
+        .get(GITHUB_CURRENT_USER_URL)
+        .bearer_auth(&token.access_token)
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header(reqwest::header::USER_AGENT, "nilx-one/web")
+        .send()
+        .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "GitHub browser user lookup failed");
+            return callback_failure("provider_authentication_unavailable");
+        }
+    };
+    if !response.status().is_success() {
+        tracing::warn!(status = %response.status(), "GitHub browser user lookup rejected");
+        return callback_failure("github_authentication_failed");
+    }
+    let user = match response.json::<GithubUser>().await {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::warn!(%error, "GitHub browser user response was invalid");
+            return callback_failure("github_authentication_failed");
+        }
+    };
+    finish_provider_callback(
+        &state,
+        BrowserProvider::Github.identity(user.id.to_string()),
+        &transaction,
+    )
+    .await
+}
+
 fn callback_transaction(
     state: &BrowserAuthState,
     headers: &HeaderMap,
@@ -590,6 +687,7 @@ async fn finish_provider_callback(
         provider: match provider.provider {
             IdentityProvider::Telegram => BrowserProvider::Telegram,
             IdentityProvider::Discord => BrowserProvider::Discord,
+            IdentityProvider::Github => BrowserProvider::Github,
         },
         subject: provider.subject,
         expires_at: now.saturating_add(PENDING_PROVIDER_TTL_SECONDS),
@@ -699,6 +797,7 @@ async fn issue_native_session(
 struct BrowserProviderAvailability {
     telegram: bool,
     discord: bool,
+    github: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -716,6 +815,7 @@ async fn read_provider_context(
     let available = BrowserProviderAvailability {
         telegram: state.config.telegram.is_some(),
         discord: state.config.discord.is_some(),
+        github: state.config.github.is_some(),
     };
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
@@ -895,6 +995,16 @@ struct DiscordUser {
     id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct GithubTokenResponse {
+    access_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubUser {
+    id: u64,
+}
+
 #[derive(Debug, thiserror::Error)]
 enum BrowserProviderError {
     #[error("provider token is invalid")]
@@ -1070,9 +1180,17 @@ mod tests {
     }
 
     #[test]
+    fn github_identity_uses_the_stable_numeric_subject_namespace() {
+        let identity = BrowserProvider::Github.identity(75973992_u64.to_string());
+        assert_eq!(identity.provider, crate::IdentityProvider::Github);
+        assert_eq!(identity.subject, "75973992");
+    }
+
+    #[test]
     fn callbacks_are_pinned_to_the_public_origin() {
         let config = BrowserOAuthConfig::new(
             Url::parse("https://nilx.one").expect("valid origin"),
+            None,
             None,
             None,
         );
@@ -1083,6 +1201,10 @@ mod tests {
         assert_eq!(
             config.callback_url(BrowserProvider::Discord).as_str(),
             "https://nilx.one/api/v1/auth/browser/discord/callback"
+        );
+        assert_eq!(
+            config.callback_url(BrowserProvider::Github).as_str(),
+            "https://nilx.one/api/v1/auth/browser/github/callback"
         );
     }
 }

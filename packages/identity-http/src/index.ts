@@ -87,7 +87,7 @@ function parseErrorCode(value: unknown): string | undefined {
 }
 
 function isBrowserProvider(value: unknown): value is BrowserIdentityProvider {
-  return value === "telegram" || value === "discord";
+  return value === "telegram" || value === "discord" || value === "github";
 }
 
 class IdentityHttpAdapter
@@ -625,13 +625,15 @@ class IdentityHttpAdapter
     }
     if (
       typeof body.available.telegram !== "boolean" ||
-      typeof body.available.discord !== "boolean"
+      typeof body.available.discord !== "boolean" ||
+      typeof body.available.github !== "boolean"
     ) {
       return { kind: "service-unavailable" };
     }
     const available = {
       telegram: body.available.telegram,
       discord: body.available.discord,
+      github: body.available.github,
     };
     if (body.state === "none") {
       return { kind: "none", available };

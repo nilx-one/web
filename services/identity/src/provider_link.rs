@@ -166,6 +166,22 @@ mod tests {
                 .pub_dress,
             "0x0sky"
         );
+        assert_eq!(
+            links
+                .link(&bond, &ProviderIdentity::github(75973992))
+                .await
+                .expect("GitHub link"),
+            ProviderLinkOutcome::Linked
+        );
+        assert_eq!(
+            identities
+                .find_by_provider(&ProviderIdentity::github(75973992))
+                .await
+                .expect("GitHub provider lookup")
+                .expect("GitHub bound identity")
+                .pub_dress,
+            "0x0sky"
+        );
     }
 
     #[tokio::test]

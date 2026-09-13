@@ -102,6 +102,10 @@ discord_client_id="$(read_provider_value DISCORD_CLIENT_ID)"
 discord_client_secret="$(read_provider_value DISCORD_CLIENT_SECRET)"
 validate_pair "Discord OAuth" "$discord_client_id" "$discord_client_secret"
 
+github_auth_client_id="$(read_provider_value GITHUB_AUTH_CLIENT_ID)"
+github_auth_client_secret="$(read_provider_value GITHUB_AUTH_CLIENT_SECRET)"
+validate_pair "GitHub browser OAuth" "$github_auth_client_id" "$github_auth_client_secret"
+
 next_env="$(mktemp "$runtime_dir/.runtime.env.XXXXXX")"
 trap 'rm -f "$next_env"' EXIT HUP INT TERM
 

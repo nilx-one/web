@@ -35,6 +35,7 @@ export interface BrowserProviderAuthViewState {
   available: {
     telegram: boolean;
     discord: boolean;
+    github: boolean;
   };
   pendingProvider?: BrowserIdentityProvider;
   onAuthorize(provider: BrowserIdentityProvider): void;
@@ -254,7 +255,9 @@ function ProviderRow({
       ? "Telegram"
       : auth?.pendingProvider === "discord"
         ? "Discord"
-        : undefined;
+        : auth?.pendingProvider === "github"
+          ? "GitHub"
+          : undefined;
   return (
     <section className="provider-row" aria-labelledby="provider-row-label">
       <span id="provider-row-label">Sign in with</span>
@@ -283,6 +286,18 @@ function ProviderRow({
             <circle cx="14.5" cy="11.5" r="1" />
           </svg>
           <span>Discord</span>
+          <small>web</small>
+        </button>
+        <button
+          type="button"
+          disabled={auth?.available.github !== true}
+          aria-label="Sign in with GitHub"
+          onClick={() => auth?.onAuthorize("github")}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.8a9.3 9.3 0 0 0-2.9 18.1c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 0 1.6 1 1.6 1 .9 1.6 2.4 1.1 2.9.9.1-.7.4-1.1.7-1.4-2.3-.3-4.6-1.1-4.6-4.9 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.5 9.5 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.8-2.3 4.6-4.6 4.9.4.3.7 1 .7 1.9v2.8c0 .3.2.6.7.5A9.3 9.3 0 0 0 12 2.8Z" />
+          </svg>
+          <span>GitHub</span>
           <small>web</small>
         </button>
       </div>
