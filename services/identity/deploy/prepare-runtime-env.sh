@@ -128,6 +128,10 @@ else
   github_evidence_client_secret="$(read_existing_value GITHUB_EVIDENCE_CLIENT_SECRET)"
 fi
 validate_pair "GitHub evidence OAuth" "$github_evidence_client_id" "$github_evidence_client_secret"
+if [ -n "$github_auth_client_id" ] && [ -n "$github_evidence_client_id" ] && [ "$github_auth_client_id" = "$github_evidence_client_id" ]; then
+  echo "GitHub browser authentication and evidence access must use different OAuth clients" >&2
+  exit 1
+fi
 
 next_env="$(mktemp "$runtime_dir/.runtime.env.XXXXXX")"
 trap 'rm -f "$next_env"' EXIT HUP INT TERM
@@ -145,10 +149,8 @@ trap 'rm -f "$next_env"' EXIT HUP INT TERM
     printf 'GITHUB_AUTH_CLIENT_SECRET=%s\n' "$github_auth_client_secret"
   fi
   if [ "$github_evidence_from_provider" = false ] && [ -n "$github_evidence_client_id" ]; then
-    printf 'GITHUB_EVIDENCE_CLIENT_ID=%s
-' "$github_evidence_client_id"
-    printf 'GITHUB_EVIDENCE_CLIENT_SECRET=%s
-' "$github_evidence_client_secret"
+    printf 'GITHUB_EVIDENCE_CLIENT_ID=%s\n' "$github_evidence_client_id"
+    printf 'GITHUB_EVIDENCE_CLIENT_SECRET=%s\n' "$github_evidence_client_secret"
   fi
   cat "$provider_env"
 } >"$next_env"

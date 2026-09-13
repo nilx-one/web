@@ -93,6 +93,15 @@ async fn main() {
         "GITHUB_EVIDENCE_CLIENT_SECRET",
         "GitHub evidence connection",
     );
+    if github_browser_oauth
+        .as_ref()
+        .zip(github_evidence_oauth.as_ref())
+        .is_some_and(|(auth, evidence)| auth.client_id == evidence.client_id)
+    {
+        panic!(
+            "GitHub browser authentication and evidence access must use different OAuth clients"
+        );
+    }
     let github_evidence_cipher = ProviderSecretCipher::from_hex_key(
         &env::var("GITHUB_EVIDENCE_ENCRYPTION_KEY")
             .expect("GITHUB_EVIDENCE_ENCRYPTION_KEY must be configured"),

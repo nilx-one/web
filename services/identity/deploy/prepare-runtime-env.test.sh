@@ -91,6 +91,18 @@ if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
 fi
 
 {
+  printf '%s\n' 'TELOXIDE_TOKEN=github-shared-client'
+  printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=shared-client'
+  printf '%s\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'
+  printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=shared-client'
+  printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_SECRET=github-evidence-secret'
+} >"$provider"
+if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
+  echo "shared GitHub auth/evidence OAuth client unexpectedly succeeded" >&2
+  exit 1
+fi
+
+{
   printf '%s\n' 'TELOXIDE_TOKEN=github-missing-pair'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=github-auth-client'
 } >"$provider"

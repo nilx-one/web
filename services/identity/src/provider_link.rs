@@ -64,6 +64,36 @@ impl ProviderLinkRepository {
             return Ok(ProviderLinkOutcome::IdentityMissing);
         }
 
+        let evidence_table_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'github_evidence_connections')",
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        if provider.provider == IdentityProvider::Github && evidence_table_exists {
+            if let Some(existing_pub_dress) = sqlx::query_scalar::<_, String>(
+                "SELECT pub_dress FROM github_evidence_connections WHERE github_user_id = ?",
+            )
+            .bind(&provider.subject)
+            .fetch_optional(&mut *transaction)
+            .await?
+                && existing_pub_dress != pub_dress.as_str()
+            {
+                transaction.commit().await?;
+                return Ok(ProviderLinkOutcome::ProviderAlreadyLinked);
+            }
+            if let Some(existing_subject) = sqlx::query_scalar::<_, String>(
+                "SELECT github_user_id FROM github_evidence_connections WHERE pub_dress = ?",
+            )
+            .bind(pub_dress.as_str())
+            .fetch_optional(&mut *transaction)
+            .await?
+                && existing_subject != provider.subject
+            {
+                transaction.commit().await?;
+                return Ok(ProviderLinkOutcome::ProviderTypeAlreadyLinked);
+            }
+        }
+
         if let Some(existing_pub_dress) = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM identity_providers WHERE provider = ? AND provider_subject = ?",
         )
@@ -165,7 +195,9 @@ mod tests {
     use std::str::FromStr;
 
     use super::{ProviderLinkOutcome, ProviderLinkRepository};
-    use crate::{IdentityProvider, IdentityRepository, ProviderIdentity, PubDress};
+    use crate::{
+        GithubEvidenceRepository, IdentityProvider, IdentityRepository, ProviderIdentity, PubDress,
+    };
 
     async fn register_bond(
         identities: &IdentityRepository,
@@ -281,6 +313,56 @@ mod tests {
                 .unlink(&bond, IdentityProvider::Github)
                 .await
                 .expect("idempotent absence")
+        );
+    }
+
+    #[tokio::test]
+    async fn github_provider_binding_cannot_drift_from_existing_evidence_account() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider link repository");
+        let _evidence = GithubEvidenceRepository::connect(&database_url)
+            .await
+            .expect("GitHub evidence repository");
+        let first = register_bond(&identities, "0x0sky", "evidence-first").await;
+        let second = register_bond(&identities, "0x1sky", "evidence-second").await;
+
+        sqlx::query(
+            "INSERT INTO github_evidence_connections \
+             (pub_dress, github_user_id, login, profile_url, avatar_url, encrypted_access_token, connection_state, connected_at, refreshed_at) \
+             VALUES (?, '42', 'evidence-user', 'https://github.com/evidence-user', 'https://avatars.example/42', X'01', 'connected', 1, 1)",
+        )
+        .bind(first.as_str())
+        .execute(&links.pool)
+        .await
+        .expect("evidence fixture");
+
+        assert_eq!(
+            links
+                .link(&first, &ProviderIdentity::github(43))
+                .await
+                .expect("different account for evidence owner"),
+            ProviderLinkOutcome::ProviderTypeAlreadyLinked
+        );
+        assert_eq!(
+            links
+                .link(&second, &ProviderIdentity::github(42))
+                .await
+                .expect("evidence account on another Bond"),
+            ProviderLinkOutcome::ProviderAlreadyLinked
+        );
+        assert_eq!(
+            links
+                .link(&first, &ProviderIdentity::github(42))
+                .await
+                .expect("matching account"),
+            ProviderLinkOutcome::Linked
         );
     }
 
