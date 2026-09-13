@@ -1,0 +1,72 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Fix GitHub provider settings tests
+
+on:
+  push:
+    branches:
+      - feature/github-provider-settings
+    paths:
+      - .github/workflows/fix-github-provider-settings-tests.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/github-provider-settings
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Align direct-view fixtures with service-backed provider truth
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('packages/product-app/src/features/map/authenticated-map-home-view.test.tsx')
+          text = path.read_text()
+
+          old = '''    ...(overrides.connectedProviders === undefined\n      ? {}\n      : { connectedProviders: overrides.connectedProviders }),\n'''
+          new = '''    connectedProviders: overrides.connectedProviders ?? [],\n'''
+          if text.count(old) != 1:
+              raise SystemExit('expected renderView connectedProviders fixture')
+          text = text.replace(old, new, 1)
+
+          old = '''    expect(\n      screen.getByRole("link", { name: "Connect Discord" }),\n    ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");\n    expect(screen.getAllByText("Not connected")).toHaveLength(2);\n'''
+          new = '''    expect(\n      screen.getByRole("link", { name: "Connect Discord" }),\n    ).toHaveAttribute("href", "/auth?provider=discord&intent=connect");\n    expect(\n      screen.getByRole("link", { name: "Connect GitHub" }),\n    ).toHaveAttribute("href", "/auth?provider=github&intent=connect");\n    expect(screen.getAllByText("Not connected")).toHaveLength(3);\n'''
+          if text.count(old) != 1:
+              raise SystemExit('expected three-provider route assertion site')
+          text = text.replace(old, new, 1)
+
+          old = '''    expect(screen.getByText("Connected")).toBeVisible();\n    expect(screen.getByText("Not connected")).toBeVisible();\n    // Connected: reachable and detachable. Unconnected: connectable.\n'''
+          new = '''    expect(screen.getByText("Connected")).toBeVisible();\n    expect(screen.getAllByText("Not connected")).toHaveLength(2);\n    // Connected: reachable and detachable. Unconnected: connectable.\n'''
+          if text.count(old) != 1:
+              raise SystemExit('expected unconnected cardinality assertion')
+          text = text.replace(old, new, 1)
+
+          old = '''    expect(screen.getByRole("link", { name: "Connect Discord" })).toBeVisible();\n\n    fireEvent.click(\n'''
+          new = '''    expect(screen.getByRole("link", { name: "Connect Discord" })).toBeVisible();\n    expect(screen.getByRole("link", { name: "Connect GitHub" })).toBeVisible();\n\n    fireEvent.click(\n'''
+          if text.count(old) != 1:
+              raise SystemExit('expected GitHub connect assertion insertion point')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+          pnpm exec prettier --write packages/product-app/src/features/map/authenticated-map-home-view.test.tsx
+          pnpm vitest run packages/product-app/src/features/map/authenticated-map-home-view.test.tsx
+      - name: Remove workflow and commit test alignment
+        run: |
+          rm .github/workflows/fix-github-provider-settings-tests.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test: align provider settings fixtures"
+          git push origin HEAD:feature/github-provider-settings
