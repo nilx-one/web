@@ -23,7 +23,7 @@ jobs:
       - name: Apply source transformation
         run: python3 scripts/apply-github-auth-provider.py
       - name: Format Rust sources
-        run: cargo fmt --all
+        run: cargo fmt --manifest-path services/identity/Cargo.toml --all
       - name: Remove temporary transformation machinery
         run: |
           rm -f scripts/apply-github-auth-provider.py
