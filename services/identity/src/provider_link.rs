@@ -39,9 +39,11 @@ impl ProviderLinkRepository {
             .max_connections(max_connections)
             .connect_with(options)
             .await?;
-        sqlx::raw_sql(include_str!("../migrations/0011_provider_type_cardinality.sql"))
-            .execute(&pool)
-            .await?;
+        sqlx::raw_sql(include_str!(
+            "../migrations/0011_provider_type_cardinality.sql"
+        ))
+        .execute(&pool)
+        .await?;
         Ok(Self { pool })
     }
 
