@@ -29,9 +29,11 @@ sh "$prepare" "$runtime" "$provider"
 
 native_first="$(value_of NATIVE_AUTH_SECRET "$runtime")"
 pepper_first="$(value_of PASSWORD_PEPPER "$runtime")"
+evidence_key_first="$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")"
 [ "${#native_first}" -ge 32 ]
 [ "${#pepper_first}" -ge 32 ]
 [ "$native_first" != "$pepper_first" ]
+[ "${#evidence_key_first}" -eq 64 ]
 [ "$(value_of TELOXIDE_TOKEN "$runtime")" = first-token ]
 [ "$(stat -c '%a' "$runtime")" = 600 ]
 
@@ -44,6 +46,8 @@ pepper_first="$(value_of PASSWORD_PEPPER "$runtime")"
   printf '%s\n' 'DISCORD_CLIENT_SECRET=discord-secret'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=github-auth-client'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'
+  printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=github-evidence-client'
+  printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_SECRET=github-evidence-secret'
 } >"$provider"
 sh "$prepare" "$runtime" "$provider"
 
@@ -57,6 +61,9 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of DISCORD_CLIENT_SECRET "$runtime")" = discord-secret ]
 [ "$(value_of GITHUB_AUTH_CLIENT_ID "$runtime")" = github-auth-client ]
 [ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]
+[ "$(value_of GITHUB_EVIDENCE_CLIENT_ID "$runtime")" = github-evidence-client ]
+[ "$(value_of GITHUB_EVIDENCE_CLIENT_SECRET "$runtime")" = github-evidence-secret ]
+[ "$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")" = "$evidence_key_first" ]
 
 {
   printf '%s\n' 'TELOXIDE_TOKEN=third-token'
@@ -70,6 +77,30 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
 [ "$(value_of GITHUB_AUTH_CLIENT_ID "$runtime")" = github-auth-client ]
 [ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]
+[ "$(value_of GITHUB_EVIDENCE_CLIENT_ID "$runtime")" = github-evidence-client ]
+[ "$(value_of GITHUB_EVIDENCE_CLIENT_SECRET "$runtime")" = github-evidence-secret ]
+[ "$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")" = "$evidence_key_first" ]
+
+{
+  printf '%s\n' 'TELOXIDE_TOKEN=github-evidence-missing-pair'
+  printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=github-evidence-client'
+} >"$provider"
+if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
+  echo "incomplete GitHub evidence OAuth credentials unexpectedly succeeded" >&2
+  exit 1
+fi
+
+{
+  printf '%s\n' 'TELOXIDE_TOKEN=github-shared-client'
+  printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=shared-client'
+  printf '%s\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'
+  printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=shared-client'
+  printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_SECRET=github-evidence-secret'
+} >"$provider"
+if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
+  echo "shared GitHub auth/evidence OAuth client unexpectedly succeeded" >&2
+  exit 1
+fi
 
 {
   printf '%s\n' 'TELOXIDE_TOKEN=github-missing-pair'
@@ -86,6 +117,15 @@ fi
 } >"$provider"
 if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
   echo "incomplete Telegram browser OAuth credentials unexpectedly succeeded" >&2
+  exit 1
+fi
+
+{
+  printf '%s\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'
+  printf '%s\n' 'GITHUB_EVIDENCE_ENCRYPTION_KEY=not-allowed'
+} >"$provider"
+if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
+  echo "GitHub evidence encryption-key override unexpectedly succeeded" >&2
   exit 1
 fi
 
