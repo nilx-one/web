@@ -1,0 +1,14 @@
+{
+  "name": "@nilx-one/narration-webllm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser-host.ts"
+  },
+  "dependencies": {
+    "@mlc-ai/web-llm": "0.2.84",
+    "@nilx-one/narration-contract": "workspace:*"
+  }
+}
