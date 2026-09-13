@@ -39,6 +39,11 @@ impl ProviderLinkRepository {
             .max_connections(max_connections)
             .connect_with(options)
             .await?;
+        sqlx::raw_sql(include_str!(
+            "../migrations/0011_provider_type_cardinality.sql"
+        ))
+        .execute(&pool)
+        .await?;
         Ok(Self { pool })
     }
 
@@ -276,6 +281,35 @@ mod tests {
                 .unlink(&bond, IdentityProvider::Github)
                 .await
                 .expect("idempotent absence")
+        );
+    }
+
+    #[tokio::test]
+    async fn initialized_provider_link_storage_enforces_provider_type_cardinality_directly() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider link repository");
+        let bond = register_bond(&identities, "0x0sky", "db-boundary").await;
+
+        links
+            .link(&bond, &ProviderIdentity::github(1))
+            .await
+            .expect("first GitHub link");
+        let duplicate = sqlx::query(
+            "INSERT INTO identity_providers (provider, provider_subject, pub_dress) VALUES ('github', '2', ?)",
+        )
+        .bind(bond.as_str())
+        .execute(&links.pool)
+        .await;
+        assert!(
+            duplicate.is_err(),
+            "database must reject a second GitHub account for one Bond"
         );
     }
 
