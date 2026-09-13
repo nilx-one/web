@@ -25,10 +25,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-      - name: Prepare temporary source transform
+      - name: Prepare temporary source transforms
         run: |
           python - <<'PY'
           from pathlib import Path
+
           path = Path('.github/scripts/apply-github-evidence-wiring.py')
           text = path.read_text().replace(
               'if text.count(old) != 1:',
@@ -53,6 +54,14 @@ jobs:
           text = text.replace(
               "    + '''          if [ -n \"$GITHUB_EVIDENCE_CLIENT_ID\" ] && [ -n \"$GITHUB_EVIDENCE_CLIENT_SECRET\" ]; then",
               "    + r'''          if [ -n \"$GITHUB_EVIDENCE_CLIENT_ID\" ] && [ -n \"$GITHUB_EVIDENCE_CLIENT_SECRET\" ]; then",
+              1,
+          )
+          path.write_text(text)
+
+          path = Path('.github/scripts/fix-github-evidence-clippy.py')
+          text = path.read_text().replace(
+              'assert_eq!(config.api_root.as_str(), "http://127.0.0.1:4101/");',
+              'assert_eq!(config.endpoints.api_root.as_str(), "http://127.0.0.1:4101/");',
               1,
           )
           path.write_text(text)
