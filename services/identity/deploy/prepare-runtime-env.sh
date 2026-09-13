@@ -56,6 +56,7 @@ validate_pair() {
 
 native_auth_secret="$(read_existing_value NATIVE_AUTH_SECRET)"
 password_pepper="$(read_existing_value PASSWORD_PEPPER)"
+github_evidence_encryption_key="$(read_existing_value GITHUB_EVIDENCE_ENCRYPTION_KEY)"
 
 if [ "${#native_auth_secret}" -lt 32 ]; then
   native_auth_secret="$(generate_secret)"
@@ -63,12 +64,16 @@ fi
 if [ "${#password_pepper}" -lt 32 ] || [ "$password_pepper" = "$native_auth_secret" ]; then
   password_pepper="$(generate_secret)"
 fi
+if [ "${#github_evidence_encryption_key}" -ne 64 ] || ! printf '%s' "$github_evidence_encryption_key" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+  github_evidence_encryption_key="$(generate_secret)"
+fi
 
 [ "${#native_auth_secret}" -ge 32 ]
 [ "${#password_pepper}" -ge 32 ]
 [ "$native_auth_secret" != "$password_pepper" ]
+[ "${#github_evidence_encryption_key}" -eq 64 ]
 
-if grep -Eq '^(NATIVE_AUTH_SECRET|PASSWORD_PEPPER)=' "$provider_env"; then
+if grep -Eq '^(NATIVE_AUTH_SECRET|PASSWORD_PEPPER|GITHUB_EVIDENCE_ENCRYPTION_KEY)=' "$provider_env"; then
   echo "provider environment must not override server-owned native authentication secrets" >&2
   exit 1
 fi
@@ -113,12 +118,28 @@ else
 fi
 validate_pair "GitHub browser OAuth" "$github_auth_client_id" "$github_auth_client_secret"
 
+github_evidence_client_id="$(read_provider_value GITHUB_EVIDENCE_CLIENT_ID)"
+github_evidence_client_secret="$(read_provider_value GITHUB_EVIDENCE_CLIENT_SECRET)"
+github_evidence_from_provider=false
+if [ -n "$github_evidence_client_id" ] || [ -n "$github_evidence_client_secret" ]; then
+  github_evidence_from_provider=true
+else
+  github_evidence_client_id="$(read_existing_value GITHUB_EVIDENCE_CLIENT_ID)"
+  github_evidence_client_secret="$(read_existing_value GITHUB_EVIDENCE_CLIENT_SECRET)"
+fi
+validate_pair "GitHub evidence OAuth" "$github_evidence_client_id" "$github_evidence_client_secret"
+if [ -n "$github_auth_client_id" ] && [ -n "$github_evidence_client_id" ] && [ "$github_auth_client_id" = "$github_evidence_client_id" ]; then
+  echo "GitHub browser authentication and evidence access must use different OAuth clients" >&2
+  exit 1
+fi
+
 next_env="$(mktemp "$runtime_dir/.runtime.env.XXXXXX")"
 trap 'rm -f "$next_env"' EXIT HUP INT TERM
 
 {
   printf 'NATIVE_AUTH_SECRET=%s\n' "$native_auth_secret"
   printf 'PASSWORD_PEPPER=%s\n' "$password_pepper"
+  printf 'GITHUB_EVIDENCE_ENCRYPTION_KEY=%s\n' "$github_evidence_encryption_key"
   if [ "$telegram_oidc_from_provider" = false ] && [ -n "$telegram_oidc_client_id" ]; then
     printf 'TELEGRAM_OIDC_CLIENT_ID=%s\n' "$telegram_oidc_client_id"
     printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$telegram_oidc_client_secret"
@@ -126,6 +147,10 @@ trap 'rm -f "$next_env"' EXIT HUP INT TERM
   if [ "$github_auth_from_provider" = false ] && [ -n "$github_auth_client_id" ]; then
     printf 'GITHUB_AUTH_CLIENT_ID=%s\n' "$github_auth_client_id"
     printf 'GITHUB_AUTH_CLIENT_SECRET=%s\n' "$github_auth_client_secret"
+  fi
+  if [ "$github_evidence_from_provider" = false ] && [ -n "$github_evidence_client_id" ]; then
+    printf 'GITHUB_EVIDENCE_CLIENT_ID=%s\n' "$github_evidence_client_id"
+    printf 'GITHUB_EVIDENCE_CLIENT_SECRET=%s\n' "$github_evidence_client_secret"
   fi
   cat "$provider_env"
 } >"$next_env"
