@@ -104,6 +104,13 @@ validate_pair "Discord OAuth" "$discord_client_id" "$discord_client_secret"
 
 github_auth_client_id="$(read_provider_value GITHUB_AUTH_CLIENT_ID)"
 github_auth_client_secret="$(read_provider_value GITHUB_AUTH_CLIENT_SECRET)"
+github_auth_from_provider=false
+if [ -n "$github_auth_client_id" ] || [ -n "$github_auth_client_secret" ]; then
+  github_auth_from_provider=true
+else
+  github_auth_client_id="$(read_existing_value GITHUB_AUTH_CLIENT_ID)"
+  github_auth_client_secret="$(read_existing_value GITHUB_AUTH_CLIENT_SECRET)"
+fi
 validate_pair "GitHub browser OAuth" "$github_auth_client_id" "$github_auth_client_secret"
 
 next_env="$(mktemp "$runtime_dir/.runtime.env.XXXXXX")"
@@ -115,6 +122,10 @@ trap 'rm -f "$next_env"' EXIT HUP INT TERM
   if [ "$telegram_oidc_from_provider" = false ] && [ -n "$telegram_oidc_client_id" ]; then
     printf 'TELEGRAM_OIDC_CLIENT_ID=%s\n' "$telegram_oidc_client_id"
     printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$telegram_oidc_client_secret"
+  fi
+  if [ "$github_auth_from_provider" = false ] && [ -n "$github_auth_client_id" ]; then
+    printf 'GITHUB_AUTH_CLIENT_ID=%s\n' "$github_auth_client_id"
+    printf 'GITHUB_AUTH_CLIENT_SECRET=%s\n' "$github_auth_client_secret"
   fi
   cat "$provider_env"
 } >"$next_env"
