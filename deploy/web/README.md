@@ -38,6 +38,27 @@ The image contains:
 
 Each deployed host selects exactly one runtime root through `CLIENT_ROOT`. This allows `web`, `telegram`, and `discord` to advance independently while reusing the same verified artifact for a given commit.
 
+## Model artifacts
+
+Local narration loads a model from this host, not from a third party. `deploy/web/bootstrap-models.sh` places one, the way `bootstrap-basemap.sh` places the basemap:
+
+```sh
+MODEL_ROOT=/srv/models MODEL_ID=Qwen3-0.6B-q4f16_1-MLC MODEL_REVISION=1 \
+  sh deploy/web/bootstrap-models.sh
+```
+
+It fetches the chat config, the tokenizer, the artifact manifest, every weight shard and the compiled model library; checks each shard against the size its manifest declares; writes everything atomically into `$MODEL_ROOT/<model_id>/resolve/<revision>/`; and leaves a `manifest.json` carrying the total download size, the shard list, SRI hashes for the config, tokenizer and library, the upstream sources, and the notices those sources require. A revision that already exists is left alone.
+
+The path is not decorative. WebLLM appends `resolve/main/` to any model URL that does not already name a revision, so serving from `…/resolve/<revision>/` both satisfies that rule and gives a directory whose contents never change — which is why Caddy serves `/models/*` as `immutable`, and why re-acquiring a model after a browser evicts it costs a cache hit rather than the whole download.
+
+Why this host rather than a bucket, for now:
+
+- same origin as the app, so no third party learns who is loading an avatar and nothing has to be negotiated with CORS;
+- no new vendor, credentials, or bill, on a path that already carries a large third-party asset;
+- an immutable revision path is exactly what a CDN would want later, so putting one in front of `/models/*` is a configuration change rather than a redesign.
+
+`deploy/web/check-models-public.sh` is the public smoke: the manifest answers for the model asked for, the chat config answers, and the library answers and is served immutable. Both scripts are covered by `.test.sh` neighbours that mock `curl`, and CI runs them with the other deployment scripts.
+
 ## Deployment
 
 `Deploy Production` is the only manual production entry point.
