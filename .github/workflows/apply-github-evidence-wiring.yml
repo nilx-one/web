@@ -1,0 +1,396 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Apply GitHub evidence runtime wiring
+
+on:
+  push:
+    branches:
+      - feature/github-evidence-connection
+    paths:
+      - .github/workflows/apply-github-evidence-wiring.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/github-evidence-connection
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - name: Apply runtime, storage, and deploy wiring
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Evidence module: own its schema, reuse the established native-session contract locally,
+          # and revoke any exchanged credential that is rejected before persistence.
+          path = Path('services/identity/src/github_evidence.rs')
+          text = path.read_text()
+          text = text.replace(
+              '    IdentityRepository, NativeAuthConfig, OAuthClientCredentials, ProviderSecretCipher, PubDress,\n    SecretDigester,\n};\nuse crate::browser_web_auth::authenticated_native_session;\n',
+              '    IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,\n    ProviderSecretCipher, PubDress, SecretDigester,\n};\n',
+              1,
+          )
+          text = text.replace(
+              'const EVIDENCE_TRANSACTION_COOKIE: &str = "__Host-ox1_github_evidence";\n',
+              'const EVIDENCE_TRANSACTION_COOKIE: &str = "__Host-ox1_github_evidence";\nconst SESSION_COOKIE: &str = "__Host-ox1_session";\n',
+              1,
+          )
+          old = '''        let pool = SqlitePoolOptions::new()
+            .max_connections(max_connections)
+            .connect_with(options)
+            .await?;
+        Ok(Self { pool })
+'''
+          new = '''        let pool = SqlitePoolOptions::new()
+            .max_connections(max_connections)
+            .connect_with(options)
+            .await?;
+        sqlx::raw_sql(include_str!("../migrations/0012_github_evidence_connection.sql"))
+            .execute(&pool)
+            .await?;
+        Ok(Self { pool })
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected evidence repository connect site')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '        .append_pair("code_challenge_method", "S256")\n        .append_pair("prompt", "select_account");\n',
+              '        .append_pair("code_challenge_method", "S256");\n',
+              1,
+          )
+          old = '''    if !token.scope.trim().is_empty() {
+        return callback_failure("github_evidence_scope_rejected");
+    }
+'''
+          new = '''    if !token.scope.trim().is_empty() {
+        let _ = revoke_token(&state, credentials, &token.access_token).await;
+        return callback_failure("github_evidence_scope_rejected");
+    }
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected token scope rejection site')
+          text = text.replace(old, new, 1)
+          old = '''    if !inspection.scopes.is_empty() {
+        return callback_failure("github_evidence_scope_rejected");
+    }
+'''
+          new = '''    if !inspection.scopes.is_empty() {
+        let _ = revoke_token(&state, credentials, &token.access_token).await;
+        return callback_failure("github_evidence_scope_rejected");
+    }
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected inspection scope rejection site')
+          text = text.replace(old, new, 1)
+          old = '''        Err(error) => {
+            tracing::error!(%error, "GitHub evidence token encryption failed");
+            return callback_failure("github_evidence_unavailable");
+        }
+'''
+          new = '''        Err(error) => {
+            tracing::error!(%error, "GitHub evidence token encryption failed");
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
+            return callback_failure("github_evidence_unavailable");
+        }
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected encryption rejection site')
+          text = text.replace(old, new, 1)
+          old = '''        Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch) => {
+            callback_failure("github_evidence_identity_mismatch")
+        }
+        Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected) => {
+            callback_failure("github_evidence_account_in_use")
+        }
+        Ok(GithubEvidenceConnectOutcome::BondMissing) => {
+            callback_failure("native_authentication_required")
+        }
+        Err(error) => {
+            tracing::error!(%error, "GitHub evidence connection persistence failed");
+            callback_failure("github_evidence_unavailable")
+        }
+'''
+          new = '''        Ok(GithubEvidenceConnectOutcome::ProviderIdentityMismatch) => {
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
+            callback_failure("github_evidence_identity_mismatch")
+        }
+        Ok(GithubEvidenceConnectOutcome::GithubAccountAlreadyConnected) => {
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
+            callback_failure("github_evidence_account_in_use")
+        }
+        Ok(GithubEvidenceConnectOutcome::BondMissing) => {
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
+            callback_failure("native_authentication_required")
+        }
+        Err(error) => {
+            tracing::error!(%error, "GitHub evidence connection persistence failed");
+            let _ = revoke_token(&state, credentials, &token.access_token).await;
+            callback_failure("github_evidence_unavailable")
+        }
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected persistence outcome site')
+          text = text.replace(old, new, 1)
+          marker = '''fn read_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
+'''
+          helper = '''async fn authenticated_native_session(
+    repository: &IdentityRepository,
+    native_auth: &NativeAuthConfig,
+    headers: &HeaderMap,
+    now: u64,
+) -> Option<IdentityRecord> {
+    let token = read_cookie(headers, SESSION_COOKIE)?;
+    let hash = native_auth
+        .secret_digester()
+        .digest("native-session", &token);
+    repository.find_native_session(&hash, now).await.ok()?
+}
+
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('expected cookie helper insertion site')
+          text = text.replace(marker, helper + marker, 1)
+          path.write_text(text)
+
+          # Main runtime wiring. Evidence OAuth is a separate client from sign-in auth.
+          path = Path('services/identity/src/main.rs')
+          text = path.read_text()
+          text = text.replace(
+              '    DecimalU64, DiscordOAuthClient, GeoCoordinate, IdentityRecord, IdentityRepository,\n    NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,\n    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth,\n    location_control_router, public_api, role_for_pub_dress,\n',
+              '    DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig,\n    GithubEvidenceRepository, IdentityRecord, IdentityRepository, NativeAuthConfig,\n    OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher,\n    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, github_evidence,\n    location_control_router, public_api, role_for_pub_dress,\n',
+              1,
+          )
+          old = '''    let github_browser_oauth = oauth_credentials_from_environment(
+        "GITHUB_AUTH_CLIENT_ID",
+        "GITHUB_AUTH_CLIENT_SECRET",
+        "GitHub browser authentication",
+    );
+'''
+          new = old + '''    let github_evidence_oauth = oauth_credentials_from_environment(
+        "GITHUB_EVIDENCE_CLIENT_ID",
+        "GITHUB_EVIDENCE_CLIENT_SECRET",
+        "GitHub evidence connection",
+    );
+    let github_evidence_cipher = ProviderSecretCipher::from_hex_key(
+        &env::var("GITHUB_EVIDENCE_ENCRYPTION_KEY")
+            .expect("GITHUB_EVIDENCE_ENCRYPTION_KEY must be configured"),
+    )
+    .expect("GITHUB_EVIDENCE_ENCRYPTION_KEY must be a 32-byte hexadecimal key");
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected GitHub auth env site')
+          text = text.replace(old, new, 1)
+          old = '''    let provider_links = ProviderLinkRepository::connect(&database_url)
+        .await
+        .expect("provider link database connection must initialize");
+'''
+          new = old + '''    let github_evidence_connections = GithubEvidenceRepository::connect(&database_url)
+        .await
+        .expect("GitHub evidence database connection must initialize");
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected provider repository site')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '            public_origin,\n            telegram_browser_oauth,\n',
+              '            public_origin.clone(),\n            telegram_browser_oauth,\n',
+              1,
+          )
+          marker = '''    let public_api = public_api::router(repository.clone());
+'''
+          evidence = '''    let github_evidence_api = github_evidence::router(
+        repository.clone(),
+        github_evidence_connections,
+        native_auth.clone(),
+        GithubEvidenceConfig::new(
+            public_origin,
+            github_evidence_oauth,
+            github_evidence_cipher,
+        ),
+    );
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('expected public API site')
+          text = text.replace(marker, evidence + marker, 1)
+          text = text.replace(
+              '    .merge(provider_api)\n    .merge(public_api);\n',
+              '    .merge(provider_api)\n    .merge(github_evidence_api)\n    .merge(public_api);\n',
+              1,
+          )
+          path.write_text(text)
+
+          # Runtime env: encryption key is server-owned and generated/preserved locally.
+          path = Path('services/identity/deploy/prepare-runtime-env.sh')
+          text = path.read_text()
+          text = text.replace(
+              'native_auth_secret="$(read_existing_value NATIVE_AUTH_SECRET)"\npassword_pepper="$(read_existing_value PASSWORD_PEPPER)"\n',
+              'native_auth_secret="$(read_existing_value NATIVE_AUTH_SECRET)"\npassword_pepper="$(read_existing_value PASSWORD_PEPPER)"\ngithub_evidence_encryption_key="$(read_existing_value GITHUB_EVIDENCE_ENCRYPTION_KEY)"\n',
+              1,
+          )
+          text = text.replace(
+              'if [ "${#password_pepper}" -lt 32 ] || [ "$password_pepper" = "$native_auth_secret" ]; then\n  password_pepper="$(generate_secret)"\nfi\n',
+              'if [ "${#password_pepper}" -lt 32 ] || [ "$password_pepper" = "$native_auth_secret" ]; then\n  password_pepper="$(generate_secret)"\nfi\nif [ "${#github_evidence_encryption_key}" -ne 64 ] || ! printf \'%s\' "$github_evidence_encryption_key" | grep -Eq \'^[0-9a-fA-F]{64}$\'; then\n  github_evidence_encryption_key="$(generate_secret)"\nfi\n',
+              1,
+          )
+          text = text.replace(
+              '[ "$native_auth_secret" != "$password_pepper" ]\n\nif grep -Eq \'^(NATIVE_AUTH_SECRET|PASSWORD_PEPPER)=\' "$provider_env"; then\n',
+              '[ "$native_auth_secret" != "$password_pepper" ]\n[ "${#github_evidence_encryption_key}" -eq 64 ]\n\nif grep -Eq \'^(NATIVE_AUTH_SECRET|PASSWORD_PEPPER|GITHUB_EVIDENCE_ENCRYPTION_KEY)=\' "$provider_env"; then\n',
+              1,
+          )
+          old = '''validate_pair "GitHub browser OAuth" "$github_auth_client_id" "$github_auth_client_secret"
+
+next_env='''
+          new = '''validate_pair "GitHub browser OAuth" "$github_auth_client_id" "$github_auth_client_secret"
+
+github_evidence_client_id="$(read_provider_value GITHUB_EVIDENCE_CLIENT_ID)"
+github_evidence_client_secret="$(read_provider_value GITHUB_EVIDENCE_CLIENT_SECRET)"
+github_evidence_from_provider=false
+if [ -n "$github_evidence_client_id" ] || [ -n "$github_evidence_client_secret" ]; then
+  github_evidence_from_provider=true
+else
+  github_evidence_client_id="$(read_existing_value GITHUB_EVIDENCE_CLIENT_ID)"
+  github_evidence_client_secret="$(read_existing_value GITHUB_EVIDENCE_CLIENT_SECRET)"
+fi
+validate_pair "GitHub evidence OAuth" "$github_evidence_client_id" "$github_evidence_client_secret"
+
+next_env='''
+          if text.count(old) != 1:
+              raise SystemExit('expected GitHub auth validation site')
+          text = text.replace(old, new, 1)
+          text = text.replace(
+              '  printf \'PASSWORD_PEPPER=%s\\n\' "$password_pepper"\n',
+              '  printf \'PASSWORD_PEPPER=%s\\n\' "$password_pepper"\n  printf \'GITHUB_EVIDENCE_ENCRYPTION_KEY=%s\\n\' "$github_evidence_encryption_key"\n',
+              1,
+          )
+          marker = '''  cat "$provider_env"
+'''
+          preserved = '''  if [ "$github_evidence_from_provider" = false ] && [ -n "$github_evidence_client_id" ]; then
+    printf 'GITHUB_EVIDENCE_CLIENT_ID=%s\n' "$github_evidence_client_id"
+    printf 'GITHUB_EVIDENCE_CLIENT_SECRET=%s\n' "$github_evidence_client_secret"
+  fi
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('expected provider env append site')
+          text = text.replace(marker, preserved + marker, 1)
+          path.write_text(text)
+
+          # Deploy/runtime tests.
+          path = Path('services/identity/deploy/prepare-runtime-env.test.sh')
+          text = path.read_text()
+          text = text.replace(
+              'pepper_first="$(value_of PASSWORD_PEPPER "$runtime")"\n',
+              'pepper_first="$(value_of PASSWORD_PEPPER "$runtime")"\nevidence_key_first="$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")"\n',
+              1,
+          )
+          text = text.replace(
+              '[ "$native_first" != "$pepper_first" ]\n',
+              '[ "$native_first" != "$pepper_first" ]\n[ "${#evidence_key_first}" -eq 64 ]\n',
+              1,
+          )
+          text = text.replace(
+              "  printf '%s\\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'\n",
+              "  printf '%s\\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'\n  printf '%s\\n' 'GITHUB_EVIDENCE_CLIENT_ID=github-evidence-client'\n  printf '%s\\n' 'GITHUB_EVIDENCE_CLIENT_SECRET=github-evidence-secret'\n",
+              1,
+          )
+          text = text.replace(
+              '[ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]\n',
+              '[ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]\n[ "$(value_of GITHUB_EVIDENCE_CLIENT_ID "$runtime")" = github-evidence-client ]\n[ "$(value_of GITHUB_EVIDENCE_CLIENT_SECRET "$runtime")" = github-evidence-secret ]\n[ "$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")" = "$evidence_key_first" ]\n',
+              1,
+          )
+          needle = '[ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]\n\n{\n  printf \'%s\\n\' \'TELOXIDE_TOKEN=github-missing-pair\'\n'
+          replacement = '[ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]\n[ "$(value_of GITHUB_EVIDENCE_CLIENT_ID "$runtime")" = github-evidence-client ]\n[ "$(value_of GITHUB_EVIDENCE_CLIENT_SECRET "$runtime")" = github-evidence-secret ]\n[ "$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")" = "$evidence_key_first" ]\n\n{\n  printf \'%s\\n\' \'TELOXIDE_TOKEN=github-evidence-missing-pair\'\n  printf \'%s\\n\' \'GITHUB_EVIDENCE_CLIENT_ID=github-evidence-client\'\n} >"$provider"\nif sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then\n  echo "incomplete GitHub evidence OAuth credentials unexpectedly succeeded" >&2\n  exit 1\nfi\n\n{\n  printf \'%s\\n\' \'TELOXIDE_TOKEN=github-missing-pair\'\n'
+          if text.count(needle) != 1:
+              raise SystemExit('expected evidence preservation test insertion site')
+          text = text.replace(needle, replacement, 1)
+          needle = '''{
+  printf '%s\n' 'TELOXIDE_TOKEN=attempted-override'
+  printf '%s\n' 'NATIVE_AUTH_SECRET=not-allowed'
+} >"$provider"
+'''
+          replacement = '''{
+  printf '%s\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'
+  printf '%s\n' 'GITHUB_EVIDENCE_ENCRYPTION_KEY=not-allowed'
+} >"$provider"
+if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
+  echo "GitHub evidence encryption-key override unexpectedly succeeded" >&2
+  exit 1
+fi
+
+''' + needle
+          if text.count(needle) != 1:
+              raise SystemExit('expected server secret override test site')
+          text = text.replace(needle, replacement, 1)
+          path.write_text(text)
+
+          # Example contract for local/manual environments.
+          path = Path('services/identity/deploy/env.example')
+          text = path.read_text()
+          text += '\nGITHUB_EVIDENCE_CLIENT_ID=replace-with-dedicated-read-only-github-oauth-client-id\nGITHUB_EVIDENCE_CLIENT_SECRET=replace-with-dedicated-read-only-github-oauth-client-secret\nGITHUB_EVIDENCE_ENCRYPTION_KEY=replace-with-64-hex-character-server-owned-key\n'
+          path.write_text(text)
+
+          # Deployment transport for the distinct evidence OAuth app. Encryption key stays server-side.
+          path = Path('.github/workflows/deploy-identity-service.yml')
+          text = path.read_text()
+          text = text.replace(
+              '      GITHUB_AUTH_CLIENT_SECRET:\n        required: false\n',
+              '      GITHUB_AUTH_CLIENT_SECRET:\n        required: false\n      GITHUB_EVIDENCE_CLIENT_SECRET:\n        required: false\n',
+              1,
+          )
+          text = text.replace(
+              '      GITHUB_AUTH_CLIENT_SECRET: ${{ secrets.GITHUB_AUTH_CLIENT_SECRET }}\n',
+              '      GITHUB_AUTH_CLIENT_SECRET: ${{ secrets.GITHUB_AUTH_CLIENT_SECRET }}\n      GITHUB_EVIDENCE_CLIENT_ID: ${{ vars.GITHUB_EVIDENCE_CLIENT_ID }}\n      GITHUB_EVIDENCE_CLIENT_SECRET: ${{ secrets.GITHUB_EVIDENCE_CLIENT_SECRET }}\n',
+              1,
+          )
+          old = '''          if [ -n "$GITHUB_AUTH_CLIENT_ID" ] || [ -n "$GITHUB_AUTH_CLIENT_SECRET" ]; then
+            test -n "$GITHUB_AUTH_CLIENT_ID"
+            test -n "$GITHUB_AUTH_CLIENT_SECRET"
+          fi
+'''
+          new = old + '''          if [ -n "$GITHUB_EVIDENCE_CLIENT_ID" ] || [ -n "$GITHUB_EVIDENCE_CLIENT_SECRET" ]; then
+            test -n "$GITHUB_EVIDENCE_CLIENT_ID"
+            test -n "$GITHUB_EVIDENCE_CLIENT_SECRET"
+          fi
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected deploy validation GitHub auth site')
+          text = text.replace(old, new, 1)
+          old = '''          if [ -n "$GITHUB_AUTH_CLIENT_ID" ] && [ -n "$GITHUB_AUTH_CLIENT_SECRET" ]; then
+            printf 'GITHUB_AUTH_CLIENT_ID=%s\n' "$GITHUB_AUTH_CLIENT_ID" >>"$provider_file"
+            printf 'GITHUB_AUTH_CLIENT_SECRET=%s\n' "$GITHUB_AUTH_CLIENT_SECRET" >>"$provider_file"
+          fi
+'''
+          new = old + '''          if [ -n "$GITHUB_EVIDENCE_CLIENT_ID" ] && [ -n "$GITHUB_EVIDENCE_CLIENT_SECRET" ]; then
+            printf 'GITHUB_EVIDENCE_CLIENT_ID=%s\n' "$GITHUB_EVIDENCE_CLIENT_ID" >>"$provider_file"
+            printf 'GITHUB_EVIDENCE_CLIENT_SECRET=%s\n' "$GITHUB_EVIDENCE_CLIENT_SECRET" >>"$provider_file"
+          fi
+'''
+          if text.count(old) != 1:
+              raise SystemExit('expected deploy provider file GitHub auth site')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+
+          cargo fmt --manifest-path services/identity/Cargo.toml --all
+          cargo test --manifest-path services/identity/Cargo.toml
+          cargo clippy --manifest-path services/identity/Cargo.toml --all-targets -- -D warnings
+          sh services/identity/deploy/prepare-runtime-env.test.sh
+          git diff --check
+
+      - name: Commit verified wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add services/identity/Cargo.toml services/identity/Cargo.lock \
+            services/identity/src/github_evidence.rs services/identity/src/main.rs \
+            services/identity/deploy/prepare-runtime-env.sh \
+            services/identity/deploy/prepare-runtime-env.test.sh \
+            services/identity/deploy/env.example .github/workflows/deploy-identity-service.yml
+          git commit -m "feat: wire GitHub evidence capability into identity runtime"
+          git push origin HEAD:feature/github-evidence-connection
