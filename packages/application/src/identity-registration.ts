@@ -1,6 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type {
+  BondProviderConnections,
+  BondProviderType,
+} from "./bond-providers";
+
 /**
  * The avatar studies this client can choose and render. Identity responses may
  * carry a newer model id; preserve that explicit choice opaquely instead of
@@ -220,7 +225,21 @@ export type BrowserProviderLinkResult =
         | "authentication-required"
         | "provider-proof-required"
         | "provider-already-linked"
+        | "provider-type-already-linked"
         | "session-changed";
+    }
+  | { kind: "service-unavailable" };
+
+export type BrowserProviderConnectionsResult =
+  | { kind: "available"; connections: BondProviderConnections }
+  | { kind: "authentication-required" }
+  | { kind: "service-unavailable" };
+
+export type BrowserProviderDisconnectResult =
+  | { kind: "disconnected"; provider: BondProviderType }
+  | {
+      kind: "rejected";
+      reason: "authentication-required" | "not-connected";
     }
   | { kind: "service-unavailable" };
 
@@ -294,6 +313,15 @@ export interface IdentityAccessPort {
   linkBrowserProvider?(
     expectedPubDress: string,
   ): Promise<BrowserProviderLinkResult>;
+  /** Authenticated browser projection of the provider bindings this Bond owns. */
+  readBrowserProviderConnections?(): Promise<BrowserProviderConnectionsResult>;
+  /**
+   * Removes only the 0x1 binding. The external provider account is outside this
+   * port and cannot be deleted by this operation.
+   */
+  disconnectBrowserProvider?(
+    provider: BondProviderType,
+  ): Promise<BrowserProviderDisconnectResult>;
 }
 
 export class ResolvePubDress {
@@ -526,6 +554,40 @@ export class LinkBrowserProvider {
     }
     try {
       return await link.call(this.identity, expectedPubDress);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class ReadBrowserProviderConnections {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(): Promise<BrowserProviderConnectionsResult> {
+    const read = this.identity.readBrowserProviderConnections;
+    if (read === undefined) {
+      return { kind: "service-unavailable" };
+    }
+    try {
+      return await read.call(this.identity);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class DisconnectBrowserProvider {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(
+    provider: BondProviderType,
+  ): Promise<BrowserProviderDisconnectResult> {
+    const disconnect = this.identity.disconnectBrowserProvider;
+    if (disconnect === undefined) {
+      return { kind: "service-unavailable" };
+    }
+    try {
+      return await disconnect.call(this.identity, provider);
     } catch {
       return { kind: "service-unavailable" };
     }

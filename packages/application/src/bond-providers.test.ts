@@ -20,6 +20,7 @@ const DISCORD = {
   provider: "discord",
   externalId: "84759302847591038",
 } as const;
+const GITHUB = { provider: "github" } as const;
 
 describe("Bond provider attachment", () => {
   it("attaches a provider account to a Bond that has none", () => {
@@ -50,10 +51,14 @@ describe("Bond provider attachment", () => {
     if (first.kind !== "attached") return;
 
     const second = connectBondProvider(first.connections, DISCORD);
+    expect(second.kind).toBe("attached");
+    if (second.kind !== "attached") return;
 
-    expect(second).toEqual({
+    const third = connectBondProvider(second.connections, GITHUB);
+
+    expect(third).toEqual({
       kind: "attached",
-      connections: [TELEGRAM, DISCORD],
+      connections: [TELEGRAM, DISCORD, GITHUB],
     });
   });
 
@@ -86,6 +91,7 @@ describe("Bond provider attachment", () => {
     expect(bondProviderConnection([TELEGRAM], "telegram")).toEqual(TELEGRAM);
     expect(bondProviderConnection([TELEGRAM], "discord")).toBeUndefined();
     expect(isBondProviderType("telegram")).toBe(true);
+    expect(isBondProviderType("github")).toBe(true);
     expect(isBondProviderType("matrix")).toBe(false);
   });
 });
@@ -117,6 +123,12 @@ describe("Bond provider open targets", () => {
         { kind: "provider-page", url: "https://discord.com/channels/@me" },
       ],
     );
+  });
+
+  it("opens an identity-only GitHub binding without inventing a login", () => {
+    expect(bondProviderOpenTargets(GITHUB)).toEqual([
+      { kind: "provider-page", url: "https://github.com" },
+    ]);
   });
 
   it("falls back to the provider itself when the address is unusable", () => {

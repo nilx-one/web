@@ -132,6 +132,14 @@ pub fn router(
             "/api/v1/auth/browser/provider/link",
             post(link_pending_provider),
         )
+        .route(
+            "/api/v1/auth/browser/provider/connections",
+            get(read_provider_connections),
+        )
+        .route(
+            "/api/v1/auth/browser/provider/disconnect",
+            post(disconnect_provider),
+        )
         .with_state(state)
 }
 
@@ -169,13 +177,17 @@ impl BrowserProvider {
         }
     }
 
+    const fn identity_provider(self) -> IdentityProvider {
+        match self {
+            Self::Telegram => IdentityProvider::Telegram,
+            Self::Discord => IdentityProvider::Discord,
+            Self::Github => IdentityProvider::Github,
+        }
+    }
+
     fn identity(self, subject: String) -> ProviderIdentity {
         ProviderIdentity {
-            provider: match self {
-                Self::Telegram => IdentityProvider::Telegram,
-                Self::Discord => IdentityProvider::Discord,
-                Self::Github => IdentityProvider::Github,
-            },
+            provider: self.identity_provider(),
             subject,
         }
     }
@@ -664,6 +676,9 @@ async fn finish_provider_callback(
             Ok(ProviderLinkOutcome::ProviderAlreadyLinked) => {
                 callback_failure("provider_already_linked")
             }
+            Ok(ProviderLinkOutcome::ProviderTypeAlreadyLinked) => {
+                callback_failure("provider_type_already_linked")
+            }
             Ok(ProviderLinkOutcome::IdentityMissing) => {
                 callback_failure("connect_identity_changed")
             }
@@ -852,6 +867,117 @@ struct BrowserProviderLinkResponse {
     provider: &'static str,
 }
 
+#[derive(Debug, Serialize)]
+struct BrowserProviderConnectionsResponse {
+    state: &'static str,
+    providers: Vec<String>,
+}
+
+async fn read_provider_connections(
+    State(state): State<BrowserAuthState>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(now) = now_unix_seconds() else {
+        return service_unavailable();
+    };
+    let Some(native_identity) = native_session_identity(&state, &headers, now).await else {
+        return no_store_error(
+            StatusCode::UNAUTHORIZED,
+            "native_authentication_required",
+            "Sign in to the Bond before reading provider connections.",
+        );
+    };
+    let pub_dress = match native_identity.pub_dress.parse::<PubDress>() {
+        Ok(value) => value,
+        Err(_) => return service_unavailable(),
+    };
+    match state.provider_links.list(&pub_dress).await {
+        Ok(providers) => no_store_json(
+            StatusCode::OK,
+            BrowserProviderConnectionsResponse {
+                state: "available",
+                providers,
+            },
+        ),
+        Err(error) => {
+            tracing::error!(%error, "browser provider connection lookup failed");
+            service_unavailable()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct BrowserProviderDisconnectRequest {
+    provider: String,
+}
+
+#[derive(Debug, Serialize)]
+struct BrowserProviderDisconnectResponse {
+    state: &'static str,
+    provider: &'static str,
+}
+
+async fn disconnect_provider(
+    State(state): State<BrowserAuthState>,
+    headers: HeaderMap,
+    Json(request): Json<BrowserProviderDisconnectRequest>,
+) -> Response {
+    if headers
+        .get(CSRF_HEADER)
+        .and_then(|value| value.to_str().ok())
+        != Some("1")
+    {
+        return no_store_error(
+            StatusCode::FORBIDDEN,
+            "csrf_protection_required",
+            "This state-changing request requires the 0x1 CSRF header.",
+        );
+    }
+    let Some(provider) = BrowserProvider::parse(&request.provider) else {
+        return no_store_error(
+            StatusCode::BAD_REQUEST,
+            "unsupported_provider",
+            "That provider is not supported by this identity service.",
+        );
+    };
+    let Some(now) = now_unix_seconds() else {
+        return service_unavailable();
+    };
+    let Some(native_identity) = native_session_identity(&state, &headers, now).await else {
+        return no_store_error(
+            StatusCode::UNAUTHORIZED,
+            "native_authentication_required",
+            "Sign in to the Bond before disconnecting a provider.",
+        );
+    };
+    let pub_dress = match native_identity.pub_dress.parse::<PubDress>() {
+        Ok(value) => value,
+        Err(_) => return service_unavailable(),
+    };
+    match state
+        .provider_links
+        .unlink(&pub_dress, provider.identity_provider())
+        .await
+    {
+        Ok(true) => no_store_json(
+            StatusCode::OK,
+            BrowserProviderDisconnectResponse {
+                state: "disconnected",
+                provider: provider.as_str(),
+            },
+        ),
+        Ok(false) => no_store_error(
+            StatusCode::NOT_FOUND,
+            "provider_not_connected",
+            "That provider is not connected to this Bond.",
+        ),
+        Err(error) => {
+            tracing::error!(%error, "browser provider disconnect failed");
+            service_unavailable()
+        }
+    }
+}
+
 async fn link_pending_provider(
     State(state): State<BrowserAuthState>,
     headers: HeaderMap,
@@ -927,6 +1053,11 @@ async fn link_pending_provider(
             StatusCode::CONFLICT,
             "provider_already_linked",
             "That provider account is already linked to another Bond.",
+        ),
+        Ok(ProviderLinkOutcome::ProviderTypeAlreadyLinked) => no_store_error(
+            StatusCode::CONFLICT,
+            "provider_type_already_linked",
+            "This Bond already has an account for that provider.",
         ),
         Ok(ProviderLinkOutcome::IdentityMissing) => no_store_error(
             StatusCode::UNAUTHORIZED,

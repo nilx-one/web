@@ -509,3 +509,80 @@ describe("Avaia profile transport", () => {
     });
   });
 });
+
+describe("Browser provider connection transport", () => {
+  it("reads canonical provider bindings from the authenticated service", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        state: "available",
+        providers: ["telegram", "github"],
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readBrowserProviderConnections?.()).resolves.toEqual({
+      kind: "available",
+      connections: [{ provider: "telegram" }, { provider: "github" }],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/auth/browser/provider/connections",
+      {
+        cache: "no-store",
+        credentials: "same-origin",
+      },
+    );
+  });
+
+  it("disconnects only the selected provider binding with CSRF protection", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        state: "disconnected",
+        provider: "github",
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(
+      adapter.disconnectBrowserProvider?.("github"),
+    ).resolves.toEqual({
+      kind: "disconnected",
+      provider: "github",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/auth/browser/provider/disconnect",
+      {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ provider: "github" }),
+      },
+    );
+  });
+
+  it("rejects malformed provider lists instead of inventing connection truth", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        state: "available",
+        providers: ["github", "matrix"],
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readBrowserProviderConnections?.()).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+  });
+});

@@ -14,10 +14,25 @@ describe("Bond providers view state", () => {
     expect(state.rows.map((row) => row.provider)).toEqual([
       "telegram",
       "discord",
+      "github",
     ]);
     expect(state.rows[0]?.status).toBe("Connected");
     expect(state.rows[1]?.status).toBe("Not connected");
+    expect(state.rows[2]?.status).toBe("Not connected");
     expect(state.connectable).toBe(true);
+  });
+
+  it("presents GitHub without inventing an account address", () => {
+    const state = createBondProvidersViewState([{ provider: "github" }]);
+    const github = state.rows.find((row) => row.provider === "github");
+
+    expect(github).toMatchObject({
+      label: "GitHub",
+      glyph: "GH",
+      status: "Connected",
+      openUrl: "https://github.com",
+      openKind: "provider-page",
+    });
   });
 
   it("gives the compact row the attached providers and nothing else", () => {

@@ -8,20 +8,17 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 
-use crate::{ProviderIdentity, PubDress};
+use crate::{IdentityProvider, ProviderIdentity, PubDress};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderLinkOutcome {
     Linked,
     AlreadyLinked,
     ProviderAlreadyLinked,
+    ProviderTypeAlreadyLinked,
     IdentityMissing,
 }
 
-/// Persistence boundary for attaching an already-verified external provider to
-/// an already-authenticated human Bond. It deliberately cannot create either
-/// side of the relationship: provider proof and Bond authentication happen
-/// before this adapter is called.
 #[derive(Clone, Debug)]
 pub struct ProviderLinkRepository {
     pool: SqlitePool,
@@ -78,9 +75,20 @@ impl ProviderLinkRepository {
             });
         }
 
+        let same_provider_subject = sqlx::query_scalar::<_, String>(
+            "SELECT provider_subject FROM identity_providers WHERE pub_dress = ? AND provider = ? LIMIT 1",
+        )
+        .bind(pub_dress.as_str())
+        .bind(provider.provider.as_str())
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if same_provider_subject.is_some() {
+            transaction.commit().await?;
+            return Ok(ProviderLinkOutcome::ProviderTypeAlreadyLinked);
+        }
+
         let insert = sqlx::query(
-            "INSERT INTO identity_providers (provider, provider_subject, pub_dress) \
-             VALUES (?, ?, ?) ON CONFLICT(provider, provider_subject) DO NOTHING",
+            "INSERT INTO identity_providers (provider, provider_subject, pub_dress) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
         )
         .bind(provider.provider.as_str())
         .bind(&provider.subject)
@@ -92,8 +100,6 @@ impl ProviderLinkRepository {
             return Ok(ProviderLinkOutcome::Linked);
         }
 
-        // A concurrent callback may have claimed the provider between the
-        // lookup and insert. Re-read the authoritative binding before deciding.
         let existing_pub_dress = sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM identity_providers WHERE provider = ? AND provider_subject = ?",
         )
@@ -101,12 +107,51 @@ impl ProviderLinkRepository {
         .bind(&provider.subject)
         .fetch_optional(&mut *transaction)
         .await?;
+        if let Some(existing_pub_dress) = existing_pub_dress {
+            transaction.commit().await?;
+            return Ok(if existing_pub_dress == pub_dress.as_str() {
+                ProviderLinkOutcome::AlreadyLinked
+            } else {
+                ProviderLinkOutcome::ProviderAlreadyLinked
+            });
+        }
+
+        let same_provider_subject = sqlx::query_scalar::<_, String>(
+            "SELECT provider_subject FROM identity_providers WHERE pub_dress = ? AND provider = ? LIMIT 1",
+        )
+        .bind(pub_dress.as_str())
+        .bind(provider.provider.as_str())
+        .fetch_optional(&mut *transaction)
+        .await?;
         transaction.commit().await?;
-        Ok(match existing_pub_dress.as_deref() {
-            Some(value) if value == pub_dress.as_str() => ProviderLinkOutcome::AlreadyLinked,
-            Some(_) => ProviderLinkOutcome::ProviderAlreadyLinked,
-            None => ProviderLinkOutcome::IdentityMissing,
+        Ok(if same_provider_subject.is_some() {
+            ProviderLinkOutcome::ProviderTypeAlreadyLinked
+        } else {
+            ProviderLinkOutcome::IdentityMissing
         })
+    }
+
+    pub async fn list(&self, pub_dress: &PubDress) -> Result<Vec<String>, sqlx::Error> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT provider FROM identity_providers WHERE pub_dress = ? ORDER BY CASE provider WHEN 'telegram' THEN 0 WHEN 'discord' THEN 1 WHEN 'github' THEN 2 ELSE 99 END",
+        )
+        .bind(pub_dress.as_str())
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    pub async fn unlink(
+        &self,
+        pub_dress: &PubDress,
+        provider: IdentityProvider,
+    ) -> Result<bool, sqlx::Error> {
+        let deleted =
+            sqlx::query("DELETE FROM identity_providers WHERE pub_dress = ? AND provider = ?")
+                .bind(pub_dress.as_str())
+                .bind(provider.as_str())
+                .execute(&self.pool)
+                .await?;
+        Ok(deleted.rows_affected() > 0)
     }
 }
 
@@ -115,7 +160,29 @@ mod tests {
     use std::str::FromStr;
 
     use super::{ProviderLinkOutcome, ProviderLinkRepository};
-    use crate::{IdentityRepository, ProviderIdentity, PubDress};
+    use crate::{IdentityProvider, IdentityRepository, ProviderIdentity, PubDress};
+
+    async fn register_bond(
+        identities: &IdentityRepository,
+        pub_dress: &str,
+        seed: &str,
+    ) -> PubDress {
+        let bond = PubDress::from_str(pub_dress).expect("valid Bond");
+        identities
+            .register_native(
+                &bond,
+                "hash",
+                1,
+                format!("recovery-{seed}").as_bytes(),
+                format!("challenge-{seed}").as_bytes(),
+                format!("idempotency-{seed}").as_bytes(),
+                100,
+                200,
+            )
+            .await
+            .expect("native Bond registration");
+        bond
+    }
 
     #[tokio::test]
     async fn verified_provider_can_only_link_to_an_existing_human_bond() {
@@ -128,20 +195,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond = PubDress::from_str("0x0sky").expect("valid Bond");
-        identities
-            .register_native(
-                &bond,
-                "hash",
-                1,
-                b"recovery",
-                b"challenge",
-                b"idempotency",
-                100,
-                200,
-            )
-            .await
-            .expect("native Bond registration");
+        let bond = register_bond(&identities, "0x0sky", "first").await;
 
         assert_eq!(
             links
@@ -174,13 +228,54 @@ mod tests {
             ProviderLinkOutcome::Linked
         );
         assert_eq!(
-            identities
-                .find_by_provider(&ProviderIdentity::github(75973992))
+            links.list(&bond).await.expect("provider list"),
+            vec!["telegram".to_owned(), "github".to_owned()]
+        );
+    }
+
+    #[tokio::test]
+    async fn one_bond_has_one_account_per_provider_type_and_can_disconnect_it() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider link repository");
+        let bond = register_bond(&identities, "0x0sky", "one-provider").await;
+
+        assert_eq!(
+            links
+                .link(&bond, &ProviderIdentity::github(1))
                 .await
-                .expect("GitHub provider lookup")
-                .expect("GitHub bound identity")
-                .pub_dress,
-            "0x0sky"
+                .expect("first GitHub link"),
+            ProviderLinkOutcome::Linked
+        );
+        assert_eq!(
+            links
+                .link(&bond, &ProviderIdentity::github(2))
+                .await
+                .expect("second GitHub link"),
+            ProviderLinkOutcome::ProviderTypeAlreadyLinked
+        );
+        assert_eq!(
+            links.list(&bond).await.expect("provider list"),
+            vec!["github".to_owned()]
+        );
+        assert!(
+            links
+                .unlink(&bond, IdentityProvider::Github)
+                .await
+                .expect("unlink")
+        );
+        assert!(links.list(&bond).await.expect("provider list").is_empty());
+        assert!(
+            !links
+                .unlink(&bond, IdentityProvider::Github)
+                .await
+                .expect("idempotent absence")
         );
     }
 
@@ -195,35 +290,10 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let first = PubDress::from_str("0x0sky").expect("valid first Bond");
-        let second = PubDress::from_str("0x1sky").expect("valid second Bond");
-        identities
-            .register_native(
-                &first,
-                "hash",
-                1,
-                b"recovery-1",
-                b"challenge-1",
-                b"idempotency-1",
-                100,
-                200,
-            )
-            .await
-            .expect("first Bond registration");
-        identities
-            .register_native(
-                &second,
-                "hash",
-                1,
-                b"recovery-2",
-                b"challenge-2",
-                b"idempotency-2",
-                101,
-                201,
-            )
-            .await
-            .expect("second Bond registration");
+        let first = register_bond(&identities, "0x0sky", "first").await;
+        let second = register_bond(&identities, "0x1sky", "second").await;
         let provider = ProviderIdentity::discord("42");
+
         assert_eq!(
             links.link(&first, &provider).await.expect("first link"),
             ProviderLinkOutcome::Linked
