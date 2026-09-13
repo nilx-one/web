@@ -275,6 +275,14 @@ importers:
         specifier: ^6.6.0
         version: 6.6.0
 
+  packages/narration-contract: {}
+
+  packages/narration-templates:
+    dependencies:
+      '@nilx-one/narration-contract':
+        specifier: workspace:*
+        version: link:../narration-contract
+
   packages/presence-contract: {}
 
   packages/presence-geo:
