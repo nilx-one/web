@@ -120,9 +120,14 @@ export async function describeDownload(
  */
 function modelUrl(model: string): string {
   const withSlash = model.endsWith("/") ? model : `${model}/`;
-  return /.+\/resolve\/.+\//.test(withSlash)
-    ? withSlash
-    : `${withSlash}resolve/main/`;
+  const segments = withSlash.split("/");
+  const resolveIndex = segments.lastIndexOf("resolve");
+  const namesRevision =
+    resolveIndex >= 0 &&
+    resolveIndex + 1 < segments.length - 1 &&
+    segments[resolveIndex + 1] !== "";
+
+  return namesRevision ? withSlash : `${withSlash}resolve/main/`;
 }
 
 /** The production host. Construction downloads nothing and starts no worker. */
