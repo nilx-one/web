@@ -1,7 +1,7 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: Apply GitHub evidence runtime wiring
+name: Apply GitHub evidence acceptance tests
 
 on:
   push:
@@ -9,8 +9,7 @@ on:
       - feature/github-evidence-connection
     paths:
       - .github/workflows/apply-github-evidence-wiring.yml
-      - .github/scripts/apply-github-evidence-wiring.py
-      - .github/scripts/fix-github-evidence-clippy.py
+      - .github/scripts/add-github-evidence-acceptance-tests.py
 
 permissions:
   contents: write
@@ -25,51 +24,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
-      - name: Prepare temporary source transforms
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('.github/scripts/apply-github-evidence-wiring.py')
-          text = path.read_text().replace(
-              'if text.count(old) != 1:',
-              'if text.count(old) < 1:',
-              1,
-          )
-          text = text.replace(
-              "needle = '''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-override'",
-              "needle = r'''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-override'",
-              1,
-          )
-          text = text.replace(
-              "    '''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'",
-              "    r'''{\n  printf '%s\\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'",
-              1,
-          )
-          text = text.replace(
-              "old = '''          if [ -n \"$GITHUB_AUTH_CLIENT_ID\" ] && [ -n \"$GITHUB_AUTH_CLIENT_SECRET\" ]; then",
-              "old = r'''          if [ -n \"$GITHUB_AUTH_CLIENT_ID\" ] && [ -n \"$GITHUB_AUTH_CLIENT_SECRET\" ]; then",
-              1,
-          )
-          text = text.replace(
-              "    + '''          if [ -n \"$GITHUB_EVIDENCE_CLIENT_ID\" ] && [ -n \"$GITHUB_EVIDENCE_CLIENT_SECRET\" ]; then",
-              "    + r'''          if [ -n \"$GITHUB_EVIDENCE_CLIENT_ID\" ] && [ -n \"$GITHUB_EVIDENCE_CLIENT_SECRET\" ]; then",
-              1,
-          )
-          path.write_text(text)
-
-          path = Path('.github/scripts/fix-github-evidence-clippy.py')
-          text = path.read_text().replace(
-              'assert_eq!(config.api_root.as_str(), "http://127.0.0.1:4101/");',
-              'assert_eq!(config.endpoints.api_root.as_str(), "http://127.0.0.1:4101/");',
-              1,
-          )
-          path.write_text(text)
-          PY
-      - name: Apply product transforms
-        run: |
-          python .github/scripts/apply-github-evidence-wiring.py
-          python .github/scripts/fix-github-evidence-clippy.py
+      - name: Apply acceptance tests
+        run: python .github/scripts/add-github-evidence-acceptance-tests.py
       - name: Validate identity capability
         run: |
           cargo fmt --manifest-path services/identity/Cargo.toml --all
@@ -77,13 +33,10 @@ jobs:
           cargo clippy --manifest-path services/identity/Cargo.toml --all-targets -- -D warnings
           sh services/identity/deploy/prepare-runtime-env.test.sh
           git diff --check
-      - name: Commit verified non-workflow source changes
+      - name: Commit verified acceptance tests
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add services/identity/Cargo.toml services/identity/Cargo.lock \
-            services/identity/src/github_evidence.rs services/identity/src/provider_secret.rs \
-            services/identity/src/main.rs services/identity/deploy/prepare-runtime-env.sh \
-            services/identity/deploy/prepare-runtime-env.test.sh services/identity/deploy/env.example
-          git commit -m "feat: wire GitHub evidence capability into identity runtime"
+          git add services/identity/src/github_evidence.rs
+          git commit -m "test: cover GitHub evidence OAuth lifecycle"
           git push origin HEAD:feature/github-evidence-connection
