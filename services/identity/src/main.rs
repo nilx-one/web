@@ -82,6 +82,11 @@ async fn main() {
         "DISCORD_CLIENT_SECRET",
         "Discord authentication",
     );
+    let github_browser_oauth = oauth_credentials_from_environment(
+        "GITHUB_AUTH_CLIENT_ID",
+        "GITHUB_AUTH_CLIENT_SECRET",
+        "GitHub browser authentication",
+    );
     let discord_activity_oauth = discord_credentials.as_ref().map(|credentials| {
         DiscordOAuthClient::new(
             credentials.client_id.clone(),
@@ -107,7 +112,12 @@ async fn main() {
         repository.clone(),
         provider_links,
         native_auth.clone(),
-        BrowserOAuthConfig::new(public_origin, telegram_browser_oauth, discord_credentials),
+        BrowserOAuthConfig::new(
+            public_origin,
+            telegram_browser_oauth,
+            discord_credentials,
+            github_browser_oauth,
+        ),
     );
     let public_api = public_api::router(repository.clone());
     let telegram_activity_verifier =

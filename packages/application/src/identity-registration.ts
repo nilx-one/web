@@ -195,11 +195,12 @@ export type ProviderPasswordResult =
     }
   | { kind: "service-unavailable" };
 
-export type BrowserIdentityProvider = "telegram" | "discord";
+export type BrowserIdentityProvider = "telegram" | "discord" | "github";
 
 export interface BrowserProviderAvailability {
   telegram: boolean;
   discord: boolean;
+  github: boolean;
 }
 
 export type BrowserProviderContextResult =

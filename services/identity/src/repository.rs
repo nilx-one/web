@@ -15,6 +15,7 @@ use crate::{AvaiaPubDress, PubDress, PubDressLabel};
 pub enum IdentityProvider {
     Telegram,
     Discord,
+    Github,
 }
 
 impl IdentityProvider {
@@ -22,6 +23,7 @@ impl IdentityProvider {
         match self {
             Self::Telegram => "telegram",
             Self::Discord => "discord",
+            Self::Github => "github",
         }
     }
 }
@@ -44,6 +46,13 @@ impl ProviderIdentity {
         Self {
             provider: IdentityProvider::Discord,
             subject: user_id.into(),
+        }
+    }
+
+    pub fn github(user_id: u64) -> Self {
+        Self {
+            provider: IdentityProvider::Github,
+            subject: user_id.to_string(),
         }
     }
 }
@@ -146,6 +155,7 @@ impl IdentityRepository {
                 .execute(&self.pool)
                 .await?;
         }
+        self.migrate_provider_catalog().await?;
 
         sqlx::raw_sql(include_str!("../migrations/0003_native_auth.sql"))
             .execute(&self.pool)
@@ -167,6 +177,22 @@ impl IdentityRepository {
         }
         self.migrate_avatar_catalog().await?;
         self.backfill_pub_dress_labels().await?;
+        Ok(())
+    }
+
+    async fn migrate_provider_catalog(&self) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let schema: String = sqlx::query_scalar(
+            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'identity_providers'",
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !schema.contains("'github'") {
+            sqlx::raw_sql(include_str!("../migrations/0010_github_provider.sql"))
+                .execute(&mut *transaction)
+                .await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 

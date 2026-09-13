@@ -159,7 +159,14 @@ function validNativePassword(password: string): boolean {
 }
 
 function providerDisplayName(provider: BrowserIdentityProvider): string {
-  return provider === "telegram" ? "Telegram" : "Discord";
+  switch (provider) {
+    case "telegram":
+      return "Telegram";
+    case "discord":
+      return "Discord";
+    case "github":
+      return "GitHub";
+  }
 }
 
 /** The root only selects between the persistent product foundation and diagnostics. */
@@ -566,11 +573,16 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   // The provider a session was proved through is the one attachment this
   // client can attest to. A Bond's full set of attachments is a service fact
   // no endpoint answers yet, so nothing here invents one.
+  const linkedBrowserProvider =
+    browserProviderLink.data?.kind === "linked"
+      ? browserProviderLink.data.provider
+      : undefined;
   const attestedProvider: BondProviderType | undefined =
     host.kind === "telegram" || host.kind === "discord"
       ? host.kind
-      : browserProviderLink.data?.kind === "linked"
-        ? browserProviderLink.data.provider
+      : linkedBrowserProvider === "telegram" ||
+          linkedBrowserProvider === "discord"
+        ? linkedBrowserProvider
         : undefined;
   const providers = useBondProviderConnections(
     attestedProvider === undefined ? [] : [{ provider: attestedProvider }],
@@ -965,7 +977,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           providerContext?.kind === "none" ||
           providerContext?.kind === "pending"
             ? providerContext.available
-            : { telegram: false, discord: false },
+            : { telegram: false, discord: false, github: false },
         onAuthorize: authorizeBrowserProvider,
         ...(pendingBrowserProvider === undefined
           ? {}
