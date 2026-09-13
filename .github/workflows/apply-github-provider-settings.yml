@@ -1,0 +1,65 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Apply GitHub provider settings slice
+
+on:
+  push:
+    branches:
+      - feature/github-provider-settings
+    paths:
+      - .github/scripts/apply-github-provider-settings.py
+      - .github/workflows/apply-github-provider-settings.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-github-provider-settings
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/github-provider-settings
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply source transformation
+        run: python .github/scripts/apply-github-provider-settings.py
+      - name: Format changed sources
+        run: |
+          cargo fmt --manifest-path services/identity/Cargo.toml --all
+          pnpm exec prettier --write \
+            packages/application/src/bond-providers.ts \
+            packages/application/src/bond-providers.test.ts \
+            packages/application/src/identity-registration.ts \
+            packages/application/src/index.ts \
+            packages/identity-http/src/index.ts \
+            packages/identity-http/src/index.test.ts \
+            packages/product-app/src/index.tsx \
+            packages/product-app/src/features/identity/bond-providers-view-model.ts \
+            packages/product-app/src/features/identity/bond-providers-view-model.test.ts \
+            packages/product-app/src/features/map/authenticated-map-home-view.tsx
+      - name: Remove transform machinery
+        run: |
+          rm .github/scripts/apply-github-provider-settings.py
+          rm .github/workflows/apply-github-provider-settings.yml
+          git diff --check
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: persist Bond provider connections"
+          git push origin HEAD:feature/github-provider-settings
