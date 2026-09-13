@@ -733,6 +733,7 @@ class IdentityHttpAdapter
       response.ok &&
       isRecord(body) &&
       body.state === "disconnected" &&
+      typeof body.provider === "string" &&
       isBondProviderType(body.provider)
     ) {
       return { kind: "disconnected", provider: body.provider };
