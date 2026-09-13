@@ -580,7 +580,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const attestedProvider: BondProviderType | undefined =
     host.kind === "telegram" || host.kind === "discord"
       ? host.kind
-      : linkedBrowserProvider === "telegram" || linkedBrowserProvider === "discord"
+      : linkedBrowserProvider === "telegram" ||
+          linkedBrowserProvider === "discord"
         ? linkedBrowserProvider
         : undefined;
   const providers = useBondProviderConnections(
