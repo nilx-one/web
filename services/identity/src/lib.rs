@@ -8,8 +8,10 @@ pub mod api {
 pub mod browser_web_auth;
 pub mod credentials;
 pub mod discord_oauth;
+pub mod github_evidence;
 pub mod location_control;
 pub mod provider_link;
+pub mod provider_secret;
 pub mod public_api;
 pub mod rate_limit;
 pub mod repository {
@@ -24,6 +26,7 @@ pub use credentials::{
     TokenFactory,
 };
 pub use discord_oauth::{DiscordAccessToken, DiscordOAuthClient, DiscordOAuthError};
+pub use github_evidence::{GithubEvidenceConfig, GithubEvidenceRepository};
 pub use location_control::{
     BondAccessRole, BondLocationRepository, BondLocationRepositoryError, PendingLocationIntent,
     TelegramLocationIntents, location_control_router, role_for_pub_dress,
@@ -33,6 +36,7 @@ pub use ox1_contracts::{
     GeoCoordinateError, PubDress, PubDressError, PubDressLabel, PubDressLabelError,
 };
 pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository};
+pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
 pub use repository::{
     AvaiaConfigurationState, AvaiaIdentityRecord, AvaiaUpdateOutcome, IdentityProvider,
     IdentityRecord, IdentityRepository, NativeCredentialRecord, NativeRegistrationOutcome,
