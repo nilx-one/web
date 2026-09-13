@@ -282,6 +282,23 @@ importers:
         specifier: ^6.6.0
         version: 6.6.0
 
+  packages/narration-contract: {}
+
+  packages/narration-templates:
+    dependencies:
+      '@nilx-one/narration-contract':
+        specifier: workspace:*
+        version: link:../narration-contract
+
+  packages/narration-webllm:
+    dependencies:
+      '@mlc-ai/web-llm':
+        specifier: 0.2.84
+        version: 0.2.84
+      '@nilx-one/narration-contract':
+        specifier: workspace:*
+        version: link:../narration-contract
+
   packages/presence-contract: {}
 
   packages/presence-geo:
@@ -584,6 +601,9 @@ packages:
 
   '@maplibre/vt-pbf@4.3.2':
     resolution: {integrity: sha512-j6p0AdjvAR19Z3XaCysle7A4ZSo08tYOzxD0Y9NQylwPAkwJJeYub5b2eVucdeDh7erhv69DahoLOevDRERRUw==}
+
+  '@mlc-ai/web-llm@0.2.84':
+    resolution: {integrity: sha512-hrOWzK4/nGNmgoRKT8pgVmZZ2oEPpbblIWQOwpqNyvK2dysHw3KVB1gNJOuRcQfKOPhucEhX1NJzXzgMDnwSCQ==}
 
   '@oxc-project/types@0.147.0':
     resolution: {integrity: sha512-IJ3s6ltHLp45S0bh7phkX+gJO7A1Wuz2EaqpAhb8WjqDwbzMiWKHhyyT42tskaWjEYXtHtVCPpnBJVT9+dcRLg==}
@@ -1350,6 +1370,10 @@ packages:
   lodash.transform@4.6.0:
     resolution: {integrity: sha512-LO37ZnhmBVx0GvOU/caQuipEh4GN82TcWv3yHlebGDgOxbxiwwzW5Pcx2AcvpIv2WmvmSMoC492yQFNhy/l/UQ==}
 
+  loglevel@1.9.2:
+    resolution: {integrity: sha512-HgMmCqIJSAKqo68l0rS2AanEWfkxaZ5wNiEFb5ggm08lDs9Xl2KxBlX3PTcaD2chBM1gXAYf491/M2Rv8Jwayg==}
+    engines: {node: '>= 0.6.0'}
+
   lru-cache@11.5.2:
     resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
     engines: {node: 20 || >=22}
@@ -2062,6 +2086,10 @@ snapshots:
       '@types/geojson': 7946.0.16
       pbf: 5.1.2
 
+  '@mlc-ai/web-llm@0.2.84':
+    dependencies:
+      loglevel: 1.9.2
+
   '@oxc-project/types@0.147.0': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.6':
@@ -2750,6 +2778,8 @@ snapshots:
       p-locate: 5.0.0
 
   lodash.transform@4.6.0: {}
+
+  loglevel@1.9.2: {}
 
   lru-cache@11.5.2: {}
 

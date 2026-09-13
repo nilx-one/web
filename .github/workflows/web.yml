@@ -160,9 +160,15 @@ jobs:
             deploy/web/check-public.sh \
             deploy/web/check-public.test.sh \
             deploy/web/check-map-public.sh \
-            deploy/web/check-map-public.test.sh
+            deploy/web/check-map-public.test.sh \
+            deploy/web/bootstrap-models.sh \
+            deploy/web/bootstrap-models.test.sh \
+            deploy/web/check-models-public.sh \
+            deploy/web/check-models-public.test.sh
           sh deploy/web/check-public.test.sh
           sh deploy/web/check-map-public.test.sh
+          sh deploy/web/bootstrap-models.test.sh
+          sh deploy/web/check-models-public.test.sh
       - name: Reuse verified Web host builds
         uses: actions/download-artifact@v4
         with:
