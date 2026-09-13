@@ -64,6 +64,29 @@ describe("describing a download before it starts", () => {
     expect(requested.at(-1)).toContain("/resolve/main/ndarray-cache.json");
   });
 
+  it("preserves an explicit immutable revision without appending main", async () => {
+    const config = narrationAppConfig();
+    const model_list = config.model_list.map((entry) =>
+      entry.model_id === NARRATION_MODEL_ID
+        ? {
+            ...entry,
+            model:
+              "https://example.test/models/Qwen3-0.6B-q4f16_1-MLC/resolve/1/",
+          }
+        : entry,
+    );
+
+    await describeDownload(
+      NARRATION_MODEL_ID,
+      { ...config, model_list },
+      fetchManifest,
+    );
+
+    expect(requested.at(-1)).toBe(
+      "https://example.test/models/Qwen3-0.6B-q4f16_1-MLC/resolve/1/ndarray-cache.json",
+    );
+  });
+
   it("says it does not know rather than guessing a size", async () => {
     await expect(
       describeDownload(NARRATION_MODEL_ID, narrationAppConfig(), () =>
