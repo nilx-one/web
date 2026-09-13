@@ -42,6 +42,8 @@ pepper_first="$(value_of PASSWORD_PEPPER "$runtime")"
   printf '%s\n' 'TELEGRAM_OIDC_CLIENT_SECRET=telegram-secret'
   printf '%s\n' 'DISCORD_CLIENT_ID=1234'
   printf '%s\n' 'DISCORD_CLIENT_SECRET=discord-secret'
+  printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=github-auth-client'
+  printf '%s\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'
 } >"$provider"
 sh "$prepare" "$runtime" "$provider"
 
@@ -53,6 +55,8 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
 [ "$(value_of DISCORD_CLIENT_ID "$runtime")" = 1234 ]
 [ "$(value_of DISCORD_CLIENT_SECRET "$runtime")" = discord-secret ]
+[ "$(value_of GITHUB_AUTH_CLIENT_ID "$runtime")" = github-auth-client ]
+[ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]
 
 {
   printf '%s\n' 'TELOXIDE_TOKEN=third-token'
@@ -64,6 +68,17 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of TELOXIDE_TOKEN "$runtime")" = third-token ]
 [ "$(value_of TELEGRAM_OIDC_CLIENT_ID "$runtime")" = telegram-client ]
 [ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
+[ "$(value_of GITHUB_AUTH_CLIENT_ID "$runtime")" = github-auth-client ]
+[ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]
+
+{
+  printf '%s\n' 'TELOXIDE_TOKEN=github-missing-pair'
+  printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=github-auth-client'
+} >"$provider"
+if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
+  echo "incomplete GitHub browser OAuth credentials unexpectedly succeeded" >&2
+  exit 1
+fi
 
 {
   printf '%s\n' 'TELOXIDE_TOKEN=missing-pair'
