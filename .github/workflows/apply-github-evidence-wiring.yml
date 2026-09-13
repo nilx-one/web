@@ -77,14 +77,13 @@ jobs:
           cargo clippy --manifest-path services/identity/Cargo.toml --all-targets -- -D warnings
           sh services/identity/deploy/prepare-runtime-env.test.sh
           git diff --check
-      - name: Commit verified source changes
+      - name: Commit verified non-workflow source changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add services/identity/Cargo.toml services/identity/Cargo.lock \
             services/identity/src/github_evidence.rs services/identity/src/provider_secret.rs \
             services/identity/src/main.rs services/identity/deploy/prepare-runtime-env.sh \
-            services/identity/deploy/prepare-runtime-env.test.sh \
-            services/identity/deploy/env.example .github/workflows/deploy-identity-service.yml
+            services/identity/deploy/prepare-runtime-env.test.sh services/identity/deploy/env.example
           git commit -m "feat: wire GitHub evidence capability into identity runtime"
           git push origin HEAD:feature/github-evidence-connection
