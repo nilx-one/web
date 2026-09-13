@@ -57,6 +57,16 @@ jobs:
           path.write_text(text)
           PY
           python .github/scripts/apply-github-evidence-wiring.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('services/identity/src/github_evidence.rs')
+          text = path.read_text()
+          old = '.signer\n        .verify(&cookie)\n        .filter(|transaction| transaction.expires_at > now)'
+          new = '.signer\n        .verify::<EvidenceTransaction>(&cookie)\n        .filter(|transaction| transaction.expires_at > now)'
+          if text.count(old) != 1:
+              raise SystemExit('expected evidence transaction verification site')
+          path.write_text(text.replace(old, new, 1))
+          PY
       - name: Validate identity capability
         run: |
           cargo fmt --manifest-path services/identity/Cargo.toml --all
