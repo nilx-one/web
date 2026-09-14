@@ -35,6 +35,18 @@
 			file_server
 		}
 
+		# Telegram Mini App is published below /telegram/, while its build output is
+		# rooted at /srv/telegram-mini-app. Strip the public prefix before file lookup;
+		# otherwise /telegram/assets/* would resolve to /srv/telegram-mini-app/telegram/*.
+		@telegram_root path /telegram
+		redir @telegram_root /telegram/ 308
+
+		handle_path /telegram/* {
+			root * /srv/telegram-mini-app
+			try_files {path} /index.html
+			file_server
+		}
+
 		handle {
 			root * {$CLIENT_ROOT:/srv/site}
 			try_files {path} /index.html
