@@ -63,7 +63,9 @@ jobs:
           package_ready=false
 
           for attempt in $(seq 1 40); do
-            response="$(gh api --method GET               "repos/${GITHUB_REPOSITORY}/actions/workflows/package-web.yml/runs"               -f per_page=100)"
+            response="$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/package-web.yml/runs" \
+              -f per_page=100)"
 
             package_state="$(jq -r --arg sha "$RELEASE_SHA" '
               .workflow_runs
@@ -103,7 +105,11 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
-          jq -n             --arg workload "$WORKLOAD"             --arg image "$CLIENT_IMAGE"             --arg source "$GITHUB_REPOSITORY"             '{
+          jq -n \
+            --arg workload "$WORKLOAD" \
+            --arg image "$CLIENT_IMAGE" \
+            --arg source "$GITHUB_REPOSITORY" \
+            '{
               event_type: "deploy-workload",
               client_payload: {
                 workload: $workload,
