@@ -16,9 +16,9 @@ COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 
 ENV CLIENT_ROOT=/srv/site
 
-EXPOSE 8080
+EXPOSE 1927
 
 HEALTHCHECK --interval=15s --timeout=5s --retries=6 --start-period=5s \
-  CMD wget -q -O - http://127.0.0.1:8080/health >/dev/null || exit 1
+  CMD wget -q -O - http://127.0.0.1:1927/health >/dev/null || exit 1
 
 CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]
