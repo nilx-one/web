@@ -21,8 +21,6 @@ on:
     secrets:
       INFRA_DEPLOY_TOKEN:
         required: true
-      INFRA_ACTIONS_READ_TOKEN:
-        required: true
 
 permissions:
   actions: read
@@ -42,7 +40,6 @@ jobs:
       FORCE_IDENTITY: ${{ inputs.force }}
       IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-identity
       INFRA_DEPLOY_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
-      INFRA_ACTIONS_READ_TOKEN: ${{ secrets.INFRA_ACTIONS_READ_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +53,6 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REQUIRED_IDENTITY_CONTRACT" =~ ^[0-9]+$ ]]
           test -n "$INFRA_DEPLOY_TOKEN"
-          test -n "$INFRA_ACTIONS_READ_TOKEN"
 
       - id: package
         name: Resolve latest verified identity package in release ancestry
@@ -104,7 +100,7 @@ jobs:
 
           echo "package_sha=$package_sha" >>"$GITHUB_OUTPUT"
           echo "IDENTITY_IMAGE=${IMAGE_REPOSITORY}:sha-${package_sha}" >>"$GITHUB_ENV"
-          echo "IDENTITY_RELEASE_SHA=$package_sha" >>"$GITHUB_ENV"
+          echo "IDENTITY_RELEASE_SHA=${package_sha}" >>"$GITHUB_ENV"
 
       - id: dispatch
         name: Request infra identity deployment
@@ -114,17 +110,12 @@ jobs:
           set -Eeuo pipefail
           dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "started_at=$dispatch_started" >>"$GITHUB_OUTPUT"
-          jq -n \
-            --arg workload "nilxone-identity" \
-            --arg image "$IDENTITY_IMAGE" \
-            --arg source "$GITHUB_REPOSITORY" \
-            --arg ref "$RELEASE_SHA" \
-            '{event_type:"deploy-workload",client_payload:{workload:$workload,image:$image,source_repository:$source,ref:$ref}}' |
+          jq -n             --arg workload "nilxone-identity"             --arg image "$IDENTITY_IMAGE"             --arg source "$GITHUB_REPOSITORY"             --arg ref "$RELEASE_SHA"             '{event_type:"deploy-workload",client_payload:{workload:$workload,image:$image,source_repository:$source,ref:$ref}}' |
             gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
 
       - name: Wait for infra deployment
         env:
-          GH_TOKEN: ${{ secrets.INFRA_ACTIONS_READ_TOKEN }}
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
           STARTED_AT: ${{ steps.dispatch.outputs.started_at }}
         run: |
           set -Eeuo pipefail
@@ -156,9 +147,9 @@ jobs:
           {
             echo "### 0x1 identity dependency"
             echo
-            echo "- release request: \`$RELEASE_SHA\`"
-            echo "- required contract: \`$REQUIRED_IDENTITY_CONTRACT\`"
-            echo "- force requested: \`$FORCE_IDENTITY\`"
-            echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
-            echo "- result: \`${{ job.status }}\`"
+            echo "- release request: `$RELEASE_SHA`"
+            echo "- required contract: `$REQUIRED_IDENTITY_CONTRACT`"
+            echo "- force requested: `$FORCE_IDENTITY`"
+            echo "- identity package: `${IDENTITY_RELEASE_SHA:-unknown}`"
+            echo "- result: `${{ job.status }}`"
           } >>"$GITHUB_STEP_SUMMARY"
