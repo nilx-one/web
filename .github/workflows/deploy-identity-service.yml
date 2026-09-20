@@ -22,11 +22,11 @@ on:
       INFRA_DEPLOY_TOKEN:
         required: false
       TELOXIDE_TOKEN:
-        required: true
+        required: false
       TELEGRAM_OIDC_CLIENT_SECRET:
-        required: true
+        required: false
       DISCORD_CLIENT_SECRET:
-        required: true
+        required: false
 
 permissions:
   actions: read
@@ -38,8 +38,6 @@ jobs:
     name: Resolve verified identity package
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: production
     outputs:
       package_sha: ${{ steps.package.outputs.package_sha }}
     env:
@@ -49,6 +47,16 @@ jobs:
       IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-identity
 
     steps:
+      - name: Validate provider credentials
+        env:
+          TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+          TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$TELOXIDE_TOKEN" || { echo "Missing repository secret TELOXIDE_TOKEN." >&2; exit 1; }
+          test -n "$TELEGRAM_OIDC_CLIENT_SECRET" || { echo "Missing repository secret TELEGRAM_OIDC_CLIENT_SECRET." >&2; exit 1; }
+          test -n "$DISCORD_CLIENT_SECRET" || { echo "Missing repository secret DISCORD_CLIENT_SECRET." >&2; exit 1; }
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}

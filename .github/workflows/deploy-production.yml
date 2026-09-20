@@ -3,6 +3,8 @@
 
 name: Deploy Production
 
+run-name: Deploy Production — ${{ inputs.target }}
+
 on:
   workflow_dispatch:
     inputs:
