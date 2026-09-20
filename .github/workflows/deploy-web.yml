@@ -15,35 +15,23 @@ on:
         required: true
         type: string
     secrets:
-      SSH_HOST:
-        required: false
-      SSH_USER:
-        required: false
-      SSH_PRIVATE_KEY:
-        required: false
+      INFRA_DEPLOY_TOKEN:
+        required: true
 
 permissions:
-  actions: read
   contents: read
-  packages: read
+  actions: read
 
 jobs:
   deploy:
-    name: Activate ${{ inputs.target }}
+    name: Request infra activation for ${{ inputs.target }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment:
-      name: production
+    timeout-minutes: 10
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       CLIENT_NAME: ${{ inputs.target }}
       IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web
-      SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USER: ${{ secrets.SSH_USER }}
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      SSH_PORT: ${{ vars.SSH_PORT || '22022' }}
-      CLIENT_DEPLOYMENT_ROOT: ${{ vars.CLIENT_DEPLOYMENT_ROOT || '.local/share/nilx-one' }}
-
+      INFRA_DEPLOY_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,32 +42,18 @@ jobs:
           set -Eeuo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$CLIENT_NAME" =~ ^[a-z0-9-]+$ ]]
-          [[ "$SSH_PORT" =~ ^[0-9]+$ ]]
-          (( SSH_PORT >= 1 && SSH_PORT <= 65535 ))
-          test -n "$SSH_HOST"
-          test -n "$SSH_USER"
-          test -n "$SSH_PRIVATE_KEY"
-          test -n "$CLIENT_DEPLOYMENT_ROOT"
+          test -n "$INFRA_DEPLOY_TOKEN"
 
           jq -e --arg target "$CLIENT_NAME" '.targets[$target]' deploy/web/targets.json >/dev/null
-          client_root="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].root' deploy/web/targets.json)"
-          edge_alias="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].edgeAlias' deploy/web/targets.json)"
-          compat_edge_alias="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].compatEdgeAlias' deploy/web/targets.json)"
-          compose_project="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].composeProject' deploy/web/targets.json)"
-          public_path="$(jq -r --arg target "$CLIENT_NAME" '.targets[$target].publicPath' deploy/web/targets.json)"
-
-          [[ "$client_root" == /srv/* ]]
-          [[ "$edge_alias" =~ ^[a-z0-9-]+$ ]]
-          [[ "$compat_edge_alias" =~ ^[a-z0-9-]+$ ]]
-          [[ "$compose_project" =~ ^[a-z0-9-]+$ ]]
-          [[ "$public_path" == /* ]]
-
-          echo "CLIENT_ROOT=$client_root" >>"$GITHUB_ENV"
-          echo "EDGE_ALIAS=$edge_alias" >>"$GITHUB_ENV"
-          echo "COMPAT_EDGE_ALIAS=$compat_edge_alias" >>"$GITHUB_ENV"
-          echo "COMPOSE_PROJECT_NAME=$compose_project" >>"$GITHUB_ENV"
-          echo "PUBLIC_PATH=$public_path" >>"$GITHUB_ENV"
-          echo "CLIENT_IMAGE=${IMAGE_REPOSITORY}:sha-${RELEASE_SHA}" >>"$GITHUB_ENV"
+          workload=""
+          case "$CLIENT_NAME" in
+            web) workload="nilxone-web" ;;
+            telegram) workload="nilxone-telegram" ;;
+            discord) workload="nilxone-discord" ;;
+            *) echo "Unsupported deployment target: $CLIENT_NAME" >&2; exit 1 ;;
+          esac
+          echo "WORKLOAD=$workload" >>"$GITHUB_ENV"
+          echo "CLIENT_IMAGE=$IMAGE_REPOSITORY:sha-$RELEASE_SHA" >>"$GITHUB_ENV"
 
       - name: Wait for immutable client package
         env:
@@ -89,9 +63,7 @@ jobs:
           package_ready=false
 
           for attempt in $(seq 1 40); do
-            response="$(gh api --method GET \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/package-web.yml/runs" \
-              -f per_page=100)"
+            response="$(gh api --method GET               "repos/${GITHUB_REPOSITORY}/actions/workflows/package-web.yml/runs"               -f per_page=100)"
 
             package_state="$(jq -r --arg sha "$RELEASE_SHA" '
               .workflow_runs
@@ -106,7 +78,7 @@ jobs:
               continue
             fi
 
-            IFS=$'\t' read -r package_status package_conclusion package_url <<<"$package_state"
+            IFS=$'	' read -r package_status package_conclusion package_url <<<"$package_state"
             if [ "$package_status" = completed ]; then
               if [ "$package_conclusion" != success ]; then
                 echo "Package Clients did not succeed for $RELEASE_SHA: $package_conclusion" >&2
@@ -126,173 +98,29 @@ jobs:
             exit 1
           fi
 
-      - uses: docker/setup-buildx-action@v3
-      - name: Authenticate to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify and fetch immutable client package
+      - name: Request infra workload deployment
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
-          docker buildx imagetools inspect "$CLIENT_IMAGE" >/dev/null
-          docker pull "$CLIENT_IMAGE"
-          docker save "$CLIENT_IMAGE" | gzip > "/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz"
-
-      - name: Configure SSH
-        run: |
-          set -Eeuo pipefail
-          install -m 0700 -d "$HOME/.ssh"
-          printf '%s\n' "$SSH_PRIVATE_KEY" >"$HOME/.ssh/id_ed25519"
-          chmod 0600 "$HOME/.ssh/id_ed25519"
-          ssh-keyscan -T 10 -p "$SSH_PORT" -H "$SSH_HOST" >"$HOME/.ssh/known_hosts"
-          test -s "$HOME/.ssh/known_hosts"
-          ssh -o BatchMode=yes -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" true
-
-      - name: Upload immutable package and deployment descriptors
-        run: |
-          set -Eeuo pipefail
-          archive="/tmp/0x1-client-deploy-${RELEASE_SHA}.tar.gz"
-          tar -czf "$archive" -C deploy/web compose.yaml deploy.sh bootstrap-basemap.sh check-public.sh check-map-public.sh
-          scp -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -P "$SSH_PORT" \
-            "$archive" "/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz" \
-            "$SSH_USER@$SSH_HOST:/tmp/"
-
-      - name: Activate client target
-        run: |
-          set -Eeuo pipefail
-          ssh -o IdentitiesOnly=yes -i "$HOME/.ssh/id_ed25519" -p "$SSH_PORT" \
-            "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_ROOT='$CLIENT_DEPLOYMENT_ROOT' CLIENT_NAME='$CLIENT_NAME' CLIENT_ROOT='$CLIENT_ROOT' EDGE_ALIAS='$EDGE_ALIAS' COMPAT_EDGE_ALIAS='$COMPAT_EDGE_ALIAS' COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' PUBLIC_PATH='$PUBLIC_PATH' RELEASE_SHA='$RELEASE_SHA' CLIENT_IMAGE='$CLIENT_IMAGE' bash -s" <<'REMOTE'
-          set -Eeuo pipefail
-
-          deploy_root="$DEPLOY_ROOT"
-          case "$deploy_root" in
-            /*) ;;
-            *) deploy_root="$HOME/$deploy_root" ;;
-          esac
-
-          deploy_path="$deploy_root/$CLIENT_NAME"
-          releases_dir="$deploy_path/releases"
-          release_dir="$releases_dir/$RELEASE_SHA"
-          current_link="$deploy_path/current"
-          previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
-          archive="/tmp/0x1-client-deploy-${RELEASE_SHA}.tar.gz"
-          image_archive="/tmp/0x1-clients-image-${RELEASE_SHA}.tar.gz"
-          map_basemap_path="$deploy_root/shared/map/0.1.0/basemap.pmtiles"
-
-          mkdir -p "$releases_dir"
-          test -w "$releases_dir"
-          test -s "$image_archive"
-          gunzip -c "$image_archive" | docker load >/dev/null
-          rm -f "$image_archive"
-          docker image inspect "$CLIENT_IMAGE" >/dev/null
-
-          rm -rf "$release_dir"
-          mkdir -p "$release_dir"
-          tar -xzf "$archive" -C "$release_dir"
-          rm -f "$archive"
-
-          MAP_BASEMAP_PATH="$map_basemap_path" sh "$release_dir/bootstrap-basemap.sh"
-          test -s "$map_basemap_path"
-
-          printf '%s\n' "$CLIENT_IMAGE" >"$release_dir/.image"
-          printf '%s\n' "$CLIENT_NAME" >"$release_dir/.client-name"
-          printf '%s\n' "$CLIENT_ROOT" >"$release_dir/.client-root"
-          printf '%s\n' "$EDGE_ALIAS" >"$release_dir/.edge-alias"
-          printf '%s\n' "$COMPAT_EDGE_ALIAS" >"$release_dir/.compat-edge-alias"
-          printf '%s\n' "$COMPOSE_PROJECT_NAME" >"$release_dir/.compose-project"
-          printf '%s\n' "$PUBLIC_PATH" >"$release_dir/.public-path"
-          printf '%s\n' "$map_basemap_path" >"$release_dir/.map-basemap-path"
-
-          activate_current() {
-            cd "$release_dir"
-            CLIENT_NAME="$CLIENT_NAME" \
-            CLIENT_IMAGE="$CLIENT_IMAGE" \
-            CLIENT_ROOT="$CLIENT_ROOT" \
-            EDGE_ALIAS="$EDGE_ALIAS" \
-            COMPAT_EDGE_ALIAS="$COMPAT_EDGE_ALIAS" \
-            COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" \
-            MAP_BASEMAP_PATH="$map_basemap_path" \
-            RELEASE_SHA="$RELEASE_SHA" \
-              sh ./deploy.sh
-            CLIENT_NAME="$CLIENT_NAME" \
-            PUBLIC_ORIGIN='https://nilx.one' \
-            PUBLIC_PATH="$PUBLIC_PATH" \
-            HEALTH_RETRY=18 \
-            HEALTH_RETRY_DELAY=5 \
-              sh ./check-public.sh
-            if [ "$CLIENT_NAME" = web ]; then
-              PUBLIC_ORIGIN='https://nilx.one' \
-              MAP_RETRY=18 \
-              MAP_RETRY_DELAY=5 \
-                sh ./check-map-public.sh
-            fi
-          }
-
-          rollback() {
-            [ -n "$previous_release" ] || return 0
-            [ -f "$previous_release/.image" ] || return 0
-
-            previous_image="$(cat "$previous_release/.image")"
-            previous_sha="$(basename "$previous_release")"
-            docker image inspect "$previous_image" >/dev/null 2>&1 || return 0
-
-            if [ -f "$previous_release/.client-name" ]; then
-              previous_name="$(cat "$previous_release/.client-name")"
-              previous_root="$(cat "$previous_release/.client-root")"
-              previous_alias="$(cat "$previous_release/.edge-alias")"
-              previous_compat_alias="$(cat "$previous_release/.compat-edge-alias")"
-              previous_project="$(cat "$previous_release/.compose-project")"
-              previous_map_path="$map_basemap_path"
-              if [ -f "$previous_release/.map-basemap-path" ]; then
-                previous_map_path="$(cat "$previous_release/.map-basemap-path")"
-              fi
-              (
-                cd "$previous_release"
-                CLIENT_NAME="$previous_name" \
-                CLIENT_IMAGE="$previous_image" \
-                CLIENT_ROOT="$previous_root" \
-                EDGE_ALIAS="$previous_alias" \
-                COMPAT_EDGE_ALIAS="$previous_compat_alias" \
-                COMPOSE_PROJECT_NAME="$previous_project" \
-                MAP_BASEMAP_PATH="$previous_map_path" \
-                RELEASE_SHA="$previous_sha" \
-                  sh ./deploy.sh
-              ) || true
-              return 0
-            fi
-
-            if [ "$CLIENT_NAME" = web ]; then
-              (
-                cd "$previous_release"
-                WEB_IMAGE="$previous_image" RELEASE_SHA="$previous_sha" sh ./deploy.sh
-              ) || true
-            fi
-          }
-
-          if ! activate_current; then
-            rollback
-            exit 1
-          fi
-
-          ln -sfn "$release_dir" "$current_link"
-          find "$releases_dir" \
-            -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-            | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf
-          REMOTE
+          jq -n             --arg workload "$WORKLOAD"             --arg image "$CLIENT_IMAGE"             --arg source "$GITHUB_REPOSITORY"             '{
+              event_type: "deploy-workload",
+              client_payload: {
+                workload: $workload,
+                image: $image,
+                source_repository: $source
+              }
+            }' |
+            gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
 
       - name: Publish summary
         if: always()
         run: |
           {
-            echo "### 0x1 client deployment"
+            echo "### 0x1 client deployment request"
             echo
-            echo "- target: \`$CLIENT_NAME\`"
-            echo "- release: \`$RELEASE_SHA\`"
-            echo "- image: \`$CLIENT_IMAGE\`"
-            echo "- edge alias: \`$EDGE_ALIAS\`"
-            echo "- public path: \`$PUBLIC_PATH\`"
-            echo "- result: \`${{ job.status }}\`"
+            echo "- target: `$CLIENT_NAME`"
+            echo "- workload: `$WORKLOAD`"
+            echo "- image: `$CLIENT_IMAGE`"
+            echo "- result: `${{ job.status }}`"
           } >>"$GITHUB_STEP_SUMMARY"
