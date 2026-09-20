@@ -21,6 +21,8 @@ on:
     secrets:
       INFRA_DEPLOY_TOKEN:
         required: true
+      INFRA_ACTIONS_READ_TOKEN:
+        required: true
 
 permissions:
   actions: read
@@ -40,6 +42,7 @@ jobs:
       FORCE_IDENTITY: ${{ inputs.force }}
       IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-identity
       INFRA_DEPLOY_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+      INFRA_ACTIONS_READ_TOKEN: ${{ secrets.INFRA_ACTIONS_READ_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +56,7 @@ jobs:
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REQUIRED_IDENTITY_CONTRACT" =~ ^[0-9]+$ ]]
           test -n "$INFRA_DEPLOY_TOKEN"
+          test -n "$INFRA_ACTIONS_READ_TOKEN"
 
       - id: package
         name: Resolve latest verified identity package in release ancestry
@@ -120,7 +124,7 @@ jobs:
 
       - name: Wait for infra deployment
         env:
-          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+          GH_TOKEN: ${{ secrets.INFRA_ACTIONS_READ_TOKEN }}
           STARTED_AT: ${{ steps.dispatch.outputs.started_at }}
         run: |
           set -Eeuo pipefail
