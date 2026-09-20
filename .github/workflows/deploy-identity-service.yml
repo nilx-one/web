@@ -32,6 +32,8 @@ jobs:
     name: Ensure identity contract ${{ inputs.required_contract }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: production
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       REQUIRED_IDENTITY_CONTRACT: ${{ inputs.required_contract }}
@@ -63,10 +65,10 @@ jobs:
           for attempt in $(seq 1 40); do
             response="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/package-identity-service.yml/runs" -f per_page=100)"
             candidate=""
-            while IFS=$'\t' read -r sha status conclusion url; do
+            while IFS=$'	' read -r sha status conclusion url; do
               [ -n "$sha" ] || continue
               if git merge-base --is-ancestor "$sha" "$RELEASE_SHA"; then
-                candidate="$sha"$'\t'"$status"$'\t'"$conclusion"$'\t'"$url"
+                candidate="$sha"$'	'"$status"$'	'"$conclusion"$'	'"$url"
                 break
               fi
             done < <(jq -r '.workflow_runs[] | [.head_sha, .status, (.conclusion // ""), .html_url] | @tsv' <<<"$response")
@@ -77,7 +79,7 @@ jobs:
               continue
             fi
 
-            IFS=$'\t' read -r package_sha package_status package_conclusion package_url <<<"$candidate"
+            IFS=$'	' read -r package_sha package_status package_conclusion package_url <<<"$candidate"
             if [ "$package_status" = completed ]; then
               if [ "$package_conclusion" != success ]; then
                 echo "Latest identity package in release ancestry failed: $package_conclusion" >&2
@@ -108,12 +110,7 @@ jobs:
           set -Eeuo pipefail
           dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "started_at=$dispatch_started" >>"$GITHUB_OUTPUT"
-          jq -n \
-            --arg workload "nilxone-identity" \
-            --arg image "$IDENTITY_IMAGE" \
-            --arg source "$GITHUB_REPOSITORY" \
-            --arg ref "$RELEASE_SHA" \
-            '{event_type:"deploy-workload",client_payload:{workload:$workload,image:$image,source_repository:$source,ref:$ref}}' |
+          jq -n             --arg workload "nilxone-identity"             --arg image "$IDENTITY_IMAGE"             --arg source "$GITHUB_REPOSITORY"             --arg ref "$RELEASE_SHA"             '{event_type:"deploy-workload",client_payload:{workload:$workload,image:$image,source_repository:$source,ref:$ref}}' |
             gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
 
       - name: Wait for infra deployment
@@ -150,9 +147,9 @@ jobs:
           {
             echo "### 0x1 identity dependency"
             echo
-            echo "- release request: \`$RELEASE_SHA\`"
-            echo "- required contract: \`$REQUIRED_IDENTITY_CONTRACT\`"
-            echo "- force requested: \`$FORCE_IDENTITY\`"
-            echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
-            echo "- result: \`${{ job.status }}\`"
+            echo "- release request: `$RELEASE_SHA`"
+            echo "- required contract: `$REQUIRED_IDENTITY_CONTRACT`"
+            echo "- force requested: `$FORCE_IDENTITY`"
+            echo "- identity package: `${IDENTITY_RELEASE_SHA:-unknown}`"
+            echo "- result: `${{ job.status }}`"
           } >>"$GITHUB_STEP_SUMMARY"
