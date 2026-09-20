@@ -113,6 +113,16 @@ jobs:
           jq -n             --arg workload "nilxone-identity"             --arg image "$IDENTITY_IMAGE"             --arg source "$GITHUB_REPOSITORY"             --arg ref "$RELEASE_SHA"             '{event_type:"deploy-workload",client_payload:{workload:$workload,image:$image,source_repository:$source,ref:$ref}}' |
             gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
 
+      - name: Validate infra deployment credential
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          if ! gh api --method GET repos/aiaiaiai-org/infra/actions/workflows/deploy-workload.yml >/dev/null; then
+            echo "::error::INFRA_DEPLOY_TOKEN cannot read Actions workflows in aiaiaiai-org/infra. Grant the token Actions: Read access to the infra repository." >&2
+            exit 1
+          fi
+
       - name: Wait for infra deployment
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
