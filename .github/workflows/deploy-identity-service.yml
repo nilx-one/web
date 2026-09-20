@@ -21,6 +21,7 @@ on:
     secrets:
       INFRA_DEPLOY_TOKEN:
         required: true
+        required: true
 
 permissions:
   actions: read
@@ -106,11 +107,38 @@ jobs:
         name: Request infra identity deployment
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+          TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+          TELEGRAM_OIDC_CLIENT_ID: ${{ secrets.TELEGRAM_OIDC_CLIENT_ID }}
+          TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          PUBLIC_ORIGIN: https://nilx.one
         run: |
           set -Eeuo pipefail
+          test -n "$TELOXIDE_TOKEN"
+          test -n "$TELEGRAM_OIDC_CLIENT_ID"
+          test -n "$TELEGRAM_OIDC_CLIENT_SECRET"
+          test -n "$DISCORD_CLIENT_ID"
+          test -n "$DISCORD_CLIENT_SECRET"
+
+          provider_env="$(printf '%s\n' \
+            "PUBLIC_ORIGIN=$PUBLIC_ORIGIN" \
+            "TELOXIDE_TOKEN=$TELOXIDE_TOKEN" \
+            "TELEGRAM_OIDC_CLIENT_ID=$TELEGRAM_OIDC_CLIENT_ID" \
+            "TELEGRAM_OIDC_CLIENT_SECRET=$TELEGRAM_OIDC_CLIENT_SECRET" \
+            "DISCORD_CLIENT_ID=$DISCORD_CLIENT_ID" \
+            "DISCORD_CLIENT_SECRET=$DISCORD_CLIENT_SECRET")"
+          provider_env_b64="$(printf '%s' "$provider_env" | base64 -w 0)"
+
           dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "started_at=$dispatch_started" >>"$GITHUB_OUTPUT"
-          jq -n             --arg workload "nilxone-identity"             --arg image "$IDENTITY_IMAGE"             --arg source "$GITHUB_REPOSITORY"             --arg ref "$RELEASE_SHA"             '{event_type:"deploy-workload",client_payload:{workload:$workload,image:$image,source_repository:$source,ref:$ref}}' |
+          jq -n \
+            --arg workload "nilxone-identity" \
+            --arg image "$IDENTITY_IMAGE" \
+            --arg source "$GITHUB_REPOSITORY" \
+            --arg ref "$RELEASE_SHA" \
+            --arg provider_env_b64 "$provider_env_b64" \
+            '{event_type:"deploy-workload",client_payload:{workload:$workload,image:$image,source_repository:$source,ref:$ref,provider_env_b64:$provider_env_b64}}' |
             gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
 
       - name: Validate infra deployment credential
@@ -125,7 +153,6 @@ jobs:
 
       - name: Wait for infra deployment
         env:
-          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
           STARTED_AT: ${{ steps.dispatch.outputs.started_at }}
         run: |
           set -Eeuo pipefail
@@ -157,9 +184,9 @@ jobs:
           {
             echo "### 0x1 identity dependency"
             echo
-            echo "- release request: `$RELEASE_SHA`"
-            echo "- required contract: `$REQUIRED_IDENTITY_CONTRACT`"
-            echo "- force requested: `$FORCE_IDENTITY`"
-            echo "- identity package: `${IDENTITY_RELEASE_SHA:-unknown}`"
-            echo "- result: `${{ job.status }}`"
+            echo "- release request: \`$RELEASE_SHA\`"
+            echo "- required contract: \`$REQUIRED_IDENTITY_CONTRACT\`"
+            echo "- force requested: \`$FORCE_IDENTITY\`"
+            echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
+            echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"
