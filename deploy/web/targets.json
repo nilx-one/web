@@ -15,7 +15,7 @@
       "app": "telegram-mini-app",
       "root": "/srv/telegram-mini-app",
       "edgeAlias": "nilxone-telegram",
-      "compatEdgeAlias": "ox1-telegram",
+      "compatEdgeAlias": "nilxone-telegram",
       "composeProject": "nilx-one-telegram",
       "publicPath": "/telegram/",
       "requiresIdentityContract": 9
@@ -24,7 +24,7 @@
       "app": "discord-activity",
       "root": "/srv/discord-activity",
       "edgeAlias": "nilxone-discord",
-      "compatEdgeAlias": "ox1-discord",
+      "compatEdgeAlias": "nilxone-discord",
       "composeProject": "nilx-one-discord",
       "publicPath": "/discord/",
       "requiresIdentityContract": 9
