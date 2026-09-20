@@ -134,7 +134,8 @@ jobs:
           grep -Fq "INFRA_DEPLOY_TOKEN:" "$file"
           grep -Fq 'event_type: "deploy-workload"' "$file"
           grep -Fq "source_repository" "$file"
-          grep -Fq "ghcr.io/nilx-one/0x1-web:sha-" "$file"
+          grep -Fq "IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web" "$file"
+          grep -Fq 'sha-$RELEASE_SHA' "$file"
 
       - name: Publish summary
         if: always()
