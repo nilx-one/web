@@ -196,7 +196,7 @@ jobs:
           set -Eeuo pipefail
           port=18080
           while IFS=$'\t' read -r target root; do
-            container_id="$(docker run --detach --env "CLIENT_ROOT=$root" --publish "$port:8080" 0x1-clients:ci)"
+            container_id="$(docker run --detach --env "CLIENT_ROOT=$root" --publish "$port:1927" 0x1-clients:ci)"
             trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' RETURN
             ready=false
             for attempt in $(seq 1 20); do
@@ -220,8 +220,8 @@ jobs:
           CLIENT_NAME=web \
           CLIENT_IMAGE=ghcr.io/nilx-one/0x1-web:sha-${GITHUB_SHA} \
           CLIENT_ROOT=/srv/site \
-          EDGE_ALIAS=ox1-web \
-          COMPAT_EDGE_ALIAS=ox1-telegram-mini-app \
+          EDGE_ALIAS=nilxone-web \
+          COMPAT_EDGE_ALIAS=nilxone-web \
           MAP_BASEMAP_PATH=/tmp/0x1-basemap.pmtiles \
           RELEASE_SHA="${GITHUB_SHA}" \
             docker compose --file deploy/web/compose.yaml config --quiet
