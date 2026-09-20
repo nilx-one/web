@@ -20,6 +20,12 @@ on:
         type: boolean
     secrets:
       INFRA_DEPLOY_TOKEN:
+        required: false
+      TELOXIDE_TOKEN:
+        required: true
+      TELEGRAM_OIDC_CLIENT_SECRET:
+        required: true
+      DISCORD_CLIENT_SECRET:
         required: true
 
 permissions:
@@ -103,12 +109,15 @@ jobs:
   deploy:
     name: Deploy identity through infra
     needs: package
-    environment:
-      name: production
     uses: aiaiaiai-org/infra/.github/workflows/deploy-workload.yml@fix/dynamic-web-provider-env
     with:
       workload: nilxone-identity
       image: ghcr.io/nilx-one/0x1-identity:sha-${{ needs.package.outputs.package_sha }}
       source_repository: ${{ github.repository }}
       ref: ${{ inputs.release_sha }}
-    secrets: inherit
+      telegram_oidc_client_id: ${{ vars.TELEGRAM_OIDC_CLIENT_ID }}
+      discord_client_id: ${{ vars.DISCORD_CLIENT_ID }}
+    secrets:
+      TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+      TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
+      DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
