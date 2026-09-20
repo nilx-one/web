@@ -21,7 +21,6 @@ on:
     secrets:
       INFRA_DEPLOY_TOKEN:
         required: true
-        required: true
 
 permissions:
   actions: read
@@ -153,6 +152,7 @@ jobs:
 
       - name: Wait for infra deployment
         env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
           STARTED_AT: ${{ steps.dispatch.outputs.started_at }}
         run: |
           set -Eeuo pipefail
