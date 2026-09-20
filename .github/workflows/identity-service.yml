@@ -8,12 +8,14 @@ on:
     paths:
       - "services/identity/**"
       - ".github/workflows/identity-service.yml"
+      - ".github/workflows/deploy-identity-service.yml"
   push:
     branches:
       - master
     paths:
       - "services/identity/**"
       - ".github/workflows/identity-service.yml"
+      - ".github/workflows/deploy-identity-service.yml"
 
 permissions:
   contents: read
