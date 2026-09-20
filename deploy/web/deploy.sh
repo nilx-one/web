@@ -116,7 +116,7 @@ fi
 
 docker compose exec -T client test -f "$CLIENT_ROOT/index.html"
 docker compose exec -T client test -s /srv/map/0.1.0/basemap.pmtiles
-docker compose exec -T client wget -q -O - http://127.0.0.1:8080/health >/dev/null
+docker compose exec -T client wget -q -O - http://127.0.0.1:1927/health >/dev/null
 
 echo "0x1 $CLIENT_NAME $RELEASE_SHA is healthy"
 echo "Edge alias verified: $EDGE_ALIAS"

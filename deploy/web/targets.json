@@ -5,8 +5,8 @@
     "web": {
       "app": "site",
       "root": "/srv/site",
-      "edgeAlias": "ox1-web",
-      "compatEdgeAlias": "ox1-telegram-mini-app",
+      "edgeAlias": "nilxone-web",
+      "compatEdgeAlias": "nilxone-web",
       "composeProject": "nilx-one-web",
       "publicPath": "/",
       "requiresIdentityContract": 9
@@ -14,8 +14,8 @@
     "telegram": {
       "app": "telegram-mini-app",
       "root": "/srv/telegram-mini-app",
-      "edgeAlias": "ox1-telegram",
-      "compatEdgeAlias": "ox1-telegram",
+      "edgeAlias": "nilxone-telegram",
+      "compatEdgeAlias": "nilxone-telegram",
       "composeProject": "nilx-one-telegram",
       "publicPath": "/telegram/",
       "requiresIdentityContract": 9
@@ -23,8 +23,8 @@
     "discord": {
       "app": "discord-activity",
       "root": "/srv/discord-activity",
-      "edgeAlias": "ox1-discord",
-      "compatEdgeAlias": "ox1-discord",
+      "edgeAlias": "nilxone-discord",
+      "compatEdgeAlias": "nilxone-discord",
       "composeProject": "nilx-one-discord",
       "publicPath": "/discord/",
       "requiresIdentityContract": 9

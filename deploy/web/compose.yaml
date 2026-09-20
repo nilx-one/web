@@ -17,7 +17,7 @@ services:
     volumes:
       - ${MAP_BASEMAP_PATH:?MAP_BASEMAP_PATH is required}:/srv/map/0.1.0/basemap.pmtiles:ro
     expose:
-      - "8080"
+      - "1927"
     networks:
       edge:
         aliases:
