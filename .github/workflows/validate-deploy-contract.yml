@@ -137,12 +137,18 @@ jobs:
             fi
           done
 
-          for secret in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
-            if grep -Fq "$secret" "$file"; then
-              echo "::error file=$file::provider secret '$secret' must not be carried in the deployment request"
-              exit 1
-            fi
-          done
+          if grep -F -- "--arg" "$file" | grep -Eq "TELOXIDE_TOKEN|CLIENT_SECRET"; then
+            echo "::error file=$file::provider secrets must not be carried in the dispatch payload"
+            exit 1
+          fi
+
+          grep -Fq "gh secret set" "$file"
+          grep -Fq "gh secret delete" "$file"
+
+          if ! grep -A1 -F "name: Revoke transient provider environment" "$file" | grep -Fq "if: always()"; then
+            echo "::error file=$file::the transient provider environment must be revoked even when the deployment fails"
+            exit 1
+          fi
 
       - name: Validate client handoff
         shell: bash
@@ -170,6 +176,7 @@ jobs:
             echo "- repository boundary: validated"
             echo "- production orchestrator: validated"
             echo "- identity handoff: validated"
+            echo "- provider environment: transient"
             echo "- client handoff: validated"
             echo "- deployment: not performed"
           } >> "$GITHUB_STEP_SUMMARY"
