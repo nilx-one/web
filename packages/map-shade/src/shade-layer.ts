@@ -26,6 +26,15 @@ export interface ShadeLayerOptions {
   readonly textureSize?: number;
   readonly shadeColor?: readonly [number, number, number];
   readonly shadeAlpha?: number;
+  /**
+   * Cells rasterized into the lightmap per flush. A cold-loaded journal can
+   * hand the layer thousands of already-lit cells at once; draining all of
+   * them in the frame that adds the layer would turn mount into a single
+   * long synchronous stall. Bounding the batch keeps every frame's cost the
+   * same whether it is filling a week of history or lighting the one cell a
+   * person just walked into.
+   */
+  readonly cellsPerFlush?: number;
   readonly onCellTap?: (tap: CellTap) => void | Promise<void>;
 }
 
@@ -122,6 +131,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   const textureSize = options.textureSize ?? 2_048;
   const shadeColor = options.shadeColor ?? [0, 0, 0];
   const shadeAlpha = options.shadeAlpha ?? 0.82;
+  const cellsPerFlush = options.cellsPerFlush ?? 512;
   const center = MercatorCoordinate.fromLngLat(options.anchor, 0);
   const half = (regionM / 2) * center.meterInMercatorCoordinateUnits();
   const region = {
@@ -212,13 +222,18 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     gl.useProgram(rasterProgram);
     gl.bindVertexArray(rasterVertexArray);
 
-    for (const cell of pending.splice(0)) {
+    for (const cell of pending.splice(0, cellsPerFlush)) {
       const vertices = cellVertices(cell);
       if (vertices === null) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, cellBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
       gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length / 2);
     }
+
+    // A batch capped below the full backlog leaves cells still pending; the
+    // next frame's prerender is where they get drawn, not a repaint this
+    // layer would otherwise have no reason to ask for.
+    if (pending.length > 0) map?.triggerRepaint();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, previousArrayBuffer);
     gl.bindVertexArray(previousVertexArray);
