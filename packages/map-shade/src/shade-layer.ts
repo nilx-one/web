@@ -126,12 +126,30 @@ function requireObject<T>(value: T | null, label: string): T {
   return value;
 }
 
+/**
+ * A batch size of 0 or less would make `flush` splice nothing out of
+ * `pending` on every call, so the backlog never shrinks while `pending.length
+ * > 0` keeps asking for another frame — an infinite repaint loop that lights
+ * no cell. Failing here, once, beats that loop failing to fail anywhere.
+ */
+function requirePositiveInteger(value: number, label: string): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `map-shade ${label} must be a positive integer, got ${value}`,
+    );
+  }
+  return value;
+}
+
 export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   const regionM = options.regionM ?? 20_000;
   const textureSize = options.textureSize ?? 2_048;
   const shadeColor = options.shadeColor ?? [0, 0, 0];
   const shadeAlpha = options.shadeAlpha ?? 0.82;
-  const cellsPerFlush = options.cellsPerFlush ?? 512;
+  const cellsPerFlush = requirePositiveInteger(
+    options.cellsPerFlush ?? 512,
+    "cellsPerFlush",
+  );
   const center = MercatorCoordinate.fromLngLat(options.anchor, 0);
   const half = (regionM / 2) * center.meterInMercatorCoordinateUnits();
   const region = {

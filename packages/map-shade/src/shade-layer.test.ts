@@ -260,3 +260,42 @@ describe("shade layer cold-load batching", () => {
     expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("shade layer cellsPerFlush validation", () => {
+  // A batch size that never shrinks `pending` would otherwise become an
+  // infinite triggerRepaint loop inside flush() instead of a construction
+  // error here — see requirePositiveInteger's own comment in shade-layer.ts.
+  it.each([0, -1, -512])(
+    "rejects a non-positive cellsPerFlush (%s) at construction",
+    (cellsPerFlush) => {
+      expect(() =>
+        createShadeLayer({
+          source: litSource([]),
+          store,
+          anchor: KYIV,
+          cellsPerFlush,
+        }),
+      ).toThrow(/cellsPerFlush must be a positive integer/);
+    },
+  );
+
+  it.each([5.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects a non-integer cellsPerFlush (%s) at construction",
+    (cellsPerFlush) => {
+      expect(() =>
+        createShadeLayer({
+          source: litSource([]),
+          store,
+          anchor: KYIV,
+          cellsPerFlush,
+        }),
+      ).toThrow(/cellsPerFlush must be a positive integer/);
+    },
+  );
+
+  it("accepts the default when cellsPerFlush is not given", () => {
+    expect(() =>
+      createShadeLayer({ source: litSource([]), store, anchor: KYIV }),
+    ).not.toThrow();
+  });
+});
