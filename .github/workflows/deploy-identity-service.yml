@@ -20,7 +20,15 @@ on:
         type: boolean
     secrets:
       INFRA_DEPLOY_TOKEN:
-        required: true
+        required: false
+      INFRA_PROVIDER_TOKEN:
+        required: false
+      TELOXIDE_TOKEN:
+        required: false
+      TELEGRAM_OIDC_CLIENT_SECRET:
+        required: false
+      DISCORD_CLIENT_SECRET:
+        required: false
 
 permissions:
   actions: read
@@ -39,6 +47,7 @@ jobs:
       REQUIRED_IDENTITY_CONTRACT: ${{ inputs.required_contract }}
       FORCE_IDENTITY: ${{ inputs.force }}
       IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-identity
+      INFRA_REPOSITORY: aiaiaiai-org/infra
       INFRA_DEPLOY_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
       TELEGRAM_OIDC_CLIENT_ID: ${{ vars.TELEGRAM_OIDC_CLIENT_ID }}
       DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
@@ -111,10 +120,36 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
-          if ! gh api --method GET repos/aiaiaiai-org/infra/actions/workflows/deploy-workload.yml >/dev/null; then
-            echo "::error::INFRA_DEPLOY_TOKEN cannot read Actions workflows in aiaiaiai-org/infra. Grant the token Actions: Read access to the infra repository." >&2
+          if ! gh api --method GET "repos/${INFRA_REPOSITORY}/actions/workflows/deploy-workload.yml" >/dev/null; then
+            echo "::error::INFRA_DEPLOY_TOKEN cannot read Actions workflows in ${INFRA_REPOSITORY}. Grant the token Actions: Read access to the infra repository." >&2
             exit 1
           fi
+
+      - id: provider
+        name: Publish transient provider environment
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_PROVIDER_TOKEN }}
+          TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+          TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$GH_TOKEN" || {
+            echo "Missing repository secret INFRA_PROVIDER_TOKEN. It needs Secrets: Read and write on ${INFRA_REPOSITORY}." >&2
+            exit 1
+          }
+
+          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
+            test -n "${!name:-}" || { echo "Missing repository secret $name." >&2; exit 1; }
+          done
+
+          echo "published=true" >>"$GITHUB_OUTPUT"
+
+          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
+            gh secret set "$name" --repo "$INFRA_REPOSITORY" --body "${!name}"
+          done
+
+          echo "Provider credentials are readable by ${INFRA_REPOSITORY} for this deployment only."
 
       - id: dispatch
         name: Request infra identity deployment
@@ -143,7 +178,7 @@ jobs:
                 discord_client_id: $discord_client_id
               }
             }' |
-            gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
+            gh api --method POST "repos/${INFRA_REPOSITORY}/dispatches" --input -
 
       - name: Wait for infra deployment
         env:
@@ -152,7 +187,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           for attempt in $(seq 1 40); do
-            response="$(gh api --method GET repos/aiaiaiai-org/infra/actions/workflows/deploy-workload.yml/runs -f event=repository_dispatch -f per_page=20)"
+            response="$(gh api --method GET "repos/${INFRA_REPOSITORY}/actions/workflows/deploy-workload.yml/runs" -f event=repository_dispatch -f per_page=20)"
             deployment_run="$(jq -r --arg started "$STARTED_AT" '.workflow_runs | map(select(.created_at >= $started)) | sort_by(.created_at) | last | .id // empty' <<<"$response")"
 
             if [ -n "$deployment_run" ]; then
@@ -181,6 +216,23 @@ jobs:
           echo "Timed out waiting for infra identity deployment." >&2
           exit 1
 
+      - name: Revoke transient provider environment
+        if: always() && steps.provider.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_PROVIDER_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          revoked=true
+
+          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
+            if ! gh secret delete "$name" --repo "$INFRA_REPOSITORY"; then
+              revoked=false
+              echo "::error::Could not remove the transient provider secret $name from ${INFRA_REPOSITORY}. Remove it by hand before the next deployment."
+            fi
+          done
+
+          [ "$revoked" = true ]
+
       - name: Publish summary
         if: always()
         run: |
@@ -191,5 +243,6 @@ jobs:
             echo "- required contract: \`$REQUIRED_IDENTITY_CONTRACT\`"
             echo "- force requested: \`$FORCE_IDENTITY\`"
             echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
+            echo "- provider environment: \`transient\`"
             echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"
