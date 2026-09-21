@@ -1,0 +1,182 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Validate Deploy Contract
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/deploy-production.yml"
+      - ".github/workflows/deploy-identity-service.yml"
+      - ".github/workflows/deploy-web.yml"
+      - ".github/workflows/validate-deploy-contract.yml"
+      - "deploy/web/**"
+      - "services/identity/deploy/**"
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/deploy-production.yml"
+      - ".github/workflows/deploy-identity-service.yml"
+      - ".github/workflows/deploy-web.yml"
+      - ".github/workflows/validate-deploy-contract.yml"
+      - "deploy/web/**"
+      - "services/identity/deploy/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Validate deployment contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate identity contract and targets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
+          [[ "$identity_contract" =~ ^[0-9]+$ ]] || {
+            echo "::error file=services/identity/deploy/contract.version::identity contract must be an integer"
+            exit 1
+          }
+
+          jq -e '
+            . as $contract |
+            ($contract.deployOrder | type == "array" and length > 0) and
+            ($contract.targets | type == "object") and
+            all($contract.deployOrder[]; $contract.targets[.] != null) and
+            all($contract.deployOrder[]; ($contract.targets[.].requiresIdentityContract | type == "number"))
+          ' deploy/web/targets.json >/dev/null
+
+          jq -r '.deployOrder[]' deploy/web/targets.json |
+          while IFS= read -r target; do
+            required="$(jq -r --arg target "$target" '.targets[$target].requiresIdentityContract' deploy/web/targets.json)"
+
+            if (( required > identity_contract )); then
+              echo "::error file=deploy/web/targets.json::target '$target' requires identity contract $required, repository provides $identity_contract"
+              exit 1
+            fi
+
+            case "$target" in
+              web|telegram|discord) ;;
+              *)
+                echo "::error file=deploy/web/targets.json::unsupported client target '$target'"
+                exit 1
+                ;;
+            esac
+          done
+
+          echo "Identity contract: $identity_contract"
+          jq '.deployOrder, .targets' deploy/web/targets.json
+
+      - name: Validate repository boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for file in \
+            .github/workflows/deploy-production.yml \
+            .github/workflows/deploy-identity-service.yml \
+            .github/workflows/deploy-web.yml; do
+            if grep -Eq "uses:[[:space:]]*aiaiaiai-org/" "$file"; then
+              echo "::error file=$file::aiaiaiai-org/infra is a private repository in another organization, so its reusable workflows cannot be called from nilx-one/web; deployment must be requested through repository_dispatch"
+              exit 1
+            fi
+          done
+
+      - name: Validate production orchestrator
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          file=".github/workflows/deploy-production.yml"
+
+          grep -Fq "name: Deploy Production" "$file"
+          grep -Fq "run-name: Deploy Production — " "$file"
+
+          for target in all web telegram discord identity; do
+            grep -Fq -- "- $target" "$file"
+          done
+
+          grep -Fq "uses: ./.github/workflows/deploy-identity-service.yml" "$file"
+          grep -Fq "secrets: inherit" "$file"
+          grep -Fq "uses: ./.github/workflows/deploy-web.yml" "$file"
+
+          if grep -Fq "NILXONE_IDENTITY_PROVIDER_ENV_B64" "$file"; then
+            echo "::error file=$file::legacy provider env bundle must not be used"
+            exit 1
+          fi
+
+      - name: Validate identity handoff
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          file=".github/workflows/deploy-identity-service.yml"
+
+          grep -Fq "workflow_call:" "$file"
+          grep -Fq "release_sha:" "$file"
+          grep -Fq "required_contract:" "$file"
+          grep -Fq "force:" "$file"
+          grep -Fq "INFRA_DEPLOY_TOKEN:" "$file"
+          grep -Fq 'event_type: "deploy-workload"' "$file"
+          grep -Fq "telegram_oidc_client_id:" "$file"
+          grep -Fq "discord_client_id:" "$file"
+          grep -Fq "ghcr.io/nilx-one/0x1-identity" "$file"
+
+          for legacy in NILXONE_IDENTITY_PROVIDER_ENV_B64 provider_env_b64; do
+            if grep -Fq "$legacy" "$file"; then
+              echo "::error file=$file::legacy provider env bundle '$legacy' must not be used"
+              exit 1
+            fi
+          done
+
+          if grep -F -- "--arg" "$file" | grep -Eq "TELOXIDE_TOKEN|CLIENT_SECRET"; then
+            echo "::error file=$file::provider secrets must not be carried in the dispatch payload"
+            exit 1
+          fi
+
+          grep -Fq "gh secret set" "$file"
+          grep -Fq "gh secret delete" "$file"
+
+          if ! grep -A1 -F "name: Revoke transient provider environment" "$file" | grep -Fq "if: always()"; then
+            echo "::error file=$file::the transient provider environment must be revoked even when the deployment fails"
+            exit 1
+          fi
+
+      - name: Validate client handoff
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          file=".github/workflows/deploy-web.yml"
+
+          grep -Fq "workflow_call:" "$file"
+          grep -Fq "release_sha:" "$file"
+          grep -Fq "INFRA_DEPLOY_TOKEN:" "$file"
+          grep -Fq 'event_type: "deploy-workload"' "$file"
+          grep -Fq "source_repository" "$file"
+          grep -Fq "IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web" "$file"
+          grep -Fq 'sha-$RELEASE_SHA' "$file"
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Deploy contract"
+            echo
+            echo "- identity contract: $(tr -d '[:space:]' < services/identity/deploy/contract.version)"
+            echo "- target contract: validated"
+            echo "- repository boundary: validated"
+            echo "- production orchestrator: validated"
+            echo "- identity handoff: validated"
+            echo "- provider environment: transient"
+            echo "- client handoff: validated"
+            echo "- deployment: not performed"
+          } >> "$GITHUB_STEP_SUMMARY"
