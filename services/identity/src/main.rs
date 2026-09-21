@@ -32,7 +32,7 @@ const DEFAULT_PUBLIC_ORIGIN: &str = "https://nilx.one";
 const CURRENT_POSITION_BUTTON: &str = "Поточна позиція";
 const SET_POSITION_BUTTON: &str = "Встановити позицію";
 const USER_HELP: &str = "Commands:\n/start — open pub_dress registration\n/whoami — show your Bond identity and location\n/current_position — передати поточну позицію й повернути live mode\n/recover — explain the current recovery boundary";
-const ADMIN_HELP: &str = "\n/set_position — обрати довільну точку й перейти в manual mode";
+const ADMIN_HELP: &str = "\n/set_position — обрати довільну точку й перейти в manual mode\nAdmin: можна також просто надіслати точку в чат без команди — live location поверне live mode, звичайна (не-live) точка перейде в manual.";
 
 #[derive(Clone)]
 struct TelegramBotState {
@@ -254,15 +254,7 @@ async fn handle_message(
     };
 
     if let Some(location) = message.location() {
-        handle_location(
-            &bot,
-            &message,
-            state.as_ref(),
-            telegram_user_id,
-            location.longitude,
-            location.latitude,
-        )
-        .await?;
+        handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
         return Ok(());
     }
 
@@ -354,13 +346,59 @@ async fn registered_identity(
     }
 }
 
+/// Why [`resolve_location_mode`] would not accept the location as sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocationModeRefusal {
+    /// Nothing was pending and the sender cannot fall back to the automatic
+    /// admin path, so the location needs an explicit button/command first.
+    NoIntent,
+    /// A pending or inferred manual write, from a sender who is not admin.
+    ManualRequiresAdmin,
+}
+
+/// Decides `Bond.location`'s next mode from three facts: whether an explicit
+/// button/command already committed to one (`intent`), who is sending
+/// (`role`), and whether Telegram itself marked this point a live location
+/// (`live`). No I/O here — every caller-visible refusal message stays in
+/// `handle_location`, this only says which one applies.
+///
+/// An explicit intent, once set, always wins and is consumed regardless of
+/// what the message turns out to be — that half of the contract is unchanged
+/// from the original button-driven flow. What is new is the `None` arm for
+/// admin: absent a prior button tap, the location's own `live_period` decides
+/// the mode directly, so sending a location in the bot chat is the toggle —
+/// live switches `Bond.location` back to live, anything else (a one-off share
+/// or a chosen map point) declares manual, the same outcome `/set_position`
+/// already produces explicitly.
+fn resolve_location_mode(
+    intent: Option<PendingLocationIntent>,
+    role: BondAccessRole,
+    live: bool,
+) -> Result<BondLocationMode, LocationModeRefusal> {
+    match intent {
+        Some(PendingLocationIntent::Current) => Ok(BondLocationMode::Live),
+        Some(PendingLocationIntent::Manual) => {
+            if role == BondAccessRole::Admin {
+                Ok(BondLocationMode::Manual)
+            } else {
+                Err(LocationModeRefusal::ManualRequiresAdmin)
+            }
+        }
+        None if role == BondAccessRole::Admin => Ok(if live {
+            BondLocationMode::Live
+        } else {
+            BondLocationMode::Manual
+        }),
+        None => Err(LocationModeRefusal::NoIntent),
+    }
+}
+
 async fn handle_location(
     bot: &Bot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
-    longitude: f64,
-    latitude: f64,
+    location: &teloxide::types::Location,
 ) -> ResponseResult<()> {
     let Some((identity, role)) =
         registered_identity(bot, message, &state.repository, telegram_user_id).await?
@@ -368,26 +406,30 @@ async fn handle_location(
         return Ok(());
     };
 
-    let Some(intent) = state.intents.consume(telegram_user_id).await else {
-        bot.send_message(
-            message.chat.id,
-            "Спочатку оберіть «Поточна позиція» або, для admin, «Встановити позицію».",
-        )
-        .reply_markup(control_keyboard(role))
-        .await?;
-        return Ok(());
+    let intent = state.intents.consume(telegram_user_id).await;
+    let mode = match resolve_location_mode(intent, role, location.live_period.is_some()) {
+        Ok(mode) => mode,
+        Err(LocationModeRefusal::ManualRequiresAdmin) => {
+            bot.send_message(
+                message.chat.id,
+                "Встановлення manual position доступне лише admin.",
+            )
+            .reply_markup(control_keyboard(BondAccessRole::User))
+            .await?;
+            return Ok(());
+        }
+        Err(LocationModeRefusal::NoIntent) => {
+            bot.send_message(
+                message.chat.id,
+                "Спочатку оберіть «Поточна позиція» або, для admin, «Встановити позицію».",
+            )
+            .reply_markup(control_keyboard(role))
+            .await?;
+            return Ok(());
+        }
     };
-    if intent == PendingLocationIntent::Manual && role != BondAccessRole::Admin {
-        bot.send_message(
-            message.chat.id,
-            "Встановлення manual position доступне лише admin.",
-        )
-        .reply_markup(control_keyboard(BondAccessRole::User))
-        .await?;
-        return Ok(());
-    }
 
-    let coordinate = match GeoCoordinate::from_degrees(longitude, latitude) {
+    let coordinate = match GeoCoordinate::from_degrees(location.longitude, location.latitude) {
         Ok(coordinate) => coordinate,
         Err(error) => {
             error!(%error, "Telegram supplied an invalid location point");
@@ -404,24 +446,22 @@ async fn handle_location(
             return Ok(());
         }
     };
-    let mode = match intent {
-        PendingLocationIntent::Current => BondLocationMode::Live,
-        PendingLocationIntent::Manual => BondLocationMode::Manual,
-    };
-    let location = BondLocation::new(coordinate, mode, DecimalU64::new(updated_at));
+    let location_record = BondLocation::new(coordinate, mode, DecimalU64::new(updated_at));
 
-    if let Err(error) = state.locations.write(&identity.pub_dress, location).await {
+    if let Err(error) = state
+        .locations
+        .write(&identity.pub_dress, location_record)
+        .await
+    {
         error!(%error, "Bond location write failed");
         bot.send_message(message.chat.id, "Bond location тимчасово недоступний.")
             .await?;
         return Ok(());
     }
 
-    let acknowledgement = match intent {
-        PendingLocationIntent::Current => {
-            "Поточну позицію прийнято. Bond.location оновлено; режим: live."
-        }
-        PendingLocationIntent::Manual => {
+    let acknowledgement = match mode {
+        BondLocationMode::Live => "Поточну позицію прийнято. Bond.location оновлено; режим: live.",
+        BondLocationMode::Manual => {
             "Позицію встановлено. Bond.location оновлено; режим: manual — device location на карті не використовується."
         }
     };
@@ -620,12 +660,12 @@ async fn show_identity(
 
 #[cfg(test)]
 mod tests {
-    use identity_bot::BondAccessRole;
+    use identity_bot::{BondAccessRole, BondLocationMode, PendingLocationIntent};
     use serde_json::json;
 
     use super::{
-        MINI_APP_URL, SET_POSITION_BUTTON, control_keyboard, current_position_request_keyboard,
-        registration_keyboard,
+        LocationModeRefusal, MINI_APP_URL, SET_POSITION_BUTTON, control_keyboard,
+        current_position_request_keyboard, registration_keyboard, resolve_location_mode,
     };
 
     #[test]
@@ -663,6 +703,81 @@ mod tests {
         assert_eq!(
             admin_keyboard["keyboard"][1][0]["text"],
             SET_POSITION_BUTTON
+        );
+    }
+
+    #[test]
+    fn an_explicit_intent_always_wins_over_what_was_sent() {
+        // The original button-driven contract: once /current_position or
+        // /set_position committed to a mode, the location's own live_period
+        // is irrelevant — a person can share a static pin after tapping
+        // "Поточна позиція" and it still writes live, matching what Telegram
+        // actually let them declare that way before this change.
+        assert_eq!(
+            resolve_location_mode(
+                Some(PendingLocationIntent::Current),
+                BondAccessRole::User,
+                false,
+            ),
+            Ok(BondLocationMode::Live)
+        );
+        assert_eq!(
+            resolve_location_mode(
+                Some(PendingLocationIntent::Current),
+                BondAccessRole::User,
+                true,
+            ),
+            Ok(BondLocationMode::Live)
+        );
+    }
+
+    #[test]
+    fn a_pending_manual_intent_still_requires_admin() {
+        assert_eq!(
+            resolve_location_mode(
+                Some(PendingLocationIntent::Manual),
+                BondAccessRole::Admin,
+                false,
+            ),
+            Ok(BondLocationMode::Manual)
+        );
+        assert_eq!(
+            resolve_location_mode(
+                Some(PendingLocationIntent::Manual),
+                BondAccessRole::User,
+                false,
+            ),
+            Err(LocationModeRefusal::ManualRequiresAdmin)
+        );
+    }
+
+    #[test]
+    fn an_admin_sending_a_location_with_no_pending_intent_toggles_by_live_period() {
+        // The new behavior this change adds: no button tap needed. A live
+        // location switches Bond.location back to live; a plain send —
+        // one-off "my current position" or a chosen map point alike —
+        // declares manual, exactly what /set_position already produced.
+        assert_eq!(
+            resolve_location_mode(None, BondAccessRole::Admin, true),
+            Ok(BondLocationMode::Live)
+        );
+        assert_eq!(
+            resolve_location_mode(None, BondAccessRole::Admin, false),
+            Ok(BondLocationMode::Manual)
+        );
+    }
+
+    #[test]
+    fn a_non_admin_sending_a_location_with_no_pending_intent_is_still_refused() {
+        // Regular users keep needing the explicit button/command either way;
+        // the automatic toggle is admin-only, same as manual mode always was.
+        assert_eq!(
+            resolve_location_mode(None, BondAccessRole::User, true),
+            Err(LocationModeRefusal::NoIntent)
+        );
+        assert_eq!(
+            resolve_location_mode(None, BondAccessRole::User, false),
+            Err(LocationModeRefusal::NoIntent)
         );
     }
 }

@@ -26,6 +26,15 @@ export interface ShadeLayerOptions {
   readonly textureSize?: number;
   readonly shadeColor?: readonly [number, number, number];
   readonly shadeAlpha?: number;
+  /**
+   * Cells rasterized into the lightmap per flush. A cold-loaded journal can
+   * hand the layer thousands of already-lit cells at once; draining all of
+   * them in the frame that adds the layer would turn mount into a single
+   * long synchronous stall. Bounding the batch keeps every frame's cost the
+   * same whether it is filling a week of history or lighting the one cell a
+   * person just walked into.
+   */
+  readonly cellsPerFlush?: number;
   readonly onCellTap?: (tap: CellTap) => void | Promise<void>;
 }
 
@@ -117,11 +126,30 @@ function requireObject<T>(value: T | null, label: string): T {
   return value;
 }
 
+/**
+ * A batch size of 0 or less would make `flush` splice nothing out of
+ * `pending` on every call, so the backlog never shrinks while `pending.length
+ * > 0` keeps asking for another frame — an infinite repaint loop that lights
+ * no cell. Failing here, once, beats that loop failing to fail anywhere.
+ */
+function requirePositiveInteger(value: number, label: string): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      `map-shade ${label} must be a positive integer, got ${value}`,
+    );
+  }
+  return value;
+}
+
 export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   const regionM = options.regionM ?? 20_000;
   const textureSize = options.textureSize ?? 2_048;
   const shadeColor = options.shadeColor ?? [0, 0, 0];
   const shadeAlpha = options.shadeAlpha ?? 0.82;
+  const cellsPerFlush = requirePositiveInteger(
+    options.cellsPerFlush ?? 512,
+    "cellsPerFlush",
+  );
   const center = MercatorCoordinate.fromLngLat(options.anchor, 0);
   const half = (regionM / 2) * center.meterInMercatorCoordinateUnits();
   const region = {
@@ -212,13 +240,18 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     gl.useProgram(rasterProgram);
     gl.bindVertexArray(rasterVertexArray);
 
-    for (const cell of pending.splice(0)) {
+    for (const cell of pending.splice(0, cellsPerFlush)) {
       const vertices = cellVertices(cell);
       if (vertices === null) continue;
       gl.bindBuffer(gl.ARRAY_BUFFER, cellBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
       gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length / 2);
     }
+
+    // A batch capped below the full backlog leaves cells still pending; the
+    // next frame's prerender is where they get drawn, not a repaint this
+    // layer would otherwise have no reason to ask for.
+    if (pending.length > 0) map?.triggerRepaint();
 
     gl.bindBuffer(gl.ARRAY_BUFFER, previousArrayBuffer);
     gl.bindVertexArray(previousVertexArray);
