@@ -9,6 +9,7 @@ on:
       - ".github/workflows/deploy-production.yml"
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/deploy-web.yml"
+      - ".github/workflows/validate-deploy-contract.yml"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   push:
@@ -18,6 +19,7 @@ on:
       - ".github/workflows/deploy-production.yml"
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/deploy-web.yml"
+      - ".github/workflows/validate-deploy-contract.yml"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   workflow_dispatch:
@@ -47,10 +49,11 @@ jobs:
           }
 
           jq -e '
-            (.deployOrder | type == "array" and length > 0) and
-            (.targets | type == "object") and
-            all(.deployOrder[]; (.targets[.] != null)) and
-            all(.deployOrder[]; (.targets[.].requiresIdentityContract | type == "number"))
+            . as $contract |
+            ($contract.deployOrder | type == "array" and length > 0) and
+            ($contract.targets | type == "object") and
+            all($contract.deployOrder[]; $contract.targets[.] != null) and
+            all($contract.deployOrder[]; ($contract.targets[.].requiresIdentityContract | type == "number"))
           ' deploy/web/targets.json >/dev/null
 
           jq -r '.deployOrder[]' deploy/web/targets.json |
@@ -73,6 +76,21 @@ jobs:
 
           echo "Identity contract: $identity_contract"
           jq '.deployOrder, .targets' deploy/web/targets.json
+
+      - name: Validate repository boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for file in \
+            .github/workflows/deploy-production.yml \
+            .github/workflows/deploy-identity-service.yml \
+            .github/workflows/deploy-web.yml; do
+            if grep -Eq "uses:[[:space:]]*aiaiaiai-org/" "$file"; then
+              echo "::error file=$file::aiaiaiai-org/infra is a private repository in another organization, so its reusable workflows cannot be called from nilx-one/web; deployment must be requested through repository_dispatch"
+              exit 1
+            fi
+          done
 
       - name: Validate production orchestrator
         shell: bash
@@ -106,22 +124,25 @@ jobs:
           grep -Fq "release_sha:" "$file"
           grep -Fq "required_contract:" "$file"
           grep -Fq "force:" "$file"
-
-          for secret in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
-            grep -Fq "$secret:" "$file"
-          done
-
+          grep -Fq "INFRA_DEPLOY_TOKEN:" "$file"
+          grep -Fq 'event_type: "deploy-workload"' "$file"
           grep -Fq "telegram_oidc_client_id:" "$file"
           grep -Fq "discord_client_id:" "$file"
+          grep -Fq "ghcr.io/nilx-one/0x1-identity" "$file"
 
-          grep -Fq "TELOXIDE_TOKEN: " "$file"
-          grep -Fq "TELEGRAM_OIDC_CLIENT_SECRET: " "$file"
-          grep -Fq "DISCORD_CLIENT_SECRET: " "$file"
+          for legacy in NILXONE_IDENTITY_PROVIDER_ENV_B64 provider_env_b64; do
+            if grep -Fq "$legacy" "$file"; then
+              echo "::error file=$file::legacy provider env bundle '$legacy' must not be used"
+              exit 1
+            fi
+          done
 
-          if grep -Fq "NILXONE_IDENTITY_PROVIDER_ENV_B64" "$file"; then
-            echo "::error file=$file::legacy provider env bundle must not be used"
-            exit 1
-          fi
+          for secret in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
+            if grep -Fq "$secret" "$file"; then
+              echo "::error file=$file::provider secret '$secret' must not be carried in the deployment request"
+              exit 1
+            fi
+          done
 
       - name: Validate client handoff
         shell: bash
@@ -146,6 +167,7 @@ jobs:
             echo
             echo "- identity contract: $(tr -d '[:space:]' < services/identity/deploy/contract.version)"
             echo "- target contract: validated"
+            echo "- repository boundary: validated"
             echo "- production orchestrator: validated"
             echo "- identity handoff: validated"
             echo "- client handoff: validated"
