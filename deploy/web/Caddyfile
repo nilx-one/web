@@ -18,6 +18,19 @@
 			file_server
 		}
 
+		# The PMTiles basemap is server-owned deployment data mounted read-only at
+		# /srv/map-data (see contracts/services/nilxone-web.yaml); it is never baked
+		# into the immutable client image the way style.json is. Match it ahead of
+		# @map_assets so the versioned public path still resolves to the mounted
+		# archive instead of falling through to a 404 under /srv/map.
+		@basemap_archive path /map/0.1.0/basemap.pmtiles
+		handle @basemap_archive {
+			root * /srv/map-data
+			header Cache-Control "public, max-age=86400"
+			rewrite * /basemap.pmtiles
+			file_server
+		}
+
 		@map_assets path /map/*
 		handle @map_assets {
 			root * /srv
