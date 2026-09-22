@@ -1954,11 +1954,16 @@ mod tests {
     }
 
     async fn discord_app() -> axum::Router {
-        let repository = IdentityRepository::connect("sqlite::memory:")
+        let database_url = "sqlite:file:discord-api-test?mode=memory&cache=shared";
+        let repository = IdentityRepository::connect(database_url)
             .await
             .expect("repository must initialize");
+        let provider_links = ProviderLinkRepository::connect(database_url)
+            .await
+            .expect("provider link repository must initialize");
         router_with_clock(
             repository,
+            provider_links,
             TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
             Some(discord_oauth().await),
             NativeAuthConfig::new(
@@ -1971,11 +1976,16 @@ mod tests {
     }
 
     async fn app() -> axum::Router {
-        let repository = IdentityRepository::connect("sqlite::memory:")
+        let database_url = "sqlite:file:api-test?mode=memory&cache=shared";
+        let repository = IdentityRepository::connect(database_url)
             .await
             .expect("repository must initialize");
+        let provider_links = ProviderLinkRepository::connect(database_url)
+            .await
+            .expect("provider link repository must initialize");
         router_with_clock(
             repository,
+            provider_links,
             TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
             None,
             NativeAuthConfig::new(
