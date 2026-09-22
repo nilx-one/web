@@ -12,6 +12,8 @@ import {
   MAP_STYLE_URL,
   MAP_STYLE_URLS,
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
+  OBSERVED_POSITION_CELL_LAYER_ID,
+  OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
   OBSERVED_POSITION_EDGE_LAYER_ID,
   OBSERVED_POSITION_POINT_LAYER_ID,
   OBSERVED_POSITION_SOURCE_ID,
@@ -409,6 +411,8 @@ describe("observed device position", () => {
 
     expect(fakeMap.sources.has(OBSERVED_POSITION_SOURCE_ID)).toBe(true);
     expect([...fakeMap.layers.keys()]).toEqual([
+      OBSERVED_POSITION_CELL_LAYER_ID,
+      OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
       OBSERVED_POSITION_ACCURACY_LAYER_ID,
       OBSERVED_POSITION_EDGE_LAYER_ID,
       OBSERVED_POSITION_POINT_LAYER_ID,
@@ -435,7 +439,7 @@ describe("observed device position", () => {
     });
 
     expect(fakeMap.addSource).toHaveBeenCalledOnce();
-    expect(fakeMap.addLayer).toHaveBeenCalledTimes(3);
+    expect(fakeMap.addLayer).toHaveBeenCalledTimes(5);
     expect(
       fakeMap.sources.get(OBSERVED_POSITION_SOURCE_ID)?.setData,
     ).toHaveBeenCalledOnce();
@@ -493,7 +497,7 @@ describe("observed device position", () => {
     fakeMap.reloadStyle();
 
     expect(fakeMap.sources.has(OBSERVED_POSITION_SOURCE_ID)).toBe(true);
-    expect(fakeMap.layers.size).toBe(3);
+    expect(fakeMap.layers.size).toBe(5);
   });
 
   it("releases location resources on unmount", () => {
