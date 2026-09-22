@@ -22,9 +22,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     AvaiaPubDress, DiscordOAuthClient, DiscordOAuthError, IdentityRecord, IdentityRepository,
     NativeAuthConfig, NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine,
-    PasswordPolicyError, ProviderIdentity, PubDress, PubDressRenameOutcome, RegistrationOutcome,
-    RememberedBondSigner, SecretDigester, TelegramInitDataVerifier, TokenFactory,
-    rate_limit::AttemptLimiter,
+    PasswordPolicyError, ProviderIdentity, ProviderLinkOutcome, ProviderLinkRepository, PubDress,
+    PubDressRenameOutcome, RegistrationOutcome, RememberedBondSigner, SecretDigester,
+    TelegramInitDataVerifier, TokenFactory, rate_limit::AttemptLimiter,
 };
 use subtle::ConstantTimeEq as _;
 
@@ -66,17 +66,20 @@ struct ApiState {
     secret_digester: SecretDigester,
     remembered_bond_signer: RememberedBondSigner,
     limiter: AttemptLimiter,
+    provider_links: ProviderLinkRepository,
     dummy_password_hash: String,
 }
 
 pub fn router(
     repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
 ) -> Router {
     router_with_clock(
         repository,
+        provider_links,
         telegram_verifier,
         discord_oauth,
         native_auth,
@@ -86,6 +89,7 @@ pub fn router(
 
 fn router_with_clock(
     repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
@@ -105,6 +109,7 @@ fn router_with_clock(
         remembered_bond_signer: native_auth.remembered_bond_signer(),
         native_auth,
         limiter: AttemptLimiter::default(),
+        provider_links,
         dummy_password_hash,
     };
 
@@ -126,6 +131,7 @@ fn router_with_clock(
             post(authenticate_native_identity),
         )
         .route("/api/v1/auth/native/logout", post(logout_native_identity))
+        .route("/api/v1/auth/telegram/link", post(link_telegram_provider))
         .route(
             "/api/v1/auth/native/remembered/forget",
             post(forget_remembered_bond),
@@ -477,6 +483,79 @@ async fn authenticate_native_identity(
         None,
     )
     .await
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TelegramProviderLinkRequest {
+    pub_dress: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TelegramProviderLinkResponse {
+    state: &'static str,
+    provider: &'static str,
+}
+
+async fn link_telegram_provider(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<TelegramProviderLinkRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let identity = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value,
+        Err(error) => return error.into_response(),
+    };
+    if identity.pub_dress != request.pub_dress {
+        return no_store_error(
+            StatusCode::CONFLICT,
+            "session_changed",
+            "The signed-in Bond changed before Telegram could be linked.",
+        );
+    }
+    let provider = match authenticate(&state, &headers).await {
+        Ok(value) if value.provider == crate::IdentityProvider::Telegram => value,
+        Ok(_) => return unauthorized(),
+        Err(error) => return error.into_response(),
+    };
+    let pub_dress = match PubDress::from_str(&identity.pub_dress) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+
+    match state.provider_links.link(&pub_dress, &provider).await {
+        Ok(ProviderLinkOutcome::Linked | ProviderLinkOutcome::AlreadyLinked) => {
+            no_store_json(
+                StatusCode::OK,
+                TelegramProviderLinkResponse {
+                    state: "linked",
+                    provider: "telegram",
+                },
+            )
+        }
+        Ok(ProviderLinkOutcome::ProviderAlreadyLinked) => no_store_error(
+            StatusCode::CONFLICT,
+            "provider_already_linked",
+            "This Telegram account is already linked to another Bond.",
+        ),
+        Ok(ProviderLinkOutcome::ProviderTypeAlreadyLinked) => no_store_error(
+            StatusCode::CONFLICT,
+            "provider_type_already_linked",
+            "This Bond account is already linked to another Telegram account. Sign in with that account or unlink it in the web app before linking a different Telegram account.",
+        ),
+        Ok(ProviderLinkOutcome::IdentityMissing) => unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "Telegram provider link failed");
+            unavailable()
+        }
+    }
 }
 
 async fn logout_native_identity(State(state): State<ApiState>, headers: HeaderMap) -> Response {
@@ -1792,7 +1871,8 @@ mod tests {
 
     use super::{Clock, router_with_clock};
     use crate::{
-        DiscordOAuthClient, IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier,
+        DiscordOAuthClient, IdentityRepository, NativeAuthConfig, ProviderLinkRepository,
+        TelegramInitDataVerifier,
     };
 
     const TOKEN: &str = "123456:development-token";
