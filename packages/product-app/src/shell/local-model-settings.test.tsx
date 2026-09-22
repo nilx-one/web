@@ -27,6 +27,8 @@ class FakeHost implements LocalModelHost {
   public unloaded = 0;
   public removed = 0;
   public failOpen = false;
+  /** Holds `open` until its signal aborts, as a download a person stops midway would. */
+  public holdOpen = false;
 
   public inspect(): Promise<LocalModelDeviceVerdict> {
     return Promise.resolve(this.verdict);
@@ -43,7 +45,16 @@ class FakeHost implements LocalModelHost {
   public open(
     _modelId: string,
     onProgress: (progress: LocalModelDownloadProgress) => void,
+    signal?: AbortSignal,
   ): Promise<LocalModelEngine> {
+    if (this.holdOpen) {
+      onProgress({ ratio: 0.25, text: "" });
+      return new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    }
     if (this.failOpen) {
       return Promise.reject(new Error("device lost"));
     }
@@ -185,6 +196,39 @@ describe("downloading from Settings", () => {
 
     await waitFor(() => expect(screen.getByText("device lost")).toBeVisible());
     expect(screen.getByRole("button", { name: "Download now" })).toBeEnabled();
+  });
+});
+
+describe("cancelling a download from Settings", () => {
+  it("abandons it through the host and returns without reporting a failure", async () => {
+    const host = new FakeHost();
+    host.description = { bytes: 3_000_000, source: "upstream", notices: [] };
+    host.holdOpen = true;
+
+    renderSettings(host);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Download now" }),
+      ).toBeEnabled(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Download now" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Cancel download" }),
+      ).toBeEnabled(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel download" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Not downloaded yet.")).toBeVisible(),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Download now" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Cancel download" }),
+    ).toBeNull();
   });
 });
 

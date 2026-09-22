@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { ProgressBar } from "@nilx-one/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -60,10 +60,12 @@ function queryKeyFor(modelId: string): readonly unknown[] {
  * already on this device, how large a first download is and where it would come from before
  * anything is fetched, and a way to reclaim the storage rather than wait for eviction to do
  * it. "Download now" here is a convenience prefetch: the same bytes that entry point would
- * ask for, asked for early and released again once fetched.
+ * ask for, asked for early and released again once fetched. A person who changes their mind
+ * midway can say so: cancelling abandons the download and re-reads the cache, and is never
+ * reported as something having gone wrong.
  *
  * `host` is not constructed here — see `local-model-host.ts` for why this package may not
- * reach into `@nilx-one/narration-webllm` itself. A deployment without one to pass simply
+ * reach into `@nilx-one/narration-webllm` or `@aiaiaiai/webllm` itself. A deployment without one to pass simply
  * does not render this section, which `AuthenticatedMapHomeView` decides, not this component.
  */
 export function LocalModelSettings({ host, modelId }: LocalModelSettingsProps) {
@@ -72,6 +74,7 @@ export function LocalModelSettings({ host, modelId }: LocalModelSettingsProps) {
   const [progress, setProgress] = useState<
     { readonly ratio: number; readonly text: string } | undefined
   >(undefined);
+  const downloadAbort = useRef<AbortController | undefined>(undefined);
 
   const statusQuery = useQuery({
     queryKey: queryKeyFor(modelId),
@@ -86,12 +89,21 @@ export function LocalModelSettings({ host, modelId }: LocalModelSettingsProps) {
 
   const download = useMutation({
     mutationFn: async () => {
+      const controller = new AbortController();
+      downloadAbort.current = controller;
       setProgress({ ratio: 0, text: "" });
-      const engine = await host.open(modelId, setProgress);
-      // Warms the cache; a prefetch from here never keeps an engine resident.
-      await engine.unload();
+      try {
+        const engine = await host.open(modelId, setProgress, controller.signal);
+        // Warms the cache; a prefetch from here never keeps an engine resident.
+        await engine.unload();
+      } catch (error) {
+        // A download someone asked to stop did not fail; it settles as a success so the
+        // cache is re-read and the section returns to whatever is true now.
+        if (!controller.signal.aborted) throw error;
+      }
     },
     onSettled: () => {
+      downloadAbort.current = undefined;
       setProgress(undefined);
     },
     onSuccess: refresh,
@@ -163,14 +175,24 @@ export function LocalModelSettings({ host, modelId }: LocalModelSettingsProps) {
         >
           {t("settings.localModel.action.download")}
         </button>
-        <button
-          type="button"
-          className="bond-profile__action"
-          disabled={!view.canRemove || view.busy}
-          onClick={() => remove.mutate()}
-        >
-          {t("settings.localModel.action.remove")}
-        </button>
+        {view.canCancel ? (
+          <button
+            type="button"
+            className="bond-profile__action"
+            onClick={() => downloadAbort.current?.abort()}
+          >
+            {t("settings.localModel.action.cancel")}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="bond-profile__action"
+            disabled={!view.canRemove || view.busy}
+            onClick={() => remove.mutate()}
+          >
+            {t("settings.localModel.action.remove")}
+          </button>
+        )}
       </div>
     </fieldset>
   );
