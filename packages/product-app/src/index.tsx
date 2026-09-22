@@ -7,6 +7,7 @@ import {
   AuthenticateNativeIdentity,
   BeginBrowserProviderAuthorization,
   DisconnectBrowserProvider,
+  DisconnectSelfProvider,
   ForgetRememberedBond,
   LinkBrowserProvider,
   LogoutNativeIdentity,
@@ -492,6 +493,19 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
     },
   });
+  // Unlike browserProviderDisconnect, a successful self-disconnect detaches
+  // the very identity this session is authenticated as: the Bond this host
+  // was reading is no longer reachable from here, so both identity
+  // projections must be refetched rather than just the connections list.
+  const selfProviderDisconnect = useMutation({
+    mutationFn: () =>
+      new DisconnectSelfProvider(dependencies.identity).execute(),
+    onSuccess: (result) => {
+      if (result.kind === "disconnected") {
+        void refreshIdentityProjections();
+      }
+    },
+  });
   const forgetRemembered = useMutation({
     mutationFn: () => new ForgetRememberedBond(dependencies.identity).execute(),
     onSuccess: (result) => {
@@ -931,15 +945,28 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         {...(providerConnections === undefined
           ? {}
           : { connectedProviders: providerConnections })}
-        {...(!browserHost || providerConnections === undefined
+        {...(providerConnections === undefined
           ? {}
-          : {
-              onDisconnectProvider: (provider: BondProviderType) => {
-                if (!browserProviderDisconnect.isPending) {
-                  browserProviderDisconnect.mutate(provider);
+          : browserHost
+            ? {
+                onDisconnectProvider: (provider: BondProviderType) => {
+                  if (!browserProviderDisconnect.isPending) {
+                    browserProviderDisconnect.mutate(provider);
+                  }
+                },
+              }
+            : host.kind === "telegram"
+              ? {
+                  // This host's own proof authenticated it as "telegram", so
+                  // there is exactly one row to disconnect and no `provider`
+                  // to forward — the service resolves it from that same proof.
+                  onDisconnectProvider: () => {
+                    if (!selfProviderDisconnect.isPending) {
+                      selfProviderDisconnect.mutate();
+                    }
+                  },
                 }
-              },
-            })}
+              : {})}
         // A host that is itself Telegram or Discord can follow that provider's
         // URL scheme. Browser GitHub bindings intentionally have no deep link.
         providerDeepLinks={providerDeepLinks}

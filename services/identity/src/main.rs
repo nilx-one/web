@@ -2,20 +2,20 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     env,
     net::SocketAddr,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use identity_bot::{
     BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository, BrowserOAuthConfig,
     DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig, GithubEvidenceRepository,
-    IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,
-    PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, TelegramInitDataVerifier,
-    TelegramLocationIntents, api, browser_web_auth, github_evidence, location_control_router,
-    public_api, role_for_pub_dress,
+    IdentityProvider, IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,
+    PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
+    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, github_evidence,
+    location_control_router, provider_self_service_router, public_api, role_for_pub_dress,
 };
 use teloxide::{
     prelude::*,
@@ -62,6 +62,10 @@ const USER_COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         command: "recover",
         description: "Explain the current recovery boundary",
+    },
+    CommandSpec {
+        command: "unlink",
+        description: "Від'єднати Telegram від цього Bond",
     },
     CommandSpec {
         command: "help",
@@ -111,11 +115,44 @@ fn help_text(role: BondAccessRole) -> String {
     lines.join("\n")
 }
 
+const UNLINK_CONFIRMATION_TTL: Duration = Duration::from_secs(5 * 60);
+
+/// Tracks a `/unlink` that is waiting on its `/unlink_confirm`. Detaching
+/// Telegram from a Bond is not reversible from inside the chat that just lost
+/// access to it, so the bot requires this explicit second step rather than
+/// acting on `/unlink` alone — mirroring how [`TelegramLocationIntents`]
+/// requires an explicit button/command before consuming a location.
+#[derive(Clone, Default)]
+struct PendingUnlinkConfirmations(Arc<Mutex<HashMap<i64, Instant>>>);
+
+impl PendingUnlinkConfirmations {
+    /// Sweeps every entry past [`UNLINK_CONFIRMATION_TTL`] before recording a
+    /// new one. Without this, a `/unlink` that is never followed by
+    /// `/unlink_confirm` would leave its entry in the map forever — the TTL
+    /// only gates what `consume` accepts, not how long the entry lives.
+    async fn begin(&self, telegram_user_id: i64) {
+        let mut pending = self.0.lock().await;
+        pending.retain(|_, started| started.elapsed() <= UNLINK_CONFIRMATION_TTL);
+        pending.insert(telegram_user_id, Instant::now());
+    }
+
+    /// Consumes the pending confirmation regardless of its age; the caller
+    /// only proceeds when this returns `true`.
+    async fn consume(&self, telegram_user_id: i64) -> bool {
+        match self.0.lock().await.remove(&telegram_user_id) {
+            Some(started) => started.elapsed() <= UNLINK_CONFIRMATION_TTL,
+            None => false,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct TelegramBotState {
     repository: IdentityRepository,
     locations: BondLocationRepository,
     intents: TelegramLocationIntents,
+    provider_links: ProviderLinkRepository,
+    pending_unlinks: PendingUnlinkConfirmations,
     /// Chat ids whose command menu has already been scoped to
     /// [`ADMIN_ONLY_COMMANDS`], so a resolved admin only costs one
     /// `setMyCommands` call per chat rather than one per message.
@@ -222,7 +259,7 @@ async fn main() {
         .expect("Telegram default chat menu button must open the command list");
     let provider_api = browser_web_auth::router(
         repository.clone(),
-        provider_links,
+        provider_links.clone(),
         native_auth.clone(),
         BrowserOAuthConfig::new(
             public_origin.clone(),
@@ -251,6 +288,11 @@ async fn main() {
         discord_activity_oauth.clone(),
         native_auth.clone(),
     );
+    let provider_self_service_api = provider_self_service_router(
+        repository.clone(),
+        provider_links.clone(),
+        telegram_activity_verifier.clone(),
+    );
     let api = api::router(
         repository.clone(),
         telegram_activity_verifier,
@@ -260,6 +302,7 @@ async fn main() {
     .merge(avaia_api)
     .merge(location_api)
     .merge(provider_api)
+    .merge(provider_self_service_api)
     .merge(github_evidence_api)
     .merge(public_api);
     let listener = tokio::net::TcpListener::bind(http_bind)
@@ -270,6 +313,8 @@ async fn main() {
         repository,
         locations,
         intents: TelegramLocationIntents::default(),
+        provider_links,
+        pending_unlinks: PendingUnlinkConfirmations::default(),
         admin_menu_synced: Arc::new(Mutex::new(HashSet::new())),
     });
 
@@ -378,6 +423,10 @@ async fn handle_message(
             )
             .reply_markup(control_keyboard(role))
             .await?;
+        }
+        "/unlink" => begin_unlink(&bot, &message, state.as_ref(), telegram_user_id).await?,
+        "/unlink_confirm" => {
+            confirm_unlink(&bot, &message, state.as_ref(), telegram_user_id).await?
         }
         "/help" => {
             send_help(&bot, &message, state.as_ref(), telegram_user_id).await?;
@@ -676,6 +725,96 @@ async fn begin_manual_position(
     Ok(())
 }
 
+/// First step of self-disconnecting this chat's Telegram identity from its
+/// Bond. Requires an explicit `/unlink_confirm` within
+/// [`UNLINK_CONFIRMATION_TTL`] rather than acting immediately: detaching the
+/// host that is sending the command is not reversible from inside this same
+/// chat once it loses access to the Bond it was linked to.
+async fn begin_unlink(
+    bot: &Bot,
+    message: &Message,
+    state: &TelegramBotState,
+    telegram_user_id: i64,
+) -> ResponseResult<()> {
+    if registered_identity(bot, message, &state.repository, telegram_user_id)
+        .await?
+        .is_none()
+    {
+        return Ok(());
+    }
+    state.pending_unlinks.begin(telegram_user_id).await;
+    bot.send_message(
+        message.chat.id,
+        "Це від'єднає Telegram від цього Bond: цей чат більше не зможе увійти в нього чи керувати ним. Щоб підтвердити, надішліть /unlink_confirm протягом 5 хвилин.",
+    )
+    .await?;
+    Ok(())
+}
+
+/// Second step: performs the actual, atomic self-disconnect only when
+/// `/unlink` armed it. [`ProviderLinkRepository::unlink_self_service`]
+/// refuses the write when Telegram is this Bond's only way back in — the
+/// same guard the Mini App Settings surface's disconnect button relies on.
+async fn confirm_unlink(
+    bot: &Bot,
+    message: &Message,
+    state: &TelegramBotState,
+    telegram_user_id: i64,
+) -> ResponseResult<()> {
+    if !state.pending_unlinks.consume(telegram_user_id).await {
+        bot.send_message(
+            message.chat.id,
+            "Немає активного запиту на відв'язання. Спочатку надішліть /unlink.",
+        )
+        .await?;
+        return Ok(());
+    }
+    let Some((identity, _role)) =
+        registered_identity(bot, message, &state.repository, telegram_user_id).await?
+    else {
+        return Ok(());
+    };
+    let pub_dress = match identity.pub_dress.parse() {
+        Ok(value) => value,
+        Err(error) => {
+            error!(%error, "stored Bond pub_dress is invalid");
+            bot.send_message(message.chat.id, "Bond тимчасово недоступний.")
+                .await?;
+            return Ok(());
+        }
+    };
+    match state
+        .provider_links
+        .unlink_self_service(&pub_dress, IdentityProvider::Telegram)
+        .await
+    {
+        Ok(SelfDisconnectOutcome::Disconnected) => {
+            bot.send_message(
+                message.chat.id,
+                "Telegram від'єднано від цього Bond. Щоб знову користуватись 0x1 з цього чату, зареєструйте новий Bond через /start або увійдіть іншим прив'язаним способом.",
+            )
+            .await?;
+        }
+        Ok(SelfDisconnectOutcome::NotLinked) => {
+            bot.send_message(message.chat.id, "Спочатку зареєструйте Bond через /start.")
+                .await?;
+        }
+        Ok(SelfDisconnectOutcome::SoleAccessPath) => {
+            bot.send_message(
+                message.chat.id,
+                "Telegram — єдиний спосіб увійти в цей Bond: немає пароля чи іншого прив'язаного провайдера. Спочатку встановіть пароль або прив'яжіть інший акаунт у 0x1, потім повторіть /unlink.",
+            )
+            .await?;
+        }
+        Err(error) => {
+            error!(%error, "self-disconnect failed");
+            bot.send_message(message.chat.id, "Від'єднання тимчасово недоступне.")
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 async fn send_help(
     bot: &Bot,
     message: &Message,
@@ -806,10 +945,68 @@ mod tests {
     use identity_bot::{BondAccessRole, BondLocationMode, PendingLocationIntent};
     use serde_json::json;
 
+    use std::time::Duration;
+
     use super::{
-        LocationModeRefusal, MINI_APP_URL, SET_POSITION_BUTTON, bot_commands, control_keyboard,
-        current_position_request_keyboard, help_text, registration_keyboard, resolve_location_mode,
+        LocationModeRefusal, MINI_APP_URL, PendingUnlinkConfirmations, SET_POSITION_BUTTON,
+        bot_commands, control_keyboard, current_position_request_keyboard, help_text,
+        registration_keyboard, resolve_location_mode,
     };
+
+    #[test]
+    fn unlink_is_registered_and_documented_for_every_role() {
+        assert!(
+            bot_commands(BondAccessRole::User)
+                .iter()
+                .any(|c| c.command == "unlink")
+        );
+        assert!(
+            bot_commands(BondAccessRole::Admin)
+                .iter()
+                .any(|c| c.command == "unlink")
+        );
+        assert!(help_text(BondAccessRole::User).contains("/unlink"));
+        assert!(help_text(BondAccessRole::Admin).contains("/unlink"));
+    }
+
+    #[tokio::test]
+    async fn unlink_confirmation_is_explicit_single_use_and_expires() {
+        let pending = PendingUnlinkConfirmations::default();
+        assert!(!pending.consume(7).await, "nothing armed yet");
+
+        pending.begin(7).await;
+        assert!(pending.consume(7).await);
+        assert!(!pending.consume(7).await, "a confirmation is single-use");
+
+        let expired = PendingUnlinkConfirmations::default();
+        expired
+            .0
+            .lock()
+            .await
+            .insert(7, std::time::Instant::now() - Duration::from_secs(10 * 60));
+        assert!(!expired.consume(7).await, "a stale confirmation must lapse");
+    }
+
+    #[tokio::test]
+    async fn unlink_confirmation_sweeps_expired_entries_instead_of_leaking_them() {
+        let pending = PendingUnlinkConfirmations::default();
+        pending
+            .0
+            .lock()
+            .await
+            .insert(7, std::time::Instant::now() - Duration::from_secs(10 * 60));
+
+        // A fresh /unlink from anyone must not leave that stale entry behind
+        // forever just because its own owner never sent /unlink_confirm.
+        pending.begin(8).await;
+
+        assert_eq!(
+            pending.0.lock().await.len(),
+            1,
+            "the expired entry for a different user must be swept, leaving only the new one"
+        );
+        assert!(pending.consume(8).await);
+    }
 
     #[test]
     fn only_admins_get_set_position_in_the_registered_command_menu() {

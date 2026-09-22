@@ -20,6 +20,7 @@ import {
   type NativeRegistrationResult,
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
+  type ProviderSelfDisconnectResult,
   type AvaiaProfileAccessPort,
   type AvaiaProfileProjection,
   type AvaiaProfileReadResult,
@@ -746,6 +747,31 @@ class IdentityHttpAdapter
       default:
         return { kind: "service-unavailable" };
     }
+  }
+
+  public async disconnectSelfProvider(): Promise<ProviderSelfDisconnectResult> {
+    const authorization = this.authorization();
+    if (authorization === undefined) {
+      return { kind: "rejected", reason: "authentication-required" };
+    }
+    const response = await this.fetch("/api/v1/auth/telegram/disconnect", {
+      method: "POST",
+      cache: "no-store",
+      headers: { authorization },
+    });
+    if (response.ok) {
+      return { kind: "disconnected" };
+    }
+    if (response.status === 401) {
+      return { kind: "rejected", reason: "authentication-required" };
+    }
+    if (response.status === 404) {
+      return { kind: "rejected", reason: "not-connected" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    return parseErrorCode(body) === "sole_access_path"
+      ? { kind: "rejected", reason: "sole-access-path" }
+      : { kind: "service-unavailable" };
   }
 
   private async nativeAuthenticationRequest(
