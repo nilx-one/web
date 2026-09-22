@@ -129,13 +129,14 @@ export function observedPositionSource(
 }
 
 /**
- * Three restrained circles rather than a conventional pin: the accuracy the
- * host reported, a pale edge that keeps the point legible over near-white
- * buildings, and the exact coordinate itself.
+ * The local cell is paired with three restrained circles rather than a
+ * conventional pin: the reported accuracy, a pale edge, and the exact
+ * coordinate itself. The cell is a presentation boundary only; it is not a
+ * persistent presence record.
  *
- * All three lie flat on the ground. The marker is always drawn, so a body has
- * to be able to stand on it: pitched into the viewport it would tilt up into
- * the figure and read as a disc pasted over its middle.
+ * All point layers lie flat on the ground. The marker is always drawn, so a
+ * body has to be able to stand on it: pitched into the viewport it would tilt
+ * up into the figure and read as a disc pasted over its middle.
  */
 export function observedPositionLayers(
   position: MapObservedPosition,
