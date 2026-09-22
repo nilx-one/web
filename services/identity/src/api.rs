@@ -1853,7 +1853,10 @@ struct ApiError {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, sync::Arc};
+    use std::{
+        collections::BTreeMap,
+        sync::{Arc, atomic::{AtomicU64, Ordering}},
+    };
 
     use axum::{
         body::{Body, to_bytes},
@@ -1877,6 +1880,12 @@ mod tests {
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
+    static TEST_DATABASE_ID: AtomicU64 = AtomicU64::new(0);
+
+    fn test_database_url(prefix: &str) -> String {
+        let id = TEST_DATABASE_ID.fetch_add(1, Ordering::Relaxed);
+        format!("sqlite:file:{prefix}-{id}?mode=memory&cache=shared")
+    }
 
     #[derive(Debug)]
     struct StaticClock;
@@ -1954,7 +1963,7 @@ mod tests {
     }
 
     async fn discord_app() -> axum::Router {
-        let database_url = "sqlite:file:discord-api-test?mode=memory&cache=shared";
+        let database_url = test_database_url("discord-api-test");
         let repository = IdentityRepository::connect(database_url)
             .await
             .expect("repository must initialize");
@@ -1976,7 +1985,7 @@ mod tests {
     }
 
     async fn app() -> axum::Router {
-        let database_url = "sqlite:file:api-test?mode=memory&cache=shared";
+        let database_url = test_database_url("api-test");
         let repository = IdentityRepository::connect(database_url)
             .await
             .expect("repository must initialize");
