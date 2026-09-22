@@ -230,6 +230,18 @@ export type BrowserProviderLinkResult =
     }
   | { kind: "service-unavailable" };
 
+export type TelegramProviderLinkResult =
+  | { kind: "linked" }
+  | {
+      kind: "rejected";
+      reason:
+        | "authentication-required"
+        | "provider-already-linked"
+        | "provider-type-already-linked"
+        | "session-changed";
+    }
+  | { kind: "service-unavailable" };
+
 export type BrowserProviderConnectionsResult =
   | { kind: "available"; connections: BondProviderConnections }
   | { kind: "authentication-required" }
@@ -311,6 +323,9 @@ export interface IdentityAccessPort {
   registerProvider(
     selection: PubDressSelection,
   ): Promise<ProviderRegistrationResult>;
+  linkTelegramProvider(
+    expectedPubDress: string,
+  ): Promise<TelegramProviderLinkResult>;
   resolvePubDress(
     selection: PubDressSelection,
   ): Promise<PubDressResolutionResult>;
@@ -345,6 +360,20 @@ export interface IdentityAccessPort {
    * browser tab has no provider proof of its own and does not implement this.
    */
   disconnectSelfProvider?(): Promise<ProviderSelfDisconnectResult>;
+}
+
+export class LinkTelegramProvider {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(
+    expectedPubDress: string,
+  ): Promise<TelegramProviderLinkResult> {
+    try {
+      return await this.identity.linkTelegramProvider(expectedPubDress);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
 }
 
 export class ResolvePubDress {
