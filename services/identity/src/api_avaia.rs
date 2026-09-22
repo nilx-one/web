@@ -6,12 +6,14 @@
 /// duplicating provider/session authentication semantics.
 pub fn avaia_router(
     repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
 ) -> Router {
     avaia_router_with_clock(
         repository,
+        provider_links,
         telegram_verifier,
         discord_oauth,
         native_auth,
@@ -21,6 +23,7 @@ pub fn avaia_router(
 
 fn avaia_router_with_clock(
     repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
@@ -40,6 +43,7 @@ fn avaia_router_with_clock(
         remembered_bond_signer: native_auth.remembered_bond_signer(),
         native_auth,
         limiter: AttemptLimiter::default(),
+        provider_links,
         dummy_password_hash,
     };
 
