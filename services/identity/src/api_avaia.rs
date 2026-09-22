@@ -6,12 +6,14 @@
 /// duplicating provider/session authentication semantics.
 pub fn avaia_router(
     repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
 ) -> Router {
     avaia_router_with_clock(
         repository,
+        provider_links,
         telegram_verifier,
         discord_oauth,
         native_auth,
@@ -21,6 +23,7 @@ pub fn avaia_router(
 
 fn avaia_router_with_clock(
     repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
@@ -40,6 +43,7 @@ fn avaia_router_with_clock(
         remembered_bond_signer: native_auth.remembered_bond_signer(),
         native_auth,
         limiter: AttemptLimiter::default(),
+        provider_links,
         dummy_password_hash,
     };
 
@@ -174,7 +178,10 @@ impl From<crate::AvaiaIdentityRecord> for AvaiaIdentityProjection {
 
 #[cfg(test)]
 mod avaia_api_tests {
-    use std::{collections::BTreeMap, sync::Arc};
+    use std::{
+        collections::BTreeMap,
+        sync::{Arc, atomic::{AtomicU64, Ordering}},
+    };
 
     use axum::{
         body::{Body, to_bytes},
@@ -193,6 +200,12 @@ mod avaia_api_tests {
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
+    static TEST_DATABASE_ID: AtomicU64 = AtomicU64::new(0);
+
+    fn test_database_url() -> String {
+        let id = TEST_DATABASE_ID.fetch_add(1, Ordering::Relaxed);
+        format!("sqlite:file:avaia-api-test-{id}?mode=memory&cache=shared")
+    }
 
     #[derive(Debug)]
     struct StaticClock;
@@ -237,7 +250,8 @@ mod avaia_api_tests {
     }
 
     async fn app(user_id: i64, owner: &str) -> (axum::Router, String) {
-        let repository = IdentityRepository::connect("sqlite::memory:")
+        let database_url = test_database_url();
+        let repository = IdentityRepository::connect(&database_url)
             .await
             .expect("repository");
         let owner: PubDress = owner.parse().expect("owner pub_dress");
@@ -245,8 +259,12 @@ mod avaia_api_tests {
             .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
             .await
             .expect("registration");
+        let provider_links = crate::ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider links");
         let app = avaia_router_with_clock(
             repository,
+            provider_links,
             TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
             None,
             NativeAuthConfig::new(

@@ -30,6 +30,7 @@ function createPort(
     renamePubDressSlug: async () => ({ kind: "service-unavailable" }),
     setProviderPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
+    linkTelegramProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
     resolvePubDress: async (selection) => ({
       kind: "available",

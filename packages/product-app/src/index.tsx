@@ -10,6 +10,7 @@ import {
   DisconnectSelfProvider,
   ForgetRememberedBond,
   LinkBrowserProvider,
+  LinkTelegramProvider,
   LogoutNativeIdentity,
   ReadBrowserProviderConnections,
   ReadBrowserProviderContext,
@@ -320,7 +321,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     queryKey: ["native-identity-context"],
     queryFn: () =>
       new ReadNativeIdentityContext(dependencies.identity).execute(),
-    enabled: browserHost,
+    enabled: true,
     retry: false,
     staleTime: 0,
   });
@@ -378,7 +379,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     (nativeContextQuery.data?.kind === "remembered" && !useRememberedHint);
   const providerCanResolve =
     providerIdentityQuery.data?.kind === "not-registered";
-  const canResolve = browserHost ? nativeCanResolve : providerCanResolve;
+  const canResolve = browserHost
+    ? nativeCanResolve
+    : providerCanResolve || nativeContextQuery.data?.kind !== "authenticated";
   const selectionMatchesResolution =
     selection.discriminator === resolutionSelection.discriminator &&
     selection.slug === resolutionSelection.slug;
@@ -481,6 +484,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         });
       }
     },
+  });
+  const telegramProviderLink = useMutation({
+    mutationFn: (expectedPubDress: string) =>
+      new LinkTelegramProvider(dependencies.identity).execute(expectedPubDress),
   });
   const browserProviderDisconnect = useMutation({
     mutationFn: (provider: BondProviderType) =>
@@ -640,6 +647,11 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     nativeIdentityState.kind === "authenticated"
       ? nativeIdentityState.pubDress
       : undefined;
+  const providerOwnsSelectedBond =
+    providerIdentityQuery.data?.kind === "registered" &&
+    providerIdentityQuery.data.identity.pubDress === formatPubDress(selection);
+  const useNativeSignInForExistingBond =
+    !browserHost && status.kind === "registered" && !providerOwnsSelectedBond;
 
   useEffect(() => {
     if (
@@ -659,19 +671,79 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     pendingBrowserProvider,
   ]);
 
+  useEffect(() => {
+    if (
+      host.kind !== "telegram" ||
+      !useNativeSignInForExistingBond ||
+      latestAuthentication?.kind !== "authenticated" ||
+      latestAuthentication.identity.pubDress !== formatPubDress(selection) ||
+      telegramProviderLink.isPending ||
+      telegramProviderLink.data !== undefined
+    ) {
+      return;
+    }
+    telegramProviderLink.mutate(latestAuthentication.identity.pubDress);
+  }, [
+    host.kind,
+    latestAuthentication,
+    selection,
+    telegramProviderLink,
+    useNativeSignInForExistingBond,
+  ]);
+
   let identityState: IdentityViewState = browserHost
     ? nativeIdentityState
-    : createProviderIdentityViewState(
-        host,
-        providerIdentityQuery.data,
-        providerRegistration.data,
-        status,
-        providerRegistration.isPending ||
-          providerPassword.isPending ||
-          recoveryAcknowledgement.isPending,
-        providerPassword.data,
-        recoveryAcknowledgement.data,
-      );
+    : useNativeSignInForExistingBond
+      ? createNativeIdentityViewState(
+          nativeContextQuery.data,
+          status,
+          nativeRegistration.data,
+          latestAuthentication,
+          nativePending,
+        )
+      : createProviderIdentityViewState(
+          host,
+          providerIdentityQuery.data,
+          providerRegistration.data,
+          status,
+          providerRegistration.isPending ||
+            providerPassword.isPending ||
+            recoveryAcknowledgement.isPending,
+          providerPassword.data,
+          recoveryAcknowledgement.data,
+        );
+  if (
+    host.kind === "telegram" &&
+    useNativeSignInForExistingBond &&
+    latestAuthentication?.kind === "authenticated" &&
+    nativeIdentityState.kind === "authenticated"
+  ) {
+    const linkResult = telegramProviderLink.data;
+    if (linkResult?.kind === "linked") {
+      identityState = nativeIdentityState;
+    } else if (linkResult?.kind === "rejected") {
+      identityState = {
+        kind: "unavailable",
+        detail:
+          linkResult.reason === "provider-type-already-linked"
+            ? "This Bond account is already linked to another Telegram account. Sign in with that account or unlink it in the web app before linking a different Telegram account."
+            : linkResult.reason === "provider-already-linked"
+              ? "This Telegram account is already linked to another Bond."
+              : "Could not connect Telegram to this Bond. Try again.",
+      };
+    } else if (linkResult?.kind === "service-unavailable") {
+      identityState = {
+        kind: "unavailable",
+        detail: "Could not connect Telegram to this Bond right now.",
+      };
+    } else {
+      identityState = {
+        kind: "loading",
+        detail: "Connecting Telegram to " + nativeIdentityState.pubDress + "…",
+      };
+    }
+  }
+
   if (
     browserHost &&
     pendingBrowserProvider !== undefined &&

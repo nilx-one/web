@@ -284,6 +284,7 @@ async fn main() {
     );
     let avaia_api = api::avaia_router(
         repository.clone(),
+        provider_links.clone(),
         telegram_activity_verifier.clone(),
         discord_activity_oauth.clone(),
         native_auth.clone(),
@@ -295,6 +296,7 @@ async fn main() {
     );
     let api = api::router(
         repository.clone(),
+        provider_links.clone(),
         telegram_activity_verifier,
         discord_activity_oauth,
         native_auth,

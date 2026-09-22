@@ -138,6 +138,7 @@ function createIdentity(
     setProviderPassword: async () => ({ kind: "service-unavailable" }),
     registerProvider: async () => ({ kind: "service-unavailable" }),
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
+    linkTelegramProvider: async () => ({ kind: "linked" }),
     resolvePubDress: async (selection) => ({
       kind: "available",
       pubDress: formatPubDress(selection),
