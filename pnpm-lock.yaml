@@ -260,6 +260,9 @@ importers:
       '@types/three':
         specifier: ^0.185.4
         version: 0.185.4
+      h3-js:
+        specifier: ^4.5.0
+        version: 4.5.0
       maplibre-gl:
         specifier: ^6.6.0
         version: 6.6.0
