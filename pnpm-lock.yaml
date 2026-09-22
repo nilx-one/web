@@ -298,9 +298,9 @@ importers:
 
   packages/narration-webllm:
     dependencies:
-      '@mlc-ai/web-llm':
-        specifier: 0.2.84
-        version: 0.2.84
+      '@aiaiaiai/webllm':
+        specifier: 0.1.0
+        version: 0.1.0
       '@nilx-one/narration-contract':
         specifier: workspace:*
         version: link:../narration-contract
@@ -369,6 +369,10 @@ packages:
   '@aiaiaiai/4x-errors-browser@0.1.0':
     resolution: {integrity: sha512-enyPr7OK468H29rLb2VogIm8bSl4my4pU+vjZ/et4qbUD2JNHnPtm9Os5kqbtILjSXRNlFB4M0V+ZmE+m3GfRg==}
     engines: {node: '>=24'}
+
+  '@aiaiaiai/webllm@0.1.0':
+    resolution: {integrity: sha512-Zp1nQ9TjcTpHws6Ejm/5bbfeHGT2ciVzCPYNTH5OFRNYB5d/4pENNYNHPn2ENopcYID6wr5WD/yoI79Vt02h7A==}
+    engines: {node: '>=22'}
 
   '@asamuzakjp/css-color@6.0.7':
     resolution: {integrity: sha512-vC/bk1Lz7Tn/EfU9/apOTBk80/8dyGyWMowPoV1tJ52muDGsDqt2HPT2klrFUiY60MQmQv9q8yIht15JnBgDGw==}
@@ -1825,6 +1829,10 @@ snapshots:
   '@adobe/css-tools@4.5.0': {}
 
   '@aiaiaiai/4x-errors-browser@0.1.0': {}
+
+  '@aiaiaiai/webllm@0.1.0':
+    dependencies:
+      '@mlc-ai/web-llm': 0.2.84
 
   '@asamuzakjp/css-color@6.0.7':
     dependencies:

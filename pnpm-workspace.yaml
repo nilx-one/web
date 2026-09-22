@@ -6,3 +6,4 @@ packages:
   - packages/*
 minimumReleaseAgeExclude:
   - "@aiaiaiai/4x-errors-browser@0.1.0"
+  - "@aiaiaiai/webllm@0.1.0"
