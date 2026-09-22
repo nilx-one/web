@@ -33,6 +33,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "services/identity -> target"
       - name: Check formatting
         run: cargo fmt --manifest-path services/identity/Cargo.toml --all -- --check
       - name: Run Clippy
@@ -58,8 +61,16 @@ jobs:
           sh services/identity/deploy/prepare-runtime-env.test.sh
           identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
           [[ "$identity_contract" =~ ^[0-9]+$ ]]
+      - uses: docker/setup-buildx-action@v3
       - name: Build runtime image
-        run: docker build --file services/identity/Dockerfile --tag 0x1-identity:ci .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/identity/Dockerfile
+          tags: 0x1-identity:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Validate runtime Compose contract
         run: |
           set -Eeuo pipefail

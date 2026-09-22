@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
@@ -8,7 +9,15 @@ COPY services/identity/Cargo.toml ./Cargo.toml
 COPY services/identity/Cargo.lock ./Cargo.lock
 COPY services/identity/migrations ./migrations
 COPY services/identity/src ./src
-RUN cargo build --locked --release
+# The registry, git-checkout, and target caches are cache mounts: they speed
+# up rebuilds across CI runs but never end up in an image layer, so the
+# binary has to be copied out to a plain path before this RUN ends — nothing
+# under /source/target survives past it.
+RUN --mount=type=cache,id=identity-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=identity-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=identity-cargo-target,target=/source/target \
+    cargo build --locked --release \
+    && cp target/release/identity-bot /tmp/identity-bot
 
 FROM debian:bookworm-slim
 
@@ -18,7 +27,7 @@ RUN apt-get update \
     && useradd --create-home --uid 10001 identity \
     && install --directory --owner identity --group identity /data
 
-COPY --from=build /source/target/release/identity-bot /usr/local/bin/identity-bot
+COPY --from=build /tmp/identity-bot /usr/local/bin/identity-bot
 
 USER identity
 ENV DATABASE_URL=sqlite:///data/identity.db
