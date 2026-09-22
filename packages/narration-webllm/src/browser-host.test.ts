@@ -31,32 +31,23 @@ function mirrorManifest(
     revision: "1",
     bytes: 402_653_184,
     integrity: {
-      config: "sha256-Y29uZmln",
-      tokenizer: { "tokenizer.json": "sha256-dG9rZW5pemVy" },
-      model_lib: "sha256-bGli",
+      config: "sha256-t5YG+zr+pb0WCe1AtiIULxyYElq8/omnamYbDo40ORA=",
+      tokenizer: {
+        "tokenizer.json": "sha256-X5fjd0xR7dHWNwbC7DgmxWSgZ3lHcM2rD4xHl5ccrPk=",
+      },
+      model_lib: "sha256-drWjVzkSdrKCpRb1T0jvPCB/RtgZLcWMII1Rg9OEFfg=",
     },
     ...overrides,
   };
 }
 
 describe("the config this product loads under", () => {
-  it("declares the feature the registry omits on this entry", () => {
+  it("carries the feature the registry omits on this entry, completed by the foundation", () => {
     const record = narrationAppConfig().model_list.find(
       (entry) => entry.model_id === NARRATION_MODEL_ID,
     );
 
     expect(record?.required_features).toEqual(["shader-f16"]);
-  });
-
-  it("leaves every other registry entry as it found it", () => {
-    const config = narrationAppConfig();
-    const others = config.model_list.filter(
-      (entry) => entry.model_id !== NARRATION_MODEL_ID,
-    );
-
-    expect(others.some((entry) => entry.required_features === undefined)).toBe(
-      true,
-    );
   });
 
   it("chooses a cache backend rather than leaving it to a default", () => {
@@ -153,10 +144,9 @@ describe("choosing where this device loads from", () => {
           : Promise.reject(new Error(`unexpected request: ${input}`)),
     );
 
-    expect(resolved.kind).toBe("mirror");
-    expect(resolved.appConfig.model_list[0]?.model).toBe(
-      `${ORIGIN}/models/${NARRATION_MODEL_ID}/resolve/1/`,
-    );
+    expect(
+      resolved.kind === "mirror" && resolved.catalog.models[0]?.artifacts,
+    ).toBe(`${ORIGIN}/models/${NARRATION_MODEL_ID}/resolve/1/`);
   });
 
   it("falls back to the pinned upstream registry when this deployment has no mirror", async () => {
@@ -174,8 +164,11 @@ describe("choosing where this device loads from", () => {
     const untrusted = mirrorManifest({
       integrity: {
         config: "not-sri",
-        tokenizer: { "tokenizer.json": "sha256-dG9rZW5pemVy" },
-        model_lib: "sha256-bGli",
+        tokenizer: {
+          "tokenizer.json":
+            "sha256-X5fjd0xR7dHWNwbC7DgmxWSgZ3lHcM2rD4xHl5ccrPk=",
+        },
+        model_lib: "sha256-drWjVzkSdrKCpRb1T0jvPCB/RtgZLcWMII1Rg9OEFfg=",
       },
     });
 

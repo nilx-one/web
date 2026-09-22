@@ -1,12 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { LocalInferenceError } from "@aiaiaiai/webllm";
 import { describe, expect, it } from "vitest";
 
 import {
   describeMirrorDownload,
   loadMirrorManifest,
-  mirrorAppConfig,
+  mirrorCatalog,
   MirrorConfigError,
   type MirrorManifest,
 } from "./mirror";
@@ -20,9 +21,11 @@ function manifest(overrides: Partial<MirrorManifest> = {}): MirrorManifest {
     revision: "1",
     bytes: 402_653_184,
     integrity: {
-      config: "sha256-Y29uZmln",
-      tokenizer: { "tokenizer.json": "sha256-dG9rZW5pemVy" },
-      model_lib: "sha256-bGli",
+      config: "sha256-t5YG+zr+pb0WCe1AtiIULxyYElq8/omnamYbDo40ORA=",
+      tokenizer: {
+        "tokenizer.json": "sha256-X5fjd0xR7dHWNwbC7DgmxWSgZ3lHcM2rD4xHl5ccrPk=",
+      },
+      model_lib: "sha256-drWjVzkSdrKCpRb1T0jvPCB/RtgZLcWMII1Rg9OEFfg=",
     },
     ...overrides,
   };
@@ -30,39 +33,49 @@ function manifest(overrides: Partial<MirrorManifest> = {}): MirrorManifest {
 
 describe("loading a model from our own origin", () => {
   it("serves the model from a revision WebLLM will not rewrite", () => {
-    const [record] = mirrorAppConfig("https://nilx.one", manifest()).model_list;
+    const [model] = mirrorCatalog("https://nilx.one", manifest()).models;
 
-    expect(record?.model).toBe(
+    expect(model?.artifacts).toBe(
       `https://nilx.one/models/${MODEL_ID}/resolve/1/`,
     );
-    expect(record?.model_lib).toBe(
+    expect(model?.modelLib).toBe(
       `https://nilx.one/models/${MODEL_ID}/resolve/1/model.wasm`,
     );
     // WebLLM appends `resolve/main/` only to a URL that does not already name a revision.
-    expect(record?.model).toMatch(/\/resolve\/[^/]+\/$/);
+    expect(model?.artifacts).toMatch(/\/resolve\/[^/]+\/$/);
   });
 
   it("declares the feature the prebuilt registry leaves off this entry", () => {
-    const [record] = mirrorAppConfig("https://nilx.one", manifest()).model_list;
+    const [model] = mirrorCatalog("https://nilx.one", manifest()).models;
 
-    expect(record?.required_features).toEqual(["shader-f16"]);
+    expect(model?.requiredFeatures).toEqual(["shader-f16"]);
   });
 
-  it("carries the hashes WebLLM can verify, and fails closed on a mismatch", () => {
-    const [record] = mirrorAppConfig("https://nilx.one", manifest()).model_list;
+  it("carries the hashes WebLLM can verify", () => {
+    const [model] = mirrorCatalog("https://nilx.one", manifest()).models;
 
-    expect(record?.integrity).toEqual({
-      config: "sha256-Y29uZmln",
-      model_lib: "sha256-bGli",
-      tokenizer: { "tokenizer.json": "sha256-dG9rZW5pemVy" },
-      onFailure: "error",
+    expect(model?.integrity).toEqual({
+      config: "sha256-t5YG+zr+pb0WCe1AtiIULxyYElq8/omnamYbDo40ORA=",
+      modelLib: "sha256-drWjVzkSdrKCpRb1T0jvPCB/RtgZLcWMII1Rg9OEFfg=",
+      tokenizer: {
+        "tokenizer.json": "sha256-X5fjd0xR7dHWNwbC7DgmxWSgZ3lHcM2rD4xHl5ccrPk=",
+      },
     });
   });
 
   it("keeps only the model it was given", () => {
+    expect(mirrorCatalog("https://nilx.one", manifest()).models).toHaveLength(
+      1,
+    );
+  });
+
+  it("leaves the cache backend to the caller", () => {
     expect(
-      mirrorAppConfig("https://nilx.one", manifest()).model_list,
-    ).toHaveLength(1);
+      mirrorCatalog("https://nilx.one", manifest()).cacheBackend,
+    ).toBeUndefined();
+    expect(
+      mirrorCatalog("https://nilx.one", manifest(), "opfs").cacheBackend,
+    ).toBe("opfs");
   });
 
   it("states the download size without asking the network", () => {
@@ -70,47 +83,54 @@ describe("loading a model from our own origin", () => {
   });
 });
 
-describe("what a mirror config refuses", () => {
-  it("refuses a plaintext origin but allows local development", () => {
-    expect(() => mirrorAppConfig("http://nilx.one", manifest())).toThrow(
-      MirrorConfigError,
+describe("what a mirror catalog refuses", () => {
+  it("refuses a plaintext origin, local development included", () => {
+    expect(() => mirrorCatalog("http://nilx.one", manifest())).toThrow(
+      LocalInferenceError,
     );
-    expect(() =>
-      mirrorAppConfig("http://localhost:5173", manifest()),
-    ).not.toThrow();
+    expect(() => mirrorCatalog("http://localhost:5173", manifest())).toThrow(
+      LocalInferenceError,
+    );
   });
 
   it("refuses a manifest schema it does not know how to read", () => {
     expect(() =>
-      mirrorAppConfig("https://nilx.one", manifest({ schema: 2 })),
+      mirrorCatalog("https://nilx.one", manifest({ schema: 2 })),
     ).toThrow(/schema 2/);
   });
 
   it("refuses identifiers that would not stay inside one path segment", () => {
     for (const model_id of ["../etc", "a/b", ""]) {
       expect(() =>
-        mirrorAppConfig("https://nilx.one", manifest({ model_id })),
+        mirrorCatalog("https://nilx.one", manifest({ model_id })),
       ).toThrow(MirrorConfigError);
     }
+  });
+
+  it("refuses a revision that moves", () => {
+    expect(() =>
+      mirrorCatalog("https://nilx.one", manifest({ revision: "main" })),
+    ).toThrow(/moving revision/);
   });
 
   it("refuses a hash that is not SRI", () => {
     const broken = manifest({
       integrity: {
         config: "deadbeef",
-        tokenizer: { "tokenizer.json": "sha256-dG9rZW5pemVy" },
-        model_lib: "sha256-bGli",
+        tokenizer: {
+          "tokenizer.json":
+            "sha256-X5fjd0xR7dHWNwbC7DgmxWSgZ3lHcM2rD4xHl5ccrPk=",
+        },
+        model_lib: "sha256-drWjVzkSdrKCpRb1T0jvPCB/RtgZLcWMII1Rg9OEFfg=",
       },
     });
 
-    expect(() => mirrorAppConfig("https://nilx.one", broken)).toThrow(
-      /not an SRI hash/,
-    );
+    expect(() => mirrorCatalog("https://nilx.one", broken)).toThrow(/SRI hash/);
   });
 
   it("refuses a manifest that does not state what it is offering", () => {
     expect(() =>
-      mirrorAppConfig("https://nilx.one", manifest({ bytes: 0 })),
+      mirrorCatalog("https://nilx.one", manifest({ bytes: 0 })),
     ).toThrow(/download size/);
   });
 });
@@ -134,6 +154,14 @@ describe("reading the manifest a deployment wrote", () => {
     expect(asked).toEqual([
       `https://nilx.one/models/${MODEL_ID}/resolve/1/manifest.json`,
     ]);
+  });
+
+  it("does not ask a plaintext origin", async () => {
+    await expect(
+      loadMirrorManifest("http://localhost:5173", MODEL_ID, "1", () =>
+        Promise.reject(new Error("should not be asked")),
+      ),
+    ).resolves.toBeNull();
   });
 
   it("returns nothing when the deployment has no such revision", async () => {

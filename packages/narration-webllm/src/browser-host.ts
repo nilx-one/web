@@ -6,19 +6,22 @@
  *
  * Everything that can download, occupy memory, or fail because of a device lives here and
  * nowhere else, so the adapter above it stays testable without a GPU.
+ *
+ * The lifecycle itself — probing, the engine behind a worker, the cache, eviction, and
+ * abandoning a download midway — is `@aiaiaiai/webllm`'s. What stays here is this
+ * product's: which model, which source it prefers, and how the size of a download is told
+ * to a person before it starts.
  */
 
 import {
-  CreateWebWorkerMLCEngine,
-  deleteModelAllInfoInCache,
-  hasModelInCache,
-  prebuiltAppConfig,
-  type AppConfig,
-  type InitProgressReport,
-  type ModelRecord,
-} from "@mlc-ai/web-llm";
+  completedPrebuiltAppConfig,
+  WebLlmBrowserHost,
+  type LocalTextEngine,
+  type ServedCatalog,
+  type WebLlmBrowserHostOptions,
+} from "@aiaiaiai/webllm";
 
-import { inspectDevice, type DeviceVerdict } from "./device";
+import { deviceVerdict, type DeviceVerdict } from "./device";
 import {
   NARRATION_MODEL_ID,
   type LoadProgress,
@@ -28,9 +31,12 @@ import {
 import {
   describeMirrorDownload,
   loadMirrorManifest,
-  mirrorAppConfig,
+  mirrorCatalog,
   type MirrorManifest,
 } from "./mirror";
+
+/** The pinned runtime's configuration, named through the foundation rather than beside it. */
+export type AppConfig = NonNullable<WebLlmBrowserHostOptions["appConfig"]>;
 
 /** One short rephrasing. Bounded because a sentence is all that is wanted. */
 const MAX_NEW_TOKENS = 48;
@@ -53,26 +59,17 @@ export interface BrowserHostOptions {
 }
 
 /**
- * Builds the app config this product loads under.
+ * Builds the app config this product loads from upstream under.
  *
- * Two things the prebuilt registry does not do for us. It omits `required_features` on the
- * newer entries, so a device without `shader-f16` would download an entire model before
- * failing to initialise it — we declare it. And its default cache backend is the Cache API,
- * while artifacts meant to stay through eviction pressure belong in OPFS where the browser
- * offers it.
+ * The foundation already completes `required_features` on the registry entries that omit
+ * it, so a device without `shader-f16` is refused before a download rather than after one.
+ * What it leaves to a product is where the artifacts are kept: the default is the Cache
+ * API, while artifacts meant to stay through eviction pressure belong in OPFS where the
+ * browser offers it.
  */
-export function narrationAppConfig(modelId = NARRATION_MODEL_ID): AppConfig {
-  const model_list = prebuiltAppConfig.model_list.map((record: ModelRecord) =>
-    record.model_id === modelId
-      ? {
-          ...record,
-          required_features: record.required_features ?? ["shader-f16"],
-        }
-      : record,
-  );
-
+export function narrationAppConfig(): AppConfig {
   return {
-    model_list,
+    ...completedPrebuiltAppConfig(),
     cacheBackend: supportsOpfs() ? "opfs" : "cache",
   };
 }
@@ -91,7 +88,7 @@ const DEFAULT_MIRROR_REVISION = "1";
 export type ResolvedModelSource =
   | {
       readonly kind: "mirror";
-      readonly appConfig: AppConfig;
+      readonly catalog: ServedCatalog;
       readonly manifest: MirrorManifest;
     }
   | { readonly kind: "upstream"; readonly appConfig: AppConfig };
@@ -102,9 +99,9 @@ export type ResolvedModelSource =
  * one of the two that names an immutable `model_lib` and keeps a device's IP off a host we do
  * not run — see `docs/model-selection.md` in `nilx-one/ai` for why that gap exists upstream.
  *
- * A malformed manifest is treated the same as a missing one: `mirrorAppConfig` throwing is
- * this deployment describing a mirror it does not trust itself, not a reason to load from it
- * anyway with a config nobody checked.
+ * A malformed manifest is treated the same as a missing one: `mirrorCatalog` throwing is
+ * this deployment describing a mirror it — or the foundation — does not trust, not a reason
+ * to load from it anyway with a config nobody checked.
  */
 export async function resolveLocalModelSource(
   modelId = NARRATION_MODEL_ID,
@@ -122,14 +119,14 @@ export async function resolveLocalModelSource(
     try {
       return {
         kind: "mirror",
-        appConfig: mirrorAppConfig(origin, manifest),
+        catalog: mirrorCatalog(origin, manifest),
         manifest,
       };
     } catch {
       // Falls through to upstream below.
     }
   }
-  return { kind: "upstream", appConfig: narrationAppConfig(modelId) };
+  return { kind: "upstream", appConfig: narrationAppConfig() };
 }
 
 function defaultOrigin(): string {
@@ -193,7 +190,7 @@ export async function describeLocalModelDownload(
  */
 export async function describeDownload(
   modelId = NARRATION_MODEL_ID,
-  appConfig: AppConfig = narrationAppConfig(modelId),
+  appConfig: AppConfig = narrationAppConfig(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<
   { readonly bytes: number } | { readonly bytes: null; readonly reason: string }
@@ -248,87 +245,100 @@ export function createBrowserHost(
   options: BrowserHostOptions = {},
 ): WebLlmRuntimeHost {
   const modelId = options.modelId ?? NARRATION_MODEL_ID;
-  const workerFactory =
-    options.workerFactory ??
-    (() =>
-      new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }));
+  // Left unset, the foundation starts the worker it ships, which runs the same pinned
+  // runtime its host drives. A second copy here would be a second 6 MB bundle.
+  const workerFactory = options.workerFactory;
+
+  // Probing reads the adapter and nothing else, so it needs no source resolved — a device
+  // that can run nothing is told so without a request to anyone. Its host is given an empty
+  // model list because it will never be asked to load one.
+  let probeHost: WebLlmBrowserHost | undefined;
 
   // Resolved lazily, and only once per host: construction must still download nothing, and
-  // `isCached` and `open` have to agree on the same config or they answer about two places.
-  let resolved: Promise<AppConfig> | undefined;
-  function resolveAppConfig(): Promise<AppConfig> {
-    if (options.appConfig !== undefined) {
-      return Promise.resolve(options.appConfig);
-    }
-    resolved ??= resolveLocalModelSource(
-      modelId,
-      options.origin,
-      options.revision,
-      options.fetchImpl,
-    ).then((source) => source.appConfig);
+  // `isCached`, `open` and `remove` have to agree on the same source or they answer about
+  // two places.
+  let resolved: Promise<WebLlmBrowserHost> | undefined;
+  function hostOptions(
+    source: Pick<WebLlmBrowserHostOptions, "appConfig" | "catalog">,
+  ): WebLlmBrowserHostOptions {
+    return workerFactory === undefined ? source : { ...source, workerFactory };
+  }
+  function resolveHost(): Promise<WebLlmBrowserHost> {
+    resolved ??=
+      options.appConfig !== undefined
+        ? Promise.resolve(
+            new WebLlmBrowserHost(
+              hostOptions({ appConfig: options.appConfig }),
+            ),
+          )
+        : resolveLocalModelSource(
+            modelId,
+            options.origin,
+            options.revision,
+            options.fetchImpl,
+          ).then((source) =>
+            source.kind === "mirror"
+              ? new WebLlmBrowserHost(hostOptions({ catalog: source.catalog }))
+              : new WebLlmBrowserHost(
+                  hostOptions({ appConfig: source.appConfig }),
+                ),
+          );
     return resolved;
   }
 
   return {
-    inspect(): Promise<DeviceVerdict> {
-      return inspectDevice();
+    async inspect(): Promise<DeviceVerdict> {
+      probeHost ??= new WebLlmBrowserHost({ appConfig: { model_list: [] } });
+      return deviceVerdict(await probeHost.probeWebGpu(), modelId);
     },
 
     async isCached(id: string): Promise<boolean> {
-      // Asked with the same config the load will use: a query against another registry or
-      // another backend answers about a different place than the one being filled.
-      const appConfig = await resolveAppConfig();
-      return hasModelInCache(id, appConfig);
+      return (await resolveHost()).hasModelInCache(id);
     },
 
     async remove(id: string): Promise<void> {
-      // Same reasoning as `isCached`: evicting from the wrong config leaves the actual
-      // cache entry untouched and reports success anyway.
-      const appConfig = await resolveAppConfig();
-      await deleteModelAllInfoInCache(id, appConfig);
+      await (await resolveHost()).evictModel(id);
     },
 
     async open(
       id: string,
       onProgress: (progress: LoadProgress) => void,
+      signal?: AbortSignal,
     ): Promise<LocalEngine> {
-      const appConfig = await resolveAppConfig();
-      const worker = workerFactory();
-      try {
-        const engine = await CreateWebWorkerMLCEngine(worker, id, {
-          appConfig,
-          initProgressCallback: (report: InitProgressReport) =>
-            onProgress({ ratio: report.progress, text: report.text }),
-        });
-
-        return {
-          async rephrase(system: string, user: string): Promise<string> {
-            const completion = await engine.chat.completions.create({
-              messages: [
-                { role: "system", content: system },
-                { role: "user", content: user },
-              ],
-              stream: false,
-              max_tokens: MAX_NEW_TOKENS,
-              temperature: TEMPERATURE,
-              top_p: TOP_P,
-              extra_body: { enable_thinking: false },
-            });
-            return completion.choices[0]?.message.content ?? "";
-          },
-
-          async unload(): Promise<void> {
-            try {
-              await engine.unload();
-            } finally {
-              worker.terminate();
-            }
-          },
-        };
-      } catch (error) {
-        worker.terminate();
-        throw error;
-      }
+      const host = await resolveHost();
+      const engine = await host.createEngine(
+        id,
+        (progress) =>
+          onProgress({ ratio: progress.progress, text: progress.text }),
+        signal,
+      );
+      return {
+        rephrase: (system, user) => complete(engine, system, user),
+        unload: () => engine.unload(),
+      };
     },
   };
+}
+
+async function complete(
+  engine: LocalTextEngine,
+  system: string,
+  user: string,
+): Promise<string> {
+  let said = "";
+  for await (const chunk of engine.stream(
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    {
+      maxTokens: MAX_NEW_TOKENS,
+      temperature: TEMPERATURE,
+      topP: TOP_P,
+      responseFormat: undefined,
+    },
+  )) {
+    said += chunk;
+  }
+  return said;
 }

@@ -40,6 +40,31 @@ describe("what an owner may do, by phase", () => {
         reason: "below_runtime_floor",
       }).statusKey,
     ).toBe("unsupportedBelowFloor");
+    expect(
+      createLocalModelSettingsViewState({
+        kind: "unsupported",
+        reason: "missing_features",
+      }).statusKey,
+    ).toBe("unsupportedFeatures");
+  });
+
+  it("offers cancelling only while a download is running", () => {
+    expect(
+      createLocalModelSettingsViewState({
+        kind: "downloading",
+        ratio: 0.1,
+        text: "",
+      }).canCancel,
+    ).toBe(true);
+    for (const phase of [
+      { kind: "checking" },
+      { kind: "absent", bytes: null, source: "upstream" },
+      { kind: "present" },
+      { kind: "removing" },
+      { kind: "error", message: "device lost" },
+    ] as const) {
+      expect(createLocalModelSettingsViewState(phase).canCancel).toBe(false);
+    }
   });
 
   it("offers a download and carries the size and notices, once absent", () => {

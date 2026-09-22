@@ -4,28 +4,30 @@
 /**
  * Whether this surface can run a local model at all.
  *
- * An adapter is not a device. WebLLM asks `requestDevice` for 1 GiB of `maxBufferSize` and
- * `maxStorageBufferBindingSize`, falls back once to the values below, and throws beneath
- * them; it also requires 32 KiB of `maxComputeWorkgroupStorageSize` and **ten** storage
- * buffers per shader stage, neither with a fallback. Ten is above the WebGPU default of
- * eight, so a current device can offer an adapter and still be one nothing will load on.
+ * The probe itself and the floors it is measured against are `@aiaiaiai/webllm`'s: the
+ * runtime it pins asks `requestDevice` for limits above the WebGPU defaults, so a current
+ * device can offer an adapter and still be one nothing will load on. What is decided here is
+ * only the product's reading of that probe — one verdict, named in this product's terms.
  *
- * These numbers are `RUNTIME_DEVICE_FLOORS` in `@aiaiaiai/webllm`, which is where they
- * belong. They are repeated here only because that package is not published yet
- * (`nilx-one/ai#17`); this file is deleted, not maintained, once it is.
+ * The model's own requirements are checked here too, before anything is fetched. A `…f16…`
+ * model cannot compile its kernels without `shader-f16`, and an adapter that lacks it would
+ * otherwise be offered a download it can never run.
  */
 
-export const RUNTIME_DEVICE_FLOORS = {
-  maxBufferSize: 1 << 28,
-  maxStorageBufferBindingSize: 1 << 27,
-  maxComputeWorkgroupStorageSize: 32 << 10,
-  maxStorageBuffersPerShaderStage: 10,
-} as const;
+import {
+  belowRuntimeFloor,
+  missingFeatures,
+  requiredFeaturesFor,
+  type DeviceLimit,
+  type WebGpuProbe,
+} from "@aiaiaiai/webllm";
 
-export type RuntimeDeviceLimit = keyof typeof RUNTIME_DEVICE_FLOORS;
+export { RUNTIME_DEVICE_FLOORS } from "@aiaiaiai/webllm";
+
+export type RuntimeDeviceLimit = DeviceLimit;
 
 export type DeviceVerdict =
-  | { readonly kind: "usable"; readonly shaderF16: boolean }
+  | { readonly kind: "usable" }
   | { readonly kind: "insecure_context" }
   | { readonly kind: "webgpu_missing" }
   | { readonly kind: "adapter_unavailable" }
@@ -33,63 +35,41 @@ export type DeviceVerdict =
       readonly kind: "below_runtime_floor";
       readonly limit: RuntimeDeviceLimit;
       readonly granted: number;
+    }
+  | {
+      readonly kind: "missing_features";
+      readonly missing: readonly string[];
     };
 
-interface GpuAdapterLike {
-  readonly limits?: Partial<Record<RuntimeDeviceLimit, number>>;
-  readonly features?: { has(feature: string): boolean };
-}
-
-interface GpuLike {
-  requestAdapter(): Promise<GpuAdapterLike | null>;
-}
-
-/** Reads the device without downloading, loading, or requesting a GPU device. */
-export async function inspectDevice(
-  gpu: GpuLike | undefined = (navigator as Navigator & { gpu?: GpuLike }).gpu,
-  secureContext: boolean = globalThis.isSecureContext !== false,
-): Promise<DeviceVerdict> {
-  if (!secureContext) {
-    return { kind: "insecure_context" };
-  }
-  if (gpu === undefined) {
-    return { kind: "webgpu_missing" };
-  }
-
-  const adapter = await gpu.requestAdapter();
-  if (adapter === null) {
-    return { kind: "adapter_unavailable" };
-  }
-
-  const shortfall = firstShortfall(adapter.limits);
-  if (shortfall !== undefined) {
-    return { kind: "below_runtime_floor", ...shortfall };
-  }
-
-  return {
-    kind: "usable",
-    shaderF16: adapter.features?.has("shader-f16") === true,
-  };
-}
-
 /**
- * The first limit granted below what the runtime requires.
+ * Reads a probe for one model, without downloading, loading, or requesting a GPU device.
  *
- * A limit an adapter does not report is not treated as short: an absent value is unknown,
+ * A limit an adapter did not report is not treated as short: an absent value is unknown,
  * and refusing on it would turn a reporting gap into a verdict about someone's device.
  */
-function firstShortfall(
-  limits: Partial<Record<RuntimeDeviceLimit, number>> | undefined,
-): { limit: RuntimeDeviceLimit; granted: number } | undefined {
-  if (limits === undefined) {
-    return undefined;
+export function deviceVerdict(
+  probe: WebGpuProbe,
+  modelId: string,
+): DeviceVerdict {
+  if (!probe.supported) {
+    return probe.reason === "webgpu_adapter_unavailable"
+      ? { kind: "adapter_unavailable" }
+      : { kind: probe.reason };
   }
-  for (const [name, floor] of Object.entries(RUNTIME_DEVICE_FLOORS)) {
-    const limit = name as RuntimeDeviceLimit;
-    const granted = limits[limit];
-    if (typeof granted === "number" && granted < floor) {
-      return { limit, granted };
-    }
+
+  const { capability } = probe;
+  const limit = belowRuntimeFloor(capability);
+  if (limit !== undefined) {
+    // `belowRuntimeFloor` only names a limit the adapter reported, so this is defined.
+    return {
+      kind: "below_runtime_floor",
+      limit,
+      granted: capability[limit] ?? 0,
+    };
   }
-  return undefined;
+
+  const missing = missingFeatures(capability, requiredFeaturesFor(modelId));
+  return missing.length === 0
+    ? { kind: "usable" }
+    : { kind: "missing_features", missing };
 }

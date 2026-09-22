@@ -69,6 +69,8 @@ const EN_MESSAGES = {
     "Unavailable: no graphics adapter answered.",
   "settings.localModel.status.unsupportedBelowFloor":
     "Unavailable: this device is short of what the model runtime requires.",
+  "settings.localModel.status.unsupportedFeatures":
+    "Unavailable: this graphics adapter lacks a feature the model needs.",
   "settings.localModel.status.absent": "Not downloaded yet.",
   "settings.localModel.status.downloading": "Downloading…",
   "settings.localModel.status.present": "Downloaded and cached on this device.",
@@ -80,6 +82,7 @@ const EN_MESSAGES = {
     "size unknown until the download starts.",
   "settings.localModel.action.download": "Download now",
   "settings.localModel.action.remove": "Remove downloaded model",
+  "settings.localModel.action.cancel": "Cancel download",
   "settings.localModel.notices.legend": "Redistribution notices",
 } as const;
 
@@ -143,6 +146,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Недоступно: жоден графічний адаптер не відповів.",
   "settings.localModel.status.unsupportedBelowFloor":
     "Недоступно: цьому пристрою не вистачає того, що вимагає рантайм моделі.",
+  "settings.localModel.status.unsupportedFeatures":
+    "Недоступно: графічному адаптеру бракує можливості, потрібної моделі.",
   "settings.localModel.status.absent": "Ще не завантажено.",
   "settings.localModel.status.downloading": "Завантажуємо…",
   "settings.localModel.status.present":
@@ -155,6 +160,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "розмір невідомий, доки не почнеться завантаження.",
   "settings.localModel.action.download": "Завантажити зараз",
   "settings.localModel.action.remove": "Видалити завантажену модель",
+  "settings.localModel.action.cancel": "Скасувати завантаження",
   "settings.localModel.notices.legend": "Примітки щодо розповсюдження",
 };
 

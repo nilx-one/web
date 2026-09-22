@@ -5,12 +5,11 @@
  * What Settings needs from a local-inference host, stated without depending on any
  * concrete adapter.
  *
- * This product's WebGPU-touching code lives in `@nilx-one/narration-webllm`, which this
- * package is not allowed to import — see `tests/architecture/dependencies.test.ts`. That is
- * not a gap to route around: `nilx-one/ai#17` is why no published foundation package exists
- * for either side to depend on instead, so whoever composes this product's dependencies (an
- * `apps/*` root, which the architecture test does not constrain) builds the adapter and
- * satisfies this shape. `LocalModelSettings` never constructs one itself.
+ * This product's WebGPU-touching code lives in `@nilx-one/narration-webllm`, on top of
+ * `@aiaiaiai/webllm`, and this package is not allowed to import either — see
+ * `tests/architecture/dependencies.test.ts`. Whoever composes this product's dependencies
+ * (an `apps/*` root, which the architecture test does not constrain) builds the adapter
+ * and satisfies this shape. `LocalModelSettings` never constructs one itself.
  */
 
 import type { UnsupportedReason } from "./local-model-settings-view-model";
@@ -40,10 +39,14 @@ export interface LocalModelHost {
   isCached(modelId: string): Promise<boolean>;
   /** The size and provenance of the download `open` would start, without starting it. */
   describe(modelId: string): Promise<LocalModelDescription>;
-  /** Downloads when the artifacts are not cached, exactly as `open` on `WebLlmRuntimeHost` does. */
+  /**
+   * Downloads when the artifacts are not cached, exactly as `open` on `WebLlmRuntimeHost`
+   * does. Aborting `signal` abandons the download; the promise then rejects.
+   */
   open(
     modelId: string,
     onProgress: (progress: LocalModelDownloadProgress) => void,
+    signal?: AbortSignal,
   ): Promise<LocalModelEngine>;
   remove(modelId: string): Promise<void>;
 }

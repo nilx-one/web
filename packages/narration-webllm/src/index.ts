@@ -15,9 +15,9 @@
  * one bounded pass runs over the evidence, and the engine unloads afterwards. There is no
  * resident inference.
  *
- * `@mlc-ai/web-llm` is depended on directly, which duplicates a lifecycle
- * `@aiaiaiai/webllm` already owns. That package is unpublished (`nilx-one/ai#17`); this one
- * is replaced by it rather than maintained beside it.
+ * The lifecycle underneath — probe, worker, cache, eviction — is `@aiaiaiai/webllm`'s. What
+ * this package adds is narration's own: the prompt, the bound on a pass, and the check that
+ * a rephrasing carries only what it was given.
  */
 
 import {
@@ -31,7 +31,7 @@ import {
 
 import type { DeviceVerdict } from "./device";
 
-export { inspectDevice, RUNTIME_DEVICE_FLOORS } from "./device";
+export { deviceVerdict, RUNTIME_DEVICE_FLOORS } from "./device";
 export type { DeviceVerdict, RuntimeDeviceLimit } from "./device";
 
 const ADAPTER_ID = "webllm-local";
@@ -57,10 +57,15 @@ export interface LocalEngine {
 export interface WebLlmRuntimeHost {
   inspect(): Promise<DeviceVerdict>;
   isCached(modelId: string): Promise<boolean>;
-  /** Downloads when the artifacts are not cached. Called only from `load`. */
+  /**
+   * Downloads when the artifacts are not cached. Called only from `load`.
+   *
+   * `signal` abandons a download in progress; the promise then rejects with its reason.
+   */
   open(
     modelId: string,
     onProgress: (progress: LoadProgress) => void,
+    signal?: AbortSignal,
   ): Promise<LocalEngine>;
   /** Evicts a cached model an owner asked to reclaim, in full: config, weights, and library. */
   remove(modelId: string): Promise<void>;
@@ -190,6 +195,7 @@ function reasonFor(verdict: DeviceVerdict): NarrationUnavailableReason {
     case "webgpu_missing":
     case "adapter_unavailable":
     case "below_runtime_floor":
+    case "missing_features":
       return "surface_unsupported";
     default:
       return "not_loaded";
