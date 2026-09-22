@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { cellToBoundary, latLngToCell } from "h3-js";
 import {
   mapMetersPerPixel,
   type MapObservedPosition,
@@ -8,8 +9,19 @@ import {
 
 export const OBSERVED_POSITION_SOURCE_ID = "observed-position";
 export const OBSERVED_POSITION_ACCURACY_LAYER_ID = "observed-position-accuracy";
+export const OBSERVED_POSITION_CELL_LAYER_ID = "observed-position-cell";
+export const OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID =
+  "observed-position-cell-outline";
 export const OBSERVED_POSITION_EDGE_LAYER_ID = "observed-position-edge";
 export const OBSERVED_POSITION_POINT_LAYER_ID = "observed-position-point";
+
+/**
+ * Presentation-only local cell. Resolution 12 has an average H3 edge length
+ * of about 10.8 m, so the authenticated world shows a small spatial unit
+ * around the observed device instead of the much larger persistent presence
+ * cells. This does not change presence resolution or create a journal record.
+ */
+export const OBSERVED_POSITION_CELL_RESOLUTION = 12;
 
 const ACCENT = "#37d7e5";
 
@@ -61,6 +73,32 @@ export function accuracyRadiusExpression(
   ];
 }
 
+function observedPositionCellFeature(
+  position: MapObservedPosition,
+): Record<string, unknown> {
+  const cell = latLngToCell(
+    position.center[1],
+    position.center[0],
+    OBSERVED_POSITION_CELL_RESOLUTION,
+  );
+  const boundary = cellToBoundary(cell, true);
+  const coordinates = boundary.map(([longitude, latitude]) => [
+    longitude,
+    latitude,
+  ]);
+  const first = coordinates[0];
+  if (first !== undefined) coordinates.push([...first]);
+
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: {
+      type: "Polygon",
+      coordinates: [coordinates],
+    },
+  };
+}
+
 export function observedPositionFeature(
   position: MapObservedPosition,
 ): Record<string, unknown> {
@@ -82,28 +120,54 @@ export function observedPositionSource(
     type: "geojson",
     data: {
       type: "FeatureCollection",
-      features: [observedPositionFeature(position)],
+      features: [
+        observedPositionCellFeature(position),
+        observedPositionFeature(position),
+      ],
     },
   };
 }
 
 /**
- * Three restrained circles rather than a conventional pin: the accuracy the
- * host reported, a pale edge that keeps the point legible over near-white
- * buildings, and the exact coordinate itself.
+ * The local cell is paired with three restrained circles rather than a
+ * conventional pin: the reported accuracy, a pale edge, and the exact
+ * coordinate itself. The cell is a presentation boundary only; it is not a
+ * persistent presence record.
  *
- * All three lie flat on the ground. The marker is always drawn, so a body has
- * to be able to stand on it: pitched into the viewport it would tilt up into
- * the figure and read as a disc pasted over its middle.
+ * All point layers lie flat on the ground. The marker is always drawn, so a
+ * body has to be able to stand on it: pitched into the viewport it would tilt
+ * up into the figure and read as a disc pasted over its middle.
  */
 export function observedPositionLayers(
   position: MapObservedPosition,
 ): readonly Record<string, unknown>[] {
   return [
     {
+      id: OBSERVED_POSITION_CELL_LAYER_ID,
+      type: "fill",
+      source: OBSERVED_POSITION_SOURCE_ID,
+      filter: ["==", "$type", "Polygon"],
+      paint: {
+        "fill-color": "#ffffff",
+        "fill-opacity": 0.12,
+      },
+    },
+    {
+      id: OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
+      type: "line",
+      source: OBSERVED_POSITION_SOURCE_ID,
+      filter: ["==", "$type", "Polygon"],
+      paint: {
+        "line-color": ACCENT,
+        "line-opacity": 0.7,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 15, 1, 19, 1.5],
+      },
+    },
+    {
       id: OBSERVED_POSITION_ACCURACY_LAYER_ID,
       type: "circle",
       source: OBSERVED_POSITION_SOURCE_ID,
+      filter: ["==", "$type", "Point"],
       paint: {
         "circle-radius": accuracyRadiusExpression(position),
         "circle-color": ACCENT,
@@ -118,6 +182,7 @@ export function observedPositionLayers(
       id: OBSERVED_POSITION_EDGE_LAYER_ID,
       type: "circle",
       source: OBSERVED_POSITION_SOURCE_ID,
+      filter: ["==", "$type", "Point"],
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 10],
         "circle-color": ACCENT,
@@ -132,6 +197,7 @@ export function observedPositionLayers(
       id: OBSERVED_POSITION_POINT_LAYER_ID,
       type: "circle",
       source: OBSERVED_POSITION_SOURCE_ID,
+      filter: ["==", "$type", "Point"],
       paint: {
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 5.5],
         "circle-color": ACCENT,

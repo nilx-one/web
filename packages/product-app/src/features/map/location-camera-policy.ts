@@ -24,10 +24,11 @@ import type { ShellPresentation } from "../../shell/shell-presentation";
  */
 
 /**
- * The first fix lands at neighbourhood scale. Building scale is where a person
- * arrives by zooming, not where the map drops them the moment a fix resolves.
+ * The first authenticated fix opens at local-cell scale. The visible viewport
+ * keeps useful street/building context while making the roughly 10 m local cell
+ * around the observation immediately legible.
  */
-export const FIRST_FIX_SCALE: MapScale = "neighborhood";
+export const FIRST_FIX_ZOOM = 18.5;
 
 /** Recentering never leaves the camera further out than useful local context. */
 export const RECENTER_MIN_SCALE: MapScale = "neighborhood";
@@ -117,7 +118,7 @@ export function firstFixCamera(
   position: ObservedGeolocation,
   context: LocationCameraContext,
 ): MapCamera {
-  const zoom = locationCameraZoom(FIRST_FIX_SCALE, context.presentation);
+  const zoom = FIRST_FIX_ZOOM;
   return {
     center: [position.longitude, position.latitude],
     zoom,
