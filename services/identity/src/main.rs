@@ -126,8 +126,14 @@ const UNLINK_CONFIRMATION_TTL: Duration = Duration::from_secs(5 * 60);
 struct PendingUnlinkConfirmations(Arc<Mutex<HashMap<i64, Instant>>>);
 
 impl PendingUnlinkConfirmations {
+    /// Sweeps every entry past [`UNLINK_CONFIRMATION_TTL`] before recording a
+    /// new one. Without this, a `/unlink` that is never followed by
+    /// `/unlink_confirm` would leave its entry in the map forever — the TTL
+    /// only gates what `consume` accepts, not how long the entry lives.
     async fn begin(&self, telegram_user_id: i64) {
-        self.0.lock().await.insert(telegram_user_id, Instant::now());
+        let mut pending = self.0.lock().await;
+        pending.retain(|_, started| started.elapsed() <= UNLINK_CONFIRMATION_TTL);
+        pending.insert(telegram_user_id, Instant::now());
     }
 
     /// Consumes the pending confirmation regardless of its age; the caller
@@ -979,6 +985,27 @@ mod tests {
             .await
             .insert(7, std::time::Instant::now() - Duration::from_secs(10 * 60));
         assert!(!expired.consume(7).await, "a stale confirmation must lapse");
+    }
+
+    #[tokio::test]
+    async fn unlink_confirmation_sweeps_expired_entries_instead_of_leaking_them() {
+        let pending = PendingUnlinkConfirmations::default();
+        pending
+            .0
+            .lock()
+            .await
+            .insert(7, std::time::Instant::now() - Duration::from_secs(10 * 60));
+
+        // A fresh /unlink from anyone must not leave that stale entry behind
+        // forever just because its own owner never sent /unlink_confirm.
+        pending.begin(8).await;
+
+        assert_eq!(
+            pending.0.lock().await.len(),
+            1,
+            "the expired entry for a different user must be swept, leaving only the new one"
+        );
+        assert!(pending.consume(8).await);
     }
 
     #[test]
