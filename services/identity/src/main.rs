@@ -413,41 +413,60 @@ async fn role_for_telegram(
     }
 }
 
-/// Scopes this chat's Telegram command menu to [`ADMIN_ONLY_COMMANDS`] the
-/// first time its sender resolves to [`BondAccessRole::Admin`]. Regular
-/// chats never call `setMyCommands` and keep the [`BotCommandScope::AllPrivateChats`]
-/// default registered at startup, so `/set_position` — the command that puts
-/// `Bond.location` into manual mode — stays invisible to everyone else, both
-/// in the `/` autocomplete and the composer's menu button.
+/// Keeps this chat's Telegram command menu in sync with the sender's current
+/// [`BondAccessRole`]. The first time a chat resolves to
+/// [`BondAccessRole::Admin`] it gets a [`BotCommandScope::Chat`] override
+/// including [`ADMIN_ONLY_COMMANDS`]; the first time a previously-synced chat
+/// resolves back to [`BondAccessRole::User`] (a demoted admin), that override
+/// is deleted so the chat falls back to the [`BotCommandScope::AllPrivateChats`]
+/// default registered at startup — otherwise a demoted admin would keep
+/// seeing `/set_position`, the command that puts `Bond.location` into manual
+/// mode, in both the `/` autocomplete and the composer's menu button even
+/// though the runtime role check in `begin_manual_position` already rejects
+/// the write. Chats that were never synced, and stay `User`, never call the
+/// Telegram API at all.
 async fn ensure_admin_command_menu(
     bot: &Bot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) {
-    if role_for_telegram(&state.repository, telegram_user_id).await != BondAccessRole::Admin {
-        return;
-    }
-
+    let role = role_for_telegram(&state.repository, telegram_user_id).await;
     let chat_id = message.chat.id.0;
-    let already_synced = {
-        let mut synced = state.admin_menu_synced.lock().await;
-        !synced.insert(chat_id)
-    };
-    if already_synced {
+    let previously_synced = state.admin_menu_synced.lock().await.contains(&chat_id);
+
+    if role == BondAccessRole::Admin {
+        if previously_synced {
+            return;
+        }
+        if let Err(error) = bot
+            .set_my_commands(bot_commands(BondAccessRole::Admin))
+            .scope(BotCommandScope::Chat {
+                chat_id: message.chat.id.into(),
+            })
+            .await
+        {
+            error!(%error, "failed to scope admin command menu");
+            return;
+        }
+        state.admin_menu_synced.lock().await.insert(chat_id);
         return;
     }
 
+    if !previously_synced {
+        return;
+    }
     if let Err(error) = bot
-        .set_my_commands(bot_commands(BondAccessRole::Admin))
+        .delete_my_commands()
         .scope(BotCommandScope::Chat {
             chat_id: message.chat.id.into(),
         })
         .await
     {
-        error!(%error, "failed to scope admin command menu");
-        state.admin_menu_synced.lock().await.remove(&chat_id);
+        error!(%error, "failed to revert command menu after admin demotion");
+        return;
     }
+    state.admin_menu_synced.lock().await.remove(&chat_id);
 }
 
 async fn registered_identity(
