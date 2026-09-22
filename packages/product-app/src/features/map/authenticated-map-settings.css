@@ -265,6 +265,54 @@
   color: rgba(245, 243, 247, 0.88);
 }
 
+.local-model-settings {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.local-model-settings__status {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.local-model-settings__detail {
+  margin: 0;
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.78rem;
+}
+
+.local-model-settings__error {
+  margin: 0;
+  color: #ff8f8f;
+  font-size: 0.8rem;
+}
+
+.local-model-settings__notices {
+  color: rgba(245, 243, 247, 0.62);
+  font-size: 0.75rem;
+}
+
+.local-model-settings__notices summary {
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.local-model-settings__notices ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.local-model-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .avatar-choice {
   display: grid;
   gap: 0.25rem;

@@ -3,8 +3,16 @@
 
 import { describe, expect, it } from "vitest";
 
-import { describeDownload, narrationAppConfig } from "./browser-host";
+import {
+  describeDownload,
+  describeLocalModelDownload,
+  narrationAppConfig,
+  resolveLocalModelSource,
+} from "./browser-host";
 import { NARRATION_MODEL_ID } from "./index";
+import type { MirrorManifest } from "./mirror";
+
+const ORIGIN = "https://nilx.one";
 
 function manifestResponse(body: unknown, ok = true, status = 200): Response {
   return {
@@ -12,6 +20,23 @@ function manifestResponse(body: unknown, ok = true, status = 200): Response {
     status,
     json: () => Promise.resolve(body),
   } as unknown as Response;
+}
+
+function mirrorManifest(
+  overrides: Partial<MirrorManifest> = {},
+): MirrorManifest {
+  return {
+    schema: 1,
+    model_id: NARRATION_MODEL_ID,
+    revision: "1",
+    bytes: 402_653_184,
+    integrity: {
+      config: "sha256-Y29uZmln",
+      tokenizer: { "tokenizer.json": "sha256-dG9rZW5pemVy" },
+      model_lib: "sha256-bGli",
+    },
+    ...overrides,
+  };
 }
 
 describe("the config this product loads under", () => {
@@ -111,5 +136,106 @@ describe("describing a download before it starts", () => {
     await expect(
       describeDownload("not-a-model", narrationAppConfig(), fetchManifest),
     ).resolves.toEqual({ bytes: null, reason: "model_not_in_config" });
+  });
+});
+
+describe("choosing where this device loads from", () => {
+  const manifestUrl = `${ORIGIN}/models/${NARRATION_MODEL_ID}/resolve/1/manifest.json`;
+
+  it("prefers this deployment's mirror when a manifest answers", async () => {
+    const resolved = await resolveLocalModelSource(
+      NARRATION_MODEL_ID,
+      ORIGIN,
+      "1",
+      (input) =>
+        String(input) === manifestUrl
+          ? Promise.resolve(manifestResponse(mirrorManifest()))
+          : Promise.reject(new Error(`unexpected request: ${input}`)),
+    );
+
+    expect(resolved.kind).toBe("mirror");
+    expect(resolved.appConfig.model_list[0]?.model).toBe(
+      `${ORIGIN}/models/${NARRATION_MODEL_ID}/resolve/1/`,
+    );
+  });
+
+  it("falls back to the pinned upstream registry when this deployment has no mirror", async () => {
+    const resolved = await resolveLocalModelSource(
+      NARRATION_MODEL_ID,
+      ORIGIN,
+      "1",
+      () => Promise.resolve({ ok: false, status: 404 } as unknown as Response),
+    );
+
+    expect(resolved.kind).toBe("upstream");
+  });
+
+  it("falls back to upstream rather than load from a manifest it cannot trust", async () => {
+    const untrusted = mirrorManifest({
+      integrity: {
+        config: "not-sri",
+        tokenizer: { "tokenizer.json": "sha256-dG9rZW5pemVy" },
+        model_lib: "sha256-bGli",
+      },
+    });
+
+    const resolved = await resolveLocalModelSource(
+      NARRATION_MODEL_ID,
+      ORIGIN,
+      "1",
+      () => Promise.resolve(manifestResponse(untrusted)),
+    );
+
+    expect(resolved.kind).toBe("upstream");
+  });
+});
+
+describe("describing the download regardless of where it comes from", () => {
+  it("states the mirror's own size with no second request", async () => {
+    const requested: string[] = [];
+    const fetchImpl = (input: URL | RequestInfo): Promise<Response> => {
+      requested.push(String(input));
+      return Promise.resolve(manifestResponse(mirrorManifest({ bytes: 500 })));
+    };
+
+    await expect(
+      describeLocalModelDownload(NARRATION_MODEL_ID, ORIGIN, "1", fetchImpl),
+    ).resolves.toEqual({ bytes: 500, source: "mirror", notices: [] });
+    expect(requested).toHaveLength(1);
+  });
+
+  it("carries a mirror's redistribution notices through", async () => {
+    const notices = ["Model weights converted and published by mlc-ai."];
+    const fetchImpl = () =>
+      Promise.resolve(manifestResponse(mirrorManifest({ notices })));
+
+    await expect(
+      describeLocalModelDownload(NARRATION_MODEL_ID, ORIGIN, "1", fetchImpl),
+    ).resolves.toEqual({ bytes: 402_653_184, source: "mirror", notices });
+  });
+
+  it("sums the upstream registry's shards when there is no mirror", async () => {
+    const fetchImpl = (input: URL | RequestInfo): Promise<Response> =>
+      String(input).endsWith("manifest.json")
+        ? Promise.resolve({ ok: false, status: 404 } as unknown as Response)
+        : Promise.resolve(
+            manifestResponse({ records: [{ nbytes: 1000 }, { nbytes: 2500 }] }),
+          );
+
+    await expect(
+      describeLocalModelDownload(NARRATION_MODEL_ID, ORIGIN, "1", fetchImpl),
+    ).resolves.toEqual({ bytes: 3500, source: "upstream", notices: [] });
+  });
+
+  it("says which source it could not describe from", async () => {
+    const fetchImpl = () => Promise.reject(new Error("offline"));
+
+    await expect(
+      describeLocalModelDownload(NARRATION_MODEL_ID, ORIGIN, "1", fetchImpl),
+    ).resolves.toEqual({
+      bytes: null,
+      reason: "manifest_unreachable",
+      source: "upstream",
+    });
   });
 });

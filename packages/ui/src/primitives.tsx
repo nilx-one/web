@@ -73,6 +73,40 @@ export function RuntimeStatus({ detail, label, tone }: RuntimeStatusProps) {
   );
 }
 
+export interface ProgressBarProps {
+  /** 0–1. A ratio outside that range is clamped rather than rendered as-is. */
+  ratio: number;
+  label: string;
+}
+
+/**
+ * A determinate progress bar for a download or a load whose size is already known.
+ *
+ * There is no indeterminate variant here: a caller with nothing to report a ratio for has
+ * nothing honest to show in this shape, and should render a `RuntimeStatus` instead.
+ */
+export function ProgressBar({ ratio, label }: ProgressBarProps) {
+  const percent = Math.round(Math.min(1, Math.max(0, ratio)) * 100);
+
+  return (
+    <div className="progress-bar">
+      <div
+        className="progress-bar__track"
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+      >
+        <div className="progress-bar__fill" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="progress-bar__label">
+        {label} — {percent}%
+      </p>
+    </div>
+  );
+}
+
 export function PairwiseBoundary() {
   return (
     <figure className="pairwise-boundary">

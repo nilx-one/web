@@ -4,8 +4,10 @@
 export {
   AppChrome,
   PairwiseBoundary,
+  ProgressBar,
   RuntimeStatus,
   type AppChromeProps,
+  type ProgressBarProps,
   type RuntimeStatusProps,
 } from "./primitives";
 export {

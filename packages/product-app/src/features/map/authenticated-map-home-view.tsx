@@ -24,6 +24,8 @@ import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
 import { LanguageSettings } from "../../shell/language-settings";
+import type { LocalModelDependency } from "../../shell/local-model-host";
+import { LocalModelSettings } from "../../shell/local-model-settings";
 import {
   IDENTITY_ROUTE,
   WORLD_ROUTE,
@@ -113,6 +115,11 @@ export interface AuthenticatedMapHomeViewProps {
   readonly safeArea: ShellSafeArea;
   /** The canonical route this surface is presenting. */
   readonly section?: ShellSection;
+  /**
+   * The on-device model host, when this deployment has wired one. Undefined is a normal,
+   * honest state — Settings then simply has nothing to show here — not a degraded one.
+   */
+  readonly localModel?: LocalModelDependency;
   /**
    * The provider accounts this Bond carries. Account text never reaches this
    * surface as content: an attachment resolves where it opens, nothing more.
@@ -379,6 +386,7 @@ export function AuthenticatedMapHomeView({
   runtime,
   safeArea,
   section = "world",
+  localModel,
   connectedProviders,
   providerDeepLinks = [],
   onDisconnectProvider,
@@ -1171,6 +1179,12 @@ export function AuthenticatedMapHomeView({
                 {section === "settings" ? (
                   <>
                     <LanguageSettings />
+                    {localModel === undefined ? null : (
+                      <LocalModelSettings
+                        host={localModel.host}
+                        modelId={localModel.modelId}
+                      />
+                    )}
                     <BondArtificialPositionSettings
                       ownerPubDress={pubDress}
                       renderer={renderer}

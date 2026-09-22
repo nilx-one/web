@@ -143,6 +143,9 @@ importers:
       '@nilx-one/map-shade':
         specifier: workspace:*
         version: link:../../packages/map-shade
+      '@nilx-one/narration-webllm':
+        specifier: workspace:*
+        version: link:../../packages/narration-webllm
       '@nilx-one/presence-geo':
         specifier: workspace:*
         version: link:../../packages/presence-geo

@@ -59,6 +59,28 @@ const EN_MESSAGES = {
   "settings.language.detected.uk": "Detected: Ukrainian",
   "settings.language.english": "English",
   "settings.language.ukrainian": "Українська",
+  "settings.localModel.legend": "On-device model",
+  "settings.localModel.status.checking": "Checking this device…",
+  "settings.localModel.status.unsupportedInsecure":
+    "Unavailable: this page is not loaded securely.",
+  "settings.localModel.status.unsupportedNoWebgpu":
+    "Unavailable: this browser has no WebGPU.",
+  "settings.localModel.status.unsupportedNoAdapter":
+    "Unavailable: no graphics adapter answered.",
+  "settings.localModel.status.unsupportedBelowFloor":
+    "Unavailable: this device is short of what the model runtime requires.",
+  "settings.localModel.status.absent": "Not downloaded yet.",
+  "settings.localModel.status.downloading": "Downloading…",
+  "settings.localModel.status.present": "Downloaded and cached on this device.",
+  "settings.localModel.status.removing": "Removing…",
+  "settings.localModel.status.error": "Something went wrong.",
+  "settings.localModel.detail.mirror": "From our own mirror,",
+  "settings.localModel.detail.upstream": "From the model's upstream registry,",
+  "settings.localModel.detail.unknownSize":
+    "size unknown until the download starts.",
+  "settings.localModel.action.download": "Download now",
+  "settings.localModel.action.remove": "Remove downloaded model",
+  "settings.localModel.notices.legend": "Redistribution notices",
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -111,6 +133,29 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.language.detected.uk": "Визначено: Українська",
   "settings.language.english": "English",
   "settings.language.ukrainian": "Українська",
+  "settings.localModel.legend": "Локальна модель",
+  "settings.localModel.status.checking": "Перевіряємо цей пристрій…",
+  "settings.localModel.status.unsupportedInsecure":
+    "Недоступно: сторінку завантажено не безпечно.",
+  "settings.localModel.status.unsupportedNoWebgpu":
+    "Недоступно: у цьому браузері немає WebGPU.",
+  "settings.localModel.status.unsupportedNoAdapter":
+    "Недоступно: жоден графічний адаптер не відповів.",
+  "settings.localModel.status.unsupportedBelowFloor":
+    "Недоступно: цьому пристрою не вистачає того, що вимагає рантайм моделі.",
+  "settings.localModel.status.absent": "Ще не завантажено.",
+  "settings.localModel.status.downloading": "Завантажуємо…",
+  "settings.localModel.status.present":
+    "Завантажено і закешовано на цьому пристрої.",
+  "settings.localModel.status.removing": "Видаляємо…",
+  "settings.localModel.status.error": "Щось пішло не так.",
+  "settings.localModel.detail.mirror": "З нашого власного мірора,",
+  "settings.localModel.detail.upstream": "Зі сховища виробника моделі,",
+  "settings.localModel.detail.unknownSize":
+    "розмір невідомий, доки не почнеться завантаження.",
+  "settings.localModel.action.download": "Завантажити зараз",
+  "settings.localModel.action.remove": "Видалити завантажену модель",
+  "settings.localModel.notices.legend": "Примітки щодо розповсюдження",
 };
 
 const CATALOGS: Readonly<
