@@ -249,8 +249,12 @@ mod avaia_api_tests {
             .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
             .await
             .expect("registration");
+        let provider_links = crate::ProviderLinkRepository::connect("sqlite::memory:")
+            .await
+            .expect("provider links");
         let app = avaia_router_with_clock(
             repository,
+            provider_links,
             TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
             None,
             NativeAuthConfig::new(
