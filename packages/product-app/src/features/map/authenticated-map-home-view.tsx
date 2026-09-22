@@ -514,6 +514,10 @@ export function AuthenticatedMapHomeView({
       : wheel === "bond"
         ? avatarChoice.rendered
         : avaiaStudy(avaiaAddress, avatarChoice.rendered);
+  // The card names whoever is driving, not the Bond regardless of the wheel —
+  // the observation is drawn at this device's own position either way, but
+  // the identity standing there changes hands with the wheel.
+  const wheelAddress = wheel === "bond" ? pubDress : avaiaAddress;
 
   // A map that never paints must say so. Without this the shell shows an empty
   // surface and a renderer, asset, or basemap failure is indistinguishable
@@ -572,7 +576,7 @@ export function AuthenticatedMapHomeView({
       accuracyMeters: observedPosition.accuracyMeters,
     });
     renderer.setObservedPositionLabel({
-      title: pubDress,
+      title: wheelAddress,
       detail: "This device",
       // Too far out for a body, so the card shows the study it would be
       // standing in — the same identity, at a size that survives the distance.
@@ -580,7 +584,7 @@ export function AuthenticatedMapHomeView({
         ? {}
         : { avatarUrl: avatarPreviewUrl(wheelStudy) }),
     });
-  }, [observedPosition, pubDress, renderer, wheelStudy]);
+  }, [observedPosition, renderer, wheelAddress, wheelStudy]);
 
   // The first fix of a world recenters once. Later updates move the marker;
   // they never take the camera back from the person holding it.

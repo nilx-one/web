@@ -987,6 +987,28 @@ describe("AuthenticatedMapHomeView", () => {
     expect(drawn).toBe("dasha-study");
   });
 
+  // The card names whoever took the wheel — a Bond that hands over to its
+  // Avaia is spectating, and the marker it left behind must say so too.
+  it("renames the card to the Avaia once it takes the wheel", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "ready",
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+    );
+
+    const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
+      .lastCall?.[0];
+    expect(label).toMatchObject({ title: "0skai", detail: "This device" });
+  });
+
   it("keeps the world usable when the host has no location capability", async () => {
     const mapRenderer = renderer();
 
