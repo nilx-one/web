@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { observation } from "../../../../../tests/support/doubles";
 import {
-  FIRST_FIX_SCALE,
+  FIRST_FIX_ZOOM,
   bodyVisibleCamera,
   cameraFramesPosition,
   cameraMotion,
@@ -30,13 +30,13 @@ const VOLUMETRIC = {
 };
 
 describe("first fix camera policy", () => {
-  it("lands at neighbourhood scale rather than maximum building zoom", () => {
+  it("lands at local-cell scale rather than neighbourhood scale", () => {
     const camera = firstFixCamera(observation(), VOLUMETRIC);
 
-    expect(FIRST_FIX_SCALE).toBe("neighborhood");
+    expect(FIRST_FIX_ZOOM).toBe(18.5);
     expect(camera.center).toEqual([30.5234, 50.4501]);
-    expect(camera.zoom).toBe(MAP_SCALE_ZOOM.neighborhood);
-    expect(camera.zoom).toBeLessThan(MAP_SCALE_ZOOM.building);
+    expect(camera.zoom).toBe(FIRST_FIX_ZOOM);
+    expect(camera.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.building);
   });
 
   it("opens wider on a narrow viewport so the same context fits", () => {
