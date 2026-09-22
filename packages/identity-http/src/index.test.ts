@@ -586,3 +586,70 @@ describe("Browser provider connection transport", () => {
     });
   });
 });
+
+describe("Telegram self-disconnect transport", () => {
+  it("disconnects the identity that authenticated the request, naming no provider", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(response(200, { state: "disconnected" }));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma init-data",
+    });
+
+    await expect(adapter.disconnectSelfProvider?.()).resolves.toEqual({
+      kind: "disconnected",
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/v1/auth/telegram/disconnect", {
+      method: "POST",
+      cache: "no-store",
+      headers: { authorization: "tma init-data" },
+    });
+  });
+
+  it("never calls the service without provider proof to authenticate with", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.disconnectSelfProvider?.()).resolves.toEqual({
+      kind: "rejected",
+      reason: "authentication-required",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses when disconnecting would leave the Bond with no way back in", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(409, {
+        error: { code: "sole_access_path", message: "" },
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma init-data",
+    });
+
+    await expect(adapter.disconnectSelfProvider?.()).resolves.toEqual({
+      kind: "rejected",
+      reason: "sole-access-path",
+    });
+  });
+
+  it("reports not-connected when this identity carries no Bond", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(response(404, {}));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma init-data",
+    });
+
+    await expect(adapter.disconnectSelfProvider?.()).resolves.toEqual({
+      kind: "rejected",
+      reason: "not-connected",
+    });
+  });
+});

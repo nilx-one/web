@@ -19,6 +19,16 @@ pub enum ProviderLinkOutcome {
     IdentityMissing,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SelfDisconnectOutcome {
+    Disconnected,
+    NotLinked,
+    /// Refused: removing this provider would leave the Bond with no other
+    /// linked provider and no active native password, so its owner could
+    /// never reach it again.
+    SoleAccessPath,
+}
+
 #[derive(Clone, Debug)]
 pub struct ProviderLinkRepository {
     pool: SqlitePool,
@@ -188,13 +198,63 @@ impl ProviderLinkRepository {
                 .await?;
         Ok(deleted.rows_affected() > 0)
     }
+
+    /// Detaches `provider` from `pub_dress` at that provider's own request,
+    /// refusing when it is the only way back into the Bond. The remaining-access
+    /// check and the delete run in one transaction, so a concurrent link,
+    /// unlink, or password change cannot race this into an orphaned Bond.
+    pub async fn unlink_self_service(
+        &self,
+        pub_dress: &PubDress,
+        provider: IdentityProvider,
+    ) -> Result<SelfDisconnectOutcome, sqlx::Error> {
+        let mut transaction = self.pool.begin().await?;
+
+        let linked = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identity_providers WHERE pub_dress = ? AND provider = ?)",
+        )
+        .bind(pub_dress.as_str())
+        .bind(provider.as_str())
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !linked {
+            transaction.rollback().await?;
+            return Ok(SelfDisconnectOutcome::NotLinked);
+        }
+
+        let other_providers = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM identity_providers WHERE pub_dress = ? AND provider <> ?",
+        )
+        .bind(pub_dress.as_str())
+        .bind(provider.as_str())
+        .fetch_one(&mut *transaction)
+        .await?;
+        let password_active = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM native_credentials WHERE pub_dress = ? AND active = 1)",
+        )
+        .bind(pub_dress.as_str())
+        .fetch_one(&mut *transaction)
+        .await?;
+        if other_providers == 0 && !password_active {
+            transaction.rollback().await?;
+            return Ok(SelfDisconnectOutcome::SoleAccessPath);
+        }
+
+        sqlx::query("DELETE FROM identity_providers WHERE pub_dress = ? AND provider = ?")
+            .bind(pub_dress.as_str())
+            .bind(provider.as_str())
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(SelfDisconnectOutcome::Disconnected)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use super::{ProviderLinkOutcome, ProviderLinkRepository};
+    use super::{ProviderLinkOutcome, ProviderLinkRepository, SelfDisconnectOutcome};
     use crate::{
         GithubEvidenceRepository, IdentityProvider, IdentityRepository, ProviderIdentity, PubDress,
     };
@@ -417,6 +477,127 @@ mod tests {
         assert_eq!(
             links.link(&second, &provider).await.expect("second link"),
             ProviderLinkOutcome::ProviderAlreadyLinked
+        );
+    }
+
+    #[tokio::test]
+    async fn self_disconnect_removes_a_provider_when_another_access_path_remains() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider link repository");
+        let bond = register_bond(&identities, "0x0sky", "self-disconnect-other-provider").await;
+        links
+            .link(&bond, &ProviderIdentity::telegram(42))
+            .await
+            .expect("telegram link");
+        links
+            .link(&bond, &ProviderIdentity::github(1))
+            .await
+            .expect("github link");
+
+        assert_eq!(
+            links
+                .unlink_self_service(&bond, IdentityProvider::Telegram)
+                .await
+                .expect("self disconnect"),
+            SelfDisconnectOutcome::Disconnected
+        );
+        assert_eq!(
+            links.list(&bond).await.expect("provider list"),
+            vec!["github".to_owned()]
+        );
+    }
+
+    #[tokio::test]
+    async fn self_disconnect_refuses_to_orphan_a_bond_with_no_other_access_path() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider link repository");
+        // register_native leaves the native credential inactive until a
+        // recovery-key acknowledgement, so this Bond starts with no active
+        // password — exactly the state a Telegram-only registration is in.
+        let bond = register_bond(&identities, "0x0sky", "self-disconnect-sole-path").await;
+        links
+            .link(&bond, &ProviderIdentity::telegram(42))
+            .await
+            .expect("telegram link");
+
+        assert_eq!(
+            links
+                .unlink_self_service(&bond, IdentityProvider::Telegram)
+                .await
+                .expect("self disconnect"),
+            SelfDisconnectOutcome::SoleAccessPath
+        );
+        assert_eq!(
+            links.list(&bond).await.expect("provider list"),
+            vec!["telegram".to_owned()]
+        );
+    }
+
+    #[tokio::test]
+    async fn self_disconnect_succeeds_when_an_active_native_password_remains() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider link repository");
+        let bond = register_bond(&identities, "0x0sky", "self-disconnect-active-password").await;
+        identities
+            .activate_native_registration(b"challenge-self-disconnect-active-password", 150)
+            .await
+            .expect("activation must succeed")
+            .expect("registration challenge must still be valid");
+        links
+            .link(&bond, &ProviderIdentity::telegram(42))
+            .await
+            .expect("telegram link");
+
+        assert_eq!(
+            links
+                .unlink_self_service(&bond, IdentityProvider::Telegram)
+                .await
+                .expect("self disconnect"),
+            SelfDisconnectOutcome::Disconnected
+        );
+        assert!(links.list(&bond).await.expect("provider list").is_empty());
+    }
+
+    #[tokio::test]
+    async fn self_disconnect_reports_not_linked_for_an_unlinked_provider() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("identity.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository");
+        let links = ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider link repository");
+        let bond = register_bond(&identities, "0x0sky", "self-disconnect-not-linked").await;
+
+        assert_eq!(
+            links
+                .unlink_self_service(&bond, IdentityProvider::Telegram)
+                .await
+                .expect("self disconnect"),
+            SelfDisconnectOutcome::NotLinked
         );
     }
 }

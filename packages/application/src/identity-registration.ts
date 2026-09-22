@@ -244,6 +244,22 @@ export type BrowserProviderDisconnectResult =
   | { kind: "service-unavailable" };
 
 /**
+ * Detaching the provider that authenticated this very session, at that
+ * provider's own request — the Mini App Settings button and the Telegram
+ * bot's `/unlink` command are the same operation under two surfaces. Unlike
+ * {@link BrowserProviderDisconnectResult}, there is no `provider` to name:
+ * the service resolves it from the caller's own proof, never from anything
+ * the client sends.
+ */
+export type ProviderSelfDisconnectResult =
+  | { kind: "disconnected" }
+  | {
+      kind: "rejected";
+      reason: "authentication-required" | "not-connected" | "sole-access-path";
+    }
+  | { kind: "service-unavailable" };
+
+/**
  * Renaming moves the same Bond to another address it may hold. The
  * discriminator is not part of the request: the service keeps the one the Bond
  * registered under, and the owned Avaia address follows its owner.
@@ -322,6 +338,13 @@ export interface IdentityAccessPort {
   disconnectBrowserProvider?(
     provider: BondProviderType,
   ): Promise<BrowserProviderDisconnectResult>;
+  /**
+   * Self-service disconnect for a host that is itself the provider (Telegram,
+   * eventually Discord): detaches whichever identity this session's own proof
+   * names, the same self-service the host's own bot command performs. A
+   * browser tab has no provider proof of its own and does not implement this.
+   */
+  disconnectSelfProvider?(): Promise<ProviderSelfDisconnectResult>;
 }
 
 export class ResolvePubDress {
@@ -588,6 +611,22 @@ export class DisconnectBrowserProvider {
     }
     try {
       return await disconnect.call(this.identity, provider);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class DisconnectSelfProvider {
+  public constructor(private readonly identity: IdentityAccessPort) {}
+
+  public async execute(): Promise<ProviderSelfDisconnectResult> {
+    const disconnect = this.identity.disconnectSelfProvider;
+    if (disconnect === undefined) {
+      return { kind: "service-unavailable" };
+    }
+    try {
+      return await disconnect.call(this.identity);
     } catch {
       return { kind: "service-unavailable" };
     }
