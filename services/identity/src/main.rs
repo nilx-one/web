@@ -295,6 +295,7 @@ async fn main() {
     );
     let api = api::router(
         repository.clone(),
+        provider_links.clone(),
         telegram_activity_verifier,
         discord_activity_oauth,
         native_auth,
