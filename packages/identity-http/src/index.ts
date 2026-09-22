@@ -21,6 +21,7 @@ import {
   type ProviderIdentityLookupResult,
   type ProviderRegistrationResult,
   type ProviderSelfDisconnectResult,
+  type TelegramProviderLinkResult,
   type AvaiaProfileAccessPort,
   type AvaiaProfileProjection,
   type AvaiaProfileReadResult,
@@ -250,6 +251,42 @@ class IdentityHttpAdapter
       pub_dress: pubDress,
       password,
     });
+  }
+
+  public async linkTelegramProvider(
+    expectedPubDress: string,
+  ): Promise<TelegramProviderLinkResult> {
+    const authorization = this.authorization();
+    if (authorization === undefined) {
+      return { kind: "rejected", reason: "authentication-required" };
+    }
+    const response = await this.fetch("/api/v1/auth/telegram/link", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        authorization,
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({ pub_dress: expectedPubDress }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok && isRecord(body) && body.state === "linked") {
+      return { kind: "linked" };
+    }
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "provider_already_linked":
+        return { kind: "rejected", reason: "provider-already-linked" };
+      case "provider_type_already_linked":
+        return { kind: "rejected", reason: "provider-type-already-linked" };
+      case "session_changed":
+        return { kind: "rejected", reason: "session-changed" };
+      default:
+        return { kind: "service-unavailable" };
+    }
   }
 
   public async acknowledgeRecoveryKey(
