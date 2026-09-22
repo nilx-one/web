@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
+    collections::HashSet,
     env,
     net::SocketAddr,
     sync::Arc,
@@ -19,10 +20,11 @@ use identity_bot::{
 use teloxide::{
     prelude::*,
     types::{
-        ButtonRequest, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup,
-        Message, WebAppInfo,
+        BotCommand, BotCommandScope, ButtonRequest, InlineKeyboardButton, InlineKeyboardMarkup,
+        KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
     },
 };
+use tokio::sync::Mutex;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 use url::Url;
@@ -31,14 +33,93 @@ const MINI_APP_URL: &str = "https://nilx.one/telegram/";
 const DEFAULT_PUBLIC_ORIGIN: &str = "https://nilx.one";
 const CURRENT_POSITION_BUTTON: &str = "Поточна позиція";
 const SET_POSITION_BUTTON: &str = "Встановити позицію";
-const USER_HELP: &str = "Commands:\n/start — open pub_dress registration\n/whoami — show your Bond identity and location\n/current_position — передати поточну позицію й повернути live mode\n/recover — explain the current recovery boundary";
-const ADMIN_HELP: &str = "\n/set_position — обрати довільну точку й перейти в manual mode\nAdmin: можна також просто надіслати точку в чат без команди — live location поверне live mode, звичайна (не-live) точка перейде в manual.";
+const ADMIN_LOCATION_NOTE: &str = "Admin: можна також просто надіслати точку в чат без команди — live location поверне live mode, звичайна (не-live) точка перейде в manual.";
+
+/// Single declaration of a bot command, feeding both the Telegram command
+/// menu (`/`, the composer's menu button) and the `/help` text, so the two
+/// can never drift apart.
+struct CommandSpec {
+    command: &'static str,
+    description: &'static str,
+}
+
+/// Commands every registered user sees — the default Telegram command menu
+/// scope, so they show up both when typing `/` and via the composer's menu
+/// button in any private chat with the bot.
+const USER_COMMANDS: &[CommandSpec] = &[
+    CommandSpec {
+        command: "start",
+        description: "Open pub_dress registration",
+    },
+    CommandSpec {
+        command: "whoami",
+        description: "Show your Bond identity and location",
+    },
+    CommandSpec {
+        command: "current_position",
+        description: "Передати поточну позицію й повернути live mode",
+    },
+    CommandSpec {
+        command: "recover",
+        description: "Explain the current recovery boundary",
+    },
+    CommandSpec {
+        command: "help",
+        description: "Show available commands",
+    },
+];
+
+/// Commands that move `Bond.location` into manual mode. These stay off the
+/// default menu and are only registered for a chat once its sender resolves
+/// to [`BondAccessRole::Admin`], matching the runtime check already made in
+/// [`begin_manual_position`].
+const ADMIN_ONLY_COMMANDS: &[CommandSpec] = &[CommandSpec {
+    command: "set_position",
+    description: "Обрати довільну точку й перейти в manual mode",
+}];
+
+fn bot_commands(role: BondAccessRole) -> Vec<BotCommand> {
+    let mut commands: Vec<BotCommand> = USER_COMMANDS
+        .iter()
+        .map(|spec| BotCommand::new(spec.command, spec.description))
+        .collect();
+    if role == BondAccessRole::Admin {
+        commands.extend(
+            ADMIN_ONLY_COMMANDS
+                .iter()
+                .map(|spec| BotCommand::new(spec.command, spec.description)),
+        );
+    }
+    commands
+}
+
+fn help_text(role: BondAccessRole) -> String {
+    let mut lines = vec!["Commands:".to_owned()];
+    lines.extend(
+        USER_COMMANDS
+            .iter()
+            .map(|spec| format!("/{} — {}", spec.command, spec.description)),
+    );
+    if role == BondAccessRole::Admin {
+        lines.extend(
+            ADMIN_ONLY_COMMANDS
+                .iter()
+                .map(|spec| format!("/{} — {}", spec.command, spec.description)),
+        );
+        lines.push(ADMIN_LOCATION_NOTE.to_owned());
+    }
+    lines.join("\n")
+}
 
 #[derive(Clone)]
 struct TelegramBotState {
     repository: IdentityRepository,
     locations: BondLocationRepository,
     intents: TelegramLocationIntents,
+    /// Chat ids whose command menu has already been scoped to
+    /// [`ADMIN_ONLY_COMMANDS`], so a resolved admin only costs one
+    /// `setMyCommands` call per chat rather than one per message.
+    admin_menu_synced: Arc<Mutex<HashSet<i64>>>,
 }
 
 #[tokio::main]
@@ -131,6 +212,14 @@ async fn main() {
         .await
         .expect("GitHub evidence database connection must initialize");
     let bot = Bot::new(bot_token.clone());
+    bot.set_my_commands(bot_commands(BondAccessRole::User))
+        .scope(BotCommandScope::AllPrivateChats)
+        .await
+        .expect("Telegram command menu must register for private chats");
+    bot.set_chat_menu_button()
+        .menu_button(MenuButton::Commands)
+        .await
+        .expect("Telegram default chat menu button must open the command list");
     let provider_api = browser_web_auth::router(
         repository.clone(),
         provider_links,
@@ -181,6 +270,7 @@ async fn main() {
         repository,
         locations,
         intents: TelegramLocationIntents::default(),
+        admin_menu_synced: Arc::new(Mutex::new(HashSet::new())),
     });
 
     info!(%http_bind, "starting Stage 1 identity service");
@@ -253,6 +343,8 @@ async fn handle_message(
         return Ok(());
     };
 
+    ensure_admin_command_menu(&bot, &message, state.as_ref(), telegram_user_id).await;
+
     if let Some(location) = message.location() {
         handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
         return Ok(());
@@ -318,6 +410,43 @@ async fn role_for_telegram(
             error!(%error, "identity lookup failed while resolving access role");
             BondAccessRole::User
         }
+    }
+}
+
+/// Scopes this chat's Telegram command menu to [`ADMIN_ONLY_COMMANDS`] the
+/// first time its sender resolves to [`BondAccessRole::Admin`]. Regular
+/// chats never call `setMyCommands` and keep the [`BotCommandScope::AllPrivateChats`]
+/// default registered at startup, so `/set_position` — the command that puts
+/// `Bond.location` into manual mode — stays invisible to everyone else, both
+/// in the `/` autocomplete and the composer's menu button.
+async fn ensure_admin_command_menu(
+    bot: &Bot,
+    message: &Message,
+    state: &TelegramBotState,
+    telegram_user_id: i64,
+) {
+    if role_for_telegram(&state.repository, telegram_user_id).await != BondAccessRole::Admin {
+        return;
+    }
+
+    let chat_id = message.chat.id.0;
+    let already_synced = {
+        let mut synced = state.admin_menu_synced.lock().await;
+        !synced.insert(chat_id)
+    };
+    if already_synced {
+        return;
+    }
+
+    if let Err(error) = bot
+        .set_my_commands(bot_commands(BondAccessRole::Admin))
+        .scope(BotCommandScope::Chat {
+            chat_id: message.chat.id.into(),
+        })
+        .await
+    {
+        error!(%error, "failed to scope admin command menu");
+        state.admin_menu_synced.lock().await.remove(&chat_id);
     }
 }
 
@@ -535,12 +664,7 @@ async fn send_help(
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
     let role = role_for_telegram(&state.repository, telegram_user_id).await;
-    let help = if role == BondAccessRole::Admin {
-        format!("{USER_HELP}{ADMIN_HELP}")
-    } else {
-        USER_HELP.to_owned()
-    };
-    bot.send_message(message.chat.id, help)
+    bot.send_message(message.chat.id, help_text(role))
         .reply_markup(control_keyboard(role))
         .await?;
     Ok(())
@@ -664,9 +788,25 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        LocationModeRefusal, MINI_APP_URL, SET_POSITION_BUTTON, control_keyboard,
-        current_position_request_keyboard, registration_keyboard, resolve_location_mode,
+        LocationModeRefusal, MINI_APP_URL, SET_POSITION_BUTTON, bot_commands, control_keyboard,
+        current_position_request_keyboard, help_text, registration_keyboard, resolve_location_mode,
     };
+
+    #[test]
+    fn only_admins_get_set_position_in_the_registered_command_menu() {
+        let user_commands = bot_commands(BondAccessRole::User);
+        let admin_commands = bot_commands(BondAccessRole::Admin);
+
+        assert!(!user_commands.iter().any(|c| c.command == "set_position"));
+        assert!(admin_commands.iter().any(|c| c.command == "set_position"));
+        assert_eq!(admin_commands.len(), user_commands.len() + 1);
+    }
+
+    #[test]
+    fn only_admins_see_set_position_in_help_text() {
+        assert!(!help_text(BondAccessRole::User).contains("/set_position"));
+        assert!(help_text(BondAccessRole::Admin).contains("/set_position"));
+    }
 
     #[test]
     fn registration_button_opens_the_canonical_mini_app() {
