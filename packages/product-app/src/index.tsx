@@ -651,9 +651,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     providerIdentityQuery.data?.kind === "registered" &&
     providerIdentityQuery.data.identity.pubDress === formatPubDress(selection);
   const useNativeSignInForExistingBond =
-    !browserHost &&
-    status.kind === "registered" &&
-    !providerOwnsSelectedBond;
+    !browserHost && status.kind === "registered" && !providerOwnsSelectedBond;
 
   useEffect(() => {
     if (
