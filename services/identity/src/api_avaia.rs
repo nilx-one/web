@@ -178,7 +178,10 @@ impl From<crate::AvaiaIdentityRecord> for AvaiaIdentityProjection {
 
 #[cfg(test)]
 mod avaia_api_tests {
-    use std::{collections::BTreeMap, sync::Arc};
+    use std::{
+        collections::BTreeMap,
+        sync::{Arc, atomic::{AtomicU64, Ordering}},
+    };
 
     use axum::{
         body::{Body, to_bytes},
@@ -197,6 +200,12 @@ mod avaia_api_tests {
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
+    static TEST_DATABASE_ID: AtomicU64 = AtomicU64::new(0);
+
+    fn test_database_url() -> String {
+        let id = TEST_DATABASE_ID.fetch_add(1, Ordering::Relaxed);
+        format!("sqlite:file:avaia-api-test-{id}?mode=memory&cache=shared")
+    }
 
     #[derive(Debug)]
     struct StaticClock;
@@ -241,7 +250,8 @@ mod avaia_api_tests {
     }
 
     async fn app(user_id: i64, owner: &str) -> (axum::Router, String) {
-        let repository = IdentityRepository::connect("sqlite::memory:")
+        let database_url = test_database_url();
+        let repository = IdentityRepository::connect(&database_url)
             .await
             .expect("repository");
         let owner: PubDress = owner.parse().expect("owner pub_dress");
@@ -249,7 +259,7 @@ mod avaia_api_tests {
             .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
             .await
             .expect("registration");
-        let provider_links = crate::ProviderLinkRepository::connect("sqlite::memory:")
+        let provider_links = crate::ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider links");
         let app = avaia_router_with_clock(
