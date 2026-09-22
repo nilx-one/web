@@ -1964,10 +1964,10 @@ mod tests {
 
     async fn discord_app() -> axum::Router {
         let database_url = test_database_url("discord-api-test");
-        let repository = IdentityRepository::connect(database_url)
+        let repository = IdentityRepository::connect(&database_url)
             .await
             .expect("repository must initialize");
-        let provider_links = ProviderLinkRepository::connect(database_url)
+        let provider_links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository must initialize");
         router_with_clock(
@@ -1986,10 +1986,10 @@ mod tests {
 
     async fn app() -> axum::Router {
         let database_url = test_database_url("api-test");
-        let repository = IdentityRepository::connect(database_url)
+        let repository = IdentityRepository::connect(&database_url)
             .await
             .expect("repository must initialize");
-        let provider_links = ProviderLinkRepository::connect(database_url)
+        let provider_links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository must initialize");
         router_with_clock(
