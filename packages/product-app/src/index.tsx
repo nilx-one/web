@@ -647,6 +647,13 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     nativeIdentityState.kind === "authenticated"
       ? nativeIdentityState.pubDress
       : undefined;
+  const providerOwnsSelectedBond =
+    providerIdentityQuery.data?.kind === "registered" &&
+    providerIdentityQuery.data.identity.pubDress === formatPubDress(selection);
+  const useNativeSignInForExistingBond =
+    !browserHost &&
+    status.kind === "registered" &&
+    !providerOwnsSelectedBond;
 
   useEffect(() => {
     if (
@@ -685,14 +692,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     telegramProviderLink,
     useNativeSignInForExistingBond,
   ]);
-
-  const providerOwnsSelectedBond =
-    providerIdentityQuery.data?.kind === "registered" &&
-    providerIdentityQuery.data.identity.pubDress === formatPubDress(selection);
-  const useNativeSignInForExistingBond =
-    !browserHost &&
-    status.kind === "registered" &&
-    !providerOwnsSelectedBond;
 
   let identityState: IdentityViewState = browserHost
     ? nativeIdentityState
