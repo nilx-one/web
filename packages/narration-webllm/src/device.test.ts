@@ -1,95 +1,84 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { DeviceCapability } from "@aiaiaiai/webllm";
 import { describe, expect, it } from "vitest";
 
-import { inspectDevice, RUNTIME_DEVICE_FLOORS } from "./device";
+import { deviceVerdict, RUNTIME_DEVICE_FLOORS } from "./device";
+import { NARRATION_MODEL_ID } from "./index";
 
-const generous = {
+const generous: DeviceCapability = {
+  features: ["shader-f16"],
   maxBufferSize: 1 << 30,
   maxStorageBufferBindingSize: 1 << 30,
   maxComputeWorkgroupStorageSize: 64 << 10,
   maxStorageBuffersPerShaderStage: 10,
 };
 
-function gpuGranting(
-  limits: Partial<typeof generous> | undefined,
-  features: readonly string[] = ["shader-f16"],
-) {
-  return {
-    requestAdapter: () =>
-      Promise.resolve({
-        ...(limits === undefined ? {} : { limits }),
-        features: { has: (feature: string) => features.includes(feature) },
-      }),
-  };
+function supported(capability: DeviceCapability) {
+  return { supported: true, capability } as const;
 }
 
 describe("reading a device before asking anything of it", () => {
-  it("accepts an adapter that clears every floor", async () => {
-    await expect(inspectDevice(gpuGranting(generous), true)).resolves.toEqual({
+  it("accepts an adapter that clears every floor and offers what the model needs", () => {
+    expect(deviceVerdict(supported(generous), NARRATION_MODEL_ID)).toEqual({
       kind: "usable",
-      shaderF16: true,
     });
   });
 
-  it("refuses an insecure context before looking for WebGPU", async () => {
-    await expect(inspectDevice(undefined, false)).resolves.toEqual({
-      kind: "insecure_context",
-    });
-  });
-
-  it("separates a missing WebGPU from an adapter it would not grant", async () => {
-    await expect(inspectDevice(undefined, true)).resolves.toEqual({
-      kind: "webgpu_missing",
-    });
-    await expect(
-      inspectDevice({ requestAdapter: () => Promise.resolve(null) }, true),
-    ).resolves.toEqual({ kind: "adapter_unavailable" });
-  });
-
-  it("names the limit that fell short, one floor at a time", async () => {
-    for (const [limit, floor] of Object.entries(RUNTIME_DEVICE_FLOORS)) {
-      const verdict = await inspectDevice(
-        gpuGranting({ ...generous, [limit]: floor - 1 }),
-        true,
-      );
-
-      expect(verdict).toEqual({
-        kind: "below_runtime_floor",
-        limit,
-        granted: floor - 1,
-      });
-    }
-  });
-
-  /** Ten storage buffers per shader stage is above the WebGPU default of eight. */
-  it("refuses the WebGPU default storage buffer count", async () => {
-    await expect(
-      inspectDevice(
-        gpuGranting({ ...generous, maxStorageBuffersPerShaderStage: 8 }),
-        true,
+  it("names why a probe found nothing to run on", () => {
+    expect(
+      deviceVerdict(
+        { supported: false, reason: "insecure_context" },
+        NARRATION_MODEL_ID,
       ),
-    ).resolves.toEqual({
+    ).toEqual({ kind: "insecure_context" });
+    expect(
+      deviceVerdict(
+        { supported: false, reason: "webgpu_missing" },
+        NARRATION_MODEL_ID,
+      ),
+    ).toEqual({ kind: "webgpu_missing" });
+    expect(
+      deviceVerdict(
+        { supported: false, reason: "webgpu_adapter_unavailable" },
+        NARRATION_MODEL_ID,
+      ),
+    ).toEqual({ kind: "adapter_unavailable" });
+  });
+
+  it("names the first limit granted below the runtime floor, and what was granted", () => {
+    expect(
+      deviceVerdict(
+        supported({ ...generous, maxStorageBuffersPerShaderStage: 8 }),
+        NARRATION_MODEL_ID,
+      ),
+    ).toEqual({
       kind: "below_runtime_floor",
       limit: "maxStorageBuffersPerShaderStage",
       granted: 8,
     });
   });
 
-  it("does not call a limit short because the adapter did not report it", async () => {
-    await expect(inspectDevice(gpuGranting(undefined), true)).resolves.toEqual({
-      kind: "usable",
-      shaderF16: true,
-    });
+  it("uses the foundation's floors rather than a copy of them", () => {
+    expect(RUNTIME_DEVICE_FLOORS.maxStorageBuffersPerShaderStage).toBe(10);
   });
 
-  it("reports a device without shader-f16 as usable but says so", async () => {
-    await expect(
-      inspectDevice(gpuGranting(generous, []), true),
-    ).resolves.toEqual({
-      kind: "usable",
-      shaderF16: false,
-    });
+  it("does not refuse a limit the adapter never reported", () => {
+    expect(
+      deviceVerdict(
+        supported({ features: ["shader-f16"] }),
+        NARRATION_MODEL_ID,
+      ),
+    ).toEqual({ kind: "usable" });
+  });
+
+  it("refuses before any download when the adapter lacks what an f16 model needs", () => {
+    expect(
+      deviceVerdict(
+        supported({ ...generous, features: [] }),
+        NARRATION_MODEL_ID,
+      ),
+    ).toEqual({ kind: "missing_features", missing: ["shader-f16"] });
   });
 });

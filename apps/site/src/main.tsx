@@ -29,7 +29,11 @@ import {
   createPresenceTracker,
 } from "@nilx-one/presence-geo";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
-import { ProductApp, type LocalModelHost } from "@nilx-one/product-app";
+import {
+  ProductApp,
+  type LocalModelDeviceVerdict,
+  type LocalModelHost,
+} from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
@@ -40,19 +44,19 @@ import { reportMapRendererStatus } from "./error-reporting";
 import { PublicBondPage, isPublicBondHostname } from "./public-bond";
 
 /**
- * Adapts `@nilx-one/narration-webllm`'s browser host to the shape
- * `@nilx-one/product-app` asks for. That package cannot depend on this adapter itself — see
+ * Adapts `@nilx-one/narration-webllm`'s browser host — this product's source and sizing
+ * over `@aiaiaiai/webllm`'s lifecycle — to the shape `@nilx-one/product-app` asks for. That
+ * package cannot depend on this adapter itself — see
  * `packages/product-app/src/shell/local-model-host.ts` — so this composition root is where
- * the two sides meet, exactly as `nilx-one/ai#17`'s eventual `@aiaiaiai/webllm` release
- * would meet them once it exists.
+ * the two sides meet.
  */
 function createLocalModelHost(): LocalModelHost {
   const runtime = createLocalModelRuntimeHost();
 
   return {
-    async inspect() {
-      const verdict = await runtime.inspect();
-      return { kind: verdict.kind };
+    async inspect(): Promise<LocalModelDeviceVerdict> {
+      const { kind } = await runtime.inspect();
+      return kind === "usable" ? { kind } : { kind };
     },
     isCached: (modelId) => runtime.isCached(modelId),
     async describe(modelId) {
@@ -65,7 +69,8 @@ function createLocalModelHost(): LocalModelHost {
             notices: description.notices,
           };
     },
-    open: (modelId, onProgress) => runtime.open(modelId, onProgress),
+    open: (modelId, onProgress, signal) =>
+      runtime.open(modelId, onProgress, signal),
     remove: (modelId) => runtime.remove(modelId),
   };
 }

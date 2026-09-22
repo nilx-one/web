@@ -18,7 +18,8 @@ export type UnsupportedReason =
   | "insecure_context"
   | "webgpu_missing"
   | "adapter_unavailable"
-  | "below_runtime_floor";
+  | "below_runtime_floor"
+  | "missing_features";
 
 export type LocalModelPhase =
   | { readonly kind: "checking" }
@@ -43,6 +44,7 @@ export type LocalModelStatusKey =
   | "unsupportedNoWebgpu"
   | "unsupportedNoAdapter"
   | "unsupportedBelowFloor"
+  | "unsupportedFeatures"
   | "absent"
   | "downloading"
   | "present"
@@ -60,6 +62,8 @@ export interface LocalModelSettingsViewState {
   readonly notices: readonly string[];
   readonly canDownload: boolean;
   readonly canRemove: boolean;
+  /** Only a download is worth abandoning midway; removal is quick and local. */
+  readonly canCancel: boolean;
   readonly busy: boolean;
 }
 
@@ -73,6 +77,8 @@ function unsupportedStatusKey(reason: UnsupportedReason): LocalModelStatusKey {
       return "unsupportedNoAdapter";
     case "below_runtime_floor":
       return "unsupportedBelowFloor";
+    case "missing_features":
+      return "unsupportedFeatures";
   }
 }
 
@@ -109,6 +115,7 @@ export function createLocalModelSettingsViewState(
     notices: phase.kind === "absent" ? notices : [],
     canDownload: phase.kind === "absent" || phase.kind === "error",
     canRemove: phase.kind === "present",
+    canCancel: phase.kind === "downloading",
     busy: phase.kind === "downloading" || phase.kind === "removing",
   };
 }

@@ -16,7 +16,11 @@
  * SRI hashes WebLLM verifies for the config, the tokenizer and the model library.
  */
 
-import type { AppConfig, ModelRecord } from "@mlc-ai/web-llm";
+import {
+  validateServedCatalog,
+  type CacheBackend,
+  type ServedCatalog,
+} from "@aiaiaiai/webllm";
 
 /** What `bootstrap-models.sh` writes beside the artifacts it placed. */
 export interface MirrorManifest {
@@ -34,11 +38,7 @@ export interface MirrorManifest {
 }
 
 export type MirrorRefusal =
-  | "origin_not_secure"
-  | "unknown_schema"
-  | "unsupported_identifier"
-  | "integrity_not_sri"
-  | "size_not_stated";
+  "unknown_schema" | "unsupported_identifier" | "size_not_stated";
 
 export class MirrorConfigError extends Error {
   public constructor(
@@ -52,26 +52,25 @@ export class MirrorConfigError extends Error {
 
 const SUPPORTED_SCHEMA = 1;
 const SAFE_SEGMENT = /^[0-9A-Za-z._-]+$/;
-const SRI = /^sha(256|384|512)-[A-Za-z0-9+/]+={0,2}$/;
 
 /**
- * Builds the config that loads this model from `origin`.
+ * Builds the catalog that serves this model from `origin`.
  *
- * @throws {MirrorConfigError} when the origin, the manifest schema, the identifiers or the
- * hashes are not ones this product is willing to load from. A mirror that cannot be
- * described exactly is not one to fall back from — the caller keeps whatever config it had.
+ * What is checked here is this product's manifest format — its schema, its identifiers, the
+ * size it must state. What a mirror has to get right to be loaded from at all — HTTPS, an
+ * immutable `resolve/<revision>/` segment, well-formed SRI digests — is `@aiaiaiai/webllm`'s
+ * opinion, and `validateServedCatalog` applies it before this returns, so a catalog that
+ * comes back is one the loader will accept.
+ *
+ * @throws {MirrorConfigError} when the manifest is not one this product knows how to read.
+ * @throws {LocalInferenceError} (`invalid_catalog`) when the mirror it describes is not one
+ * the foundation will load from. Either way the caller keeps whatever source it had.
  */
-export function mirrorAppConfig(
+export function mirrorCatalog(
   origin: string,
   manifest: MirrorManifest,
-  cacheBackend: AppConfig["cacheBackend"] = "cache",
-): AppConfig {
-  if (!isSecureOrigin(origin)) {
-    throw new MirrorConfigError(
-      "origin_not_secure",
-      `model origin must be HTTPS or localhost: ${origin}`,
-    );
-  }
+  cacheBackend?: CacheBackend,
+): ServedCatalog {
   if (manifest.schema !== SUPPORTED_SCHEMA) {
     throw new MirrorConfigError(
       "unknown_schema",
@@ -93,40 +92,32 @@ export function mirrorAppConfig(
       "a mirror manifest must state the download size it is offering",
     );
   }
-  for (const hash of [
-    manifest.integrity.config,
-    manifest.integrity.model_lib,
-    ...Object.values(manifest.integrity.tokenizer),
-  ]) {
-    if (!SRI.test(hash)) {
-      throw new MirrorConfigError(
-        "integrity_not_sri",
-        `not an SRI hash: ${hash}`,
-      );
-    }
-  }
 
   // The trailing `resolve/<revision>/` is what stops WebLLM appending `resolve/main/` of
   // its own, and it is also what makes the directory immutable.
   const base = `${origin.replace(/\/$/, "")}/models/${manifest.model_id}/resolve/${manifest.revision}/`;
 
-  const record: ModelRecord = {
-    model: base,
-    model_id: manifest.model_id,
-    model_lib: `${base}model.wasm`,
-    // The prebuilt registry omits this on these entries, which lets a device without f16
-    // download a whole model before failing to initialise it.
-    required_features: ["shader-f16"],
-    integrity: {
-      config: manifest.integrity.config,
-      model_lib: manifest.integrity.model_lib,
-      tokenizer: { ...manifest.integrity.tokenizer },
-      onFailure: "error",
-    },
-    overrides: { context_window_size: 4096 },
+  const catalog: ServedCatalog = {
+    models: [
+      {
+        modelId: manifest.model_id,
+        artifacts: base,
+        modelLib: `${base}model.wasm`,
+        // Also derived from the identifier by the foundation; stated so the manifest this
+        // product writes is not the only place it is implied.
+        requiredFeatures: ["shader-f16"],
+        contextWindowSize: 4096,
+        integrity: {
+          config: manifest.integrity.config,
+          modelLib: manifest.integrity.model_lib,
+          tokenizer: { ...manifest.integrity.tokenizer },
+        },
+      },
+    ],
+    ...(cacheBackend === undefined ? {} : { cacheBackend }),
   };
-
-  return { model_list: [record], cacheBackend };
+  validateServedCatalog(catalog);
+  return catalog;
 }
 
 /**
@@ -172,14 +163,13 @@ export async function loadMirrorManifest(
   }
 }
 
+/**
+ * Only an HTTPS origin is worth asking: `@aiaiaiai/webllm` loads no artifact over plaintext,
+ * local development included, so a manifest read from one could only be refused afterwards.
+ */
 function isSecureOrigin(origin: string): boolean {
   try {
-    const url = new URL(origin);
-    return (
-      url.protocol === "https:" ||
-      url.hostname === "localhost" ||
-      url.hostname === "127.0.0.1"
-    );
+    return new URL(origin).protocol === "https:";
   } catch {
     return false;
   }

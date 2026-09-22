@@ -59,7 +59,7 @@ function visit(overrides: Partial<CellEvidence> = {}): CellEvidence {
 }
 
 class FakeHost implements WebLlmRuntimeHost {
-  public verdict: DeviceVerdict = { kind: "usable", shaderF16: true };
+  public verdict: DeviceVerdict = { kind: "usable" };
   public cached = false;
   public opened = 0;
   public unloaded = 0;

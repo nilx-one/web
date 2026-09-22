@@ -8,7 +8,7 @@
     "./browser": "./src/browser-host.ts"
   },
   "dependencies": {
-    "@mlc-ai/web-llm": "0.2.84",
+    "@aiaiaiai/webllm": "0.1.0",
     "@nilx-one/narration-contract": "workspace:*"
   }
 }
