@@ -63,6 +63,7 @@ class FakeHost implements WebLlmRuntimeHost {
   public cached = false;
   public opened = 0;
   public unloaded = 0;
+  public removed = 0;
   public said: string | ((source: string) => string) = "Був тут 12 хвилин.";
   public failOpen = false;
   public prompts: string[] = [];
@@ -73,6 +74,12 @@ class FakeHost implements WebLlmRuntimeHost {
 
   public isCached(): Promise<boolean> {
     return Promise.resolve(this.cached);
+  }
+
+  public remove(): Promise<void> {
+    this.removed += 1;
+    this.cached = false;
+    return Promise.resolve();
   }
 
   public open(

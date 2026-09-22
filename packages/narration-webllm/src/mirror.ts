@@ -29,6 +29,8 @@ export interface MirrorManifest {
     readonly tokenizer: Readonly<Record<string, string>>;
     readonly model_lib: string;
   };
+  /** Redistribution attribution `bootstrap-models.sh` records. Absent from older manifests. */
+  readonly notices?: readonly string[];
 }
 
 export type MirrorRefusal =

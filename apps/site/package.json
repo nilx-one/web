@@ -14,6 +14,7 @@
     "@nilx-one/identity-http": "workspace:*",
     "@nilx-one/map-maplibre": "workspace:*",
     "@nilx-one/map-shade": "workspace:*",
+    "@nilx-one/narration-webllm": "workspace:*",
     "@nilx-one/presence-geo": "workspace:*",
     "@nilx-one/presence-idb": "workspace:*",
     "@nilx-one/product-app": "workspace:*",

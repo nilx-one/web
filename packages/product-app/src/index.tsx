@@ -79,6 +79,7 @@ import {
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
+import type { LocalModelDependency } from "./shell/local-model-host";
 import {
   applyAppearance,
   declareDeviceAppearance,
@@ -98,12 +99,27 @@ export {
   type PublishFailure,
   type PublishFailureOptions,
 } from "./features/failures/failure-toast-region";
+export type {
+  LocalModelDependency,
+  LocalModelDescription,
+  LocalModelDeviceVerdict,
+  LocalModelDownloadProgress,
+  LocalModelEngine,
+  LocalModelHost,
+} from "./shell/local-model-host";
 
 export interface ProductAppDependencies {
   core: CoreRuntimePort;
   host: HostPort;
   identity: IdentityAccessPort;
   mapRenderer: MapRenderer;
+  /**
+   * The on-device model host, when this deployment has wired one — see
+   * `./shell/local-model-host.ts` for why this package cannot build one itself. Omitted
+   * rather than passed as undefined: it is an app-level composition decision, not a state
+   * this package should be able to represent as "present but empty."
+   */
+  localModel?: LocalModelDependency;
 }
 
 export interface ProductAppProps extends ProductAppDependencies {
@@ -909,6 +925,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         runtime={viewModel.runtime}
         safeArea={viewModel.safeArea}
         section={section}
+        {...(dependencies.localModel === undefined
+          ? {}
+          : { localModel: dependencies.localModel })}
         {...(providerConnections === undefined
           ? {}
           : { connectedProviders: providerConnections })}
@@ -1056,6 +1075,7 @@ export function ProductApp({
   host,
   identity,
   mapRenderer,
+  localModel,
   routerBasepath = "/",
 }: ProductAppProps) {
   const [queryClient] = useState(
@@ -1072,7 +1092,15 @@ export function ProductApp({
     createRouter({
       routeTree,
       basepath: routerBasepath,
-      context: { dependencies: { core, host, identity, mapRenderer } },
+      context: {
+        dependencies: {
+          core,
+          host,
+          identity,
+          mapRenderer,
+          ...(localModel === undefined ? {} : { localModel }),
+        },
+      },
     }),
   );
 

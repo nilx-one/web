@@ -231,6 +231,31 @@ a {
   line-height: 1.5;
 }
 
+.progress-bar {
+  display: grid;
+  gap: 6px;
+}
+
+.progress-bar__track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.progress-bar__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease;
+}
+
+.progress-bar__label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .pairwise-boundary {
   position: relative;
   display: grid;

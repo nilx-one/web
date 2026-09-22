@@ -10,6 +10,7 @@
 
 import {
   CreateWebWorkerMLCEngine,
+  deleteModelAllInfoInCache,
   hasModelInCache,
   prebuiltAppConfig,
   type AppConfig,
@@ -24,6 +25,12 @@ import {
   type LocalEngine,
   type WebLlmRuntimeHost,
 } from "./index";
+import {
+  describeMirrorDownload,
+  loadMirrorManifest,
+  mirrorAppConfig,
+  type MirrorManifest,
+} from "./mirror";
 
 /** One short rephrasing. Bounded because a sentence is all that is wanted. */
 const MAX_NEW_TOKENS = 48;
@@ -32,9 +39,17 @@ const TOP_P = 0.9;
 
 export interface BrowserHostOptions {
   readonly modelId?: string;
-  /** Overrides the registry entry. A mirror supplies its own origin here. */
+  /**
+   * Overrides both the mirror lookup and the upstream fallback outright. Set this only when
+   * the caller has already resolved a source itself; leaving it unset is what lets a host
+   * prefer this deployment's mirror over the pinned registry.
+   */
   readonly appConfig?: AppConfig;
   readonly workerFactory?: () => Worker;
+  /** Where a mirror manifest is read from. Defaults to this page's own origin. */
+  readonly origin?: string;
+  readonly revision?: string;
+  readonly fetchImpl?: typeof fetch;
 }
 
 /**
@@ -68,6 +83,104 @@ function supportsOpfs(): boolean {
     typeof (navigator.storage as { getDirectory?: unknown } | undefined)
       ?.getDirectory === "function"
   );
+}
+
+/** The revision `bootstrap-models.sh` writes until this product rolls one forward. */
+const DEFAULT_MIRROR_REVISION = "1";
+
+export type ResolvedModelSource =
+  | {
+      readonly kind: "mirror";
+      readonly appConfig: AppConfig;
+      readonly manifest: MirrorManifest;
+    }
+  | { readonly kind: "upstream"; readonly appConfig: AppConfig };
+
+/**
+ * Chooses where this device loads a model from: our own mirror when this deployment has
+ * one, the pinned upstream registry otherwise. A mirror is preferred because it is the only
+ * one of the two that names an immutable `model_lib` and keeps a device's IP off a host we do
+ * not run — see `docs/model-selection.md` in `nilx-one/ai` for why that gap exists upstream.
+ *
+ * A malformed manifest is treated the same as a missing one: `mirrorAppConfig` throwing is
+ * this deployment describing a mirror it does not trust itself, not a reason to load from it
+ * anyway with a config nobody checked.
+ */
+export async function resolveLocalModelSource(
+  modelId = NARRATION_MODEL_ID,
+  origin: string = defaultOrigin(),
+  revision = DEFAULT_MIRROR_REVISION,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ResolvedModelSource> {
+  const manifest = await loadMirrorManifest(
+    origin,
+    modelId,
+    revision,
+    fetchImpl,
+  );
+  if (manifest !== null) {
+    try {
+      return {
+        kind: "mirror",
+        appConfig: mirrorAppConfig(origin, manifest),
+        manifest,
+      };
+    } catch {
+      // Falls through to upstream below.
+    }
+  }
+  return { kind: "upstream", appConfig: narrationAppConfig(modelId) };
+}
+
+function defaultOrigin(): string {
+  return typeof location === "undefined" ? "" : location.origin;
+}
+
+/**
+ * The download size and provenance, answered without loading anything.
+ *
+ * A mirror states its size in the manifest this client already fetched to resolve the
+ * source, so no second request is needed. The upstream path has no such manifest to read, so
+ * it falls back to `describeDownload`'s own request against the registry entry it resolved.
+ */
+export async function describeLocalModelDownload(
+  modelId = NARRATION_MODEL_ID,
+  origin: string = defaultOrigin(),
+  revision = DEFAULT_MIRROR_REVISION,
+  fetchImpl: typeof fetch = fetch,
+): Promise<
+  | {
+      readonly bytes: number;
+      readonly source: "mirror" | "upstream";
+      readonly notices: readonly string[];
+    }
+  | {
+      readonly bytes: null;
+      readonly reason: string;
+      readonly source: "mirror" | "upstream";
+    }
+> {
+  const resolved = await resolveLocalModelSource(
+    modelId,
+    origin,
+    revision,
+    fetchImpl,
+  );
+  if (resolved.kind === "mirror") {
+    return {
+      ...describeMirrorDownload(resolved.manifest),
+      source: "mirror",
+      notices: resolved.manifest.notices ?? [],
+    };
+  }
+  const upstream = await describeDownload(
+    modelId,
+    resolved.appConfig,
+    fetchImpl,
+  );
+  return upstream.bytes === null
+    ? { bytes: null, reason: upstream.reason, source: "upstream" }
+    : { bytes: upstream.bytes, source: "upstream", notices: [] };
 }
 
 /**
@@ -135,27 +248,51 @@ export function createBrowserHost(
   options: BrowserHostOptions = {},
 ): WebLlmRuntimeHost {
   const modelId = options.modelId ?? NARRATION_MODEL_ID;
-  const appConfig = options.appConfig ?? narrationAppConfig(modelId);
   const workerFactory =
     options.workerFactory ??
     (() =>
       new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }));
+
+  // Resolved lazily, and only once per host: construction must still download nothing, and
+  // `isCached` and `open` have to agree on the same config or they answer about two places.
+  let resolved: Promise<AppConfig> | undefined;
+  function resolveAppConfig(): Promise<AppConfig> {
+    if (options.appConfig !== undefined) {
+      return Promise.resolve(options.appConfig);
+    }
+    resolved ??= resolveLocalModelSource(
+      modelId,
+      options.origin,
+      options.revision,
+      options.fetchImpl,
+    ).then((source) => source.appConfig);
+    return resolved;
+  }
 
   return {
     inspect(): Promise<DeviceVerdict> {
       return inspectDevice();
     },
 
-    isCached(id: string): Promise<boolean> {
+    async isCached(id: string): Promise<boolean> {
       // Asked with the same config the load will use: a query against another registry or
       // another backend answers about a different place than the one being filled.
+      const appConfig = await resolveAppConfig();
       return hasModelInCache(id, appConfig);
+    },
+
+    async remove(id: string): Promise<void> {
+      // Same reasoning as `isCached`: evicting from the wrong config leaves the actual
+      // cache entry untouched and reports success anyway.
+      const appConfig = await resolveAppConfig();
+      await deleteModelAllInfoInCache(id, appConfig);
     },
 
     async open(
       id: string,
       onProgress: (progress: LoadProgress) => void,
     ): Promise<LocalEngine> {
+      const appConfig = await resolveAppConfig();
       const worker = workerFactory();
       try {
         const engine = await CreateWebWorkerMLCEngine(worker, id, {

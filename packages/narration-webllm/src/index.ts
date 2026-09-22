@@ -62,6 +62,8 @@ export interface WebLlmRuntimeHost {
     modelId: string,
     onProgress: (progress: LoadProgress) => void,
   ): Promise<LocalEngine>;
+  /** Evicts a cached model an owner asked to reclaim, in full: config, weights, and library. */
+  remove(modelId: string): Promise<void>;
 }
 
 export interface WebLlmNarrationOptions {
