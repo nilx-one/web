@@ -9,14 +9,12 @@ The production artifact in this repository is one immutable Web client image con
 Current targets are:
 
 ```text
-web       -> /          -> ox1-web
-telegram  -> /telegram/ -> ox1-telegram
-discord   -> /discord/  -> ox1-discord
+web       -> /          -> nilxone-web
+telegram  -> /telegram/ -> nilxone-telegram
+discord   -> /discord/  -> nilxone-discord
 ```
 
-The Browser host temporarily keeps the compatibility alias `ox1-telegram-mini-app` so the existing shared edge remains valid while public routing migrates to explicit host aliases.
-
-All host containers proxy only the bounded identity API surface to `ox1-identity:8080`. Protocol truth stays outside rendering and host layers.
+All host containers proxy only the bounded identity API surface to `nilxone-identity:8080`. Protocol truth stays outside rendering and host layers.
 
 Discord is the one host that does not reach this surface directly. An Activity is served from `<client_id>.discordsays.com` and every request it makes is answered by Discord's proxy, which matches only paths below `/.proxy/` against the Activity's URL mappings. The Discord client therefore re-roots its own absolute paths — `/api`, `/map`, `/core` — under that prefix at runtime; the deployed surface stays identical for every host. Discord authentication additionally requires `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` in the identity service runtime, without which `/api/v1/auth/discord/config` reports the host as unconfigured.
 

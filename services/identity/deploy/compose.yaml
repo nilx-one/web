@@ -26,7 +26,7 @@ services:
     networks:
       edge:
         aliases:
-          - ox1-identity
+          - nilxone-identity
     security_opt:
       - no-new-privileges:true
     stop_grace_period: 20s

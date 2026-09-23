@@ -93,7 +93,7 @@ credentials do not activate a public provider host by themselves.
 
 ## Runtime package
 
-[`Dockerfile`](Dockerfile) builds the combined Telegram bot and identity API. [`deploy/compose.yaml`](deploy/compose.yaml) persists SQLite state in a named volume and exposes only the private `ox1-identity:8080` edge alias. The canonical Web runtime proxies the bounded `/api/v1/identity*` and `/api/v1/auth/*` surfaces to that alias.
+[`Dockerfile`](Dockerfile) builds the combined Telegram bot and identity API. [`deploy/compose.yaml`](deploy/compose.yaml) persists SQLite state in a named volume and exposes only the private `nilxone-identity:8080` edge alias. The canonical Web runtime proxies the bounded `/api/v1/identity*` and `/api/v1/auth/*` surfaces to that alias.
 
 CI validates the service and deployment contract. Packaging publishes an immutable GHCR image. Production activation is a separate manual workflow. The production deploy composes provider credentials with the persistent server-owned native secrets into a `0600` runtime environment file.
 

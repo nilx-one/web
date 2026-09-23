@@ -150,6 +150,24 @@ jobs:
             exit 1
           fi
 
+      - name: Validate identity edge alias
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # The workload name dispatched to infra (deploy-identity-service.yml) must match
+          # the Docker network alias the identity container actually registers under
+          # (services/identity/deploy/compose.yaml), and the alias every consumer proxies to
+          # (deploy/web/Caddyfile). A drift between these three is a silent 502 in production:
+          # Caddy resolves a hostname the identity container never joins the edge network as.
+          workload="$(grep -F -- '--arg workload' .github/workflows/deploy-identity-service.yml | grep -oE '"[a-z0-9-]+"' | tr -d '"')"
+
+          grep -Fq -- "- $workload" services/identity/deploy/compose.yaml ||
+            { echo "::error file=services/identity/deploy/compose.yaml::edge network alias must match the dispatched workload name '$workload'"; exit 1; }
+
+          grep -Fq "$workload:8080" deploy/web/Caddyfile ||
+            { echo "::error file=deploy/web/Caddyfile::identity reverse_proxy target must match the dispatched workload name '$workload'"; exit 1; }
+
       - name: Validate client handoff
         shell: bash
         run: |
