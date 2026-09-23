@@ -31,11 +31,11 @@ COPY --from=build /tmp/identity-bot /usr/local/bin/identity-bot
 
 USER identity
 ENV DATABASE_URL=sqlite:///data/identity.db
-ENV HTTP_BIND=0.0.0.0:8080
-EXPOSE 8080
+ENV HTTP_BIND=0.0.0.0:1927
+EXPOSE 1927
 VOLUME ["/data"]
 
 HEALTHCHECK --interval=15s --timeout=5s --retries=6 --start-period=5s \
-    CMD curl --fail --silent --show-error http://127.0.0.1:8080/health >/dev/null || exit 1
+    CMD curl --fail --silent --show-error http://127.0.0.1:1927/health >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/local/bin/identity-bot"]
