@@ -78,7 +78,10 @@ async function bootstrap(): Promise<void> {
   const host = createTelegramHost(
     telegramBridge,
     locationControl.kind === "live"
-      ? { onLiveLocation: createTelegramLiveLocationSink(telegramBridge?.initData ?? "") }
+      ? {
+          enableLiveLocation: true,
+          onLiveLocation: createTelegramLiveLocationSink(telegramBridge?.initData ?? ""),
+        }
       : {},
   );
   const core = createCoreWasmClient({
@@ -117,16 +120,23 @@ async function bootstrap(): Promise<void> {
   // the lifetime of one host instance.
   const initialLocationFingerprint =
     locationControlFingerprint(locationControl);
+  const recheckLocationControl = (): void => {
+    void readTelegramLocationControl(telegramBridge?.initData ?? "").then((next) => {
+      if (locationControlFingerprint(next) !== initialLocationFingerprint) {
+        window.location.reload();
+      }
+    });
+  };
+
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
-    void readTelegramLocationControl(telegramBridge?.initData ?? "").then(
-      (next) => {
-        if (locationControlFingerprint(next) !== initialLocationFingerprint) {
-          window.location.reload();
-        }
-      },
-    );
+    recheckLocationControl();
   });
+  const locationControlPoll = window.setInterval(
+    recheckLocationControl,
+    LOCATION_PERSIST_INTERVAL_MS,
+  );
+  window.addEventListener("pagehide", () => window.clearInterval(locationControlPoll), { once: true });
 
   createRoot(container).render(
     <StrictMode>
