@@ -25,6 +25,24 @@ export interface TelegramWebAppUser {
   readonly language_code?: string;
 }
 
+export interface TelegramLocationData {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly horizontal_accuracy?: number | null;
+}
+
+export interface TelegramLocationManager {
+  isInited: boolean;
+  isLocationAvailable: boolean;
+  isAccessRequested: boolean;
+  isAccessGranted: boolean;
+  init(callback?: () => void): TelegramLocationManager;
+  getLocation(callback: (location: TelegramLocationData | null) => void): TelegramLocationManager;
+  openSettings(): TelegramLocationManager;
+  onEvent?: (event: "locationManagerUpdated", listener: () => void) => void;
+  offEvent?: (event: "locationManagerUpdated", listener: () => void) => void;
+}
+
 export interface TelegramWebAppBridge {
   initData: string;
   initDataUnsafe?: {
@@ -32,6 +50,7 @@ export interface TelegramWebAppBridge {
   };
   colorScheme: "dark" | "light";
   safeAreaInset?: Partial<SafeAreaInsets>;
+  LocationManager?: TelegramLocationManager;
   HapticFeedback?: {
     impactOccurred(style: "light" | "medium" | "heavy"): void;
   };
@@ -182,6 +201,64 @@ class TelegramHost implements HostPort {
   }
 }
 
+function createTelegramGeolocation(bridge: TelegramWebAppBridge): GeolocationCapability {
+  const manager = bridge.LocationManager;
+  if (manager === undefined) return UNSUPPORTED_GEOLOCATION;
+
+  let initialized: Promise<void> | undefined;
+  const init = (): Promise<void> => {
+    if (initialized !== undefined) return initialized;
+    initialized = new Promise((resolve) => manager.init(() => resolve()));
+    return initialized;
+  };
+  const observation = (location: TelegramLocationData): GeolocationObservation => ({
+    kind: "observed",
+    position: {
+      longitude: location.longitude,
+      latitude: location.latitude,
+      accuracyMeters: Number.isFinite(location.horizontal_accuracy ?? NaN)
+        ? Math.max(0, location.horizontal_accuracy as number)
+        : 50,
+      observedAt: Date.now(),
+    },
+  });
+
+  return {
+    async readPermission() {
+      await init();
+      if (!manager.isLocationAvailable) return "unsupported";
+      if (manager.isAccessGranted) return "granted";
+      if (manager.isAccessRequested) return "denied";
+      return "prompt";
+    },
+    async requestPosition() {
+      await init();
+      if (!manager.isLocationAvailable) return { kind: "failed", reason: "unsupported" };
+      return new Promise<GeolocationObservation>((resolve) => {
+        try {
+          manager.getLocation((location) => {
+            resolve(location === null ? { kind: "failed", reason: "permission-denied" } : observation(location));
+          });
+        } catch {
+          resolve({ kind: "failed", reason: "host-failed" });
+        }
+      });
+    },
+    watchPosition(observer) {
+      let active = true;
+      const update = () => {
+        if (!active || !manager.isAccessGranted) return;
+        void this.requestPosition().then((value) => { if (active) observer(value); });
+      };
+      manager.onEvent?.("locationManagerUpdated", update);
+      return () => {
+        active = false;
+        manager.offEvent?.("locationManagerUpdated", update);
+      };
+    },
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -227,6 +304,6 @@ export function createTelegramHost(
 ): HostPort {
   return new TelegramHost(
     bridge,
-    composition.geolocation ?? UNSUPPORTED_GEOLOCATION,
+    composition.geolocation ?? (bridge === undefined ? UNSUPPORTED_GEOLOCATION : createTelegramGeolocation(bridge)),
   );
 }
