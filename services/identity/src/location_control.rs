@@ -10,6 +10,7 @@ use std::{
 
 use axum::{
     Json, Router,
+    extract::DefaultBodyLimit,
     extract::State,
     http::{
         HeaderMap, StatusCode,
@@ -31,6 +32,7 @@ use crate::{IdentityRepository, TelegramInitDataVerifier};
 
 const TELEGRAM_AUTH_SCHEME: &str = "tma ";
 const DEFAULT_INTENT_TTL: Duration = Duration::from_secs(5 * 60);
+const MAX_LOCATION_REQUEST_BYTES: usize = 8 * 1024;
 
 /// Application authorization role for a human Bond.
 ///
@@ -221,6 +223,7 @@ pub fn location_control_router(
     Router::new()
         .route("/api/v1/location-control", get(read_location_control))
         .route("/api/v1/location-control", post(write_live_location))
+        .layer(DefaultBodyLimit::max(MAX_LOCATION_REQUEST_BYTES))
         .with_state(LocationControlApiState {
             identities,
             locations,
