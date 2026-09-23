@@ -32,6 +32,7 @@ import {
   type CoreRuntimePort,
   type IdentityAccessPort,
   type AvatarModel,
+  type NativeIdentityContextResult,
   type ProviderPasswordHost,
   type PubDressSelection,
 } from "@nilx-one/application";
@@ -691,11 +692,26 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     useNativeSignInForExistingBond,
   ]);
 
+  // A Telegram (or Discord) host has no native session of its own — any
+  // native context here is ambient browser-cookie state this device happens
+  // to carry from some other Bond entirely. It only counts as proof for the
+  // *typed* selection when its own pubDress actually matches it; otherwise
+  // trusting it would sign this flow into whatever Bond that stale session
+  // belongs to instead of the one the person is trying to reach.
+  const nativeContextForSelectedBond: NativeIdentityContextResult | undefined =
+    nativeContextQuery.data?.kind === "authenticated" &&
+    nativeContextQuery.data.identity.pubDress !== formatPubDress(selection)
+      ? { kind: "anonymous" }
+      : nativeContextQuery.data?.kind === "remembered" &&
+          nativeContextQuery.data.pubDress !== formatPubDress(selection)
+        ? { kind: "anonymous" }
+        : nativeContextQuery.data;
+
   let identityState: IdentityViewState = browserHost
     ? nativeIdentityState
     : useNativeSignInForExistingBond
       ? createNativeIdentityViewState(
-          nativeContextQuery.data,
+          nativeContextForSelectedBond,
           status,
           nativeRegistration.data,
           latestAuthentication,
