@@ -24,17 +24,15 @@ const readyCore: CoreRuntimePort = {
 };
 
 /**
- * The authenticated world opens on the Bond, so an Avaia's own Dock card is
- * reached by handing it the wheel first. That handover is what these tests are
- * standing on, not what they are about.
+ * The authenticated world opens on the Avaia, so its own Dock card is already
+ * the one at the wheel. Waiting for it is what these tests are standing on,
+ * not what they are about.
  */
-async function handWheelToAvaia(
-  user: ReturnType<typeof userEvent.setup>,
+async function avaiaAtWheel(
+  _user: ReturnType<typeof userEvent.setup>,
   address = "0skai",
 ): Promise<void> {
-  await user.click(
-    await screen.findByRole("button", { name: `Hand the wheel to ${address}` }),
-  );
+  await screen.findByRole("button", { name: `Focus the world on ${address}` });
 }
 
 function createHost(): HostPort {
@@ -140,7 +138,7 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    await handWheelToAvaia(user);
+    await avaiaAtWheel(user);
 
     // An Avaia nobody has configured says so on its card, and the Dock's own
     // action offers the one thing that can be done about it.
@@ -207,7 +205,7 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    await handWheelToAvaia(user);
+    await avaiaAtWheel(user);
 
     await user.click(await screen.findByRole("button", { name: "Edit 0skai" }));
     expect(await screen.findByLabelText("pub_dress")).toHaveValue("sk");
@@ -234,7 +232,7 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    await handWheelToAvaia(user);
+    await avaiaAtWheel(user);
 
     await user.click(
       await screen.findByRole("button", { name: "Set up 0skai" }),
@@ -270,7 +268,7 @@ describe("Avaia setup from the Bond dock", () => {
 
     // No runtime is published on any device, and that never unconfigures what
     // an owner already stored.
-    await handWheelToAvaia(user);
+    await avaiaAtWheel(user);
 
     const configure = await screen.findByRole("button", { name: "Edit 0skai" });
     expect(
@@ -293,18 +291,22 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    // The world opens on the Bond, so the Dock offers the wheel onward rather
-    // than back.
+    // The world opens on the Avaia, so the Dock offers the wheel back to the
+    // Bond rather than onward.
     expect(
-      await screen.findByRole("button", { name: "Hand the wheel to 0skai" }),
+      await screen.findByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toBeVisible();
     // Nothing is synthesised in place of a profile this host cannot read: the
     // Avaia keeps its seat and its address, and gains no configure action.
     expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Edit 0skai/ })).toBeNull();
+    // The Dock's own edit action still names whoever is driving, but on this
+    // host it opens no configuration: there is no address field to invent.
+    await userEvent.click(screen.getByRole("button", { name: "Edit 0skai" }));
+    expect(screen.queryByLabelText("pub_dress")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
-    ).toHaveTextContent("You");
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).toHaveTextContent("AI");
   });
 
   it("has no automatically detectable accessibility violations", async () => {
@@ -323,7 +325,7 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    await handWheelToAvaia(user);
+    await avaiaAtWheel(user);
 
     await user.click(
       await screen.findByRole("button", { name: "Set up 0skai" }),

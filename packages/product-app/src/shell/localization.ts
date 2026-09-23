@@ -52,6 +52,13 @@ const EN_MESSAGES = {
   "location.centered.label": "Map centred on this device",
   "location.recenter.label": "Recenter on this device",
   "location.accuracy.approx": "Accuracy about",
+  "map.card.thisDevice": "This device",
+  "map.card.fromThisDevice": "{distance} from this device",
+  "avaia.notebook.title": "Landmarks studied",
+  "avaia.notebook.empty":
+    "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
+  "avaia.notebook.note":
+    "Kept on this device only. Nothing here is sent anywhere or asserted about anyone.",
   "settings.language.legend": "Language",
   "settings.language.auto": "Auto",
   "settings.language.autoAction": "Use detected language",
@@ -129,6 +136,13 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "location.centered.label": "Мапа центрована на цьому пристрої",
   "location.recenter.label": "Центрувати на цьому пристрої",
   "location.accuracy.approx": "Точність близько",
+  "map.card.thisDevice": "Цей пристрій",
+  "map.card.fromThisDevice": "{distance} від цього пристрою",
+  "avaia.notebook.title": "Вивчені пам’ятки",
+  "avaia.notebook.empty":
+    "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",
+  "avaia.notebook.note":
+    "Зберігається лише на цьому пристрої. Нічого звідси нікуди не надсилається і ні про кого не стверджується.",
   "settings.language.legend": "Мова",
   "settings.language.auto": "Автоматично",
   "settings.language.autoAction": "Використовувати визначену мову",

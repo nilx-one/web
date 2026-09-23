@@ -12,6 +12,7 @@ import {
   MAP_BODY_HEIGHT_METERS,
   mapMetersPerPixel,
   sampleAmbientAvatar,
+  type AvatarClipId,
   type AvatarHandle,
   type AvatarModelId,
 } from "@nilx-one/map-contract";
@@ -133,6 +134,21 @@ export interface WheelBodyInput {
   readonly zoom: number;
   readonly timeMs: number;
   readonly reducedMotion: boolean;
+  /**
+   * Where the body stands and what it is doing when that is not simply "at
+   * this device, in the ambient rhythm" — an Avaia that walked off, is walking,
+   * or is looking a landmark over. A handover still outranks its clip.
+   */
+  readonly stance?: BodyStance | undefined;
+}
+
+/** A body's own place and motion, when it has one. */
+export interface BodyStance {
+  readonly point: { readonly longitude: number; readonly latitude: number };
+  readonly bearingDeg: number;
+  /** Absent means standing there in the ambient rhythm. */
+  readonly clipId?: AvatarClipId;
+  readonly clipPhase?: number;
 }
 
 /**
@@ -152,9 +168,11 @@ export function createWheelBodyHandle({
   zoom,
   timeMs,
   reducedMotion,
+  stance,
 }: WheelBodyInput): AvatarHandle | null {
-  const position = deviceLocationPosition(location);
-  if (position === undefined) return null;
+  const observed = deviceLocationPosition(location);
+  if (observed === undefined) return null;
+  const position = stance?.point ?? observed;
   const ambient = sampleAmbientAvatar(
     avatarSeed(address),
     timeMs,
@@ -164,6 +182,10 @@ export function createWheelBodyHandle({
   // so it is not left to the ambient sampler. Reduced motion still gets the
   // clip: it is what makes the change legible, and it plays once.
   const handing = body.clipId !== undefined;
+  // Reduced motion gets no stride and no turn: the application already sends
+  // such a body straight to where it was going, and here it simply stands.
+  const moving =
+    stance?.clipId !== undefined && !reducedMotion ? stance : undefined;
   // The same resolver the settings preview and the editor draw from, so a
   // person cannot be wearing one thing in the editor and another on the world.
   const scene = resolveAvatarScene(study, appearance);
@@ -174,11 +196,18 @@ export function createWheelBodyHandle({
     // chosen body needs no translation table between them.
     modelId: study as AvatarModelId,
     lngLat: [position.longitude, position.latitude],
-    // Heading is not observed here, so the body faces the world's north rather
-    // than pretending to know which way anyone is turned.
-    bearingDeg: 0,
-    clipId: handing ? body.clipId : ambient.clipId,
-    clipPhase: handing ? (body.clipPhase ?? 0) : ambient.clipPhase,
+    // Heading is not observed here, so a body at the device faces the world's
+    // north rather than pretending to know which way anyone is turned. A body
+    // that walked somewhere faces the way it walked.
+    bearingDeg: stance?.bearingDeg ?? 0,
+    clipId: handing
+      ? (body.clipId ?? "idle")
+      : (moving?.clipId ?? ambient.clipId),
+    clipPhase: handing
+      ? (body.clipPhase ?? 0)
+      : moving?.clipId !== undefined
+        ? (moving.clipPhase ?? 0)
+        : ambient.clipPhase,
     scale: avatarPresentationScale(zoom, position.latitude),
     visible: zoom >= AVATAR_MIN_ZOOM,
     visibleNodes: scene.visibleNodes,

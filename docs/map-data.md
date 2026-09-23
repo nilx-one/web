@@ -58,6 +58,14 @@ The published styles currently rely on exactly this much of the schema:
 adding an attribute to a style is a deliberate change that has to be verified
 against a real archive first.
 
+The renderer itself reads a little more, outside any style, for
+[Avaia walks the world](avaia-walk.md): a tap on the ground is classified by
+querying the painted `buildings`, `buildings-flat` and `water` layers, and
+`landmarksNear` reads `kind`, `name` and every other attribute of `pois`
+features from tiles already loaded. `LANDMARK_KINDS` follows the Protomaps
+schema the archive is built from. Confirm it against the `pois` declaration
+this script prints, the same as any style attribute.
+
 Elements the reference imagery shows but the archive does not support are
 omitted rather than invented. In particular, individual street trees are not
 placed: the archive carries no tree points, and drawing them at made-up

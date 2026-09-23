@@ -17,6 +17,7 @@ import {
 } from "@nilx-one/map-maplibre";
 import {
   createRawJournalPresenter,
+  createGroundRevealed,
   createShadeMapFactory,
 } from "@nilx-one/map-shade";
 import { NARRATION_MODEL_ID } from "@nilx-one/narration-webllm";
@@ -132,6 +133,7 @@ if (isPublicBondHostname(window.location.hostname)) {
       anchor: { lng: anchorLng, lat: anchorLat },
       onCellTap: (tap) => journalPresenter.show(tap),
     }),
+    isGroundRevealed: createGroundRevealed(localPresence),
   });
 
   reportMapRendererStatus(reporter, mapRenderer.getStatus());

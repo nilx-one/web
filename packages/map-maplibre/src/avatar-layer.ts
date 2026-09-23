@@ -195,7 +195,10 @@ export function createAvatarLayer(
     root.position.set(coordinate.x, coordinate.y, coordinate.z);
     root.scale.setScalar(metres * scale);
     // glTF is Y-up. Rotate it into Mercator's Z-up frame, then apply bearing.
-    root.rotation.set(Math.PI / 2, 0, (-bearingDeg * Math.PI) / 180, "ZXY");
+    // The studies face glTF +Z, which lands on Mercator north; Mercator's y
+    // grows southward, so a positive turn about its Z axis is clockwise on the
+    // ground — the same sense a compass bearing turns in.
+    root.rotation.set(Math.PI / 2, 0, (bearingDeg * Math.PI) / 180, "ZXY");
     root.visible = instance.handle.visible;
     root.updateMatrixWorld(true);
   }

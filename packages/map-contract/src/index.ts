@@ -136,6 +136,49 @@ export function mapMetersPerPixel(latitude: number, zoom: number): number {
   );
 }
 
+const EARTH_RADIUS_METERS = 6_371_008.8;
+
+function radians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
+}
+
+/**
+ * Great-circle ground distance between two points. Renderer and application
+ * share it so "within reach" is the same distance on both sides.
+ */
+export function mapDistanceMeters(
+  from: MapPointSelection,
+  to: MapPointSelection,
+): number {
+  const dLat = radians(to.latitude - from.latitude);
+  const dLng = radians(to.longitude - from.longitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(radians(from.latitude)) *
+      Math.cos(radians(to.latitude)) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * The compass heading from one point to another: degrees clockwise from
+ * north, in [0, 360). It is what `AvatarHandle.bearingDeg` means.
+ */
+export function mapCompassBearing(
+  from: MapPointSelection,
+  to: MapPointSelection,
+): number {
+  const phi1 = radians(from.latitude);
+  const phi2 = radians(to.latitude);
+  const dLng = radians(to.longitude - from.longitude);
+  const y = Math.sin(dLng) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLng);
+  const degrees = (Math.atan2(y, x) * 180) / Math.PI;
+  return (degrees + 360) % 360;
+}
+
 /**
  * A device observation supplied by the application. It carries presentation
  * geometry and nothing else: the renderer never learns who is observed, never
@@ -156,11 +199,65 @@ export interface MapObservedPositionLabel {
   readonly title: string;
   readonly detail?: string;
   /**
+   * Where the card stands when the body at the wheel stands somewhere other
+   * than the observation — an Avaia that walked off. Absent means over the
+   * observation itself.
+   */
+  readonly at?: readonly [longitude: number, latitude: number];
+  /**
+   * A line the body at the wheel is saying to itself. While present the card
+   * opens beneath the title to carry it and stays shown at every scale, the
+   * body's own included: it is who is talking, not a second marker. It is
+   * presentation copy the application already localized, never a message
+   * sent anywhere.
+   */
+  readonly speech?: string;
+  /**
    * A still of the study standing here, shown beside the text once the body
    * itself is too small to read. It is the same body, at a size that survives
    * the distance — never a second identity, and never a claim of its own.
    */
   readonly avatarUrl?: string;
+}
+
+/**
+ * What the ground under a tap is, as far as the renderer can tell from what it
+ * paints. `open` is somewhere a body could walk to; the rest say why not.
+ * `fog` is ground this device has not revealed yet: the renderer only reports
+ * it when its composition gave it a way to know.
+ */
+export type MapGround = "open" | "building" | "water" | "fog";
+
+/**
+ * A person tapping the world itself — not a body, not an editor point. The
+ * renderer reports where and what is painted there; the application decides
+ * what that means. It is presentation input, never presence evidence.
+ */
+export interface MapGroundTap {
+  readonly longitude: number;
+  readonly latitude: number;
+  readonly ground: MapGround;
+}
+
+/**
+ * A point of interest the basemap already draws that is worth walking up to —
+ * a monument, a memorial, an artwork. It is what the published archive says
+ * about a place, read locally: never protocol state, never a claim that anyone
+ * was there, and never a landmark projection in the sense of the map
+ * architecture.
+ */
+export interface MapLandmark {
+  /** Stable for the same feature across tiles and sessions. */
+  readonly id: string;
+  readonly longitude: number;
+  readonly latitude: number;
+  readonly kind: string;
+  readonly name?: string;
+  /**
+   * The remaining attributes the archive declares for this feature, verbatim.
+   * What a body "learns" about a landmark is exactly this and nothing more.
+   */
+  readonly facts: Readonly<Record<string, string | number | boolean>>;
 }
 
 export type MapRendererStatus =
@@ -210,6 +307,21 @@ export interface MapRenderer {
   subscribeBodyActivation?(
     listener: (activation: MapBodyActivation) => void,
   ): () => void;
+  /**
+   * Notifies when a person taps the world where no body is drawn and no
+   * editor is listening. Point selection and body activation keep precedence.
+   */
+  subscribeGroundTap?(listener: (tap: MapGroundTap) => void): () => void;
+  /**
+   * The landmarks the basemap carries within a radius of a point, nearest
+   * first. It reads tiles already loaded for the current view and nothing
+   * else: no request is made on its behalf, so a place off the loaded map
+   * answers with nothing rather than a guess.
+   */
+  landmarksNear?(
+    point: MapPointSelection,
+    radiusMeters: number,
+  ): readonly MapLandmark[];
 }
 
 /**
@@ -277,6 +389,7 @@ export interface AvatarHandle {
   readonly modelId: AvatarModelId;
   readonly lngLat: readonly [longitude: number, latitude: number];
   readonly altitudeMeters?: number;
+  /** The way the body faces: degrees clockwise from north, as a compass reads. */
   readonly bearingDeg: number;
   readonly clipId: AvatarClipId;
   /** Normalized [0, 1) phase used to make deterministic loops reproducible. */

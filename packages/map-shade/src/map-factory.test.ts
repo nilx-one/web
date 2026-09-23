@@ -10,7 +10,12 @@ import type * as MapLibreModule from "maplibre-gl";
 import type { MapOptions } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createShadeMapFactory, type ShadeRuntime } from "./map-factory";
+import {
+  createGroundRevealed,
+  createShadeMapFactory,
+  type ShadeRuntime,
+} from "./map-factory";
+import { cellAtLngLat } from "./pick";
 
 // Declared through vi.hoisted so the mock factory below, which vitest lifts to
 // the top of the module, can still reference it.
@@ -193,5 +198,41 @@ describe("shade map factory", () => {
     map.emit("styledata");
 
     expect(map.addLayerCalls).toEqual([]);
+  });
+});
+
+describe("ground this device has revealed", () => {
+  const here = { longitude: 30.5234, latitude: 50.4501 };
+  const elsewhere = { longitude: 30.6, latitude: 50.5 };
+
+  it("answers from the same lit cells the shade draws", async () => {
+    const lit = cellAtLngLat({ lng: here.longitude, lat: here.latitude });
+    const source: ShadeSource = {
+      litCells: () => [lit],
+      isLit: (cell: CellIndex) => cell === lit,
+      onCellLit: () => () => undefined,
+    };
+    const runtime = Promise.resolve({
+      source,
+      store: {} as PresenceStore,
+    } satisfies ShadeRuntime);
+    const revealed = createGroundRevealed(runtime);
+    await runtime;
+
+    expect(revealed(here)).toBe(true);
+    expect(revealed(elsewhere)).toBe(false);
+  });
+
+  it("claims no fog while the journal loads, or when it never does", async () => {
+    let resolve: (value: ShadeRuntime | null) => void = () => undefined;
+    const pending = createGroundRevealed(
+      new Promise<ShadeRuntime | null>((settle) => {
+        resolve = settle;
+      }),
+    );
+    expect(pending(elsewhere)).toBe(true);
+    resolve(null);
+    await Promise.resolve();
+    expect(pending(elsewhere)).toBe(true);
   });
 });

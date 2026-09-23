@@ -19,6 +19,7 @@ import {
 } from "@nilx-one/map-maplibre";
 import {
   createRawJournalPresenter,
+  createGroundRevealed,
   createShadeMapFactory,
 } from "@nilx-one/map-shade";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
       anchor: { lng: anchorLng, lat: anchorLat },
       onCellTap: (tap) => journalPresenter.show(tap),
     }),
+    isGroundRevealed: createGroundRevealed(localPresence),
   });
 
   root.render(

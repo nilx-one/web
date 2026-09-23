@@ -13,6 +13,7 @@ export {
   type ShadeLayerOptions,
 } from "./shade-layer";
 export {
+  createGroundRevealed,
   createShadeMapFactory,
   type ShadeMapFactoryOptions,
   type ShadeRuntime,
