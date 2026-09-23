@@ -20,6 +20,7 @@ export interface TelegramHostComposition {
    * geolocation implementation here.
    */
   readonly geolocation?: GeolocationCapability;
+  readonly enableLiveLocation?: boolean;
   readonly onLiveLocation?: (position: ObservedGeolocation) => void;
 }
 
@@ -316,6 +317,8 @@ export function createTelegramHost(
 ): HostPort {
   return new TelegramHost(
     bridge,
-    composition.geolocation ?? (bridge === undefined ? UNSUPPORTED_GEOLOCATION : createTelegramGeolocation(bridge, composition.onLiveLocation)),
+    composition.geolocation ?? (bridge === undefined || composition.enableLiveLocation !== true
+      ? UNSUPPORTED_GEOLOCATION
+      : createTelegramGeolocation(bridge, composition.onLiveLocation)),
   );
 }
