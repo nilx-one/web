@@ -5,6 +5,7 @@ import {
   UNSUPPORTED_GEOLOCATION,
   ZERO_SAFE_AREA,
   type GeolocationCapability,
+  type GeolocationObservation,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
@@ -223,6 +224,20 @@ function createTelegramGeolocation(bridge: TelegramWebAppBridge): GeolocationCap
     },
   });
 
+  const requestPosition = async (): Promise<GeolocationObservation> => {
+    await init();
+    if (!manager.isLocationAvailable) return { kind: "failed", reason: "unsupported" };
+    return new Promise<GeolocationObservation>((resolve) => {
+      try {
+        manager.getLocation((location) => {
+          resolve(location === null ? { kind: "failed", reason: "permission-denied" } : observation(location));
+        });
+      } catch {
+        resolve({ kind: "failed", reason: "host-failed" });
+      }
+    });
+  };
+
   return {
     async readPermission() {
       await init();
@@ -231,24 +246,12 @@ function createTelegramGeolocation(bridge: TelegramWebAppBridge): GeolocationCap
       if (manager.isAccessRequested) return "denied";
       return "prompt";
     },
-    async requestPosition() {
-      await init();
-      if (!manager.isLocationAvailable) return { kind: "failed", reason: "unsupported" };
-      return new Promise<GeolocationObservation>((resolve) => {
-        try {
-          manager.getLocation((location) => {
-            resolve(location === null ? { kind: "failed", reason: "permission-denied" } : observation(location));
-          });
-        } catch {
-          resolve({ kind: "failed", reason: "host-failed" });
-        }
-      });
-    },
+    requestPosition,
     watchPosition(observer) {
       let active = true;
       const update = () => {
         if (!active || !manager.isAccessGranted) return;
-        void this.requestPosition().then((value) => { if (active) observer(value); });
+        void requestPosition().then((value) => { if (active) observer(value); });
       };
       manager.onEvent?.("locationManagerUpdated", update);
       return () => {
