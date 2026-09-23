@@ -16,10 +16,10 @@ use axum::{
         header::{AUTHORIZATION, CACHE_CONTROL},
     },
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use ox1_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{
     Row, SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
@@ -220,6 +220,7 @@ pub fn location_control_router(
 ) -> Router {
     Router::new()
         .route("/api/v1/location-control", get(read_location_control))
+        .route("/api/v1/location-control", post(write_live_location))
         .with_state(LocationControlApiState {
             identities,
             locations,
@@ -234,6 +235,62 @@ pub fn location_control_router(
 struct LocationControlProjection {
     role: BondAccessRole,
     location: Option<BondLocation>,
+}
+
+#[derive(Deserialize)]
+struct LiveLocationRequest {
+    longitude: f64,
+    latitude: f64,
+}
+
+async fn write_live_location(
+    State(state): State<LocationControlApiState>,
+    headers: HeaderMap,
+    Json(request): Json<LiveLocationRequest>,
+) -> Response {
+    let Some(init_data) = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix(TELEGRAM_AUTH_SCHEME))
+        .filter(|value| !value.is_empty())
+    else {
+        return status(StatusCode::UNAUTHORIZED);
+    };
+    let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(value) => value.as_secs(),
+        Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
+    };
+    let user = match state.telegram_verifier.verify(init_data, now) {
+        Ok(user) => user,
+        Err(_) => return status(StatusCode::UNAUTHORIZED),
+    };
+    let identity = match state.identities.find_by_telegram(user.id).await {
+        Ok(Some(identity)) => identity,
+        Ok(None) => return status(StatusCode::NOT_FOUND),
+        Err(error) => {
+            tracing::error!(%error, "Bond live location identity lookup failed");
+            return status(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+    let coordinate = match GeoCoordinate::from_degrees(request.longitude, request.latitude) {
+        Ok(value) => value,
+        Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
+    };
+    let updated_at = match DecimalU64::new(now).get().try_into() {
+        Ok(value) => DecimalU64::new(value),
+        Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
+    };
+    let location = BondLocation::new(coordinate, BondLocationMode::Live, updated_at);
+    match state.locations.write(&identity.pub_dress, location).await {
+        Ok(()) => no_store_json(StatusCode::OK, LocationControlProjection {
+            role: role_for_pub_dress(&identity.pub_dress.parse::<PubDress>().expect("stored Bond pub_dress must be valid")),
+            location: Some(location),
+        }),
+        Err(error) => {
+            tracing::error!(%error, "Bond live location write failed");
+            status(StatusCode::SERVICE_UNAVAILABLE)
+        }
+    }
 }
 
 async fn read_location_control(
