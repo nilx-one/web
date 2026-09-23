@@ -18,7 +18,6 @@ import {
   createMapLibreRenderer,
 } from "@nilx-one/map-maplibre";
 import {
-  createRawJournalPresenter,
   createGroundRevealed,
   createShadeMapFactory,
 } from "@nilx-one/map-shade";
@@ -86,13 +85,11 @@ async function main(): Promise<void> {
     getAuthorization: () => session.authorization,
   });
   const localPresence = createLocalPresenceJournal().catch(() => null);
-  const journalPresenter = createRawJournalPresenter();
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
   const mapRenderer = createMapLibreRenderer({
     createMap: createShadeMapFactory({
       runtime: localPresence,
       anchor: { lng: anchorLng, lat: anchorLat },
-      onCellTap: (tap) => journalPresenter.show(tap),
     }),
     isGroundRevealed: createGroundRevealed(localPresence),
   });

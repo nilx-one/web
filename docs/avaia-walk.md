@@ -119,7 +119,9 @@ where its owner is. Nothing walks in the background.
   loaded model is the next step, and the candidates would stay what they are
   here: landmarks the person already passed.
 - **Routes.** Walks are straight lines between checked endpoints.
-- **The raw presence journal on tap.** The phase-1 journal panel still opens
-  when a lit cell is tapped, including a tap that sends the Avaia there.
+- **The raw presence journal.** A tap now belongs to the Avaia, so the hosts
+  no longer open the phase-1 journal panel on a lit cell. The panel itself
+  (`createRawJournalPresenter`) and the shade layer's `onCellTap` stay in
+  `map-shade` until the journal gets a home of its own.
 
 © 2026 aiaiaiai · aiaiaiai.org
