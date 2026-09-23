@@ -14,6 +14,27 @@ import {
 
 function createBridge(): TelegramWebAppBridge {
   return {
+    LocationManager: {
+      isInited: false,
+      isLocationAvailable: true,
+      isAccessRequested: true,
+      isAccessGranted: true,
+      init(callback) {
+        callback?.();
+        return this;
+      },
+      getLocation(callback) {
+        callback({
+          latitude: 50.4501,
+          longitude: 30.5234,
+          horizontal_accuracy: 8,
+        });
+        return this;
+      },
+      openSettings() {
+        return this;
+      },
+    },
     initData: "signed-by-telegram-but-not-yet-verified",
     initDataUnsafe: {
       user: { language_code: "uk-UA" },
@@ -169,5 +190,38 @@ describe("Telegram chrome appearance", () => {
     expect(() => syncTelegramChrome(bridge, "dark")).not.toThrow();
     expect(bridge.setBackgroundColor).toHaveBeenCalledWith("#121116");
     expect(bridge.setBottomBarColor).toHaveBeenCalledWith("#121116");
+  });
+});
+
+describe("Telegram native geolocation", () => {
+  it("uses Telegram LocationManager and forwards observed coordinates", async () => {
+    const onLiveLocation = vi.fn();
+    const host = createTelegramHost(createBridge(), {
+      enableLiveLocation: true,
+      onLiveLocation,
+    });
+
+    await expect(host.geolocation.readPermission()).resolves.toBe("granted");
+    await expect(host.geolocation.requestPosition()).resolves.toMatchObject({
+      kind: "observed",
+      position: {
+        latitude: 50.4501,
+        longitude: 30.5234,
+        accuracyMeters: 8,
+      },
+    });
+    expect(onLiveLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ latitude: 50.4501, longitude: 30.5234 }),
+    );
+  });
+
+  it("falls back to unsupported when Telegram has no LocationManager", async () => {
+    const bridge = createBridge();
+    delete bridge.LocationManager;
+    const host = createTelegramHost(bridge);
+    await expect(host.geolocation.readPermission()).resolves.toBe(
+      "unsupported",
+    );
+    expect(host.geolocation).not.toBe(undefined);
   });
 });

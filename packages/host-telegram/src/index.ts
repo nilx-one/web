@@ -5,6 +5,8 @@ import {
   UNSUPPORTED_GEOLOCATION,
   ZERO_SAFE_AREA,
   type GeolocationCapability,
+  type GeolocationObservation,
+  type ObservedGeolocation,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
@@ -18,11 +20,33 @@ export interface TelegramHostComposition {
    * geolocation implementation here.
    */
   readonly geolocation?: GeolocationCapability;
+  readonly enableLiveLocation?: boolean;
+  readonly onLiveLocation?: (position: ObservedGeolocation) => void;
 }
 
 export interface TelegramWebAppUser {
   /** ISO language hint from Telegram. It is presentation evidence, not auth truth. */
   readonly language_code?: string;
+}
+
+export interface TelegramLocationData {
+  readonly latitude: number;
+  readonly longitude: number;
+  readonly horizontal_accuracy?: number | null;
+}
+
+export interface TelegramLocationManager {
+  isInited: boolean;
+  isLocationAvailable: boolean;
+  isAccessRequested: boolean;
+  isAccessGranted: boolean;
+  init(callback?: () => void): TelegramLocationManager;
+  getLocation(
+    callback: (location: TelegramLocationData | null) => void,
+  ): TelegramLocationManager;
+  openSettings(): TelegramLocationManager;
+  onEvent?: (event: "locationManagerUpdated", listener: () => void) => void;
+  offEvent?: (event: "locationManagerUpdated", listener: () => void) => void;
 }
 
 export interface TelegramWebAppBridge {
@@ -32,6 +56,7 @@ export interface TelegramWebAppBridge {
   };
   colorScheme: "dark" | "light";
   safeAreaInset?: Partial<SafeAreaInsets>;
+  LocationManager?: TelegramLocationManager;
   HapticFeedback?: {
     impactOccurred(style: "light" | "medium" | "heavy"): void;
   };
@@ -182,6 +207,84 @@ class TelegramHost implements HostPort {
   }
 }
 
+function createTelegramGeolocation(
+  bridge: TelegramWebAppBridge,
+  onLiveLocation?: (position: ObservedGeolocation) => void,
+): GeolocationCapability {
+  const manager = bridge.LocationManager;
+  if (manager === undefined) return UNSUPPORTED_GEOLOCATION;
+
+  let initialized: Promise<void> | undefined;
+  const init = (): Promise<void> => {
+    if (initialized !== undefined) return initialized;
+    initialized = new Promise((resolve) => manager.init(() => resolve()));
+    return initialized;
+  };
+  const observation = (
+    location: TelegramLocationData,
+  ): GeolocationObservation => ({
+    kind: "observed",
+    position: {
+      longitude: location.longitude,
+      latitude: location.latitude,
+      accuracyMeters: Number.isFinite(location.horizontal_accuracy ?? NaN)
+        ? Math.max(0, location.horizontal_accuracy as number)
+        : 50,
+      observedAt: Date.now(),
+    },
+  });
+  const notify = (value: GeolocationObservation): GeolocationObservation => {
+    if (value.kind === "observed") onLiveLocation?.(value.position);
+    return value;
+  };
+
+  const requestPosition = async (): Promise<GeolocationObservation> => {
+    await init();
+    if (!manager.isLocationAvailable)
+      return { kind: "failed", reason: "unsupported" };
+    return new Promise<GeolocationObservation>((resolve) => {
+      try {
+        manager.getLocation((location) => {
+          resolve(
+            notify(
+              location === null
+                ? { kind: "failed", reason: "permission-denied" }
+                : observation(location),
+            ),
+          );
+        });
+      } catch {
+        resolve({ kind: "failed", reason: "host-failed" });
+      }
+    });
+  };
+
+  return {
+    async readPermission() {
+      await init();
+      if (!manager.isLocationAvailable) return "unsupported";
+      if (manager.isAccessGranted) return "granted";
+      if (manager.isAccessRequested) return "denied";
+      return "prompt";
+    },
+    requestPosition,
+    watchPosition(observer) {
+      let active = true;
+      const update = () => {
+        if (!active || !manager.isAccessGranted) return;
+        void requestPosition().then((value) => {
+          if (active) observer(value);
+        });
+      };
+      manager.onEvent?.("locationManagerUpdated", update);
+      return () => {
+        active = false;
+        manager.offEvent?.("locationManagerUpdated", update);
+      };
+    },
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -227,6 +330,9 @@ export function createTelegramHost(
 ): HostPort {
   return new TelegramHost(
     bridge,
-    composition.geolocation ?? UNSUPPORTED_GEOLOCATION,
+    composition.geolocation ??
+      (bridge === undefined || composition.enableLiveLocation !== true
+        ? UNSUPPORTED_GEOLOCATION
+        : createTelegramGeolocation(bridge, composition.onLiveLocation)),
   );
 }
