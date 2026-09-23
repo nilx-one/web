@@ -114,7 +114,10 @@ export function createLocalModelSettingsViewState(
     ...(phase.kind === "error" ? { errorMessage: phase.message } : {}),
     notices: phase.kind === "absent" ? notices : [],
     canDownload: phase.kind === "absent" || phase.kind === "error",
-    canRemove: phase.kind === "present",
+    // An error may mean an interrupted download left something behind that a status check
+    // can no longer read; eviction is documented as safe even when nothing is cached, so
+    // offering it here gives a person a way out that does not depend on the error's cause.
+    canRemove: phase.kind === "present" || phase.kind === "error",
     canCancel: phase.kind === "downloading",
     busy: phase.kind === "downloading" || phase.kind === "removing",
   };

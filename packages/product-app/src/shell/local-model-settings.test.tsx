@@ -29,12 +29,23 @@ class FakeHost implements LocalModelHost {
   public failOpen = false;
   /** Holds `open` until its signal aborts, as a download a person stops midway would. */
   public holdOpen = false;
+  /**
+   * Throws once from `isCached`, as an artifact an interrupted write left unreadable would
+   * — see the device's own `@mlc-ai/web-llm` OPFS writer, which is not atomic everywhere.
+   */
+  public unreadableCache = false;
 
   public inspect(): Promise<LocalModelDeviceVerdict> {
     return Promise.resolve(this.verdict);
   }
 
   public isCached(): Promise<boolean> {
+    if (this.unreadableCache) {
+      this.unreadableCache = false;
+      return Promise.reject(
+        new SyntaxError("JSON Parse error: Unexpected EOF"),
+      );
+    }
     return Promise.resolve(this.cached);
   }
 
@@ -196,6 +207,11 @@ describe("downloading from Settings", () => {
 
     await waitFor(() => expect(screen.getByText("device lost")).toBeVisible());
     expect(screen.getByRole("button", { name: "Download now" })).toBeEnabled();
+    // A failed download may still have left something behind that a status check cannot
+    // read; removal stays on offer rather than depending on knowing why it failed.
+    expect(
+      screen.getByRole("button", { name: "Remove downloaded model" }),
+    ).toBeEnabled();
   });
 });
 
@@ -229,6 +245,23 @@ describe("cancelling a download from Settings", () => {
     expect(
       screen.queryByRole("button", { name: "Cancel download" }),
     ).toBeNull();
+  });
+});
+
+describe("a cache check that cannot prove the model complete", () => {
+  it("reads as absent rather than an error, and evicts what it could not read", async () => {
+    const host = new FakeHost();
+    host.description = { bytes: 3_000_000, source: "upstream", notices: [] };
+    host.unreadableCache = true;
+
+    renderSettings(host);
+
+    await waitFor(() =>
+      expect(screen.getByText("Not downloaded yet.")).toBeVisible(),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(host.removed).toBe(1);
+    expect(screen.getByRole("button", { name: "Download now" })).toBeEnabled();
   });
 });
 

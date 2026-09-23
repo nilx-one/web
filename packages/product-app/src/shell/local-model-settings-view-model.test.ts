@@ -123,7 +123,7 @@ describe("what an owner may do, by phase", () => {
     expect(view.busy).toBe(true);
   });
 
-  it("surfaces the error and still offers a download as the retry", () => {
+  it("surfaces the error and offers both download and removal as the retry", () => {
     const view = createLocalModelSettingsViewState({
       kind: "error",
       message: "device lost",
@@ -131,7 +131,10 @@ describe("what an owner may do, by phase", () => {
 
     expect(view.errorMessage).toBe("device lost");
     expect(view.canDownload).toBe(true);
-    expect(view.canRemove).toBe(false);
+    // An error can mean an interrupted download left something behind a later check can no
+    // longer read; eviction is safe even when nothing is actually cached, so it stays on
+    // offer here rather than depending on knowing the error's cause.
+    expect(view.canRemove).toBe(true);
   });
 
   it("never carries notices outside the absent phase", () => {
