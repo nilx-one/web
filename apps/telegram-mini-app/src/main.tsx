@@ -5,7 +5,6 @@ import {
   createCoreWasmClient,
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
-import { createBrowserGeolocation } from "@nilx-one/host-browser";
 import {
   createTelegramHost,
   resolveTelegramWebApp,
@@ -25,6 +24,7 @@ import { ProductApp } from "@nilx-one/product-app";
 import { declareHostLanguages } from "@nilx-one/product-app/localization";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
+import type { ObservedGeolocation } from "@nilx-one/host-contract";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -34,6 +34,30 @@ import {
   locationControlFingerprint,
   readTelegramLocationControl,
 } from "./location-control";
+
+const LOCATION_PERSIST_INTERVAL_MS = 15_000;
+
+function createTelegramLiveLocationSink(initData: string): (position: ObservedGeolocation) => void {
+  let lastSentAt = 0;
+  return (position) => {
+    const now = Date.now();
+    if (now - lastSentAt < LOCATION_PERSIST_INTERVAL_MS) return;
+    lastSentAt = now;
+    void fetch("/api/v1/location-control", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        authorization: `tma ${initData}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        longitude: position.longitude,
+        latitude: position.latitude,
+      }),
+    }).catch(() => undefined);
+  };
+}
 
 async function bootstrap(): Promise<void> {
   const container = document.querySelector<HTMLElement>("#root");
@@ -54,7 +78,7 @@ async function bootstrap(): Promise<void> {
   const host = createTelegramHost(
     telegramBridge,
     locationControl.kind === "live"
-      ? { geolocation: createBrowserGeolocation() }
+      ? { onLiveLocation: createTelegramLiveLocationSink(telegramBridge?.initData ?? "") }
       : {},
   );
   const core = createCoreWasmClient({
