@@ -62,9 +62,17 @@ The renderer itself reads a little more, outside any style, for
 [Avaia walks the world](avaia-walk.md): a tap on the ground is classified by
 querying the painted `buildings`, `buildings-flat` and `water` layers, and
 `landmarksNear` reads `kind`, `name` and every other attribute of `pois`
-features from tiles already loaded. `LANDMARK_KINDS` follows the Protomaps
-schema the archive is built from. Confirm it against the `pois` declaration
-this script prints, the same as any style attribute.
+features from tiles already loaded. `LANDMARK_KINDS`
+(`packages/map-maplibre/src/landmark-kinds.json`) follows the Protomaps schema
+the archive is built from. The declaration above names fields, not the values
+they take, so `inspect-basemap.sh` ends by reading the `pois` tiles themselves
+with `deploy/web/landmark-kinds.mjs`: it lists every `kind` the archive
+carries, marks the ones on the list, and fails when none of them occur. It can
+also be run on its own with any Node:
+
+```sh
+node deploy/web/landmark-kinds.mjs /srv/nilx-one/map/basemap.pmtiles
+```
 
 Elements the reference imagery shows but the archive does not support are
 omitted rather than invented. In particular, individual street trees are not

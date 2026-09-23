@@ -239,6 +239,11 @@ export function createManualLocationMapRenderer(
     landmarksNear(point, radiusMeters) {
       return renderer.landmarksNear?.(point, radiusMeters) ?? [];
     },
+    subscribeLandmarksChanged(listener: () => void) {
+      return (
+        renderer.subscribeLandmarksChanged?.(listener) ?? (() => undefined)
+      );
+    },
   };
 }
 

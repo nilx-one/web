@@ -51,6 +51,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { Protocol } from "pmtiles";
 
 import type { AvatarCustomLayer } from "./avatar-layer";
+import landmarkKinds from "./landmark-kinds.json";
 
 import {
   applyObservedPositionLabel,
@@ -106,22 +107,7 @@ export const POI_SOURCE_LAYER = "pois";
  * `deploy/web/inspect-basemap.sh` is what confirms the list against the real
  * `pois` declaration.
  */
-export const LANDMARK_KINDS: ReadonlySet<string> = new Set([
-  "monument",
-  "memorial",
-  "artwork",
-  "sculpture",
-  "statue",
-  "attraction",
-  "museum",
-  "castle",
-  "fort",
-  "ruins",
-  "archaeological_site",
-  "historic",
-  "landmark",
-  "viewpoint",
-]);
+export const LANDMARK_KINDS: ReadonlySet<string> = new Set(landmarkKinds);
 
 /** Eased camera transitions stay short enough to read as one continuous world. */
 export const MAP_CAMERA_TRANSITION_MS = 900;
@@ -366,6 +352,7 @@ export function createMapLibreRenderer(
   >();
   const pointSelectionListeners = new Set<(point: MapPointSelection) => void>();
   const groundTapListeners = new Set<(tap: MapGroundTap) => void>();
+  const landmarkListeners = new Set<() => void>();
 
   function clearLoadTimer(): void {
     if (loadTimer === undefined) {
@@ -755,6 +742,12 @@ export function createMapLibreRenderer(
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
           publishCamera(event?.originalEvent !== undefined);
         });
+        // "idle" is MapLibre saying every tile the view needs has loaded and
+        // painted: the one moment new landmarks can have become readable. It
+        // fires once per settle, not once per tile.
+        mountedMap.on("idle", () => {
+          for (const listener of [...landmarkListeners]) listener();
+        });
         mountedMap.on("zoom", () => {
           updateLabelVisibility(mountedMap);
         });
@@ -887,6 +880,11 @@ export function createMapLibreRenderer(
       return [...found.values()]
         .sort((a, b) => a.distance - b.distance)
         .map((entry) => entry.landmark);
+    },
+
+    subscribeLandmarksChanged(listener) {
+      landmarkListeners.add(listener);
+      return () => landmarkListeners.delete(listener);
     },
 
     subscribePointSelection(listener) {

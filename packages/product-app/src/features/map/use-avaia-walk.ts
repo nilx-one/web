@@ -312,23 +312,31 @@ export function useAvaiaWalk({
 
   // Noticing belongs to the person: whoever is at the wheel, this device
   // passing close to a landmark the basemap draws is what writes it down.
+  // It is asked twice over: when the observation moves, and when the map has
+  // loaded more of itself — a position that arrives before its tiles do is
+  // noticed once they land, not missed until the person moves again.
   useEffect(() => {
-    if (
-      observedLongitude === undefined ||
-      observedLatitude === undefined ||
-      observedAccuracy === undefined ||
-      observedAccuracy > NOTICE_ACCURACY_METERS
-    ) {
-      return;
+    function notice(): void {
+      if (
+        observedLongitude === undefined ||
+        observedLatitude === undefined ||
+        observedAccuracy === undefined ||
+        observedAccuracy > NOTICE_ACCURACY_METERS
+      ) {
+        return;
+      }
+      const found = renderer.landmarksNear?.(
+        { longitude: observedLongitude, latitude: observedLatitude },
+        NOTICE_RADIUS_METERS,
+      );
+      if (found === undefined || found.length === 0) return;
+      updateNotebook(owner, (current) =>
+        noticeLandmarks(current, found, Date.now()),
+      );
     }
-    const found = renderer.landmarksNear?.(
-      { longitude: observedLongitude, latitude: observedLatitude },
-      NOTICE_RADIUS_METERS,
-    );
-    if (found === undefined || found.length === 0) return;
-    updateNotebook(owner, (current) =>
-      noticeLandmarks(current, found, Date.now()),
-    );
+
+    notice();
+    return renderer.subscribeLandmarksChanged?.call(renderer, notice);
   }, [observedAccuracy, observedLatitude, observedLongitude, owner, renderer]);
 
   // Curiosity: an idle Avaia at the wheel goes to see the nearest thing its

@@ -871,6 +871,20 @@ describe("landmarks the basemap draws", () => {
     expect(found?.[1]?.facts).toEqual({ min_zoom: 15 });
   });
 
+  it("says the answer may have changed each time the map settles", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const changed = vi.fn();
+    const unsubscribe = renderer.subscribeLandmarksChanged?.(changed);
+
+    fakeMap.emit("idle");
+    fakeMap.emit("idle");
+    unsubscribe?.();
+    fakeMap.emit("idle");
+
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
   it("answers nothing before a map is mounted", () => {
     const renderer = createMapLibreRenderer({
       createMap: (_options: MapOptions) =>

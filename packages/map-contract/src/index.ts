@@ -322,6 +322,12 @@ export interface MapRenderer {
     point: MapPointSelection,
     radiusMeters: number,
   ): readonly MapLandmark[];
+  /**
+   * Notifies when what `landmarksNear` can answer may have changed: the map
+   * has settled after loading what the current view needs. A position known
+   * before its tiles arrive is asked again then, rather than missed.
+   */
+  subscribeLandmarksChanged?(listener: () => void): () => void;
 }
 
 /**

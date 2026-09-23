@@ -1187,6 +1187,47 @@ describe("AuthenticatedMapHomeView", () => {
       expect(notes).toHaveTextContent("historic: memorial");
     });
 
+    it("notices a landmark whose tiles land after the position does", async () => {
+      vi.useFakeTimers();
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+      // The position is known, but the tile carrying the monument is not yet.
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(lastLabel(mapRenderer)?.speech).toBeUndefined();
+
+      // The person has not moved; the map finishes loading around them.
+      act(() =>
+        mapRenderer.setLandmarks([
+          {
+            id: "poi:7",
+            longitude: here.longitude + 0.0003,
+            latitude: here.latitude,
+            kind: "memorial",
+            name: "Late tile",
+            facts: {},
+          },
+        ]),
+      );
+      for (let step = 0; step < 4; step += 1) {
+        act(() => vi.advanceTimersByTime(5_000));
+      }
+
+      expect(
+        vi
+          .mocked(mapRenderer.setObservedPositionLabel)
+          .mock.calls.some(([label]) => label?.speech?.includes("Late tile")),
+      ).toBe(true);
+    });
+
     it("does not walk while its Bond is at the wheel", async () => {
       const mapRenderer = await renderWorld();
       fireEvent.click(

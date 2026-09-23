@@ -101,10 +101,10 @@ attendance or any Bond, and it is not a landmark projection in the sense of
 the map architecture. The Avaia only ever chooses among what its owner already
 walked past. It never goes looking beyond that.
 
-The `LANDMARK_KINDS` list follows the Protomaps basemap schema the archive is
-built from. Confirm it against the deployed archive's `pois` declaration with
-`deploy/web/inspect-basemap.sh` (see [map data](map-data.md)). A kind the
-archive never carries simply never matches.
+The `LANDMARK_KINDS` list (`landmark-kinds.json` in `map-maplibre`) follows the
+Protomaps basemap schema the archive is built from. `inspect-basemap.sh` checks
+it against the real archive with `landmark-kinds.mjs`, and fails when none of
+its kinds occur there (see [map data](map-data.md)).
 
 ## Leaving the wheel
 

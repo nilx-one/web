@@ -33,7 +33,10 @@ export interface MapRendererDouble extends MapRenderer {
   activateBody(id: string): void;
   /** Publishes a person tapping the ground where no body is drawn. */
   tapGround(tap: MapGroundTap): void;
-  /** Sets what the basemap answers for landmarks near any point. */
+  /**
+   * Sets what the basemap answers for landmarks near any point, and — as a
+   * real renderer does once tiles settle — says that answer may have changed.
+   */
   setLandmarks(landmarks: readonly MapLandmark[]): void;
 }
 
@@ -43,6 +46,7 @@ export function createMapRendererDouble(
   const cameraListeners = new Set<(change: MapCameraChange) => void>();
   const bodyListeners = new Set<(activation: { id: string }) => void>();
   const groundListeners = new Set<(tap: MapGroundTap) => void>();
+  const landmarkListeners = new Set<() => void>();
   let landmarks: readonly MapLandmark[] = [];
   let camera: MapCamera = DEFAULT_MAP_CAMERA;
 
@@ -75,6 +79,10 @@ export function createMapRendererDouble(
       return () => groundListeners.delete(listener);
     }),
     landmarksNear: vi.fn(() => landmarks),
+    subscribeLandmarksChanged: vi.fn((listener: () => void) => {
+      landmarkListeners.add(listener);
+      return () => landmarkListeners.delete(listener);
+    }),
     // The avatar surface a real renderer publishes, so a test can see which
     // body the application asked the world to draw.
     avatars: {
@@ -100,6 +108,7 @@ export function createMapRendererDouble(
     },
     setLandmarks(next) {
       landmarks = next;
+      for (const listener of [...landmarkListeners]) listener();
     },
   };
 }
