@@ -11,6 +11,9 @@ type PointSelectionListener = Parameters<
 type BodyActivationListener = Parameters<
   NonNullable<TelegramMapRenderer["subscribeBodyActivation"]>
 >[0];
+type GroundTapListener = Parameters<
+  NonNullable<TelegramMapRenderer["subscribeGroundTap"]>
+>[0];
 
 const GEO_E7_SCALE = 10_000_000;
 const LOCATION_CONTROL_REQUEST_TIMEOUT_MS = 2_000;
@@ -229,6 +232,17 @@ export function createManualLocationMapRenderer(
     },
     subscribeBodyActivation(listener: BodyActivationListener) {
       return renderer.subscribeBodyActivation?.(listener) ?? (() => undefined);
+    },
+    subscribeGroundTap(listener: GroundTapListener) {
+      return renderer.subscribeGroundTap?.(listener) ?? (() => undefined);
+    },
+    landmarksNear(point, radiusMeters) {
+      return renderer.landmarksNear?.(point, radiusMeters) ?? [];
+    },
+    subscribeLandmarksChanged(listener: () => void) {
+      return (
+        renderer.subscribeLandmarksChanged?.(listener) ?? (() => undefined)
+      );
     },
   };
 }

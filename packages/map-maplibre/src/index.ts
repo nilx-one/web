@@ -16,6 +16,10 @@ import {
   MAP_BODY_HEIGHT_METERS,
   mapMetersPerPixel,
   type MapBodyActivation,
+  type MapGround,
+  type MapGroundTap,
+  type MapLandmark,
+  mapDistanceMeters,
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapPointSelection,
@@ -47,6 +51,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { Protocol } from "pmtiles";
 
 import type { AvatarCustomLayer } from "./avatar-layer";
+import landmarkKinds from "./landmark-kinds.json";
 
 import {
   applyObservedPositionLabel,
@@ -81,6 +86,28 @@ export {
 
 /** The style layer the published styles raise for volumetric building depth. */
 export const BUILDING_EXTRUSION_LAYER_ID = "buildings";
+
+/** The style layers whose paint means "a building stands here". */
+export const BUILDING_LAYER_IDS: readonly string[] = [
+  BUILDING_EXTRUSION_LAYER_ID,
+  "buildings-flat",
+];
+
+/** The style layers whose paint means "this is water". */
+export const WATER_LAYER_IDS: readonly string[] = ["water"];
+
+/** The archive's point-of-interest source layer. */
+export const POI_SOURCE_LAYER = "pois";
+
+/**
+ * The `kind` values a body treats as worth walking up to. The published
+ * archive follows the Protomaps basemap schema; these are the kinds it assigns
+ * to monuments, memorials, art and the like. It is read against the archive,
+ * not invented: a kind the archive never carries simply never matches, and
+ * `deploy/web/inspect-basemap.sh` is what confirms the list against the real
+ * `pois` declaration.
+ */
+export const LANDMARK_KINDS: ReadonlySet<string> = new Set(landmarkKinds);
 
 /** Eased camera transitions stay short enough to read as one continuous world. */
 export const MAP_CAMERA_TRANSITION_MS = 900;
@@ -143,6 +170,12 @@ export interface MapLibreRendererOptions {
   readonly createLabelMarker?: MapLabelMarkerFactory;
   readonly createSelectionMarker?: MapSelectionMarkerFactory;
   readonly loadTimeoutMs?: number;
+  /**
+   * Whether this device has revealed the ground at a point. The composition
+   * that draws the fog is the one that knows; absent means the renderer has
+   * no fog to consult, and no tap is ever reported as `fog`.
+   */
+  readonly isGroundRevealed?: (point: MapPointSelection) => boolean;
 }
 
 function createMapLibreLabelMarker(
@@ -318,6 +351,8 @@ export function createMapLibreRenderer(
     (activation: MapBodyActivation) => void
   >();
   const pointSelectionListeners = new Set<(point: MapPointSelection) => void>();
+  const groundTapListeners = new Set<(tap: MapGroundTap) => void>();
+  const landmarkListeners = new Set<() => void>();
 
   function clearLoadTimer(): void {
     if (loadTimer === undefined) {
@@ -428,7 +463,11 @@ export function createMapLibreRenderer(
     // The label and the body take turns: closer than the handover the body is
     // on the world and speaks for itself, and a card over its head would only
     // repeat it. Further out the body is gone, and the card is what is left.
-    labelElement.hidden = mounted.getZoom() >= MAP_BODY_HANDOVER_ZOOM;
+    // A body that is talking keeps its card at every scale: the line is the
+    // card's to carry, and hiding it would be the body falling silent.
+    const speaking = (observedLabel?.speech ?? "").length > 0;
+    labelElement.hidden =
+      !speaking && mounted.getZoom() >= MAP_BODY_HANDOVER_ZOOM;
   }
 
   function applyLabel(mounted: MapLibreMap): void {
@@ -439,10 +478,8 @@ export function createMapLibreRenderer(
       return;
     }
 
-    const center: [number, number] = [
-      observedPosition.center[0],
-      observedPosition.center[1],
-    ];
+    const anchor = observedLabel.at ?? observedPosition.center;
+    const center: [number, number] = [anchor[0], anchor[1]];
 
     if (labelElement === undefined) {
       labelElement = createObservedPositionLabelElement(globalThis.document);
@@ -558,6 +595,80 @@ export function createMapLibreRenderer(
     presentationApplied = true;
   }
 
+  function existingLayers(
+    mounted: MapLibreMap,
+    ids: readonly string[],
+  ): string[] {
+    return ids.filter((id) => mounted.getLayer(id) !== undefined);
+  }
+
+  /**
+   * What is painted under a tap. Fog outranks what is drawn beneath it: ground
+   * this device has not revealed is not somewhere a body walks, whatever the
+   * basemap shows there.
+   */
+  function groundAt(
+    mounted: MapLibreMap,
+    point: MapScreenPoint,
+    selected: MapPointSelection,
+  ): MapGround {
+    if (options.isGroundRevealed?.(selected) === false) return "fog";
+    const query = (layers: readonly string[]): boolean => {
+      const present = existingLayers(mounted, layers);
+      if (present.length === 0) return false;
+      return (
+        mounted.queryRenderedFeatures([point.x, point.y], { layers: present })
+          .length > 0
+      );
+    };
+    if (query(BUILDING_LAYER_IDS)) return "building";
+    if (query(WATER_LAYER_IDS)) return "water";
+    return "open";
+  }
+
+  function landmarkFrom(feature: {
+    readonly id?: string | number | undefined;
+    readonly geometry: { readonly type: string };
+    readonly properties: Record<string, unknown> | null;
+  }): MapLandmark | undefined {
+    if (feature.geometry.type !== "Point") return undefined;
+    const [longitude, latitude] = (
+      feature.geometry as unknown as { coordinates: [number, number] }
+    ).coordinates;
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+      return undefined;
+    }
+    const properties = feature.properties ?? {};
+    const kind = properties.kind;
+    if (typeof kind !== "string" || !LANDMARK_KINDS.has(kind)) return undefined;
+    const name = typeof properties.name === "string" ? properties.name : "";
+    const facts: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(properties)) {
+      if (key === "kind" || key === "name") continue;
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        facts[key] = value;
+      }
+    }
+    // A feature id is the archive's own and survives a tile boundary; without
+    // one the place itself is the identity, rounded to well under a metre.
+    const id =
+      feature.id === undefined
+        ? `${kind}:${name}:${longitude.toFixed(6)},${latitude.toFixed(6)}`
+        : `poi:${String(feature.id)}`;
+    return {
+      id,
+      longitude,
+      latitude,
+      kind,
+      ...(name.length === 0 ? {} : { name }),
+      facts,
+    };
+  }
+
   function releaseLabel(): void {
     labelMarker?.remove();
     labelMarker = undefined;
@@ -631,6 +742,12 @@ export function createMapLibreRenderer(
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
           publishCamera(event?.originalEvent !== undefined);
         });
+        // "idle" is MapLibre saying every tile the view needs has loaded and
+        // painted: the one moment new landmarks can have become readable. It
+        // fires once per settle, not once per tile.
+        mountedMap.on("idle", () => {
+          for (const listener of [...landmarkListeners]) listener();
+        });
         mountedMap.on("zoom", () => {
           updateLabelVisibility(mountedMap);
         });
@@ -661,9 +778,25 @@ export function createMapLibreRenderer(
             const point = event?.point;
             if (point === undefined) return;
             const id = bodyAtPoint(drawnBodies(mountedMap), point);
-            if (id === undefined) return;
-            for (const listener of [...bodyActivationListeners]) {
-              listener({ id });
+            if (id !== undefined) {
+              for (const listener of [...bodyActivationListeners]) {
+                listener({ id });
+              }
+              return;
+            }
+
+            const selected = event?.lngLat;
+            if (selected === undefined || groundTapListeners.size === 0) {
+              return;
+            }
+            const at: MapPointSelection = {
+              longitude: selected.lng,
+              latitude: selected.lat,
+            };
+            if (!validPoint(at)) return;
+            const ground = groundAt(mountedMap, point, at);
+            for (const listener of [...groundTapListeners]) {
+              listener({ ...at, ground });
             }
           },
         );
@@ -720,6 +853,38 @@ export function createMapLibreRenderer(
     subscribeBodyActivation(listener) {
       bodyActivationListeners.add(listener);
       return () => bodyActivationListeners.delete(listener);
+    },
+
+    subscribeGroundTap(listener) {
+      groundTapListeners.add(listener);
+      return () => groundTapListeners.delete(listener);
+    },
+
+    landmarksNear(point, radiusMeters) {
+      if (map === undefined || !validPoint(point)) return [];
+      const sourceId = map.getLayer(POI_SOURCE_LAYER)?.source ?? "basemap";
+      if (map.getSource(sourceId) === undefined) return [];
+      const found = new Map<
+        string,
+        { landmark: MapLandmark; distance: number }
+      >();
+      for (const feature of map.querySourceFeatures(sourceId, {
+        sourceLayer: POI_SOURCE_LAYER,
+      })) {
+        const landmark = landmarkFrom(feature);
+        if (landmark === undefined || found.has(landmark.id)) continue;
+        const distance = mapDistanceMeters(point, landmark);
+        if (distance <= radiusMeters)
+          found.set(landmark.id, { landmark, distance });
+      }
+      return [...found.values()]
+        .sort((a, b) => a.distance - b.distance)
+        .map((entry) => entry.landmark);
+    },
+
+    subscribeLandmarksChanged(listener) {
+      landmarkListeners.add(listener);
+      return () => landmarkListeners.delete(listener);
     },
 
     subscribePointSelection(listener) {

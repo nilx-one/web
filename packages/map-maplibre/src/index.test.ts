@@ -67,6 +67,7 @@ interface FakeMap {
       error?: unknown;
       originalEvent?: unknown;
       point?: { x: number; y: number };
+      lngLat?: { lng: number; lat: number };
     },
   ): void;
   /** A style swap discards everything the renderer added, as MapLibre does. */
@@ -738,5 +739,195 @@ describe("reaching for a body on the world", () => {
     fakeMap.emit("click", { point: { x: 200, y: 296 } });
 
     expect(activated).not.toHaveBeenCalled();
+  });
+});
+
+describe("pointing at the ground", () => {
+  const TAP = { point: { x: 600, y: 600 }, lngLat: { lng: 30.6, lat: 50.4 } };
+
+  function groundMap(painted: readonly string[]) {
+    const fakeMap = makeFakeMap();
+    for (const id of ["buildings", "buildings-flat", "water", "pois"]) {
+      fakeMap.layers.set(id, { id, source: "basemap" });
+    }
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    const queryRenderedFeatures = vi.fn(
+      (_point: unknown, options: { layers: string[] }) =>
+        options.layers.some((layer) => painted.includes(layer))
+          ? [{ layer: { id: options.layers[0] } }]
+          : [],
+    );
+    Object.assign(fakeMap, { queryRenderedFeatures });
+    return fakeMap;
+  }
+
+  function tapWith(
+    painted: readonly string[],
+    isGroundRevealed?: (point: {
+      longitude: number;
+      latitude: number;
+    }) => boolean,
+  ) {
+    const fakeMap = groundMap(painted);
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      ...(isGroundRevealed === undefined ? {} : { isGroundRevealed }),
+    });
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    const tapped = vi.fn();
+    renderer.subscribeGroundTap?.(tapped);
+    fakeMap.emit("click", TAP);
+    return tapped;
+  }
+
+  it("reports open ground where nothing stands", () => {
+    expect(tapWith([])).toHaveBeenCalledExactlyOnceWith({
+      longitude: 30.6,
+      latitude: 50.4,
+      ground: "open",
+    });
+  });
+
+  it("names what is in the way", () => {
+    expect(tapWith(["buildings-flat"]).mock.calls[0]?.[0].ground).toBe(
+      "building",
+    );
+    expect(tapWith(["water"]).mock.calls[0]?.[0].ground).toBe("water");
+  });
+
+  it("puts fog before whatever the basemap paints beneath it", () => {
+    expect(tapWith(["buildings"], () => false).mock.calls[0]?.[0].ground).toBe(
+      "fog",
+    );
+    expect(tapWith([], () => true).mock.calls[0]?.[0].ground).toBe("open");
+  });
+
+  it("leaves a body tap to the body, and an editor tap to the editor", () => {
+    const fakeMap = groundMap([]);
+    const renderer = readyRenderer(fakeMap);
+    const tapped = vi.fn();
+    renderer.subscribeGroundTap?.(tapped);
+    renderer.avatars?.upsert({
+      id: "avaia",
+      modelId: "sky-study",
+      lngLat: [30.5234, 50.4501],
+      bearingDeg: 0,
+      clipId: "idle",
+      clipPhase: 0,
+      scale: 1,
+      visible: true,
+    });
+    fakeMap.emit("click", {
+      point: { x: 200, y: 296 },
+      lngLat: { lng: 30.5234, lat: 50.4501 },
+    });
+    const unsubscribe = renderer.subscribePointSelection?.(vi.fn());
+    fakeMap.emit("click", TAP);
+    unsubscribe?.();
+
+    expect(tapped).not.toHaveBeenCalled();
+  });
+});
+
+describe("landmarks the basemap draws", () => {
+  it("answers the nearest monuments first, and nothing that is not one", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.layers.set("pois", { id: "pois", source: "basemap" });
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    const point = (id: number, lng: number, properties: object) => ({
+      id,
+      geometry: { type: "Point", coordinates: [lng, 50.4501] },
+      properties,
+    });
+    const querySourceFeatures = vi.fn(() => [
+      point(1, 30.524, { kind: "monument", name: "Far", min_zoom: 15 }),
+      point(2, 30.5235, {
+        kind: "memorial",
+        name: "Near",
+        "name:uk": "Близько",
+      }),
+      point(2, 30.5235, { kind: "memorial", name: "Near" }),
+      point(3, 30.5235, { kind: "cafe", name: "Coffee" }),
+      point(4, 30.6, { kind: "monument", name: "Elsewhere" }),
+    ]);
+    Object.assign(fakeMap, { querySourceFeatures });
+    const renderer = readyRenderer(fakeMap);
+
+    const found = renderer.landmarksNear?.(
+      { longitude: 30.5234, latitude: 50.4501 },
+      100,
+    );
+
+    expect(querySourceFeatures).toHaveBeenCalledWith("basemap", {
+      sourceLayer: "pois",
+    });
+    expect(found?.map((landmark) => landmark.id)).toEqual(["poi:2", "poi:1"]);
+    expect(found?.[0]).toMatchObject({
+      kind: "memorial",
+      name: "Near",
+      facts: { "name:uk": "Близько" },
+    });
+    expect(found?.[1]?.facts).toEqual({ min_zoom: 15 });
+  });
+
+  it("says the answer may have changed each time the map settles", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const changed = vi.fn();
+    const unsubscribe = renderer.subscribeLandmarksChanged?.(changed);
+
+    fakeMap.emit("idle");
+    fakeMap.emit("idle");
+    unsubscribe?.();
+    fakeMap.emit("idle");
+
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("answers nothing before a map is mounted", () => {
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) =>
+        makeFakeMap() as unknown as MapLibreMap,
+    });
+    expect(
+      renderer.landmarksNear?.({ longitude: 30.5, latitude: 50.4 }, 100),
+    ).toEqual([]);
+  });
+});
+
+describe("a card that talks", () => {
+  it("opens beneath the title, stands over the body, and stays at close range", () => {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const renderer = readyRenderer(fakeMap, createLabelMarker);
+    renderer.setObservedPosition(OBSERVED);
+    fakeMap.camera.zoom = 17;
+
+    renderer.setObservedPositionLabel({
+      title: "0skai",
+      detail: "70 m from this device",
+      at: [30.5244, 50.4501],
+      speech: "Right. That way.",
+    });
+
+    const marker = markers.at(-1);
+    expect(marker?.center).toEqual([30.5244, 50.4501]);
+    const speech = marker?.element.querySelector<HTMLElement>(
+      '[data-part="speech"]',
+    );
+    expect(speech?.textContent).toBe("Right. That way.");
+    expect(speech?.style.opacity).toBe("1");
+    expect(marker?.element.hidden).toBe(false);
+
+    renderer.setObservedPositionLabel({
+      title: "0skai",
+      detail: "This device",
+    });
+    expect(speech?.style.opacity).toBe("0");
+    expect(speech?.style.maxHeight).toBe("0px");
+    // Silent again at close range, the body speaks for itself.
+    expect(marker?.element.hidden).toBe(true);
+    expect(marker?.center).toEqual([30.5234, 50.4501]);
   });
 });

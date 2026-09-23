@@ -12,7 +12,11 @@ import {
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import {
   avatarPreviewUrl,
+  mapDistanceMeters,
+  type AvatarModelId,
   type MapDimension,
+  type MapObservedPositionLabel,
+  type MapPointSelection,
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
@@ -24,6 +28,7 @@ import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
 import { LanguageSettings } from "../../shell/language-settings";
+import { useLocalization, type ProductLocale } from "../../shell/localization";
 import type { LocalModelDependency } from "../../shell/local-model-host";
 import { LocalModelSettings } from "../../shell/local-model-settings";
 import {
@@ -95,6 +100,9 @@ import {
   type AvaiaAvailability,
   type DockSeat,
 } from "./bond-dock-view-model";
+import { landmarkLabel } from "./avaia-lines";
+import { studiedBy } from "./landmark-notebook";
+import { useAvaiaWalk } from "./use-avaia-walk";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 
@@ -215,6 +223,19 @@ interface IdentityDetailState {
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
 
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
+
+/** Closer than this, a body is still standing at this device. */
+const AT_DEVICE_METERS = 5;
+
+function formatDistance(locale: ProductLocale, meters: number): string {
+  const kilometres = meters >= 1_000;
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: kilometres ? "kilometer" : "meter",
+    unitDisplay: "short",
+    maximumFractionDigits: kilometres ? 1 : 0,
+  }).format(kilometres ? meters / 1_000 : meters);
+}
 
 function runtimeContract(runtime: RuntimeViewState): string | undefined {
   if (runtime.tone !== "ready") return undefined;
@@ -421,9 +442,10 @@ export function AuthenticatedMapHomeView({
     StatusToastItem | undefined
   >(undefined);
   // Who is at the wheel is presentation: it moves nothing in the shared world.
-  // The authenticated world opens on this Bond; its Avaia takes the wheel only
-  // after an explicit handover, so the first body is the Bond's stored choice.
-  const [wheel, setWheel] = useState<DockSeat>("bond");
+  // The authenticated world opens on the Avaia, with its Bond spectating: the
+  // first thing a person sees is the character they point around the world,
+  // and taking the wheel back is one tap on the Dock.
+  const [wheel, setWheel] = useState<DockSeat>("avaia");
   const [handover, setHandover] = useState<WheelHandover | undefined>(
     undefined,
   );
@@ -518,6 +540,66 @@ export function AuthenticatedMapHomeView({
   // the observation is drawn at this device's own position either way, but
   // the identity standing there changes hands with the wheel.
   const wheelAddress = wheel === "bond" ? pubDress : avaiaAddress;
+  const { t, resolved: locale } = useLocalization();
+  // The study the Avaia is drawn in, whose voice it speaks in. No body drawn
+  // means no voice either: a card does not talk on behalf of nobody.
+  const avaiaVoice: AvatarModelId | undefined =
+    avatarChoice?.rendered === undefined
+      ? undefined
+      : (avaiaStudy(avaiaAddress, avatarChoice.rendered) as AvatarModelId);
+  const avaiaWalk = useAvaiaWalk({
+    renderer,
+    active: wheel === "avaia" && handover === undefined,
+    observed: observedPosition,
+    model: avaiaVoice,
+    locale,
+    avaiaAddress,
+    owner: pubDress,
+    zoom: camera.zoom,
+    reducedMotion: prefersReducedMotion(),
+  });
+  const avaiaSpeech =
+    wheel === "avaia" && handover === undefined
+      ? avaiaWalk.speech?.text
+      : undefined;
+  const avaiaStudied = studiedBy(avaiaWalk.notebook, avaiaAddress);
+
+  /**
+   * The card over whoever is at the wheel. It stands over the body — which for
+   * an Avaia that walked off is not this device — and says how far from this
+   * device that is, so the card never claims a position it does not have.
+   */
+  function wheelLabel(
+    at: MapPointSelection | undefined,
+  ): MapObservedPositionLabel {
+    const away =
+      at !== undefined && observedPosition !== undefined
+        ? mapDistanceMeters(observedPosition, at)
+        : 0;
+    return {
+      title: wheelAddress,
+      detail:
+        away > AT_DEVICE_METERS
+          ? t("map.card.fromThisDevice").replace(
+              "{distance}",
+              formatDistance(locale, away),
+            )
+          : t("map.card.thisDevice"),
+      ...(at === undefined || away <= AT_DEVICE_METERS
+        ? {}
+        : { at: [at.longitude, at.latitude] as const }),
+      ...(avaiaSpeech === undefined ? {} : { speech: avaiaSpeech }),
+      // Too far out for a body, so the card shows the study it would be
+      // standing in — the same identity, at a size that survives the distance.
+      ...(wheelStudy === undefined
+        ? {}
+        : { avatarUrl: avatarPreviewUrl(wheelStudy) }),
+    };
+  }
+  const wheelLabelRef = useRef(wheelLabel);
+  useEffect(() => {
+    wheelLabelRef.current = wheelLabel;
+  });
 
   // A map that never paints must say so. Without this the shell shows an empty
   // surface and a renderer, asset, or basemap failure is indistinguishable
@@ -575,16 +657,22 @@ export function AuthenticatedMapHomeView({
       center: [observedPosition.longitude, observedPosition.latitude],
       accuracyMeters: observedPosition.accuracyMeters,
     });
-    renderer.setObservedPositionLabel({
-      title: wheelAddress,
-      detail: "This device",
-      // Too far out for a body, so the card shows the study it would be
-      // standing in — the same identity, at a size that survives the distance.
-      ...(wheelStudy === undefined
-        ? {}
-        : { avatarUrl: avatarPreviewUrl(wheelStudy) }),
-    });
-  }, [observedPosition, renderer, wheelAddress, wheelStudy]);
+    const stance =
+      wheel === "avaia" && handover === undefined
+        ? avaiaWalk.stance(globalThis.performance.now())
+        : undefined;
+    renderer.setObservedPositionLabel(wheelLabelRef.current(stance?.point));
+  }, [
+    avaiaSpeech,
+    avaiaWalk,
+    handover,
+    locale,
+    observedPosition,
+    renderer,
+    wheel,
+    wheelAddress,
+    wheelStudy,
+  ]);
 
   // The first fix of a world recenters once. Later updates move the marker;
   // they never take the camera back from the person holding it.
@@ -745,6 +833,10 @@ export function AuthenticatedMapHomeView({
 
     function draw(nowMs: number): void {
       const body = wheelBody(wheel, handover, nowMs);
+      const stance =
+        body.seat === "avaia" && handover === undefined
+          ? avaiaWalk.stance(nowMs)
+          : undefined;
       const handle = createWheelBodyHandle({
         body,
         address: address(body.seat),
@@ -754,8 +846,13 @@ export function AuthenticatedMapHomeView({
         zoom: cameraZoom,
         timeMs: nowMs,
         reducedMotion,
+        stance,
       });
       if (handle !== null) avatarLayer.upsert(handle);
+      // A walking body carries its card with it, frame by frame.
+      if (avaiaWalk.moving && stance !== undefined) {
+        renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
+      }
 
       // Only the identity in the seat this instant is on the world: the other
       // handle is dropped rather than left standing behind the one driving.
@@ -763,9 +860,11 @@ export function AuthenticatedMapHomeView({
         if (seat !== body.seat) avatarLayer.remove(id);
       }
 
-      // A handover is the only thing here that needs frames, and it ends.
+      // A handover and a walk are the only things here that need frames, and
+      // both end.
       frame =
-        handover !== undefined && !handoverComplete(handover, nowMs)
+        (handover !== undefined && !handoverComplete(handover, nowMs)) ||
+        (handover === undefined && avaiaWalk.moving)
           ? globalThis.requestAnimationFrame(draw)
           : undefined;
     }
@@ -785,6 +884,7 @@ export function AuthenticatedMapHomeView({
     avaiaAddress,
     avaiaAvatar?.appearance,
     avatarChoice?.rendered,
+    avaiaWalk,
     bondAvatar?.appearance,
     cameraZoom,
     handover,
@@ -901,6 +1001,9 @@ export function AuthenticatedMapHomeView({
     if (dock.preparesRuntime) onPrepareAvaia?.();
 
     const to: DockSeat = wheel === "bond" ? "avaia" : "bond";
+    // An Avaia taking the wheel starts from where its owner is; one leaving it
+    // stops wherever it was going. Neither walks on in the background.
+    avaiaWalk.reset();
     setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
     setWheel(to);
 
@@ -1252,17 +1355,61 @@ export function AuthenticatedMapHomeView({
                   </>
                 ) : null}
 
-                {activeDetail === "avaia" && avaiaSetup !== undefined ? (
+                {activeDetail === "avaia" ? (
                   <>
-                    <AvaiaSetupView
-                      state={avaiaSetup}
-                      onDraftChange={(value) => onAvaiaSetupChange?.(value)}
-                      onSubmit={() => void submitAvaiaSetup()}
-                    />
-                    <AvatarModelField
-                      state={createAvatarFieldViewState("avaia", avaiaAvatar)}
-                      onOpen={() => openAvatarEditor("avaia")}
-                    />
+                    {/* A host that cannot read the Avaia's profile configures
+                        nothing here; what this device noted is still its own. */}
+                    {avaiaSetup === undefined ? null : (
+                      <>
+                        <AvaiaSetupView
+                          state={avaiaSetup}
+                          onDraftChange={(value) => onAvaiaSetupChange?.(value)}
+                          onSubmit={() => void submitAvaiaSetup()}
+                        />
+                        <AvatarModelField
+                          state={createAvatarFieldViewState(
+                            "avaia",
+                            avaiaAvatar,
+                          )}
+                          onOpen={() => openAvatarEditor("avaia")}
+                        />
+                      </>
+                    )}
+                    <section
+                      className="avaia-notebook"
+                      aria-labelledby="avaia-notebook-title"
+                    >
+                      <span
+                        className="interface-settings__eyebrow"
+                        id="avaia-notebook-title"
+                      >
+                        {t("avaia.notebook.title")}
+                      </span>
+                      {avaiaStudied.length === 0 ? (
+                        <p className="profile-edit__note">
+                          {t("avaia.notebook.empty")}
+                        </p>
+                      ) : (
+                        <ul className="avaia-notebook__list">
+                          {avaiaStudied.map(({ landmark }) => (
+                            <li key={landmark.id}>
+                              <strong>{landmarkLabel(locale, landmark)}</strong>
+                              <small>
+                                {[
+                                  landmark.kind,
+                                  ...Object.entries(landmark.facts)
+                                    .filter(([key]) => !key.startsWith("name"))
+                                    .map(([key, value]) => `${key}: ${value}`),
+                                ].join(" · ")}
+                              </small>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="interface-settings__note">
+                        {t("avaia.notebook.note")}
+                      </p>
+                    </section>
                   </>
                 ) : null}
 
@@ -1372,6 +1519,11 @@ export function AuthenticatedMapHomeView({
             viewModel={locationControl}
             onActivate={activateLocationControl}
           />
+          {/* The map is hidden from assistive technology, so what the Avaia
+              says to itself on the card is said here too. */}
+          <span className="visually-hidden" aria-live="polite">
+            {avaiaSpeech ?? ""}
+          </span>
           {/* The canvas marker has no text of its own, so the observation's
               meaning is announced here rather than left to a cyan dot. */}
           <span className="visually-hidden" aria-live="polite">

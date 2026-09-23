@@ -35,6 +35,10 @@ import { createProfileSlugViewState } from "../identity/profile-slug-view-model"
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
 import type { AvaiaAvailability } from "./bond-dock-view-model";
+import { avaiaStudy } from "./avatar-presence";
+import { avaiaLines } from "./avaia-lines";
+import { forgetNotebookCache } from "./landmark-notebook";
+import { SPEECH_MS } from "./use-avaia-walk";
 import {
   AuthenticatedMapHomeView,
   type ConnectedProvider,
@@ -133,6 +137,7 @@ beforeEach(() => {
   // The wardrobe keeps a module-level snapshot so React can compare it, so
   // clearing storage alone would leave the previous test's outfit in memory.
   forgetAvatarChoices();
+  forgetNotebookCache();
 });
 
 afterEach(() => {
@@ -146,17 +151,20 @@ describe("AuthenticatedMapHomeView", () => {
 
     renderView({ mapRenderer });
 
-    // Authentication opens on the Bond represented by this device; its Avaia
-    // remains the other identity until an explicit handover.
+    // Authentication opens on the Avaia, with the Bond represented by this
+    // device spectating until it takes the wheel back.
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
-    ).toHaveTextContent("You");
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).toHaveTextContent("AI");
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+    ).toHaveTextContent("driving");
     expect(
       screen.getByLabelText("No reciprocal relationship asserted"),
     ).toHaveTextContent("—");
     expect(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
-    ).toHaveTextContent("unavailable");
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toHaveTextContent("spectate");
     expect(screen.getByText("0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
@@ -202,6 +210,12 @@ describe("AuthenticatedMapHomeView", () => {
 
   it("hands the wheel to the Avaia and back to the Bond", () => {
     renderView({ avaiaAvailability: "ready" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    ).toHaveTextContent("You");
 
     const handToAvaia = screen.getByRole("button", {
       name: "Hand the wheel to 0skai",
@@ -231,6 +245,13 @@ describe("AuthenticatedMapHomeView", () => {
     const onPrepareAvaia = vi.fn();
     renderView({ avaiaAvailability: "downloadable", onPrepareAvaia });
 
+    // Opening on the Avaia is presentation: nothing is fetched until a person
+    // hands it the wheel with a gesture of their own.
+    expect(onPrepareAvaia).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+    expect(onPrepareAvaia).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
     );
@@ -240,6 +261,9 @@ describe("AuthenticatedMapHomeView", () => {
     // A host that cannot fetch one still hands the wheel over.
     cleanup();
     renderView({ avaiaAvailability: "downloadable" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
     const avaia = screen.getByRole("button", {
       name: "Hand the wheel to 0skai",
     });
@@ -263,7 +287,7 @@ describe("AuthenticatedMapHomeView", () => {
     const firstFix = setCamera.mock.calls.length;
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+      screen.getByRole("button", { name: "Focus the world on 0skai" }),
     );
 
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
@@ -282,16 +306,16 @@ describe("AuthenticatedMapHomeView", () => {
     const firstFix = setCamera.mock.calls.length;
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
 
     // The seats swap, and the camera lands at or inside the scale a body is
     // drawn from, so the arrival is something a person can watch happen.
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
     ).toBeVisible();
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
@@ -330,6 +354,9 @@ describe("AuthenticatedMapHomeView", () => {
     const onNavigate = vi.fn();
 
     renderView({ onNavigate });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
     const edit = screen.getByRole("button", { name: "Edit 0x0sky" });
 
     expect(edit).toHaveTextContent("edit");
@@ -551,12 +578,28 @@ describe("AuthenticatedMapHomeView", () => {
     );
     expect(screen.getByRole("radio", { name: "Loose length" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "White sneakers" })).toBeChecked();
+    cleanup();
 
-    // The world draws the same outfit the editor is showing.
-    await vi.waitFor(() =>
-      expect(vi.mocked(mapRenderer.avatars!.upsert)).toHaveBeenCalled(),
+    // The world draws the same outfit the editor is showing, once the Bond
+    // wearing it takes the wheel from its Avaia.
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-v2-study", undefined),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
-    const handle = vi.mocked(mapRenderer.avatars!.upsert).mock.lastCall?.[0];
+    const bondHandle = () =>
+      vi
+        .mocked(mapRenderer.avatars!.upsert)
+        .mock.calls.map(([drawn]) => drawn)
+        .findLast((drawn) => drawn.id === "bond");
+    await vi.waitFor(() => expect(bondHandle()).toBeDefined(), {
+      timeout: 5_000,
+    });
+    const handle = bondHandle();
     expect(handle?.visibleNodes).toContain("wear:hair/loose-long");
     expect(handle?.visibleNodes).toContain("wear:shoes/sneakers-white");
     expect(handle?.visibleNodes).not.toContain("wear:shoes/loafers-black");
@@ -903,10 +946,10 @@ describe("AuthenticatedMapHomeView", () => {
     expect(upsert.mock.lastCall?.[0].visible).toBe(false);
   });
 
-  // Authentication starts with the Bond represented by this device. Its stored
-  // avatar choice therefore reaches the first body without waiting for a
+  // Authentication starts with the Avaia at the wheel, in the study its Bond's
+  // choice gives it, so the first body is drawn without waiting for a
   // presentation handover to repair which identity the world is drawing.
-  it("draws the Bond's selected study immediately after authentication", async () => {
+  it("draws the Avaia's study immediately after authentication", async () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
 
     renderView({
@@ -921,13 +964,11 @@ describe("AuthenticatedMapHomeView", () => {
       .mocked(mapRenderer.avatars!.upsert)
       .mock.calls.map(([handle]) => handle);
     expect(new Set(drawn.map((handle) => handle.id))).toEqual(
-      new Set(["bond"]),
+      new Set(["avaia"]),
     );
-    expect(drawn.at(-1)?.modelId).toBe("dasha-study");
+    expect(drawn.at(-1)?.modelId).toBe(avaiaStudy("0skai", "dasha-study"));
     // The seat nobody is in is dropped rather than left standing behind.
-    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith(
-      "avaia",
-    );
+    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("bond");
   });
 
   it("settles the leaving body before the arriving one, rather than swapping", async () => {
@@ -954,13 +995,13 @@ describe("AuthenticatedMapHomeView", () => {
     upsert.mockClear();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
 
-    // The Bond does not blink away: it settles first, and only then does the
-    // Avaia come out and wake on the world.
+    // The Avaia does not blink away: it settles first, and only then does the
+    // Bond come out and wake on the world.
     const first = upsert.mock.calls[0]?.[0];
-    expect(first).toMatchObject({ id: "bond", clipId: "quiesce" });
+    expect(first).toMatchObject({ id: "avaia", clipId: "quiesce" });
     expect(first?.clipPhase).toBeLessThan(1);
   });
 
@@ -982,14 +1023,14 @@ describe("AuthenticatedMapHomeView", () => {
     const drawn = vi.mocked(mapRenderer.avatars!.upsert).mock.lastCall?.[0]
       .modelId;
 
-    expect(label).toMatchObject({ title: "0x0sky", detail: "This device" });
+    expect(label).toMatchObject({ title: "0skai", detail: "This device" });
     expect(label?.avatarUrl).toBe(avatarPreviewUrl(drawn!));
-    expect(drawn).toBe("dasha-study");
+    expect(drawn).toBe(avaiaStudy("0skai", "dasha-study"));
   });
 
-  // The card names whoever took the wheel — a Bond that hands over to its
-  // Avaia is spectating, and the marker it left behind must say so too.
-  it("renames the card to the Avaia once it takes the wheel", async () => {
+  // The card names whoever took the wheel — an Avaia that hands back to its
+  // Bond is spectating, and the marker it left behind must say so too.
+  it("renames the card to the Bond once it takes the wheel", async () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
 
     renderView({
@@ -1001,12 +1042,211 @@ describe("AuthenticatedMapHomeView", () => {
     await screen.findByRole("button", { name: "Map centred on this device" });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
 
     const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
       .lastCall?.[0];
-    expect(label).toMatchObject({ title: "0skai", detail: "This device" });
+    expect(label).toMatchObject({ title: "0x0sky", detail: "This device" });
+  });
+
+  describe("an Avaia at the wheel", () => {
+    const here = observation();
+    // About 70 m east of this device.
+    const there = {
+      longitude: here.longitude + 0.001,
+      latitude: here.latitude,
+    };
+
+    async function renderWorld() {
+      vi.useFakeTimers();
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+      return mapRenderer;
+    }
+
+    const voice = avaiaStudy("0skai", "dasha-study");
+    const lastLabel = (mapRenderer: MapRenderer) =>
+      vi.mocked(mapRenderer.setObservedPositionLabel).mock.lastCall?.[0];
+    const lastAvaia = (mapRenderer: MapRenderer) =>
+      vi
+        .mocked(mapRenderer.avatars!.upsert)
+        .mock.calls.map(([handle]) => handle)
+        .findLast((handle) => handle.id === "avaia");
+
+    it("walks where its owner taps, and says so on its card", async () => {
+      const mapRenderer = await renderWorld();
+
+      act(() =>
+        (
+          mapRenderer as ReturnType<typeof renderer> & {
+            tapGround: (tap: object) => void;
+          }
+        ).tapGround({ ...there, ground: "open" }),
+      );
+
+      const speaking = lastLabel(mapRenderer)?.speech;
+      expect(avaiaLines("en", voice, "walk")).toContain(speaking);
+      expect(
+        screen.getByText(speaking!, { selector: ".visually-hidden" }),
+      ).toBeInTheDocument();
+      // Mid-walk the body strides, facing the way it is going.
+      act(() => vi.advanceTimersByTime(200));
+      expect(lastAvaia(mapRenderer)).toMatchObject({ clipId: "walk" });
+      expect(lastAvaia(mapRenderer)?.bearingDeg).toBeCloseTo(90, 0);
+
+      act(() => vi.advanceTimersByTime(60_000));
+      const arrived = lastAvaia(mapRenderer);
+      expect(arrived?.lngLat[0]).toBeCloseTo(there.longitude, 6);
+      expect(arrived?.lngLat[1]).toBeCloseTo(there.latitude, 6);
+      // The card went with it, and says how far that is from this device.
+      const card = lastLabel(mapRenderer);
+      expect(card?.at?.[0]).toBeCloseTo(there.longitude, 6);
+      expect(card?.detail).toMatch(/^\d+ m from this device$/);
+      // And the line has been said: the card closes again.
+      expect(card?.speech).toBeUndefined();
+      expect(SPEECH_MS).toBe(10_000);
+    });
+
+    it("says why not, and stays, when the ground is not walkable", async () => {
+      const mapRenderer = await renderWorld();
+
+      act(() =>
+        (
+          mapRenderer as ReturnType<typeof renderer> & {
+            tapGround: (tap: object) => void;
+          }
+        ).tapGround({ ...there, ground: "building" }),
+      );
+      act(() => vi.advanceTimersByTime(5_000));
+
+      expect(avaiaLines("en", voice, "blocked.building")).toContain(
+        lastLabel(mapRenderer)?.speech,
+      );
+      expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+        here.longitude,
+        here.latitude,
+      ]);
+    });
+
+    it("goes to see what its owner walked past, and writes it down", async () => {
+      vi.useFakeTimers();
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      const monument = {
+        id: "poi:42",
+        longitude: here.longitude + 0.0003,
+        latitude: here.latitude,
+        kind: "monument",
+        name: "Volodymyr the Great",
+        facts: { historic: "memorial" },
+      };
+      mapRenderer.setLandmarks([monument]);
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+
+      // It looks around first, then sets off with a word about what it saw.
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(lastLabel(mapRenderer)?.speech).toContain("Volodymyr the Great");
+      expect(lastAvaia(mapRenderer)).toMatchObject({ clipId: "walk" });
+
+      // It arrives, looks the monument over, and says what it learned. Time
+      // moves in steps so each thing it does gets to start before the next.
+      for (let step = 0; step < 6; step += 1) {
+        act(() => vi.advanceTimersByTime(5_000));
+      }
+      const studied = avaiaLines("en", voice, "landmark.studied").map((line) =>
+        line.replace("{landmark}", "“Volodymyr the Great”"),
+      );
+      const said = vi
+        .mocked(mapRenderer.setObservedPositionLabel)
+        .mock.calls.map(([label]) => label?.speech);
+      expect(said.some((line) => studied.includes(line ?? ""))).toBe(true);
+
+      // What it learned is its own note, on this device.
+      vi.useRealTimers();
+      fireEvent.click(screen.getByRole("button", { name: "Edit 0skai" }));
+      const notes = screen.getByRole("region", { name: "Landmarks studied" });
+      expect(notes).toHaveTextContent("“Volodymyr the Great”");
+      expect(notes).toHaveTextContent("historic: memorial");
+    });
+
+    it("notices a landmark whose tiles land after the position does", async () => {
+      vi.useFakeTimers();
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+      // The position is known, but the tile carrying the monument is not yet.
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(lastLabel(mapRenderer)?.speech).toBeUndefined();
+
+      // The person has not moved; the map finishes loading around them.
+      act(() =>
+        mapRenderer.setLandmarks([
+          {
+            id: "poi:7",
+            longitude: here.longitude + 0.0003,
+            latitude: here.latitude,
+            kind: "memorial",
+            name: "Late tile",
+            facts: {},
+          },
+        ]),
+      );
+      for (let step = 0; step < 4; step += 1) {
+        act(() => vi.advanceTimersByTime(5_000));
+      }
+
+      expect(
+        vi
+          .mocked(mapRenderer.setObservedPositionLabel)
+          .mock.calls.some(([label]) => label?.speech?.includes("Late tile")),
+      ).toBe(true);
+    });
+
+    it("does not walk while its Bond is at the wheel", async () => {
+      const mapRenderer = await renderWorld();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      );
+      act(() => vi.advanceTimersByTime(5_000));
+      vi.mocked(mapRenderer.setObservedPositionLabel).mockClear();
+
+      act(() =>
+        (
+          mapRenderer as ReturnType<typeof renderer> & {
+            tapGround: (tap: object) => void;
+          }
+        ).tapGround({ ...there, ground: "open" }),
+      );
+      act(() => vi.advanceTimersByTime(1_000));
+
+      expect(lastLabel(mapRenderer)?.speech).toBeUndefined();
+    });
   });
 
   it("keeps the world usable when the host has no location capability", async () => {

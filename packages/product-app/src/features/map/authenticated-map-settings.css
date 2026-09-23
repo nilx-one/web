@@ -635,3 +635,49 @@ button.provider-control {
 .profile-edit__address:has(.profile-edit__discriminator) .profile-edit__save {
   margin: 0.48rem 0.55rem 0.48rem 0;
 }
+
+/* What an Avaia has studied: the same card rows as the provider list, text
+   only, because a note is something to read rather than to act on. */
+.avaia-notebook {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.avaia-notebook__list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.avaia-notebook__list > li {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid rgba(245, 243, 247, 0.1);
+  border-radius: 0.9rem;
+  background: rgba(245, 243, 247, 0.035);
+}
+
+.avaia-notebook__list strong {
+  font-size: 0.84rem;
+  font-weight: 680;
+}
+
+.avaia-notebook__list small {
+  color: rgba(245, 243, 247, 0.55);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.authenticated-map-home[data-theme="light"] .avaia-notebook__list > li {
+  border-color: rgba(29, 40, 44, 0.1);
+  background: rgba(29, 40, 44, 0.035);
+}
+
+.authenticated-map-home[data-theme="light"] .avaia-notebook__list small {
+  color: rgba(29, 40, 44, 0.6);
+}

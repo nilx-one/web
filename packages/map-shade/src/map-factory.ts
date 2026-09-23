@@ -4,7 +4,7 @@
 import type { PresenceStore, ShadeSource } from "@nilx-one/presence-contract";
 import { Map as MapLibreMap, type MapOptions } from "maplibre-gl";
 
-import type { CellTap } from "./pick";
+import { cellAtLngLat, type CellTap } from "./pick";
 import { createShadeLayer } from "./shade-layer";
 
 export interface ShadeRuntime {
@@ -64,4 +64,28 @@ export function createShadeMapFactory(
 
     return map;
   };
+}
+
+/**
+ * Whether this device has revealed the ground at a point, for a renderer that
+ * reports taps into the fog. It answers from the same lit-cell membership the
+ * shade layer draws, and says "revealed" while the journal is still loading
+ * or could not load at all — no fog is drawn then, so none is claimed.
+ */
+export function createGroundRevealed(
+  runtime: Promise<ShadeRuntime | null>,
+): (point: {
+  readonly longitude: number;
+  readonly latitude: number;
+}) => boolean {
+  let source: ShadeSource | undefined;
+  void runtime.then(
+    (resolved) => {
+      source = resolved?.source;
+    },
+    () => undefined,
+  );
+  return (point) =>
+    source === undefined ||
+    source.isLit(cellAtLngLat({ lng: point.longitude, lat: point.latitude }));
 }

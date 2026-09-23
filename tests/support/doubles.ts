@@ -13,6 +13,8 @@ import {
   DEFAULT_MAP_CAMERA,
   type MapCamera,
   type MapCameraChange,
+  type MapGroundTap,
+  type MapLandmark,
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
@@ -29,6 +31,13 @@ export interface MapRendererDouble extends MapRenderer {
   moveCamera(camera: MapCamera, gesture: boolean): void;
   /** Publishes a person reaching for a body the world is drawing. */
   activateBody(id: string): void;
+  /** Publishes a person tapping the ground where no body is drawn. */
+  tapGround(tap: MapGroundTap): void;
+  /**
+   * Sets what the basemap answers for landmarks near any point, and — as a
+   * real renderer does once tiles settle — says that answer may have changed.
+   */
+  setLandmarks(landmarks: readonly MapLandmark[]): void;
 }
 
 export function createMapRendererDouble(
@@ -36,6 +45,9 @@ export function createMapRendererDouble(
 ): MapRendererDouble {
   const cameraListeners = new Set<(change: MapCameraChange) => void>();
   const bodyListeners = new Set<(activation: { id: string }) => void>();
+  const groundListeners = new Set<(tap: MapGroundTap) => void>();
+  const landmarkListeners = new Set<() => void>();
+  let landmarks: readonly MapLandmark[] = [];
   let camera: MapCamera = DEFAULT_MAP_CAMERA;
 
   return {
@@ -62,6 +74,15 @@ export function createMapRendererDouble(
         return () => bodyListeners.delete(listener);
       },
     ),
+    subscribeGroundTap: vi.fn((listener: (tap: MapGroundTap) => void) => {
+      groundListeners.add(listener);
+      return () => groundListeners.delete(listener);
+    }),
+    landmarksNear: vi.fn(() => landmarks),
+    subscribeLandmarksChanged: vi.fn((listener: () => void) => {
+      landmarkListeners.add(listener);
+      return () => landmarkListeners.delete(listener);
+    }),
     // The avatar surface a real renderer publishes, so a test can see which
     // body the application asked the world to draw.
     avatars: {
@@ -81,6 +102,13 @@ export function createMapRendererDouble(
     },
     activateBody(id) {
       for (const listener of [...bodyListeners]) listener({ id });
+    },
+    tapGround(tap) {
+      for (const listener of [...groundListeners]) listener(tap);
+    },
+    setLandmarks(next) {
+      landmarks = next;
+      for (const listener of [...landmarkListeners]) listener();
     },
   };
 }

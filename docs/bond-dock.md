@@ -28,6 +28,12 @@ device fetches to serve it is not a second decision.
 The Bond reads "You" while it drives and "spectate" while its Avaia does. That
 is what spectating means here: watching a world someone else is moving through.
 
+The world opens with the Avaia at the wheel and the Bond spectating. Opening
+there is presentation only: nothing is fetched until a person hands the Avaia
+the wheel with a gesture of their own. An Avaia at the wheel walks where its
+owner taps and goes to see what its owner walked past — see
+[Avaia walks the world](avaia-walk.md).
+
 ## Avaia availability
 
 The right-hand Avaia states what this device can do about its runtime:
