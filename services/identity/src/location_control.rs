@@ -276,14 +276,18 @@ async fn write_live_location(
         Ok(value) => value,
         Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
     };
-    let updated_at = match DecimalU64::new(now).get().try_into() {
-        Ok(value) => DecimalU64::new(value),
-        Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
-    };
+    let updated_at = DecimalU64::new(now);
     let location = BondLocation::new(coordinate, BondLocationMode::Live, updated_at);
-    match state.locations.write(&identity.pub_dress, location.clone()).await {
+    let pub_dress = match identity.pub_dress.parse::<PubDress>() {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "stored Bond pub_dress is invalid");
+            return status(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+    match state.locations.write(pub_dress.as_str(), location.clone()).await {
         Ok(()) => no_store_json(StatusCode::OK, LocationControlProjection {
-            role: role_for_pub_dress(&identity.pub_dress.parse::<PubDress>().expect("stored Bond pub_dress must be valid")),
+            role: role_for_pub_dress(&pub_dress),
             location: Some(location),
         }),
         Err(error) => {
