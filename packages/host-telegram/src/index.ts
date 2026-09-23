@@ -6,6 +6,7 @@ import {
   ZERO_SAFE_AREA,
   type GeolocationCapability,
   type GeolocationObservation,
+  type ObservedGeolocation,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
@@ -19,6 +20,7 @@ export interface TelegramHostComposition {
    * geolocation implementation here.
    */
   readonly geolocation?: GeolocationCapability;
+  readonly onLiveLocation?: (position: ObservedGeolocation) => void;
 }
 
 export interface TelegramWebAppUser {
@@ -202,7 +204,10 @@ class TelegramHost implements HostPort {
   }
 }
 
-function createTelegramGeolocation(bridge: TelegramWebAppBridge): GeolocationCapability {
+function createTelegramGeolocation(
+  bridge: TelegramWebAppBridge,
+  onLiveLocation?: (position: ObservedGeolocation) => void,
+): GeolocationCapability {
   const manager = bridge.LocationManager;
   if (manager === undefined) return UNSUPPORTED_GEOLOCATION;
 
@@ -230,7 +235,7 @@ function createTelegramGeolocation(bridge: TelegramWebAppBridge): GeolocationCap
     return new Promise<GeolocationObservation>((resolve) => {
       try {
         manager.getLocation((location) => {
-          resolve(location === null ? { kind: "failed", reason: "permission-denied" } : observation(location));
+          resolve(notify(location === null ? { kind: "failed", reason: "permission-denied" } : observation(location)));
         });
       } catch {
         resolve({ kind: "failed", reason: "host-failed" });
@@ -307,6 +312,6 @@ export function createTelegramHost(
 ): HostPort {
   return new TelegramHost(
     bridge,
-    composition.geolocation ?? (bridge === undefined ? UNSUPPORTED_GEOLOCATION : createTelegramGeolocation(bridge)),
+    composition.geolocation ?? (bridge === undefined ? UNSUPPORTED_GEOLOCATION : createTelegramGeolocation(bridge, composition.onLiveLocation)),
   );
 }
