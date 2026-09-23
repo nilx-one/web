@@ -34,7 +34,7 @@ async function checkLocalModel(
   if (verdict.kind !== "usable") {
     return { kind: "unsupported", reason: verdict.kind };
   }
-  if (await host.isCached(modelId)) {
+  if (await isCachedOrRecover(host, modelId)) {
     return { kind: "cached" };
   }
   const description = await host.describe(modelId);
@@ -44,6 +44,30 @@ async function checkLocalModel(
     source: description.source,
     notices: description.bytes === null ? [] : description.notices,
   };
+}
+
+/**
+ * A completeness check that cannot prove the model complete answers "not cached" rather
+ * than failing this whole status check.
+ *
+ * A cancelled download is one known way to reach this: `@mlc-ai/web-llm`'s OPFS writer
+ * streams a response straight into a file, and at least one browser does not make that
+ * write atomic — terminating the worker mid-write can leave a truncated artifact rather
+ * than none at all. `isCached` then reads that file and throws parsing it, and it throws
+ * the same way on every future check until the artifact is gone. Evicting here is what
+ * turns a wedged device back into a retryable one, and eviction is documented as safe to
+ * call even when nothing is actually cached.
+ */
+async function isCachedOrRecover(
+  host: LocalModelHost,
+  modelId: string,
+): Promise<boolean> {
+  try {
+    return await host.isCached(modelId);
+  } catch {
+    await host.remove(modelId).catch(() => undefined);
+    return false;
+  }
 }
 
 function queryKeyFor(modelId: string): readonly unknown[] {
