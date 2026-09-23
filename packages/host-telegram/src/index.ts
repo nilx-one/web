@@ -228,6 +228,10 @@ function createTelegramGeolocation(
       observedAt: Date.now(),
     },
   });
+  const notify = (value: GeolocationObservation): GeolocationObservation => {
+    if (value.kind === "observed") onLiveLocation?.(value.position);
+    return value;
+  };
 
   const requestPosition = async (): Promise<GeolocationObservation> => {
     await init();
