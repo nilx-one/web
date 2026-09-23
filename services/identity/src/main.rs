@@ -172,7 +172,7 @@ async fn main() {
     let database_url =
         env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://identity.db".to_owned());
     let http_bind = env::var("HTTP_BIND")
-        .unwrap_or_else(|_| "0.0.0.0:8080".to_owned())
+        .unwrap_or_else(|_| "0.0.0.0:1927".to_owned())
         .parse::<SocketAddr>()
         .expect("HTTP_BIND must be a socket address");
     let public_origin = env::var("PUBLIC_ORIGIN")

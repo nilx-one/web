@@ -165,8 +165,23 @@ jobs:
           grep -Fq -- "- $workload" services/identity/deploy/compose.yaml ||
             { echo "::error file=services/identity/deploy/compose.yaml::edge network alias must match the dispatched workload name '$workload'"; exit 1; }
 
-          grep -Fq "$workload:8080" deploy/web/Caddyfile ||
-            { echo "::error file=deploy/web/Caddyfile::identity reverse_proxy target must match the dispatched workload name '$workload'"; exit 1; }
+          # The port every consumer proxies to must match what the container actually binds:
+          # compose.yaml's HTTP_BIND, its own healthcheck, the Dockerfile's ENV/EXPOSE/HEALTHCHECK,
+          # and deploy/web/Caddyfile's reverse_proxy target all have to agree, or the container comes
+          # up (network alias resolves fine) but unhealthy/unreachable on the port everyone else expects.
+          port="$(grep -F 'HTTP_BIND:' services/identity/deploy/compose.yaml | grep -oE ':[0-9]+' | tr -d ':')"
+
+          grep -Fq "127.0.0.1:$port/health" services/identity/deploy/compose.yaml ||
+            { echo "::error file=services/identity/deploy/compose.yaml::healthcheck port must match HTTP_BIND ($port)"; exit 1; }
+
+          grep -Fq "ENV HTTP_BIND=0.0.0.0:$port" services/identity/Dockerfile ||
+            { echo "::error file=services/identity/Dockerfile::HTTP_BIND default must match compose.yaml ($port)"; exit 1; }
+
+          grep -Fq "EXPOSE $port" services/identity/Dockerfile ||
+            { echo "::error file=services/identity/Dockerfile::EXPOSE must match HTTP_BIND ($port)"; exit 1; }
+
+          grep -Fq "$workload:$port" deploy/web/Caddyfile ||
+            { echo "::error file=deploy/web/Caddyfile::identity reverse_proxy target must match the dispatched workload name and port '$workload:$port'"; exit 1; }
 
       - name: Validate client handoff
         shell: bash

@@ -12,7 +12,7 @@ services:
       - ${IDENTITY_ENV_FILE:?IDENTITY_ENV_FILE is required}
     environment:
       DATABASE_URL: sqlite:///data/identity.db
-      HTTP_BIND: 0.0.0.0:8080
+      HTTP_BIND: 0.0.0.0:1927
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
     labels:
       one.nilx.product: 0x1
@@ -20,7 +20,7 @@ services:
       one.nilx.identity.contract: ${IDENTITY_CONTRACT:?IDENTITY_CONTRACT is required}
       org.opencontainers.image.revision: ${RELEASE_SHA:?RELEASE_SHA is required}
     expose:
-      - "8080"
+      - "1927"
     volumes:
       - identity-data:/data
     networks:
@@ -37,7 +37,7 @@ services:
         - --fail
         - --silent
         - --show-error
-        - http://127.0.0.1:8080/health
+        - http://127.0.0.1:1927/health
       interval: 15s
       timeout: 5s
       retries: 6
