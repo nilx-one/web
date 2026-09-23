@@ -140,7 +140,7 @@ record.
   then a new Bond whose default DNS label is already allocated is rejected at
   the transaction boundary rather than silently receiving another address;
 - provision wildcard `*.nilx.one` DNS and DNS-01 TLS at the shared edge in
-  `0x0sky/infra`, then route Bond hosts to `ox1-web`;
+  `0x0sky/infra`, then route Bond hosts to `nilxone-web`;
 - activate and publicly verify that edge change. Merge and deployment remain
   separate delivery stages.
 
