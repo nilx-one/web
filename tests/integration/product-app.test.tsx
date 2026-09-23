@@ -823,6 +823,43 @@ describe("ProductApp identity", () => {
     },
   );
 
+  it("never authorizes a Telegram host into a Bond an ambient native session names instead of the typed address", async () => {
+    // A Telegram host has no native session of its own: readNativeContext
+    // answering "authenticated" here is stale/ambient browser-cookie state
+    // this device happens to carry from an unrelated Bond, not proof of
+    // whatever pub_dress is currently typed. It must never be trusted as
+    // that Bond just because it happens to already be signed in.
+    const user = userEvent.setup();
+    const identity = createIdentity({
+      readProviderIdentity: async () => ({ kind: "not-registered" }),
+      readNativeContext: async () => ({
+        kind: "authenticated",
+        identity: { pubDress: "0xda-sha" },
+      }),
+      resolvePubDress: async (selection) =>
+        formatPubDress(selection) === "0x0sky"
+          ? { kind: "registered", pubDress: "0x0sky" }
+          : { kind: "available", pubDress: formatPubDress(selection) },
+    });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createTelegramHost()}
+        identity={identity}
+      />,
+    );
+
+    await user.type(await screen.findByLabelText("pub_dress"), "sky");
+    await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
+
+    expect(
+      screen.queryByRole("button", { name: "Focus the world on 0xda-sha" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Focus the world on /i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("creates a Discord password for an authorized Bond and confirms recovery before entering", async () => {
     const user = userEvent.setup();
     const setProviderPassword = vi
