@@ -281,7 +281,7 @@ async fn write_live_location(
         Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
     };
     let location = BondLocation::new(coordinate, BondLocationMode::Live, updated_at);
-    match state.locations.write(&identity.pub_dress, location).await {
+    match state.locations.write(&identity.pub_dress, location.clone()).await {
         Ok(()) => no_store_json(StatusCode::OK, LocationControlProjection {
             role: role_for_pub_dress(&identity.pub_dress.parse::<PubDress>().expect("stored Bond pub_dress must be valid")),
             location: Some(location),
