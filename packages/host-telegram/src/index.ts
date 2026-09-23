@@ -41,7 +41,9 @@ export interface TelegramLocationManager {
   isAccessRequested: boolean;
   isAccessGranted: boolean;
   init(callback?: () => void): TelegramLocationManager;
-  getLocation(callback: (location: TelegramLocationData | null) => void): TelegramLocationManager;
+  getLocation(
+    callback: (location: TelegramLocationData | null) => void,
+  ): TelegramLocationManager;
   openSettings(): TelegramLocationManager;
   onEvent?: (event: "locationManagerUpdated", listener: () => void) => void;
   offEvent?: (event: "locationManagerUpdated", listener: () => void) => void;
@@ -218,7 +220,9 @@ function createTelegramGeolocation(
     initialized = new Promise((resolve) => manager.init(() => resolve()));
     return initialized;
   };
-  const observation = (location: TelegramLocationData): GeolocationObservation => ({
+  const observation = (
+    location: TelegramLocationData,
+  ): GeolocationObservation => ({
     kind: "observed",
     position: {
       longitude: location.longitude,
@@ -236,11 +240,18 @@ function createTelegramGeolocation(
 
   const requestPosition = async (): Promise<GeolocationObservation> => {
     await init();
-    if (!manager.isLocationAvailable) return { kind: "failed", reason: "unsupported" };
+    if (!manager.isLocationAvailable)
+      return { kind: "failed", reason: "unsupported" };
     return new Promise<GeolocationObservation>((resolve) => {
       try {
         manager.getLocation((location) => {
-          resolve(notify(location === null ? { kind: "failed", reason: "permission-denied" } : observation(location)));
+          resolve(
+            notify(
+              location === null
+                ? { kind: "failed", reason: "permission-denied" }
+                : observation(location),
+            ),
+          );
         });
       } catch {
         resolve({ kind: "failed", reason: "host-failed" });
@@ -261,7 +272,9 @@ function createTelegramGeolocation(
       let active = true;
       const update = () => {
         if (!active || !manager.isAccessGranted) return;
-        void requestPosition().then((value) => { if (active) observer(value); });
+        void requestPosition().then((value) => {
+          if (active) observer(value);
+        });
       };
       manager.onEvent?.("locationManagerUpdated", update);
       return () => {
@@ -317,8 +330,9 @@ export function createTelegramHost(
 ): HostPort {
   return new TelegramHost(
     bridge,
-    composition.geolocation ?? (bridge === undefined || composition.enableLiveLocation !== true
-      ? UNSUPPORTED_GEOLOCATION
-      : createTelegramGeolocation(bridge, composition.onLiveLocation)),
+    composition.geolocation ??
+      (bridge === undefined || composition.enableLiveLocation !== true
+        ? UNSUPPORTED_GEOLOCATION
+        : createTelegramGeolocation(bridge, composition.onLiveLocation)),
   );
 }

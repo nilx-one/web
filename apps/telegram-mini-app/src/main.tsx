@@ -37,7 +37,9 @@ import {
 
 const LOCATION_PERSIST_INTERVAL_MS = 15_000;
 
-function createTelegramLiveLocationSink(initData: string): (position: ObservedGeolocation) => void {
+function createTelegramLiveLocationSink(
+  initData: string,
+): (position: ObservedGeolocation) => void {
   let lastSentAt = 0;
   return (position) => {
     const now = Date.now();
@@ -80,7 +82,9 @@ async function bootstrap(): Promise<void> {
     locationControl.kind === "live"
       ? {
           enableLiveLocation: true,
-          onLiveLocation: createTelegramLiveLocationSink(telegramBridge?.initData ?? ""),
+          onLiveLocation: createTelegramLiveLocationSink(
+            telegramBridge?.initData ?? "",
+          ),
         }
       : {},
   );
@@ -121,11 +125,13 @@ async function bootstrap(): Promise<void> {
   const initialLocationFingerprint =
     locationControlFingerprint(locationControl);
   const recheckLocationControl = (): void => {
-    void readTelegramLocationControl(telegramBridge?.initData ?? "").then((next) => {
-      if (locationControlFingerprint(next) !== initialLocationFingerprint) {
-        window.location.reload();
-      }
-    });
+    void readTelegramLocationControl(telegramBridge?.initData ?? "").then(
+      (next) => {
+        if (locationControlFingerprint(next) !== initialLocationFingerprint) {
+          window.location.reload();
+        }
+      },
+    );
   };
 
   document.addEventListener("visibilitychange", () => {
@@ -136,7 +142,11 @@ async function bootstrap(): Promise<void> {
     recheckLocationControl,
     LOCATION_PERSIST_INTERVAL_MS,
   );
-  window.addEventListener("pagehide", () => window.clearInterval(locationControlPoll), { once: true });
+  window.addEventListener(
+    "pagehide",
+    () => window.clearInterval(locationControlPoll),
+    { once: true },
+  );
 
   createRoot(container).render(
     <StrictMode>

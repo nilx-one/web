@@ -288,11 +288,14 @@ async fn write_live_location(
             return status(StatusCode::SERVICE_UNAVAILABLE);
         }
     };
-    match state.locations.write(pub_dress.as_str(), location.clone()).await {
-        Ok(()) => no_store_json(StatusCode::OK, LocationControlProjection {
-            role: role_for_pub_dress(&pub_dress),
-            location: Some(location),
-        }),
+    match state.locations.write(pub_dress.as_str(), location).await {
+        Ok(()) => no_store_json(
+            StatusCode::OK,
+            LocationControlProjection {
+                role: role_for_pub_dress(&pub_dress),
+                location: Some(location),
+            },
+        ),
         Err(error) => {
             tracing::error!(%error, "Bond live location write failed");
             status(StatusCode::SERVICE_UNAVAILABLE)

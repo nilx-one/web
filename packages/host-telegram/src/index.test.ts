@@ -19,9 +19,21 @@ function createBridge(): TelegramWebAppBridge {
       isLocationAvailable: true,
       isAccessRequested: true,
       isAccessGranted: true,
-      init(callback) { callback?.(); return this; },
-      getLocation(callback) { callback({ latitude: 50.4501, longitude: 30.5234, horizontal_accuracy: 8 }); return this; },
-      openSettings() { return this; },
+      init(callback) {
+        callback?.();
+        return this;
+      },
+      getLocation(callback) {
+        callback({
+          latitude: 50.4501,
+          longitude: 30.5234,
+          horizontal_accuracy: 8,
+        });
+        return this;
+      },
+      openSettings() {
+        return this;
+      },
     },
     initData: "signed-by-telegram-but-not-yet-verified",
     initDataUnsafe: {
@@ -181,11 +193,13 @@ describe("Telegram chrome appearance", () => {
   });
 });
 
-
 describe("Telegram native geolocation", () => {
   it("uses Telegram LocationManager and forwards observed coordinates", async () => {
     const onLiveLocation = vi.fn();
-    const host = createTelegramHost(createBridge(), { enableLiveLocation: true, onLiveLocation });
+    const host = createTelegramHost(createBridge(), {
+      enableLiveLocation: true,
+      onLiveLocation,
+    });
 
     await expect(host.geolocation.readPermission()).resolves.toBe("granted");
     await expect(host.geolocation.requestPosition()).resolves.toMatchObject({
@@ -205,7 +219,9 @@ describe("Telegram native geolocation", () => {
     const bridge = createBridge();
     delete bridge.LocationManager;
     const host = createTelegramHost(bridge);
-    await expect(host.geolocation.readPermission()).resolves.toBe("unsupported");
+    await expect(host.geolocation.readPermission()).resolves.toBe(
+      "unsupported",
+    );
     expect(host.geolocation).not.toBe(undefined);
   });
 });
