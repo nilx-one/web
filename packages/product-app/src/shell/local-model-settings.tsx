@@ -153,6 +153,17 @@ export function LocalModelSettings({
     { readonly ratio: number; readonly text: string } | undefined
   >(undefined);
   const downloadAbort = useRef<AbortController | undefined>(undefined);
+  // A one-time note, not a checkbox: it surfaces the moment a use-policy entry is picked
+  // and is gone on the next render unless picked again. Nothing here gates the choice —
+  // per the Llama 3.2 Community License §1.b.ii, a person receiving it through this
+  // product is not the one who must agree to the licence; we are, as its distributor.
+  const [justChosenPolicy, setJustChosenPolicy] = useState<string | null>(null);
+
+  function onPick(pickedId: string): void {
+    chooseLocalModel(pickedId);
+    const picked = choice.options.find((option) => option.modelId === pickedId);
+    setJustChosenPolicy(picked?.usePolicy ?? null);
+  }
 
   const statusQuery = useQuery({
     queryKey: queryKeyFor(modelId),
@@ -209,7 +220,7 @@ export function LocalModelSettings({
           value={pickerValue}
           aria-label={t("settings.localModel.legend")}
           disabled={view.busy}
-          onChange={(event) => chooseLocalModel(event.currentTarget.value)}
+          onChange={(event) => onPick(event.currentTarget.value)}
         >
           {pickerValue === "" ? (
             <option value="" disabled>
@@ -240,6 +251,22 @@ export function LocalModelSettings({
             <li key={option.modelId}>{refusalText(option, t)}</li>
           ))}
         </ul>
+      )}
+      {justChosenPolicy === null ? null : (
+        <p className="local-model-settings__policy-note" role="status">
+          {t("settings.localModel.option.usePolicyNote")}{" "}
+          <a href={justChosenPolicy} target="_blank" rel="noreferrer">
+            {t("settings.localModel.option.usePolicy")}
+          </a>
+          <button
+            type="button"
+            className="local-model-settings__policy-dismiss"
+            aria-label={t("settings.localModel.option.usePolicyDismiss")}
+            onClick={() => setJustChosenPolicy(null)}
+          >
+            ×
+          </button>
+        </p>
       )}
       {effective === undefined ? null : (
         <LocalModelDetails option={effective} />

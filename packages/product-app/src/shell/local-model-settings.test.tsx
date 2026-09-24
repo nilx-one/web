@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { LOCAL_MODEL_CHOICE_STORAGE_KEY } from "./local-model-choice";
@@ -473,5 +479,86 @@ describe("choosing among the served entries", () => {
         /Llama 3\.2 is licensed under the Llama 3\.2 Community License/,
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("choosing a model with an acceptable-use policy", () => {
+  it("surfaces the policy note only for the pick that made it apply, not on load", async () => {
+    window.localStorage.setItem(LOCAL_MODEL_CHOICE_STORAGE_KEY, LLAMA);
+    renderSettings(new FakeHost());
+
+    // The stored choice already carries a use policy, but nobody picked it just now.
+    await waitFor(() => expect(picker()).toHaveValue(LLAMA));
+    expect(
+      screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+    ).toBeNull();
+  });
+
+  it("appears the moment Llama is picked, links the policy, and is not a checkbox", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => {
+      expect(option(/Llama 3\.2 1B/)).toBeInTheDocument();
+    });
+    fireEvent.change(picker(), { target: { value: LLAMA } });
+
+    const note = await screen.findByText(
+      /Built with Llama\. Usage is subject to Meta's/,
+    );
+    const notePara = note.closest("p")!;
+    expect(notePara).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(
+      within(notePara).getByRole("link", { name: "Acceptable use policy" }),
+    ).toHaveAttribute("href", "https://www.llama.com/llama3_2/use-policy");
+    // Nothing is gated behind it: the choice already took effect.
+    expect(picker()).toHaveValue(LLAMA);
+  });
+
+  it("goes away once a different model is picked", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => expect(option(/Llama 3\.2 1B/)).toBeInTheDocument());
+    fireEvent.change(picker(), { target: { value: LLAMA } });
+    await screen.findByText(/Built with Llama\. Usage is subject to Meta's/);
+
+    fireEvent.change(picker(), { target: { value: SMOLLM2 } });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+      ).toBeNull();
+    });
+  });
+
+  it("can be dismissed without changing the choice", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => expect(option(/Llama 3\.2 1B/)).toBeInTheDocument());
+    fireEvent.change(picker(), { target: { value: LLAMA } });
+    await screen.findByText(/Built with Llama\. Usage is subject to Meta's/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(
+      screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+    ).toBeNull();
+    expect(picker()).toHaveValue(LLAMA);
+  });
+
+  it("does not appear for an entry with no use policy", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => expect(option(/SmolLM2 360M/)).toBeInTheDocument());
+    fireEvent.change(picker(), { target: { value: SMOLLM2 } });
+
+    await waitFor(() => expect(picker()).toHaveValue(SMOLLM2));
+    expect(
+      screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+    ).toBeNull();
   });
 });

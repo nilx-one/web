@@ -389,6 +389,38 @@
   font-size: 0.75rem;
 }
 
+.local-model-settings__policy-note {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  background: rgba(245, 243, 247, 0.06);
+  color: rgba(245, 243, 247, 0.78);
+  font-size: 0.75rem;
+}
+
+.local-model-settings__policy-note a {
+  color: inherit;
+}
+
+.local-model-settings__policy-dismiss {
+  margin-left: auto;
+  padding: 0 0.3rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.local-model-settings__policy-dismiss:hover {
+  opacity: 1;
+}
+
 .local-model-settings__fallback {
   margin: 0;
   font-size: 0.8rem;

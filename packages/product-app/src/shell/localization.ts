@@ -104,6 +104,9 @@ const EN_MESSAGES = {
   "settings.localModel.option.lowFaithfulness":
     "Rarely passes the faithfulness check: most sentences keep their plain wording.",
   "settings.localModel.option.usePolicy": "Acceptable use policy",
+  "settings.localModel.option.usePolicyNote":
+    "Built with Llama. Usage is subject to Meta's",
+  "settings.localModel.option.usePolicyDismiss": "Dismiss",
   "settings.localModel.fallback.ineligible":
     "The model you chose can’t run here, so the default is used. Your choice is kept.",
   "settings.localModel.fallback.unknown":
@@ -208,6 +211,9 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.option.lowFaithfulness":
     "Рідко проходить перевірку точності: більшість речень лишаються простими.",
   "settings.localModel.option.usePolicy": "Політика допустимого використання",
+  "settings.localModel.option.usePolicyNote":
+    "Побудовано на Llama. Використання підпорядковується",
+  "settings.localModel.option.usePolicyDismiss": "Закрити",
   "settings.localModel.fallback.ineligible":
     "Обрана модель тут не запускається, тож працює типова. Ваш вибір збережено.",
   "settings.localModel.fallback.unknown":
