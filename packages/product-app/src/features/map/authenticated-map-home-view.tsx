@@ -65,7 +65,8 @@ import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
 import "../identity/avatar-editor.css";
-import { BondArtificialPositionSettings } from "./bond-artificial-position-settings";
+// Hidden for now; see the commented render call in Settings below.
+// import { BondArtificialPositionSettings } from "./bond-artificial-position-settings";
 import {
   deviceLocationPosition,
   type DeviceLocationState,
@@ -529,13 +530,12 @@ export function AuthenticatedMapHomeView({
   );
 
   // The study of whoever is at the wheel: the body on the world, and the still
-  // the label falls back to once that body is too far away to read.
+  // the label falls back to once that body is too far away to read. Reads
+  // through bondAvatar/avaiaAvatar rather than recomputing the ambient study
+  // directly, so a body either identity actually chose is what is shown —
+  // avaiaAvatar already is that ambient study whenever nothing was chosen.
   const wheelStudy =
-    avatarChoice?.rendered === undefined
-      ? undefined
-      : wheel === "bond"
-        ? avatarChoice.rendered
-        : avaiaStudy(avaiaAddress, avatarChoice.rendered);
+    wheel === "bond" ? bondAvatar?.modelId : avaiaAvatar?.modelId;
   // The card names whoever is driving, not the Bond regardless of the wheel —
   // the observation is drawn at this device's own position either way, but
   // the identity standing there changes hands with the wheel.
@@ -543,10 +543,8 @@ export function AuthenticatedMapHomeView({
   const { t, resolved: locale } = useLocalization();
   // The study the Avaia is drawn in, whose voice it speaks in. No body drawn
   // means no voice either: a card does not talk on behalf of nobody.
-  const avaiaVoice: AvatarModelId | undefined =
-    avatarChoice?.rendered === undefined
-      ? undefined
-      : (avaiaStudy(avaiaAddress, avatarChoice.rendered) as AvatarModelId);
+  const avaiaVoice: AvatarModelId | undefined = avaiaAvatar?.modelId as
+    AvatarModelId | undefined;
   const avaiaWalk = useAvaiaWalk({
     renderer,
     active: wheel === "avaia" && handover === undefined,
@@ -820,8 +818,12 @@ export function AuthenticatedMapHomeView({
 
     const avatarLayer = avatars;
     const reducedMotion = prefersReducedMotion();
+    // The world draws whatever body was actually chosen for each identity —
+    // avaiaAvatar already falls back to the ambient study on its own when
+    // nothing was, so there is no separate raw computation to keep in step
+    // with it.
     const study = (seat: DockSeat) =>
-      seat === "bond" ? bondStudy : avaiaStudy(avaiaAddress, bondStudy);
+      seat === "bond" ? bondStudy : (avaiaAvatar?.modelId ?? bondStudy);
     const address = (seat: DockSeat) =>
       seat === "bond" ? pubDress : avaiaAddress;
     // What each identity is wearing, resolved exactly once and drawn by the
@@ -883,6 +885,7 @@ export function AuthenticatedMapHomeView({
   }, [
     avaiaAddress,
     avaiaAvatar?.appearance,
+    avaiaAvatar?.modelId,
     avatarChoice?.rendered,
     avaiaWalk,
     bondAvatar?.appearance,
@@ -1292,10 +1295,12 @@ export function AuthenticatedMapHomeView({
                         modelId={localModel.modelId}
                       />
                     )}
+                    {/* Hidden for now — uncomment together with the import above.
                     <BondArtificialPositionSettings
                       ownerPubDress={pubDress}
                       renderer={renderer}
                     />
+                    */}
                     <fieldset className="interface-settings__appearance">
                       <legend>Appearance</legend>
                       {(["light", "dark", "auto"] as const).map((mode) => (

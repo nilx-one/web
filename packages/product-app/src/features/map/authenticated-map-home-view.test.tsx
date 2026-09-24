@@ -29,6 +29,10 @@ import {
   createMapRendererDouble,
   observation,
 } from "../../../../../tests/support/doubles";
+import {
+  createAvaiaSetupViewState,
+  type AvaiaSetupViewState,
+} from "../avaia/avaia-setup-view-model";
 import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import { forgetAvatarChoices } from "../identity/avatar-wardrobe-store";
 import { createProfileSlugViewState } from "../identity/profile-slug-view-model";
@@ -63,6 +67,7 @@ interface ViewOverrides {
   onAvatarChoice?: (
     model: "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study",
   ) => Promise<AvatarModelResult | undefined>;
+  avaiaSetup?: AvaiaSetupViewState;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -99,6 +104,9 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.onAvatarChoice === undefined
       ? {}
       : { onAvatarChoice: overrides.onAvatarChoice }),
+    ...(overrides.avaiaSetup === undefined
+      ? {}
+      : { avaiaSetup: overrides.avaiaSetup }),
     ...(overrides.onSlugChange === undefined
       ? {}
       : { onSlugChange: overrides.onSlugChange }),
@@ -504,7 +512,11 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.queryByRole("heading", { name: "Hair" })).toBeNull();
   });
 
-  it("offers Dasha 2.0's wardrobe, and only hers", () => {
+  // Skipped along with the wardrobe sections themselves: avatar-editor-view.tsx
+  // hides them for now because equipping an item does not persist. Model-level
+  // equip logic stays covered in avatar-editor-view-model.test.ts; unskip this
+  // once the sections come back.
+  it.skip("offers Dasha 2.0's wardrobe, and only hers", () => {
     renderView({
       section: "identity",
       avatarChoice: createAvatarChoiceViewState("dasha-v2-study", undefined),
@@ -541,7 +553,9 @@ describe("AuthenticatedMapHomeView", () => {
     ).not.toBeChecked();
   });
 
-  it("keeps a saved outfit across a reload, and draws it on the world", async () => {
+  // Skipped with the wardrobe sections above: this exercises equipping
+  // through the now-hidden UI. Unskip once the sections come back.
+  it.skip("keeps a saved outfit across a reload, and draws it on the world", async () => {
     const mapRenderer = renderer();
     const view = renderView({
       section: "identity",
@@ -603,6 +617,69 @@ describe("AuthenticatedMapHomeView", () => {
     expect(handle?.visibleNodes).toContain("wear:hair/loose-long");
     expect(handle?.visibleNodes).toContain("wear:shoes/sneakers-white");
     expect(handle?.visibleNodes).not.toContain("wear:shoes/loafers-black");
+  });
+
+  // Regression: useAvatarSelection used to let the ambient default it was
+  // handed always win over a choice this device actually remembered, so an
+  // Avaia's own saved body silently reverted to the deterministic default on
+  // every render. This exercises the whole path a person actually uses —
+  // the field, the editor, Save — and checks the world, not just the field.
+  it("keeps the body chosen for an Avaia, over its own ambient default", async () => {
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+    const avaiaSetup = createAvaiaSetupViewState({
+      load: {
+        kind: "available",
+        profile: {
+          pubDress: "0skai",
+          ownerPubDress: "0x0sky",
+          configurationState: "configured",
+        },
+      },
+      pending: false,
+    });
+    renderView({
+      mapRenderer,
+      avaiaSetup,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+
+    const avaiaHandle = () =>
+      vi
+        .mocked(mapRenderer.avatars!.upsert)
+        .mock.calls.map(([drawn]) => drawn)
+        .findLast((drawn) => drawn.id === "avaia");
+
+    // Nothing chosen yet: the world draws the deterministic ambient study for
+    // this address ("Sky", for "0skai" against a "dasha-study" Bond).
+    await vi.waitFor(() =>
+      expect(avaiaHandle()?.modelId).toBe(avaiaStudy("0skai", "dasha-study")),
+    );
+    expect(avaiaHandle()?.modelId).not.toBe("kai-study");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit 0skai" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change this Avaia's 3D model — currently Sky/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Kai/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    // The field itself reads back the saved choice…
+    expect(
+      await screen.findByRole("button", {
+        name: /Change this Avaia's 3D model — currently Kai/,
+      }),
+    ).toBeVisible();
+    // …and so does the world: not the ambient default, whatever it computes to.
+    await vi.waitFor(() => expect(avaiaHandle()?.modelId).toBe("kai-study"));
+
+    // The card carries the same choice once the body is too far to read.
+    const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
+      .lastCall?.[0];
+    expect(label?.avatarUrl).toBe(avatarPreviewUrl("kai-study"));
   });
 
   it("shows connected providers as marks that open the external account", () => {

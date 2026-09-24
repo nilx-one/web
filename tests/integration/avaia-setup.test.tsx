@@ -158,14 +158,10 @@ describe("Avaia setup from the Bond dock", () => {
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
 
-    // A body is part of what an Avaia is, and this contract publishes no model
-    // to choose from, so the field is present and inert rather than invented.
-    const model = screen.getByLabelText("3D model");
-    expect(model).toBeDisabled();
-    expect(model).toHaveValue("Not available yet");
-    // The address and that one inert field are the whole surface: no model
-    // capability is invented beside them.
-    expect(screen.getAllByRole("textbox")).toEqual([address, model]);
+    // The address is the only textbox this surface itself owns; the body an
+    // Avaia is represented by is a separate, real control below it
+    // (AvatarModelField, not a disabled placeholder duplicating it here).
+    expect(screen.getAllByRole("textbox")).toEqual([address]);
 
     await user.clear(address);
     await user.type(address, "vesn");
