@@ -288,12 +288,6 @@
   border: 0;
 }
 
-.local-model-settings__status {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 650;
-}
-
 .local-model-settings__detail {
   margin: 0;
   color: rgba(245, 243, 247, 0.62);

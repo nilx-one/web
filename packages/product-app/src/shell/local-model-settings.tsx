@@ -213,7 +213,7 @@ export function LocalModelSettings({
   ]);
 
   return (
-    <fieldset className="local-model-settings">
+    <fieldset className="local-model-settings interface-settings__appearance">
       <legend>{t("settings.localModel.legend")}</legend>
       <label className="local-model-settings__picker">
         <select
@@ -278,7 +278,7 @@ export function LocalModelSettings({
             : t("settings.localModel.fallback.unknown")}
         </p>
       )}
-      <p className="local-model-settings__status" role="status">
+      <p className="interface-settings__note" role="status">
         {t(`settings.localModel.status.${view.statusKey}`)}
       </p>
 
