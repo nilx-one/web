@@ -371,19 +371,11 @@ function LocalModelDetails({
         {t("settings.localModel.option.memory").replace(
           "{size}",
           Math.round(option.vramMb).toString(),
-        )}{" "}
-        · {option.licenceName}
+        )}
       </small>
       {option.attribution === null ? null : (
         <small className="local-model-settings__attribution">
           {option.attribution}
-        </small>
-      )}
-      {option.faithfulness === "measured" ? null : (
-        <small>
-          {option.faithfulness === "low"
-            ? t("settings.localModel.option.lowFaithfulness")
-            : t("settings.localModel.option.unmeasured")}
         </small>
       )}
       {option.usePolicy === null ? null : (
