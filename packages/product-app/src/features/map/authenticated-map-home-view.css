@@ -209,13 +209,19 @@
    bottom-anchored by AppShell, while this material is deliberately light and
    compact enough that the map keeps visual priority. */
 .bond-dock {
+  /* The detail header (authenticated-map-settings.css) reads these back to
+     stay flush with this card's own edges while it is pinned in place, so a
+     breakpoint below only has to change the padding once, here. */
+  --dock-pad-top: 1rem;
+  --dock-pad-inline: 1.15rem;
+  --dock-radius: 1.35rem;
   width: min(var(--shell-dock-width, 38rem), 100%);
   max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 1rem 1.15rem 1.1rem;
+  padding: var(--dock-pad-top) var(--dock-pad-inline) 1.1rem;
   border: 1px solid var(--map-line);
-  border-radius: 1.35rem;
+  border-radius: var(--dock-radius);
   color: var(--map-ink);
   background: var(--map-glass);
   backdrop-filter: blur(22px) saturate(1.08);
@@ -608,8 +614,11 @@
 }
 
 .authenticated-map-home[data-presentation="compact"] .bond-dock {
-  padding: 0.82rem 0.9rem 0.9rem;
-  border-radius: 1.1rem;
+  --dock-pad-top: 0.82rem;
+  --dock-pad-inline: 0.9rem;
+  --dock-radius: 1.1rem;
+  padding: var(--dock-pad-top) var(--dock-pad-inline) 0.9rem;
+  border-radius: var(--dock-radius);
 }
 
 .authenticated-map-home[data-presentation="compact"] .bond-dock__kicker {
@@ -648,7 +657,9 @@
 
 @media (max-height: 520px) {
   .bond-dock {
-    padding: 0.72rem 0.82rem 0.78rem;
+    --dock-pad-top: 0.72rem;
+    --dock-pad-inline: 0.82rem;
+    padding: var(--dock-pad-top) var(--dock-pad-inline) 0.78rem;
   }
 
   .bond-dock__kicker {

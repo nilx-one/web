@@ -1,10 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  AVAIA_MODEL_UNAVAILABLE,
-  type AvaiaSetupViewState,
-} from "./avaia-setup-view-model";
+import type { AvaiaSetupViewState } from "./avaia-setup-view-model";
 import "./avaia-setup.css";
 
 export interface AvaiaSetupViewProps {
@@ -17,10 +14,12 @@ export interface AvaiaSetupViewProps {
 /**
  * The compact surface an owner configures their Avaia from.
  *
- * It carries the address and nothing it cannot honestly offer. The 3D model is
- * present because a person deciding about an Avaia should see that a body is
- * part of what an Avaia is — and disabled because this contract publishes no
- * model capability to choose from. Nothing is invented to fill it.
+ * It carries the address and nothing it cannot honestly offer. A disabled "3D
+ * model: Not available yet" field used to sit here for the same reason the
+ * Dock's own `AvatarModelField` now sits right below this surface — but that
+ * field is real, so the dead one only duplicated it. Commented out rather
+ * than deleted, in case this surface ever needs to say something about a
+ * model capability of its own again.
  */
 export function AvaiaSetupView({
   state,
@@ -81,6 +80,9 @@ export function AvaiaSetupView({
           {state.note}
         </p>
 
+        {/* Hidden for now: duplicated the real AvatarModelField rendered
+            right after this surface. See avaia-setup-view-model.ts for
+            AVAIA_MODEL_UNAVAILABLE, kept for whenever this comes back.
         <label className="avaia-setup__label" htmlFor="avaia-model">
           3D model
         </label>
@@ -98,6 +100,7 @@ export function AvaiaSetupView({
           A body for this Avaia is not something this contract publishes yet, so
           there is nothing here to choose.
         </p>
+        */}
 
         {state.status === undefined ? null : (
           <p className="profile-edit__note" role="status">

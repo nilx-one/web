@@ -1,8 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AvatarSlot } from "@nilx-one/application";
-
 import { AvatarPreviewCanvas } from "./avatar-preview-canvas";
 import type { AvatarEditorViewState } from "./avatar-editor-view-model";
 
@@ -24,7 +22,8 @@ export interface AvatarEditorViewProps {
 export function AvatarEditorView({
   state,
   onChooseModel,
-  onEquip,
+  // Unused while the wardrobe sections below are hidden; see there.
+  onEquip: _onEquip,
   onCancel,
   onSave,
 }: AvatarEditorViewProps): React.ReactElement {
@@ -68,6 +67,9 @@ export function AvatarEditorView({
 
       <p className="avatar-editor__note">{state.appearanceNote}</p>
 
+      {/* Hidden for now: equipping an item here does not persist. Re-enable
+          once that is fixed — onEquip and state.sections are untouched, only
+          this rendering is suppressed.
       {state.sections.map((section) => (
         <WardrobeSection
           key={section.slot}
@@ -79,6 +81,7 @@ export function AvatarEditorView({
           onEquip={onEquip}
         />
       ))}
+      */}
 
       {state.error === undefined ? null : (
         <p className="profile-edit__error" role="alert">
@@ -105,48 +108,51 @@ export function AvatarEditorView({
   );
 }
 
-interface WardrobeSectionProps {
-  readonly slot: AvatarSlot;
-  readonly label: string;
-  readonly multiple: boolean;
-  readonly items: AvatarEditorViewState["sections"][number]["items"];
-  readonly busy: boolean;
-  readonly onEquip: (itemId: string) => void;
-}
-
-function WardrobeSection({
-  slot,
-  label,
-  multiple,
-  items,
-  busy,
-  onEquip,
-}: WardrobeSectionProps): React.ReactElement {
-  return (
-    <section className="wardrobe" aria-labelledby={`wardrobe-${slot}`}>
-      <h3 id={`wardrobe-${slot}`}>{label}</h3>
-      <ul className="wardrobe__items">
-        {items.map((item) => (
-          <li key={item.id}>
-            <button
-              type="button"
-              className={`wardrobe__item${
-                item.selected ? " wardrobe__item--worn" : ""
-              }`}
-              // A picker where one thing is on is a set of radios; one where
-              // several may be is a set of switches. Saying which it is out
-              // loud is what lets it be used without seeing it.
-              role={multiple ? "switch" : "radio"}
-              aria-checked={item.selected}
-              disabled={busy}
-              onClick={() => onEquip(item.id)}
-            >
-              <img src={item.thumbnailUrl} alt="" aria-hidden="true" />
-              <span>{item.name}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
+// Hidden for now, along with its call site above. Kept whole rather than
+// deleted so restoring the wardrobe sections is one uncomment, not a rewrite.
+//
+// interface WardrobeSectionProps {
+//   readonly slot: AvatarSlot;
+//   readonly label: string;
+//   readonly multiple: boolean;
+//   readonly items: AvatarEditorViewState["sections"][number]["items"];
+//   readonly busy: boolean;
+//   readonly onEquip: (itemId: string) => void;
+// }
+//
+// function WardrobeSection({
+//   slot,
+//   label,
+//   multiple,
+//   items,
+//   busy,
+//   onEquip,
+// }: WardrobeSectionProps): React.ReactElement {
+//   return (
+//     <section className="wardrobe" aria-labelledby={`wardrobe-${slot}`}>
+//       <h3 id={`wardrobe-${slot}`}>{label}</h3>
+//       <ul className="wardrobe__items">
+//         {items.map((item) => (
+//           <li key={item.id}>
+//             <button
+//               type="button"
+//               className={`wardrobe__item${
+//                 item.selected ? " wardrobe__item--worn" : ""
+//               }`}
+//               // A picker where one thing is on is a set of radios; one where
+//               // several may be is a set of switches. Saying which it is out
+//               // loud is what lets it be used without seeing it.
+//               role={multiple ? "switch" : "radio"}
+//               aria-checked={item.selected}
+//               disabled={busy}
+//               onClick={() => onEquip(item.id)}
+//             >
+//               <img src={item.thumbnailUrl} alt="" aria-hidden="true" />
+//               <span>{item.name}</span>
+//             </button>
+//           </li>
+//         ))}
+//       </ul>
+//     </section>
+//   );
+// }

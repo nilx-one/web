@@ -504,7 +504,11 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.queryByRole("heading", { name: "Hair" })).toBeNull();
   });
 
-  it("offers Dasha 2.0's wardrobe, and only hers", () => {
+  // Skipped along with the wardrobe sections themselves: avatar-editor-view.tsx
+  // hides them for now because equipping an item does not persist. Model-level
+  // equip logic stays covered in avatar-editor-view-model.test.ts; unskip this
+  // once the sections come back.
+  it.skip("offers Dasha 2.0's wardrobe, and only hers", () => {
     renderView({
       section: "identity",
       avatarChoice: createAvatarChoiceViewState("dasha-v2-study", undefined),
@@ -541,7 +545,9 @@ describe("AuthenticatedMapHomeView", () => {
     ).not.toBeChecked();
   });
 
-  it("keeps a saved outfit across a reload, and draws it on the world", async () => {
+  // Skipped with the wardrobe sections above: this exercises equipping
+  // through the now-hidden UI. Unskip once the sections come back.
+  it.skip("keeps a saved outfit across a reload, and draws it on the world", async () => {
     const mapRenderer = renderer();
     const view = renderView({
       section: "identity",

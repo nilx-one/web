@@ -68,6 +68,21 @@
 
 .bond-dock__detail-header {
   align-items: flex-start;
+  /* Pinned to the top of the Dock's own scroll box: the back button and title
+     stay reachable while everything under them scrolls. The negative margin
+     cancels .bond-dock's own padding so this reaches its edges exactly, and
+     the matching padding puts the back button and title back where they were
+     before this had a background of its own to carry. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: calc(-1 * var(--dock-pad-top, 1rem))
+    calc(-1 * var(--dock-pad-inline, 1.15rem)) 0;
+  padding: var(--dock-pad-top, 1rem) var(--dock-pad-inline, 1.15rem) 0;
+  border-top-left-radius: var(--dock-radius, 1.35rem);
+  border-top-right-radius: var(--dock-radius, 1.35rem);
+  background: var(--map-glass);
+  backdrop-filter: blur(22px) saturate(1.08);
 }
 
 .bond-dock__detail-header > div {
