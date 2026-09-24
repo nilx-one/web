@@ -20,7 +20,7 @@ import {
   type LocalModelPhase,
   type UnsupportedReason,
 } from "./local-model-settings-view-model";
-import { useLocalization } from "./localization";
+import { type Translate, useLocalization } from "./localization";
 
 export type LocalModelSettingsProps = LocalModelDependency;
 
@@ -136,6 +136,17 @@ export function LocalModelSettings({
     verdicts: verdictsQuery.data,
   });
   const modelId = choice.effectiveModelId;
+  const effective = choice.options.find((option) => option.modelId === modelId);
+  const refused = choice.options.filter(
+    (option) => option.refusal !== undefined,
+  );
+  // Until someone chooses, the picker asks rather than pretending the default was chosen;
+  // a stored choice stays shown even while the default stands in for it.
+  const pickerValue =
+    stored !== undefined &&
+    choice.options.some((option) => option.modelId === stored)
+      ? stored
+      : "";
   const entry = catalog.find((candidate) => candidate.modelId === modelId);
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<
@@ -193,15 +204,46 @@ export function LocalModelSettings({
   return (
     <fieldset className="local-model-settings">
       <legend>{t("settings.localModel.legend")}</legend>
-      <div className="local-model-settings__options">
-        {choice.options.map((option) => (
-          <LocalModelOption
-            key={option.modelId}
-            option={option}
-            disabled={!option.selectable || view.busy}
-          />
-        ))}
-      </div>
+      <label className="local-model-settings__picker">
+        <select
+          value={pickerValue}
+          aria-label={t("settings.localModel.legend")}
+          disabled={view.busy}
+          onChange={(event) => chooseLocalModel(event.currentTarget.value)}
+        >
+          {pickerValue === "" ? (
+            <option value="" disabled>
+              {t("settings.localModel.choose")}
+            </option>
+          ) : null}
+          {choice.options.map((option) => (
+            <option
+              key={option.modelId}
+              value={option.modelId}
+              disabled={!option.selectable}
+            >
+              {optionText(option, t)}
+            </option>
+          ))}
+        </select>
+        <svg
+          className="local-model-settings__chevron"
+          viewBox="0 0 12 12"
+          aria-hidden="true"
+        >
+          <path d="m2.5 4.5 3.5 3 3.5-3" />
+        </svg>
+      </label>
+      {refused.length === 0 ? null : (
+        <ul className="local-model-settings__refusals">
+          {refused.map((option) => (
+            <li key={option.modelId}>{refusalText(option, t)}</li>
+          ))}
+        </ul>
+      )}
+      {effective === undefined ? null : (
+        <LocalModelDetails option={effective} />
+      )}
       {choice.fallback === undefined ? null : (
         <p className="local-model-settings__fallback">
           {choice.fallback === "stored_ineligible"
@@ -284,70 +326,66 @@ export function LocalModelSettings({
   );
 }
 
-function LocalModelOption({
+/**
+ * One line per entry, as a native picker shows it. What a licence obliges to be seen beside
+ * the model — "Built with Llama" — travels in the line itself, so it is shown wherever the
+ * entry is offered. An entry this device refuses is marked here and says why under the
+ * picker, where a reason has room to be read whole.
+ */
+function optionText(option: LocalModelOptionView, t: Translate): string {
+  const parts = [option.label];
+  if (option.isDefault) {
+    parts.push(t("settings.localModel.option.default"));
+  }
+  if (option.attribution !== null) {
+    parts.push(option.attribution);
+  }
+  const text = parts.join(" · ");
+  return option.refusal === undefined
+    ? text
+    : `${text} — ${t("settings.localModel.option.unavailable")}`;
+}
+
+function refusalText(option: LocalModelOptionView, t: Translate): string {
+  const refusal = option.refusal;
+  const reason =
+    refusal?.kind === "over_budget"
+      ? t("settings.localModel.option.overBudget")
+          .replace("{required}", Math.round(refusal.requiredMb).toString())
+          .replace("{budget}", Math.round(refusal.budgetMb).toString())
+      : t("settings.localModel.option.missingFeatures");
+  return `${option.label} — ${reason}`;
+}
+
+/** What is worth knowing about the model in effect, and only that one. */
+function LocalModelDetails({
   option,
-  disabled,
 }: {
   readonly option: LocalModelOptionView;
-  readonly disabled: boolean;
 }) {
   const { t } = useLocalization();
-  const refusal = option.refusal;
 
   return (
     <div className="local-model-settings__option">
-      <label className="interface-settings__option">
-        <span>
-          <strong>
-            {option.label}
-            {option.isDefault
-              ? ` · ${t("settings.localModel.option.default")}`
-              : null}
-          </strong>
-          <small>
-            {t("settings.localModel.option.memory").replace(
-              "{size}",
-              Math.round(option.vramMb).toString(),
-            )}{" "}
-            · {option.licenceName}
-          </small>
-          {option.attribution === null ? null : (
-            <small className="local-model-settings__attribution">
-              {option.attribution}
-            </small>
-          )}
-          {refusal === undefined ? null : (
-            <small className="local-model-settings__refusal">
-              {refusal.kind === "over_budget"
-                ? t("settings.localModel.option.overBudget")
-                    .replace(
-                      "{required}",
-                      Math.round(refusal.requiredMb).toString(),
-                    )
-                    .replace(
-                      "{budget}",
-                      Math.round(refusal.budgetMb).toString(),
-                    )
-                : t("settings.localModel.option.missingFeatures")}
-            </small>
-          )}
-          {option.faithfulness === "measured" ? null : (
-            <small>
-              {option.faithfulness === "low"
-                ? t("settings.localModel.option.lowFaithfulness")
-                : t("settings.localModel.option.unmeasured")}
-            </small>
-          )}
-        </span>
-        <input
-          type="radio"
-          name="local-model"
-          value={option.modelId}
-          checked={option.chosen}
-          disabled={disabled}
-          onChange={() => chooseLocalModel(option.modelId)}
-        />
-      </label>
+      <small>
+        {t("settings.localModel.option.memory").replace(
+          "{size}",
+          Math.round(option.vramMb).toString(),
+        )}{" "}
+        · {option.licenceName}
+      </small>
+      {option.attribution === null ? null : (
+        <small className="local-model-settings__attribution">
+          {option.attribution}
+        </small>
+      )}
+      {option.faithfulness === "measured" ? null : (
+        <small>
+          {option.faithfulness === "low"
+            ? t("settings.localModel.option.lowFaithfulness")
+            : t("settings.localModel.option.unmeasured")}
+        </small>
+      )}
       {option.usePolicy === null ? null : (
         <a
           className="local-model-settings__policy"

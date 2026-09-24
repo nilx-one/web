@@ -322,27 +322,69 @@
   padding-left: 1.1rem;
 }
 
-.local-model-settings__options {
-  display: grid;
-  gap: 0.45rem;
+.local-model-settings__picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.local-model-settings__picker select {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0 2rem 0 0.75rem;
+  border: 1px solid rgba(245, 243, 247, 0.18);
+  border-radius: 0.6rem;
+  appearance: none;
+  background: rgba(245, 243, 247, 0.06);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.local-model-settings__picker select:focus-visible {
+  outline: 2px solid rgba(245, 243, 247, 0.6);
+  outline-offset: 2px;
+}
+
+.local-model-settings__picker select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.local-model-settings__chevron {
+  position: absolute;
+  right: 0.75rem;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  pointer-events: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
 }
 
 .local-model-settings__option {
   display: grid;
   gap: 0.25rem;
+  color: rgba(245, 243, 247, 0.72);
+  font-size: 0.78rem;
+}
+
+.local-model-settings__refusals {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #ffb38f;
+  font-size: 0.75rem;
 }
 
 .local-model-settings__attribution {
   font-weight: 650;
 }
 
-.local-model-settings__refusal {
-  color: #ffb38f;
-}
-
 .local-model-settings__policy {
   justify-self: start;
-  padding-left: 1rem;
   color: rgba(245, 243, 247, 0.72);
   font-size: 0.75rem;
 }
