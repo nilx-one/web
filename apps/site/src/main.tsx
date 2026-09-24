@@ -19,7 +19,7 @@ import {
   createGroundRevealed,
   createShadeMapFactory,
 } from "@nilx-one/map-shade";
-import { NARRATION_MODEL_ID } from "@nilx-one/narration-webllm";
+import { LOCAL_MODEL_CATALOG } from "@nilx-one/narration-webllm";
 import {
   createBrowserHost as createLocalModelRuntimeHost,
   describeLocalModelDownload,
@@ -44,6 +44,14 @@ import { reportMapRendererStatus } from "./error-reporting";
 import { PublicBondPage, isPublicBondHostname } from "./public-bond";
 
 /**
+ * How much memory this surface declares it will spend on a local model, in MB. Declared, not
+ * measured: `WebGPU` reports no memory budget. It admits every entry the catalog serves today;
+ * a surface that must hold less declares less, and Settings then shows the entries it refuses
+ * with their reason.
+ */
+const LOCAL_MODEL_BUDGET_MB = 2048;
+
+/**
  * Adapts `@nilx-one/narration-webllm`'s browser host — this product's source and sizing
  * over `@aiaiaiai/webllm`'s lifecycle — to the shape `@nilx-one/product-app` asks for. That
  * package cannot depend on this adapter itself — see
@@ -51,12 +59,25 @@ import { PublicBondPage, isPublicBondHostname } from "./public-bond";
  * the two sides meet.
  */
 function createLocalModelHost(): LocalModelHost {
-  const runtime = createLocalModelRuntimeHost();
+  const runtime = createLocalModelRuntimeHost({
+    budgetMb: LOCAL_MODEL_BUDGET_MB,
+  });
 
   return {
-    async inspect(): Promise<LocalModelDeviceVerdict> {
-      const { kind } = await runtime.inspect();
-      return kind === "usable" ? { kind } : { kind };
+    async inspect(modelId: string): Promise<LocalModelDeviceVerdict> {
+      const verdict = await runtime.inspect(modelId);
+      switch (verdict.kind) {
+        case "usable":
+          return { kind: "usable" };
+        case "over_budget":
+          return {
+            kind: "over_budget",
+            requiredMb: verdict.requiredMb,
+            budgetMb: verdict.budgetMb,
+          };
+        default:
+          return { kind: verdict.kind };
+      }
     },
     isCached: (modelId) => runtime.isCached(modelId),
     async describe(modelId) {
@@ -145,7 +166,8 @@ if (isPublicBondHostname(window.location.hostname)) {
         mapRenderer={mapRenderer}
         localModel={{
           host: createLocalModelHost(),
-          modelId: NARRATION_MODEL_ID,
+          catalog: LOCAL_MODEL_CATALOG.models,
+          defaultModelId: LOCAL_MODEL_CATALOG.defaultModelId,
         }}
       />
     </StrictMode>,

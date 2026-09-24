@@ -102,7 +102,13 @@ export {
   type PublishFailure,
   type PublishFailureOptions,
 } from "./features/failures/failure-toast-region";
+export {
+  chooseLocalModel,
+  LOCAL_MODEL_CHOICE_STORAGE_KEY,
+  readLocalModelChoice,
+} from "./shell/local-model-choice";
 export type {
+  LocalModelCatalogEntry,
   LocalModelDependency,
   LocalModelDescription,
   LocalModelDeviceVerdict,

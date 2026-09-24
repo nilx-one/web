@@ -1,6 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type {
+  LocalModelCatalogEntry,
+  LocalModelDeviceVerdict,
+} from "./local-model-host";
+
 /**
  * What this Settings fieldset shows about the on-device model, and what an owner may do
  * about it from here.
@@ -19,7 +24,8 @@ export type UnsupportedReason =
   | "webgpu_missing"
   | "adapter_unavailable"
   | "below_runtime_floor"
-  | "missing_features";
+  | "missing_features"
+  | "over_budget";
 
 export type LocalModelPhase =
   | { readonly kind: "checking" }
@@ -45,6 +51,7 @@ export type LocalModelStatusKey =
   | "unsupportedNoAdapter"
   | "unsupportedBelowFloor"
   | "unsupportedFeatures"
+  | "unsupportedOverBudget"
   | "absent"
   | "downloading"
   | "present"
@@ -79,6 +86,8 @@ function unsupportedStatusKey(reason: UnsupportedReason): LocalModelStatusKey {
       return "unsupportedBelowFloor";
     case "missing_features":
       return "unsupportedFeatures";
+    case "over_budget":
+      return "unsupportedOverBudget";
   }
 }
 
@@ -120,5 +129,152 @@ export function createLocalModelSettingsViewState(
     canRemove: phase.kind === "present" || phase.kind === "error",
     canCancel: phase.kind === "downloading",
     busy: phase.kind === "downloading" || phase.kind === "removing",
+  };
+}
+
+/** Refusals that belong to the device rather than to any entry: every entry shares them. */
+const DEVICE_REASONS: ReadonlySet<UnsupportedReason> = new Set([
+  "insecure_context",
+  "webgpu_missing",
+  "adapter_unavailable",
+  "below_runtime_floor",
+]);
+
+/** A measured pass that kept fewer than this share of rephrasings is labelled as such. */
+export const LOW_FAITHFULNESS_RATIO = 0.2;
+
+export type LocalModelFaithfulnessKey = "unmeasured" | "low" | "measured";
+
+/** Why one entry is not offered here, when the reason is the entry's own. */
+export type LocalModelOptionRefusal =
+  | { readonly kind: "missing_features" }
+  | {
+      readonly kind: "over_budget";
+      readonly requiredMb: number;
+      readonly budgetMb: number;
+    };
+
+export interface LocalModelOptionView {
+  readonly modelId: string;
+  readonly label: string;
+  readonly vramMb: number;
+  readonly licenceName: string;
+  readonly attribution: string | null;
+  readonly usePolicy: string | null;
+  readonly isDefault: boolean;
+  /** This entry is the one in effect on this device. */
+  readonly chosen: boolean;
+  /** This device admits the entry, so it may be chosen. */
+  readonly selectable: boolean;
+  readonly refusal?: LocalModelOptionRefusal;
+  readonly faithfulness: LocalModelFaithfulnessKey;
+}
+
+/** Why the entry in effect is the default rather than the stored choice. */
+export type LocalModelFallback = "stored_unknown" | "stored_ineligible";
+
+export interface LocalModelChoiceView {
+  readonly effectiveModelId: string;
+  readonly fallback?: LocalModelFallback;
+  /** A refusal every entry shares because it is the device's; shown once, not per entry. */
+  readonly deviceRefusal?: UnsupportedReason;
+  readonly options: readonly LocalModelOptionView[];
+}
+
+export interface LocalModelChoiceInput {
+  readonly catalog: readonly LocalModelCatalogEntry[];
+  readonly defaultModelId: string;
+  /** What this device stored as the owner's choice, if anything. */
+  readonly stored: string | undefined;
+  /** This device's verdict per entry, or `undefined` while it is still being checked. */
+  readonly verdicts: ReadonlyMap<string, LocalModelDeviceVerdict> | undefined;
+}
+
+function faithfulnessKey(
+  faithfulness: LocalModelCatalogEntry["faithfulness"],
+): LocalModelFaithfulnessKey {
+  if (faithfulness === null) {
+    return "unmeasured";
+  }
+  return faithfulness.admitted / faithfulness.total < LOW_FAITHFULNESS_RATIO
+    ? "low"
+    : "measured";
+}
+
+function refusalOf(
+  verdict: LocalModelDeviceVerdict | undefined,
+): LocalModelOptionRefusal | undefined {
+  if (verdict?.kind === "over_budget") {
+    return {
+      kind: "over_budget",
+      requiredMb: verdict.requiredMb,
+      budgetMb: verdict.budgetMb,
+    };
+  }
+  return verdict?.kind === "missing_features"
+    ? { kind: "missing_features" }
+    : undefined;
+}
+
+/**
+ * Chosen, eligible and default, kept apart.
+ *
+ * The stored choice is in effect when the catalog still serves it and this device admits it.
+ * Otherwise the default is, and the view says why — without erasing the stored choice, which
+ * may be admitted again once whatever refused it changes. Nothing here fetches anything:
+ * choosing an entry changes which entry the rest of the section is about, and no more.
+ */
+export function createLocalModelChoiceView(
+  input: LocalModelChoiceInput,
+): LocalModelChoiceView {
+  const { catalog, defaultModelId, stored, verdicts } = input;
+  const defaultVerdict = verdicts?.get(defaultModelId);
+  const deviceRefusal =
+    defaultVerdict !== undefined &&
+    defaultVerdict.kind !== "usable" &&
+    DEVICE_REASONS.has(defaultVerdict.kind)
+      ? defaultVerdict.kind
+      : undefined;
+
+  let effectiveModelId = defaultModelId;
+  let fallback: LocalModelFallback | undefined;
+  if (stored !== undefined) {
+    const storedVerdict = verdicts?.get(stored);
+    if (!catalog.some((entry) => entry.modelId === stored)) {
+      fallback = "stored_unknown";
+    } else if (
+      storedVerdict !== undefined &&
+      storedVerdict.kind !== "usable" &&
+      deviceRefusal === undefined
+    ) {
+      fallback = "stored_ineligible";
+    } else {
+      effectiveModelId = stored;
+    }
+  }
+
+  const options = catalog.map((entry): LocalModelOptionView => {
+    const verdict = verdicts?.get(entry.modelId);
+    const refusal = refusalOf(verdict);
+    return {
+      modelId: entry.modelId,
+      label: entry.label,
+      vramMb: entry.vramMb,
+      licenceName: entry.licenceName,
+      attribution: entry.attribution,
+      usePolicy: entry.usePolicy,
+      isDefault: entry.modelId === defaultModelId,
+      chosen: entry.modelId === effectiveModelId,
+      selectable: verdict?.kind === "usable",
+      ...(refusal === undefined ? {} : { refusal }),
+      faithfulness: faithfulnessKey(entry.faithfulness),
+    };
+  });
+
+  return {
+    effectiveModelId,
+    ...(fallback === undefined ? {} : { fallback }),
+    ...(deviceRefusal === undefined ? {} : { deviceRefusal }),
+    options,
   };
 }

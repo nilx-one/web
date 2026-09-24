@@ -34,11 +34,33 @@ export interface CellEvidence {
   readonly kind: CellEvidenceKind;
 }
 
+/**
+ * Who wrote a fragment's text.
+ *
+ * Carried on the fragment itself so that whatever keeps a fragment keeps this too. A licence
+ * can reach past the device: Llama 3.2's reaches the name of any model trained on its
+ * outputs, which is why `nilx-one/ai`'s presence-journal egress policy reads this field.
+ */
+export interface NarrationProvenance {
+  /** The adapter whose model wrote the text. */
+  readonly adapter: string;
+  /** The model that wrote it, as its catalog names it. */
+  readonly modelId: string;
+  /** The licence that model's weights are distributed under, as its upstream card names it. */
+  readonly licence: string;
+}
+
 /** One sentence about one cell, anchored to a moment inside that cell's evidence. */
 export interface NarrationFragment {
   readonly cell: CellIndex;
   readonly at: number;
   readonly text: string;
+  /**
+   * Set on text a model wrote, and only there. A fragment without it carries text no model
+   * wrote — the deterministic sentence, including one a model was asked to rephrase and whose
+   * rephrasing was refused.
+   */
+  readonly producedBy?: NarrationProvenance;
 }
 
 /** Why an adapter cannot narrate on this surface right now. */

@@ -11,10 +11,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { DeviceVerdict } from "./device";
 import {
   createWebLlmNarrationAdapter,
+  GENERATION_PROFILES,
+  NARRATION_MODEL_ID,
   type LoadProgress,
   type LocalEngine,
+  type RephraseOptions,
   type WebLlmRuntimeHost,
 } from "./index";
+
+const LLAMA = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+const SMOLLM2 = "SmolLM2-360M-Instruct-q4f16_1-MLC";
 
 const CELL = "891fb46622fffff";
 const FROM = 1_767_225_600_000;
@@ -60,6 +66,10 @@ function visit(overrides: Partial<CellEvidence> = {}): CellEvidence {
 
 class FakeHost implements WebLlmRuntimeHost {
   public verdict: DeviceVerdict = { kind: "usable" };
+  /** Per-entry verdicts, where one entry is refused and another is not. */
+  public verdicts: Readonly<Record<string, DeviceVerdict>> = {};
+  public openedIds: string[] = [];
+  public generation: RephraseOptions[] = [];
   public cached = false;
   public opened = 0;
   public unloaded = 0;
@@ -68,8 +78,8 @@ class FakeHost implements WebLlmRuntimeHost {
   public failOpen = false;
   public prompts: string[] = [];
 
-  public inspect(): Promise<DeviceVerdict> {
-    return Promise.resolve(this.verdict);
+  public inspect(modelId: string): Promise<DeviceVerdict> {
+    return Promise.resolve(this.verdicts[modelId] ?? this.verdict);
   }
 
   public isCached(): Promise<boolean> {
@@ -83,18 +93,24 @@ class FakeHost implements WebLlmRuntimeHost {
   }
 
   public open(
-    _modelId: string,
+    modelId: string,
     onProgress: (progress: LoadProgress) => void,
   ): Promise<LocalEngine> {
     if (this.failOpen) {
       return Promise.reject(new Error("device lost"));
     }
     this.opened += 1;
+    this.openedIds.push(modelId);
     onProgress({ ratio: 0.5, text: "halfway" });
 
     return Promise.resolve({
-      rephrase: (_system: string, user: string): Promise<string> => {
+      rephrase: (
+        _system: string,
+        user: string,
+        options: RephraseOptions,
+      ): Promise<string> => {
         this.prompts.push(user);
+        this.generation.push(options);
         return Promise.resolve(
           typeof this.said === "function" ? this.said(user) : this.said,
         );
@@ -165,6 +181,11 @@ describe("one bounded pass", () => {
       cell: CELL,
       at: FROM,
       text: "Провів тут 12 хвилин.",
+      producedBy: {
+        adapter: "webllm-local",
+        modelId: NARRATION_MODEL_ID,
+        licence: "apache-2.0",
+      },
     });
     expect(host.prompts).toEqual(["00:00–00:12 — 12 хвилин."]);
   });
@@ -285,5 +306,132 @@ describe("failure keeps narration at Phase 2", () => {
 
     await expect(adapterFor(host).narrate([])).resolves.toEqual([]);
     expect(host.opened).toBe(0);
+  });
+});
+
+describe("the entry that runs is the owner's choice, read when narration runs", () => {
+  it("opens the default when nothing was chosen", async () => {
+    const host = new FakeHost();
+
+    await adapterFor(host).narrate([visit()]);
+
+    expect(host.openedIds).toEqual([NARRATION_MODEL_ID]);
+  });
+
+  it("opens whatever the choice names at the moment of narration, not at composition", async () => {
+    const host = new FakeHost();
+    let choice: string | undefined = SMOLLM2;
+    const adapter = adapterFor(host, { modelId: () => choice });
+
+    choice = LLAMA;
+    await adapter.narrate([visit()]);
+
+    expect(host.openedIds).toEqual([LLAMA]);
+  });
+
+  it("falls back to the default when the device refuses the chosen entry", async () => {
+    const host = new FakeHost();
+    host.verdicts = {
+      [LLAMA]: { kind: "over_budget", requiredMb: 879.04, budgetMb: 512 },
+    };
+
+    await adapterFor(host, { modelId: LLAMA }).narrate([visit()]);
+
+    expect(host.openedIds).toEqual([NARRATION_MODEL_ID]);
+  });
+
+  it("treats a choice the catalog no longer serves as the default", async () => {
+    const host = new FakeHost();
+
+    await adapterFor(host, { modelId: "gemma3-1b-it-q4f16_1-MLC" }).narrate([
+      visit(),
+    ]);
+
+    expect(host.openedIds).toEqual([NARRATION_MODEL_ID]);
+  });
+
+  it("narrates deterministically when the device admits neither", async () => {
+    const host = new FakeHost();
+    host.verdicts = {
+      [LLAMA]: { kind: "over_budget", requiredMb: 879.04, budgetMb: 512 },
+      [NARRATION_MODEL_ID]: {
+        kind: "over_budget",
+        requiredMb: 1403.34,
+        budgetMb: 512,
+      },
+    };
+
+    await expect(
+      textsOf(adapterFor(host, { modelId: LLAMA }), [visit()]),
+    ).resolves.toEqual(["00:00–00:12 — 12 хвилин."]);
+    expect(host.opened).toBe(0);
+    await expect(
+      adapterFor(host, { modelId: LLAMA }).capability(),
+    ).resolves.toEqual({
+      kind: "unavailable",
+      adapter: "webllm-local",
+      reason: "surface_unsupported",
+    });
+  });
+
+  it("asks each family with its own profile", async () => {
+    const host = new FakeHost();
+
+    await adapterFor(host, { modelId: SMOLLM2 }).narrate([visit()]);
+
+    expect(host.generation).toEqual([
+      {
+        maxNewTokens: GENERATION_PROFILES.smollm2.maxNewTokens,
+        temperature: GENERATION_PROFILES.smollm2.temperature,
+        topP: GENERATION_PROFILES.smollm2.topP,
+      },
+    ]);
+  });
+});
+
+describe("what a model wrote is marked with who wrote it", () => {
+  it("marks Llama output with its licence, which reaches past the device", async () => {
+    const host = new FakeHost();
+    host.said = "Провів тут 12 хвилин.";
+
+    const [fragment] = await adapterFor(host, { modelId: LLAMA }).narrate([
+      visit(),
+    ]);
+
+    expect(fragment?.producedBy).toEqual({
+      adapter: "webllm-local",
+      modelId: LLAMA,
+      licence: "llama3.2",
+    });
+  });
+
+  it("leaves a refused rephrasing unmarked, because no model wrote what is shown", async () => {
+    const host = new FakeHost();
+    host.said = "Був тут 47 хвилин.";
+
+    const [fragment] = await adapterFor(host, { modelId: LLAMA }).narrate([
+      visit(),
+    ]);
+
+    expect(fragment?.text).toBe("00:00–00:12 — 12 хвилин.");
+    expect(fragment?.producedBy).toBeUndefined();
+  });
+
+  it("strips the empty thinking block the runtime writes before every reply", async () => {
+    const host = new FakeHost();
+    host.said = "<think>\n\n</think>\n\nПровів тут 12 хвилин.";
+
+    await expect(textsOf(adapterFor(host), [visit()])).resolves.toEqual([
+      "Провів тут 12 хвилин.",
+    ]);
+  });
+
+  it("refuses a sentence the token bound cut off", async () => {
+    const host = new FakeHost();
+    host.said = "Провів тут 12 хвилин і ця клітинка тепер";
+
+    await expect(textsOf(adapterFor(host), [visit()])).resolves.toEqual([
+      "00:00–00:12 — 12 хвилин.",
+    ]);
   });
 });

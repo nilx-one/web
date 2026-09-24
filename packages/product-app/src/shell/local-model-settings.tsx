@@ -6,9 +6,17 @@ import { useRef, useState } from "react";
 import { ProgressBar } from "@nilx-one/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { LocalModelDependency, LocalModelHost } from "./local-model-host";
+import { chooseLocalModel, useLocalModelChoice } from "./local-model-choice";
+import type {
+  LocalModelCatalogEntry,
+  LocalModelDependency,
+  LocalModelDeviceVerdict,
+  LocalModelHost,
+} from "./local-model-host";
 import {
+  createLocalModelChoiceView,
   createLocalModelSettingsViewState,
+  type LocalModelOptionView,
   type LocalModelPhase,
   type UnsupportedReason,
 } from "./local-model-settings-view-model";
@@ -30,7 +38,7 @@ async function checkLocalModel(
   host: LocalModelHost,
   modelId: string,
 ): Promise<LocalModelCheck> {
-  const verdict = await host.inspect();
+  const verdict = await host.inspect(modelId);
   if (verdict.kind !== "usable") {
     return { kind: "unsupported", reason: verdict.kind };
   }
@@ -70,6 +78,19 @@ async function isCachedOrRecover(
   }
 }
 
+async function inspectCatalog(
+  host: LocalModelHost,
+  catalog: readonly LocalModelCatalogEntry[],
+): Promise<ReadonlyMap<string, LocalModelDeviceVerdict>> {
+  const verdicts = await Promise.all(
+    catalog.map(
+      async (entry) =>
+        [entry.modelId, await host.inspect(entry.modelId)] as const,
+    ),
+  );
+  return new Map(verdicts);
+}
+
 function queryKeyFor(modelId: string): readonly unknown[] {
   return ["local-model-status", modelId];
 }
@@ -92,8 +113,30 @@ function queryKeyFor(modelId: string): readonly unknown[] {
  * reach into `@nilx-one/narration-webllm` or `@aiaiaiai/webllm` itself. A deployment without one to pass simply
  * does not render this section, which `AuthenticatedMapHomeView` decides, not this component.
  */
-export function LocalModelSettings({ host, modelId }: LocalModelSettingsProps) {
+export function LocalModelSettings({
+  host,
+  catalog,
+  defaultModelId,
+}: LocalModelSettingsProps) {
   const { t } = useLocalization();
+  const stored = useLocalModelChoice();
+  const verdictsQuery = useQuery({
+    queryKey: [
+      "local-model-verdicts",
+      ...catalog.map((entry) => entry.modelId),
+    ],
+    queryFn: () => inspectCatalog(host, catalog),
+    retry: false,
+    staleTime: 0,
+  });
+  const choice = createLocalModelChoiceView({
+    catalog,
+    defaultModelId,
+    stored,
+    verdicts: verdictsQuery.data,
+  });
+  const modelId = choice.effectiveModelId;
+  const entry = catalog.find((candidate) => candidate.modelId === modelId);
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<
     { readonly ratio: number; readonly text: string } | undefined
@@ -139,14 +182,33 @@ export function LocalModelSettings({ host, modelId }: LocalModelSettingsProps) {
   });
 
   const phase = phaseFrom(statusQuery, download, remove, progress);
-  const view = createLocalModelSettingsViewState(
-    phase,
-    statusQuery.data?.kind === "absent" ? statusQuery.data.notices : [],
-  );
+  const described =
+    statusQuery.data?.kind === "absent" ? statusQuery.data.notices : [];
+  const entryNotices = entry?.notices ?? [];
+  const view = createLocalModelSettingsViewState(phase, [
+    ...entryNotices,
+    ...described.filter((notice) => !entryNotices.includes(notice)),
+  ]);
 
   return (
     <fieldset className="local-model-settings">
       <legend>{t("settings.localModel.legend")}</legend>
+      <div className="local-model-settings__options">
+        {choice.options.map((option) => (
+          <LocalModelOption
+            key={option.modelId}
+            option={option}
+            disabled={!option.selectable || view.busy}
+          />
+        ))}
+      </div>
+      {choice.fallback === undefined ? null : (
+        <p className="local-model-settings__fallback">
+          {choice.fallback === "stored_ineligible"
+            ? t("settings.localModel.fallback.ineligible")
+            : t("settings.localModel.fallback.unknown")}
+        </p>
+      )}
       <p className="local-model-settings__status" role="status">
         {t(`settings.localModel.status.${view.statusKey}`)}
       </p>
@@ -219,6 +281,84 @@ export function LocalModelSettings({ host, modelId }: LocalModelSettingsProps) {
         )}
       </div>
     </fieldset>
+  );
+}
+
+function LocalModelOption({
+  option,
+  disabled,
+}: {
+  readonly option: LocalModelOptionView;
+  readonly disabled: boolean;
+}) {
+  const { t } = useLocalization();
+  const refusal = option.refusal;
+
+  return (
+    <div className="local-model-settings__option">
+      <label className="interface-settings__option">
+        <span>
+          <strong>
+            {option.label}
+            {option.isDefault
+              ? ` · ${t("settings.localModel.option.default")}`
+              : null}
+          </strong>
+          <small>
+            {t("settings.localModel.option.memory").replace(
+              "{size}",
+              Math.round(option.vramMb).toString(),
+            )}{" "}
+            · {option.licenceName}
+          </small>
+          {option.attribution === null ? null : (
+            <small className="local-model-settings__attribution">
+              {option.attribution}
+            </small>
+          )}
+          {refusal === undefined ? null : (
+            <small className="local-model-settings__refusal">
+              {refusal.kind === "over_budget"
+                ? t("settings.localModel.option.overBudget")
+                    .replace(
+                      "{required}",
+                      Math.round(refusal.requiredMb).toString(),
+                    )
+                    .replace(
+                      "{budget}",
+                      Math.round(refusal.budgetMb).toString(),
+                    )
+                : t("settings.localModel.option.missingFeatures")}
+            </small>
+          )}
+          {option.faithfulness === "measured" ? null : (
+            <small>
+              {option.faithfulness === "low"
+                ? t("settings.localModel.option.lowFaithfulness")
+                : t("settings.localModel.option.unmeasured")}
+            </small>
+          )}
+        </span>
+        <input
+          type="radio"
+          name="local-model"
+          value={option.modelId}
+          checked={option.chosen}
+          disabled={disabled}
+          onChange={() => chooseLocalModel(option.modelId)}
+        />
+      </label>
+      {option.usePolicy === null ? null : (
+        <a
+          className="local-model-settings__policy"
+          href={option.usePolicy}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {t("settings.localModel.option.usePolicy")}
+        </a>
+      )}
+    </div>
   );
 }
 

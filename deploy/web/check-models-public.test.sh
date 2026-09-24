@@ -44,8 +44,17 @@ done
 
 case "$url" in
   */manifest.json)
-    printf '%s' '{"model_id":"Qwen3-0.6B-q4f16_1-MLC","revision":"1","bytes":22}' >"$output_file"
+    model_id="$(printf '%s' "$url" | sed 's#.*/models/\([^/]*\)/resolve/.*#\1#')"
+    printf '{"model_id":"%s","bytes":22}' "$model_id" >"$output_file"
     printf '%s' "${MOCK_MANIFEST_STATUS:-200}"
+    printf '%s\n' "$url" >>"${MOCK_CURL_LOG:-/dev/null}"
+    ;;
+  */LICENSE|*/NOTICE)
+    : >"$output_file"
+    case "$url" in
+      *Llama*/NOTICE) printf '%s' "${MOCK_LLAMA_NOTICE_STATUS:-200}" ;;
+      *) printf '%s' 200 ;;
+    esac
     ;;
   */mlc-chat-config.json)
     printf '%s' '{"context_window_size":4096}' >"$output_file"
@@ -73,9 +82,32 @@ MOCK
 chmod +x "$mock_bin/curl"
 
 PATH="$mock_bin:$PATH"
-export PATH
+MOCK_CURL_LOG="$test_dir/curl.log"
+export PATH MOCK_CURL_LOG
 
 MODEL_RETRY=1 MODEL_RETRY_DELAY=0 sh "$script_dir/check-models-public.sh" >/dev/null
+
+# Every served entry is asked about, each at the revision the catalog names.
+test "$(wc -l <"$MOCK_CURL_LOG")" -eq 5 || {
+  echo "check-models-public did not cover every served entry" >&2
+  exit 1
+}
+grep -Fq "/models/Qwen3-0.6B-q4f16_1-MLC/resolve/2/manifest.json" "$MOCK_CURL_LOG" || {
+  echo "check-models-public did not ask for the default at its catalog revision" >&2
+  exit 1
+}
+
+MOCK_LLAMA_NOTICE_STATUS=404 MODEL_RETRY=1 MODEL_RETRY_DELAY=0 \
+  sh "$script_dir/check-models-public.sh" >/dev/null 2>&1 && {
+  echo "check-models-public passed Llama weights served without their Notice file" >&2
+  exit 1
+}
+
+MODEL_ID="gemma3-1b-it-q4f16_1-MLC" MODEL_RETRY=1 MODEL_RETRY_DELAY=0 \
+  sh "$script_dir/check-models-public.sh" >/dev/null 2>&1 && {
+  echo "check-models-public passed a model the catalog does not serve" >&2
+  exit 1
+}
 
 MOCK_MANIFEST_STATUS=404 MODEL_RETRY=1 MODEL_RETRY_DELAY=0 \
   sh "$script_dir/check-models-public.sh" >/dev/null 2>&1 && {

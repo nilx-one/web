@@ -91,6 +91,23 @@ const EN_MESSAGES = {
   "settings.localModel.action.remove": "Remove downloaded model",
   "settings.localModel.action.cancel": "Cancel download",
   "settings.localModel.notices.legend": "Redistribution notices",
+  "settings.localModel.option.default": "default",
+  "settings.localModel.option.memory": "about {size} MB of memory",
+  "settings.localModel.option.missingFeatures":
+    "Not offered here: this device lacks a GPU feature the model needs.",
+  "settings.localModel.option.overBudget":
+    "Not offered here: needs about {required} MB, this surface allows {budget} MB.",
+  "settings.localModel.option.unmeasured":
+    "Ukrainian phrasing not yet measured on a device.",
+  "settings.localModel.option.lowFaithfulness":
+    "Rarely passes the faithfulness check: most sentences keep their plain wording.",
+  "settings.localModel.option.usePolicy": "Acceptable use policy",
+  "settings.localModel.fallback.ineligible":
+    "The model you chose can’t run here, so the default is used. Your choice is kept.",
+  "settings.localModel.fallback.unknown":
+    "The model you chose is no longer offered, so the default is used.",
+  "settings.localModel.status.unsupportedOverBudget":
+    "Unavailable: this model needs more memory than this surface allows.",
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -176,6 +193,23 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.action.remove": "Видалити завантажену модель",
   "settings.localModel.action.cancel": "Скасувати завантаження",
   "settings.localModel.notices.legend": "Примітки щодо розповсюдження",
+  "settings.localModel.option.default": "типова",
+  "settings.localModel.option.memory": "близько {size} МБ пам’яті",
+  "settings.localModel.option.missingFeatures":
+    "Тут недоступна: цьому пристрою бракує можливості GPU, потрібної моделі.",
+  "settings.localModel.option.overBudget":
+    "Тут недоступна: потрібно близько {required} МБ, а тут дозволено {budget} МБ.",
+  "settings.localModel.option.unmeasured":
+    "Якість українських формулювань ще не виміряна на пристрої.",
+  "settings.localModel.option.lowFaithfulness":
+    "Рідко проходить перевірку точності: більшість речень лишаються простими.",
+  "settings.localModel.option.usePolicy": "Політика допустимого використання",
+  "settings.localModel.fallback.ineligible":
+    "Обрана модель тут не запускається, тож працює типова. Ваш вибір збережено.",
+  "settings.localModel.fallback.unknown":
+    "Обрану модель більше не пропонують, тож працює типова.",
+  "settings.localModel.status.unsupportedOverBudget":
+    "Недоступно: цій моделі потрібно більше пам’яті, ніж дозволено тут.",
 };
 
 const CATALOGS: Readonly<
