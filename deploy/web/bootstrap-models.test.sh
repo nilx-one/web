@@ -77,10 +77,10 @@ export PATH MOCK_CURL_LOG
 root="$test_dir/srv/models"
 mkdir -p "$root"
 
-MODEL_ROOT="$root" MODEL_ID="Qwen3-0.6B-q4f16_1-MLC" MODEL_REVISION="1" \
+MODEL_ROOT="$root" MODEL_ID="Qwen3-0.6B-q4f16_1-MLC" \
   sh "$script_dir/bootstrap-models.sh" >"$test_dir/first.log"
 
-revision_dir="$root/Qwen3-0.6B-q4f16_1-MLC/resolve/1"
+revision_dir="$root/Qwen3-0.6B-q4f16_1-MLC/resolve/2"
 
 for file in manifest.json mlc-chat-config.json tokenizer.json ndarray-cache.json \
   params_shard_0.bin params_shard_1.bin model.wasm; do
@@ -96,7 +96,7 @@ import json, sys
 manifest = json.load(open(sys.argv[1]))
 
 assert manifest["model_id"] == "Qwen3-0.6B-q4f16_1-MLC", manifest
-assert manifest["revision"] == "1", manifest
+assert manifest["revision"] == "2", manifest
 # Eight plus four bytes of shards, ten bytes of library.
 assert manifest["bytes"] == 22, manifest
 assert manifest["shards"] == ["params_shard_0.bin", "params_shard_1.bin"], manifest
@@ -172,8 +172,29 @@ test ! -d "$root/SmolLM2-360M-Instruct-q4f16_1-MLC/resolve/1" || {
   exit 1
 }
 
+# The catalog is the only artifact definition: a run that tries to override one field of it
+# is refused before anything is fetched, so no manifest pairs one entry's licence with
+# another artifact's bytes.
+for retired in MODEL_REVISION=3 MODEL_SOURCE=https://example.invalid/other/resolve/main \
+  MODEL_LIB_URL=https://example.invalid/other.wasm; do
+  : >"$MOCK_CURL_LOG"
+  if env "$retired" MODEL_ROOT="$root" MODEL_ID="SmolLM2-360M-Instruct-q4f16_1-MLC" \
+    sh "$script_dir/bootstrap-models.sh" >"$test_dir/override.log" 2>&1; then
+    echo "bootstrap-models let $retired override the catalog" >&2
+    exit 1
+  fi
+  test ! -s "$MOCK_CURL_LOG" || {
+    echo "bootstrap-models fetched something for a refused override ($retired)" >&2
+    exit 1
+  }
+done
+test ! -d "$root/SmolLM2-360M-Instruct-q4f16_1-MLC" || {
+  echo "bootstrap-models placed a model under a refused override" >&2
+  exit 1
+}
+
 # A second run must not refetch: the revision directory is immutable once it exists.
-MODEL_ROOT="$root" MODEL_ID="Qwen3-0.6B-q4f16_1-MLC" MODEL_REVISION="1" \
+MODEL_ROOT="$root" MODEL_ID="Qwen3-0.6B-q4f16_1-MLC" \
   sh "$script_dir/bootstrap-models.sh" >"$test_dir/second.log"
 
 grep -Fq "Model already present" "$test_dir/second.log" || {
@@ -182,13 +203,13 @@ grep -Fq "Model already present" "$test_dir/second.log" || {
 }
 
 # A shard that does not match the size its manifest declares fails the run.
-if MODEL_ROOT="$root" MODEL_ID="Qwen3-0.6B-q4f16_1-MLC" MODEL_REVISION="2" \
+if MODEL_ROOT="$root" MODEL_ID="OLMo-2-0425-1B-Instruct-q4f16_1-MLC" \
   MOCK_SHORT_SHARD=true sh "$script_dir/bootstrap-models.sh" >"$test_dir/short.log" 2>&1; then
   echo "bootstrap-models accepted a shard of the wrong size" >&2
   exit 1
 fi
 
-test -d "$root/Qwen3-0.6B-q4f16_1-MLC/resolve/2" && {
+test -d "$root/OLMo-2-0425-1B-Instruct-q4f16_1-MLC" && {
   echo "bootstrap-models left a half-written revision in place" >&2
   exit 1
 }

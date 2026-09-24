@@ -20,11 +20,19 @@
 #   MODEL_ROOT=/srv/nilx-one/models MODEL_ID=Llama-3.2-1B-Instruct-q4f16_1-MLC \
 #     sh deploy/web/bootstrap-models.sh
 #
-# One invocation per entry. MODEL_REVISION, MODEL_SOURCE and MODEL_LIB_URL still override
-# the catalog for a single run, for a mirror of a mirror; the notices and licence files never
-# do.
+# One invocation per entry. Revision, source and library come from the catalog entry and
+# nowhere else, so the manifest's licence and notices always describe the bytes beside them.
+# A different source is a catalog change, reviewed like any other.
 
 set -eu
+
+# These once overrode the catalog one field at a time, which could pair one entry's licence
+# with another artifact's weights. Refused loudly rather than ignored.
+if [ -n "${MODEL_REVISION+set}${MODEL_SOURCE+set}${MODEL_LIB_URL+set}" ]; then
+  echo "MODEL_REVISION, MODEL_SOURCE and MODEL_LIB_URL no longer override the catalog:" \
+    "change the catalog entry instead" >&2
+  exit 2
+fi
 
 : "${MODEL_ROOT:?MODEL_ROOT is required}"
 : "${MODEL_ID:?MODEL_ID is required: one model_id from the catalog}"
@@ -69,9 +77,9 @@ print(catalog["model_lib_prefix"] + mirror["model_lib"])
   exit 3
 }
 
-MODEL_REVISION="${MODEL_REVISION:-$(printf '%s\n' "$catalog_entry" | sed -n 1p)}"
-MODEL_SOURCE="${MODEL_SOURCE:-$(printf '%s\n' "$catalog_entry" | sed -n 2p)}"
-MODEL_LIB_URL="${MODEL_LIB_URL:-$(printf '%s\n' "$catalog_entry" | sed -n 3p)}"
+MODEL_REVISION="$(printf '%s\n' "$catalog_entry" | sed -n 1p)"
+MODEL_SOURCE="$(printf '%s\n' "$catalog_entry" | sed -n 2p)"
+MODEL_LIB_URL="$(printf '%s\n' "$catalog_entry" | sed -n 3p)"
 
 case "$MODEL_REVISION" in
   *[!0-9A-Za-z._-]*|'')
