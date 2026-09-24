@@ -25,24 +25,34 @@ import {
  * because the contract publishes no field for it. Reading them together in one
  * place is what keeps the two halves from being resolved differently on
  * different screens.
+ *
+ * `defaultModelId` is a fallback, not an authority: it is what stands in for a
+ * subject nothing has chosen yet — the identity service's own value for a
+ * Bond mid-load, or an Avaia's deterministic ambient study before its owner
+ * ever opens the editor. A choice this device actually remembers for
+ * `address` — real for an Avaia, and in ordinary operation never set at all
+ * for a Bond's own address, since a Bond's body is the service's to keep —
+ * always wins over it. Passing the fallback as the second argument and then
+ * having it win regardless is exactly the bug this precedence exists to
+ * prevent: a saved choice must survive being reasoned about identically to
+ * one nobody made yet.
  */
 export function useAvatarSelection(
   address: string,
-  modelId: AvatarModel | undefined,
+  defaultModelId: AvatarModel | undefined,
 ): AvatarSelection | undefined {
   const stored = useAvatarChoice(address);
   return useMemo(() => {
     const chosen =
-      modelId ??
       (stored.modelId !== undefined && isPublishedAvatarModel(stored.modelId)
         ? stored.modelId
-        : undefined);
+        : undefined) ?? defaultModelId;
     if (chosen === undefined) return undefined;
     return {
       modelId: chosen,
       appearance: parseAvatarAppearance(chosen, stored.appearances?.[chosen]),
     };
-  }, [modelId, stored]);
+  }, [defaultModelId, stored]);
 }
 
 export interface AvatarCommit {
