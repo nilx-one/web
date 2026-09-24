@@ -15,9 +15,14 @@
  * one bounded pass runs over the evidence, and the engine unloads afterwards. There is no
  * resident inference.
  *
+ * Which model runs is the owner's choice within what this device admits, read at the moment
+ * of narration — a choice changed in Settings after this adapter was composed is the one that
+ * loads. A choice the device refuses falls back to the catalog's default, and a device that
+ * admits neither narrates deterministically.
+ *
  * The lifecycle underneath — probe, worker, cache, eviction — is `@aiaiaiai/webllm`'s. What
- * this package adds is narration's own: the prompt, the bound on a pass, and the check that
- * a rephrasing carries only what it was given.
+ * this package adds is narration's own: the catalog, a generation profile per family, the
+ * prompt, the bound on a pass, and the check that a rephrasing carries only what it was given.
  */
 
 import {
@@ -29,33 +34,57 @@ import {
   type NarrationUnavailableReason,
 } from "@nilx-one/narration-contract";
 
+import {
+  defaultLocalModel,
+  findLocalModel,
+  LOCAL_MODEL_CATALOG,
+  type LocalModelCatalog,
+  type LocalModelEntry,
+} from "./catalog";
 import type { DeviceVerdict } from "./device";
+import { rephraseSentence, type LocalEngine } from "./rephrase";
 
-export { deviceVerdict, RUNTIME_DEVICE_FLOORS } from "./device";
+export {
+  defaultLocalModel,
+  findLocalModel,
+  LOCAL_MODEL_CATALOG,
+  LocalModelCatalogError,
+  MODEL_FAMILIES,
+  parseLocalModelCatalog,
+} from "./catalog";
+export type {
+  LocalModelCatalog,
+  LocalModelEntry,
+  MeasuredFaithfulness,
+  ModelFamily,
+} from "./catalog";
+export { deviceVerdict, entryVerdict, RUNTIME_DEVICE_FLOORS } from "./device";
 export type { DeviceVerdict, RuntimeDeviceLimit } from "./device";
+export { FAITHFULNESS_FIXTURE, measureFaithfulness } from "./faithfulness";
+export type { FaithfulnessCount } from "./faithfulness";
+export {
+  GENERATION_PROFILES,
+  MAX_SENTENCE_LENGTH,
+  tokenBoundFor,
+  UKRAINIAN_TOKEN_DENSITY,
+} from "./profiles";
+export type { GenerationProfile, UkrainianTokenDensity } from "./profiles";
+export type { LocalEngine, RephraseOptions } from "./rephrase";
 
 const ADAPTER_ID = "webllm-local";
 
-/** The catalog entry `nilx-one/ai` selects for this product. */
-export const NARRATION_MODEL_ID = "Qwen3-0.6B-q4f16_1-MLC";
-
-/** A sentence longer than this is not a rephrasing of one line of evidence. */
-const MAX_SENTENCE_LENGTH = 180;
+/** The catalog's default: the entry `nilx-one/ai` names for surfaces with nobody to ask. */
+export const NARRATION_MODEL_ID: string = LOCAL_MODEL_CATALOG.defaultModelId;
 
 export interface LoadProgress {
   readonly ratio: number;
   readonly text: string;
 }
 
-/** The engine surface this adapter needs, kept injectable so tests need no GPU. */
-export interface LocalEngine {
-  rephrase(system: string, user: string): Promise<string>;
-  unload(): Promise<void>;
-}
-
 /** The browser boundary: everything that touches WebGPU, the network, or the cache. */
 export interface WebLlmRuntimeHost {
-  inspect(): Promise<DeviceVerdict>;
+  /** This device's verdict on one entry, including the budget its surface declared. */
+  inspect(modelId: string): Promise<DeviceVerdict>;
   isCached(modelId: string): Promise<boolean>;
   /**
    * Downloads when the artifacts are not cached. Called only from `load`.
@@ -75,24 +104,23 @@ export interface WebLlmNarrationOptions {
   /** The deterministic adapter. Its sentences are the facts this one rephrases. */
   readonly base: NarrationAdapter;
   readonly host: WebLlmRuntimeHost;
-  readonly modelId?: string;
+  /** The entries a choice is read against. Defaults to this product's catalog. */
+  readonly catalog?: LocalModelCatalog;
+  /**
+   * The entry the owner chose, or how to read it. A function is read at the moment of
+   * narration, so the choice Settings stores is the one that loads however long ago this
+   * adapter was composed. Unset, unknown, or refused by this device means the default.
+   */
+  readonly modelId?: string | (() => string | undefined);
   /** Most records one pass will narrate. The rest keep their deterministic sentence. */
   readonly maxRecords?: number;
   readonly onProgress?: (progress: LoadProgress) => void;
 }
 
 export interface WebLlmNarrationAdapter extends NarrationAdapter {
-  /** Whether the artifacts are already on this device. Never downloads. */
+  /** Whether the artifacts of the entry that would run are already on this device. Never downloads. */
   cached(): Promise<boolean>;
 }
-
-const SYSTEM_PROMPT = [
-  "Ти переказуєш один рядок особистого журналу присутності українською.",
-  "Дозволено лише переформулювати надане речення: час, тривалість і те, що людина була тут.",
-  "Заборонено додавати місця, причини, маршрут, погоду, настрій та інших людей.",
-  "Заборонено вигадувати або змінювати числа.",
-  "Відповідай одним коротким реченням і нічим більше.",
-].join(" ");
 
 /**
  * Creates the local-model adapter. Construction touches nothing: no probe, no download.
@@ -100,34 +128,66 @@ const SYSTEM_PROMPT = [
 export function createWebLlmNarrationAdapter(
   options: WebLlmNarrationOptions,
 ): WebLlmNarrationAdapter {
-  const modelId = options.modelId ?? NARRATION_MODEL_ID;
+  const catalog = options.catalog ?? LOCAL_MODEL_CATALOG;
+  const fallback = defaultLocalModel(catalog);
   const maxRecords = options.maxRecords ?? 24;
+
+  function chosenEntry(): LocalModelEntry {
+    const choice =
+      typeof options.modelId === "function"
+        ? options.modelId()
+        : options.modelId;
+    return findLocalModel(catalog, choice) ?? fallback;
+  }
+
+  /** The chosen entry if this device admits it, else the default if it admits that. */
+  async function runnable(): Promise<
+    | { readonly entry: LocalModelEntry }
+    | { readonly entry: undefined; readonly verdict: DeviceVerdict }
+  > {
+    const chosen = chosenEntry();
+    const verdict = await options.host.inspect(chosen.modelId);
+    if (verdict.kind === "usable") {
+      return { entry: chosen };
+    }
+    if (chosen.modelId !== fallback.modelId) {
+      const fallbackVerdict = await options.host.inspect(fallback.modelId);
+      if (fallbackVerdict.kind === "usable") {
+        return { entry: fallback };
+      }
+    }
+    return { entry: undefined, verdict };
+  }
 
   return {
     id: ADAPTER_ID,
 
     async capability(): Promise<NarrationCapability> {
-      const verdict = await options.host.inspect();
-      return verdict.kind === "usable"
+      const resolved = await runnable();
+      return resolved.entry !== undefined
         ? { kind: "ready", adapter: ADAPTER_ID }
         : {
             kind: "unavailable",
             adapter: ADAPTER_ID,
-            reason: reasonFor(verdict),
+            reason: reasonFor(resolved.verdict),
           };
     },
 
-    cached(): Promise<boolean> {
-      return options.host.isCached(modelId);
+    async cached(): Promise<boolean> {
+      const resolved = await runnable();
+      return options.host.isCached((resolved.entry ?? chosenEntry()).modelId);
     },
 
     async narrate(
       evidence: readonly CellEvidence[],
     ): Promise<readonly NarrationFragment[]> {
       const deterministic = await options.base.narrate(evidence);
+      if (deterministic.length === 0) {
+        return deterministic;
+      }
 
-      const verdict = await options.host.inspect();
-      if (verdict.kind !== "usable" || deterministic.length === 0) {
+      const { entry } = await runnable();
+      if (entry === undefined) {
         // Deterministic narration is the product on this surface, not a degraded form of
         // one. Which adapter spoke is readable from `capability()`, never inferred from
         // the sentences.
@@ -136,7 +196,7 @@ export function createWebLlmNarrationAdapter(
 
       let engine: LocalEngine | undefined;
       try {
-        engine = await options.host.open(modelId, (progress) =>
+        engine = await options.host.open(entry.modelId, (progress) =>
           options.onProgress?.(progress),
         );
 
@@ -145,7 +205,7 @@ export function createWebLlmNarrationAdapter(
           rephrased.push(
             rephrased.length >= maxRecords
               ? fragment
-              : await rephraseOne(engine, fragment),
+              : await rephraseOne(engine, entry, fragment),
           );
         }
         // One bounded pass, checked against the evidence it came from before anyone sees it.
@@ -161,32 +221,28 @@ export function createWebLlmNarrationAdapter(
   };
 }
 
+/**
+ * Only text the model wrote carries the model's name and licence. A refused rephrasing keeps
+ * the deterministic sentence as it was, because no model wrote it.
+ */
 async function rephraseOne(
   engine: LocalEngine,
+  entry: LocalModelEntry,
   fragment: NarrationFragment,
 ): Promise<NarrationFragment> {
-  const said = (await engine.rephrase(SYSTEM_PROMPT, fragment.text)).trim();
-
-  return isFaithful(said, fragment.text)
-    ? { cell: fragment.cell, at: fragment.at, text: said }
-    : fragment;
-}
-
-/**
- * Whether a rephrasing carries only what it was given.
- *
- * The concrete way this model invents is numeric: a time that was never recorded, a
- * duration rounded into a different one, a count of visits nobody made. So every digit
- * sequence in the sentence must already appear in the sentence it rephrased. It is a narrow
- * test and a cheap one, and it fails closed — a sentence that does not pass is replaced by
- * the deterministic one rather than corrected.
- */
-function isFaithful(said: string, source: string): boolean {
-  if (said === "" || said.length > MAX_SENTENCE_LENGTH) {
-    return false;
-  }
-  const allowed = new Set(source.match(/\d+/g) ?? []);
-  return (said.match(/\d+/g) ?? []).every((number) => allowed.has(number));
+  const said = await rephraseSentence(engine, entry.family, fragment.text);
+  return said === undefined
+    ? fragment
+    : {
+        cell: fragment.cell,
+        at: fragment.at,
+        text: said,
+        producedBy: {
+          adapter: ADAPTER_ID,
+          modelId: entry.modelId,
+          licence: entry.licence,
+        },
+      };
 }
 
 function reasonFor(verdict: DeviceVerdict): NarrationUnavailableReason {
@@ -196,6 +252,7 @@ function reasonFor(verdict: DeviceVerdict): NarrationUnavailableReason {
     case "adapter_unavailable":
     case "below_runtime_floor":
     case "missing_features":
+    case "over_budget":
       return "surface_unsupported";
     default:
       return "not_loaded";

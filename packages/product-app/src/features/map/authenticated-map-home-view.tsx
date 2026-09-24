@@ -1292,7 +1292,8 @@ export function AuthenticatedMapHomeView({
                     {localModel === undefined ? null : (
                       <LocalModelSettings
                         host={localModel.host}
-                        modelId={localModel.modelId}
+                        catalog={localModel.catalog}
+                        defaultModelId={localModel.defaultModelId}
                       />
                     )}
                     {/* Hidden for now — uncomment together with the import above.

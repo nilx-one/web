@@ -18,10 +18,16 @@ import {
   WebLlmBrowserHost,
   type LocalTextEngine,
   type ServedCatalog,
+  type WebGpuProbe,
   type WebLlmBrowserHostOptions,
 } from "@aiaiaiai/webllm";
 
-import { deviceVerdict, type DeviceVerdict } from "./device";
+import {
+  findLocalModel,
+  LOCAL_MODEL_CATALOG,
+  type LocalModelCatalog,
+} from "./catalog";
+import { deviceVerdict, entryVerdict, type DeviceVerdict } from "./device";
 import {
   NARRATION_MODEL_ID,
   type LoadProgress,
@@ -34,17 +40,20 @@ import {
   mirrorCatalog,
   type MirrorManifest,
 } from "./mirror";
+import type { RephraseOptions } from "./rephrase";
 
 /** The pinned runtime's configuration, named through the foundation rather than beside it. */
 export type AppConfig = NonNullable<WebLlmBrowserHostOptions["appConfig"]>;
 
-/** One short rephrasing. Bounded because a sentence is all that is wanted. */
-const MAX_NEW_TOKENS = 48;
-const TEMPERATURE = 0.3;
-const TOP_P = 0.9;
-
 export interface BrowserHostOptions {
-  readonly modelId?: string;
+  /** The entries this host answers for. Defaults to this product's catalog. */
+  readonly catalog?: LocalModelCatalog;
+  /**
+   * How much memory this surface is willing to spend on a model, in MB. Declared by whoever
+   * composes the host, never measured: `WebGPU` reports no memory budget. Left unset, no
+   * entry is refused for its size.
+   */
+  readonly budgetMb?: number;
   /**
    * Overrides both the mirror lookup and the upstream fallback outright. Set this only when
    * the caller has already resolved a source itself; leaving it unset is what lets a host
@@ -54,7 +63,6 @@ export interface BrowserHostOptions {
   readonly workerFactory?: () => Worker;
   /** Where a mirror manifest is read from. Defaults to this page's own origin. */
   readonly origin?: string;
-  readonly revision?: string;
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -82,8 +90,17 @@ function supportsOpfs(): boolean {
   );
 }
 
-/** The revision `bootstrap-models.sh` writes until this product rolls one forward. */
-const DEFAULT_MIRROR_REVISION = "1";
+/**
+ * The mirror revision `bootstrap-models.sh` writes an entry under, as the catalog names it.
+ * An identifier the catalog does not serve is asked about at revision `1`, the first one any
+ * bootstrap writes.
+ */
+export function mirrorRevisionFor(
+  modelId: string,
+  catalog: LocalModelCatalog = LOCAL_MODEL_CATALOG,
+): string {
+  return findLocalModel(catalog, modelId)?.mirrorRevision ?? "1";
+}
 
 export type ResolvedModelSource =
   | {
@@ -106,7 +123,7 @@ export type ResolvedModelSource =
 export async function resolveLocalModelSource(
   modelId = NARRATION_MODEL_ID,
   origin: string = defaultOrigin(),
-  revision = DEFAULT_MIRROR_REVISION,
+  revision = mirrorRevisionFor(modelId),
   fetchImpl: typeof fetch = fetch,
 ): Promise<ResolvedModelSource> {
   const manifest = await loadMirrorManifest(
@@ -143,7 +160,7 @@ function defaultOrigin(): string {
 export async function describeLocalModelDownload(
   modelId = NARRATION_MODEL_ID,
   origin: string = defaultOrigin(),
-  revision = DEFAULT_MIRROR_REVISION,
+  revision = mirrorRevisionFor(modelId),
   fetchImpl: typeof fetch = fetch,
 ): Promise<
   | {
@@ -244,60 +261,79 @@ function modelUrl(model: string): string {
 export function createBrowserHost(
   options: BrowserHostOptions = {},
 ): WebLlmRuntimeHost {
-  const modelId = options.modelId ?? NARRATION_MODEL_ID;
+  const catalog = options.catalog ?? LOCAL_MODEL_CATALOG;
   // Left unset, the foundation starts the worker it ships, which runs the same pinned
   // runtime its host drives. A second copy here would be a second 6 MB bundle.
   const workerFactory = options.workerFactory;
 
   // Probing reads the adapter and nothing else, so it needs no source resolved — a device
   // that can run nothing is told so without a request to anyone. Its host is given an empty
-  // model list because it will never be asked to load one.
+  // model list because it will never be asked to load one. The probe is asked once and every
+  // entry is read against the same answer; a probe that failed is asked again next time.
   let probeHost: WebLlmBrowserHost | undefined;
+  let probe: Promise<WebGpuProbe> | undefined;
+  function probeOnce(): Promise<WebGpuProbe> {
+    probeHost ??= new WebLlmBrowserHost({ appConfig: { model_list: [] } });
+    probe ??= probeHost.probeWebGpu().catch((error: unknown) => {
+      probe = undefined;
+      throw error;
+    });
+    return probe;
+  }
 
-  // Resolved lazily, and only once per host: construction must still download nothing, and
-  // `isCached`, `open` and `remove` have to agree on the same source or they answer about
-  // two places.
-  let resolved: Promise<WebLlmBrowserHost> | undefined;
+  // Resolved lazily and once per entry: construction must still download nothing, each entry
+  // has its own mirror manifest, and `isCached`, `open` and `remove` for one entry have to
+  // agree on the same source or they answer about two places.
+  const resolved = new Map<string, Promise<WebLlmBrowserHost>>();
   function hostOptions(
     source: Pick<WebLlmBrowserHostOptions, "appConfig" | "catalog">,
   ): WebLlmBrowserHostOptions {
     return workerFactory === undefined ? source : { ...source, workerFactory };
   }
-  function resolveHost(): Promise<WebLlmBrowserHost> {
-    resolved ??=
-      options.appConfig !== undefined
-        ? Promise.resolve(
-            new WebLlmBrowserHost(
-              hostOptions({ appConfig: options.appConfig }),
-            ),
-          )
-        : resolveLocalModelSource(
-            modelId,
-            options.origin,
-            options.revision,
-            options.fetchImpl,
-          ).then((source) =>
-            source.kind === "mirror"
-              ? new WebLlmBrowserHost(hostOptions({ catalog: source.catalog }))
-              : new WebLlmBrowserHost(
-                  hostOptions({ appConfig: source.appConfig }),
-                ),
-          );
-    return resolved;
+  function resolveHost(modelId: string): Promise<WebLlmBrowserHost> {
+    let host = resolved.get(modelId);
+    if (host === undefined) {
+      host =
+        options.appConfig !== undefined
+          ? Promise.resolve(
+              new WebLlmBrowserHost(
+                hostOptions({ appConfig: options.appConfig }),
+              ),
+            )
+          : resolveLocalModelSource(
+              modelId,
+              options.origin,
+              mirrorRevisionFor(modelId, catalog),
+              options.fetchImpl,
+            ).then((source) =>
+              source.kind === "mirror"
+                ? new WebLlmBrowserHost(
+                    hostOptions({ catalog: source.catalog }),
+                  )
+                : new WebLlmBrowserHost(
+                    hostOptions({ appConfig: source.appConfig }),
+                  ),
+            );
+      resolved.set(modelId, host);
+    }
+    return host;
   }
 
   return {
-    async inspect(): Promise<DeviceVerdict> {
-      probeHost ??= new WebLlmBrowserHost({ appConfig: { model_list: [] } });
-      return deviceVerdict(await probeHost.probeWebGpu(), modelId);
+    async inspect(modelId: string): Promise<DeviceVerdict> {
+      const answer = await probeOnce();
+      const entry = findLocalModel(catalog, modelId);
+      return entry === undefined
+        ? deviceVerdict(answer, modelId)
+        : entryVerdict(answer, entry, options.budgetMb);
     },
 
     async isCached(id: string): Promise<boolean> {
-      return (await resolveHost()).hasModelInCache(id);
+      return (await resolveHost(id)).hasModelInCache(id);
     },
 
     async remove(id: string): Promise<void> {
-      await (await resolveHost()).evictModel(id);
+      await (await resolveHost(id)).evictModel(id);
     },
 
     async open(
@@ -305,7 +341,7 @@ export function createBrowserHost(
       onProgress: (progress: LoadProgress) => void,
       signal?: AbortSignal,
     ): Promise<LocalEngine> {
-      const host = await resolveHost();
+      const host = await resolveHost(id);
       const engine = await host.createEngine(
         id,
         (progress) =>
@@ -313,7 +349,8 @@ export function createBrowserHost(
         signal,
       );
       return {
-        rephrase: (system, user) => complete(engine, system, user),
+        rephrase: (system, user, generation) =>
+          complete(engine, system, user, generation),
         unload: () => engine.unload(),
       };
     },
@@ -324,6 +361,7 @@ async function complete(
   engine: LocalTextEngine,
   system: string,
   user: string,
+  generation: RephraseOptions,
 ): Promise<string> {
   let said = "";
   for await (const chunk of engine.stream(
@@ -332,9 +370,9 @@ async function complete(
       { role: "user", content: user },
     ],
     {
-      maxTokens: MAX_NEW_TOKENS,
-      temperature: TEMPERATURE,
-      topP: TOP_P,
+      maxTokens: generation.maxNewTokens,
+      temperature: generation.temperature,
+      topP: generation.topP,
       responseFormat: undefined,
     },
   )) {

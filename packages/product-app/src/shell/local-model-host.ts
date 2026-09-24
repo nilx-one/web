@@ -15,7 +15,38 @@
 import type { UnsupportedReason } from "./local-model-settings-view-model";
 
 export type LocalModelDeviceVerdict =
-  { readonly kind: "usable" } | { readonly kind: UnsupportedReason };
+  | { readonly kind: "usable" }
+  | { readonly kind: Exclude<UnsupportedReason, "over_budget"> }
+  | {
+      readonly kind: "over_budget";
+      /** What the entry states it needs, in MB. */
+      readonly requiredMb: number;
+      /** What this surface declared it will spend, in MB. */
+      readonly budgetMb: number;
+    };
+
+/**
+ * One entry a person may choose, carried as data: this package imports no model runtime.
+ * Notices and attribution are here so they render before any download.
+ */
+export interface LocalModelCatalogEntry {
+  readonly modelId: string;
+  readonly family: string;
+  readonly label: string;
+  readonly vramMb: number;
+  readonly licence: string;
+  readonly licenceName: string;
+  /** Text the licence obliges this product to display beside the entry, verbatim. */
+  readonly attribution: string | null;
+  /** A use policy the licence incorporates, linked where the entry is offered. */
+  readonly usePolicy: string | null;
+  readonly notices: readonly string[];
+  /** How many fixture rephrasings an on-device pass kept, or `null` until one ran. */
+  readonly faithfulness: {
+    readonly admitted: number;
+    readonly total: number;
+  } | null;
+}
 
 export interface LocalModelDownloadProgress {
   readonly ratio: number;
@@ -35,7 +66,8 @@ export interface LocalModelEngine {
 }
 
 export interface LocalModelHost {
-  inspect(): Promise<LocalModelDeviceVerdict>;
+  /** This device's verdict on one entry, including the budget its surface declared. */
+  inspect(modelId: string): Promise<LocalModelDeviceVerdict>;
   isCached(modelId: string): Promise<boolean>;
   /** The size and provenance of the download `open` would start, without starting it. */
   describe(modelId: string): Promise<LocalModelDescription>;
@@ -54,5 +86,8 @@ export interface LocalModelHost {
 /** What a deployment wiring this port names the model it serves. Read, never invented here. */
 export interface LocalModelDependency {
   readonly host: LocalModelHost;
-  readonly modelId: string;
+  /** Every entry this product serves, in presentation order. */
+  readonly catalog: readonly LocalModelCatalogEntry[];
+  /** What runs when nothing was chosen, and what a refused choice falls back to. */
+  readonly defaultModelId: string;
 }

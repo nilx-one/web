@@ -4,7 +4,7 @@
 import type { DeviceCapability } from "@aiaiaiai/webllm";
 import { describe, expect, it } from "vitest";
 
-import { deviceVerdict, RUNTIME_DEVICE_FLOORS } from "./device";
+import { deviceVerdict, entryVerdict, RUNTIME_DEVICE_FLOORS } from "./device";
 import { NARRATION_MODEL_ID } from "./index";
 
 const generous: DeviceCapability = {
@@ -80,5 +80,35 @@ describe("reading a device before asking anything of it", () => {
         NARRATION_MODEL_ID,
       ),
     ).toEqual({ kind: "missing_features", missing: ["shader-f16"] });
+  });
+});
+
+describe("an entry against the budget this surface declared", () => {
+  const entry = { modelId: NARRATION_MODEL_ID, vramMb: 1403.34 };
+
+  it("refuses an entry above the budget, naming both claims", () => {
+    expect(entryVerdict(supported(generous), entry, 1024)).toEqual({
+      kind: "over_budget",
+      requiredMb: 1403.34,
+      budgetMb: 1024,
+    });
+  });
+
+  it("admits an entry within it", () => {
+    expect(entryVerdict(supported(generous), entry, 2048)).toEqual({
+      kind: "usable",
+    });
+  });
+
+  it("refuses nothing for size when no budget was declared", () => {
+    expect(entryVerdict(supported(generous), entry)).toEqual({
+      kind: "usable",
+    });
+  });
+
+  it("names the device's refusal before the budget's", () => {
+    expect(
+      entryVerdict({ supported: false, reason: "webgpu_missing" }, entry, 1),
+    ).toEqual({ kind: "webgpu_missing" });
   });
 });

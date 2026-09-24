@@ -3,9 +3,11 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
+import { LOCAL_MODEL_CHOICE_STORAGE_KEY } from "./local-model-choice";
 import type {
+  LocalModelCatalogEntry,
   LocalModelDescription,
   LocalModelDeviceVerdict,
   LocalModelDownloadProgress,
@@ -15,9 +17,54 @@ import type {
 import { LocalModelSettings } from "./local-model-settings";
 
 const MODEL_ID = "Qwen3-0.6B-q4f16_1-MLC";
+const SMOLLM2 = "SmolLM2-360M-Instruct-q4f16_1-MLC";
+const LLAMA = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+
+function entry(
+  modelId: string,
+  label: string,
+  vramMb: number,
+  overrides: Partial<LocalModelCatalogEntry> = {},
+): LocalModelCatalogEntry {
+  return {
+    modelId,
+    family: "qwen3",
+    label,
+    vramMb,
+    licence: "apache-2.0",
+    licenceName: "Apache License 2.0",
+    attribution: null,
+    usePolicy: null,
+    notices: [`${label} by upstream, licensed under the Apache License 2.0.`],
+    faithfulness: null,
+    ...overrides,
+  };
+}
+
+const CATALOG: readonly LocalModelCatalogEntry[] = [
+  entry(MODEL_ID, "Qwen3 0.6B", 1403.34),
+  entry(SMOLLM2, "SmolLM2 360M", 376.06, { family: "smollm2" }),
+  entry(LLAMA, "Llama 3.2 1B", 879.04, {
+    family: "llama3.2",
+    licence: "llama3.2",
+    licenceName: "Llama 3.2 Community License",
+    attribution: "Built with Llama",
+    usePolicy: "https://www.llama.com/llama3_2/use-policy",
+    notices: [
+      "Llama 3.2 is licensed under the Llama 3.2 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.",
+    ],
+  }),
+];
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 class FakeHost implements LocalModelHost {
   public verdict: LocalModelDeviceVerdict = { kind: "usable" };
+  public verdicts: Readonly<Record<string, LocalModelDeviceVerdict>> = {};
+  public described: string[] = [];
+  public openedIds: string[] = [];
   public cached = false;
   public description: LocalModelDescription = {
     bytes: null,
@@ -35,8 +82,8 @@ class FakeHost implements LocalModelHost {
    */
   public unreadableCache = false;
 
-  public inspect(): Promise<LocalModelDeviceVerdict> {
-    return Promise.resolve(this.verdict);
+  public inspect(modelId: string): Promise<LocalModelDeviceVerdict> {
+    return Promise.resolve(this.verdicts[modelId] ?? this.verdict);
   }
 
   public isCached(): Promise<boolean> {
@@ -49,15 +96,17 @@ class FakeHost implements LocalModelHost {
     return Promise.resolve(this.cached);
   }
 
-  public describe(): Promise<LocalModelDescription> {
+  public describe(modelId: string): Promise<LocalModelDescription> {
+    this.described.push(modelId);
     return Promise.resolve(this.description);
   }
 
   public open(
-    _modelId: string,
+    modelId: string,
     onProgress: (progress: LocalModelDownloadProgress) => void,
     signal?: AbortSignal,
   ): Promise<LocalModelEngine> {
+    this.openedIds.push(modelId);
     if (this.holdOpen) {
       onProgress({ ratio: 0.25, text: "" });
       return new Promise((_, reject) => {
@@ -94,7 +143,11 @@ function renderSettings(host: LocalModelHost) {
   });
   return render(
     <QueryClientProvider client={client}>
-      <LocalModelSettings host={host} modelId={MODEL_ID} />
+      <LocalModelSettings
+        host={host}
+        catalog={CATALOG}
+        defaultModelId={MODEL_ID}
+      />
     </QueryClientProvider>,
   );
 }
@@ -125,7 +178,7 @@ describe("a device that has not fetched the model yet", () => {
     await waitFor(() =>
       expect(screen.getByText("Not downloaded yet.")).toBeVisible(),
     );
-    expect(screen.getByText(/3 MB/)).toBeVisible();
+    expect(screen.getByText(/registry.*\b3 MB/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Download now" })).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "Remove downloaded model" }),
@@ -286,5 +339,101 @@ describe("removing a cached model", () => {
       expect(screen.getByText("Not downloaded yet.")).toBeVisible(),
     );
     expect(host.removed).toBe(1);
+  });
+});
+
+describe("choosing among the served entries", () => {
+  it("offers every entry with the default in effect when nothing was chosen", async () => {
+    renderSettings(new FakeHost());
+
+    const radios = await screen.findAllByRole("radio");
+    expect(radios).toHaveLength(CATALOG.length);
+    await waitFor(() => {
+      expect(screen.getByRole("radio", { name: /Qwen3 0\.6B/ })).toBeChecked();
+    });
+  });
+
+  it("changing the choice downloads nothing, and is kept on this device", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    const smol = await screen.findByRole("radio", { name: /SmolLM2 360M/ });
+    await waitFor(() => {
+      expect(smol).toBeEnabled();
+    });
+    fireEvent.click(smol);
+
+    await waitFor(() => {
+      expect(smol).toBeChecked();
+    });
+    await waitFor(() => {
+      expect(host.described).toContain(SMOLLM2);
+    });
+    expect(host.opened).toBe(0);
+    expect(window.localStorage.getItem(LOCAL_MODEL_CHOICE_STORAGE_KEY)).toBe(
+      SMOLLM2,
+    );
+  });
+
+  it("shows an entry this surface refuses, with its reason, and does not let it be chosen", async () => {
+    const host = new FakeHost();
+    host.verdicts = {
+      [LLAMA]: { kind: "over_budget", requiredMb: 879.04, budgetMb: 512 },
+    };
+    renderSettings(host);
+
+    expect(
+      await screen.findByText(/needs about 879 MB, this surface allows 512 MB/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Llama 3\.2 1B/ })).toBeDisabled();
+  });
+
+  it("falls back to the default when the stored choice is refused here, says so, and keeps it", async () => {
+    window.localStorage.setItem(LOCAL_MODEL_CHOICE_STORAGE_KEY, LLAMA);
+    const host = new FakeHost();
+    host.verdicts = {
+      [LLAMA]: { kind: "over_budget", requiredMb: 879.04, budgetMb: 512 },
+    };
+    renderSettings(host);
+
+    expect(
+      await screen.findByText(/The model you chose can’t run here/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Qwen3 0\.6B/ })).toBeChecked();
+    expect(window.localStorage.getItem(LOCAL_MODEL_CHOICE_STORAGE_KEY)).toBe(
+      LLAMA,
+    );
+  });
+
+  it("says so when the stored choice is no longer served", async () => {
+    window.localStorage.setItem(
+      LOCAL_MODEL_CHOICE_STORAGE_KEY,
+      "gemma3-1b-it-q4f16_1-MLC",
+    );
+    renderSettings(new FakeHost());
+
+    expect(
+      await screen.findByText(/The model you chose is no longer offered/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows Built with Llama beside its entry and links the use policy where it is offered", async () => {
+    renderSettings(new FakeHost());
+
+    expect(await screen.findByText("Built with Llama")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Acceptable use policy" }),
+    ).toHaveAttribute("href", "https://www.llama.com/llama3_2/use-policy");
+  });
+
+  it("shows the chosen entry's own notices before any download", async () => {
+    window.localStorage.setItem(LOCAL_MODEL_CHOICE_STORAGE_KEY, LLAMA);
+    renderSettings(new FakeHost());
+
+    expect(
+      await screen.findByText(
+        /Llama 3\.2 is licensed under the Llama 3\.2 Community License/,
+      ),
+    ).toBeInTheDocument();
   });
 });

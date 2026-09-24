@@ -39,6 +39,13 @@ export type DeviceVerdict =
   | {
       readonly kind: "missing_features";
       readonly missing: readonly string[];
+    }
+  | {
+      readonly kind: "over_budget";
+      /** What the entry states it needs, in MB: the registry's claim, not a reading. */
+      readonly requiredMb: number;
+      /** What this surface declared it will spend, in MB: policy, not a reading. */
+      readonly budgetMb: number;
     };
 
 /**
@@ -72,4 +79,27 @@ export function deviceVerdict(
   return missing.length === 0
     ? { kind: "usable" }
     : { kind: "missing_features", missing };
+}
+
+/**
+ * One catalog entry's verdict: the device's first, then the budget this surface declared.
+ *
+ * The order is the one `nilx-one/ai`'s `eligible_local_models` checks in — runtime floor,
+ * features, budget — and both are tested against the same fixture
+ * (`local-model-eligibility.json`), so an entry cannot be offered in one and refused in the
+ * other. An undeclared budget refuses nothing: no budget is a declaration this surface did not
+ * make, not a measurement that came back empty.
+ */
+export function entryVerdict(
+  probe: WebGpuProbe,
+  entry: { readonly modelId: string; readonly vramMb: number },
+  budgetMb?: number,
+): DeviceVerdict {
+  const verdict = deviceVerdict(probe, entry.modelId);
+  if (verdict.kind !== "usable" || budgetMb === undefined) {
+    return verdict;
+  }
+  return entry.vramMb > budgetMb
+    ? { kind: "over_budget", requiredMb: entry.vramMb, budgetMb }
+    : verdict;
 }

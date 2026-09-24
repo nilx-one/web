@@ -322,6 +322,36 @@
   padding-left: 1.1rem;
 }
 
+.local-model-settings__options {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.local-model-settings__option {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.local-model-settings__attribution {
+  font-weight: 650;
+}
+
+.local-model-settings__refusal {
+  color: #ffb38f;
+}
+
+.local-model-settings__policy {
+  justify-self: start;
+  padding-left: 1rem;
+  color: rgba(245, 243, 247, 0.72);
+  font-size: 0.75rem;
+}
+
+.local-model-settings__fallback {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
 .local-model-settings__actions {
   display: flex;
   flex-wrap: wrap;
