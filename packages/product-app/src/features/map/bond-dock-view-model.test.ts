@@ -11,7 +11,7 @@ import {
 
 const base: BondDockInput = {
   pubDress: "0x0sky",
-  avaiaPubDress: "0skai",
+  avaiaPubDress: "x0skai",
   wheel: "bond",
   avaia: "unavailable",
   focusable: true,
@@ -51,7 +51,7 @@ describe("Dock seats", () => {
         role: "unavailable",
         tone: "idle",
         actionable: true,
-        actionLabel: "Hand the wheel to 0skai",
+        actionLabel: "Hand the wheel to x0skai",
       },
     });
     expect(createBondDockViewState({ ...base, avaia: "ready" })).toMatchObject({
@@ -73,7 +73,7 @@ describe("Dock seats", () => {
       }),
     ).toMatchObject({
       preparesRuntime: true,
-      right: { role: "download", actionLabel: "Hand the wheel to 0skai" },
+      right: { role: "download", actionLabel: "Hand the wheel to x0skai" },
     });
     // Nothing to fetch, or no way to fetch it: the wheel still changes hands.
     expect(
@@ -108,7 +108,7 @@ describe("Avaia configuration on the Dock", () => {
     const dock = createBondDockViewState({ ...base, wheel: "avaia" });
 
     expect(dock.left).toMatchObject({ seat: "avaia", role: "driving" });
-    expect(dock.configure).toEqual({ seat: "avaia", label: "Edit 0skai" });
+    expect(dock.configure).toEqual({ seat: "avaia", label: "Edit x0skai" });
   });
 
   it("states what an owner has not configured, in either seat", () => {
@@ -117,7 +117,7 @@ describe("Avaia configuration on the Dock", () => {
         .right,
     ).toMatchObject({
       role: "unconfigured",
-      actionLabel: "Hand the wheel to 0skai",
+      actionLabel: "Hand the wheel to x0skai",
     });
     expect(
       createBondDockViewState({
@@ -127,7 +127,7 @@ describe("Avaia configuration on the Dock", () => {
       }).left,
     ).toMatchObject({
       role: "unconfigured",
-      actionLabel: "Focus the world on 0skai",
+      actionLabel: "Focus the world on x0skai",
     });
   });
 
@@ -168,14 +168,14 @@ describe("What the Dock configures", () => {
         wheel: "avaia",
         avaiaConfiguration: "unconfigured",
       }).configure,
-    ).toEqual({ seat: "avaia", label: "Set up 0skai" });
+    ).toEqual({ seat: "avaia", label: "Set up x0skai" });
     expect(
       createBondDockViewState({
         ...base,
         wheel: "avaia",
         avaiaConfiguration: "configured",
       }).configure,
-    ).toEqual({ seat: "avaia", label: "Edit 0skai" });
+    ).toEqual({ seat: "avaia", label: "Edit x0skai" });
   });
 });
 

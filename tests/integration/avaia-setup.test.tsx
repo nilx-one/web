@@ -30,7 +30,7 @@ const readyCore: CoreRuntimePort = {
  */
 async function avaiaAtWheel(
   _user: ReturnType<typeof userEvent.setup>,
-  address = "0skai",
+  address = "x0skai",
 ): Promise<void> {
   await screen.findByRole("button", { name: `Focus the world on ${address}` });
 }
@@ -64,7 +64,7 @@ function createIdentity(
       kind: "authenticated",
       identity: {
         pubDress: "0x0sky",
-        avaiaPubDress: "0skai",
+        avaiaPubDress: "x0skai",
         avatarModel: "sky-study",
       },
     }),
@@ -101,7 +101,7 @@ function projection(
   overrides: Partial<AvaiaProfileProjection> = {},
 ): AvaiaProfileProjection {
   return {
-    pubDress: "0skai",
+    pubDress: "x0skai",
     ownerPubDress: "0x0sky",
     configurationState: "unconfigured",
     ...overrides,
@@ -144,10 +144,10 @@ describe("Avaia setup from the Bond dock", () => {
     // An Avaia nobody has configured says so on its card, and the Dock's own
     // action offers the one thing that can be done about it.
     const configure = await screen.findByRole("button", {
-      name: "Set up 0skai",
+      name: "Set up x0skai",
     });
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("unconfigured");
     expect(renderer.mount).toHaveBeenCalledOnce();
 
@@ -168,16 +168,16 @@ describe("Avaia setup from the Bond dock", () => {
     await user.type(address, "vesn");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("0vesnai");
+    expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("x0vesnai");
 
     // The save ends on the world: the screen closes, the Dock reads the
     // address the service answered with, and the notice is said once in the
     // stack every transient notice is said in.
     const notice = await screen.findByText("Avaia saved");
-    expect(notice.closest(".toast")).toHaveTextContent("0vesnai");
+    expect(notice.closest(".toast")).toHaveTextContent("x0vesnai");
     expect(screen.queryByLabelText("pub_dress")).toBeNull();
     expect(
-      await screen.findByRole("button", { name: "Edit 0vesnai" }),
+      await screen.findByRole("button", { name: "Edit x0vesnai" }),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
@@ -204,9 +204,11 @@ describe("Avaia setup from the Bond dock", () => {
 
     await avaiaAtWheel(user);
 
-    await user.click(await screen.findByRole("button", { name: "Edit 0skai" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Edit x0skai" }),
+    );
     expect(await screen.findByLabelText("pub_dress")).toHaveValue("sk");
-    expect(screen.getByRole("heading", { name: "0skai" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "x0skai" })).toBeVisible();
   });
 
   it("keeps the service's refusal, and the slug stem a person typed", async () => {
@@ -232,7 +234,7 @@ describe("Avaia setup from the Bond dock", () => {
     await avaiaAtWheel(user);
 
     await user.click(
-      await screen.findByRole("button", { name: "Set up 0skai" }),
+      await screen.findByRole("button", { name: "Set up x0skai" }),
     );
     const address = await screen.findByLabelText("pub_dress");
     await user.clear(address);
@@ -267,9 +269,11 @@ describe("Avaia setup from the Bond dock", () => {
     // an owner already stored.
     await avaiaAtWheel(user);
 
-    const configure = await screen.findByRole("button", { name: "Edit 0skai" });
+    const configure = await screen.findByRole("button", {
+      name: "Edit x0skai",
+    });
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).not.toHaveTextContent("unconfigured");
 
     configure.focus();
@@ -298,11 +302,11 @@ describe("Avaia setup from the Bond dock", () => {
     expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
     // The Dock's own edit action still names whoever is driving, but on this
     // host it opens no configuration: there is no address field to invent.
-    await userEvent.click(screen.getByRole("button", { name: "Edit 0skai" }));
+    await userEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
     expect(screen.queryByLabelText("pub_dress")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("AI");
   });
 
@@ -325,7 +329,7 @@ describe("Avaia setup from the Bond dock", () => {
     await avaiaAtWheel(user);
 
     await user.click(
-      await screen.findByRole("button", { name: "Set up 0skai" }),
+      await screen.findByRole("button", { name: "Set up x0skai" }),
     );
     await screen.findByLabelText("pub_dress");
     const results = await act(() => axe.run(container));

@@ -12,7 +12,7 @@ import {
 } from "./avaia-profile";
 
 const profile = {
-  pubDress: "0skai",
+  pubDress: "x0skai",
   ownerPubDress: "0x0sky",
   configurationState: "configured",
 } as const;
@@ -63,7 +63,7 @@ describe("Avaia profile capability", () => {
       kind: "service-unavailable",
     });
     await expect(
-      new UpdateAvaiaProfile(failing).execute("0skai"),
+      new UpdateAvaiaProfile(failing).execute("x0skai"),
     ).resolves.toEqual({ kind: "service-unavailable" });
   });
 
@@ -76,8 +76,8 @@ describe("Avaia profile capability", () => {
       },
     });
 
-    await new UpdateAvaiaProfile(port).execute("0vesnai");
-    expect(seen).toEqual(["0vesnai"]);
+    await new UpdateAvaiaProfile(port).execute("x0vesnai");
+    expect(seen).toEqual(["x0vesnai"]);
   });
 
   it("publishes the position exactly as given", async () => {

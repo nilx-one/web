@@ -268,6 +268,69 @@ mod avaia_configuration_tests {
     use super::*;
 
     #[tokio::test]
+    async fn prefix_migration_keeps_configuration_state_and_rename_trigger() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let database = directory.path().join("legacy-avaia.sqlite");
+        let database_url = format!("sqlite://{}", database.display());
+        {
+            let repository = IdentityRepository::connect(&database_url)
+                .await
+                .expect("repository");
+            repository
+                .initialize_avaia_configuration()
+                .await
+                .expect("configuration schema");
+            sqlx::raw_sql(
+                "INSERT INTO identities (pub_dress) VALUES ('0x0sky'), ('0x1mira');
+                 INSERT INTO identities (pub_dress, identity_kind, owner_pub_dress)
+                     VALUES ('0skai', 'avaia', '0x0sky'), ('1mirai', 'avaia', '0x1mira');
+                 UPDATE avaia_configuration SET configuration_state = 'configured'
+                     WHERE owner_pub_dress = '0x1mira';",
+            )
+            .execute(&repository.pool)
+            .await
+            .expect("legacy Avaia rows");
+            repository.pool.close().await;
+        }
+
+        let repository = IdentityRepository::connect(&database_url)
+            .await
+            .expect("upgrade");
+        let sky: PubDress = "0x0sky".parse().expect("owner");
+        let mira: PubDress = "0x1mira".parse().expect("owner");
+        let unconfigured = repository
+            .owned_avaia_identity(&sky)
+            .await
+            .expect("profile")
+            .expect("owned Avaia");
+        assert_eq!(unconfigured.pub_dress, "x0skai");
+        assert_eq!(
+            unconfigured.configuration_state,
+            AvaiaConfigurationState::Unconfigured
+        );
+        let configured = repository
+            .owned_avaia_identity(&mira)
+            .await
+            .expect("profile")
+            .expect("owned Avaia");
+        assert_eq!(configured.pub_dress, "x1mirai");
+        assert_eq!(
+            configured.configuration_state,
+            AvaiaConfigurationState::Configured
+        );
+
+        let trigger = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema \
+             WHERE type = 'trigger' \
+               AND name = 'identities_configure_avaia_on_direct_rename')",
+        )
+        .fetch_one(&repository.pool)
+        .await
+        .expect("schema");
+        assert!(trigger);
+    }
+
+    #[tokio::test]
     async fn migration_backfills_existing_avaia_as_unconfigured() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
@@ -283,7 +346,7 @@ mod avaia_configuration_tests {
             .await
             .expect("profile")
             .expect("owned Avaia");
-        assert_eq!(profile.pub_dress, "0skai");
+        assert_eq!(profile.pub_dress, "x0skai");
         assert_eq!(profile.owner_pub_dress, "0x0sky");
         assert_eq!(
             profile.configuration_state,
@@ -330,7 +393,7 @@ mod avaia_configuration_tests {
             .register(&owner, &ProviderIdentity::telegram(702), 100)
             .await
             .expect("registration");
-        let same: AvaiaPubDress = "0skai".parse().expect("Avaia");
+        let same: AvaiaPubDress = "x0skai".parse().expect("Avaia");
 
         for now in [101, 102] {
             let outcome = repository
@@ -340,7 +403,7 @@ mod avaia_configuration_tests {
             assert!(matches!(
                 outcome,
                 AvaiaUpdateOutcome::Updated(ref record)
-                    if record.pub_dress == "0skai"
+                    if record.pub_dress == "x0skai"
                         && record.configuration_state == AvaiaConfigurationState::Configured
             ));
         }
@@ -366,7 +429,7 @@ mod avaia_configuration_tests {
             .await
             .expect("other registration");
 
-        let wrong_owner: AvaiaPubDress = "1newai".parse().expect("other discriminator");
+        let wrong_owner: AvaiaPubDress = "x1newai".parse().expect("other discriminator");
         assert!(matches!(
             repository
                 .configure_owned_avaia(&owner, &wrong_owner, 101)
@@ -374,7 +437,7 @@ mod avaia_configuration_tests {
             Ok(AvaiaUpdateOutcome::OwnerDiscriminatorMismatch)
         ));
 
-        let occupied: AvaiaPubDress = "0mirai".parse().expect("occupied Avaia");
+        let occupied: AvaiaPubDress = "x0mirai".parse().expect("occupied Avaia");
         assert!(matches!(
             repository.configure_owned_avaia(&owner, &occupied, 102).await,
             Ok(AvaiaUpdateOutcome::AvaiaUnavailable)
@@ -384,7 +447,7 @@ mod avaia_configuration_tests {
             .await
             .expect("profile")
             .expect("owned Avaia");
-        assert_eq!(unchanged.pub_dress, "0skai");
+        assert_eq!(unchanged.pub_dress, "x0skai");
         assert_eq!(
             unchanged.configuration_state,
             AvaiaConfigurationState::Unconfigured

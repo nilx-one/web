@@ -83,8 +83,9 @@ and sessions are untouched.
 ## Naming the owned Avaia
 
 `POST /api/v1/identity/avaia/pub_dress` names the Avaia a Bond owns, under the
-same authority and the same limits. An Avaia address carries its owner's
-discriminator and always ends in `ai`; both belong to the contract, so only the
+same authority and the same limits. An Avaia address is its owner's address
+without the leading `0` — a literal `x`, the owner's discriminator — and always
+ends in `ai` (`0x0sky` owns `x0skai`); both belong to the contract, so only the
 name in between is accepted, and a name that drops the suffix is refused rather
 than repaired.
 

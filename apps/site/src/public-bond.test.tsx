@@ -58,7 +58,7 @@ describe("public Bond host routing", () => {
             pub_dress: "0x0sky",
             pub_dress_url: "https://0x0sky.nilx.one",
             avaia: {
-              pub_dress: "0skai",
+              pub_dress: "x0skai",
               location: {
                 coordinate: {
                   longitude_e7: "305234000",
@@ -77,7 +77,7 @@ describe("public Bond host routing", () => {
         pubDress: "0x0sky",
         pubDressUrl: "https://0x0sky.nilx.one",
         avaia: {
-          pubDress: "0skai",
+          pubDress: "x0skai",
           location: {
             coordinate: { longitude: 30.5234, latitude: 50.4501 },
           },

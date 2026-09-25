@@ -115,32 +115,33 @@ describe("profile slug state", () => {
 describe("Avaia slug state", () => {
   it("writes the Avaia name after the owner's discriminator", () => {
     expect(
-      createAvaiaSlugViewState("0skai", "0x0sky", undefined, false),
+      createAvaiaSlugViewState("x0skai", "0x0sky", undefined, false),
     ).toMatchObject({
       kind: "editable",
-      prefix: "0",
+      prefix: "x0",
       slug: "skai",
-      preview: "0skai",
+      preview: "x0skai",
       canSave: false,
     });
   });
 
   it("keeps the canonical ai suffix a requirement, not a suggestion", () => {
     expect(
-      createAvaiaSlugViewState("0skai", "0x0sky", "vesna", false),
+      createAvaiaSlugViewState("x0skai", "0x0sky", "vesna", false),
     ).toMatchObject({ canSave: false, error: "An Avaia name ends in ai." });
     expect(
-      createAvaiaSlugViewState("0skai", "0x0sky", "vesnai", false).canSave,
+      createAvaiaSlugViewState("x0skai", "0x0sky", "vesnai", false).canSave,
     ).toBe(true);
   });
 
   it("allows the two scalars the ai suffix adds to the human maximum", () => {
     const longest = `${"b".repeat(32)}ai`;
     expect(
-      createAvaiaSlugViewState("0skai", "0x0sky", longest, false).canSave,
+      createAvaiaSlugViewState("x0skai", "0x0sky", longest, false).canSave,
     ).toBe(true);
     expect(
-      createAvaiaSlugViewState("0skai", "0x0sky", `b${longest}`, false).canSave,
+      createAvaiaSlugViewState("x0skai", "0x0sky", `b${longest}`, false)
+        .canSave,
     ).toBe(false);
   });
 
@@ -149,7 +150,7 @@ describe("Avaia slug state", () => {
       createAvaiaSlugViewState(undefined, "0x0sky", undefined, false),
     ).toMatchObject({
       kind: "editable",
-      prefix: "0",
+      prefix: "x0",
       slug: "",
       canSave: false,
     });
@@ -160,10 +161,10 @@ describe("Avaia slug state", () => {
 
   it("confirms a save once the surface holds the new Avaia address", () => {
     expect(
-      createAvaiaSlugViewState("0vesnai", "0x0sky", undefined, false, {
+      createAvaiaSlugViewState("x0vesnai", "0x0sky", undefined, false, {
         kind: "renamed",
-        identity: { pubDress: "0x0sky", avaiaPubDress: "0vesnai" },
+        identity: { pubDress: "0x0sky", avaiaPubDress: "x0vesnai" },
       }).saved,
-    ).toBe("0vesnai");
+    ).toBe("x0vesnai");
   });
 });

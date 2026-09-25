@@ -18,14 +18,16 @@ beforeEach(() => {
 describe("useAvatarSelection", () => {
   it("falls back to the given default while nothing has been chosen", () => {
     const { result } = renderHook(() =>
-      useAvatarSelection("0skai", "sky-study"),
+      useAvatarSelection("x0skai", "sky-study"),
     );
 
     expect(result.current?.modelId).toBe("sky-study");
   });
 
   it("answers nothing when there is neither a default nor a stored choice", () => {
-    const { result } = renderHook(() => useAvatarSelection("0skai", undefined));
+    const { result } = renderHook(() =>
+      useAvatarSelection("x0skai", undefined),
+    );
 
     expect(result.current).toBeUndefined();
   });
@@ -39,7 +41,7 @@ describe("useAvatarSelection", () => {
     act(() =>
       commit.result.current({
         subject: "avaia",
-        address: "0skai",
+        address: "x0skai",
         selection: { modelId: "kai-study", appearance: {} },
         modelIsLocal: true,
       }),
@@ -48,7 +50,7 @@ describe("useAvatarSelection", () => {
     // The same deterministic default this address would ambiently get is
     // still handed in on every render — the point is that it must lose.
     const { result } = renderHook(() =>
-      useAvatarSelection("0skai", "sky-study"),
+      useAvatarSelection("x0skai", "sky-study"),
     );
 
     expect(result.current?.modelId).toBe("kai-study");
@@ -59,7 +61,7 @@ describe("useAvatarSelection", () => {
     act(() =>
       commit.result.current({
         subject: "avaia",
-        address: "0skai",
+        address: "x0skai",
         selection: {
           // @ts-expect-error — simulating a model an older client stored.
           modelId: "retired-study",
@@ -70,7 +72,7 @@ describe("useAvatarSelection", () => {
     );
 
     const { result } = renderHook(() =>
-      useAvatarSelection("0skai", "sky-study"),
+      useAvatarSelection("x0skai", "sky-study"),
     );
 
     expect(result.current?.modelId).toBe("sky-study");
@@ -81,14 +83,14 @@ describe("useAvatarSelection", () => {
     act(() =>
       commit.result.current({
         subject: "avaia",
-        address: "0skai",
+        address: "x0skai",
         selection: { modelId: "kai-study", appearance: {} },
         modelIsLocal: true,
       }),
     );
 
     const { result } = renderHook(() =>
-      useAvatarSelection("0other-ai", "dasha-study"),
+      useAvatarSelection("x0other-ai", "dasha-study"),
     );
 
     expect(result.current?.modelId).toBe("dasha-study");
@@ -120,7 +122,7 @@ describe("useCommitAvatarSelection", () => {
     act(() =>
       commit.result.current({
         subject: "avaia",
-        address: "0skai",
+        address: "x0skai",
         selection: { modelId: "dasha-v2-study", appearance: {} },
         modelIsLocal: true,
       }),
@@ -128,7 +130,7 @@ describe("useCommitAvatarSelection", () => {
     act(() =>
       commit.result.current({
         subject: "avaia",
-        address: "0skai",
+        address: "x0skai",
         selection: { modelId: "kai-study", appearance: {} },
         modelIsLocal: true,
       }),
@@ -137,7 +139,7 @@ describe("useCommitAvatarSelection", () => {
     // A later, independent read of the same address — the shape every screen
     // that draws this Avaia actually does — answers with the newer choice.
     const { result } = renderHook(() =>
-      useAvatarSelection("0skai", "sky-study"),
+      useAvatarSelection("x0skai", "sky-study"),
     );
     expect(result.current?.modelId).toBe("kai-study");
   });
