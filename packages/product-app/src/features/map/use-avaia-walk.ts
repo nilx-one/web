@@ -7,6 +7,7 @@ import {
   type AvatarModelId,
   type MapGroundTap,
   type MapLandmark,
+  type MapObstacle,
   type MapPointSelection,
   type MapRenderer,
 } from "@nilx-one/map-contract";
@@ -25,6 +26,7 @@ import {
   pickAvaiaLine,
   type AvaiaLineKind,
 } from "./avaia-lines";
+import { planRoute, routeBounds } from "./avaia-route";
 import {
   approachPoint,
   startWalk,
@@ -210,13 +212,26 @@ export function useAvaiaWalk({
     [],
   );
 
+  /**
+   * Sends the body to `to` around whatever buildings and water the map has
+   * loaded between here and there. Answers whether it set off, or what stood
+   * in the way when no way round was found.
+   */
   const goTo = useCallback(
-    (to: MapPointSelection, nowMs: number, landmark?: MapLandmark): boolean => {
+    (
+      to: MapPointSelection,
+      nowMs: number,
+      landmark?: MapLandmark,
+    ): "walking" | "nowhere" | MapObstacle["kind"] => {
       const from = currentPoint(nowMs);
-      if (from === undefined) return false;
+      if (from === undefined) return "nowhere";
+      const obstacles = renderer.obstaclesWithin?.(routeBounds(from, to)) ?? [];
+      const route = planRoute(from, to, obstacles);
+      if (route.kind === "blocked") return route.by;
       const next = startWalk({
         from,
-        to,
+        to: route.path[route.path.length - 1] ?? to,
+        path: route.path,
         nowMs,
         zoom: latest.current.zoom,
         landmark,
@@ -225,9 +240,9 @@ export function useAvaiaWalk({
       setActed(true);
       // Reduced motion still goes where it was sent; it just arrives.
       setWalk(latest.current.reducedMotion ? { ...next, durationMs: 0 } : next);
-      return true;
+      return "walking";
     },
-    [currentPoint],
+    [currentPoint, renderer],
   );
 
   // A tap on the world is the owner pointing. Open ground is a walk; anything
@@ -249,8 +264,17 @@ export function useAvaiaWalk({
         say(blockedLineKind(ground));
         return;
       }
-      if (goTo({ longitude: tap.longitude, latitude: tap.latitude }, nowMs)) {
+      const went = goTo(
+        { longitude: tap.longitude, latitude: tap.latitude },
+        nowMs,
+      );
+      if (went === "walking") {
         say("walk");
+      } else if (went !== "nowhere") {
+        // Open ground with no way to it: it is behind what the body cannot
+        // walk through, so that is what the Avaia names.
+        setActed(true);
+        say(blockedLineKind(went));
       }
     });
   }, [active, goTo, renderer, say]);
@@ -276,7 +300,7 @@ export function useAvaiaWalk({
         setRest(undefined);
         return;
       }
-      setRest({ point: walk.to, bearingDeg: walk.bearingDeg });
+      setRest({ point: walk.to, bearingDeg: walk.arrivalBearingDeg });
     }, remaining);
     return () => globalThis.clearTimeout(arrived);
   }, [walk]);
@@ -353,7 +377,9 @@ export function useAvaiaWalk({
         const { owner: book, avaiaAddress: by } = latest.current;
         const landmark = nextLandmarkToStudy(notebookSnapshot(book), by, from);
         if (landmark === undefined) return;
-        if (goTo(approachPoint(from, landmark), nowMs, landmark)) {
+        if (
+          goTo(approachPoint(from, landmark), nowMs, landmark) === "walking"
+        ) {
           say("landmark.spotted", landmark);
         }
       },

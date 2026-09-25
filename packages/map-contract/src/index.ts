@@ -263,6 +263,28 @@ export interface MapLandmark {
   readonly facts: Readonly<Record<string, string | number | boolean>>;
 }
 
+/**
+ * Ground a body walks around rather than through: a building footprint or a
+ * stretch of water, as the basemap draws it. Each polygon is its rings in
+ * `[longitude, latitude]` order, outer ring first and holes after — a
+ * courtyard inside a block is open ground.
+ */
+export interface MapObstacle {
+  readonly kind: "building" | "water";
+  readonly polygons: readonly (readonly (readonly (readonly [
+    number,
+    number,
+  ])[])[])[];
+}
+
+/** A geographic box, west to east and south to north. */
+export interface MapBounds {
+  readonly west: number;
+  readonly south: number;
+  readonly east: number;
+  readonly north: number;
+}
+
 export type MapRendererStatus =
   | { readonly kind: "unmounted" }
   | { readonly kind: "loading" }
@@ -331,6 +353,13 @@ export interface MapRenderer {
    * before its tiles arrive is asked again then, rather than missed.
    */
   subscribeLandmarksChanged?(listener: () => void): () => void;
+  /**
+   * The buildings and water the basemap carries that touch a box. Like
+   * `landmarksNear` it reads only tiles already loaded, so ground the map has
+   * not loaded answers with nothing: a walk there goes straight, as it would
+   * on a renderer that cannot answer at all.
+   */
+  obstaclesWithin?(bounds: MapBounds): readonly MapObstacle[];
 }
 
 /**

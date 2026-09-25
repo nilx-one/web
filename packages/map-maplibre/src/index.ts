@@ -16,10 +16,12 @@ import {
   MAP_BODY_HEIGHT_METERS,
   mapMetersPerPixel,
   type MapBodyActivation,
+  type MapBounds,
   type MapGround,
   type MapGroundTap,
   type MapLandmark,
   mapDistanceMeters,
+  type MapObstacle,
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapPointSelection,
@@ -36,6 +38,7 @@ import {
   getWorkerUrl,
   setWorkerUrl,
   type DataDrivenPropertyValueSpecification,
+  type FilterSpecification,
   type GeoJSONSource,
   type LayerSpecification,
   type MapOptions,
@@ -626,6 +629,51 @@ export function createMapLibreRenderer(
     return "open";
   }
 
+  /**
+   * The polygons one style layer paints that touch a box, read from the tiles
+   * it already has. The layer's own filter is what decides membership, so an
+   * obstacle is exactly what the person sees drawn as one.
+   */
+  function polygonsPainted(
+    mounted: MapLibreMap,
+    layerId: string,
+    bounds: MapBounds,
+  ): MapObstacle["polygons"] {
+    const layer = mounted.getLayer(layerId) as
+      | {
+          readonly source?: string;
+          readonly sourceLayer?: string;
+          readonly filter?: FilterSpecification | null;
+        }
+      | undefined;
+    if (layer?.source === undefined || layer.sourceLayer === undefined) {
+      return [];
+    }
+    if (mounted.getSource(layer.source) === undefined) return [];
+    const polygons: (readonly (readonly [number, number])[])[][] = [];
+    for (const feature of mounted.querySourceFeatures(layer.source, {
+      sourceLayer: layer.sourceLayer,
+      ...(layer.filter == null ? {} : { filter: layer.filter }),
+    })) {
+      const geometry = feature.geometry as {
+        readonly type: string;
+        readonly coordinates: unknown;
+      };
+      const parts =
+        geometry.type === "Polygon"
+          ? [geometry.coordinates as [number, number][][]]
+          : geometry.type === "MultiPolygon"
+            ? (geometry.coordinates as [number, number][][][])
+            : [];
+      for (const rings of parts) {
+        const outer = rings[0];
+        if (outer === undefined || !ringTouches(outer, bounds)) continue;
+        polygons.push(rings);
+      }
+    }
+    return polygons;
+  }
+
   function landmarkFrom(feature: {
     readonly id?: string | number | undefined;
     readonly geometry: { readonly type: string };
@@ -882,6 +930,28 @@ export function createMapLibreRenderer(
         .map((entry) => entry.landmark);
     },
 
+    obstaclesWithin(bounds) {
+      if (map === undefined) return [];
+      const mounted = map;
+      const obstacles: MapObstacle[] = [];
+      const collect = (
+        kind: MapObstacle["kind"],
+        layerIds: readonly string[],
+      ): void => {
+        // The flat and the raised building layers paint the same footprints;
+        // one of them is enough.
+        for (const layerId of existingLayers(mounted, layerIds)) {
+          const polygons = polygonsPainted(mounted, layerId, bounds);
+          if (polygons.length === 0) continue;
+          obstacles.push({ kind, polygons });
+          return;
+        }
+      };
+      collect("building", BUILDING_LAYER_IDS);
+      collect("water", WATER_LAYER_IDS);
+      return obstacles;
+    },
+
     subscribeLandmarksChanged(listener) {
       landmarkListeners.add(listener);
       return () => landmarkListeners.delete(listener);
@@ -967,4 +1037,26 @@ export function createMapLibreRenderer(
       if (map !== undefined) applySelectionPoint(map);
     },
   };
+}
+
+function ringTouches(
+  ring: readonly (readonly [number, number])[],
+  bounds: MapBounds,
+): boolean {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const [longitude, latitude] of ring) {
+    west = Math.min(west, longitude);
+    east = Math.max(east, longitude);
+    south = Math.min(south, latitude);
+    north = Math.max(north, latitude);
+  }
+  return (
+    west <= bounds.east &&
+    east >= bounds.west &&
+    south <= bounds.north &&
+    north >= bounds.south
+  );
 }

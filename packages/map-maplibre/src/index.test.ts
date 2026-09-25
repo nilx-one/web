@@ -896,6 +896,105 @@ describe("landmarks the basemap draws", () => {
   });
 });
 
+describe("obstacles the basemap draws", () => {
+  const square = (x: number, y: number) => ({
+    type: "Polygon",
+    coordinates: [
+      [
+        [x, y],
+        [x + 0.0001, y],
+        [x + 0.0001, y + 0.0001],
+        [x, y + 0.0001],
+        [x, y],
+      ],
+    ],
+  });
+  const bounds = { west: 30.52, south: 50.44, east: 30.53, north: 50.46 };
+
+  it("answers what the building and water layers paint inside the box", () => {
+    const fakeMap = makeFakeMap();
+    const filter = ["in", ["get", "kind"], ["literal", ["building"]]];
+    fakeMap.layers.set("buildings", {
+      id: "buildings",
+      source: "basemap",
+      sourceLayer: "buildings",
+      filter,
+    });
+    fakeMap.layers.set("buildings-flat", {
+      id: "buildings-flat",
+      source: "basemap",
+      sourceLayer: "buildings",
+      filter,
+    });
+    fakeMap.layers.set("water", {
+      id: "water",
+      source: "basemap",
+      sourceLayer: "water",
+    });
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    const querySourceFeatures = vi.fn(
+      (_source: string, query: { sourceLayer: string }) =>
+        query.sourceLayer === "buildings"
+          ? [
+              { geometry: square(30.5234, 50.4501), properties: {} },
+              // Far outside the box: never an obstacle to this walk.
+              { geometry: square(31.5, 51.5), properties: {} },
+              // A line is not ground anything stands on.
+              {
+                geometry: {
+                  type: "LineString",
+                  coordinates: [
+                    [30.5234, 50.4501],
+                    [30.5235, 50.4502],
+                  ],
+                },
+                properties: {},
+              },
+            ]
+          : [
+              {
+                geometry: {
+                  type: "MultiPolygon",
+                  coordinates: [square(30.525, 50.45).coordinates],
+                },
+                properties: {},
+              },
+            ],
+    );
+    Object.assign(fakeMap, { querySourceFeatures });
+    const renderer = readyRenderer(fakeMap);
+
+    const obstacles = renderer.obstaclesWithin?.(bounds);
+
+    expect(querySourceFeatures).toHaveBeenCalledWith("basemap", {
+      sourceLayer: "buildings",
+      filter,
+    });
+    // The flat and the raised layers are the same footprints, asked once.
+    expect(
+      querySourceFeatures.mock.calls.filter(
+        ([, query]) => query.sourceLayer === "buildings",
+      ),
+    ).toHaveLength(1);
+    expect(obstacles?.map((obstacle) => obstacle.kind)).toEqual([
+      "building",
+      "water",
+    ]);
+    expect(obstacles?.[0]?.polygons).toEqual([
+      square(30.5234, 50.4501).coordinates,
+    ]);
+    expect(obstacles?.[1]?.polygons).toHaveLength(1);
+  });
+
+  it("answers nothing before a map is mounted", () => {
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) =>
+        makeFakeMap() as unknown as MapLibreMap,
+    });
+    expect(renderer.obstaclesWithin?.(bounds)).toEqual([]);
+  });
+});
+
 describe("a card that talks", () => {
   it("opens beneath the title, stands over the body, and stays at close range", () => {
     const fakeMap = makeFakeMap();

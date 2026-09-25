@@ -1215,6 +1215,90 @@ describe("AuthenticatedMapHomeView", () => {
       ]);
     });
 
+    // A box of ground `x0`..`x1`, `y0`..`y1` in degrees off this device, as
+    // the renderer would hand a footprint over.
+    const footprint = (x0: number, y0: number, x1: number, y1: number) => [
+      [
+        [here.longitude + x0, here.latitude + y0],
+        [here.longitude + x1, here.latitude + y0],
+        [here.longitude + x1, here.latitude + y1],
+        [here.longitude + x0, here.latitude + y1],
+        [here.longitude + x0, here.latitude + y0],
+      ] as [number, number][],
+    ];
+    const tap = (mapRenderer: MapRenderer, ground = "open") =>
+      act(() =>
+        (
+          mapRenderer as ReturnType<typeof renderer> & {
+            tapGround: (tap: object) => void;
+          }
+        ).tapGround({ ...there, ground }),
+      );
+
+    it("walks around a building that stands between it and where it was sent", async () => {
+      const mapRenderer = await renderWorld();
+      // A house square across the straight way east, about 28 m wide.
+      const house = {
+        west: 0.0003,
+        east: 0.0007,
+        south: -0.00013,
+        north: 0.00013,
+      };
+      const obstaclesWithin = vi.fn(() => [
+        {
+          kind: "building" as const,
+          polygons: [
+            footprint(house.west, house.south, house.east, house.north),
+          ],
+        },
+      ]);
+      Object.assign(mapRenderer, { obstaclesWithin });
+
+      tap(mapRenderer);
+      expect(obstaclesWithin).toHaveBeenCalled();
+      expect(avaiaLines("en", voice, "walk")).toContain(
+        lastLabel(mapRenderer)?.speech,
+      );
+
+      // Every step of the way stays outside the house.
+      for (let step = 0; step < 300; step++) {
+        act(() => vi.advanceTimersByTime(200));
+        const [longitude, latitude] = lastAvaia(mapRenderer)!.lngLat;
+        const inside =
+          longitude > here.longitude + house.west &&
+          longitude < here.longitude + house.east &&
+          latitude > here.latitude + house.south &&
+          latitude < here.latitude + house.north;
+        expect(inside).toBe(false);
+      }
+      const arrived = lastAvaia(mapRenderer);
+      expect(arrived?.lngLat[0]).toBeCloseTo(there.longitude, 6);
+      expect(arrived?.lngLat[1]).toBeCloseTo(there.latitude, 6);
+    });
+
+    it("says what walls a place in, and stays, when there is no way round", async () => {
+      const mapRenderer = await renderWorld();
+      // A ring of water around where it was sent.
+      const moat = [
+        ...footprint(0.0006, -0.0004, 0.0014, 0.0004),
+        ...footprint(0.0008, -0.0002, 0.0012, 0.0002),
+      ];
+      Object.assign(mapRenderer, {
+        obstaclesWithin: () => [{ kind: "water", polygons: [moat] }],
+      });
+
+      tap(mapRenderer);
+      act(() => vi.advanceTimersByTime(5_000));
+
+      expect(avaiaLines("en", voice, "blocked.water")).toContain(
+        lastLabel(mapRenderer)?.speech,
+      );
+      expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+        here.longitude,
+        here.latitude,
+      ]);
+    });
+
     it("goes to see what its owner walked past, and writes it down", async () => {
       vi.useFakeTimers();
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
