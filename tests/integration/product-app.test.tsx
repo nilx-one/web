@@ -940,7 +940,7 @@ describe("ProductApp identity", () => {
   it("names only the Bond from the Personal Bond profile surface", async () => {
     const user = userEvent.setup();
     let pubDress = "0x0sky";
-    const avaiaPubDress = "0skai";
+    const avaiaPubDress = "x0skai";
     const renamePubDressSlug = vi
       .fn<IdentityAccessPort["renamePubDressSlug"]>()
       .mockImplementation(async (slug) => {

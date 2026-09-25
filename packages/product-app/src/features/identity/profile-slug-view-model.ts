@@ -15,6 +15,8 @@ export const MAX_AVAIA_SLUG_SCALARS = 34;
 export const AVAIA_SUFFIX = "ai";
 
 const PREFIX = "0x";
+/** An Avaia address is its owner's pub_dress without the leading `0`. */
+const AVAIA_PREFIX = "x";
 
 export interface PubDressParts {
   /** The lowercase hexadecimal discriminator the Bond registered under. */
@@ -38,13 +40,14 @@ export function pubDressParts(pubDress: string): PubDressParts | undefined {
 }
 
 /**
- * An owned Avaia address carries its owner's discriminator and no `0x` prefix,
- * so only the scalars after that discriminator are the Avaia's own name.
+ * An owned Avaia address is `x`, its owner's discriminator, then its own name:
+ * `0x0sky` owns `x0skai`. Only the scalars after the discriminator are a choice.
  */
 export function avaiaPubDressParts(
   avaiaPubDress: string,
 ): PubDressParts | undefined {
-  const body = [...avaiaPubDress];
+  if (!avaiaPubDress.startsWith(AVAIA_PREFIX)) return undefined;
+  const body = [...avaiaPubDress.slice(AVAIA_PREFIX.length)];
   const discriminator = body[0];
   if (discriminator === undefined || !/^[0-9a-f]$/.test(discriminator)) {
     return undefined;
@@ -56,7 +59,7 @@ export interface AddressSlugViewState {
   readonly kind: "editable" | "fixed";
   /** What the address reads as today, before anything is typed. */
   readonly address: string;
-  /** The immutable head the slug is written after: `0x0` or `0`. */
+  /** The immutable head the slug is written after: `0x0` or `x0`. */
   readonly prefix: string;
   /** The slug being edited, which is the current one until someone types. */
   readonly slug: string;
@@ -212,7 +215,7 @@ export function createAvaiaSlugViewState(
   return createSlugViewState(
     avaiaPubDress,
     parts,
-    parts?.discriminator ?? "",
+    parts === undefined ? "" : `${AVAIA_PREFIX}${parts.discriminator}`,
     draft,
     pending,
     {

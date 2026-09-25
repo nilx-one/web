@@ -905,7 +905,7 @@ describe("a card that talks", () => {
     fakeMap.camera.zoom = MAP_BODY_HANDOVER_ZOOM + 0.5;
 
     renderer.setObservedPositionLabel({
-      title: "0skai",
+      title: "x0skai",
       detail: "70 m from this device",
       at: [30.5244, 50.4501],
       speech: "Right. That way.",
@@ -921,7 +921,7 @@ describe("a card that talks", () => {
     expect(marker?.element.hidden).toBe(false);
 
     renderer.setObservedPositionLabel({
-      title: "0skai",
+      title: "x0skai",
       detail: "This device",
     });
     expect(speech?.style.opacity).toBe("0");

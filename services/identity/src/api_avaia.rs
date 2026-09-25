@@ -307,7 +307,7 @@ mod avaia_api_tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
-        assert_eq!(body["pub_dress"], "0skai");
+        assert_eq!(body["pub_dress"], "x0skai");
         assert_eq!(body["owner_pub_dress"], "0x0sky");
         assert_eq!(body["configuration_state"], "unconfigured");
         assert!(body["model_ref"].is_null());
@@ -322,7 +322,7 @@ mod avaia_api_tests {
                 Request::post("/api/v1/identity/avaia")
                     .header(AUTHORIZATION, format!("tma {auth}"))
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pub_dress":"0newai"}"#))
+                    .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
                     .expect("request"),
             )
             .await
@@ -349,7 +349,7 @@ mod avaia_api_tests {
                     .header(AUTHORIZATION, format!("tma {auth}"))
                     .header("x-0x1-csrf", "1")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pub_dress":"1newai"}"#))
+                    .body(Body::from(r#"{"pub_dress":"x1newai"}"#))
                     .expect("request"),
             )
             .await
@@ -367,14 +367,14 @@ mod avaia_api_tests {
                     .header(AUTHORIZATION, format!("tma {auth}"))
                     .header("x-0x1-csrf", "1")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pub_dress":"0newai"}"#))
+                    .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
                     .expect("request"),
             )
             .await
             .expect("response");
         assert_eq!(saved.status(), StatusCode::OK);
         let body = json(saved).await;
-        assert_eq!(body["pub_dress"], "0newai");
+        assert_eq!(body["pub_dress"], "x0newai");
         assert_eq!(body["configuration_state"], "configured");
 
         let reread = app
@@ -388,7 +388,7 @@ mod avaia_api_tests {
             .expect("response");
         assert_eq!(reread.status(), StatusCode::OK);
         let body = json(reread).await;
-        assert_eq!(body["pub_dress"], "0newai");
+        assert_eq!(body["pub_dress"], "x0newai");
         assert_eq!(body["configuration_state"], "configured");
     }
 }

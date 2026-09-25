@@ -348,7 +348,7 @@ describe("Avaia profile transport", () => {
   it("reads the stored Avaia over the session, and stores no copy of it", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
-        pub_dress: "0skai",
+        pub_dress: "x0skai",
         owner_pub_dress: "0x0sky",
         configuration_state: "unconfigured",
         model_ref: null,
@@ -362,7 +362,7 @@ describe("Avaia profile transport", () => {
     await expect(adapter.readAvaiaProfile()).resolves.toEqual({
       kind: "available",
       profile: {
-        pubDress: "0skai",
+        pubDress: "x0skai",
         ownerPubDress: "0x0sky",
         configurationState: "unconfigured",
       },
@@ -377,7 +377,7 @@ describe("Avaia profile transport", () => {
   it("carries a provider proof when the host has one", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
-        pub_dress: "0skai",
+        pub_dress: "x0skai",
         owner_pub_dress: "0x0sky",
         configuration_state: "configured",
         model_ref: null,
@@ -399,7 +399,7 @@ describe("Avaia profile transport", () => {
   it("sends the whole address with CSRF protection", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
-        pub_dress: "0vesnai",
+        pub_dress: "x0vesnai",
         owner_pub_dress: "0x0sky",
         configuration_state: "configured",
         model_ref: null,
@@ -410,10 +410,10 @@ describe("Avaia profile transport", () => {
       getAuthorization: () => undefined,
     });
 
-    await expect(adapter.updateAvaiaProfile("0vesnai")).resolves.toEqual({
+    await expect(adapter.updateAvaiaProfile("x0vesnai")).resolves.toEqual({
       kind: "updated",
       profile: {
-        pubDress: "0vesnai",
+        pubDress: "x0vesnai",
         ownerPubDress: "0x0sky",
         configurationState: "configured",
       },
@@ -426,7 +426,7 @@ describe("Avaia profile transport", () => {
         "content-type": "application/json",
         "x-0x1-csrf": "1",
       },
-      body: JSON.stringify({ pub_dress: "0vesnai" }),
+      body: JSON.stringify({ pub_dress: "x0vesnai" }),
     });
   });
 
@@ -462,7 +462,7 @@ describe("Avaia profile transport", () => {
       getAuthorization: () => undefined,
     });
 
-    await expect(adapter.updateAvaiaProfile("0skai")).resolves.toEqual({
+    await expect(adapter.updateAvaiaProfile("x0skai")).resolves.toEqual({
       kind: "rejected",
       reason: "authentication-required",
     });
@@ -478,11 +478,11 @@ describe("Avaia profile transport", () => {
       kind: "rejected",
       reason: "unavailable",
     });
-    await expect(adapter.updateAvaiaProfile("0skai")).resolves.toEqual({
+    await expect(adapter.updateAvaiaProfile("x0skai")).resolves.toEqual({
       kind: "rejected",
       reason: "rate-limited",
     });
-    await expect(adapter.updateAvaiaProfile("0skai")).resolves.toEqual({
+    await expect(adapter.updateAvaiaProfile("x0skai")).resolves.toEqual({
       kind: "service-unavailable",
     });
   });
@@ -490,7 +490,7 @@ describe("Avaia profile transport", () => {
   it("treats an unreadable projection as an unavailable service", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(response(200, { pub_dress: "0skai" }))
+      .mockResolvedValueOnce(response(200, { pub_dress: "x0skai" }))
       .mockResolvedValueOnce(
         response(401, {
           error: { code: "provider_authentication_required", message: "" },

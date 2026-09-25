@@ -10,7 +10,7 @@ import {
 } from "./avaia-setup-view-model";
 
 const profile = {
-  pubDress: "0skai",
+  pubDress: "x0skai",
   ownerPubDress: "0x0sky",
   configurationState: "unconfigured",
 } as const;
@@ -29,18 +29,18 @@ describe("Avaia setup surface", () => {
       input({
         load: {
           kind: "available",
-          profile: { ...profile, pubDress: "0vesnai" },
+          profile: { ...profile, pubDress: "x0vesnai" },
         },
-        fallbackAddress: "0skai",
+        fallbackAddress: "x0skai",
       }),
     );
 
     expect(state).toMatchObject({
-      address: "0vesnai",
-      prefix: "0",
+      address: "x0vesnai",
+      prefix: "x0",
       slugStem: "vesn",
       suffix: "ai",
-      candidatePubDress: "0vesnai",
+      candidatePubDress: "x0vesnai",
       editable: true,
     });
   });
@@ -49,16 +49,17 @@ describe("Avaia setup surface", () => {
     const state = createAvaiaSetupViewState(input({ draftSlugStem: "sync." }));
 
     expect(state).toMatchObject({
-      prefix: "0",
+      prefix: "x0",
       slugStem: "sync.",
       suffix: "ai",
-      candidatePubDress: "0sync.ai",
+      candidatePubDress: "x0sync.ai",
     });
   });
 
   it("reconstructs a service request from the stored discriminator", () => {
-    expect(composeAvaiaPubDress("0skai", "sync.")).toBe("0sync.ai");
-    expect(composeAvaiaPubDress("fvesnai", "new")).toBe("fnewai");
+    expect(composeAvaiaPubDress("x0skai", "sync.")).toBe("x0sync.ai");
+    expect(composeAvaiaPubDress("xfvesnai", "new")).toBe("xfnewai");
+    expect(composeAvaiaPubDress("0skai", "new")).toBeUndefined();
     expect(composeAvaiaPubDress("not-an-avaia", "new")).toBeUndefined();
   });
 
@@ -94,12 +95,12 @@ describe("Avaia setup surface", () => {
 
   it("waits for a profile before offering anything to write", () => {
     const loading = createAvaiaSetupViewState(
-      input({ load: { kind: "loading" }, fallbackAddress: "0skai" }),
+      input({ load: { kind: "loading" }, fallbackAddress: "x0skai" }),
     );
 
     expect(loading.editable).toBe(false);
     expect(loading.canSave).toBe(false);
-    expect(loading.address).toBe("0skai");
+    expect(loading.address).toBe("x0skai");
     expect(loading.configuration).toBeUndefined();
     expect(loading.status).toBe("Reading this Avaia…");
   });
@@ -134,7 +135,7 @@ describe("Avaia setup surface", () => {
     );
 
     expect(refused.slugStem).toBe("taken");
-    expect(refused.candidatePubDress).toBe("0takenai");
+    expect(refused.candidatePubDress).toBe("x0takenai");
     expect(refused.canSave).toBe(true);
   });
 });

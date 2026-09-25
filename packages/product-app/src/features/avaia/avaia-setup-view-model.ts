@@ -23,7 +23,7 @@ export const AVAIA_MODEL_UNAVAILABLE = "Not available yet";
 export const AVAIA_ADDRESS_SUFFIX = "ai";
 
 interface AvaiaAddressParts {
-  /** The owner's immutable hexadecimal discriminator. */
+  /** The literal `x` and the owner's immutable hexadecimal discriminator. */
   readonly prefix: string;
   /** Mutable UI portion before the protocol-required `ai` ending. */
   readonly slugStem: string;
@@ -33,21 +33,19 @@ interface AvaiaAddressParts {
 /**
  * Stored Avaia addresses are already canonical service facts. Splitting them is
  * presentation only: it lets the editor keep contract-owned affixes outside
- * the text input without inventing a second address source of truth.
+ * the text input without inventing a second address source of truth. An
+ * Avaia address is its owner's pub_dress without the leading `0`, so the fixed
+ * prefix is `x` plus the discriminator: `0x0sky` owns `x0skai`.
  */
 function avaiaAddressParts(address: string): AvaiaAddressParts | undefined {
-  const discriminator = address[0];
-  if (
-    discriminator === undefined ||
-    !/^[0-9a-f]$/.test(discriminator) ||
-    !address.endsWith(AVAIA_ADDRESS_SUFFIX)
-  ) {
+  const prefix = address.slice(0, 2);
+  if (!/^x[0-9a-f]$/.test(prefix) || !address.endsWith(AVAIA_ADDRESS_SUFFIX)) {
     return undefined;
   }
 
   return {
-    prefix: discriminator,
-    slugStem: address.slice(1, -AVAIA_ADDRESS_SUFFIX.length),
+    prefix,
+    slugStem: address.slice(prefix.length, -AVAIA_ADDRESS_SUFFIX.length),
     suffix: AVAIA_ADDRESS_SUFFIX,
   };
 }

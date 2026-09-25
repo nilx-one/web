@@ -14,7 +14,7 @@ describe("AvaiaSetupView", () => {
       load: {
         kind: "available",
         profile: {
-          pubDress: "0skai",
+          pubDress: "x0skai",
           ownerPubDress: "0x0sky",
           configurationState: "configured",
         },
@@ -34,7 +34,7 @@ describe("AvaiaSetupView", () => {
     expect(input).toHaveValue("sk");
     expect(
       container.querySelector(".profile-edit__discriminator"),
-    ).toHaveTextContent("0");
+    ).toHaveTextContent("x0");
     const suffix = container.querySelector(".profile-edit__affix");
     expect(suffix).toHaveTextContent("ai");
     expect(suffix?.tagName).toBe("SPAN");

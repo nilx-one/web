@@ -176,7 +176,38 @@ impl IdentityRepository {
                 .await?;
         }
         self.migrate_avatar_catalog().await?;
+        self.migrate_avaia_prefix().await?;
         self.backfill_pub_dress_labels().await?;
+        Ok(())
+    }
+
+    /// Stored Avaia addresses predate the literal `x` prefix. Rewrite them once,
+    /// keeping any configuration state the rename trigger would otherwise flip.
+    async fn migrate_avaia_prefix(&self) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let legacy = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM identities \
+             WHERE identity_kind = 'avaia' AND substr(pub_dress, 1, 1) <> 'x')",
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        if legacy {
+            let configured = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_schema \
+                 WHERE type = 'table' AND name = 'avaia_configuration')",
+            )
+            .fetch_one(&mut *transaction)
+            .await?;
+            sqlx::raw_sql(include_str!("../migrations/0013_avaia_x_prefix.sql"))
+                .execute(&mut *transaction)
+                .await?;
+            if configured {
+                sqlx::raw_sql(include_str!("../migrations/0007_avaia_configuration.sql"))
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+        }
+        transaction.commit().await?;
         Ok(())
     }
 
@@ -1298,7 +1329,7 @@ mod tests {
             Some("dasha-v2-study".to_owned())
         );
         let owner: String = sqlx::query_scalar(
-            "SELECT owner_pub_dress FROM identities WHERE pub_dress = '0Skai'",
+            "SELECT owner_pub_dress FROM identities WHERE pub_dress = 'x0Skai'",
         )
         .fetch_one(&reopened.pool)
         .await
@@ -1351,7 +1382,7 @@ mod tests {
             outcome,
             RegistrationOutcome::Registered(record)
                 if record.pub_dress == "0xda-sha."
-                    && record.avaia_pub_dress.as_deref() == Some("da-sha.ai")
+                    && record.avaia_pub_dress.as_deref() == Some("xda-sha.ai")
         ));
     }
 
@@ -1560,9 +1591,9 @@ mod tests {
             .await
             .expect("reconciliation")
             .expect("human exists");
-        assert_eq!(reconciled.avaia_pub_dress.as_deref(), Some("da-sha.ai"));
+        assert_eq!(reconciled.avaia_pub_dress.as_deref(), Some("xda-sha.ai"));
         let created_at = sqlx::query_scalar::<_, i64>(
-            "SELECT CAST(created_at AS INTEGER) FROM identities WHERE pub_dress = 'da-sha.ai'",
+            "SELECT CAST(created_at AS INTEGER) FROM identities WHERE pub_dress = 'xda-sha.ai'",
         )
         .fetch_one(&repository.pool)
         .await
@@ -1592,7 +1623,7 @@ mod tests {
             .await
             .expect("lookup")
             .expect("identity");
-        assert_eq!(telegram.avaia_pub_dress.as_deref(), Some("0skai"));
+        assert_eq!(telegram.avaia_pub_dress.as_deref(), Some("x0skai"));
         assert_eq!(
             telegram.readable_url("nilx.one").as_deref(),
             Some("https://0x0sky.nilx.one")
@@ -1602,7 +1633,7 @@ mod tests {
                 .register(&discord_address, &ProviderIdentity::discord("42"), 101)
                 .await,
             Ok(RegistrationOutcome::AlreadyRegistered(record))
-                if record.avaia_pub_dress.as_deref() == Some("7skai")
+                if record.avaia_pub_dress.as_deref() == Some("x7skai")
         ));
     }
 
@@ -1661,7 +1692,7 @@ mod tests {
         assert!(matches!(
             outcome,
             NativeRegistrationOutcome::Registered(record)
-                if record.avaia_pub_dress.as_deref() == Some("0skai")
+                if record.avaia_pub_dress.as_deref() == Some("x0skai")
                     && record.readable_url("nilx.one").as_deref() == Some("https://0x0sky.nilx.one")
         ));
         assert!(
@@ -1680,7 +1711,7 @@ mod tests {
                 .expect("identity")
                 .avaia_pub_dress
                 .as_deref(),
-            Some("0skai")
+            Some("x0skai")
         );
     }
 
@@ -1718,7 +1749,7 @@ mod tests {
                 )
                 .await,
             Ok(NativeRegistrationOutcome::IdempotentReplay(record))
-                if record.avaia_pub_dress.as_deref() == Some("0skai")
+                if record.avaia_pub_dress.as_deref() == Some("x0skai")
                     && record.pub_dress_label.as_deref() == Some("0x0sky")
         ));
         let count = sqlx::query_scalar::<_, i64>(
@@ -1762,7 +1793,7 @@ mod tests {
             .await
             .expect("session lookup")
             .expect("active session");
-        assert_eq!(session.avaia_pub_dress.as_deref(), Some("0skai"));
+        assert_eq!(session.avaia_pub_dress.as_deref(), Some("x0skai"));
         assert_eq!(
             session.readable_url("nilx.one").as_deref(),
             Some("https://0x0sky.nilx.one")

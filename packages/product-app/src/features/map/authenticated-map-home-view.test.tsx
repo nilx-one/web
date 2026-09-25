@@ -120,7 +120,7 @@ function renderView(overrides: ViewOverrides = {}) {
     <AuthenticatedMapHomeView
       hostLabel="browser host"
       pubDress="0x0sky"
-      avaiaPubDress={overrides.avaiaPubDress ?? "0skai"}
+      avaiaPubDress={overrides.avaiaPubDress ?? "x0skai"}
       renderer={overrides.mapRenderer ?? renderer()}
       geolocation={overrides.geolocation ?? UNSUPPORTED_GEOLOCATION_DOUBLE}
       runtime={{
@@ -163,10 +163,10 @@ describe("AuthenticatedMapHomeView", () => {
     // Authentication opens on the Avaia, with the Bond represented by this
     // device spectating until it takes the wheel back.
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("AI");
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("driving");
     expect(
       screen.getByLabelText("No reciprocal relationship asserted"),
@@ -174,7 +174,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toHaveTextContent("spectate");
-    expect(screen.getByText("0skai")).toBeVisible();
+    expect(screen.getByText("x0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
@@ -227,7 +227,7 @@ describe("AuthenticatedMapHomeView", () => {
     ).toHaveTextContent("You");
 
     const handToAvaia = screen.getByRole("button", {
-      name: "Hand the wheel to 0skai",
+      name: "Hand the wheel to x0skai",
     });
     expect(handToAvaia).toBeEnabled();
     expect(handToAvaia).toHaveTextContent("ready");
@@ -235,7 +235,7 @@ describe("AuthenticatedMapHomeView", () => {
     fireEvent.click(handToAvaia);
 
     expect(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("driving");
     expect(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
@@ -262,7 +262,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
     expect(onPrepareAvaia).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+      screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
     );
 
     expect(onPrepareAvaia).toHaveBeenCalledOnce();
@@ -274,7 +274,7 @@ describe("AuthenticatedMapHomeView", () => {
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
     const avaia = screen.getByRole("button", {
-      name: "Hand the wheel to 0skai",
+      name: "Hand the wheel to x0skai",
     });
     expect(avaia).toBeEnabled();
     fireEvent.click(avaia);
@@ -296,7 +296,7 @@ describe("AuthenticatedMapHomeView", () => {
     const firstFix = setCamera.mock.calls.length;
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Focus the world on 0skai" }),
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
     );
 
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
@@ -324,7 +324,7 @@ describe("AuthenticatedMapHomeView", () => {
       screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Hand the wheel to 0skai" }),
+      screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
     ).toBeVisible();
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
@@ -631,7 +631,7 @@ describe("AuthenticatedMapHomeView", () => {
       load: {
         kind: "available",
         profile: {
-          pubDress: "0skai",
+          pubDress: "x0skai",
           ownerPubDress: "0x0sky",
           configurationState: "configured",
         },
@@ -653,16 +653,16 @@ describe("AuthenticatedMapHomeView", () => {
         .findLast((drawn) => drawn.id === "avaia");
 
     // Nothing chosen yet: the world draws the deterministic ambient study for
-    // this address ("Sky", for "0skai" against a "dasha-study" Bond).
+    // this address ("Dasha 2.0", for "x0skai" against a "dasha-study" Bond).
     await vi.waitFor(() =>
-      expect(avaiaHandle()?.modelId).toBe(avaiaStudy("0skai", "dasha-study")),
+      expect(avaiaHandle()?.modelId).toBe(avaiaStudy("x0skai", "dasha-study")),
     );
     expect(avaiaHandle()?.modelId).not.toBe("kai-study");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit 0skai" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
     fireEvent.click(
       screen.getByRole("button", {
-        name: /Change this Avaia's 3D model — currently Sky/,
+        name: /Change this Avaia's 3D model — currently Dasha 2\.0/,
       }),
     );
     fireEvent.click(screen.getByRole("radio", { name: /Kai/ }));
@@ -764,7 +764,7 @@ describe("AuthenticatedMapHomeView", () => {
       <AuthenticatedMapHomeView
         hostLabel="browser host"
         pubDress="0x0sky"
-        avaiaPubDress="0skai"
+        avaiaPubDress="x0skai"
         renderer={renderer()}
         geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
         runtime={{
@@ -1043,7 +1043,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(new Set(drawn.map((handle) => handle.id))).toEqual(
       new Set(["avaia"]),
     );
-    expect(drawn.at(-1)?.modelId).toBe(avaiaStudy("0skai", "dasha-study"));
+    expect(drawn.at(-1)?.modelId).toBe(avaiaStudy("x0skai", "dasha-study"));
     // The seat nobody is in is dropped rather than left standing behind.
     expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("bond");
   });
@@ -1100,9 +1100,9 @@ describe("AuthenticatedMapHomeView", () => {
     const drawn = vi.mocked(mapRenderer.avatars!.upsert).mock.lastCall?.[0]
       .modelId;
 
-    expect(label).toMatchObject({ title: "0skai", detail: "This device" });
+    expect(label).toMatchObject({ title: "x0skai", detail: "This device" });
     expect(label?.avatarUrl).toBe(avatarPreviewUrl(drawn!));
-    expect(drawn).toBe(avaiaStudy("0skai", "dasha-study"));
+    expect(drawn).toBe(avaiaStudy("x0skai", "dasha-study"));
   });
 
   // The card names whoever took the wheel — an Avaia that hands back to its
@@ -1151,7 +1151,7 @@ describe("AuthenticatedMapHomeView", () => {
       return mapRenderer;
     }
 
-    const voice = avaiaStudy("0skai", "dasha-study");
+    const voice = avaiaStudy("x0skai", "dasha-study");
     const lastLabel = (mapRenderer: MapRenderer) =>
       vi.mocked(mapRenderer.setObservedPositionLabel).mock.lastCall?.[0];
     const lastAvaia = (mapRenderer: MapRenderer) =>
@@ -1258,7 +1258,7 @@ describe("AuthenticatedMapHomeView", () => {
 
       // What it learned is its own note, on this device.
       vi.useRealTimers();
-      fireEvent.click(screen.getByRole("button", { name: "Edit 0skai" }));
+      fireEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
       const notes = screen.getByRole("region", { name: "Landmarks studied" });
       expect(notes).toHaveTextContent("“Volodymyr the Great”");
       expect(notes).toHaveTextContent("historic: memorial");

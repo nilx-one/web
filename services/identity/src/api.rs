@@ -1356,7 +1356,7 @@ async fn rename_owned_avaia(
     {
         return rate_limited(retry_after);
     }
-    let next = match AvaiaPubDress::from_str(&format!("{}{}", owner.discriminator(), request.slug))
+    let next = match AvaiaPubDress::from_str(&format!("x{}{}", owner.discriminator(), request.slug))
     {
         Ok(value) => value,
         Err(error) => return invalid_avaia_pub_dress(error),
@@ -2025,7 +2025,7 @@ mod tests {
         let body = to_bytes(second.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["identity"]["pub_dress"], "0x0sky");
-        assert_eq!(body["identity"]["avaia_pub_dress"], "0skai");
+        assert_eq!(body["identity"]["avaia_pub_dress"], "x0skai");
         assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
         assert!(body.to_string().find("provider_subject").is_none());
     }
@@ -2145,7 +2145,7 @@ mod tests {
         let body = to_bytes(response.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["state"], "recovery_key_required");
-        assert_eq!(body["identity"]["avaia_pub_dress"], "0Skai");
+        assert_eq!(body["identity"]["avaia_pub_dress"], "x0Skai");
         assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
         assert!(
             body["recovery_key"]
@@ -2201,7 +2201,7 @@ mod tests {
         assert_eq!(authenticated_context["identity"]["pub_dress"], "0x0Sky");
         assert_eq!(
             authenticated_context["identity"]["avaia_pub_dress"],
-            "0Skai"
+            "x0Skai"
         );
         assert_eq!(
             authenticated_context["identity"]["pub_dress_url"],
@@ -2853,7 +2853,7 @@ mod tests {
         assert_eq!(renamed["pub_dress"], "0x0Rain");
         assert_eq!(renamed["pub_dress_url"], "https://0x0rain.nilx.one");
         // The owned Avaia is a derivation of its owner's address, so it moved too.
-        assert_eq!(renamed["avaia_pub_dress"], "0Rainai");
+        assert_eq!(renamed["avaia_pub_dress"], "x0Rainai");
 
         let context = Request::get("/api/v1/auth/native/context")
             .header("cookie", cookies.clone())
@@ -3117,7 +3117,7 @@ mod tests {
         assert_eq!(named.status(), StatusCode::OK);
         let named = json_body(named).await;
         assert_eq!(named["pub_dress"], "0x0Sky");
-        assert_eq!(named["avaia_pub_dress"], "0Vesnai");
+        assert_eq!(named["avaia_pub_dress"], "x0Vesnai");
 
         // A chosen Avaia name is not a derivation, so renaming its owner keeps
         // it: only the owner's own address changes.
@@ -3129,14 +3129,14 @@ mod tests {
         )
         .await;
         assert_eq!(renamed["pub_dress"], "0x0Rain");
-        assert_eq!(renamed["avaia_pub_dress"], "0Vesnai");
+        assert_eq!(renamed["avaia_pub_dress"], "x0Vesnai");
 
         let context = Request::get("/api/v1/auth/native/context")
             .header("cookie", cookies.clone())
             .body(Body::empty())
             .expect("request");
         let context = json_body(app.oneshot(context).await.expect("response")).await;
-        assert_eq!(context["identity"]["avaia_pub_dress"], "0Vesnai");
+        assert_eq!(context["identity"]["avaia_pub_dress"], "x0Vesnai");
     }
 
     #[tokio::test]
@@ -3200,7 +3200,7 @@ mod tests {
             .insert("cookie", cookies.parse().expect("header"));
         let renamed = json_body(app.oneshot(rename).await.expect("response")).await;
         assert_eq!(renamed["pub_dress"], "0x0Rain");
-        assert_eq!(renamed["avaia_pub_dress"], "0Rainai");
+        assert_eq!(renamed["avaia_pub_dress"], "x0Rainai");
     }
 
     #[tokio::test]
