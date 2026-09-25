@@ -290,7 +290,7 @@
 
 .local-model-settings__detail {
   margin: 0;
-  color: rgba(245, 243, 247, 0.62);
+  color: var(--map-ink-muted);
   font-size: 0.78rem;
 }
 
@@ -301,7 +301,7 @@
 }
 
 .local-model-settings__notices {
-  color: rgba(245, 243, 247, 0.62);
+  color: var(--map-ink-muted);
   font-size: 0.75rem;
 }
 
@@ -362,7 +362,7 @@
 .local-model-settings__option {
   display: grid;
   gap: 0.25rem;
-  color: rgba(245, 243, 247, 0.72);
+  color: var(--map-ink-muted);
   font-size: 0.78rem;
 }
 
@@ -379,7 +379,7 @@
 
 .local-model-settings__policy {
   justify-self: start;
-  color: rgba(245, 243, 247, 0.72);
+  color: var(--map-ink-muted);
   font-size: 0.75rem;
 }
 
@@ -391,7 +391,7 @@
   padding: 0.4rem 0.6rem;
   border-radius: 0.5rem;
   background: rgba(245, 243, 247, 0.06);
-  color: rgba(245, 243, 247, 0.78);
+  color: var(--map-ink-muted);
   font-size: 0.75rem;
 }
 
@@ -618,6 +618,10 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .profile-edit__discriminator,
 .authenticated-map-home[data-theme="light"] .profile-edit__affix {
   color: rgba(17, 19, 26, 0.68);
+}
+
+.authenticated-map-home[data-theme="light"] .local-model-settings__policy-note {
+  background: rgba(17, 19, 26, 0.045);
 }
 
 .authenticated-map-home[data-theme="light"] .bond-dock__edit,

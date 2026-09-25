@@ -71,7 +71,10 @@
 .app-shell__header {
   position: absolute;
   z-index: 4;
-  top: calc(var(--shell-inset) + var(--safe-top, 0px));
+  /* Pinned flush to the viewport's top edge — only the device safe area (a
+     notch or the status bar) pushes it down, never the shell's own design
+     inset. Every overlay below measures its own offset from this edge. */
+  top: var(--safe-top, 0px);
   right: calc(var(--shell-inset) + var(--safe-right, 0px));
   left: calc(var(--shell-inset) + var(--safe-left, 0px));
   min-height: var(--shell-header-block);
@@ -87,8 +90,7 @@
   position: absolute;
   z-index: 5;
   top: calc(
-    var(--shell-inset) + var(--safe-top, 0px) + var(--shell-header-block) +
-      var(--shell-gap)
+    var(--safe-top, 0px) + var(--shell-header-block) + var(--shell-gap)
   );
   right: calc(var(--shell-inset) + var(--safe-right, 0px));
   left: calc(var(--shell-inset) + var(--safe-left, 0px));
@@ -101,8 +103,8 @@
     3rem,
     calc(
       100dvh - var(--safe-top, 0px) - var(--safe-bottom, 0px) -
-        var(--shell-header-block) - var(--shell-gap) * 2 - var(--shell-inset) *
-        2 - var(--shell-bottom-height, var(--shell-dock-reserve))
+        var(--shell-header-block) - var(--shell-gap) * 2 - var(--shell-inset) -
+        var(--shell-bottom-height, var(--shell-dock-reserve))
     )
   );
   overflow-x: hidden;
@@ -133,7 +135,7 @@
   gap: var(--shell-gap);
   max-height: calc(
     100dvh - var(--safe-top, 0px) - var(--safe-bottom, 0px) -
-      var(--shell-header-block) - var(--shell-gap) - var(--shell-inset) * 2
+      var(--shell-header-block) - var(--shell-gap) - var(--shell-inset)
   );
   pointer-events: none;
 }
