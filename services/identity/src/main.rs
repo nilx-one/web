@@ -48,6 +48,10 @@ struct CommandSpec {
 /// button in any private chat with the bot.
 const USER_COMMANDS: &[CommandSpec] = &[
     CommandSpec {
+        command: "open",
+        description: "Open 0x1",
+    },
+    CommandSpec {
         command: "start",
         description: "Open pub_dress registration",
     },
@@ -409,6 +413,7 @@ async fn handle_message(
         .unwrap_or_default();
 
     match command {
+        "/open" => open_app(&bot, &message).await?,
         "/start" => start_registration(&bot, &message, state.as_ref(), telegram_user_id).await?,
         "/whoami" => show_identity(&bot, &message, state.as_ref(), telegram_user_id).await?,
         "/current_position" | CURRENT_POSITION_BUTTON => {
@@ -884,6 +889,16 @@ async fn start_registration(
     Ok(())
 }
 
+/// `/open` — the topmost command in [`USER_COMMANDS`]. Deliberately
+/// stateless: no repository lookup, no role check, so it stays available to
+/// every chat in every state, including one that never registered.
+async fn open_app(bot: &Bot, message: &Message) -> ResponseResult<()> {
+    bot.send_message(message.chat.id, "Open 0x1")
+        .reply_markup(registration_keyboard())
+        .await?;
+    Ok(())
+}
+
 fn registration_keyboard() -> InlineKeyboardMarkup {
     let url = Url::parse(MINI_APP_URL).expect("MINI_APP_URL must be a valid URL");
     let button = InlineKeyboardButton::web_app("Open 0x1", WebAppInfo { url });
@@ -954,6 +969,14 @@ mod tests {
         bot_commands, control_keyboard, current_position_request_keyboard, help_text,
         registration_keyboard, resolve_location_mode,
     };
+
+    #[test]
+    fn open_is_the_first_command_for_every_role() {
+        assert_eq!(bot_commands(BondAccessRole::User)[0].command, "open");
+        assert_eq!(bot_commands(BondAccessRole::Admin)[0].command, "open");
+        assert!(help_text(BondAccessRole::User).contains("/open"));
+        assert!(help_text(BondAccessRole::Admin).contains("/open"));
+    }
 
     #[test]
     fn unlink_is_registered_and_documented_for_every_role() {
