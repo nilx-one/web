@@ -37,4 +37,17 @@ describe("monument presentation contract", () => {
     // Disposing twice — an unmount racing a teardown — must stay a no-op.
     expect(() => layer.dispose()).not.toThrow();
   });
+
+  it("lets a style swap remove and re-add the layer without onRemove killing it for good", () => {
+    // MapLibre's setStyle removes and re-adds every custom layer; onRemove
+    // has to leave the layer able to load again, unlike dispose(), which is
+    // the one call that closes the door for good.
+    const layer = createMonumentLayer();
+    // The implementation never reads either argument, so any placeholder
+    // satisfies the interface's declared signature.
+    const detachedRemove = () => layer.onRemove?.({} as never, {} as never);
+    expect(detachedRemove).not.toThrow();
+    expect(detachedRemove).not.toThrow();
+    expect(() => layer.dispose()).not.toThrow();
+  });
 });

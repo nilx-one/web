@@ -81,7 +81,6 @@ export function createMonumentLayer(
   options: MonumentLayerOptions = {},
 ): MonumentCustomLayer {
   const loadAsset = options.loadAsset ?? defaultLoadAsset;
-  const abortController = new AbortController();
   const scene = new Scene();
   const ambient = new HemisphereLight(0xffffff, 0x6e665e, 2);
   ambient.position.set(0, 0, 1);
@@ -98,6 +97,12 @@ export function createMonumentLayer(
   let renderer: WebGLRenderer | undefined;
   let root: Object3D | undefined;
   let dimension: MapDimension = "flat";
+  // Scoped to one onAdd↔onRemove span, not the layer's whole life: a style
+  // swap removes and re-adds every custom layer, and the monument has to
+  // survive that the way the avatar layer's instances do. Only `dispose()`
+  // — a hard, permanent teardown nothing here currently calls on a style
+  // swap — closes the door for good.
+  let loadController: AbortController | undefined;
   let disposed = false;
 
   function place(): void {
@@ -131,10 +136,13 @@ export function createMonumentLayer(
     place();
   }
 
-  async function hydrate(): Promise<void> {
+  async function hydrate(signal: AbortSignal): Promise<void> {
     try {
-      const asset = await loadAsset(abortController.signal);
-      if (disposed) return;
+      const asset = await loadAsset(signal);
+      // Either the whole layer was torn down, or just this mount was — a
+      // slow load resolving after `onRemove` must not hand a scene whose
+      // renderer is already disposed a new root to retain.
+      if (disposed || signal.aborted) return;
       root = asset;
       scene.add(root);
       if (map !== undefined) anchorAt(map);
@@ -158,7 +166,8 @@ export function createMonumentLayer(
         antialias: true,
       });
       renderer.autoClear = false;
-      void hydrate();
+      loadController = new AbortController();
+      void hydrate(loadController.signal);
     },
 
     render(_gl: WebGL2RenderingContext, frame: CustomRenderMethodInput) {
@@ -181,6 +190,12 @@ export function createMonumentLayer(
     },
 
     onRemove() {
+      // Cancels this mount's in-flight load, if any, so a late resolution
+      // never adds a root to a scene whose renderer just got disposed.
+      loadController?.abort();
+      loadController = undefined;
+      root?.removeFromParent();
+      root = undefined;
       renderer?.dispose();
       renderer = undefined;
       map = undefined;
@@ -195,7 +210,8 @@ export function createMonumentLayer(
     dispose() {
       if (disposed) return;
       disposed = true;
-      abortController.abort();
+      loadController?.abort();
+      loadController = undefined;
       root?.removeFromParent();
       root = undefined;
       renderer?.dispose();
