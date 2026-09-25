@@ -508,6 +508,118 @@ describe("Avaia profile transport", () => {
       kind: "authentication-required",
     });
   });
+
+  it("nests the published location's coordinate under the read profile", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        pub_dress: "0skai",
+        owner_pub_dress: "0x0sky",
+        configuration_state: "configured",
+        model_ref: null,
+        location: {
+          coordinate: { longitude_e7: "305234000", latitude_e7: "504501000" },
+        },
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readAvaiaProfile()).resolves.toEqual({
+      kind: "available",
+      profile: {
+        pubDress: "0skai",
+        ownerPubDress: "0x0sky",
+        configurationState: "configured",
+        location: { coordinate: { longitude: 30.5234, latitude: 50.4501 } },
+      },
+    });
+  });
+
+  it("publishes the owner's chosen position with CSRF protection", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        pub_dress: "0skai",
+        owner_pub_dress: "0x0sky",
+        configuration_state: "configured",
+        model_ref: null,
+        location: {
+          coordinate: { longitude_e7: "305234000", latitude_e7: "504501000" },
+        },
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(
+      adapter.publishAvaiaLocation({ longitude: 30.5234, latitude: 50.4501 }),
+    ).resolves.toEqual({
+      kind: "published",
+      profile: {
+        pubDress: "0skai",
+        ownerPubDress: "0x0sky",
+        configurationState: "configured",
+        location: { coordinate: { longitude: 30.5234, latitude: 50.4501 } },
+      },
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/v1/identity/avaia/location", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({ longitude: 30.5234, latitude: 50.4501 }),
+    });
+  });
+
+  it("keeps the service's location refusal reason", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        response(401, {
+          error: { code: "provider_authentication_required", message: "" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(422, {
+          error: { code: "invalid_avaia_location", message: "" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(429, { error: { code: "rate_limited", message: "" } }),
+      )
+      .mockResolvedValueOnce(
+        response(503, {
+          error: { code: "identity_service_unavailable", message: "" },
+        }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    const position = { longitude: 30.5234, latitude: 50.4501 };
+
+    await expect(adapter.publishAvaiaLocation(position)).resolves.toEqual({
+      kind: "rejected",
+      reason: "authentication-required",
+    });
+    await expect(adapter.publishAvaiaLocation(position)).resolves.toEqual({
+      kind: "rejected",
+      reason: "invalid-location",
+    });
+    await expect(adapter.publishAvaiaLocation(position)).resolves.toEqual({
+      kind: "rejected",
+      reason: "rate-limited",
+    });
+    await expect(adapter.publishAvaiaLocation(position)).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+  });
 });
 
 describe("Browser provider connection transport", () => {

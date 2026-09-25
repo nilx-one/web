@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { WorldPosition } from "./avaia-movement-controller";
+
 /**
  * The Avaia a Bond owns, as identity contract 8 keeps it.
  *
@@ -12,6 +14,16 @@
  */
 export type AvaiaConfigurationState = "unconfigured" | "configured";
 
+/**
+ * The owner-published location for this Avaia, distinct from `WorldPosition`
+ * as used by {@link AvaiaMovementController}: that position is local,
+ * never-persisted presentation (see `avaia-walk.md`). This one is an explicit
+ * coordinate the owner chose to publish, and the identity service stores it.
+ */
+export interface AvaiaLocationProjection {
+  readonly coordinate: WorldPosition;
+}
+
 /** The owner-authenticated Avaia the identity service keeps. */
 export interface AvaiaProfileProjection {
   /**
@@ -21,6 +33,8 @@ export interface AvaiaProfileProjection {
   readonly pubDress: string;
   readonly ownerPubDress: string;
   readonly configurationState: AvaiaConfigurationState;
+  /** Absent while the owner has not published a location for this Avaia. */
+  readonly location?: AvaiaLocationProjection;
 }
 
 export type AvaiaProfileReadResult =
@@ -40,6 +54,14 @@ export type AvaiaProfileUpdateResult =
   | { kind: "rejected"; reason: AvaiaProfileUpdateRejection }
   | { kind: "service-unavailable" };
 
+export type AvaiaLocationPublishRejection =
+  "authentication-required" | "invalid-location" | "rate-limited";
+
+export type AvaiaLocationPublishResult =
+  | { kind: "published"; profile: AvaiaProfileProjection }
+  | { kind: "rejected"; reason: AvaiaLocationPublishRejection }
+  | { kind: "service-unavailable" };
+
 /**
  * The Avaia profile capability, kept apart from `IdentityAccessPort` so a host
  * that has not reached contract 8 stays a valid identity client instead of
@@ -48,6 +70,10 @@ export type AvaiaProfileUpdateResult =
 export interface AvaiaProfileAccessPort {
   readAvaiaProfile(): Promise<AvaiaProfileReadResult>;
   updateAvaiaProfile(pubDress: string): Promise<AvaiaProfileUpdateResult>;
+  /** Publishes the owner-chosen location nested under this Avaia. */
+  publishAvaiaLocation(
+    position: WorldPosition,
+  ): Promise<AvaiaLocationPublishResult>;
 }
 
 /** Whether an identity client also answers for the Avaia profile. */
@@ -58,7 +84,8 @@ export function hasAvaiaProfileAccess(
   const candidate = value as Partial<AvaiaProfileAccessPort>;
   return (
     typeof candidate.readAvaiaProfile === "function" &&
-    typeof candidate.updateAvaiaProfile === "function"
+    typeof candidate.updateAvaiaProfile === "function" &&
+    typeof candidate.publishAvaiaLocation === "function"
   );
 }
 
@@ -80,6 +107,20 @@ export class UpdateAvaiaProfile {
   public async execute(pubDress: string): Promise<AvaiaProfileUpdateResult> {
     try {
       return await this.avaia.updateAvaiaProfile(pubDress);
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+}
+
+export class PublishAvaiaLocation {
+  public constructor(private readonly avaia: AvaiaProfileAccessPort) {}
+
+  public async execute(
+    position: WorldPosition,
+  ): Promise<AvaiaLocationPublishResult> {
+    try {
+      return await this.avaia.publishAvaiaLocation(position);
     } catch {
       return { kind: "service-unavailable" };
     }

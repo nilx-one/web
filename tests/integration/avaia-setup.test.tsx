@@ -92,6 +92,7 @@ function withAvaiaProfile(
     ...identity,
     readAvaiaProfile: async () => ({ kind: "service-unavailable" }),
     updateAvaiaProfile: async () => ({ kind: "service-unavailable" }),
+    publishAvaiaLocation: async () => ({ kind: "service-unavailable" }),
     ...avaia,
   };
 }

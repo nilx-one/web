@@ -22,6 +22,7 @@ import {
   type ProviderRegistrationResult,
   type ProviderSelfDisconnectResult,
   type TelegramProviderLinkResult,
+  type AvaiaLocationPublishResult,
   type AvaiaProfileAccessPort,
   type AvaiaProfileProjection,
   type AvaiaProfileReadResult,
@@ -63,6 +64,40 @@ function parseIdentity(value: unknown): IdentityProjection | undefined {
   };
 }
 
+/** Matches the E7 wire scale in `ox1_contracts::GEO_COORDINATE_E7_SCALE`. */
+const GEO_COORDINATE_E7_SCALE = 10_000_000;
+
+function parseAvaiaCoordinate(
+  value: unknown,
+): { longitude: number; latitude: number } | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.longitude_e7 !== "string" ||
+    typeof value.latitude_e7 !== "string"
+  ) {
+    return undefined;
+  }
+  const longitudeE7 = Number(value.longitude_e7);
+  const latitudeE7 = Number(value.latitude_e7);
+  if (!Number.isFinite(longitudeE7) || !Number.isFinite(latitudeE7)) {
+    return undefined;
+  }
+  return {
+    longitude: longitudeE7 / GEO_COORDINATE_E7_SCALE,
+    latitude: latitudeE7 / GEO_COORDINATE_E7_SCALE,
+  };
+}
+
+function parseAvaiaLocation(
+  value: unknown,
+): AvaiaProfileProjection["location"] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const coordinate = parseAvaiaCoordinate(value.coordinate);
+  return coordinate === undefined ? undefined : { coordinate };
+}
+
 /**
  * The stored Avaia, carried exactly as the service answered. `model_ref` is
  * reserved by the contract and is not projected: no model a device may or may
@@ -78,10 +113,12 @@ function parseAvaiaProfile(value: unknown): AvaiaProfileProjection | undefined {
   ) {
     return undefined;
   }
+  const location = parseAvaiaLocation(value.location);
   return {
     pubDress: value.pub_dress,
     ownerPubDress: value.owner_pub_dress,
     configurationState: value.configuration_state,
+    ...(location === undefined ? {} : { location }),
   };
 }
 
@@ -530,6 +567,44 @@ class IdentityHttpAdapter
       case "invalid_avaia_discriminator":
       case "invalid_avaia_suffix":
         return { kind: "rejected", reason: "invalid-address" };
+      case "rate_limited":
+        return { kind: "rejected", reason: "rate-limited" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
+  public async publishAvaiaLocation(position: {
+    longitude: number;
+    latitude: number;
+  }): Promise<AvaiaLocationPublishResult> {
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/avaia/location", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        ...(authorization === undefined ? {} : { authorization }),
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({
+        longitude: position.longitude,
+        latitude: position.latitude,
+      }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const profile = parseAvaiaProfile(body);
+      if (profile !== undefined) {
+        return { kind: "published", profile };
+      }
+    }
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "invalid_avaia_location":
+        return { kind: "rejected", reason: "invalid-location" };
       case "rate_limited":
         return { kind: "rejected", reason: "rate-limited" };
       default:

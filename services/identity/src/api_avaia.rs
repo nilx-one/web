@@ -52,6 +52,10 @@ fn avaia_router_with_clock(
             "/api/v1/identity/avaia",
             get(read_owned_avaia).post(update_owned_avaia),
         )
+        .route(
+            "/api/v1/identity/avaia/location",
+            post(write_owned_avaia_location),
+        )
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(state)
 }
@@ -80,7 +84,16 @@ async fn read_owned_avaia(State(state): State<ApiState>, headers: HeaderMap) -> 
     }
 
     match state.repository.owned_avaia_identity(&owner).await {
-        Ok(Some(profile)) => no_store_json(StatusCode::OK, AvaiaIdentityProjection::from(profile)),
+        Ok(Some(profile)) => {
+            let location = match state.repository.read_avaia_location(&owner).await {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, "owned Avaia location lookup failed");
+                    return unavailable();
+                }
+            };
+            no_store_json(StatusCode::OK, avaia_identity_projection(profile, location))
+        }
         Ok(None) => unavailable(),
         Err(error) => {
             tracing::error!(%error, "owned Avaia profile lookup failed");
@@ -131,7 +144,14 @@ async fn update_owned_avaia(
 
     match state.repository.configure_owned_avaia(&owner, &next, now).await {
         Ok(crate::AvaiaUpdateOutcome::Updated(profile)) => {
-            no_store_json(StatusCode::OK, AvaiaIdentityProjection::from(profile))
+            let location = match state.repository.read_avaia_location(&owner).await {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, "owned Avaia location lookup failed");
+                    return unavailable();
+                }
+            };
+            no_store_json(StatusCode::OK, avaia_identity_projection(profile, location))
         }
         Ok(crate::AvaiaUpdateOutcome::AvaiaUnavailable) => no_store_error(
             StatusCode::CONFLICT,
@@ -163,15 +183,105 @@ struct AvaiaIdentityProjection {
     owner_pub_dress: String,
     configuration_state: &'static str,
     model_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    location: Option<AvaiaLocationProjection>,
 }
 
-impl From<crate::AvaiaIdentityRecord> for AvaiaIdentityProjection {
-    fn from(profile: crate::AvaiaIdentityRecord) -> Self {
-        Self {
-            pub_dress: profile.pub_dress,
-            owner_pub_dress: profile.owner_pub_dress,
-            configuration_state: profile.configuration_state.as_str(),
-            model_ref: None,
+#[derive(Debug, Serialize)]
+struct AvaiaLocationProjection {
+    coordinate: GeoCoordinate,
+}
+
+fn avaia_identity_projection(
+    profile: crate::AvaiaIdentityRecord,
+    location: Option<crate::AvaiaLocation>,
+) -> AvaiaIdentityProjection {
+    AvaiaIdentityProjection {
+        pub_dress: profile.pub_dress,
+        owner_pub_dress: profile.owner_pub_dress,
+        configuration_state: profile.configuration_state.as_str(),
+        model_ref: None,
+        location: location.map(|location| AvaiaLocationProjection {
+            coordinate: location.coordinate,
+        }),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AvaiaLocationUpdateRequest {
+    longitude: f64,
+    latitude: f64,
+}
+
+async fn write_owned_avaia_location(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<AvaiaLocationUpdateRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let identity = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value,
+        Err(error) => return error.into_response(),
+    };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        tracing::error!("stored human pub_dress is invalid");
+        return unavailable();
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(format!("avaia-location:{}", owner.as_str()), now, 120, 3600)
+        .and_then(|_| {
+            state
+                .limiter
+                .consume("avaia-location:global", now, 5_000, 3600)
+        })
+    {
+        return rate_limited(retry_after);
+    }
+
+    let coordinate = match GeoCoordinate::from_degrees(request.longitude, request.latitude) {
+        Ok(value) => value,
+        Err(_) => {
+            return no_store_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_avaia_location",
+                "Longitude and latitude must be finite WGS84 degrees.",
+            );
+        }
+    };
+
+    // The owned Avaia must exist before its location can be published.
+    match state.repository.reconcile_owned_avaia(&owner, now).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia reconciliation failed");
+            return unavailable();
+        }
+    }
+
+    let location = crate::AvaiaLocation::new(coordinate, crate::DecimalU64::new(now));
+    if let Err(error) = state.repository.write_avaia_location(&owner, location).await {
+        tracing::error!(%error, "owned Avaia location write failed");
+        return unavailable();
+    }
+
+    match state.repository.owned_avaia_identity(&owner).await {
+        Ok(Some(profile)) => no_store_json(
+            StatusCode::OK,
+            avaia_identity_projection(profile, Some(location)),
+        ),
+        Ok(None) => unavailable(),
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia profile lookup failed");
+            unavailable()
         }
     }
 }
@@ -390,5 +500,92 @@ mod avaia_api_tests {
         let body = json(reread).await;
         assert_eq!(body["pub_dress"], "x0newai");
         assert_eq!(body["configuration_state"], "configured");
+    }
+
+    #[tokio::test]
+    async fn owned_avaia_read_carries_no_location_until_one_is_published() {
+        let (app, auth) = app(8804, "0x0sky").await;
+        let response = app
+            .oneshot(
+                Request::get("/api/v1/identity/avaia")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json(response).await;
+        assert!(body["location"].is_null());
+    }
+
+    #[tokio::test]
+    async fn publishing_a_location_requires_csrf_and_is_reflected_on_read() {
+        let (app, auth) = app(8805, "0x0sky").await;
+        let missing_csrf = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/identity/avaia/location")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
+
+        let published = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/identity/avaia/location")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .header("x-0x1-csrf", "1")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(published.status(), StatusCode::OK);
+        let body = json(published).await;
+        assert_eq!(
+            body["location"]["coordinate"]["longitude_e7"],
+            "305234000"
+        );
+        assert_eq!(body["location"]["coordinate"]["latitude_e7"], "504501000");
+
+        let reread = app
+            .oneshot(
+                Request::get("/api/v1/identity/avaia")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(reread.status(), StatusCode::OK);
+        let body = json(reread).await;
+        assert_eq!(
+            body["location"]["coordinate"]["longitude_e7"],
+            "305234000"
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_location_is_rejected() {
+        let (app, auth) = app(8806, "0x0sky").await;
+        let response = app
+            .oneshot(
+                Request::post("/api/v1/identity/avaia/location")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .header("x-0x1-csrf", "1")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"longitude":200.0,"latitude":50.4501}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

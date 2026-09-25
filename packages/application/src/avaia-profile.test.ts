@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   hasAvaiaProfileAccess,
+  PublishAvaiaLocation,
   ReadAvaiaProfile,
   UpdateAvaiaProfile,
   type AvaiaProfileAccessPort,
@@ -22,6 +23,7 @@ function accessPort(
   return {
     readAvaiaProfile: async () => ({ kind: "available", profile }),
     updateAvaiaProfile: async () => ({ kind: "updated", profile }),
+    publishAvaiaLocation: async () => ({ kind: "published", profile }),
     ...overrides,
   };
 }
@@ -32,6 +34,12 @@ describe("Avaia profile capability", () => {
     expect(hasAvaiaProfileAccess({ readAvaiaProfile: () => undefined })).toBe(
       false,
     );
+    expect(
+      hasAvaiaProfileAccess({
+        readAvaiaProfile: async () => ({ kind: "available", profile }),
+        updateAvaiaProfile: async () => ({ kind: "updated", profile }),
+      }),
+    ).toBe(false);
     expect(hasAvaiaProfileAccess(undefined)).toBe(false);
   });
 
@@ -70,5 +78,36 @@ describe("Avaia profile capability", () => {
 
     await new UpdateAvaiaProfile(port).execute("x0vesnai");
     expect(seen).toEqual(["x0vesnai"]);
+  });
+
+  it("publishes the position exactly as given", async () => {
+    const seen: unknown[] = [];
+    const position = { longitude: 30.5234, latitude: 50.4501 };
+    const port = accessPort({
+      publishAvaiaLocation: async (published) => {
+        seen.push(published);
+        return { kind: "published", profile };
+      },
+    });
+
+    await expect(
+      new PublishAvaiaLocation(port).execute(position),
+    ).resolves.toEqual({ kind: "published", profile });
+    expect(seen).toEqual([position]);
+  });
+
+  it("keeps a publish transport failure a service fact rather than a rejection", async () => {
+    const failing = accessPort({
+      publishAvaiaLocation: async () => {
+        throw new Error("offline");
+      },
+    });
+
+    await expect(
+      new PublishAvaiaLocation(failing).execute({
+        longitude: 30.5234,
+        latitude: 50.4501,
+      }),
+    ).resolves.toEqual({ kind: "service-unavailable" });
   });
 });

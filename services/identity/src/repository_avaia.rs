@@ -39,6 +39,29 @@ pub enum AvaiaUpdateOutcome {
     Unknown,
 }
 
+/// Owner-published location for the Avaia a human Bond owns.
+///
+/// This is a distinct concept from `BondLocation` (the Bond's own operational
+/// location) and from the local walking position described in
+/// `avaia-walk.md`, which stays device-only and is never observed, persisted,
+/// or sent here. This value is the opposite: an explicit coordinate the owner
+/// chose to publish for their Avaia.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AvaiaLocation {
+    pub coordinate: GeoCoordinate,
+    pub updated_at: DecimalU64,
+}
+
+impl AvaiaLocation {
+    #[must_use]
+    pub const fn new(coordinate: GeoCoordinate, updated_at: DecimalU64) -> Self {
+        Self {
+            coordinate,
+            updated_at,
+        }
+    }
+}
+
 impl IdentityRepository {
     /// Applies the additive Avaia-profile persistence migration. Production
     /// startup calls this before accepting registrations; profile operations
@@ -151,6 +174,64 @@ impl IdentityRepository {
         };
         transaction.commit().await?;
         Ok(AvaiaUpdateOutcome::Updated(record))
+    }
+
+    /// Reads the Avaia location the owner has published. `None` means no
+    /// coordinate has been submitted yet.
+    pub async fn read_avaia_location(
+        &self,
+        owner: &PubDress,
+    ) -> Result<Option<AvaiaLocation>, RepositoryError> {
+        let row = sqlx::query(
+            "SELECT longitude_e7, latitude_e7, updated_at \
+             FROM avaia_locations WHERE owner_pub_dress = ?",
+        )
+        .bind(owner.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let longitude_e7 = i32::try_from(row.get::<i64, _>("longitude_e7"))
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        let latitude_e7 = i32::try_from(row.get::<i64, _>("latitude_e7"))
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        let coordinate = GeoCoordinate::new(longitude_e7, latitude_e7)
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        let updated_at = u64::try_from(row.get::<i64, _>("updated_at"))
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+
+        Ok(Some(AvaiaLocation::new(
+            coordinate,
+            DecimalU64::new(updated_at),
+        )))
+    }
+
+    /// Replaces the one published Avaia location for this owner.
+    pub async fn write_avaia_location(
+        &self,
+        owner: &PubDress,
+        location: AvaiaLocation,
+    ) -> Result<(), RepositoryError> {
+        let updated_at = i64::try_from(location.updated_at.get())
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        sqlx::query(
+            "INSERT INTO avaia_locations \
+             (owner_pub_dress, longitude_e7, latitude_e7, updated_at) \
+             VALUES (?, ?, ?, ?) \
+             ON CONFLICT(owner_pub_dress) DO UPDATE SET \
+               longitude_e7 = excluded.longitude_e7, \
+               latitude_e7 = excluded.latitude_e7, \
+               updated_at = excluded.updated_at",
+        )
+        .bind(owner.as_str())
+        .bind(i64::from(location.coordinate.longitude_e7()))
+        .bind(i64::from(location.coordinate.latitude_e7()))
+        .bind(updated_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }
 
@@ -370,6 +451,56 @@ mod avaia_configuration_tests {
         assert_eq!(
             unchanged.configuration_state,
             AvaiaConfigurationState::Unconfigured
+        );
+    }
+
+    #[tokio::test]
+    async fn avaia_location_is_absent_until_the_owner_publishes_one() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let owner: PubDress = "0x0sky".parse().expect("owner");
+        repository
+            .register(&owner, &ProviderIdentity::telegram(710), 100)
+            .await
+            .expect("registration");
+
+        assert_eq!(
+            repository
+                .read_avaia_location(&owner)
+                .await
+                .expect("read empty"),
+            None
+        );
+
+        let coordinate = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("valid coordinate");
+        let published = AvaiaLocation::new(coordinate, DecimalU64::new(200));
+        repository
+            .write_avaia_location(&owner, published)
+            .await
+            .expect("publish location");
+        assert_eq!(
+            repository
+                .read_avaia_location(&owner)
+                .await
+                .expect("read published")
+                .expect("published location"),
+            published
+        );
+
+        let moved = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("valid coordinate");
+        let replaced = AvaiaLocation::new(moved, DecimalU64::new(201));
+        repository
+            .write_avaia_location(&owner, replaced)
+            .await
+            .expect("replace location");
+        assert_eq!(
+            repository
+                .read_avaia_location(&owner)
+                .await
+                .expect("read replaced")
+                .expect("replaced location"),
+            replaced
         );
     }
 }

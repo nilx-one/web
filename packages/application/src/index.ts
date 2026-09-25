@@ -60,9 +60,13 @@ export {
 } from "./avaia-movement-controller";
 export {
   hasAvaiaProfileAccess,
+  PublishAvaiaLocation,
   ReadAvaiaProfile,
   UpdateAvaiaProfile,
   type AvaiaConfigurationState,
+  type AvaiaLocationProjection,
+  type AvaiaLocationPublishRejection,
+  type AvaiaLocationPublishResult,
   type AvaiaProfileAccessPort,
   type AvaiaProfileProjection,
   type AvaiaProfileReadResult,
