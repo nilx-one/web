@@ -31,8 +31,8 @@ use subtle::ConstantTimeEq as _;
 const TELEGRAM_AUTH_SCHEME: &str = "tma ";
 const DISCORD_AUTH_SCHEME: &str = "discord ";
 const MAX_REQUEST_BYTES: usize = 8 * 1024;
-const SESSION_COOKIE: &str = "__Host-ox1_session";
-const REMEMBERED_BOND_COOKIE: &str = "__Host-ox1_bond";
+const SESSION_COOKIE: &str = "__Host-0x1_session";
+const REMEMBERED_BOND_COOKIE: &str = "__Host-0x1_bond";
 const CSRF_HEADER: &str = "x-0x1-csrf";
 const PUBLIC_ZONE: &str = "nilx.one";
 

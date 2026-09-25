@@ -987,7 +987,7 @@ dependencies = [
  "getrandom 0.3.4",
  "hmac",
  "jsonwebtoken",
- "ox1-contracts",
+ "nilxone-contracts",
  "reqwest",
  "serde",
  "serde_json",
@@ -1317,6 +1317,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nilxone-contracts"
+version = "0.1.0"
+source = "git+https://github.com/nilx-one/core?rev=89feed50d8442f477b56e3124c2058bc575c651a#89feed50d8442f477b56e3124c2058bc575c651a"
+dependencies = [
+ "idna",
+ "idna_adapter",
+ "idna_mapping",
+ "serde",
+ "serde_json",
+ "unicode-bidi",
+ "unicode-general-category",
+ "unicode-joining-type",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1406,22 +1422,6 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
-
-[[package]]
-name = "ox1-contracts"
-version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=6023d6d8d92059dacc11868e877112322bbc1266#6023d6d8d92059dacc11868e877112322bbc1266"
-dependencies = [
- "idna",
- "idna_adapter",
- "idna_mapping",
- "serde",
- "serde_json",
- "unicode-bidi",
- "unicode-general-category",
- "unicode-joining-type",
- "unicode-normalization",
-]
 
 [[package]]
 name = "parking"

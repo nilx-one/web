@@ -28,8 +28,8 @@ use crate::{
     ProviderSecretCipher, PubDress, SecretDigester,
 };
 
-const EVIDENCE_TRANSACTION_COOKIE: &str = "__Host-ox1_github_evidence";
-const SESSION_COOKIE: &str = "__Host-ox1_session";
+const EVIDENCE_TRANSACTION_COOKIE: &str = "__Host-0x1_github_evidence";
+const SESSION_COOKIE: &str = "__Host-0x1_session";
 const CSRF_HEADER: &str = "x-0x1-csrf";
 const TRANSACTION_TTL_SECONDS: u64 = 10 * 60;
 const GITHUB_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";

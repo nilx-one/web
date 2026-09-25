@@ -19,7 +19,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use ox1_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
+use nilxone_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
 use serde::{Deserialize, Serialize};
 use sqlx::{
     Row, SqlitePool,
@@ -375,7 +375,7 @@ fn no_store_json<T: Serialize>(code: StatusCode, value: T) -> Response {
 mod tests {
     use std::time::Duration;
 
-    use ox1_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
+    use nilxone_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
 
     use super::{
         BondAccessRole, BondLocationRepository, PendingLocationIntent, TelegramLocationIntents,
