@@ -30,7 +30,7 @@ describe("public Bond host routing", () => {
           JSON.stringify({
             pub_dress: "0x0небо",
             pub_dress_url: "https://0x0небо.nilx.one",
-            avaia_pub_dress: "0небai",
+            avaia: { pub_dress: "0небai" },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
@@ -41,12 +41,48 @@ describe("public Bond host routing", () => {
       bond: {
         pubDress: "0x0небо",
         pubDressUrl: "https://0x0небо.nilx.one",
-        avaiaPubDress: "0небai",
+        avaia: { pubDress: "0небai" },
       },
     });
     expect(fetchImpl).toHaveBeenCalledWith("/api/v1/identity/public", {
       cache: "no-store",
       credentials: "omit",
+    });
+  });
+
+  it("nests the published Avaia location's coordinate under its Bond", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            pub_dress: "0x0sky",
+            pub_dress_url: "https://0x0sky.nilx.one",
+            avaia: {
+              pub_dress: "0skai",
+              location: {
+                coordinate: {
+                  longitude_e7: "305234000",
+                  latitude_e7: "504501000",
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    ) as unknown as typeof fetch;
+
+    await expect(readPublicBond(fetchImpl)).resolves.toEqual({
+      kind: "ready",
+      bond: {
+        pubDress: "0x0sky",
+        pubDressUrl: "https://0x0sky.nilx.one",
+        avaia: {
+          pubDress: "0skai",
+          location: {
+            coordinate: { longitude: 30.5234, latitude: 50.4501 },
+          },
+        },
+      },
     });
   });
 
