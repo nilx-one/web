@@ -177,6 +177,9 @@ impl IdentityRepository {
         }
         self.migrate_avatar_catalog().await?;
         self.backfill_pub_dress_labels().await?;
+        sqlx::raw_sql(include_str!("../migrations/0013_avaia_location.sql"))
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 

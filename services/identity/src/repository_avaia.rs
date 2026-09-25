@@ -176,21 +176,12 @@ impl IdentityRepository {
         Ok(AvaiaUpdateOutcome::Updated(record))
     }
 
-    /// Applies the additive Avaia-location persistence migration.
-    pub async fn initialize_avaia_location(&self) -> Result<(), RepositoryError> {
-        sqlx::raw_sql(include_str!("../migrations/0013_avaia_location.sql"))
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
     /// Reads the Avaia location the owner has published. `None` means no
     /// coordinate has been submitted yet.
     pub async fn read_avaia_location(
         &self,
         owner: &PubDress,
     ) -> Result<Option<AvaiaLocation>, RepositoryError> {
-        self.initialize_avaia_location().await?;
         let row = sqlx::query(
             "SELECT longitude_e7, latitude_e7, updated_at \
              FROM avaia_locations WHERE owner_pub_dress = ?",
@@ -223,7 +214,6 @@ impl IdentityRepository {
         owner: &PubDress,
         location: AvaiaLocation,
     ) -> Result<(), RepositoryError> {
-        self.initialize_avaia_location().await?;
         let updated_at = i64::try_from(location.updated_at.get())
             .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
         sqlx::query(
