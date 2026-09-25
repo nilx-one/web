@@ -475,9 +475,14 @@ describe("ProductApp identity", () => {
     await user.keyboard("{Enter}");
     await screen.findByText("Available — create this identity");
     expect(resolvePubDress).toHaveBeenCalledOnce();
-    expect(
-      await screen.findByLabelText("Password", {}, { timeout: 2_000 }),
-    ).toHaveFocus();
+    const password = await screen.findByLabelText(
+      "Password",
+      {},
+      { timeout: 2_000 },
+    );
+    // Focus moves in an effect after the field is shown, so a slow runner can
+    // see the field a tick before it takes focus.
+    await waitFor(() => expect(password).toHaveFocus(), { timeout: 2_000 });
   });
 
   it("keeps the resolved identity valid while reporting rejected credentials in red", async () => {
