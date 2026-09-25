@@ -56,6 +56,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { Protocol } from "pmtiles";
 
 import type { AvatarCustomLayer } from "./avatar-layer";
+import type { MonumentCustomLayer } from "./monument-layer";
 import {
   FOG_MARKS_FILL_LAYER_ID,
   FOG_MARKS_OUTLINE_LAYER_ID,
@@ -315,6 +316,28 @@ export function createMapLibreRenderer(
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
   let avatarCamera: MapCamera = camera;
+  let monumentLayer: MonumentCustomLayer | undefined;
+  let monumentLayerPromise: Promise<MonumentCustomLayer> | undefined;
+
+  /**
+   * A fixed landmark, not a handle the application drives: it is requested
+   * once, the first time presentation is applied, and stays for the life of
+   * the renderer.
+   */
+  function requestMonumentLayer(): Promise<MonumentCustomLayer> {
+    if (monumentLayer !== undefined) return Promise.resolve(monumentLayer);
+    if (monumentLayerPromise !== undefined) return monumentLayerPromise;
+    monumentLayerPromise = import("./monument-layer").then(
+      ({ createMonumentLayer }) => {
+        const layer = createMonumentLayer();
+        monumentLayer = layer;
+        layer.setDimension(dimension);
+        if (map !== undefined && firstPaintDone) ensureMonumentLayer(map);
+        return layer;
+      },
+    );
+    return monumentLayerPromise;
+  }
 
   function requestAvatarLayer(): Promise<AvatarCustomLayer> {
     if (avatarLayer !== undefined) return Promise.resolve(avatarLayer);
@@ -458,6 +481,11 @@ export function createMapLibreRenderer(
   }
 
   function applyDimension(mounted: MapLibreMap): void {
+    // The monument is its own custom layer, not a style layer, so it follows
+    // dimension whether or not the published style still carries an
+    // extrusion layer to match.
+    monumentLayer?.setDimension(dimension);
+
     // Depth is a presentation choice over one geographic truth: the flat mode
     // hides the extrusion and leaves the same footprints the style already
     // paints beneath it.
@@ -663,6 +691,12 @@ export function createMapLibreRenderer(
     mounted.addLayer(avatarLayer);
   }
 
+  function ensureMonumentLayer(mounted: MapLibreMap): void {
+    if (monumentLayer === undefined) return;
+    if (mounted.getLayer(monumentLayer.id) !== undefined) return;
+    mounted.addLayer(monumentLayer);
+  }
+
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
     applyFogMarks(mounted);
@@ -670,6 +704,10 @@ export function createMapLibreRenderer(
     applySelectionPoint(mounted);
     if (firstPaintDone && avatarLayer?.hasInstances())
       ensureAvatarLayer(mounted);
+    if (firstPaintDone) {
+      ensureMonumentLayer(mounted);
+      void requestMonumentLayer();
+    }
     presentationApplied = true;
   }
 
