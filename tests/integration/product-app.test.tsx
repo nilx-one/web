@@ -937,6 +937,64 @@ describe("ProductApp identity", () => {
     );
   });
 
+  it("recovers from a stale passwordRequired read instead of stranding the Bond on the password screen", async () => {
+    // Regression: if the provider-identity read that first sent this Bond to
+    // "Create your password." was stale — a credential already exists
+    // server-side — SetProviderPassword rejects with "already-set". Before
+    // the fix, nothing re-read provider identity, so the screen (and the map
+    // behind it, which only mounts once identity is "authenticated") stayed
+    // on that dead end forever, no matter what the Bond submitted.
+    const user = userEvent.setup();
+    const readProviderIdentity = vi
+      .fn<IdentityAccessPort["readProviderIdentity"]>()
+      .mockResolvedValueOnce({
+        kind: "registered",
+        identity: { pubDress: "0x0sky" },
+        passwordRequired: true,
+      })
+      .mockResolvedValue({
+        kind: "registered",
+        identity: { pubDress: "0x0sky" },
+        passwordRequired: false,
+      });
+    const setProviderPassword = vi
+      .fn<IdentityAccessPort["setProviderPassword"]>()
+      .mockResolvedValue({
+        kind: "rejected",
+        reason: "already-set",
+      });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createDiscordHost()}
+        identity={createIdentity({
+          readProviderIdentity,
+          setProviderPassword,
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Create your password." }),
+    ).toBeVisible();
+    await user.type(
+      screen.getByLabelText("Password"),
+      "a long Discord password",
+    );
+    await user.type(
+      screen.getByLabelText("Confirm password"),
+      "a long Discord password",
+    );
+    await user.click(screen.getByRole("button", { name: "Save password" }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Take the wheel as 0x0sky",
+      }),
+    ).toBeVisible();
+    expect(readProviderIdentity).toHaveBeenCalledTimes(2);
+  });
+
   it("names only the Bond from the Personal Bond profile surface", async () => {
     const user = userEvent.setup();
     let pubDress = "0x0sky";

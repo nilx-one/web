@@ -474,8 +474,17 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     mutationFn: (host: ProviderPasswordHost) =>
       new SetProviderPassword(dependencies.identity).execute(host, password),
     gcTime: 0,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result.kind === "recovery-key-required") setPassword("");
+      // "already-set" means the provider-identity read that put this Bond on
+      // the password-setup screen was stale: a credential exists server-side
+      // already. Re-reading it is what lets createProviderIdentityViewState
+      // see passwordRequired: false and fall through to "authenticated" —
+      // without it, the screen (and the map behind it) never moves past this
+      // dead end, no matter how many times the same password is resubmitted.
+      if (result.kind === "rejected" && result.reason === "already-set") {
+        await refreshIdentityProjections();
+      }
     },
   });
   const browserProviderLink = useMutation({
