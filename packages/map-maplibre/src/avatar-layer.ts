@@ -25,6 +25,7 @@ import {
   AnimationMixer,
   DirectionalLight,
   HemisphereLight,
+  Matrix4,
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
@@ -142,6 +143,14 @@ export function createAvatarLayer(
   sunlight.position.set(-1, -1, 2);
   scene.add(ambient, sunlight);
   const camera = new PerspectiveCamera();
+  // The scene is drawn in metres around a local origin rather than in raw
+  // Mercator units. A 1.8 m body is about 4e-8 of the world wide, below what a
+  // float32 can resolve next to a coordinate near 0.5, so on the GPU its
+  // vertices would snap to a coarse grid and the body would shatter into
+  // shards. The origin is folded into the projection here, in float64, so what
+  // reaches the shader is only metres from the camera's own ground.
+  let origin = { x: 0, y: 0, z: 0, metres: 1 };
+  const originMatrix = new Matrix4();
   let map: MapLibreMap | undefined;
   let renderer: WebGLRenderer | undefined;
   let cameraState: MapCamera | undefined;
@@ -192,8 +201,12 @@ export function createAvatarLayer(
       altitudeMeters,
     );
     const metres = coordinate.meterInMercatorCoordinateUnits();
-    root.position.set(coordinate.x, coordinate.y, coordinate.z);
-    root.scale.setScalar(metres * scale);
+    root.position.set(
+      (coordinate.x - origin.x) / origin.metres,
+      (coordinate.y - origin.y) / origin.metres,
+      (coordinate.z - origin.z) / origin.metres,
+    );
+    root.scale.setScalar((metres / origin.metres) * scale);
     // glTF is Y-up. Rotate it into Mercator's Z-up frame, then apply bearing.
     // The studies face glTF +Z, which lands on Mercator north; Mercator's y
     // grows southward, so a positive turn about its Z axis is clockwise on the
@@ -201,6 +214,17 @@ export function createAvatarLayer(
     root.rotation.set(Math.PI / 2, 0, (bearingDeg * Math.PI) / 180, "ZXY");
     root.visible = instance.handle.visible;
     root.updateMatrixWorld(true);
+  }
+
+  function anchorAt(mounted: MapLibreMap): void {
+    const center = MercatorCoordinate.fromLngLat(mounted.getCenter(), 0);
+    origin = {
+      x: center.x,
+      y: center.y,
+      z: center.z,
+      metres: center.meterInMercatorCoordinateUnits(),
+    };
+    for (const instance of instances.values()) place(instance);
   }
 
   async function hydrate(instance: AvatarInstance): Promise<void> {
@@ -254,7 +278,13 @@ export function createAvatarLayer(
       for (const instance of instances.values()) {
         if (instance.handle.visible) instance.mixer?.update(deltaSeconds);
       }
-      camera.projectionMatrix.fromArray(frame.defaultProjectionData.mainMatrix);
+      if (map !== undefined) anchorAt(map);
+      originMatrix
+        .makeScale(origin.metres, origin.metres, origin.metres)
+        .setPosition(origin.x, origin.y, origin.z);
+      camera.projectionMatrix
+        .fromArray(frame.defaultProjectionData.mainMatrix)
+        .multiply(originMatrix);
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
       camera.matrixWorld.identity();
       camera.matrixWorldInverse.identity();
