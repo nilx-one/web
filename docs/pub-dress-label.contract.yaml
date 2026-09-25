@@ -13,7 +13,7 @@
 contract:
   name: pub_dress_label
   owner: nilx-one/core
-  crate: ox1-contracts
+  crate: nilxone-contracts
   companion_of: PubDress
   consumers:
     - repository: nilx-one/web
@@ -175,7 +175,7 @@ resolved_decision:
 
 api:
   language: rust
-  module: ox1_contracts
+  module: nilxone_contracts
   types:
     - name: PubDressLabel
       kind: newtype
@@ -346,7 +346,7 @@ downstream:
   - repository: nilx-one/web
     steps:
       - id: pin
-        action: Move the ox1-contracts rev in services/identity/Cargo.toml to the commit adding this contract.
+        action: Move the nilxone-contracts rev in services/identity/Cargo.toml to the commit adding this contract.
       - id: migration
         action: Add migration 0005 storing the allocated label.
         detail: >-
@@ -408,7 +408,7 @@ out_of_scope:
       Public Suffix List entry.
 
 acceptance:
-  - The contract compiles in ox1-contracts with no dependency on a zone, a database, or a transport.
+  - The contract compiles in nilxone-contracts with no dependency on a zone, a database, or a transport.
   - Every row in test_vectors exists as a test and passes.
   - >-
     The pinned Unicode version and the seven UTS-46 parameters are asserted in a

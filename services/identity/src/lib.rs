@@ -32,7 +32,7 @@ pub use location_control::{
     BondAccessRole, BondLocationRepository, BondLocationRepositoryError, PendingLocationIntent,
     TelegramLocationIntents, location_control_router, role_for_pub_dress,
 };
-pub use ox1_contracts::{
+pub use nilxone_contracts::{
     AvaiaPubDress, AvaiaPubDressError, BondLocation, BondLocationMode, DecimalU64, GeoCoordinate,
     GeoCoordinateError, PubDress, PubDressError, PubDressLabel, PubDressLabelError,
 };
