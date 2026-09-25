@@ -9,7 +9,7 @@ use sqlx::{
 };
 use thiserror::Error;
 
-use crate::{AvaiaPubDress, PubDress, PubDressLabel};
+use crate::{AvaiaPubDress, DecimalU64, GeoCoordinate, PubDress, PubDressLabel};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityProvider {
@@ -177,6 +177,9 @@ impl IdentityRepository {
         }
         self.migrate_avatar_catalog().await?;
         self.backfill_pub_dress_labels().await?;
+        sqlx::raw_sql(include_str!("../migrations/0013_avaia_location.sql"))
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -1219,6 +1222,8 @@ pub enum RepositoryError {
     CorruptHumanPubDress,
     #[error("stored public-label suffix is invalid for this pub_dress")]
     CorruptPublicLabelSuffix,
+    #[error("stored Avaia location violates its contract")]
+    CorruptAvaiaLocation,
 }
 
 #[cfg(test)]
