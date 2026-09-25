@@ -9,7 +9,16 @@ import type {
 import { latLngToCell } from "h3-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { cellCameraAnchor, createPresenceTracker } from "./index";
+import type {
+  GeolocationCapability,
+  GeolocationObservation,
+} from "@nilx-one/host-contract";
+
+import {
+  cellCameraAnchor,
+  createPresenceGeolocation,
+  createPresenceTracker,
+} from "./index";
 
 function memoryStore(records: VisitRecord[]): PresenceStore {
   return {
@@ -144,5 +153,47 @@ describe("presence tracker", () => {
     tracker.stop();
     await settle();
     expect(records).toEqual([]);
+  });
+});
+
+describe("presence geolocation", () => {
+  it("never mirrors a declared point into the journal", async () => {
+    const observe = vi.fn();
+    const tracker = Promise.resolve({ observe, stop: vi.fn() });
+    const declared: GeolocationObservation = {
+      kind: "observed",
+      position: {
+        longitude: 30.563,
+        latitude: 50.4265,
+        accuracyMeters: 0,
+        observedAt: 1_000,
+        declared: true,
+      },
+    };
+    const observed: GeolocationObservation = {
+      kind: "observed",
+      position: {
+        longitude: 30.5234,
+        latitude: 50.4501,
+        accuracyMeters: 8,
+        observedAt: 2_000,
+      },
+    };
+    let answer = declared;
+    const capability: GeolocationCapability = {
+      readPermission: async () => "granted",
+      requestPosition: async () => answer,
+      watchPosition: () => () => undefined,
+    };
+    const geolocation = createPresenceGeolocation(capability, tracker);
+
+    await geolocation.requestPosition();
+    await settle();
+    expect(observe).not.toHaveBeenCalled();
+
+    answer = observed;
+    await geolocation.requestPosition();
+    await settle();
+    expect(observe).toHaveBeenCalledExactlyOnceWith(observed.position);
   });
 });

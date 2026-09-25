@@ -27,7 +27,10 @@ export type AvaiaLineKind =
   | "blocked.water"
   | "blocked.fog"
   | "landmark.spotted"
-  | "landmark.studied";
+  | "landmark.studied"
+  | "fog.reveal"
+  | "fog.revealed"
+  | "fog.busy";
 
 type Voice = Readonly<Record<AvaiaLineKind, readonly string[]>>;
 
@@ -70,6 +73,21 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. Now I know.",
       "Marked on my chart: {landmark}.",
     ],
+    "fog.reveal": [
+      "Into the fog. I'll chart it.",
+      "Clearing that patch. Give me a few minutes.",
+      "Heading in. The map will fill.",
+    ],
+    "fog.revealed": [
+      "Charted. The fog's gone there.",
+      "Clear skies over that patch now.",
+      "Done. One more piece of the map.",
+    ],
+    "fog.busy": [
+      "Three at once is my limit.",
+      "I'm already clearing three.",
+      "Hands full. Wait for one to clear.",
+    ],
   },
   "dasha-study": {
     walk: [
@@ -108,6 +126,21 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Wrote it down: {landmark}.",
       "So pretty. {landmark}, noted.",
       "{landmark}. Added to my little book.",
+    ],
+    "fog.reveal": [
+      "Ooh, a mystery patch! Going in.",
+      "Let me clear that up for you!",
+      "Into the grey I go!",
+    ],
+    "fog.revealed": [
+      "Ta-da! It's all visible now.",
+      "Look, no more fog there!",
+      "Cleared it. Pretty, isn't it?",
+    ],
+    "fog.busy": [
+      "I'm doing three already!",
+      "One sec, three is plenty.",
+      "Too many! Let me finish these first.",
     ],
   },
   "kai-study": {
@@ -148,6 +181,21 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. Filed under things that stand still.",
       "{landmark}, done. It was very… there.",
     ],
+    "fog.reveal": [
+      "Deploying one (1) fog remover.",
+      "Fine. Revealing the unrevealed.",
+      "Going to make that less grey.",
+    ],
+    "fog.revealed": [
+      "Fog: removed. You're welcome.",
+      "Revealed. It was a map all along.",
+      "Done. Territory unlocked.",
+    ],
+    "fog.busy": [
+      "Three in progress. I'm not a cluster.",
+      "Queue's full. Three max.",
+      "Parallelism limit reached: three.",
+    ],
   },
   "dasha-v2-study": {
     walk: [
@@ -186,6 +234,21 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Got it: {landmark}. Very iconic.",
       "{landmark}. Saved to favourites.",
       "{landmark}: studied and styled.",
+    ],
+    "fog.reveal": [
+      "Let's give that patch a makeover.",
+      "Grey is so last season. Clearing it.",
+      "Going to reveal that look.",
+    ],
+    "fog.revealed": [
+      "Revealed. Much better.",
+      "There. Fog is out of fashion.",
+      "All clear, and it suits the map.",
+    ],
+    "fog.busy": [
+      "Three at once, darling. That's the limit.",
+      "Already styling three. Wait.",
+      "Three's my maximum. Patience.",
     ],
   },
 };
@@ -229,6 +292,21 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. Тепер знаю.",
       "Позначив на своїй карті: {landmark}.",
     ],
+    "fog.reveal": [
+      "У туман. Нанесу на карту.",
+      "Розчищу цю ділянку. Дай кілька хвилин.",
+      "Заходжу. Мапа заповниться.",
+    ],
+    "fog.revealed": [
+      "Наніс на карту. Туману там більше нема.",
+      "Над тією ділянкою тепер ясно.",
+      "Готово. Ще один шматок мапи.",
+    ],
+    "fog.busy": [
+      "Три одночасно — моя межа.",
+      "Я вже розчищаю три.",
+      "Руки зайняті. Зачекай, поки одна відкриється.",
+    ],
   },
   "dasha-study": {
     walk: [
@@ -267,6 +345,21 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Записала: {landmark}.",
       "Яка краса. {landmark}, занотовано.",
       "{landmark}. Додала до своєї книжечки.",
+    ],
+    "fog.reveal": [
+      "Ой, таємнича ділянка! Іду.",
+      "Зараз я її розчищу!",
+      "Пірнаю в сірість!",
+    ],
+    "fog.revealed": [
+      "Та-дам! Тепер усе видно.",
+      "Дивись, там більше нема туману!",
+      "Розчистила. Гарно ж?",
+    ],
+    "fog.busy": [
+      "Я вже роблю три!",
+      "Секунду, трьох досить.",
+      "Забагато! Спершу закінчу ці.",
     ],
   },
   "kai-study": {
@@ -307,6 +400,21 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. У теку «речі, що стоять на місці».",
       "{landmark} — готово. Воно було дуже… тут.",
     ],
+    "fog.reveal": [
+      "Запускаю один (1) туманоприбирач.",
+      "Гаразд. Відкриваю невідкрите.",
+      "Зроблю це менш сірим.",
+    ],
+    "fog.revealed": [
+      "Туман: видалено. Прошу.",
+      "Відкрито. Весь час це була мапа.",
+      "Готово. Територію розблоковано.",
+    ],
+    "fog.busy": [
+      "Три в процесі. Я не кластер.",
+      "Черга повна. Максимум три.",
+      "Ліміт паралельності: три.",
+    ],
   },
   "dasha-v2-study": {
     walk: [
@@ -345,6 +453,21 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Є: {landmark}. Дуже знаково.",
       "{landmark}. Додала в обране.",
       "{landmark}: вивчено й оцінено.",
+    ],
+    "fog.reveal": [
+      "Зробимо цій ділянці макіяж.",
+      "Сірий — це минулий сезон. Розчищаю.",
+      "Іду відкривати цей образ.",
+    ],
+    "fog.revealed": [
+      "Відкрила. Так значно краще.",
+      "Ось. Туман вийшов з моди.",
+      "Усе чисто — і мапі личить.",
+    ],
+    "fog.busy": [
+      "Три одночасно, любчику. Це межа.",
+      "Я вже стилізую три. Зачекай.",
+      "Три — мій максимум. Терпіння.",
     ],
   },
 };

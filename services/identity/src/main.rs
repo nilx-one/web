@@ -396,7 +396,7 @@ async fn handle_message(
 
     ensure_admin_command_menu(&bot, &message, state.as_ref(), telegram_user_id).await;
 
-    if let Some(location) = message.location() {
+    if let Some(location) = shared_point(&message) {
         handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
         return Ok(());
     }
@@ -404,15 +404,8 @@ async fn handle_message(
     let Some(text) = message.text() else {
         return Ok(());
     };
-    let command = text
-        .split_whitespace()
-        .next()
-        .unwrap_or_default()
-        .split('@')
-        .next()
-        .unwrap_or_default();
 
-    match command {
+    match command_of(text) {
         "/open" => open_app(&bot, &message).await?,
         "/start" => start_registration(&bot, &message, state.as_ref(), telegram_user_id).await?,
         "/whoami" => show_identity(&bot, &message, state.as_ref(), telegram_user_id).await?,
@@ -444,6 +437,40 @@ async fn handle_message(
     }
 
     Ok(())
+}
+
+/// The point a message shares, whichever way Telegram packaged it.
+///
+/// Picking a spot on Telegram's own location sheet sends a plain `Location`,
+/// but choosing one of the places it lists under the map — a monument, a
+/// park, an address — sends a `Venue` wrapping the same point. Both are the
+/// person choosing a point, so both reach [`handle_location`]; a venue is
+/// never live, so it always resolves as a one-off point.
+fn shared_point(message: &Message) -> Option<&teloxide::types::Location> {
+    message
+        .location()
+        .or_else(|| message.venue().map(|venue| &venue.location))
+}
+
+/// Which command a text message is.
+///
+/// A reply-keyboard button sends its own label as text, and both labels are
+/// more than one word, so the whole message is compared against them before
+/// it is read as a slash command: taking the first word alone turned
+/// «Встановити позицію» into «Встановити», which matched nothing and fell
+/// through to `/help`.
+fn command_of(text: &str) -> &str {
+    let trimmed = text.trim();
+    if trimmed == CURRENT_POSITION_BUTTON || trimmed == SET_POSITION_BUTTON {
+        return trimmed;
+    }
+    trimmed
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .split('@')
+        .next()
+        .unwrap_or_default()
 }
 
 fn role_for_identity(identity: &IdentityRecord) -> BondAccessRole {
@@ -965,9 +992,10 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        LocationModeRefusal, MINI_APP_URL, PendingUnlinkConfirmations, SET_POSITION_BUTTON,
-        bot_commands, control_keyboard, current_position_request_keyboard, help_text,
-        registration_keyboard, resolve_location_mode,
+        CURRENT_POSITION_BUTTON, LocationModeRefusal, MINI_APP_URL, PendingUnlinkConfirmations,
+        SET_POSITION_BUTTON, bot_commands, command_of, control_keyboard,
+        current_position_request_keyboard, help_text, registration_keyboard, resolve_location_mode,
+        shared_point,
     };
 
     #[test]
@@ -1160,5 +1188,60 @@ mod tests {
             resolve_location_mode(None, BondAccessRole::User, false),
             Err(LocationModeRefusal::NoIntent)
         );
+    }
+
+    #[test]
+    fn keyboard_buttons_resolve_by_their_whole_label() {
+        // Both labels are two words; reading only the first word is what
+        // sent «Встановити позицію» to /help instead of /set_position.
+        assert_eq!(command_of(SET_POSITION_BUTTON), SET_POSITION_BUTTON);
+        assert_eq!(command_of(CURRENT_POSITION_BUTTON), CURRENT_POSITION_BUTTON);
+        assert_eq!(
+            command_of(&format!("  {SET_POSITION_BUTTON}\n")),
+            SET_POSITION_BUTTON
+        );
+        assert_eq!(command_of("/set_position"), "/set_position");
+        assert_eq!(command_of("/set_position@nilx_one_bot"), "/set_position");
+        assert_eq!(command_of("/start ref"), "/start");
+        assert_eq!(command_of("Встановити"), "Встановити");
+    }
+
+    fn private_message(media: serde_json::Value) -> teloxide::types::Message {
+        let mut message = json!({
+            "message_id": 1,
+            "date": 1_758_800_000,
+            "chat": { "id": 7, "type": "private", "first_name": "sky" },
+            "from": { "id": 7, "is_bot": false, "first_name": "sky" },
+        });
+        message
+            .as_object_mut()
+            .expect("message object")
+            .extend(media.as_object().expect("media object").clone());
+        serde_json::from_value(message).expect("valid Telegram message")
+    }
+
+    #[test]
+    fn a_chosen_place_shares_its_point_like_a_location_does() {
+        // Picking «Mother Motherland» from the list under Telegram's map
+        // sends a venue, not a location; it is still the point to set.
+        let venue = private_message(json!({
+            "venue": {
+                "location": { "longitude": 30.5630, "latitude": 50.4265 },
+                "title": "Mother Motherland",
+                "address": "парк Слави",
+            },
+        }));
+        let point = shared_point(&venue).expect("venue point");
+        assert!((point.longitude - 30.5630).abs() < 1e-9);
+        assert!((point.latitude - 50.4265).abs() < 1e-9);
+        assert!(point.live_period.is_none());
+
+        let location = private_message(json!({
+            "location": { "longitude": 30.5234, "latitude": 50.4501 },
+        }));
+        assert!(shared_point(&location).is_some());
+
+        let text = private_message(json!({ "text": "hello" }));
+        assert!(shared_point(&text).is_none());
     }
 }

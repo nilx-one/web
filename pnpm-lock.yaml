@@ -176,6 +176,9 @@ importers:
       '@nilx-one/host-browser':
         specifier: workspace:*
         version: link:../../packages/host-browser
+      '@nilx-one/host-contract':
+        specifier: workspace:*
+        version: link:../../packages/host-contract
       '@nilx-one/host-telegram':
         specifier: workspace:*
         version: link:../../packages/host-telegram
@@ -278,6 +281,9 @@ importers:
 
   packages/map-shade:
     dependencies:
+      '@nilx-one/map-contract':
+        specifier: workspace:*
+        version: link:../map-contract
       '@nilx-one/presence-contract':
         specifier: workspace:*
         version: link:../presence-contract

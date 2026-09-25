@@ -19,6 +19,13 @@ export {
   type ShadeRuntime,
 } from "./map-factory";
 export {
+  createFogField,
+  readFogReveals,
+  FOG_REVEAL_LIMIT,
+  type FogFieldComposition,
+  type FogRevealStorage,
+} from "./fog-field";
+export {
   createRawJournalPresenter,
   type RawJournalPresenter,
 } from "./presenter";

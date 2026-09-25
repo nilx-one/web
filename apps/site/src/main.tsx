@@ -15,10 +15,7 @@ import {
   MAP_BOOTSTRAP_CAMERA,
   createMapLibreRenderer,
 } from "@nilx-one/map-maplibre";
-import {
-  createGroundRevealed,
-  createShadeMapFactory,
-} from "@nilx-one/map-shade";
+import { createFogField, createShadeMapFactory } from "@nilx-one/map-shade";
 import { LOCAL_MODEL_CATALOG } from "@nilx-one/narration-webllm";
 import {
   createBrowserHost as createLocalModelRuntimeHost,
@@ -145,13 +142,14 @@ if (isPublicBondHostname(window.location.hostname)) {
     open: (url, target, features) => window.open(url, target, features),
     geolocation: browserGeolocation,
   });
+  const fog = createFogField(localPresence);
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
   const mapRenderer = createMapLibreRenderer({
     createMap: createShadeMapFactory({
-      runtime: localPresence,
+      runtime: fog.runtime,
       anchor: { lng: anchorLng, lat: anchorLat },
     }),
-    isGroundRevealed: createGroundRevealed(localPresence),
+    fog: fog.field,
   });
 
   reportMapRendererStatus(reporter, mapRenderer.getStatus());

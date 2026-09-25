@@ -20,6 +20,9 @@ const KINDS: readonly AvaiaLineKind[] = [
   "blocked.fog",
   "landmark.spotted",
   "landmark.studied",
+  "fog.reveal",
+  "fog.revealed",
+  "fog.busy",
 ];
 
 const monument: MapLandmark = {
