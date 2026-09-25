@@ -81,7 +81,13 @@
   padding: var(--dock-pad-top, 1rem) var(--dock-pad-inline, 1.15rem) 0;
   border-top-left-radius: var(--dock-radius, 1.35rem);
   border-top-right-radius: var(--dock-radius, 1.35rem);
-  background: var(--map-glass);
+  /* --map-glass is tuned for the static outer card, which is meant to hint at
+     the map behind it. A sticky header instead sits over content that is
+     actively scrolling underneath, and that same translucency lets the
+     scrolled-under text show through as a legible ghost. --map-glass-strong
+     is what the rest of the shell already uses to occlude moving content
+     (see .app-header__menu), so the pinned header borrows it too. */
+  background: var(--map-glass-strong);
   backdrop-filter: blur(22px) saturate(1.08);
 }
 
@@ -611,8 +617,23 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .interface-settings__option small,
 .authenticated-map-home[data-theme="light"] .interface-settings__note,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows dt,
-.authenticated-map-home[data-theme="light"] .provider-management__list small {
+.authenticated-map-home[data-theme="light"] .provider-management__list small,
+.authenticated-map-home[data-theme="light"] .profile-edit__note {
   color: rgba(17, 19, 26, 0.62);
+}
+
+.authenticated-map-home[data-theme="light"] .profile-edit__saved {
+  color: rgba(17, 19, 26, 0.82);
+}
+
+.authenticated-map-home[data-theme="light"] .profile-edit__address,
+.authenticated-map-home[data-theme="light"] .profile-edit__save {
+  border-color: rgba(17, 19, 26, 0.16);
+}
+
+.authenticated-map-home[data-theme="light"] .profile-edit__error,
+.authenticated-map-home[data-theme="light"] .local-model-settings__error {
+  color: #c62828;
 }
 
 .authenticated-map-home[data-theme="light"] .profile-edit__discriminator,
