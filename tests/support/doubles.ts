@@ -13,8 +13,11 @@ import {
   DEFAULT_MAP_CAMERA,
   type MapCamera,
   type MapCameraChange,
+  type MapFogCell,
+  type MapFogField,
   type MapGroundTap,
   type MapLandmark,
+  type MapPointSelection,
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
@@ -169,5 +172,55 @@ export function observation(
     accuracyMeters: 24,
     observedAt: 1_700_000_000_000,
     ...overrides,
+  };
+}
+
+/**
+ * A fog cut into a strip of cells `step` degrees of longitude wide. Crude,
+ * but it has the one property the application relies on: a point always
+ * falls in exactly one cell, and neighbours are one step apart.
+ */
+export function createFogFieldDouble(
+  step = 0.001,
+): MapFogField & { readonly revealed: Set<string> } {
+  const revealed = new Set<string>();
+  const listeners = new Set<() => void>();
+  const index = (point: MapPointSelection) =>
+    Math.round(point.longitude / step);
+  const cell = (at: number): MapFogCell => ({
+    id: `strip:${at}`,
+    center: { longitude: at * step, latitude: 50.4501 },
+    boundary: [
+      [(at - 0.5) * step, 50.449],
+      [(at + 0.5) * step, 50.449],
+      [at * step, 50.451],
+    ],
+  });
+  return {
+    revealed,
+    isActive: () => true,
+    cellAt: (point) => cell(index(point)),
+    isRevealed: (id) => revealed.has(id),
+    frontier(point, rings) {
+      const origin = index(point);
+      const found: MapFogCell[] = [];
+      for (let ring = 0; ring <= rings; ring += 1) {
+        for (const at of ring === 0
+          ? [origin]
+          : [origin - ring, origin + ring]) {
+          if (!revealed.has(`strip:${at}`)) found.push(cell(at));
+        }
+      }
+      return found;
+    },
+    reveal(id) {
+      if (revealed.has(id)) return;
+      revealed.add(id);
+      for (const listener of [...listeners]) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
   };
 }

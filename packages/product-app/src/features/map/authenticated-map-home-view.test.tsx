@@ -6,7 +6,10 @@ import type {
   AvatarModelResult,
   BondProviderConnections,
 } from "@nilx-one/application";
-import type { GeolocationCapability } from "@nilx-one/host-contract";
+import {
+  createDeclaredGeolocation,
+  type GeolocationCapability,
+} from "@nilx-one/host-contract";
 import {
   avatarPreviewUrl,
   MAP_BODY_HANDOVER_ZOOM,
@@ -26,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   UNSUPPORTED_GEOLOCATION_DOUBLE,
+  createFogFieldDouble,
   createGeolocationDouble,
   createMapRendererDouble,
   observation,
@@ -1303,6 +1307,112 @@ describe("AuthenticatedMapHomeView", () => {
           .mocked(mapRenderer.setObservedPositionLabel)
           .mock.calls.some(([label]) => label?.speech?.includes("Late tile")),
       ).toBe(true);
+    });
+
+    it("stands the Bond at a declared point and names it for what it is", async () => {
+      vi.useFakeTimers();
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      const declared = { longitude: 30.563, latitude: 50.4265 };
+      renderView({
+        mapRenderer,
+        geolocation: createDeclaredGeolocation(declared),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+          declared.longitude,
+          declared.latitude,
+        ]),
+      );
+
+      expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
+    });
+
+    it("asks before revealing fog, then sends the Avaia to reveal it", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const setFogMarks = vi.fn();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks },
+      );
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+      // Standing in a cell is enough to lift it: the person is there.
+      expect(fog.isRevealed(fog.cellAt(here).id)).toBe(true);
+      const next = fog.cellAt(there).id;
+      expect(
+        setFogMarks.mock.lastCall?.[0].some(
+          (mark: { cell: { id: string } }) => mark.cell.id === next,
+        ),
+      ).toBe(true);
+
+      act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
+      const prompt = screen.getByRole("dialog", {
+        name: "Reveal this patch of fog?",
+      });
+      expect(prompt).toHaveTextContent("x0skai will go there");
+      fireEvent.click(within(prompt).getByRole("button", { name: "Reveal" }));
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(avaiaLines("en", voice, "fog.reveal")).toContain(
+        lastLabel(mapRenderer)?.speech,
+      );
+      act(() => vi.advanceTimersByTime(200));
+      expect(lastAvaia(mapRenderer)).toMatchObject({ clipId: "walk" });
+      expect(screen.getByRole("status")).toHaveTextContent("Revealing 1 of 3");
+
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(fog.isRevealed(next)).toBe(true);
+      expect(
+        vi
+          .mocked(mapRenderer.setObservedPositionLabel)
+          .mock.calls.some(([label]) =>
+            avaiaLines("en", voice, "fog.revealed").includes(
+              label?.speech ?? "",
+            ),
+          ),
+      ).toBe(true);
+    });
+
+    it("says why not when fog is out of reach", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks: vi.fn() },
+      );
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+
+      act(() =>
+        mapRenderer.tapGround({
+          longitude: here.longitude + 0.05,
+          latitude: here.latitude,
+          ground: "fog",
+        }),
+      );
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(avaiaLines("en", voice, "blocked.fog")).toContain(
+        lastLabel(mapRenderer)?.speech,
+      );
     });
 
     it("does not walk while its Bond is at the wheel", async () => {

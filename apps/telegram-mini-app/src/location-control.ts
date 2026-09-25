@@ -1,20 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { createMapLibreRenderer } from "@nilx-one/map-maplibre";
-
-type TelegramMapRenderer = ReturnType<typeof createMapLibreRenderer>;
-
-type PointSelectionListener = Parameters<
-  NonNullable<TelegramMapRenderer["subscribePointSelection"]>
->[0];
-type BodyActivationListener = Parameters<
-  NonNullable<TelegramMapRenderer["subscribeBodyActivation"]>
->[0];
-type GroundTapListener = Parameters<
-  NonNullable<TelegramMapRenderer["subscribeGroundTap"]>
->[0];
-
 const GEO_E7_SCALE = 10_000_000;
 const LOCATION_CONTROL_REQUEST_TIMEOUT_MS = 2_000;
 
@@ -168,83 +154,6 @@ export async function readTelegramLocationControl(
   } catch {
     return { kind: "unavailable" };
   }
-}
-
-/**
- * Manual Bond location is presentation state, never a fabricated host
- * observation. The base renderer's explicit editor-point marker is reused for
- * the declared point while every observed-position write is suppressed. If an
- * editor opens, its point temporarily wins; clearing it restores the manual
- * Bond location.
- */
-export function createManualLocationMapRenderer(
-  renderer: TelegramMapRenderer,
-  manualPosition: TelegramLocationPoint,
-): TelegramMapRenderer {
-  const manual = { ...manualPosition };
-  renderer.setObservedPosition(null);
-  renderer.setObservedPositionLabel(null);
-  renderer.setSelectionPoint?.(manual);
-
-  return {
-    avatars: renderer.avatars,
-    mount(container) {
-      renderer.mount(container);
-      renderer.setObservedPosition(null);
-      renderer.setObservedPositionLabel(null);
-      renderer.setSelectionPoint?.(manual);
-    },
-    unmount() {
-      renderer.unmount();
-    },
-    getStatus() {
-      return renderer.getStatus();
-    },
-    subscribe(listener) {
-      return renderer.subscribe(listener);
-    },
-    getCamera() {
-      return renderer.getCamera();
-    },
-    setCamera(camera, options) {
-      renderer.setCamera(camera, options);
-    },
-    subscribeCamera(listener) {
-      return renderer.subscribeCamera(listener);
-    },
-    setAppearance(appearance) {
-      renderer.setAppearance(appearance);
-    },
-    setDimension(dimension) {
-      renderer.setDimension(dimension);
-    },
-    setObservedPosition() {
-      renderer.setObservedPosition(null);
-    },
-    setObservedPositionLabel() {
-      renderer.setObservedPositionLabel(null);
-    },
-    setSelectionPoint(point) {
-      renderer.setSelectionPoint?.(point === null ? manual : point);
-    },
-    subscribePointSelection(listener: PointSelectionListener) {
-      return renderer.subscribePointSelection?.(listener) ?? (() => undefined);
-    },
-    subscribeBodyActivation(listener: BodyActivationListener) {
-      return renderer.subscribeBodyActivation?.(listener) ?? (() => undefined);
-    },
-    subscribeGroundTap(listener: GroundTapListener) {
-      return renderer.subscribeGroundTap?.(listener) ?? (() => undefined);
-    },
-    landmarksNear(point, radiusMeters) {
-      return renderer.landmarksNear?.(point, radiusMeters) ?? [];
-    },
-    subscribeLandmarksChanged(listener: () => void) {
-      return (
-        renderer.subscribeLandmarksChanged?.(listener) ?? (() => undefined)
-      );
-    },
-  };
 }
 
 export function locationControlFingerprint(

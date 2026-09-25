@@ -17,10 +17,7 @@ import {
   MAP_BOOTSTRAP_CAMERA,
   createMapLibreRenderer,
 } from "@nilx-one/map-maplibre";
-import {
-  createGroundRevealed,
-  createShadeMapFactory,
-} from "@nilx-one/map-shade";
+import { createFogField, createShadeMapFactory } from "@nilx-one/map-shade";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
 import { ProductApp } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
@@ -85,13 +82,14 @@ async function main(): Promise<void> {
     getAuthorization: () => session.authorization,
   });
   const localPresence = createLocalPresenceJournal().catch(() => null);
+  const fog = createFogField(localPresence);
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
   const mapRenderer = createMapLibreRenderer({
     createMap: createShadeMapFactory({
-      runtime: localPresence,
+      runtime: fog.runtime,
       anchor: { lng: anchorLng, lat: anchorLat },
     }),
-    isGroundRevealed: createGroundRevealed(localPresence),
+    fog: fog.field,
   });
 
   root.render(

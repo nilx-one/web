@@ -3,7 +3,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { UNSUPPORTED_GEOLOCATION } from "./geolocation";
+import {
+  UNSUPPORTED_GEOLOCATION,
+  createDeclaredGeolocation,
+} from "./geolocation";
 
 describe("UNSUPPORTED_GEOLOCATION", () => {
   it("answers the canonical contract instead of forcing a host branch", async () => {
@@ -27,5 +30,31 @@ describe("UNSUPPORTED_GEOLOCATION", () => {
       kind: "failed",
       reason: "unsupported",
     });
+  });
+});
+
+describe("createDeclaredGeolocation", () => {
+  it("answers the declared point, marked as declared, without prompting", async () => {
+    const declared = createDeclaredGeolocation({
+      longitude: 30.563,
+      latitude: 50.4265,
+    });
+
+    await expect(declared.readPermission()).resolves.toBe("granted");
+    const observation = await declared.requestPosition();
+    expect(observation).toMatchObject({
+      kind: "observed",
+      position: {
+        longitude: 30.563,
+        latitude: 50.4265,
+        accuracyMeters: 0,
+        declared: true,
+      },
+    });
+
+    // The point never moves, so a watch has nothing more to say.
+    const observed = vi.fn();
+    declared.watchPosition(observed)();
+    expect(observed).not.toHaveBeenCalled();
   });
 });

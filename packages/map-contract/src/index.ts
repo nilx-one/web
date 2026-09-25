@@ -263,6 +263,61 @@ export interface MapLandmark {
   readonly facts: Readonly<Record<string, string | number | boolean>>;
 }
 
+/**
+ * One cell of the fog, as the composition that draws the fog cuts it. The id
+ * is opaque to the application: it is compared and handed back, never decoded.
+ * The geometry is presentation only.
+ */
+export interface MapFogCell {
+  readonly id: string;
+  readonly center: MapPointSelection;
+  /** The outline, as `[longitude, latitude]` pairs, not closed. */
+  readonly boundary: readonly (readonly [
+    longitude: number,
+    latitude: number,
+  ])[];
+}
+
+/**
+ * The fog this device draws over the world, and what has lifted it.
+ *
+ * Ground lifts in two ways. This device's own presence journal lights the
+ * cells it dwelt in; and an Avaia sent to a cell at the edge of that ground,
+ * or this device observing itself inside one, reveals it. A reveal is local
+ * presentation state on this device: it is never presence evidence, never a
+ * visit, never sent anywhere, and it asserts nothing about any Bond.
+ */
+export interface MapFogField {
+  /**
+   * False while the composition cannot say what is revealed — the journal is
+   * loading, or could not load. No fog is drawn then, so none is offered.
+   */
+  isActive(): boolean;
+  cellAt(point: MapPointSelection): MapFogCell;
+  isRevealed(cellId: string): boolean;
+  /**
+   * The unrevealed cells a Bond standing at `point` can reach into: its own
+   * cell and its neighbours, and every cell within `rings` of it that touches
+   * ground already revealed. Nearest first.
+   */
+  frontier(point: MapPointSelection, rings: number): readonly MapFogCell[];
+  /** Lifts the fog from one cell on this device. Idempotent. */
+  reveal(cellId: string): void;
+  /** Notifies when a cell was revealed, by either path. */
+  subscribe(listener: () => void): () => void;
+}
+
+/**
+ * A fog cell the application wants marked on the world: one a Bond may send
+ * its Avaia into, or one being revealed right now and how far along it is.
+ */
+export interface MapFogMark {
+  readonly cell: MapFogCell;
+  readonly state: "available" | "revealing";
+  /** 0 to 1, for a cell being revealed. */
+  readonly progress?: number;
+}
+
 export type MapRendererStatus =
   | { readonly kind: "unmounted" }
   | { readonly kind: "loading" }
@@ -331,6 +386,13 @@ export interface MapRenderer {
    * before its tiles arrive is asked again then, rather than missed.
    */
   subscribeLandmarksChanged?(listener: () => void): () => void;
+  /**
+   * The fog this renderer draws, when its composition draws one. Absent means
+   * there is no fog: nothing is offered to reveal and no tap is `fog`.
+   */
+  readonly fog?: MapFogField;
+  /** Marks fog cells on the world; an empty list clears them. */
+  setFogMarks?(marks: readonly MapFogMark[]): void;
 }
 
 /**

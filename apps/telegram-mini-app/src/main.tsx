@@ -15,22 +15,21 @@ import {
   MAP_BOOTSTRAP_CAMERA,
   createMapLibreRenderer,
 } from "@nilx-one/map-maplibre";
-import {
-  createGroundRevealed,
-  createShadeMapFactory,
-} from "@nilx-one/map-shade";
+import { createFogField, createShadeMapFactory } from "@nilx-one/map-shade";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
 import { ProductApp } from "@nilx-one/product-app";
 import { declareHostLanguages } from "@nilx-one/product-app/localization";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { ObservedGeolocation } from "@nilx-one/host-contract";
+import {
+  createDeclaredGeolocation,
+  type ObservedGeolocation,
+} from "@nilx-one/host-contract";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { startTelegramChromeAppearanceSync } from "./appearance";
 import {
-  createManualLocationMapRenderer,
   locationControlFingerprint,
   readTelegramLocationControl,
 } from "./location-control";
@@ -77,6 +76,8 @@ async function bootstrap(): Promise<void> {
   const locationControl = await readTelegramLocationControl(
     telegramBridge?.initData ?? "",
   );
+  // A manual Bond location stands the Bond at the declared point: the host
+  // answers that point, marked declared, and never asks the device at all.
   const host = createTelegramHost(
     telegramBridge,
     locationControl.kind === "live"
@@ -86,7 +87,9 @@ async function bootstrap(): Promise<void> {
             telegramBridge?.initData ?? "",
           ),
         }
-      : {},
+      : locationControl.kind === "manual"
+        ? { geolocation: createDeclaredGeolocation(locationControl.position) }
+        : {},
   );
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,
@@ -101,21 +104,15 @@ async function bootstrap(): Promise<void> {
     },
   });
   const localPresence = createLocalPresenceJournal().catch(() => null);
+  const fog = createFogField(localPresence);
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
-  const baseMapRenderer = createMapLibreRenderer({
+  const mapRenderer = createMapLibreRenderer({
     createMap: createShadeMapFactory({
-      runtime: localPresence,
+      runtime: fog.runtime,
       anchor: { lng: anchorLng, lat: anchorLat },
     }),
-    isGroundRevealed: createGroundRevealed(localPresence),
+    fog: fog.field,
   });
-  const mapRenderer =
-    locationControl.kind === "manual"
-      ? createManualLocationMapRenderer(
-          baseMapRenderer,
-          locationControl.position,
-        )
-      : baseMapRenderer;
 
   // Telegram commonly keeps a Mini App alive while the user returns to the
   // bot. Re-read when it becomes visible; a changed mode needs a fresh
