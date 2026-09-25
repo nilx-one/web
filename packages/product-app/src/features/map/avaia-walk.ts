@@ -9,8 +9,6 @@ import {
   type MapPointSelection,
 } from "@nilx-one/map-contract";
 
-import { AVATAR_APPARENT_PIXELS } from "./avatar-presence";
-
 /**
  * An Avaia walking across the world, the way a character in an isometric game
  * does: a person points at the ground, the body turns to face it and goes.
@@ -52,12 +50,14 @@ export const STUDY_CLIP_MS = 1_600;
 export const STUDY_MS = STUDY_CLIP_MS * 2;
 
 /**
- * How far a body goes per second, in its own drawn heights. A body is drawn at
- * one apparent size at every scale, so a pace measured in metres would crawl
- * at street scale and teleport at building scale; a pace measured against the
- * body reads the same wherever the camera is, which is what a character in a
- * game does.
+ * The screen stride a walk is paced against. A pace measured in metres alone
+ * would crawl when the camera is far and teleport when it is close; a pace
+ * measured against a fixed length on screen reads the same wherever the camera
+ * is, which is what a character in a game does.
  */
+const WALK_STRIDE_PIXELS = 24;
+
+/** How far a body goes per second, in strides of the screen. */
 export const WALK_BODY_HEIGHTS_PER_SECOND = 1.1;
 
 /** Nobody walks slower than a stroll, even a body drawn very small. */
@@ -71,7 +71,7 @@ export function walkSpeedMetersPerSecond(
   latitude: number,
   zoom: number,
 ): number {
-  const bodyMeters = AVATAR_APPARENT_PIXELS * mapMetersPerPixel(latitude, zoom);
+  const bodyMeters = WALK_STRIDE_PIXELS * mapMetersPerPixel(latitude, zoom);
   const speed = bodyMeters * WALK_BODY_HEIGHTS_PER_SECOND;
   return Number.isFinite(speed)
     ? Math.max(MIN_WALK_SPEED_MPS, speed)

@@ -9,8 +9,6 @@ import {
 import {
   AVATAR_MODEL_IDS,
   MAP_BODY_HANDOVER_ZOOM,
-  MAP_BODY_HEIGHT_METERS,
-  mapMetersPerPixel,
   sampleAmbientAvatar,
   type AvatarClipId,
   type AvatarHandle,
@@ -61,23 +59,10 @@ export function avatarSeed(pubDress: string): number {
 }
 
 /**
- * The height a published study stands at, which the map contract publishes so
- * that the renderer measures the reach of a body by the same number the world
- * draws it at. Every study clears it, and none is scaled up further than it
- * needs.
- */
-const AVATAR_HEIGHT_METERS = MAP_BODY_HEIGHT_METERS;
-
-/** The parallel Web Mercator stops at, and so the last latitude with ground. */
-const MERCATOR_LATITUDE_LIMIT = 85.051129;
-
-/** The height a body is drawn at, at every scale it appears on. */
-export const AVATAR_APPARENT_PIXELS = 24;
-
-/**
- * Further out than street scale an observation is a place, not a person. The
- * position marker already says "here" at those widths, and a body standing
- * there would claim a precision the observation does not have.
+ * Closer than street scale — at the local-cell scale a first fix opens at — an
+ * observation is a person rather than a place. Further out the position marker
+ * already says "here", and a body standing there would claim a precision the
+ * observation does not have.
  *
  * It is the map contract's own threshold rather than a second copy of it: the
  * renderer hides the card by the same number the body appears at, so the two
@@ -86,36 +71,12 @@ export const AVATAR_APPARENT_PIXELS = 24;
 export const AVATAR_MIN_ZOOM = MAP_BODY_HANDOVER_ZOOM;
 
 /**
- * How much larger than life the body is drawn, so that it is always drawn the
- * same size.
- *
- * At building scale a person is barely three pixels tall, which is why a body
- * needs a presentation size of its own to be seen at all. It keeps that size
- * at every scale it appears on rather than growing into true scale as the
- * camera comes in: a body is who is standing there, and how big it looks
- * should not change what it is. The position is untouched — only the apparent
- * height — and the world's own geometry is unaffected.
+ * A body is drawn at true human height, never larger than life. Standing beside
+ * buildings drawn at their own height, anything bigger would read as a giant
+ * rather than a person; a body too small to read is simply not drawn yet, and
+ * the card carries it until the camera comes in.
  */
-export function avatarPresentationScale(
-  zoom: number,
-  latitude: number,
-): number {
-  // Web Mercator carries no ground past this parallel, and the metres a pixel
-  // covers there collapses towards zero — which would divide a body down to
-  // nothing rather than draw it. The projection's own limit is the answer.
-  const ground = mapMetersPerPixel(
-    Math.min(
-      Math.max(latitude, -MERCATOR_LATITUDE_LIMIT),
-      MERCATOR_LATITUDE_LIMIT,
-    ),
-    zoom,
-  );
-  const naturalPixels = AVATAR_HEIGHT_METERS / ground;
-  if (!Number.isFinite(naturalPixels) || naturalPixels <= 0) {
-    return 1;
-  }
-  return AVATAR_APPARENT_PIXELS / naturalPixels;
-}
+export const AVATAR_PRESENTATION_SCALE = 1;
 
 /** Everything the client needs to stand a body on the world. */
 export interface WheelBodyInput {
@@ -208,7 +169,7 @@ export function createWheelBodyHandle({
       : moving?.clipId !== undefined
         ? (moving.clipPhase ?? 0)
         : ambient.clipPhase,
-    scale: avatarPresentationScale(zoom, position.latitude),
+    scale: AVATAR_PRESENTATION_SCALE,
     visible: zoom >= AVATAR_MIN_ZOOM,
     visibleNodes: scene.visibleNodes,
   };

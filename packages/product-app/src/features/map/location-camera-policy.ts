@@ -157,14 +157,17 @@ export function recenterCamera(
 
 /**
  * The closest the world goes on purpose. Focusing an identity is a deliberate
- * "take me to it", so it lands at building scale rather than preserving the
- * zoom the person happened to be at.
+ * "take me to it", so it lands close enough for the body to stand on the world
+ * rather than preserving the zoom the person happened to be at.
  */
 export function closeUpCamera(
   position: ObservedGeolocation,
   context: LocationCameraContext,
 ): MapCamera {
-  const zoom = locationCameraZoom(CLOSE_UP_SCALE, context.presentation);
+  const zoom = Math.max(
+    MAP_BODY_HANDOVER_ZOOM,
+    locationCameraZoom(CLOSE_UP_SCALE, context.presentation),
+  );
   return {
     center: [position.longitude, position.latitude],
     zoom,

@@ -9,10 +9,9 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
-  AVATAR_APPARENT_PIXELS,
   AVATAR_MIN_ZOOM,
+  AVATAR_PRESENTATION_SCALE,
   avaiaStudy,
-  avatarPresentationScale,
   avatarSeed,
   BODY_HANDLE_IDS,
   createWheelBodyHandle,
@@ -38,7 +37,7 @@ function wheelBodyHandle(overrides: Partial<WheelBodyInput> = {}) {
     address: "0x0sky",
     study: "dasha-study",
     location: located,
-    zoom: MAP_SCALE_ZOOM.building,
+    zoom: MAP_BODY_HANDOVER_ZOOM,
     timeMs: 0,
     reducedMotion: false,
     ...overrides,
@@ -146,52 +145,21 @@ describe("which body an Avaia wears", () => {
 });
 
 describe("apparent size of a body", () => {
-  // The point of the policy: arriving at the scale focusing lands on has to
-  // show a person, and unscaled geography draws one about three pixels tall.
-  it("makes the body readable at the scale focusing an identity lands on", () => {
-    const zoom = MAP_SCALE_ZOOM.building;
-    expect(apparentPixels(zoom, 1)).toBeLessThan(5);
-    expect(apparentPixels(zoom, avatarPresentationScale(zoom, LATITUDE))).toBe(
-      AVATAR_APPARENT_PIXELS,
-    );
+  // A body stands beside buildings drawn at their own height, so anything
+  // larger than life reads as a giant rather than a person.
+  it("draws the body at true human height", () => {
+    expect(AVATAR_PRESENTATION_SCALE).toBe(1);
+    expect(wheelBodyHandle({ zoom: 20 })?.scale).toBe(1);
   });
 
-  // One size, everywhere. A body is who is standing there, and coming closer
-  // must not change what it is — including past the zoom where geography could
-  // carry a person on its own.
-  it("draws the body the same size at every scale, near and far", () => {
-    for (const zoom of [15, 16, MAP_SCALE_ZOOM.building, 18, 19, 20, 22]) {
-      expect(
-        apparentPixels(zoom, avatarPresentationScale(zoom, LATITUDE)),
-      ).toBeCloseTo(AVATAR_APPARENT_PIXELS, 6);
-    }
-  });
-
-  it("holds that size at any latitude", () => {
-    for (const latitude of [0, LATITUDE, -33.87, 78.2]) {
-      const scale = avatarPresentationScale(18, latitude);
-      const height = (1.8 * scale) / mapMetersPerPixel(latitude, 18);
-      expect(height).toBeCloseTo(AVATAR_APPARENT_PIXELS, 6);
-    }
-  });
-
-  // Past Web Mercator's last parallel the ground a pixel covers collapses, and
-  // dividing by it would shrink a body to nothing instead of drawing it.
-  it("holds the size at the pole rather than dividing a body away", () => {
-    for (const latitude of [90, -90, 85.5]) {
-      const scale = avatarPresentationScale(18, latitude);
-      expect(scale).toBe(avatarPresentationScale(18, 85.051129));
-      expect(scale).toBeGreaterThan(0);
-    }
-  });
-
-  it("draws a body at a broken latitude rather than nothing at all", () => {
-    expect(avatarPresentationScale(18, Number.NaN)).toBe(1);
+  it("appears only once a true-height body is readable", () => {
+    expect(apparentPixels(AVATAR_MIN_ZOOM, 1)).toBeGreaterThan(10);
+    expect(apparentPixels(MAP_SCALE_ZOOM.street, 1)).toBeLessThan(2);
   });
 
   it("withdraws the body where an observation is a place, not a person", () => {
     expect(AVATAR_MIN_ZOOM).toBe(MAP_BODY_HANDOVER_ZOOM);
-    expect(AVATAR_MIN_ZOOM).toBe(MAP_SCALE_ZOOM.street);
+    expect(AVATAR_MIN_ZOOM).toBeGreaterThan(MAP_SCALE_ZOOM.building);
     expect(wheelBodyHandle({ zoom: AVATAR_MIN_ZOOM })?.visible).toBe(true);
     expect(wheelBodyHandle({ zoom: AVATAR_MIN_ZOOM - 0.01 })?.visible).toBe(
       false,

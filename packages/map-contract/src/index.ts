@@ -66,13 +66,16 @@ export const MAP_SCALE_ZOOM: Readonly<Record<MapScale, number>> = Object.freeze(
 );
 
 /**
- * The scale a body stands on the world from. Closer than this a body is drawn
- * and speaks for itself; further out it would be too small to read, so the
- * label carries the identity instead — and shows the study as a still, since
- * the body itself is no longer legible. Renderer and application share this so
- * the two never both speak, and never both fall silent.
+ * The scale a body stands on the world from. A body is drawn at true human
+ * height, so it only appears once the ground is close enough for a person to
+ * be one: here a 1.8 m body is roughly a dozen pixels tall at mid latitudes,
+ * the same local-cell scale a first fix opens at. Further out it would be a
+ * speck — or, drawn larger than life, as tall as the houses beside it — so the
+ * label carries the identity instead and shows the study as a still. Renderer
+ * and application share this so the two never both speak, and never both fall
+ * silent.
  */
-export const MAP_BODY_HANDOVER_ZOOM: number = MAP_SCALE_ZOOM.street;
+export const MAP_BODY_HANDOVER_ZOOM = 18.5;
 
 /**
  * The height a published study stands at. The three studies measure 1.80 m to
@@ -84,7 +87,7 @@ export const MAP_BODY_HEIGHT_METERS = 1.8;
 
 /**
  * The reach of a drawn body, as a square of screen pixels around where it
- * stands. A body is drawn 24 px tall, which is smaller than a fingertip, so
+ * stands. A body drawn at true height is often smaller than a fingertip, so
  * what answers a tap is this target rather than the pixels the body happens to
  * cover. It is the size interface guidance has settled on for anything a person
  * is expected to hit on a touch screen.
