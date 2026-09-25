@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
         assert_eq!(body["pub_dress"], "0x0sky");
-        assert_eq!(body["avaia"]["pub_dress"], "0skai");
+        assert_eq!(body["avaia"]["pub_dress"], "x0skai");
         assert_eq!(
             body["avaia"]["location"]["coordinate"]["longitude_e7"],
             "305234000"

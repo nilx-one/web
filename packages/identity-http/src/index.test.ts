@@ -185,7 +185,7 @@ describe("pub_dress rename transport", () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValue(
-        response(200, { pub_dress: "0x0rain", avaia_pub_dress: "0rainai" }),
+        response(200, { pub_dress: "0x0rain", avaia_pub_dress: "x0rainai" }),
       );
     const adapter = createIdentityHttpAdapter({
       fetch,
@@ -194,7 +194,7 @@ describe("pub_dress rename transport", () => {
 
     await expect(adapter.renamePubDressSlug("rain")).resolves.toEqual({
       kind: "renamed",
-      identity: { pubDress: "0x0rain", avaiaPubDress: "0rainai" },
+      identity: { pubDress: "0x0rain", avaiaPubDress: "x0rainai" },
     });
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/identity/pub_dress",
@@ -466,7 +466,7 @@ describe("Avaia profile transport", () => {
       kind: "rejected",
       reason: "authentication-required",
     });
-    await expect(adapter.updateAvaiaProfile("1skai")).resolves.toEqual({
+    await expect(adapter.updateAvaiaProfile("x1skai")).resolves.toEqual({
       kind: "rejected",
       reason: "owner-discriminator-mismatch",
     });
@@ -474,7 +474,7 @@ describe("Avaia profile transport", () => {
       kind: "rejected",
       reason: "invalid-address",
     });
-    await expect(adapter.updateAvaiaProfile("0takenai")).resolves.toEqual({
+    await expect(adapter.updateAvaiaProfile("x0takenai")).resolves.toEqual({
       kind: "rejected",
       reason: "unavailable",
     });
@@ -512,7 +512,7 @@ describe("Avaia profile transport", () => {
   it("nests the published location's coordinate under the read profile", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
-        pub_dress: "0skai",
+        pub_dress: "x0skai",
         owner_pub_dress: "0x0sky",
         configuration_state: "configured",
         model_ref: null,
@@ -529,7 +529,7 @@ describe("Avaia profile transport", () => {
     await expect(adapter.readAvaiaProfile()).resolves.toEqual({
       kind: "available",
       profile: {
-        pubDress: "0skai",
+        pubDress: "x0skai",
         ownerPubDress: "0x0sky",
         configurationState: "configured",
         location: { coordinate: { longitude: 30.5234, latitude: 50.4501 } },
@@ -540,7 +540,7 @@ describe("Avaia profile transport", () => {
   it("publishes the owner's chosen position with CSRF protection", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
-        pub_dress: "0skai",
+        pub_dress: "x0skai",
         owner_pub_dress: "0x0sky",
         configuration_state: "configured",
         model_ref: null,
@@ -559,7 +559,7 @@ describe("Avaia profile transport", () => {
     ).resolves.toEqual({
       kind: "published",
       profile: {
-        pubDress: "0skai",
+        pubDress: "x0skai",
         ownerPubDress: "0x0sky",
         configurationState: "configured",
         location: { coordinate: { longitude: 30.5234, latitude: 50.4501 } },

@@ -176,11 +176,11 @@ impl IdentityRepository {
                 .await?;
         }
         self.migrate_avatar_catalog().await?;
-        self.migrate_avaia_prefix().await?;
         self.backfill_pub_dress_labels().await?;
         sqlx::raw_sql(include_str!("../migrations/0013_avaia_location.sql"))
             .execute(&self.pool)
             .await?;
+        self.migrate_avaia_prefix().await?;
         Ok(())
     }
 
@@ -201,7 +201,7 @@ impl IdentityRepository {
             )
             .fetch_one(&mut *transaction)
             .await?;
-            sqlx::raw_sql(include_str!("../migrations/0013_avaia_x_prefix.sql"))
+            sqlx::raw_sql(include_str!("../migrations/0014_avaia_x_prefix.sql"))
                 .execute(&mut *transaction)
                 .await?;
             if configured {
