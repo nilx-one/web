@@ -135,11 +135,11 @@ describe("taking the wheel", () => {
   it("leaves a camera that is already closer where the person put it", () => {
     const camera = bodyVisibleCamera(
       observation(),
-      { ...current, zoom: MAP_SCALE_ZOOM.building, pitch: 44 },
+      { ...current, zoom: MAP_BODY_HANDOVER_ZOOM + 1, pitch: 44 },
       VOLUMETRIC,
     );
 
-    expect(camera.zoom).toBe(MAP_SCALE_ZOOM.building);
+    expect(camera.zoom).toBe(MAP_BODY_HANDOVER_ZOOM + 1);
     expect(camera.pitch).toBe(44);
   });
 

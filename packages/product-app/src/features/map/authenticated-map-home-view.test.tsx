@@ -9,6 +9,7 @@ import type {
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import {
   avatarPreviewUrl,
+  MAP_BODY_HANDOVER_ZOOM,
   MAP_SCALE_ZOOM,
   type MapRenderer,
   type MapRendererStatus,
@@ -984,11 +985,11 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
-  // Focusing an identity is the moment a person expects to see somebody.
-  // Unscaled, a body is about three pixels tall there, so this covers the
-  // whole path: the camera arrives, the body is drawn large enough to read,
-  // and it withdraws again when the world pulls back to where an observation
-  // is a place rather than a person.
+  // Focusing an identity is the moment a person expects to see somebody. A
+  // body is drawn at true human height, never larger than life, so this covers
+  // the whole path: the camera arrives close enough to read it, and it
+  // withdraws again when the world pulls back to where an observation is a
+  // place rather than a person.
   it("draws a readable body at close range and withdraws it when the world pulls back", async () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
 
@@ -1004,14 +1005,13 @@ describe("AuthenticatedMapHomeView", () => {
 
     act(() => {
       mapRenderer.moveCamera(
-        { ...mapRenderer.getCamera(), zoom: MAP_SCALE_ZOOM.building },
+        { ...mapRenderer.getCamera(), zoom: MAP_BODY_HANDOVER_ZOOM },
         true,
       );
     });
 
     const close = upsert.mock.lastCall?.[0];
-    expect(close).toMatchObject({ visible: true });
-    expect(close?.scale).toBeGreaterThan(1);
+    expect(close).toMatchObject({ visible: true, scale: 1 });
 
     act(() => {
       mapRenderer.moveCamera(

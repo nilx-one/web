@@ -902,7 +902,7 @@ describe("a card that talks", () => {
     const { markers, createLabelMarker } = labelMarkers();
     const renderer = readyRenderer(fakeMap, createLabelMarker);
     renderer.setObservedPosition(OBSERVED);
-    fakeMap.camera.zoom = 17;
+    fakeMap.camera.zoom = MAP_BODY_HANDOVER_ZOOM + 0.5;
 
     renderer.setObservedPositionLabel({
       title: "0skai",
