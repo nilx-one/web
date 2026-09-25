@@ -9,7 +9,7 @@ use sqlx::{
 };
 use thiserror::Error;
 
-use crate::{AvaiaPubDress, PubDress, PubDressLabel};
+use crate::{AvaiaPubDress, DecimalU64, GeoCoordinate, PubDress, PubDressLabel};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityProvider {
@@ -1219,6 +1219,8 @@ pub enum RepositoryError {
     CorruptHumanPubDress,
     #[error("stored public-label suffix is invalid for this pub_dress")]
     CorruptPublicLabelSuffix,
+    #[error("stored Avaia location violates its contract")]
+    CorruptAvaiaLocation,
 }
 
 #[cfg(test)]

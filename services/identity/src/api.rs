@@ -20,11 +20,12 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AvaiaPubDress, DiscordOAuthClient, DiscordOAuthError, IdentityRecord, IdentityRepository,
-    NativeAuthConfig, NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine,
-    PasswordPolicyError, ProviderIdentity, ProviderLinkOutcome, ProviderLinkRepository, PubDress,
-    PubDressRenameOutcome, RegistrationOutcome, RememberedBondSigner, SecretDigester,
-    TelegramInitDataVerifier, TokenFactory, rate_limit::AttemptLimiter,
+    AvaiaPubDress, DiscordOAuthClient, DiscordOAuthError, GeoCoordinate, IdentityRecord,
+    IdentityRepository, NativeAuthConfig, NativeCredentialRecord, NativeRegistrationOutcome,
+    PasswordEngine, PasswordPolicyError, ProviderIdentity, ProviderLinkOutcome,
+    ProviderLinkRepository, PubDress, PubDressRenameOutcome, RegistrationOutcome,
+    RememberedBondSigner, SecretDigester, TelegramInitDataVerifier, TokenFactory,
+    rate_limit::AttemptLimiter,
 };
 use subtle::ConstantTimeEq as _;
 

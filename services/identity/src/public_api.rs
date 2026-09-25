@@ -15,7 +15,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{IdentityRepository, PubDressLabel, rate_limit::AttemptLimiter};
+use crate::{
+    GeoCoordinate, IdentityRepository, PubDress, PubDressLabel, rate_limit::AttemptLimiter,
+};
 
 const MAX_REQUEST_BYTES: usize = 2 * 1024;
 const PUBLIC_ZONE: &str = "nilx.one";
@@ -107,13 +109,38 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                     return unavailable();
                 }
             };
+            let avaia = match &record.identity.avaia_pub_dress {
+                Some(avaia_pub_dress) => {
+                    let owner: PubDress = match record.identity.pub_dress.parse() {
+                        Ok(value) => value,
+                        Err(_) => {
+                            tracing::error!("public Bond pub_dress is invalid");
+                            return unavailable();
+                        }
+                    };
+                    let location = match state.repository.read_avaia_location(&owner).await {
+                        Ok(value) => value,
+                        Err(error) => {
+                            tracing::error!(%error, "public Avaia location lookup failed");
+                            return unavailable();
+                        }
+                    };
+                    Some(PublicAvaiaProjection {
+                        pub_dress: avaia_pub_dress.clone(),
+                        avatar_model,
+                        location: location.map(|location| PublicAvaiaLocation {
+                            coordinate: location.coordinate,
+                        }),
+                    })
+                }
+                None => None,
+            };
             no_store_json(
                 StatusCode::OK,
                 PublicIdentityProjection {
                     pub_dress_url: record.readable_url(PUBLIC_ZONE),
                     pub_dress: record.identity.pub_dress,
-                    avaia_pub_dress: record.identity.avaia_pub_dress,
-                    avatar_model,
+                    avaia,
                 },
             )
         }
@@ -229,10 +256,29 @@ enum PubDressLabelResolutionKind {
 #[derive(Debug, Serialize)]
 struct PublicIdentityProjection {
     pub_dress: String,
-    avaia_pub_dress: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    avaia: Option<PublicAvaiaProjection>,
+    pub_dress_url: String,
+}
+
+/// The Avaia a Bond owns, nested under it in the public projection.
+///
+/// `location` is the owner-published Avaia location (see
+/// `IdentityRepository::read_avaia_location`); it is never the local walking
+/// position described in `avaia-walk.md`, which stays device-only and is
+/// never sent to this service.
+#[derive(Debug, Serialize)]
+struct PublicAvaiaProjection {
+    pub_dress: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     avatar_model: Option<String>,
-    pub_dress_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    location: Option<PublicAvaiaLocation>,
+}
+
+#[derive(Debug, Serialize)]
+struct PublicAvaiaLocation {
+    coordinate: GeoCoordinate,
 }
 
 #[derive(Debug, Serialize)]
@@ -310,6 +356,55 @@ mod tests {
         let body = json(response).await;
         assert_eq!(body["pub_dress"], "0x0небо");
         assert_eq!(body["pub_dress_url"], "https://0x0небо.nilx.one");
+        assert!(
+            body["avaia"]["pub_dress"]
+                .as_str()
+                .is_some_and(|value| value.ends_with("ai")),
+        );
+        assert!(body["avaia"]["location"].is_null());
+    }
+
+    #[tokio::test]
+    async fn public_projection_nests_the_published_avaia_location_under_its_bond() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let address: PubDress = "0x0sky".parse().expect("pub_dress");
+        repository
+            .register(&address, &ProviderIdentity::telegram(43), 100)
+            .await
+            .expect("registration");
+        let coordinate =
+            crate::GeoCoordinate::from_degrees(30.5234, 50.4501).expect("valid coordinate");
+        repository
+            .write_avaia_location(
+                &address,
+                crate::AvaiaLocation::new(coordinate, crate::DecimalU64::new(200)),
+            )
+            .await
+            .expect("publish Avaia location");
+
+        let response = router(repository)
+            .oneshot(
+                Request::get("/api/v1/identity/public")
+                    .header("host", "0x0sky.nilx.one")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json(response).await;
+        assert_eq!(body["pub_dress"], "0x0sky");
+        assert_eq!(body["avaia"]["pub_dress"], "0skai");
+        assert_eq!(
+            body["avaia"]["location"]["coordinate"]["longitude_e7"],
+            "305234000"
+        );
+        assert_eq!(
+            body["avaia"]["location"]["coordinate"]["latitude_e7"],
+            "504501000"
+        );
     }
 
     #[tokio::test]

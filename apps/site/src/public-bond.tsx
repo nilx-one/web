@@ -5,11 +5,32 @@ import { useEffect, useState } from "react";
 
 import "./public-bond.css";
 
+/** A WGS84 coordinate in decimal degrees, as read from the wire's E7 form. */
+export interface PublicCoordinate {
+  longitude: number;
+  latitude: number;
+}
+
+/**
+ * The owner-published location for a Bond's Avaia (see
+ * `IdentityRepository::read_avaia_location` in the identity service). This is
+ * never the local, never-persisted walking position described in
+ * `avaia-walk.md`.
+ */
+export interface PublicAvaiaLocation {
+  coordinate: PublicCoordinate;
+}
+
+export interface PublicAvaiaProjection {
+  pubDress: string;
+  avatarModel?: string;
+  location?: PublicAvaiaLocation;
+}
+
 export interface PublicBondProjection {
   pubDress: string;
   pubDressUrl: string;
-  avaiaPubDress?: string;
-  avatarModel?: string;
+  avaia?: PublicAvaiaProjection;
 }
 
 export type PublicBondState =
@@ -26,6 +47,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/** Matches the E7 wire scale in `ox1_contracts::GEO_COORDINATE_E7_SCALE`. */
+const GEO_COORDINATE_E7_SCALE = 10_000_000;
+
+function parseCoordinate(value: unknown): PublicCoordinate | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.longitude_e7 !== "string" ||
+    typeof value.latitude_e7 !== "string"
+  ) {
+    return undefined;
+  }
+  const longitudeE7 = Number(value.longitude_e7);
+  const latitudeE7 = Number(value.latitude_e7);
+  if (!Number.isFinite(longitudeE7) || !Number.isFinite(latitudeE7)) {
+    return undefined;
+  }
+  return {
+    longitude: longitudeE7 / GEO_COORDINATE_E7_SCALE,
+    latitude: latitudeE7 / GEO_COORDINATE_E7_SCALE,
+  };
+}
+
+function parseAvaiaLocation(value: unknown): PublicAvaiaLocation | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const coordinate = parseCoordinate(value.coordinate);
+  return coordinate === undefined ? undefined : { coordinate };
+}
+
+function parseAvaiaProjection(
+  value: unknown,
+): PublicAvaiaProjection | undefined {
+  if (!isRecord(value) || typeof value.pub_dress !== "string") {
+    return undefined;
+  }
+  const location = parseAvaiaLocation(value.location);
+  return {
+    pubDress: value.pub_dress,
+    ...(typeof value.avatar_model === "string"
+      ? { avatarModel: value.avatar_model }
+      : {}),
+    ...(location === undefined ? {} : { location }),
+  };
+}
+
 function parseProjection(value: unknown): PublicBondProjection | undefined {
   if (
     !isRecord(value) ||
@@ -34,15 +101,11 @@ function parseProjection(value: unknown): PublicBondProjection | undefined {
   ) {
     return undefined;
   }
+  const avaia = parseAvaiaProjection(value.avaia);
   return {
     pubDress: value.pub_dress,
     pubDressUrl: value.pub_dress_url,
-    ...(typeof value.avaia_pub_dress === "string"
-      ? { avaiaPubDress: value.avaia_pub_dress }
-      : {}),
-    ...(typeof value.avatar_model === "string"
-      ? { avatarModel: value.avatar_model }
-      : {}),
+    ...(avaia === undefined ? {} : { avaia }),
   };
 }
 
@@ -98,16 +161,25 @@ function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
         </a>
 
         <dl className="public-bond-facts">
-          {bond.avaiaPubDress === undefined ? null : (
+          {bond.avaia === undefined ? null : (
             <div>
               <dt>Avaia</dt>
-              <dd>{bond.avaiaPubDress}</dd>
+              <dd>{bond.avaia.pubDress}</dd>
             </div>
           )}
-          {bond.avatarModel === undefined ? null : (
+          {bond.avaia?.avatarModel === undefined ? null : (
             <div>
               <dt>body</dt>
-              <dd>{bond.avatarModel}</dd>
+              <dd>{bond.avaia.avatarModel}</dd>
+            </div>
+          )}
+          {bond.avaia?.location === undefined ? null : (
+            <div>
+              <dt>location</dt>
+              <dd>
+                {bond.avaia.location.coordinate.latitude.toFixed(4)},{" "}
+                {bond.avaia.location.coordinate.longitude.toFixed(4)}
+              </dd>
             </div>
           )}
         </dl>
