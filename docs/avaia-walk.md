@@ -110,9 +110,13 @@ its kinds occur there (see [map data](map-data.md)).
 
 The fog is lifted in two ways besides the presence journal. Both are local to
 this device, kept by the fog field (`createFogField` in `map-shade`) in local
-storage under `nilx-one.fog.reveals.v1`. A reveal is never written into the
-journal, never counts as a visit, and is never synced or sent anywhere. The
-shade layer draws it alongside what the journal lit.
+storage under `nilx-one.fog.reveals.v1.<pub_dress>`, one Bond's alone. The
+field reads and writes nothing until the product binds it to a Bond
+(`MapFogField.bindOwner`), and switching the bound Bond — signing into the
+same device as someone else — swaps in that Bond's own reveals rather than
+merging with the last one's. A reveal is never written into the journal,
+never counts as a visit, and is never synced or sent anywhere. The shade
+layer draws it alongside what the journal lit.
 
 1. **The Avaia reveals it.** The cells a Bond can reach into are marked on the
    world with a dashed outline: the cell it stands in and its neighbours, and

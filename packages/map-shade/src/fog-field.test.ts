@@ -93,6 +93,7 @@ describe("fog field", () => {
   it("reveals a cell on this device only, remembers it, and lights it for the shade", async () => {
     const storage = memoryStorage();
     const { field, runtime } = createFogField(journal([]).runtime, storage);
+    field.bindOwner?.("0x0sky");
     const shade = await runtime;
     const lit = vi.fn();
     const changed = vi.fn();
@@ -107,21 +108,97 @@ describe("fog field", () => {
     expect(shade?.source.litCells()).toContain(HERE_CELL);
     expect(lit).toHaveBeenCalledExactlyOnceWith(HERE_CELL);
     expect(changed).toHaveBeenCalledOnce();
-    expect(readFogReveals(storage)).toEqual([HERE_CELL]);
+    expect(readFogReveals("0x0sky", storage)).toEqual([HERE_CELL]);
 
     const again = createFogField(journal([]).runtime, storage);
+    again.field.bindOwner?.("0x0sky");
     await again.runtime;
     expect(again.field.isRevealed(HERE_CELL)).toBe(true);
   });
 
   it("refuses anything that is not a cell", async () => {
     const storage = memoryStorage();
-    storage.setItem("nilx-one.fog.reveals.v1", '["nope", 7]');
+    storage.setItem("nilx-one.fog.reveals.v1.0x0sky", '["nope", 7]');
     const { field, runtime } = createFogField(journal([]).runtime, storage);
+    field.bindOwner?.("0x0sky");
     await runtime;
 
     field.reveal("not-a-cell");
-    expect(readFogReveals(storage)).toEqual([]);
+    expect(readFogReveals("0x0sky", storage)).toEqual([]);
+  });
+
+  it("never reveals from, or writes to, storage until an owner is bound", async () => {
+    // The exact leak this guards: nothing may be read from or written to a
+    // key that belongs to no particular Bond, on a device more than one
+    // Bond might use.
+    const storage = memoryStorage();
+    const { field, runtime } = createFogField(journal([]).runtime, storage);
+    await runtime;
+
+    field.reveal(HERE_CELL);
+
+    expect(field.isRevealed(HERE_CELL)).toBe(true);
+    expect(storage.values.size).toBe(0);
+  });
+
+  it("keeps two Bonds' reveals on one device fully apart", async () => {
+    const storage = memoryStorage();
+    const skyCell = HERE_CELL;
+    const aliceCell = latLngToCell(48.8566, 2.3522, 9);
+    const sky = createFogField(journal([]).runtime, storage);
+    sky.field.bindOwner?.("0x0sky");
+    await sky.runtime;
+    sky.field.reveal(skyCell);
+
+    // Alice's own composition, same device and storage: her Bond must never
+    // read what Sky's reveal wrote, and revealing her own must never answer
+    // for Sky's cell either.
+    const alice = createFogField(journal([]).runtime, storage);
+    alice.field.bindOwner?.("0x0alice");
+    await alice.runtime;
+
+    expect(alice.field.isRevealed(skyCell)).toBe(false);
+    alice.field.reveal(aliceCell);
+    expect(sky.field.isRevealed(aliceCell)).toBe(false);
+
+    expect(readFogReveals("0x0sky", storage)).toEqual([skyCell]);
+    expect(readFogReveals("0x0alice", storage)).toEqual([aliceCell]);
+  });
+
+  it("rebinding the same field to a different Bond drops the previous Bond's reveals, and switching back restores them", async () => {
+    const storage = memoryStorage();
+    const skyCell = HERE_CELL;
+    const aliceCell = latLngToCell(48.8566, 2.3522, 9);
+    const { field, runtime } = createFogField(journal([]).runtime, storage);
+    field.bindOwner?.("0x0sky");
+    await runtime;
+    field.reveal(skyCell);
+
+    field.bindOwner?.("0x0alice");
+    expect(field.isRevealed(skyCell)).toBe(false);
+    field.reveal(aliceCell);
+
+    field.bindOwner?.("0x0sky");
+    expect(field.isRevealed(skyCell)).toBe(true);
+    expect(field.isRevealed(aliceCell)).toBe(false);
+
+    expect(readFogReveals("0x0sky", storage)).toEqual([skyCell]);
+    expect(readFogReveals("0x0alice", storage)).toEqual([aliceCell]);
+  });
+
+  it("rebinding to the same owner again is a no-op", async () => {
+    const storage = memoryStorage();
+    const { field, runtime } = createFogField(journal([]).runtime, storage);
+    field.bindOwner?.("0x0sky");
+    await runtime;
+    field.reveal(HERE_CELL);
+    const changed = vi.fn();
+    field.subscribe(changed);
+
+    field.bindOwner?.("0x0sky");
+
+    expect(changed).not.toHaveBeenCalled();
+    expect(field.isRevealed(HERE_CELL)).toBe(true);
   });
 
   it("hears the journal lighting a cell as revealed ground", async () => {

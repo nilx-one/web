@@ -115,6 +115,12 @@ export function useFogReveal({
   );
   const active = fog !== undefined && fog.isActive();
 
+  // Whatever this field persists is this Bond's alone: bound first, before
+  // anything below can read or write a reveal under it.
+  useEffect(() => {
+    fog?.bindOwner?.(owner);
+  }, [fog, owner]);
+
   const [jobsState, setJobsState] = useState<{
     readonly owner: string;
     readonly jobs: readonly FogRevealJob[];

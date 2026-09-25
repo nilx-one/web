@@ -195,6 +195,42 @@ describe("revealing the fog around a Bond", () => {
     expect(second.result.current.jobs).toEqual([]);
   });
 
+  it("never lets one Bond inherit cells revealed by another Bond on the same device", () => {
+    const fog = createFogFieldDouble(0.01);
+    const renderer = fogRenderer(fog);
+    const sky = render({ renderer, owner: "0x0sky" });
+    act(() => void sky.result.current.handleFogTap(NEXT_DOOR));
+    act(() => void sky.result.current.confirm());
+    act(() => vi.advanceTimersByTime(FOG_REVEAL_MIN_MS));
+    expect(fog.isRevealed("strip:3053")).toBe(true);
+    sky.unmount();
+
+    // Alice signs into the same device: the field is rebound to her Bond,
+    // and Sky's revealed cell must not come with it — the frontier still
+    // offers it, and revealing her own cell must not silently answer for
+    // Sky's.
+    const alice = render({ renderer, owner: "0x0alice" });
+    expect(alice.result.current.frontier.map((cell) => cell.id)).toContain(
+      "strip:3053",
+    );
+    act(() => void alice.result.current.handleFogTap(BOND));
+    act(() => void alice.result.current.confirm());
+    act(() => vi.advanceTimersByTime(FOG_REVEAL_MIN_MS));
+    expect(fog.isRevealed("strip:3052")).toBe(true);
+    alice.unmount();
+
+    // Sky signs back in: her own reveal is exactly as she left it, unmixed
+    // with what Alice revealed in between.
+    const skyAgain = render({ renderer, owner: "0x0sky" });
+    expect(fog.isRevealed("strip:3053")).toBe(true);
+    expect(
+      skyAgain.result.current.frontier.map((cell) => cell.id),
+    ).not.toContain("strip:3053");
+    expect(skyAgain.result.current.frontier.map((cell) => cell.id)).toContain(
+      "strip:3052",
+    );
+  });
+
   it("offers nothing where no fog is drawn", () => {
     const { result } = render({ renderer: {} as MapRenderer });
 

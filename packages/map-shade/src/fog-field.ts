@@ -12,7 +12,7 @@ import { cellToBoundary, cellToLatLng, gridDisk, isValidCell } from "h3-js";
 import type { ShadeRuntime } from "./map-factory";
 import { cellAtLngLat } from "./pick";
 
-const STORAGE_KEY = "nilx-one.fog.reveals.v1";
+const STORAGE_PREFIX = "nilx-one.fog.reveals.v1.";
 
 /** Enough for a city's worth of reveals, small enough to stay a note. */
 export const FOG_REVEAL_LIMIT = 5_000;
@@ -30,12 +30,21 @@ function defaultStorage(): FogRevealStorage | undefined {
   }
 }
 
-/** What this device remembers revealing. Never throws, never guesses. */
+function storageKeyFor(owner: string): string {
+  return STORAGE_PREFIX + owner;
+}
+
+/**
+ * What this device remembers revealing for one Bond. Never throws, never
+ * guesses. `owner` is required: a reveal is this Bond's own, and a device
+ * shared by more than one Bond must never answer one from another's key.
+ */
 export function readFogReveals(
+  owner: string,
   storage: FogRevealStorage | undefined = defaultStorage(),
 ): CellIndex[] {
   try {
-    const raw = storage?.getItem(STORAGE_KEY);
+    const raw = storage?.getItem(storageKeyFor(owner));
     if (raw === null || raw === undefined) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -49,12 +58,13 @@ export function readFogReveals(
 }
 
 function writeFogReveals(
+  owner: string,
   cells: readonly CellIndex[],
   storage: FogRevealStorage | undefined,
 ): void {
   try {
     storage?.setItem(
-      STORAGE_KEY,
+      storageKeyFor(owner),
       JSON.stringify(cells.slice(-FOG_REVEAL_LIMIT)),
     );
   } catch {
@@ -115,14 +125,19 @@ export interface FogFieldComposition {
 /**
  * Composes the fog a host draws from its presence journal and the reveals
  * this device made. Reveals live in local storage under
- * `nilx-one.fog.reveals.v1`: they are presentation state, not presence
- * evidence, and they are never synced, exported, or sent anywhere.
+ * `nilx-one.fog.reveals.v1.<owner>`, one Bond's alone: they are presentation
+ * state, not presence evidence, and they are never synced, exported, or sent
+ * anywhere. Nothing is read from or written to storage until `bindOwner`
+ * names whose reveals these are — a device this Bond only just signed into,
+ * or one another Bond used before it, must never answer from a stale or
+ * absent owner's key.
  */
 export function createFogField(
   journal: Promise<ShadeRuntime | null>,
   storage: FogRevealStorage | undefined = defaultStorage(),
 ): FogFieldComposition {
-  const reveals = new Set<CellIndex>(readFogReveals(storage));
+  const reveals = new Set<CellIndex>();
+  let owner: string | undefined;
   const cellListeners = new Set<(cell: CellIndex) => void>();
   const listeners = new Set<() => void>();
   let source: ShadeSource | undefined;
@@ -189,7 +204,10 @@ export function createFogField(
     reveal(cellId) {
       if (!isValidCell(cellId) || reveals.has(cellId)) return;
       reveals.add(cellId);
-      writeFogReveals([...reveals], storage);
+      // Unbound, this reveal stays in memory only: there is no owner yet to
+      // write it under, and writing it under none would mean writing it
+      // under everyone.
+      if (owner !== undefined) writeFogReveals(owner, [...reveals], storage);
       for (const listener of [...cellListeners]) listener(cellId);
       for (const listener of [...listeners]) listener();
     },
@@ -197,6 +215,16 @@ export function createFogField(
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+
+    bindOwner(nextOwner) {
+      if (owner === nextOwner) return;
+      // A different Bond signed in on this device: its own reveals replace
+      // whatever the previous owner's were, never merge with them.
+      owner = nextOwner;
+      reveals.clear();
+      for (const cell of readFogReveals(nextOwner, storage)) reveals.add(cell);
+      for (const listener of [...listeners]) listener();
     },
   };
 

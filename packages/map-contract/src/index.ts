@@ -305,6 +305,15 @@ export interface MapFogField {
   reveal(cellId: string): void;
   /** Notifies when a cell was revealed, by either path. */
   subscribe(listener: () => void): () => void;
+  /**
+   * Which Bond's reveals this field reads and writes. A composition that
+   * persists reveals on this device (`map-shade`'s) keeps one cell set per
+   * owner and switches which one `isRevealed`/`reveal` touch; until this is
+   * called at least once it keeps reveals in memory only, so a device never
+   * writes a completed reveal under the wrong Bond, or reads another Bond's.
+   * A composition with nothing to persist may omit this.
+   */
+  bindOwner?(owner: string): void;
 }
 
 /**
