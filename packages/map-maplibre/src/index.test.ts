@@ -7,6 +7,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   BUILDING_EXTRUSION_LAYER_ID,
+  FOG_MARKS_FILL_LAYER_ID,
+  FOG_MARKS_OUTLINE_LAYER_ID,
+  FOG_MARKS_SOURCE_ID,
   MAP_BOOTSTRAP_CAMERA,
   MAP_CAMERA_TRANSITION_MS,
   MAP_STYLE_URL,
@@ -1028,5 +1031,97 @@ describe("a card that talks", () => {
     // Silent again at close range, the body speaks for itself.
     expect(marker?.element.hidden).toBe(true);
     expect(marker?.center).toEqual([30.5234, 50.4501]);
+  });
+});
+
+describe("fog marks", () => {
+  const cell = {
+    id: "8928308280fffff",
+    center: { longitude: 30.5234, latitude: 50.4501 },
+    boundary: [
+      [30.522, 50.449],
+      [30.525, 50.449],
+      [30.526, 50.451],
+      [30.523, 50.452],
+    ] as const,
+  };
+
+  it("draws marked cells once the map is ready, and keeps them over a style swap", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+    });
+    renderer.mount(document.createElement("div"));
+    renderer.setFogMarks?.([{ cell, state: "available" }]);
+    expect(fakeMap.addSource).not.toHaveBeenCalled();
+
+    fakeMap.emit("load");
+    expect(fakeMap.sources.has(FOG_MARKS_SOURCE_ID)).toBe(true);
+    expect(fakeMap.layers.has(FOG_MARKS_FILL_LAYER_ID)).toBe(true);
+    expect(fakeMap.layers.has(FOG_MARKS_OUTLINE_LAYER_ID)).toBe(true);
+
+    renderer.setFogMarks?.([{ cell, state: "revealing", progress: 0.5 }]);
+    const data = fakeMap.sources.get(FOG_MARKS_SOURCE_ID)?.setData.mock
+      .calls[0]?.[0] as {
+      features: {
+        properties: { state: string; progress: number };
+        geometry: { coordinates: number[][][] };
+      }[];
+    };
+    expect(data.features[0]?.properties).toEqual({
+      state: "revealing",
+      progress: 0.5,
+    });
+    // The ring is closed for the polygon, never left open.
+    const ring = data.features[0]?.geometry.coordinates[0] ?? [];
+    expect(ring.at(-1)).toEqual(ring[0]);
+
+    renderer.setAppearance("dark");
+    fakeMap.reloadStyle();
+    expect(fakeMap.layers.has(FOG_MARKS_FILL_LAYER_ID)).toBe(true);
+  });
+
+  it("clears every mark with an empty list", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    renderer.setFogMarks?.([{ cell, state: "available" }]);
+    renderer.setFogMarks?.([]);
+
+    expect(fakeMap.sources.has(FOG_MARKS_SOURCE_ID)).toBe(false);
+    expect(fakeMap.layers.has(FOG_MARKS_FILL_LAYER_ID)).toBe(false);
+    expect(fakeMap.layers.has(FOG_MARKS_OUTLINE_LAYER_ID)).toBe(false);
+  });
+
+  it("hands its fog on and answers taps from it", () => {
+    const fakeMap = makeFakeMap();
+    Object.assign(fakeMap, { queryRenderedFeatures: () => [] });
+    let revealed = false;
+    const fog = {
+      isActive: () => true,
+      cellAt: () => cell,
+      isRevealed: () => revealed,
+      frontier: () => [],
+      reveal: vi.fn(),
+      subscribe: () => () => undefined,
+    };
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      fog,
+    });
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    const tapped = vi.fn();
+    renderer.subscribeGroundTap?.(tapped);
+    const tap = { point: { x: 10, y: 10 }, lngLat: { lng: 30.6, lat: 50.4 } };
+
+    fakeMap.emit("click", tap);
+    revealed = true;
+    fakeMap.emit("click", tap);
+
+    expect(renderer.fog).toBe(fog);
+    expect(tapped.mock.calls.map(([value]) => value.ground)).toEqual([
+      "fog",
+      "open",
+    ]);
   });
 });

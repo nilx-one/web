@@ -27,6 +27,13 @@ export interface ObservedGeolocation {
   readonly accuracyMeters: number;
   /** Host clock reading for the observation, in milliseconds. */
   readonly observedAt: number;
+  /**
+   * Set when this is not an observation at all but a point the Bond declared
+   * as its location (a manual `Bond.location`). It stands the Bond there for
+   * presentation and nothing else: it is never presence evidence, a presence
+   * adapter ignores it, and nothing about the device is inferred from it.
+   */
+  readonly declared?: true;
 }
 
 /**
@@ -87,3 +94,31 @@ export const UNSUPPORTED_GEOLOCATION: GeolocationCapability = Object.freeze({
     return () => undefined;
   },
 });
+
+/**
+ * A capability that answers one declared point instead of observing the
+ * device. A host whose Bond has a manual location composes it so the Bond
+ * stands where it was put, while the real device position stays unasked.
+ */
+export function createDeclaredGeolocation(point: {
+  readonly longitude: number;
+  readonly latitude: number;
+}): GeolocationCapability {
+  const observe = (): GeolocationObservation => ({
+    kind: "observed",
+    position: {
+      longitude: point.longitude,
+      latitude: point.latitude,
+      accuracyMeters: 0,
+      observedAt: Date.now(),
+      declared: true,
+    },
+  });
+  return Object.freeze({
+    readPermission: async (): Promise<GeolocationPermission> => "granted",
+    requestPosition: async (): Promise<GeolocationObservation> => observe(),
+    // The point does not move, so a watch has nothing to report beyond what a
+    // request already answered: it stays silent until it is stopped.
+    watchPosition: (): GeolocationUnsubscribe => () => undefined,
+  });
+}

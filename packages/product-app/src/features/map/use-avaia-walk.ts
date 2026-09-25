@@ -80,9 +80,17 @@ export interface AvaiaWalkInput {
   readonly renderer: MapRenderer;
   /** The Avaia is at the wheel and the handover has finished. */
   readonly active: boolean;
-  /** This device's own observation, and how sure it is. */
+  /**
+   * Where the Bond stands and how sure that is: this device's own
+   * observation, or a point the Bond declared (`declared`), which is never
+   * evidence of having passed anything.
+   */
   readonly observed:
-    (MapPointSelection & { readonly accuracyMeters: number }) | undefined;
+    | (MapPointSelection & {
+        readonly accuracyMeters: number;
+        readonly declared?: true;
+      })
+    | undefined;
   /** The study the Avaia is drawn in, whose voice it speaks with. */
   readonly model: AvatarModelId | undefined;
   readonly locale: ProductLocale;
@@ -92,6 +100,12 @@ export interface AvaiaWalkInput {
   readonly owner: string;
   readonly zoom: number;
   readonly reducedMotion: boolean;
+  /**
+   * A tap into the fog, offered to whoever can reveal it before the Avaia
+   * refuses it. `true` means it was taken and the Avaia says nothing of its
+   * own; `"busy"` means the Avaia is already revealing all it can and says so.
+   */
+  readonly onFogTap?: (tap: MapPointSelection) => boolean | "busy";
 }
 
 export interface AvaiaWalkState {
@@ -107,6 +121,14 @@ export interface AvaiaWalkState {
   readonly notebook: LandmarkNotebook;
   /** Back to the device, silent and still: what taking the wheel starts from. */
   reset(): void;
+  /**
+   * Sends the body somewhere the application chose rather than a tap —
+   * a fog cell it was asked to reveal — fog or not. False when the body has
+   * nowhere to start from, or buildings and water leave no way there.
+   */
+  walkTo(point: MapPointSelection): boolean;
+  /** Says one line in this Avaia's voice. */
+  announce(kind: AvaiaLineKind): void;
 }
 
 /**
@@ -128,6 +150,7 @@ export function useAvaiaWalk({
   owner,
   zoom,
   reducedMotion,
+  onFogTap,
 }: AvaiaWalkInput): AvaiaWalkState {
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
   const [study, setStudy] = useState<AvaiaStudy | undefined>(undefined);
@@ -147,6 +170,7 @@ export function useAvaiaWalk({
   const observedLongitude = observed?.longitude;
   const observedLatitude = observed?.latitude;
   const observedAccuracy = observed?.accuracyMeters;
+  const observedDeclared = observed?.declared === true;
 
   // Everything a callback needs to read "now", kept current without tearing
   // down the renderer subscription on every frame's worth of change.
@@ -161,6 +185,7 @@ export function useAvaiaWalk({
     reducedMotion,
     avaiaAddress,
     owner,
+    onFogTap,
   });
   useEffect(() => {
     latest.current = {
@@ -174,6 +199,7 @@ export function useAvaiaWalk({
       reducedMotion,
       avaiaAddress,
       owner,
+      onFogTap,
     };
   });
 
@@ -258,6 +284,24 @@ export function useAvaiaWalk({
       const nearDevice =
         device !== undefined &&
         mapDistanceMeters(device, tap) <= NEAR_DEVICE_OPEN_METERS;
+      // Fog is first offered for revealing — the Bond's own cell included,
+      // which is how a Bond standing in the fog gets its first ground. Only
+      // what nobody takes falls back to walking or to a refusal.
+      if (tap.ground === "fog") {
+        const taken = latest.current.onFogTap?.({
+          longitude: tap.longitude,
+          latitude: tap.latitude,
+        });
+        if (taken === "busy") {
+          setActed(true);
+          say("fog.busy");
+          return;
+        }
+        if (taken === true) {
+          setActed(true);
+          return;
+        }
+      }
       const ground = tap.ground === "fog" && nearDevice ? "open" : tap.ground;
       if (ground !== "open") {
         setActed(true);
@@ -342,6 +386,7 @@ export function useAvaiaWalk({
   useEffect(() => {
     function notice(): void {
       if (
+        observedDeclared ||
         observedLongitude === undefined ||
         observedLatitude === undefined ||
         observedAccuracy === undefined ||
@@ -361,7 +406,14 @@ export function useAvaiaWalk({
 
     notice();
     return renderer.subscribeLandmarksChanged?.call(renderer, notice);
-  }, [observedAccuracy, observedLatitude, observedLongitude, owner, renderer]);
+  }, [
+    observedAccuracy,
+    observedDeclared,
+    observedLatitude,
+    observedLongitude,
+    owner,
+    renderer,
+  ]);
 
   // Curiosity: an idle Avaia at the wheel goes to see the nearest thing its
   // owner walked past and it has not studied. It looks around first when it
@@ -406,11 +458,25 @@ export function useAvaiaWalk({
     lastLine.current = undefined;
   }, []);
 
+  const walkTo = useCallback(
+    (point: MapPointSelection): boolean =>
+      goTo(point, globalThis.performance.now()) === "walking",
+    [goTo],
+  );
+
   const moving = walk !== undefined || study !== undefined;
   // One object per change that matters, so the world redraws a body when the
   // Avaia does something and not whenever the surface around it re-renders.
   return useMemo(
-    () => ({ stance, moving, speech, notebook, reset }),
-    [moving, notebook, reset, speech, stance],
+    () => ({
+      stance,
+      moving,
+      speech,
+      notebook,
+      reset,
+      walkTo,
+      announce: say,
+    }),
+    [moving, notebook, reset, say, speech, stance, walkTo],
   );
 }

@@ -54,6 +54,20 @@ const EN_MESSAGES = {
   "location.accuracy.approx": "Accuracy about",
   "map.card.thisDevice": "This device",
   "map.card.fromThisDevice": "{distance} from this device",
+  "map.card.declared": "Manual position",
+  "map.card.fromDeclared": "{distance} from the manual position",
+  "fog.prompt.title": "Reveal this patch of fog?",
+  "fog.prompt.detail":
+    "{avaia} will go there and reveal it in about {minutes} min.",
+  "fog.prompt.landmarks":
+    "Landmarks here: {count}. Each one takes longer to look over.",
+  "fog.prompt.busy":
+    "{avaia} is already revealing {limit} cells. Wait for one to clear.",
+  "fog.prompt.confirm": "Reveal",
+  "fog.prompt.cancel": "Not now",
+  "fog.status.revealing": "Revealing {count} of {limit}",
+  "fog.status.next": "next in {time}",
+  "fog.announce.revealed": "A patch of fog was revealed.",
   "avaia.notebook.title": "Landmarks studied",
   "avaia.notebook.empty":
     "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
@@ -160,6 +174,19 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "location.accuracy.approx": "Точність близько",
   "map.card.thisDevice": "Цей пристрій",
   "map.card.fromThisDevice": "{distance} від цього пристрою",
+  "map.card.declared": "Ручна позиція",
+  "map.card.fromDeclared": "{distance} від ручної позиції",
+  "fog.prompt.title": "Відкрити цю клітинку туману?",
+  "fog.prompt.detail":
+    "{avaia} піде туди й відкриє її приблизно за {minutes} хв.",
+  "fog.prompt.landmarks": "Пам’яток тут: {count}. Кожна додає часу на огляд.",
+  "fog.prompt.busy":
+    "{avaia} вже відкриває {limit} клітинки. Зачекайте, поки одна відкриється.",
+  "fog.prompt.confirm": "Відкрити",
+  "fog.prompt.cancel": "Не зараз",
+  "fog.status.revealing": "Відкривається {count} з {limit}",
+  "fog.status.next": "наступна за {time}",
+  "fog.announce.revealed": "Клітинку туману відкрито.",
   "avaia.notebook.title": "Вивчені пам’ятки",
   "avaia.notebook.empty":
     "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",

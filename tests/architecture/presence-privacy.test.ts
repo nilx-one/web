@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const LOCAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
-  "map-shade": ["@nilx-one/presence-contract"],
+  // The map contract is presentation types and pure geometry: it is how the
+  // fog field describes its cells to the application, and it has no egress.
+  "map-shade": ["@nilx-one/map-contract", "@nilx-one/presence-contract"],
   "presence-contract": [],
   "presence-geo": ["@nilx-one/host-contract", "@nilx-one/presence-contract"],
   "presence-idb": ["@nilx-one/presence-contract"],

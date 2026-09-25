@@ -106,10 +106,53 @@ Protomaps basemap schema the archive is built from. `inspect-basemap.sh` checks
 it against the real archive with `landmark-kinds.mjs`, and fails when none of
 its kinds occur there (see [map data](map-data.md)).
 
+## Revealing the fog
+
+The fog is lifted in two ways besides the presence journal. Both are local to
+this device, kept by the fog field (`createFogField` in `map-shade`) in local
+storage under `nilx-one.fog.reveals.v1.<pub_dress>`, one Bond's alone. The
+field reads and writes nothing until the product binds it to a Bond
+(`MapFogField.bindOwner`), and switching the bound Bond — signing into the
+same device as someone else — swaps in that Bond's own reveals rather than
+merging with the last one's. A reveal is never written into the journal,
+never counts as a visit, and is never synced or sent anywhere. The shade
+layer draws it alongside what the journal lit.
+
+1. **The Avaia reveals it.** The cells a Bond can reach into are marked on the
+   world with a dashed outline: the cell it stands in and its neighbours, and
+   every cell within three rings of it that touches ground already revealed.
+   A tap on one asks first (“Reveal this patch of fog?”). A yes sends the
+   Avaia there, and the cell opens after a minute, plus a minute for each
+   landmark the archive draws inside it, never more than five minutes. An
+   Avaia works on at most three cells at once. A fourth tap gets told to
+   wait. While a cell is opening it fills in on the world, and a status chip
+   says how many cells are opening and when the next one finishes. A reveal
+   runs on the wall clock and is kept per Bond under
+   `nilx-one.fog.jobs.v1.<pub_dress>`, so reopening the page does not lose
+   it. With the Bond at the wheel a tap still asks, and the Avaia still does
+   the work, but nothing walks.
+2. **The person walks in.** When this device observes itself inside a fogged
+   cell, with 50 m accuracy or better, that one cell opens at once. There is
+   no Avaia and no wait.
+
+A tap into fog that nobody can reach is refused the way it always was.
+
+## A declared position
+
+A Bond whose owner set a manual `Bond.location` (the Telegram bot's
+`/set_position`) stands where it was put. The Telegram host answers that point
+through `createDeclaredGeolocation`, marked `declared`, and does not ask the
+device for its position at all. The Bond's body, the card, the camera and the
+cells in reach all follow the declared point, and the card says “Manual
+position” instead of “This device”. A declared point is not an observation:
+it never notices a landmark, never reveals a cell by walking into it, and the
+presence tracker ignores it.
+
 ## Leaving the wheel
 
 Handing the wheel over ends everything the Avaia was doing, including a walk,
-a study or a line on the card. An Avaia that takes the wheel starts again from
+a study or a line on the card. A fog reveal is the exception: it is work on a
+cell, not a walk, and it finishes on its own clock. An Avaia that takes the wheel starts again from
 where its owner is. Nothing walks in the background.
 
 ## Not yet

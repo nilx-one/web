@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@nilx-one/map-contract": "workspace:*",
     "@nilx-one/presence-contract": "workspace:*",
     "h3-js": "^4.5.0"
   },

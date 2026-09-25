@@ -13,8 +13,11 @@ import {
   DEFAULT_MAP_CAMERA,
   type MapCamera,
   type MapCameraChange,
+  type MapFogCell,
+  type MapFogField,
   type MapGroundTap,
   type MapLandmark,
+  type MapPointSelection,
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
@@ -169,5 +172,83 @@ export function observation(
     accuracyMeters: 24,
     observedAt: 1_700_000_000_000,
     ...overrides,
+  };
+}
+
+/**
+ * A fog cut into a strip of cells `step` degrees of longitude wide. Crude,
+ * but it has the one property the application relies on: a point always
+ * falls in exactly one cell, and neighbours are one step apart.
+ */
+/**
+ * A fog field double that keeps one reveal set per bound owner, the way
+ * `map-shade`'s real field does: revealing is never answered from, or
+ * written to, any owner but the one last bound, and unbound reveals live in
+ * memory only. `revealed` always reads the currently bound owner's set (or
+ * an owner-less scratch set before `bindOwner` is ever called), so a test
+ * that never cares about ownership can keep reading it exactly as before.
+ */
+export function createFogFieldDouble(
+  step = 0.001,
+): MapFogField & { readonly revealed: Set<string> } {
+  const perOwner = new Map<string, Set<string>>();
+  const unbound = new Set<string>();
+  let owner: string | undefined;
+  const listeners = new Set<() => void>();
+  const index = (point: MapPointSelection) =>
+    Math.round(point.longitude / step);
+  const cell = (at: number): MapFogCell => ({
+    id: `strip:${at}`,
+    center: { longitude: at * step, latitude: 50.4501 },
+    boundary: [
+      [(at - 0.5) * step, 50.449],
+      [(at + 0.5) * step, 50.449],
+      [at * step, 50.451],
+    ],
+  });
+  const currentRevealed = (): Set<string> => {
+    if (owner === undefined) return unbound;
+    let set = perOwner.get(owner);
+    if (set === undefined) {
+      set = new Set<string>();
+      perOwner.set(owner, set);
+    }
+    return set;
+  };
+  return {
+    get revealed() {
+      return currentRevealed();
+    },
+    isActive: () => true,
+    cellAt: (point) => cell(index(point)),
+    isRevealed: (id) => currentRevealed().has(id),
+    frontier(point, rings) {
+      const revealed = currentRevealed();
+      const origin = index(point);
+      const found: MapFogCell[] = [];
+      for (let ring = 0; ring <= rings; ring += 1) {
+        for (const at of ring === 0
+          ? [origin]
+          : [origin - ring, origin + ring]) {
+          if (!revealed.has(`strip:${at}`)) found.push(cell(at));
+        }
+      }
+      return found;
+    },
+    reveal(id) {
+      const revealed = currentRevealed();
+      if (revealed.has(id)) return;
+      revealed.add(id);
+      for (const listener of [...listeners]) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    bindOwner(next) {
+      if (owner === next) return;
+      owner = next;
+      for (const listener of [...listeners]) listener();
+    },
   };
 }

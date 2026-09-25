@@ -17,6 +17,8 @@ import {
   mapMetersPerPixel,
   type MapBodyActivation,
   type MapBounds,
+  type MapFogField,
+  type MapFogMark,
   type MapGround,
   type MapGroundTap,
   type MapLandmark,
@@ -54,6 +56,14 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { Protocol } from "pmtiles";
 
 import type { AvatarCustomLayer } from "./avatar-layer";
+import {
+  FOG_MARKS_FILL_LAYER_ID,
+  FOG_MARKS_OUTLINE_LAYER_ID,
+  FOG_MARKS_SOURCE_ID,
+  fogMarksData,
+  fogMarksLayers,
+  fogMarksSource,
+} from "./fog-marks";
 import landmarkKinds from "./landmark-kinds.json";
 
 import {
@@ -82,6 +92,11 @@ export {
   accuracyRadiusExpression,
   clampAccuracyMeters,
 } from "./observed-position";
+export {
+  FOG_MARKS_FILL_LAYER_ID,
+  FOG_MARKS_OUTLINE_LAYER_ID,
+  FOG_MARKS_SOURCE_ID,
+} from "./fog-marks";
 export {
   OBSERVED_POSITION_LABEL_CLASS,
   createObservedPositionLabelElement,
@@ -179,6 +194,12 @@ export interface MapLibreRendererOptions {
    * no fog to consult, and no tap is ever reported as `fog`.
    */
   readonly isGroundRevealed?: (point: MapPointSelection) => boolean;
+  /**
+   * The fog the composition draws, handed on to the application as
+   * `renderer.fog`. When `isGroundRevealed` is absent the renderer answers
+   * taps from this instead.
+   */
+  readonly fog?: MapFogField;
 }
 
 function createMapLibreLabelMarker(
@@ -348,6 +369,19 @@ export function createMapLibreRenderer(
   let labelElement: HTMLElement | undefined;
   let selectionPoint: MapPointSelection | null = null;
   let selectionMarker: MapLabelMarker | undefined;
+  let fogMarks: readonly MapFogMark[] = [];
+  const isGroundRevealed =
+    options.isGroundRevealed ??
+    (options.fog === undefined
+      ? undefined
+      : (point: MapPointSelection) => {
+          const fog = options.fog;
+          return (
+            fog === undefined ||
+            !fog.isActive() ||
+            fog.isRevealed(fog.cellAt(point).id)
+          );
+        });
   const listeners = new Set<(next: MapRendererStatus) => void>();
   const cameraListeners = new Set<(change: MapCameraChange) => void>();
   const bodyActivationListeners = new Set<
@@ -583,6 +617,46 @@ export function createMapLibreRenderer(
     applyLabel(mounted);
   }
 
+  function applyFogMarks(mounted: MapLibreMap): void {
+    if (fogMarks.length === 0) {
+      for (const layerId of [
+        FOG_MARKS_FILL_LAYER_ID,
+        FOG_MARKS_OUTLINE_LAYER_ID,
+      ]) {
+        if (mounted.getLayer(layerId) !== undefined)
+          mounted.removeLayer(layerId);
+      }
+      if (mounted.getSource(FOG_MARKS_SOURCE_ID) !== undefined) {
+        mounted.removeSource(FOG_MARKS_SOURCE_ID);
+      }
+      return;
+    }
+
+    const source = mounted.getSource(FOG_MARKS_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    if (source === undefined) {
+      mounted.addSource(
+        FOG_MARKS_SOURCE_ID,
+        fogMarksSource(fogMarks) as unknown as SourceSpecification,
+      );
+    } else {
+      source.setData(
+        fogMarksData(fogMarks) as Parameters<GeoJSONSource["setData"]>[0],
+      );
+    }
+    // Beneath the observation, so the Bond's own marker stays on top of the
+    // cells around it; the observation layers are appended after these.
+    const before = [
+      OBSERVED_POSITION_CELL_LAYER_ID,
+      OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
+    ].find((id) => mounted.getLayer(id) !== undefined);
+    for (const layer of fogMarksLayers()) {
+      if (mounted.getLayer(String(layer.id)) === undefined) {
+        mounted.addLayer(layer as unknown as LayerSpecification, before);
+      }
+    }
+  }
+
   function ensureAvatarLayer(mounted: MapLibreMap): void {
     if (avatarLayer === undefined) return;
     if (mounted.getLayer(avatarLayer.id) !== undefined) return;
@@ -591,6 +665,7 @@ export function createMapLibreRenderer(
 
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
+    applyFogMarks(mounted);
     applyObservedPosition(mounted);
     applySelectionPoint(mounted);
     if (firstPaintDone && avatarLayer?.hasInstances())
@@ -615,7 +690,7 @@ export function createMapLibreRenderer(
     point: MapScreenPoint,
     selected: MapPointSelection,
   ): MapGround {
-    if (options.isGroundRevealed?.(selected) === false) return "fog";
+    if (isGroundRevealed?.(selected) === false) return "fog";
     const query = (layers: readonly string[]): boolean => {
       const present = existingLayers(mounted, layers);
       if (present.length === 0) return false;
@@ -1035,6 +1110,13 @@ export function createMapLibreRenderer(
     setSelectionPoint(next: MapPointSelection | null) {
       selectionPoint = next === null ? null : { ...next };
       if (map !== undefined) applySelectionPoint(map);
+    },
+
+    ...(options.fog === undefined ? {} : { fog: options.fog }),
+
+    setFogMarks(next: readonly MapFogMark[]) {
+      fogMarks = [...next];
+      if (map !== undefined && presentationApplied) applyFogMarks(map);
     },
   };
 }

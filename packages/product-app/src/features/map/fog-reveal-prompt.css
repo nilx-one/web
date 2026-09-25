@@ -1,0 +1,134 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* The fog question floats over the world above the Dock's measured height,
+   beside the location control rather than over it. */
+.fog-reveal {
+  position: absolute;
+  left: calc(var(--shell-inset) + var(--safe-left, 0px));
+  right: calc(
+    var(--shell-inset) + var(--safe-right, 0px) + 44px + var(--shell-gap)
+  );
+  bottom: calc(
+    var(--shell-inset) + var(--safe-bottom, 0px) +
+      var(--shell-bottom-height, 0px) + var(--shell-gap)
+  );
+  display: grid;
+  gap: var(--shell-gap);
+  justify-items: start;
+  max-width: 360px;
+  pointer-events: none;
+}
+
+.fog-reveal > * {
+  pointer-events: auto;
+}
+
+.fog-reveal__prompt {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--map-night-border);
+  border-radius: 16px;
+  background: var(--map-glass-strong, var(--map-night-raised));
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 24px var(--map-shadow, rgba(0, 0, 0, 0.14));
+  color: var(--map-ink);
+}
+
+.fog-reveal__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.fog-reveal__detail,
+.fog-reveal__note {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.fog-reveal__note {
+  color: var(--map-ink-muted);
+}
+
+.fog-reveal__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.fog-reveal__cancel,
+.fog-reveal__confirm {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 18px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.fog-reveal__cancel {
+  border: 1px solid var(--map-night-border);
+  background: transparent;
+  color: var(--map-ink);
+}
+
+.fog-reveal__confirm {
+  border: 1px solid var(--map-accent-spatial-strong, #00bfd4);
+  background: var(--map-accent-spatial, #37d7e5);
+  color: #06363c;
+  font-weight: 650;
+}
+
+.fog-reveal__cancel:focus-visible,
+.fog-reveal__confirm:focus-visible {
+  outline: 2px solid var(--map-accent-spatial-strong, #00bfd4);
+  outline-offset: 2px;
+}
+
+.fog-reveal__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--map-night-border);
+  border-radius: 999px;
+  background: var(--map-night-raised);
+  backdrop-filter: blur(18px);
+  color: var(--map-ink);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.fog-reveal__next {
+  color: var(--map-ink-muted);
+}
+
+.fog-reveal__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--map-accent-spatial, #37d7e5);
+  animation: fog-reveal-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes fog-reveal-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fog-reveal__pulse {
+    animation: none;
+  }
+}

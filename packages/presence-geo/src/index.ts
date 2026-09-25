@@ -154,7 +154,10 @@ function trackObservation(
   tracker: PresenceTracker,
   observation: GeolocationObservation,
 ): void {
-  if (observation.kind === "observed") tracker.observe(observation.position);
+  // A declared point is where the Bond was put, not where this device was:
+  // it never becomes a visit.
+  if (observation.kind === "observed" && observation.position.declared !== true)
+    tracker.observe(observation.position);
 }
 
 /**

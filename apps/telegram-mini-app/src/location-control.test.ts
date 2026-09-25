@@ -1,27 +1,9 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { createMapLibreRenderer } from "@nilx-one/map-maplibre";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  createManualLocationMapRenderer,
-  readTelegramLocationControl,
-  type TelegramLocationPoint,
-} from "./location-control";
-
-type TelegramMapRenderer = ReturnType<typeof createMapLibreRenderer>;
-type MapStatus = ReturnType<TelegramMapRenderer["getStatus"]>;
-type MapCamera = ReturnType<TelegramMapRenderer["getCamera"]>;
-type ObservedPosition = Parameters<
-  TelegramMapRenderer["setObservedPosition"]
->[0];
-type ObservedPositionLabel = Parameters<
-  TelegramMapRenderer["setObservedPositionLabel"]
->[0];
-type SelectedPoint = Parameters<
-  NonNullable<TelegramMapRenderer["setSelectionPoint"]>
->[0];
+import { readTelegramLocationControl } from "./location-control";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -46,63 +28,6 @@ function locationProjection(
       updated_at: "1800000000",
     },
   };
-}
-
-function fakeRenderer() {
-  let status: MapStatus = { kind: "unmounted" };
-  const observed: ObservedPosition[] = [];
-  const labels: ObservedPositionLabel[] = [];
-  const selections: SelectedPoint[] = [];
-  const camera: MapCamera = {
-    center: [30.5234, 50.4501],
-    zoom: 11,
-    bearing: 0,
-    pitch: 0,
-  };
-  const renderer: TelegramMapRenderer = {
-    avatars: {
-      upsert() {},
-      remove() {},
-      setCamera() {},
-    },
-    mount() {
-      status = { kind: "ready" };
-    },
-    unmount() {
-      status = { kind: "unmounted" };
-    },
-    getStatus() {
-      return status;
-    },
-    subscribe() {
-      return () => undefined;
-    },
-    getCamera() {
-      return camera;
-    },
-    setCamera() {},
-    subscribeCamera() {
-      return () => undefined;
-    },
-    setAppearance() {},
-    setDimension() {},
-    setObservedPosition(position) {
-      observed.push(position);
-    },
-    setObservedPositionLabel(label) {
-      labels.push(label);
-    },
-    setSelectionPoint(point) {
-      selections.push(point);
-    },
-    subscribePointSelection() {
-      return () => undefined;
-    },
-    subscribeBodyActivation() {
-      return () => undefined;
-    },
-  };
-  return { renderer, observed, labels, selections };
 }
 
 describe("Telegram location control", () => {
@@ -184,30 +109,5 @@ describe("Telegram location control", () => {
     await expect(
       readTelegramLocationControl("signed", fetchImpl as typeof fetch),
     ).resolves.toEqual({ kind: "live" });
-  });
-
-  it("never presents an observed position while manual mode is active", () => {
-    const base = fakeRenderer();
-    const manual: TelegramLocationPoint = {
-      longitude: 2.3522,
-      latitude: 48.8566,
-    };
-    const renderer = createManualLocationMapRenderer(base.renderer, manual);
-
-    renderer.setObservedPosition({
-      center: [30.5234, 50.4501],
-      accuracyMeters: 10,
-    });
-    renderer.setObservedPositionLabel({ title: "0x0sky" });
-    renderer.setSelectionPoint?.({ longitude: 1, latitude: 2 });
-    renderer.setSelectionPoint?.(null);
-
-    expect(base.observed.at(-1)).toBeNull();
-    expect(base.labels.at(-1)).toBeNull();
-    expect(base.selections).toEqual([
-      manual,
-      { longitude: 1, latitude: 2 },
-      manual,
-    ]);
   });
 });

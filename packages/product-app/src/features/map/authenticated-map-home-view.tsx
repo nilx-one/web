@@ -104,6 +104,8 @@ import {
 import { landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
 import { useAvaiaWalk } from "./use-avaia-walk";
+import { FogRevealPrompt } from "./fog-reveal-prompt";
+import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 
@@ -545,6 +547,13 @@ export function AuthenticatedMapHomeView({
   // means no voice either: a card does not talk on behalf of nobody.
   const avaiaVoice: AvatarModelId | undefined = avaiaAvatar?.modelId as
     AvatarModelId | undefined;
+  // A declared point stands the Bond somewhere; only a real observation says
+  // this device is anywhere.
+  const declaredPosition = observedPosition?.declared === true;
+  const deviceObservation = declaredPosition ? undefined : observedPosition;
+  // The Avaia answers fog taps through the reveal below, which in turn talks
+  // in the Avaia's voice: the ref is what lets the two hooks meet.
+  const fogRevealRef = useRef<FogRevealState | undefined>(undefined);
   const avaiaWalk = useAvaiaWalk({
     renderer,
     active: wheel === "avaia" && handover === undefined,
@@ -555,6 +564,27 @@ export function AuthenticatedMapHomeView({
     owner: pubDress,
     zoom: camera.zoom,
     reducedMotion: prefersReducedMotion(),
+    onFogTap: (point) => {
+      const outcome = fogRevealRef.current?.handleFogTap(point);
+      if (outcome === "busy") return "busy";
+      return outcome === "offered" || outcome === "revealing";
+    },
+  });
+  const [fogAnnouncement, setFogAnnouncement] = useState("");
+  const fogReveal = useFogReveal({
+    renderer,
+    bondPoint: observedPosition,
+    observed: deviceObservation,
+    owner: pubDress,
+    onRevealed: (_cell, via) => {
+      setFogAnnouncement(t("fog.announce.revealed"));
+      if (via === "avaia" && wheel === "avaia" && handover === undefined) {
+        avaiaWalk.announce("fog.revealed");
+      }
+    },
+  });
+  useEffect(() => {
+    fogRevealRef.current = fogReveal;
   });
   const avaiaSpeech =
     wheel === "avaia" && handover === undefined
@@ -578,11 +608,12 @@ export function AuthenticatedMapHomeView({
       title: wheelAddress,
       detail:
         away > AT_DEVICE_METERS
-          ? t("map.card.fromThisDevice").replace(
-              "{distance}",
-              formatDistance(locale, away),
-            )
-          : t("map.card.thisDevice"),
+          ? t(
+              declaredPosition
+                ? "map.card.fromDeclared"
+                : "map.card.fromThisDevice",
+            ).replace("{distance}", formatDistance(locale, away))
+          : t(declaredPosition ? "map.card.declared" : "map.card.thisDevice"),
       ...(at === undefined || away <= AT_DEVICE_METERS
         ? {}
         : { at: [at.longitude, at.latitude] as const }),
@@ -920,6 +951,17 @@ export function AuthenticatedMapHomeView({
     };
   });
 
+  // With the Bond at the wheel nobody walks, but reachable fog still answers
+  // a tap: the Avaia does the revealing either way.
+  useEffect(() => {
+    if (wheel !== "bond") return;
+    const subscribe = renderer.subscribeGroundTap;
+    if (subscribe === undefined) return;
+    return subscribe.call(renderer, (tap) => {
+      if (tap.ground === "fog") fogRevealRef.current?.handleFogTap(tap);
+    });
+  }, [renderer, wheel]);
+
   useEffect(() => {
     const subscribe = renderer.subscribeBodyActivation;
     if (subscribe === undefined) return;
@@ -1017,6 +1059,16 @@ export function AuthenticatedMapHomeView({
       padding: locationCameraPadding(context),
     });
     cameraMovedByPerson.current = false;
+  }
+
+  /** The Bond said yes: the Avaia goes to the cell and starts on it. */
+  function confirmFogReveal(): void {
+    const job = fogReveal.confirm();
+    if (job === undefined) return;
+    if (wheel === "avaia" && handover === undefined) {
+      avaiaWalk.walkTo(job.cell.center);
+      avaiaWalk.announce("fog.reveal");
+    }
   }
 
   function activateLocationControl(): void {
@@ -1525,6 +1577,16 @@ export function AuthenticatedMapHomeView({
             viewModel={locationControl}
             onActivate={activateLocationControl}
           />
+          <FogRevealPrompt
+            prompt={fogReveal.prompt}
+            jobs={fogReveal.jobs}
+            avaia={avaiaLabel}
+            onConfirm={confirmFogReveal}
+            onDismiss={fogReveal.dismiss}
+          />
+          <span className="visually-hidden" aria-live="polite">
+            {fogAnnouncement}
+          </span>
           {/* The map is hidden from assistive technology, so what the Avaia
               says to itself on the card is said here too. */}
           <span className="visually-hidden" aria-live="polite">
