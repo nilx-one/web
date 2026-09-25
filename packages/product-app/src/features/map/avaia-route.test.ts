@@ -106,6 +106,46 @@ describe("finding a way round", () => {
     expect(route).toEqual({ kind: "route", path: [at(0, 0), at(0, 5)] });
   });
 
+  it("leaves a courtyard by going round, never through the block around it", () => {
+    // A closed block with a yard in the middle: no gate, so the only way out
+    // is over the wall, which there is none of.
+    const block = [-20, -20, 20, 20] as const;
+    const walls = building([box(...block), box(-8, -8, 8, 8)]);
+
+    expect(planRoute(at(0, 0), at(40, 0), [walls])).toEqual({
+      kind: "blocked",
+      by: "building",
+    });
+    expect(planRoute(at(40, 0), at(0, 0), [walls])).toEqual({
+      kind: "blocked",
+      by: "building",
+    });
+  });
+
+  it("walks out of a courtyard through its gate, and in the same way", () => {
+    // The same block, with a 6 m gate cut through its east wing.
+    const north = box(-20, 3, 20, 20);
+    const south = box(-20, -20, 20, -3);
+    const west = box(-20, -3, -8, 3);
+    const wings = [north, south, west].map((ring) => [ring]);
+    const walls: MapObstacle = { kind: "building", polygons: wings };
+    const solid = [
+      [-20, 3, 20, 20],
+      [-20, -20, 20, -3],
+      [-20, -3, -8, 3],
+    ] as const;
+
+    for (const [from, to] of [
+      [at(0, 0), at(40, 10)],
+      [at(40, 10), at(0, 0)],
+    ] as const) {
+      const route = planRoute(from, to, [walls]);
+      expect(route.kind).toBe("route");
+      if (route.kind !== "route") continue;
+      for (const area of solid) expect(crosses(route.path, area)).toBe(false);
+    }
+  });
+
   it("walks out of the building it is standing in", () => {
     // A phone indoors puts the body inside its own house; it is not trapped.
     const route = planRoute(at(0, 0), at(40, 0), [
