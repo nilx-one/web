@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { LOCAL_MODEL_CHOICE_STORAGE_KEY } from "./local-model-choice";
@@ -342,50 +348,74 @@ describe("removing a cached model", () => {
   });
 });
 
+function picker(): HTMLSelectElement {
+  return screen.getByRole("combobox", { name: "On-device model" });
+}
+
+function option(name: RegExp): HTMLOptionElement {
+  return screen.getByRole("option", { name });
+}
+
 describe("choosing among the served entries", () => {
-  it("offers every entry with the default in effect when nothing was chosen", async () => {
+  it("asks for a choice, lists every entry, and runs the default until one is made", async () => {
     renderSettings(new FakeHost());
 
-    const radios = await screen.findAllByRole("radio");
-    expect(radios).toHaveLength(CATALOG.length);
     await waitFor(() => {
-      expect(screen.getByRole("radio", { name: /Qwen3 0\.6B/ })).toBeChecked();
+      expect(option(/Qwen3 0\.6B/)).toBeEnabled();
     });
+    expect(picker()).toHaveValue("");
+    expect(option(/Choose a model/)).toBeDisabled();
+    for (const { label } of CATALOG) {
+      expect(
+        screen.getByRole("option", { name: new RegExp(label) }),
+      ).toBeInTheDocument();
+    }
+    expect(option(/Qwen3 0\.6B/)).toHaveTextContent("Qwen3 0.6B · default");
+    // The details under the picker are the default's, since it is what runs.
+    expect(screen.getByText(/about 1403 MB of memory/)).toBeVisible();
   });
 
-  it("changing the choice downloads nothing, and is kept on this device", async () => {
+  it("changing the choice downloads nothing, shows its name, and is kept on this device", async () => {
     const host = new FakeHost();
     renderSettings(host);
 
-    const smol = await screen.findByRole("radio", { name: /SmolLM2 360M/ });
     await waitFor(() => {
-      expect(smol).toBeEnabled();
+      expect(option(/SmolLM2 360M/)).toBeEnabled();
     });
-    fireEvent.click(smol);
+    fireEvent.change(picker(), { target: { value: SMOLLM2 } });
 
     await waitFor(() => {
-      expect(smol).toBeChecked();
+      expect(picker()).toHaveValue(SMOLLM2);
     });
+    expect(screen.queryByRole("option", { name: /Choose a model/ })).toBeNull();
     await waitFor(() => {
       expect(host.described).toContain(SMOLLM2);
     });
+    expect(screen.getByText(/about 376 MB of memory/)).toBeVisible();
     expect(host.opened).toBe(0);
     expect(window.localStorage.getItem(LOCAL_MODEL_CHOICE_STORAGE_KEY)).toBe(
       SMOLLM2,
     );
   });
 
-  it("shows an entry this surface refuses, with its reason, and does not let it be chosen", async () => {
+  it("lists an entry this surface refuses, with its reason, and does not let it be chosen", async () => {
     const host = new FakeHost();
     host.verdicts = {
       [LLAMA]: { kind: "over_budget", requiredMb: 879.04, budgetMb: 512 },
     };
     renderSettings(host);
 
+    await waitFor(() => {
+      expect(option(/Llama 3\.2 1B/)).toHaveTextContent(
+        /— not available here$/,
+      );
+    });
+    expect(option(/Llama 3\.2 1B/)).toBeDisabled();
     expect(
-      await screen.findByText(/needs about 879 MB, this surface allows 512 MB/),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Llama 3\.2 1B/ })).toBeDisabled();
+      screen.getByText(
+        "Llama 3.2 1B — Not offered here: needs about 879 MB, this surface allows 512 MB.",
+      ),
+    ).toBeVisible();
   });
 
   it("falls back to the default when the stored choice is refused here, says so, and keeps it", async () => {
@@ -399,13 +429,15 @@ describe("choosing among the served entries", () => {
     expect(
       await screen.findByText(/The model you chose can’t run here/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Qwen3 0\.6B/ })).toBeChecked();
+    // The picker keeps showing what was chosen; the details are the default's, which runs.
+    expect(picker()).toHaveValue(LLAMA);
+    expect(screen.getByText(/about 1403 MB of memory/)).toBeVisible();
     expect(window.localStorage.getItem(LOCAL_MODEL_CHOICE_STORAGE_KEY)).toBe(
       LLAMA,
     );
   });
 
-  it("says so when the stored choice is no longer served", async () => {
+  it("says so when the stored choice is no longer served, and asks again", async () => {
     window.localStorage.setItem(
       LOCAL_MODEL_CHOICE_STORAGE_KEY,
       "gemma3-1b-it-q4f16_1-MLC",
@@ -415,15 +447,27 @@ describe("choosing among the served entries", () => {
     expect(
       await screen.findByText(/The model you chose is no longer offered/),
     ).toBeInTheDocument();
+    expect(picker()).toHaveValue("");
   });
 
-  it("shows Built with Llama beside its entry and links the use policy where it is offered", async () => {
+  it("shows Built with Llama wherever its entry is offered", async () => {
     renderSettings(new FakeHost());
 
-    expect(await screen.findByText("Built with Llama")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(option(/Llama 3\.2 1B/)).toHaveTextContent(
+        "Llama 3.2 1B · Built with Llama",
+      );
+    });
+  });
+
+  it("links the use policy and repeats the attribution once Llama is chosen", async () => {
+    window.localStorage.setItem(LOCAL_MODEL_CHOICE_STORAGE_KEY, LLAMA);
+    renderSettings(new FakeHost());
+
     expect(
-      screen.getByRole("link", { name: "Acceptable use policy" }),
+      await screen.findByRole("link", { name: "Acceptable use policy" }),
     ).toHaveAttribute("href", "https://www.llama.com/llama3_2/use-policy");
+    expect(screen.getByText("Built with Llama")).toBeVisible();
   });
 
   it("shows the chosen entry's own notices before any download", async () => {
@@ -435,5 +479,86 @@ describe("choosing among the served entries", () => {
         /Llama 3\.2 is licensed under the Llama 3\.2 Community License/,
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("choosing a model with an acceptable-use policy", () => {
+  it("surfaces the policy note only for the pick that made it apply, not on load", async () => {
+    window.localStorage.setItem(LOCAL_MODEL_CHOICE_STORAGE_KEY, LLAMA);
+    renderSettings(new FakeHost());
+
+    // The stored choice already carries a use policy, but nobody picked it just now.
+    await waitFor(() => expect(picker()).toHaveValue(LLAMA));
+    expect(
+      screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+    ).toBeNull();
+  });
+
+  it("appears the moment Llama is picked, links the policy, and is not a checkbox", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => {
+      expect(option(/Llama 3\.2 1B/)).toBeInTheDocument();
+    });
+    fireEvent.change(picker(), { target: { value: LLAMA } });
+
+    const note = await screen.findByText(
+      /Built with Llama\. Usage is subject to Meta's/,
+    );
+    const notePara = note.closest("p")!;
+    expect(notePara).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(
+      within(notePara).getByRole("link", { name: "Acceptable use policy" }),
+    ).toHaveAttribute("href", "https://www.llama.com/llama3_2/use-policy");
+    // Nothing is gated behind it: the choice already took effect.
+    expect(picker()).toHaveValue(LLAMA);
+  });
+
+  it("goes away once a different model is picked", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => expect(option(/Llama 3\.2 1B/)).toBeInTheDocument());
+    fireEvent.change(picker(), { target: { value: LLAMA } });
+    await screen.findByText(/Built with Llama\. Usage is subject to Meta's/);
+
+    fireEvent.change(picker(), { target: { value: SMOLLM2 } });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+      ).toBeNull();
+    });
+  });
+
+  it("can be dismissed without changing the choice", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => expect(option(/Llama 3\.2 1B/)).toBeInTheDocument());
+    fireEvent.change(picker(), { target: { value: LLAMA } });
+    await screen.findByText(/Built with Llama\. Usage is subject to Meta's/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(
+      screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+    ).toBeNull();
+    expect(picker()).toHaveValue(LLAMA);
+  });
+
+  it("does not appear for an entry with no use policy", async () => {
+    const host = new FakeHost();
+    renderSettings(host);
+
+    await waitFor(() => expect(option(/SmolLM2 360M/)).toBeInTheDocument());
+    fireEvent.change(picker(), { target: { value: SMOLLM2 } });
+
+    await waitFor(() => expect(picker()).toHaveValue(SMOLLM2));
+    expect(
+      screen.queryByText(/Built with Llama\. Usage is subject to Meta's/),
+    ).toBeNull();
   });
 });

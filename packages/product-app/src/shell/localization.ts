@@ -67,6 +67,7 @@ const EN_MESSAGES = {
   "settings.language.english": "English",
   "settings.language.ukrainian": "Українська",
   "settings.localModel.legend": "On-device model",
+  "settings.localModel.choose": "Choose a model",
   "settings.localModel.status.checking": "Checking this device…",
   "settings.localModel.status.unsupportedInsecure":
     "Unavailable: this page is not loaded securely.",
@@ -93,6 +94,7 @@ const EN_MESSAGES = {
   "settings.localModel.notices.legend": "Redistribution notices",
   "settings.localModel.option.default": "default",
   "settings.localModel.option.memory": "about {size} MB of memory",
+  "settings.localModel.option.unavailable": "not available here",
   "settings.localModel.option.missingFeatures":
     "Not offered here: this device lacks a GPU feature the model needs.",
   "settings.localModel.option.overBudget":
@@ -102,6 +104,9 @@ const EN_MESSAGES = {
   "settings.localModel.option.lowFaithfulness":
     "Rarely passes the faithfulness check: most sentences keep their plain wording.",
   "settings.localModel.option.usePolicy": "Acceptable use policy",
+  "settings.localModel.option.usePolicyNote":
+    "Built with Llama. Usage is subject to Meta's",
+  "settings.localModel.option.usePolicyDismiss": "Dismiss",
   "settings.localModel.fallback.ineligible":
     "The model you chose can’t run here, so the default is used. Your choice is kept.",
   "settings.localModel.fallback.unknown":
@@ -168,6 +173,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.language.english": "English",
   "settings.language.ukrainian": "Українська",
   "settings.localModel.legend": "Локальна модель",
+  "settings.localModel.choose": "Оберіть модель",
   "settings.localModel.status.checking": "Перевіряємо цей пристрій…",
   "settings.localModel.status.unsupportedInsecure":
     "Недоступно: сторінку завантажено не безпечно.",
@@ -195,6 +201,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.notices.legend": "Примітки щодо розповсюдження",
   "settings.localModel.option.default": "типова",
   "settings.localModel.option.memory": "близько {size} МБ пам’яті",
+  "settings.localModel.option.unavailable": "тут недоступна",
   "settings.localModel.option.missingFeatures":
     "Тут недоступна: цьому пристрою бракує можливості GPU, потрібної моделі.",
   "settings.localModel.option.overBudget":
@@ -204,6 +211,9 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.option.lowFaithfulness":
     "Рідко проходить перевірку точності: більшість речень лишаються простими.",
   "settings.localModel.option.usePolicy": "Політика допустимого використання",
+  "settings.localModel.option.usePolicyNote":
+    "Побудовано на Llama. Використання підпорядковується",
+  "settings.localModel.option.usePolicyDismiss": "Закрити",
   "settings.localModel.fallback.ineligible":
     "Обрана модель тут не запускається, тож працює типова. Ваш вибір збережено.",
   "settings.localModel.fallback.unknown":
