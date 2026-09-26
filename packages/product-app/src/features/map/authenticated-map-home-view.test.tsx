@@ -1496,6 +1496,64 @@ describe("AuthenticatedMapHomeView", () => {
       ).toBe(true);
     });
 
+    it("closes the fog prompt when a person moves the camera themselves", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks: vi.fn() },
+      );
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+
+      act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
+      expect(
+        screen.getByRole("dialog", { name: "Reveal this patch of fog?" }),
+      ).toBeVisible();
+
+      // A move the application itself made is not a person looking away.
+      act(() => mapRenderer.moveCamera(mapRenderer.getCamera(), false));
+      expect(screen.queryByRole("dialog")).not.toBeNull();
+
+      act(() => mapRenderer.moveCamera(mapRenderer.getCamera(), true));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("closes the fog prompt when the Dock opens a detail screen", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks: vi.fn() },
+      );
+      renderView({
+        mapRenderer,
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+
+      act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
+      expect(
+        screen.getByRole("dialog", { name: "Reveal this patch of fog?" }),
+      ).toBeVisible();
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
     it("says why not when fog is out of reach", async () => {
       vi.useFakeTimers();
       const fog = createFogFieldDouble();

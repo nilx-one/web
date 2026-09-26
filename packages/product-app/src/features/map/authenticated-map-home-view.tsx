@@ -605,6 +605,12 @@ export function AuthenticatedMapHomeView({
   useEffect(() => {
     fogRevealRef.current = fogReveal;
   });
+  // Opening a Dock screen turns the person's attention away from the world
+  // the prompt floats over; whatever it was asking is no longer being
+  // answered.
+  useEffect(() => {
+    fogRevealRef.current?.dismiss();
+  }, [activeDetail]);
   // A screen just opened reads from its own top, its large title showing —
   // never scrolled to wherever the screen before it was left.
   const detailScreenKey = `${section}:${activeDetail ?? ""}`;
@@ -706,6 +712,8 @@ export function AuthenticatedMapHomeView({
         setCamera(change.camera);
         if (change.gesture) {
           cameraMovedByPerson.current = true;
+          // A person who is looking elsewhere is not answering the prompt.
+          fogRevealRef.current?.dismiss();
         }
       }),
     [renderer],

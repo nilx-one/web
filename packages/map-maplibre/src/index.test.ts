@@ -1137,14 +1137,18 @@ describe("fog marks", () => {
     const data = fakeMap.sources.get(FOG_MARKS_SOURCE_ID)?.setData.mock
       .calls[0]?.[0] as {
       features: {
-        properties: { state: string; progress: number };
+        properties: { state: string; progress: number; pulse: number };
         geometry: { coordinates: number[][][] };
       }[];
     };
-    expect(data.features[0]?.properties).toEqual({
+    const properties = data.features[0]?.properties;
+    expect(properties).toEqual({
       state: "revealing",
       progress: 0.5,
+      pulse: expect.any(Number),
     });
+    expect(properties?.pulse).toBeGreaterThanOrEqual(0);
+    expect(properties?.pulse).toBeLessThanOrEqual(1);
     // The ring is closed for the polygon, never left open.
     const ring = data.features[0]?.geometry.coordinates[0] ?? [];
     expect(ring.at(-1)).toEqual(ring[0]);
