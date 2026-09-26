@@ -17,7 +17,7 @@ An earlier version of this document used one key model for everything: independe
 
 **`bond.journal` key.** Generated on the client, stored as a non-extractable key, never derived from Bond identity, password, provider credential, Core key, or server secret. No recovery phrase, code, or seed, and none is planned — considered and rejected, per `presence-journal-lifecycle.md`.
 
-**`bond.chain` key.** Not a local secret at all. Per 0x1's Pairwise Key Derivation, `k = HKDF(ECDH || H(head))`: both parties to one `bch` independently derive the same key from their own long-term key material (X25519 ECDH) and the hash of the current chain head. The `.bnd` file stores the *inputs* this device needs to re-derive `k` — its own long-term key material, the chain head — not an independent per-party secret. This is why an untrusted party can hold or transfer an encrypted `bond.chain` file without learning its meaning: possession of ciphertext is not possession of the ECDH private key needed to derive `k`.
+**`bond.chain` key.** Not a local secret at all. Per 0x1's Pairwise Key Derivation, `k = HKDF(ECDH || H(head))`: both parties to one `bch` independently derive the same key from their own long-term key material (X25519 ECDH) and the hash of the current chain head. The `.bnd` file stores the _inputs_ this device needs to re-derive `k` — its own long-term key material, the chain head — not an independent per-party secret. This is why an untrusted party can hold or transfer an encrypted `bond.chain` file without learning its meaning: possession of ciphertext is not possession of the ECDH private key needed to derive `k`.
 
 There is still no recovery phrase, code, or seed for the underlying long-term identity key. The only path back to a lost `.bnd` runs through `REC-REQ`, per `nilx-one/0x1` `documents/15-devices-and-recovery.md`.
 
@@ -30,18 +30,18 @@ There is still no recovery phrase, code, or seed for the underlying long-term id
 
 A host's relationship to a `.bnd` file follows the same split, restated for storage rather than signing:
 
-| Posture | Holds `sk_bond` / can derive `k` | What it may do |
-| --- | --- | --- |
-| Official client completing an Interaction | yes | may sign commitment-bearing records under `sk_bond`; the only posture that can establish or continue a `bch` |
-| Companion / embedded host (e.g. a home device) | no | fails closed on ciphertext; never receives plaintext, `sk_bond`, or an escrow route |
-| Client holding only `sk_ack` | derived only | may acknowledge/automate within its owning contract; cannot mint or continue a `bch` |
+| Posture                                        | Holds `sk_bond` / can derive `k` | What it may do                                                                                               |
+| ---------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Official client completing an Interaction      | yes                              | may sign commitment-bearing records under `sk_bond`; the only posture that can establish or continue a `bch` |
+| Companion / embedded host (e.g. a home device) | no                               | fails closed on ciphertext; never receives plaintext, `sk_bond`, or an escrow route                          |
+| Client holding only `sk_ack`                   | derived only                     | may acknowledge/automate within its owning contract; cannot mint or continue a `bch`                         |
 
 ## Storage loss and device replacement
 
 Losing the local `.bnd` (browser profile wiped, device lost, key deleted) means:
 
 - `bond.journal` content is lost outright, exactly as `presence-journal-lifecycle.md` already describes — not reconstructed from anywhere else;
-- `bond.chain` content: a lost terminal history is recoverable only from a counterparty who independently still holds it — the other party deriving the same `k` from their own long-term key does not by itself restore *this* device's identity key;
+- `bond.chain` content: a lost terminal history is recoverable only from a counterparty who independently still holds it — the other party deriving the same `k` from their own long-term key does not by itself restore _this_ device's identity key;
 - Single Active Device (0x1 `documents/15-devices-and-recovery.md`) means a lost device's signing authority does not simply sit idle — it must be explicitly revoked and replaced through `DEVICE-REVOKE`, not silently superseded by a new local key.
 
 ## Recovery flow
