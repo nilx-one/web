@@ -586,6 +586,12 @@ export function AuthenticatedMapHomeView({
   useEffect(() => {
     fogRevealRef.current = fogReveal;
   });
+  // Opening a Dock screen turns the person's attention away from the world
+  // the prompt floats over; whatever it was asking is no longer being
+  // answered.
+  useEffect(() => {
+    fogRevealRef.current?.dismiss();
+  }, [activeDetail]);
   const avaiaSpeech =
     wheel === "avaia" && handover === undefined
       ? avaiaWalk.speech?.text
@@ -668,6 +674,8 @@ export function AuthenticatedMapHomeView({
         setCamera(change.camera);
         if (change.gesture) {
           cameraMovedByPerson.current = true;
+          // A person who is looking elsewhere is not answering the prompt.
+          fogRevealRef.current?.dismiss();
         }
       }),
     [renderer],

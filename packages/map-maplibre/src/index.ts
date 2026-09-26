@@ -64,6 +64,7 @@ import {
   fogMarksData,
   fogMarksLayers,
   fogMarksSource,
+  fogPulseLevel,
 } from "./fog-marks";
 import landmarkKinds from "./landmark-kinds.json";
 
@@ -393,6 +394,7 @@ export function createMapLibreRenderer(
   let selectionPoint: MapPointSelection | null = null;
   let selectionMarker: MapLabelMarker | undefined;
   let fogMarks: readonly MapFogMark[] = [];
+  let fogPulseFrame: number | undefined;
   const isGroundRevealed =
     options.isGroundRevealed ??
     (options.fog === undefined
@@ -645,8 +647,43 @@ export function createMapLibreRenderer(
     applyLabel(mounted);
   }
 
+  function stopFogPulse(): void {
+    if (fogPulseFrame === undefined) return;
+    globalThis.cancelAnimationFrame(fogPulseFrame);
+    fogPulseFrame = undefined;
+  }
+
+  // A cell being worked open breathes for as long as its job runs; a cell
+  // that is merely in reach, or a prompt dismissed before a job ever starts,
+  // never enters this loop, and one already running stops the moment no
+  // cell is left revealing — cancelling the reveal is what cancels this.
+  function tickFogPulse(): void {
+    fogPulseFrame = undefined;
+    if (
+      map === undefined ||
+      !fogMarks.some((mark) => mark.state === "revealing")
+    ) {
+      return;
+    }
+    const source = map.getSource(FOG_MARKS_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    source?.setData(
+      fogMarksData(fogMarks, fogPulseLevel(Date.now())) as Parameters<
+        GeoJSONSource["setData"]
+      >[0],
+    );
+    fogPulseFrame = globalThis.requestAnimationFrame(tickFogPulse);
+  }
+
+  function ensureFogPulse(): void {
+    if (fogPulseFrame !== undefined) return;
+    if (!fogMarks.some((mark) => mark.state === "revealing")) return;
+    fogPulseFrame = globalThis.requestAnimationFrame(tickFogPulse);
+  }
+
   function applyFogMarks(mounted: MapLibreMap): void {
     if (fogMarks.length === 0) {
+      stopFogPulse();
       for (const layerId of [
         FOG_MARKS_FILL_LAYER_ID,
         FOG_MARKS_OUTLINE_LAYER_ID,
@@ -660,6 +697,7 @@ export function createMapLibreRenderer(
       return;
     }
 
+    const pulse = fogPulseLevel(Date.now());
     const source = mounted.getSource(FOG_MARKS_SOURCE_ID) as
       GeoJSONSource | undefined;
     if (source === undefined) {
@@ -669,7 +707,9 @@ export function createMapLibreRenderer(
       );
     } else {
       source.setData(
-        fogMarksData(fogMarks) as Parameters<GeoJSONSource["setData"]>[0],
+        fogMarksData(fogMarks, pulse) as Parameters<
+          GeoJSONSource["setData"]
+        >[0],
       );
     }
     // Beneath the observation, so the Bond's own marker stays on top of the
@@ -683,6 +723,7 @@ export function createMapLibreRenderer(
         mounted.addLayer(layer as unknown as LayerSpecification, before);
       }
     }
+    ensureFogPulse();
   }
 
   function ensureAvatarLayer(mounted: MapLibreMap): void {
@@ -983,6 +1024,7 @@ export function createMapLibreRenderer(
     },
 
     unmount() {
+      stopFogPulse();
       releaseLabel();
       releaseSelectionMarker();
       map?.remove();
