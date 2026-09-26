@@ -13,7 +13,7 @@ services:
     environment:
       DATABASE_URL: sqlite:///data/identity.db
       HTTP_BIND: 0.0.0.0:1927
-      TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
+      TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-86400}
     labels:
       one.nilx.product: 0x1
       one.nilx.service: identity

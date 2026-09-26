@@ -120,9 +120,14 @@ async function bootstrap(): Promise<void> {
   // the lifetime of one host instance.
   const initialLocationFingerprint =
     locationControlFingerprint(locationControl);
+  // Only a definite answer is a changed mode. `unavailable` is also what a
+  // slow network or a Mini App left in the background past its initData's
+  // lifetime reads as; reloading on it would restart the page with the same
+  // initData and land on "Reopen 0x1 from Telegram" instead of the world.
   const recheckLocationControl = (): void => {
     void readTelegramLocationControl(telegramBridge?.initData ?? "").then(
       (next) => {
+        if (next.kind === "unavailable") return;
         if (locationControlFingerprint(next) !== initialLocationFingerprint) {
           window.location.reload();
         }

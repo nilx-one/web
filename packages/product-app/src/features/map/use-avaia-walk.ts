@@ -50,6 +50,7 @@ import {
   NOTICE_RADIUS_METERS,
   type LandmarkNotebook,
 } from "./landmark-notebook";
+import { readWorldMemory, rememberWorld } from "./world-memory";
 
 /** How long a line stays on the card before it closes again. */
 export const SPEECH_MS = 10_000;
@@ -154,7 +155,20 @@ export function useAvaiaWalk({
 }: AvaiaWalkInput): AvaiaWalkState {
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
   const [study, setStudy] = useState<AvaiaStudy | undefined>(undefined);
-  const [rest, setRest] = useState<Rest | undefined>(undefined);
+  // A world opened again finds its Avaia where it was left, not back at its
+  // owner's feet: where it stood, or where it was headed when the page went.
+  const [rest, setRest] = useState<Rest | undefined>(() => {
+    const remembered = readWorldMemory(owner).avaia;
+    return remembered === undefined
+      ? undefined
+      : {
+          point: {
+            longitude: remembered.longitude,
+            latitude: remembered.latitude,
+          },
+          bearingDeg: remembered.bearingDeg,
+        };
+  });
   const [speech, setSpeech] = useState<AvaiaSpeech | undefined>(undefined);
   // Whether anything has happened since the wheel changed hands, which is what
   // decides between a first look around and an idle wander.
@@ -368,6 +382,32 @@ export function useAvaiaWalk({
     }, remaining);
     return () => globalThis.clearTimeout(done);
   }, [say, study]);
+
+  // Where the body will be once what it is doing ends is what this device
+  // keeps, so a page dropped mid-walk comes back with the Avaia arrived.
+  const settledPoint =
+    walk !== undefined
+      ? { point: walk.to, bearingDeg: walk.arrivalBearingDeg }
+      : study !== undefined
+        ? { point: study.at, bearingDeg: study.bearingDeg }
+        : rest;
+  const settledLongitude = settledPoint?.point.longitude;
+  const settledLatitude = settledPoint?.point.latitude;
+  const settledBearing = settledPoint?.bearingDeg;
+  useEffect(() => {
+    rememberWorld(owner, {
+      avaia:
+        settledLongitude === undefined ||
+        settledLatitude === undefined ||
+        settledBearing === undefined
+          ? undefined
+          : {
+              longitude: settledLongitude,
+              latitude: settledLatitude,
+              bearingDeg: settledBearing,
+            },
+    });
+  }, [owner, settledBearing, settledLatitude, settledLongitude]);
 
   // A line is on the card for as long as a person needs to read it.
   useEffect(() => {
