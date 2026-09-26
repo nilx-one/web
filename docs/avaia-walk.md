@@ -106,6 +106,9 @@ Protomaps basemap schema the archive is built from. `inspect-basemap.sh` checks
 it against the real archive with `landmark-kinds.mjs`, and fails when none of
 its kinds occur there (see [map data](map-data.md)).
 
+Noticing a landmark and the Avaia studying one each pay their own local
+experience, priced differently on purpose — see [progression](progression.md).
+
 ## Revealing the fog
 
 The fog is lifted in two ways besides the presence journal. Both are local to
@@ -136,6 +139,9 @@ layer draws it alongside what the journal lit.
    no Avaia and no wait.
 
 A tap into fog that nobody can reach is refused the way it always was.
+
+Either way a zone opens pays its own local experience, priced differently on
+purpose — see [progression](progression.md).
 
 ## A declared position
 

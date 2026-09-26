@@ -21,6 +21,8 @@ interface TelegramLocationControlReadOptions {
   readonly timeoutMs?: number;
 }
 
+const BOND_ROLES: ReadonlySet<unknown> = new Set(["user", "admin", "business"]);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -129,7 +131,7 @@ export async function readTelegramLocationControl(
     const body: unknown = await response.json();
     if (
       !isRecord(body) ||
-      (body.role !== "user" && body.role !== "admin") ||
+      !BOND_ROLES.has(body.role) ||
       !("location" in body)
     ) {
       return { kind: "unavailable" };

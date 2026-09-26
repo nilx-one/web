@@ -55,6 +55,17 @@ Discord identity requests use `Authorization: discord <access_token>`. The Activ
 
 Availability is advisory. The database insert remains the only collision boundary, so a client must still handle a candidate becoming unavailable between the check and registration.
 
+## Bond roles and location modes
+
+A human Bond's role lives in `bond_roles` and is optional: no row means `user`, the only role registration creates. Known roles are `user`, `admin`, and `business`. There is no API that assigns a role; it is set out of band:
+
+```sql
+INSERT INTO bond_roles (pub_dress, role) VALUES ('0x0sky', 'admin')
+ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role;
+```
+
+`Bond.location` has two modes. Every role may use `live`: it is entered only by an explicit current-location share in the bot, where Telegram asks for the device location. The Mini App's background `POST /api/v1/location-control` only refreshes a location that is already `live` and answers `409` for a `manual` one. `manual` is a declared point and needs `admin`, whose rights are exactly those of `user` plus setting a manual location.
+
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`, and

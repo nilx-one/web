@@ -510,7 +510,7 @@ async fn link_telegram_provider(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let identity = match authenticated_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -531,7 +531,7 @@ async fn link_telegram_provider(
         Err(_) => return unavailable(),
     };
 
-    match state.provider_links.link(&pub_dress, &provider).await {
+    let mut response = match state.provider_links.link(&pub_dress, &provider).await {
         Ok(ProviderLinkOutcome::Linked | ProviderLinkOutcome::AlreadyLinked) => {
             no_store_json(
                 StatusCode::OK,
@@ -556,7 +556,11 @@ async fn link_telegram_provider(
             tracing::error!(%error, "Telegram provider link failed");
             unavailable()
         }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
+    response
 }
 
 async fn logout_native_identity(State(state): State<ApiState>, headers: HeaderMap) -> Response {
@@ -1029,40 +1033,36 @@ async fn exchange_discord_code(
 }
 
 async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Response {
-    let provider_identity = match authenticate(&state, &headers).await {
-        Ok(identity) => identity,
-        Err(error) => return error.into_response(),
-    };
     let now = match now(&state) {
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
 
+    // A session cookie already implies a registered Bond, so it goes
+    // straight to the response and never needs the "not registered" branch
+    // below. Only the fresh-provider path can observe a verified account
+    // with no Bond yet, and that path's behavior is unchanged.
+    if let Some(token) = read_cookie(&headers, SESSION_COOKIE) {
+        let token_hash = state.secret_digester.digest("native-session", &token);
+        match state.repository.find_native_session(&token_hash, now).await {
+            Ok(Some(identity)) => return identity_response(&state, identity, now, None).await,
+            Ok(None) => {}
+            Err(error) => {
+                tracing::error!(%error, "native session lookup failed");
+                return unavailable();
+            }
+        }
+    }
+
+    let provider_identity = match authenticate(&state, &headers).await {
+        Ok(identity) => identity,
+        Err(error) => return error.into_response(),
+    };
+
     match state.repository.find_by_provider(&provider_identity).await {
         Ok(Some(identity)) => {
-            let identity = match reconcile_authenticated_identity(&state, identity, now).await {
-                Some(value) => value,
-                None => return unavailable(),
-            };
-            let password_required = match state
-                .repository
-                .password_required(&identity.pub_dress)
-                .await
-            {
-                Ok(value) => value,
-                Err(_) => return unavailable(),
-            };
-            let avatar_model = match state.repository.avatar_model(&identity.pub_dress).await {
-                Ok(value) => value,
-                Err(_) => return unavailable(),
-            };
-            no_store_json(
-                StatusCode::OK,
-                ProviderIdentityProjection {
-                    identity: IdentityProjection::with_avatar(identity, avatar_model),
-                    password_required,
-                },
-            )
+            let cookie = mint_session_cookie(&state, &identity.pub_dress, now).await;
+            identity_response(&state, identity, now, cookie).await
         }
         Ok(None) => api_error(
             StatusCode::NOT_FOUND,
@@ -1074,6 +1074,41 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
             unavailable()
         }
     }
+}
+
+async fn identity_response(
+    state: &ApiState,
+    identity: IdentityRecord,
+    now: u64,
+    cookie: Option<String>,
+) -> Response {
+    let identity = match reconcile_authenticated_identity(state, identity, now).await {
+        Some(value) => value,
+        None => return unavailable(),
+    };
+    let password_required = match state
+        .repository
+        .password_required(&identity.pub_dress)
+        .await
+    {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let avatar_model = match state.repository.avatar_model(&identity.pub_dress).await {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let mut response = no_store_json(
+        StatusCode::OK,
+        ProviderIdentityProjection {
+            identity: IdentityProjection::with_avatar(identity, avatar_model),
+            password_required,
+        },
+    );
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
 }
 
 async fn set_telegram_password(
@@ -1202,7 +1237,7 @@ async fn rename_pub_dress(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let identity = match authenticated_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -1232,34 +1267,38 @@ async fn rename_pub_dress(
     };
     // Asking for the address the Bond already holds is not a conflict with
     // itself, and it writes nothing.
-    if next == current {
-        return renamed_response(&state, &headers, identity, now);
-    }
-
-    match state
-        .repository
-        .rename_pub_dress(&current, &next, now)
-        .await
-    {
-        Ok(PubDressRenameOutcome::Renamed(identity)) => {
-            renamed_response(&state, &headers, identity, now)
+    let mut response = if next == current {
+        renamed_response(&state, &headers, identity, now)
+    } else {
+        match state
+            .repository
+            .rename_pub_dress(&current, &next, now)
+            .await
+        {
+            Ok(PubDressRenameOutcome::Renamed(identity)) => {
+                renamed_response(&state, &headers, identity, now)
+            }
+            Ok(PubDressRenameOutcome::Unavailable) => no_store_error(
+                StatusCode::CONFLICT,
+                "pub_dress_unavailable",
+                "That address belongs to another identity.",
+            ),
+            Ok(PubDressRenameOutcome::AvaiaUnavailable) => no_store_error(
+                StatusCode::CONFLICT,
+                "avaia_unavailable",
+                "The Avaia address this name derives belongs to another identity.",
+            ),
+            Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
+            Err(error) => {
+                tracing::error!(%error, "pub_dress rename failed");
+                unavailable()
+            }
         }
-        Ok(PubDressRenameOutcome::Unavailable) => no_store_error(
-            StatusCode::CONFLICT,
-            "pub_dress_unavailable",
-            "That address belongs to another identity.",
-        ),
-        Ok(PubDressRenameOutcome::AvaiaUnavailable) => no_store_error(
-            StatusCode::CONFLICT,
-            "avaia_unavailable",
-            "The Avaia address this name derives belongs to another identity.",
-        ),
-        Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
-        Err(error) => {
-            tracing::error!(%error, "pub_dress rename failed");
-            unavailable()
-        }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
+    response
 }
 
 /// The published avatar studies. A body is chosen, never assigned: an address
@@ -1283,7 +1322,7 @@ async fn choose_avatar_model(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let identity = match authenticated_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -1310,7 +1349,7 @@ async fn choose_avatar_model(
             "That avatar model is not published.",
         );
     }
-    match state
+    let mut response = match state
         .repository
         .set_avatar_model(&identity.pub_dress, &request.model)
         .await
@@ -1324,7 +1363,11 @@ async fn choose_avatar_model(
             tracing::error!(%error, "avatar model update failed");
             unavailable()
         }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
+    response
 }
 
 // An Avaia address carries its owner's discriminator and the canonical `ai`
@@ -1342,7 +1385,7 @@ async fn rename_owned_avaia(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let identity = match authenticated_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -1362,31 +1405,35 @@ async fn rename_owned_avaia(
         Ok(value) => value,
         Err(error) => return invalid_avaia_pub_dress(error),
     };
-    if identity.avaia_pub_dress.as_deref() == Some(next.as_str()) {
-        return no_store_json(StatusCode::OK, IdentityProjection::from(identity));
+    let mut response = if identity.avaia_pub_dress.as_deref() == Some(next.as_str()) {
+        no_store_json(StatusCode::OK, IdentityProjection::from(identity))
+    } else {
+        match state
+            .repository
+            .rename_owned_avaia(&owner, &next, now)
+            .await
+        {
+            Ok(PubDressRenameOutcome::Renamed(identity)) => {
+                no_store_json(StatusCode::OK, IdentityProjection::from(identity))
+            }
+            Ok(PubDressRenameOutcome::AvaiaUnavailable) | Ok(PubDressRenameOutcome::Unavailable) => {
+                no_store_error(
+                    StatusCode::CONFLICT,
+                    "avaia_unavailable",
+                    "That Avaia address belongs to another identity.",
+                )
+            }
+            Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
+            Err(error) => {
+                tracing::error!(%error, "Avaia rename failed");
+                unavailable()
+            }
+        }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
-
-    match state
-        .repository
-        .rename_owned_avaia(&owner, &next, now)
-        .await
-    {
-        Ok(PubDressRenameOutcome::Renamed(identity)) => {
-            no_store_json(StatusCode::OK, IdentityProjection::from(identity))
-        }
-        Ok(PubDressRenameOutcome::AvaiaUnavailable) | Ok(PubDressRenameOutcome::Unavailable) => {
-            no_store_error(
-                StatusCode::CONFLICT,
-                "avaia_unavailable",
-                "That Avaia address belongs to another identity.",
-            )
-        }
-        Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
-        Err(error) => {
-            tracing::error!(%error, "Avaia rename failed");
-            unavailable()
-        }
-    }
+    response
 }
 
 fn invalid_avaia_pub_dress(error: crate::AvaiaPubDressError) -> Response {
@@ -1436,15 +1483,25 @@ fn renamed_response(
 
 /// The Bond behind a request, however this host proves it: a native session
 /// cookie, or a verified provider account bound to exactly one Bond.
+/// The Bond behind a request, and a session cookie to set on the response
+/// when one did not already exist.
+///
+/// A provider header such as Telegram `initData` is signed once per Mini App
+/// launch; requiring it fresh on every request would force its own validity
+/// window to span a whole session. Minting a native session the first time a
+/// provider header succeeds lets every later request in that session use the
+/// cookie instead, so the provider header's own TTL can stay short. See
+/// `nilx-one/0x1` `documents/15-devices-and-recovery.md`, Single Active
+/// Client.
 async fn authenticated_bond(
     state: &ApiState,
     headers: &HeaderMap,
     now: u64,
-) -> Result<IdentityRecord, AuthenticationFailure> {
+) -> Result<(IdentityRecord, Option<String>), AuthenticationFailure> {
     if let Some(token) = read_cookie(headers, SESSION_COOKIE) {
         let token_hash = state.secret_digester.digest("native-session", &token);
         match state.repository.find_native_session(&token_hash, now).await {
-            Ok(Some(identity)) => return Ok(identity),
+            Ok(Some(identity)) => return Ok((identity, None)),
             Ok(None) => {}
             Err(error) => {
                 tracing::error!(%error, "native session lookup failed");
@@ -1455,13 +1512,32 @@ async fn authenticated_bond(
 
     let provider = authenticate(state, headers).await?;
     match state.repository.find_by_provider(&provider).await {
-        Ok(Some(identity)) => Ok(identity),
+        Ok(Some(identity)) => {
+            let cookie = mint_session_cookie(state, &identity.pub_dress, now).await;
+            Ok((identity, cookie))
+        }
         Ok(None) => Err(AuthenticationFailure::Unauthorized),
         Err(error) => {
             tracing::error!(%error, "provider identity lookup failed");
             Err(AuthenticationFailure::Unavailable)
         }
     }
+}
+
+/// Mints a native session for a just-verified provider identity so a later
+/// request can present the cookie instead of re-proving the provider.
+/// Failure to mint is not fatal to the request that triggered it; that
+/// request already has its identity, and it simply tries again next time.
+async fn mint_session_cookie(state: &ApiState, pub_dress: &str, now: u64) -> Option<String> {
+    let token = TokenFactory::session().ok()?;
+    let token_hash = state.secret_digester.digest("native-session", &token);
+    let ttl = state.native_auth.session_ttl_seconds;
+    state
+        .repository
+        .create_native_session(&token_hash, pub_dress, now, now.saturating_add(ttl))
+        .await
+        .ok()?;
+    Some(secure_cookie(SESSION_COOKIE, &token, ttl))
 }
 
 async fn register_identity(
@@ -1863,7 +1939,7 @@ mod tests {
         body::{Body, to_bytes},
         http::{
             Request, StatusCode,
-            header::{AUTHORIZATION, CACHE_CONTROL, SET_COOKIE},
+            header::{AUTHORIZATION, CACHE_CONTROL, COOKIE, SET_COOKIE},
         },
         response::IntoResponse as _,
     };
@@ -2005,6 +2081,61 @@ mod tests {
             .expect("valid native auth configuration"),
             Arc::new(StaticClock),
         )
+    }
+
+    #[tokio::test]
+    async fn identity_read_mints_a_session_the_next_read_can_reuse_without_init_data() {
+        let app = app().await;
+        let authorization = format!("tma {}", signed_init_data(42));
+        let register = Request::post("/api/v1/identity/registration")
+            .header(AUTHORIZATION, &authorization)
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .expect("valid request");
+        assert_eq!(
+            app.clone().oneshot(register).await.expect("response").status(),
+            StatusCode::CREATED
+        );
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/identity")
+                    .header(AUTHORIZATION, &authorization)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(first.status(), StatusCode::OK);
+        let cookie = first
+            .headers()
+            .get(SET_COOKIE)
+            .expect("a session cookie is set on first authentication")
+            .to_str()
+            .expect("cookie header is valid UTF-8")
+            .split(';')
+            .next()
+            .expect("cookie has a name=value pair")
+            .to_owned();
+
+        // No Authorization header at all: `initData`'s own signature could
+        // have gone stale between these two requests and this still
+        // succeeds, which is the point of the session - see
+        // documents/15-devices-and-recovery.md, Single Active Client, in
+        // nilx-one/0x1.
+        let second = app
+            .oneshot(
+                Request::get("/api/v1/identity")
+                    .header(COOKIE, cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(second.status(), StatusCode::OK);
+        let body = json_body(second).await;
+        assert_eq!(body["pub_dress"], "0x0sky");
     }
 
     #[tokio::test]

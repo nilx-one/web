@@ -65,7 +65,7 @@ async fn read_owned_avaia(State(state): State<ApiState>, headers: HeaderMap) -> 
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let identity = match authenticated_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -83,7 +83,7 @@ async fn read_owned_avaia(State(state): State<ApiState>, headers: HeaderMap) -> 
         }
     }
 
-    match state.repository.owned_avaia_identity(&owner).await {
+    let mut response = match state.repository.owned_avaia_identity(&owner).await {
         Ok(Some(profile)) => {
             let location = match state.repository.read_avaia_location(&owner).await {
                 Ok(value) => value,
@@ -99,7 +99,11 @@ async fn read_owned_avaia(State(state): State<ApiState>, headers: HeaderMap) -> 
             tracing::error!(%error, "owned Avaia profile lookup failed");
             unavailable()
         }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
+    response
 }
 
 async fn update_owned_avaia(
@@ -114,7 +118,7 @@ async fn update_owned_avaia(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let identity = match authenticated_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -142,7 +146,7 @@ async fn update_owned_avaia(
         );
     }
 
-    match state.repository.configure_owned_avaia(&owner, &next, now).await {
+    let mut response = match state.repository.configure_owned_avaia(&owner, &next, now).await {
         Ok(crate::AvaiaUpdateOutcome::Updated(profile)) => {
             let location = match state.repository.read_avaia_location(&owner).await {
                 Ok(value) => value,
@@ -168,7 +172,11 @@ async fn update_owned_avaia(
             tracing::error!(%error, "owned Avaia profile update failed");
             unavailable()
         }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
+    response
 }
 
 #[derive(Debug, Deserialize)]
@@ -226,7 +234,7 @@ async fn write_owned_avaia_location(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let identity = match authenticated_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -273,7 +281,7 @@ async fn write_owned_avaia_location(
         return unavailable();
     }
 
-    match state.repository.owned_avaia_identity(&owner).await {
+    let mut response = match state.repository.owned_avaia_identity(&owner).await {
         Ok(Some(profile)) => no_store_json(
             StatusCode::OK,
             avaia_identity_projection(profile, Some(location)),
@@ -283,7 +291,11 @@ async fn write_owned_avaia_location(
             tracing::error!(%error, "owned Avaia profile lookup failed");
             unavailable()
         }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
+    response
 }
 
 #[cfg(test)]

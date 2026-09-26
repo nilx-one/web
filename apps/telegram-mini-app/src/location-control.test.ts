@@ -53,6 +53,17 @@ describe("Telegram location control", () => {
     ).resolves.toEqual({ kind: "live" });
   });
 
+  it("accepts every stored Bond role", async () => {
+    for (const role of ["user", "admin", "business"]) {
+      const fetchImpl = vi.fn(async () =>
+        jsonResponse(200, { role, location: null }),
+      );
+      await expect(
+        readTelegramLocationControl("signed", fetchImpl as typeof fetch),
+      ).resolves.toEqual({ kind: "live" });
+    }
+  });
+
   it("treats a stored live Bond location as live device mode", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse(200, locationProjection("live", "305234000", "504501000")),

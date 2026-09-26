@@ -30,7 +30,7 @@ pub use discord_oauth::{DiscordAccessToken, DiscordOAuthClient, DiscordOAuthErro
 pub use github_evidence::{GithubEvidenceConfig, GithubEvidenceRepository};
 pub use location_control::{
     BondAccessRole, BondLocationRepository, BondLocationRepositoryError, PendingLocationIntent,
-    TelegramLocationIntents, location_control_router, role_for_pub_dress,
+    TelegramLocationIntents, location_control_router,
 };
 pub use nilxone_contracts::{
     AvaiaPubDress, AvaiaPubDressError, BondLocation, BondLocationMode, DecimalU64, GeoCoordinate,
