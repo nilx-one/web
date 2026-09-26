@@ -424,6 +424,35 @@ describe("AuthenticatedMapHomeView", () => {
     }
   });
 
+  it("says a Dock screen's own name once, as a large title that hands off to the header once scrolled", () => {
+    const { container } = renderView({
+      section: "identity",
+      slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
+    });
+
+    // At rest, the large title alone carries the name: one heading, not two.
+    expect(screen.getAllByRole("heading", { name: "0x0sky" })).toHaveLength(1);
+    const largeTitle = container.querySelector(
+      ".bond-dock__detail-large-title",
+    );
+    const headerTitle = container.querySelector(".bond-dock__detail-header h2");
+    expect(largeTitle).toHaveAttribute("aria-hidden", "false");
+    expect(headerTitle).toHaveAttribute("aria-hidden", "true");
+
+    // Scrolled past it, the header's own small title takes over saying it —
+    // still one heading, never both at once.
+    const surface = dock(container);
+    Object.defineProperty(surface, "scrollTop", {
+      configurable: true,
+      value: 200,
+    });
+    fireEvent.scroll(surface);
+
+    expect(largeTitle).toHaveAttribute("aria-hidden", "true");
+    expect(headerTitle).toHaveAttribute("aria-hidden", "false");
+    expect(screen.getAllByRole("heading", { name: "0x0sky" })).toHaveLength(1);
+  });
+
   it("opens the Providers screen from add, with a connect route each", () => {
     renderView({ section: "identity" });
 

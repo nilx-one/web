@@ -98,8 +98,35 @@
   flex: 1;
 }
 
+/* The header's own title is the small, inline one iOS shows once its large
+   title has scrolled out of view — silent, not merely faint, until then, so
+   a screen reader never meets the same name twice. */
 .bond-dock__detail-header h2 {
-  margin: 0.22rem 0 0;
+  margin: 0.55rem 0 0;
+  overflow: hidden;
+  color: #f5f3f7;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-0.25rem);
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.bond-dock__detail-header[data-collapsed="true"] h2 {
+  opacity: 1;
+  transform: none;
+}
+
+/* The screen's own name, said once at the top of what it names — the large
+   title the header's small one takes over from the moment it scrolls away. */
+.bond-dock__detail-large-title {
+  margin: 0.1rem 0 0;
   overflow: hidden;
   color: #f5f3f7;
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -108,6 +135,15 @@
   letter-spacing: -0.055em;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.bond-dock__detail-large-title[data-collapsed="true"] {
+  opacity: 0;
+  transform: translateY(-0.4rem);
+  pointer-events: none;
 }
 
 .interface-settings__eyebrow,
@@ -701,6 +737,7 @@ button.provider-control {
 }
 
 .authenticated-map-home[data-theme="light"] .bond-dock__detail-header h2,
+.authenticated-map-home[data-theme="light"] .bond-dock__detail-large-title,
 .authenticated-map-home[data-theme="light"] .interface-settings__option strong,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows dd,
 .authenticated-map-home[data-theme="light"] .provider-management__list strong {
