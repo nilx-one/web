@@ -91,7 +91,10 @@ Optional runtime settings:
 
 - `DATABASE_URL` — default `sqlite://identity.db`;
 - `HTTP_BIND` — default `0.0.0.0:1927`;
-- `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` — default `300`.
+- `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` — default `300`. This is how long a
+  single `initData` proof is accepted, not how long a Mini App stays signed
+  in: a successful check mints a native session (`__Host-0x1_session`), and
+  later requests present that instead. See `authenticated_bond` in `api.rs`.
 
 Then run:
 
