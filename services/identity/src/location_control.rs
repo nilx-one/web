@@ -13,8 +13,8 @@ use axum::{
     extract::DefaultBodyLimit,
     extract::State,
     http::{
-        HeaderMap, StatusCode,
-        header::{AUTHORIZATION, CACHE_CONTROL},
+        HeaderMap, HeaderValue, StatusCode,
+        header::{AUTHORIZATION, CACHE_CONTROL, COOKIE, SET_COOKIE},
     },
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -28,9 +28,12 @@ use sqlx::{
 use thiserror::Error;
 use tokio::sync::Mutex;
 
-use crate::{IdentityRepository, TelegramInitDataVerifier};
+use crate::{
+    IdentityRecord, IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier, TokenFactory,
+};
 
 const TELEGRAM_AUTH_SCHEME: &str = "tma ";
+const SESSION_COOKIE: &str = "__Host-0x1_session";
 const DEFAULT_INTENT_TTL: Duration = Duration::from_secs(5 * 60);
 const MAX_LOCATION_REQUEST_BYTES: usize = 8 * 1024;
 
@@ -261,12 +264,14 @@ struct LocationControlApiState {
     identities: IdentityRepository,
     locations: BondLocationRepository,
     telegram_verifier: TelegramInitDataVerifier,
+    native_auth: NativeAuthConfig,
 }
 
 pub fn location_control_router(
     identities: IdentityRepository,
     locations: BondLocationRepository,
     telegram_verifier: TelegramInitDataVerifier,
+    native_auth: NativeAuthConfig,
 ) -> Router {
     Router::new()
         .route("/api/v1/location-control", get(read_location_control))
@@ -276,7 +281,99 @@ pub fn location_control_router(
             identities,
             locations,
             telegram_verifier,
+            native_auth,
         })
+}
+
+fn read_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|cookies| {
+            cookies.split(';').find_map(|cookie| {
+                let (candidate_name, value) = cookie.trim().split_once('=')?;
+                (candidate_name == name && !value.is_empty()).then(|| value.to_owned())
+            })
+        })
+}
+
+fn secure_cookie(name: &str, value: &str, max_age_seconds: u64) -> String {
+    format!("{name}={value}; Path=/; Max-Age={max_age_seconds}; Secure; HttpOnly; SameSite=Lax")
+}
+
+fn append_cookie(response: &mut Response, cookie: String) {
+    let value = HeaderValue::from_str(&cookie).expect("generated cookie must be a valid header");
+    response.headers_mut().append(SET_COOKIE, value);
+}
+
+/// Resolves the Bond behind a GET, trying the native session cookie first
+/// and falling back to a fresh `initData` header. `initData` is signed once
+/// per Mini App launch; requiring it fresh on every request would force its
+/// own validity window to span a whole session, so a successful fresh check
+/// mints a session cookie the *next* request can use instead. See
+/// `nilx-one/0x1` `documents/15-devices-and-recovery.md`, Single Active
+/// Client.
+async fn authenticate_telegram_bond(
+    state: &LocationControlApiState,
+    headers: &HeaderMap,
+    now: u64,
+) -> Result<(IdentityRecord, Option<String>), StatusCode> {
+    if let Some(token) = read_cookie(headers, SESSION_COOKIE) {
+        let token_hash = state
+            .native_auth
+            .secret_digester()
+            .digest("native-session", &token);
+        match state.identities.find_native_session(&token_hash, now).await {
+            Ok(Some(identity)) => return Ok((identity, None)),
+            Ok(None) => {}
+            Err(error) => {
+                tracing::error!(%error, "native session lookup failed");
+                return Err(StatusCode::SERVICE_UNAVAILABLE);
+            }
+        }
+    }
+
+    let init_data = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix(TELEGRAM_AUTH_SCHEME))
+        .filter(|value| !value.is_empty())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let user = state
+        .telegram_verifier
+        .verify(init_data, now)
+        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let identity = state
+        .identities
+        .find_by_telegram(user.id)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Bond identity lookup failed");
+            StatusCode::SERVICE_UNAVAILABLE
+        })?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let cookie = mint_session_cookie(state, &identity.pub_dress, now).await;
+    Ok((identity, cookie))
+}
+
+async fn mint_session_cookie(
+    state: &LocationControlApiState,
+    pub_dress: &str,
+    now: u64,
+) -> Option<String> {
+    let token = TokenFactory::session().ok()?;
+    let token_hash = state
+        .native_auth
+        .secret_digester()
+        .digest("native-session", &token);
+    let ttl = state.native_auth.session_ttl_seconds;
+    state
+        .identities
+        .create_native_session(&token_hash, pub_dress, now, now.saturating_add(ttl))
+        .await
+        .ok()?;
+    Some(secure_cookie(SESSION_COOKIE, &token, ttl))
 }
 
 /// Authenticated operational projection consumed by the Telegram-hosted Web
@@ -372,29 +469,13 @@ async fn read_location_control(
     State(state): State<LocationControlApiState>,
     headers: HeaderMap,
 ) -> Response {
-    let Some(init_data) = headers
-        .get(AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix(TELEGRAM_AUTH_SCHEME))
-        .filter(|value| !value.is_empty())
-    else {
-        return status(StatusCode::UNAUTHORIZED);
-    };
     let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(value) => value.as_secs(),
         Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
     };
-    let user = match state.telegram_verifier.verify(init_data, now) {
-        Ok(user) => user,
-        Err(_) => return status(StatusCode::UNAUTHORIZED),
-    };
-    let identity = match state.identities.find_by_telegram(user.id).await {
-        Ok(Some(identity)) => identity,
-        Ok(None) => return status(StatusCode::NOT_FOUND),
-        Err(error) => {
-            tracing::error!(%error, "Bond location identity lookup failed");
-            return status(StatusCode::SERVICE_UNAVAILABLE);
-        }
+    let (identity, cookie) = match authenticate_telegram_bond(&state, &headers, now).await {
+        Ok(value) => value,
+        Err(code) => return status(code),
     };
     let pub_dress = match identity.pub_dress.parse::<PubDress>() {
         Ok(value) => value,
@@ -410,13 +491,17 @@ async fn read_location_control(
             return status(StatusCode::SERVICE_UNAVAILABLE);
         }
     };
-    match state.locations.read(pub_dress.as_str()).await {
+    let mut response = match state.locations.read(pub_dress.as_str()).await {
         Ok(location) => no_store_json(StatusCode::OK, LocationControlProjection { role, location }),
         Err(error) => {
             tracing::error!(%error, "Bond location read failed");
             status(StatusCode::SERVICE_UNAVAILABLE)
         }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
     }
+    response
 }
 
 fn status(code: StatusCode) -> Response {
@@ -439,14 +524,193 @@ fn no_store_json<T: Serialize>(code: StatusCode, value: T) -> Response {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::time::Duration;
 
+    use axum::{
+        body::{Body, to_bytes},
+        http::{
+            Request, StatusCode,
+            header::{AUTHORIZATION, COOKIE, SET_COOKIE},
+        },
+    };
+    use hmac::{Hmac, Mac};
     use nilxone_contracts::{BondLocation, BondLocationMode, DecimalU64, GeoCoordinate, PubDress};
+    use sha2::Sha256;
+    use tower::ServiceExt as _;
+    use url::form_urlencoded;
 
     use super::{
         BondAccessRole, BondLocationRepository, PendingLocationIntent, TelegramLocationIntents,
+        location_control_router,
     };
-    use crate::{IdentityRepository, ProviderIdentity, RegistrationOutcome};
+    use crate::{IdentityRepository, NativeAuthConfig, ProviderIdentity, RegistrationOutcome};
+
+    const SESSION_TOKEN: &str = "123456:development-token";
+
+    // `read_location_control` reads the real wall clock, unlike api.rs's
+    // `StaticClock`-injected tests, so a fixed `auth_date` here would drift
+    // out of the verifier's TTL depending on when the suite happens to run.
+    fn session_now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock is after the Unix epoch")
+            .as_secs()
+    }
+
+    fn session_signed_init_data(user_id: i64) -> String {
+        let mut fields = BTreeMap::from([
+            ("auth_date", session_now().to_string()),
+            ("query_id", "query-1".to_owned()),
+            (
+                "user",
+                format!(r#"{{"id":{user_id},"first_name":"Sasha"}}"#),
+            ),
+        ]);
+        let check = fields
+            .iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut secret = Hmac::<Sha256>::new_from_slice(b"WebAppData").expect("valid key");
+        secret.update(SESSION_TOKEN.as_bytes());
+        let secret = secret.finalize().into_bytes();
+        let mut signature = Hmac::<Sha256>::new_from_slice(&secret).expect("valid key");
+        signature.update(check.as_bytes());
+        fields.insert(
+            "hash",
+            signature
+                .finalize()
+                .into_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
+        );
+        form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(fields)
+            .finish()
+    }
+
+    async fn session_test_app(database_url: &str) -> axum::Router {
+        let identities = IdentityRepository::connect(database_url)
+            .await
+            .expect("identity repository");
+        let locations = BondLocationRepository::connect(database_url)
+            .await
+            .expect("bond location repository");
+        location_control_router(
+            identities,
+            locations,
+            super::TelegramInitDataVerifier::new(SESSION_TOKEN.to_owned(), 300),
+            NativeAuthConfig::new(
+                "test-auth-secret-that-is-at-least-thirty-two-bytes",
+                "test-password-pepper-that-is-at-least-thirty-two-bytes",
+            )
+            .expect("valid native auth configuration"),
+        )
+    }
+
+    fn session_cookie_from(response: &axum::response::Response) -> String {
+        response
+            .headers()
+            .get(SET_COOKIE)
+            .expect("a session cookie is set on first authentication")
+            .to_str()
+            .expect("cookie header is valid UTF-8")
+            .split(';')
+            .next()
+            .expect("cookie has a name=value pair")
+            .to_owned()
+    }
+
+    #[tokio::test]
+    async fn a_fresh_init_data_read_mints_a_session_the_next_read_can_reuse() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let app = session_test_app(&database_url).await;
+        let pub_dress: PubDress = "0x0alice".parse().expect("valid pub_dress");
+        IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository")
+            .register(&pub_dress, &ProviderIdentity::telegram(7), session_now())
+            .await
+            .expect("registration");
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/location-control")
+                    .header(
+                        AUTHORIZATION,
+                        format!("tma {}", session_signed_init_data(7)),
+                    )
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(first.status(), StatusCode::OK);
+        let cookie = session_cookie_from(&first);
+
+        // No Authorization header at all: only the cookie minted above proves
+        // who is asking. `initData`'s own signature could have gone stale
+        // between these two requests and this would still succeed, which is
+        // the point - see documents/15-devices-and-recovery.md, Single Active
+        // Client, in nilx-one/0x1.
+        let second = app
+            .oneshot(
+                Request::get("/api/v1/location-control")
+                    .header(COOKIE, cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(second.status(), StatusCode::OK);
+        let body = to_bytes(second.into_body(), 4096).await.expect("body");
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("JSON body");
+        assert_eq!(body["role"], "user");
+    }
+
+    #[tokio::test]
+    async fn an_unregistered_telegram_account_is_not_found_and_gets_no_session() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let app = session_test_app(&database_url).await;
+
+        let response = app
+            .oneshot(
+                Request::get("/api/v1/location-control")
+                    .header(
+                        AUTHORIZATION,
+                        format!("tma {}", session_signed_init_data(99)),
+                    )
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(response.headers().get(SET_COOKIE).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_stale_or_missing_cookie_still_requires_a_fresh_init_data_header() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let app = session_test_app(&database_url).await;
+
+        let response = app
+            .oneshot(
+                Request::get("/api/v1/location-control")
+                    .header(COOKIE, "__Host-0x1_session=not-a-real-session-token")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
 
     async fn registered(database_url: &str, pub_dress: &str, telegram: i64) -> IdentityRepository {
         let identities = IdentityRepository::connect(database_url)
