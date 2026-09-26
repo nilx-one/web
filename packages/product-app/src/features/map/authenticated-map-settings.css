@@ -74,9 +74,12 @@
      the matching inline padding puts the back button and title back where
      they were before this had a background of its own to carry — but the top
      inset is dropped rather than restored, so the title sits flush against
-     this card's own top edge instead of leaving an indent above it. */
+     this card's own top edge instead of leaving an indent above it. A sticky
+     offset is measured from the scroll box's content edge, inside its
+     padding, so top: 0 would push this back down by --dock-pad-top and undo
+     the negative margin; the offset cancels that padding the same way. */
   position: sticky;
-  top: 0;
+  top: calc(-1 * var(--dock-pad-top, 1rem));
   z-index: 2;
   margin: calc(-1 * var(--dock-pad-top, 1rem))
     calc(-1 * var(--dock-pad-inline, 1.15rem)) 0;
