@@ -28,14 +28,14 @@ export function AvaiaSetupView({
 }: AvaiaSetupViewProps) {
   return (
     <div className="avaia-setup" data-configuration={state.configuration}>
+      {/* The address itself is the screen's own large title, right above
+          this surface — repeating it here would be the same name twice on
+          one screen, so this only adds what the title does not already say. */}
       <div className="avaia-setup__summary">
         <span className="bond-dock__glyph" aria-hidden="true">
           AI
         </span>
-        <span>
-          <strong>{state.address}</strong>
-          <small>{state.configurationLabel}</small>
-        </span>
+        <small>{state.configurationLabel}</small>
       </div>
 
       <form
