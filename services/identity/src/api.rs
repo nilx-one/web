@@ -9,7 +9,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Query, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{
         HeaderMap, HeaderValue, StatusCode,
         header::{AUTHORIZATION, CACHE_CONTROL, COOKIE, RETRY_AFTER, SET_COOKIE},
@@ -20,12 +20,12 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AvaiaPubDress, DiscordOAuthClient, DiscordOAuthError, GeoCoordinate, IdentityRecord,
-    IdentityRepository, NativeAuthConfig, NativeCredentialRecord, NativeRegistrationOutcome,
-    PasswordEngine, PasswordPolicyError, ProviderIdentity, ProviderLinkOutcome,
-    ProviderLinkRepository, PubDress, PubDressRenameOutcome, RegistrationOutcome,
-    RememberedBondSigner, SecretDigester, TelegramInitDataVerifier, TokenFactory,
-    rate_limit::AttemptLimiter,
+    ActivationRequest, ActivationRequestStatus, AvaiaPubDress, DiscordOAuthClient,
+    DiscordOAuthError, GeoCoordinate, IdentityRecord, IdentityRepository, NativeAuthConfig,
+    NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine, PasswordPolicyError,
+    ProviderIdentity, ProviderLinkOutcome, ProviderLinkRepository, PubDress,
+    PubDressRenameOutcome, RegistrationOutcome, RememberedBondSigner, SecretDigester,
+    TelegramInitDataVerifier, TokenFactory, rate_limit::AttemptLimiter,
 };
 use subtle::ConstantTimeEq as _;
 
@@ -510,10 +510,26 @@ async fn link_telegram_provider(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
+    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
+    if !active {
+        return session_inactive();
+    }
+    let mut response = link_telegram_provider_response(&state, &headers, identity, &request).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn link_telegram_provider_response(
+    state: &ApiState,
+    headers: &HeaderMap,
+    identity: IdentityRecord,
+    request: &TelegramProviderLinkRequest,
+) -> Response {
     if identity.pub_dress != request.pub_dress {
         return no_store_error(
             StatusCode::CONFLICT,
@@ -521,7 +537,7 @@ async fn link_telegram_provider(
             "The signed-in Bond changed before Telegram could be linked.",
         );
     }
-    let provider = match authenticate(&state, &headers).await {
+    let provider = match authenticate(state, headers).await {
         Ok(value) if value.provider == crate::IdentityProvider::Telegram => value,
         Ok(_) => return unauthorized(),
         Err(error) => return error.into_response(),
@@ -531,7 +547,7 @@ async fn link_telegram_provider(
         Err(_) => return unavailable(),
     };
 
-    let mut response = match state.provider_links.link(&pub_dress, &provider).await {
+    match state.provider_links.link(&pub_dress, &provider).await {
         Ok(ProviderLinkOutcome::Linked | ProviderLinkOutcome::AlreadyLinked) => {
             no_store_json(
                 StatusCode::OK,
@@ -556,11 +572,7 @@ async fn link_telegram_provider(
             tracing::error!(%error, "Telegram provider link failed");
             unavailable()
         }
-    };
-    if let Some(cookie) = cookie {
-        append_cookie(&mut response, cookie);
     }
-    response
 }
 
 async fn logout_native_identity(State(state): State<ApiState>, headers: HeaderMap) -> Response {
@@ -751,7 +763,7 @@ async fn authenticated_response(
         .digest("native-session", &session_token);
     if let Err(error) = state
         .repository
-        .create_native_session(&token_hash, &identity.pub_dress, now, session_expires_at)
+        .create_native_session(&token_hash, &identity.pub_dress, now, session_expires_at, "Browser")
         .await
     {
         tracing::error!(%error, "native session creation failed");
@@ -1044,8 +1056,14 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
     // with no Bond yet, and that path's behavior is unchanged.
     if let Some(token) = read_cookie(&headers, SESSION_COOKIE) {
         let token_hash = state.secret_digester.digest("native-session", &token);
-        match state.repository.find_native_session(&token_hash, now).await {
-            Ok(Some(identity)) => return identity_response(&state, identity, now, None).await,
+        match state
+            .repository
+            .find_native_session_with_activity(&token_hash, now)
+            .await
+        {
+            Ok(Some((identity, active))) => {
+                return identity_response(&state, identity, now, active, None).await;
+            }
             Ok(None) => {}
             Err(error) => {
                 tracing::error!(%error, "native session lookup failed");
@@ -1061,8 +1079,14 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
 
     match state.repository.find_by_provider(&provider_identity).await {
         Ok(Some(identity)) => {
-            let cookie = mint_session_cookie(&state, &identity.pub_dress, now).await;
-            identity_response(&state, identity, now, cookie).await
+            let (active, _token_hash, cookie) = mint_session_cookie(
+                &state,
+                &identity.pub_dress,
+                now,
+                client_label_for(provider_identity.provider),
+            )
+            .await;
+            identity_response(&state, identity, now, active, cookie).await
         }
         Ok(None) => api_error(
             StatusCode::NOT_FOUND,
@@ -1080,6 +1104,7 @@ async fn identity_response(
     state: &ApiState,
     identity: IdentityRecord,
     now: u64,
+    active_client: bool,
     cookie: Option<String>,
 ) -> Response {
     let identity = match reconcile_authenticated_identity(state, identity, now).await {
@@ -1103,6 +1128,7 @@ async fn identity_response(
         ProviderIdentityProjection {
             identity: IdentityProjection::with_avatar(identity, avatar_model),
             password_required,
+            active_client,
         },
     );
     if let Some(cookie) = cookie {
@@ -1237,10 +1263,27 @@ async fn rename_pub_dress(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
+    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
+    if !active {
+        return session_inactive();
+    }
+    let mut response = rename_pub_dress_response(&state, &headers, identity, &request, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn rename_pub_dress_response(
+    state: &ApiState,
+    headers: &HeaderMap,
+    identity: IdentityRecord,
+    request: &PubDressRenameRequest,
+    now: u64,
+) -> Response {
     let Ok(current) = PubDress::from_str(&identity.pub_dress) else {
         tracing::error!("stored human pub_dress is invalid");
         return unavailable();
@@ -1267,38 +1310,33 @@ async fn rename_pub_dress(
     };
     // Asking for the address the Bond already holds is not a conflict with
     // itself, and it writes nothing.
-    let mut response = if next == current {
-        renamed_response(&state, &headers, identity, now)
-    } else {
-        match state
-            .repository
-            .rename_pub_dress(&current, &next, now)
-            .await
-        {
-            Ok(PubDressRenameOutcome::Renamed(identity)) => {
-                renamed_response(&state, &headers, identity, now)
-            }
-            Ok(PubDressRenameOutcome::Unavailable) => no_store_error(
-                StatusCode::CONFLICT,
-                "pub_dress_unavailable",
-                "That address belongs to another identity.",
-            ),
-            Ok(PubDressRenameOutcome::AvaiaUnavailable) => no_store_error(
-                StatusCode::CONFLICT,
-                "avaia_unavailable",
-                "The Avaia address this name derives belongs to another identity.",
-            ),
-            Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
-            Err(error) => {
-                tracing::error!(%error, "pub_dress rename failed");
-                unavailable()
-            }
-        }
-    };
-    if let Some(cookie) = cookie {
-        append_cookie(&mut response, cookie);
+    if next == current {
+        return renamed_response(state, headers, identity, now);
     }
-    response
+    match state
+        .repository
+        .rename_pub_dress(&current, &next, now)
+        .await
+    {
+        Ok(PubDressRenameOutcome::Renamed(identity)) => {
+            renamed_response(state, headers, identity, now)
+        }
+        Ok(PubDressRenameOutcome::Unavailable) => no_store_error(
+            StatusCode::CONFLICT,
+            "pub_dress_unavailable",
+            "That address belongs to another identity.",
+        ),
+        Ok(PubDressRenameOutcome::AvaiaUnavailable) => no_store_error(
+            StatusCode::CONFLICT,
+            "avaia_unavailable",
+            "The Avaia address this name derives belongs to another identity.",
+        ),
+        Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "pub_dress rename failed");
+            unavailable()
+        }
+    }
 }
 
 /// The published avatar studies. A body is chosen, never assigned: an address
@@ -1322,10 +1360,26 @@ async fn choose_avatar_model(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
+    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
+    if !active {
+        return session_inactive();
+    }
+    let mut response = choose_avatar_model_response(&state, identity, request, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn choose_avatar_model_response(
+    state: &ApiState,
+    identity: IdentityRecord,
+    request: AvatarModelRequest,
+    now: u64,
+) -> Response {
     if let Err(retry_after) = state
         .limiter
         .consume(
@@ -1349,7 +1403,7 @@ async fn choose_avatar_model(
             "That avatar model is not published.",
         );
     }
-    let mut response = match state
+    match state
         .repository
         .set_avatar_model(&identity.pub_dress, &request.model)
         .await
@@ -1363,11 +1417,7 @@ async fn choose_avatar_model(
             tracing::error!(%error, "avatar model update failed");
             unavailable()
         }
-    };
-    if let Some(cookie) = cookie {
-        append_cookie(&mut response, cookie);
     }
-    response
 }
 
 // An Avaia address carries its owner's discriminator and the canonical `ai`
@@ -1385,10 +1435,26 @@ async fn rename_owned_avaia(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
+    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
+    if !active {
+        return session_inactive();
+    }
+    let mut response = rename_owned_avaia_response(&state, identity, &request, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn rename_owned_avaia_response(
+    state: &ApiState,
+    identity: IdentityRecord,
+    request: &PubDressRenameRequest,
+    now: u64,
+) -> Response {
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
         tracing::error!("stored human pub_dress is invalid");
         return unavailable();
@@ -1405,35 +1471,30 @@ async fn rename_owned_avaia(
         Ok(value) => value,
         Err(error) => return invalid_avaia_pub_dress(error),
     };
-    let mut response = if identity.avaia_pub_dress.as_deref() == Some(next.as_str()) {
-        no_store_json(StatusCode::OK, IdentityProjection::from(identity))
-    } else {
-        match state
-            .repository
-            .rename_owned_avaia(&owner, &next, now)
-            .await
-        {
-            Ok(PubDressRenameOutcome::Renamed(identity)) => {
-                no_store_json(StatusCode::OK, IdentityProjection::from(identity))
-            }
-            Ok(PubDressRenameOutcome::AvaiaUnavailable) | Ok(PubDressRenameOutcome::Unavailable) => {
-                no_store_error(
-                    StatusCode::CONFLICT,
-                    "avaia_unavailable",
-                    "That Avaia address belongs to another identity.",
-                )
-            }
-            Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
-            Err(error) => {
-                tracing::error!(%error, "Avaia rename failed");
-                unavailable()
-            }
-        }
-    };
-    if let Some(cookie) = cookie {
-        append_cookie(&mut response, cookie);
+    if identity.avaia_pub_dress.as_deref() == Some(next.as_str()) {
+        return no_store_json(StatusCode::OK, IdentityProjection::from(identity));
     }
-    response
+    match state
+        .repository
+        .rename_owned_avaia(&owner, &next, now)
+        .await
+    {
+        Ok(PubDressRenameOutcome::Renamed(identity)) => {
+            no_store_json(StatusCode::OK, IdentityProjection::from(identity))
+        }
+        Ok(PubDressRenameOutcome::AvaiaUnavailable) | Ok(PubDressRenameOutcome::Unavailable) => {
+            no_store_error(
+                StatusCode::CONFLICT,
+                "avaia_unavailable",
+                "That Avaia address belongs to another identity.",
+            )
+        }
+        Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "Avaia rename failed");
+            unavailable()
+        }
+    }
 }
 
 fn invalid_avaia_pub_dress(error: crate::AvaiaPubDressError) -> Response {
@@ -1493,15 +1554,31 @@ fn renamed_response(
 /// cookie instead, so the provider header's own TTL can stay short. See
 /// `nilx-one/0x1` `documents/15-devices-and-recovery.md`, Single Active
 /// Client.
+/// The Bond, whether this session is the active client, and a session
+/// cookie to set on the response when one did not already exist.
+///
+/// A caller that only reads may ignore the activity flag; a caller that
+/// would act for the Bond MUST refuse when it is `false` — an inactive
+/// client "can show what its host is authorized to show, but it cannot act
+/// for the Bond" (`nilx-one/0x1` `documents/15-devices-and-recovery.md`,
+/// Single Active Client).
+/// The Bond, whether this session is the active client, this session's own
+/// token hash (so a caller can name it, e.g. as the requester of an
+/// activation request), and a session cookie to set on the response when
+/// one did not already exist.
 async fn authenticated_bond(
     state: &ApiState,
     headers: &HeaderMap,
     now: u64,
-) -> Result<(IdentityRecord, Option<String>), AuthenticationFailure> {
+) -> Result<(IdentityRecord, bool, Vec<u8>, Option<String>), AuthenticationFailure> {
     if let Some(token) = read_cookie(headers, SESSION_COOKIE) {
         let token_hash = state.secret_digester.digest("native-session", &token);
-        match state.repository.find_native_session(&token_hash, now).await {
-            Ok(Some(identity)) => return Ok((identity, None)),
+        match state
+            .repository
+            .find_native_session_with_activity(&token_hash, now)
+            .await
+        {
+            Ok(Some((identity, active))) => return Ok((identity, active, token_hash, None)),
             Ok(None) => {}
             Err(error) => {
                 tracing::error!(%error, "native session lookup failed");
@@ -1513,8 +1590,14 @@ async fn authenticated_bond(
     let provider = authenticate(state, headers).await?;
     match state.repository.find_by_provider(&provider).await {
         Ok(Some(identity)) => {
-            let cookie = mint_session_cookie(state, &identity.pub_dress, now).await;
-            Ok((identity, cookie))
+            let (active, token_hash, cookie) = mint_session_cookie(
+                state,
+                &identity.pub_dress,
+                now,
+                client_label_for(provider.provider),
+            )
+            .await;
+            Ok((identity, active, token_hash, cookie))
         }
         Ok(None) => Err(AuthenticationFailure::Unauthorized),
         Err(error) => {
@@ -1524,20 +1607,43 @@ async fn authenticated_bond(
     }
 }
 
+fn client_label_for(provider: crate::IdentityProvider) -> &'static str {
+    match provider {
+        crate::IdentityProvider::Telegram => "Telegram",
+        crate::IdentityProvider::Discord => "Discord",
+        crate::IdentityProvider::Github => "GitHub",
+    }
+}
+
 /// Mints a native session for a just-verified provider identity so a later
-/// request can present the cookie instead of re-proving the provider.
-/// Failure to mint is not fatal to the request that triggered it; that
-/// request already has its identity, and it simply tries again next time.
-async fn mint_session_cookie(state: &ApiState, pub_dress: &str, now: u64) -> Option<String> {
-    let token = TokenFactory::session().ok()?;
+/// request can present the cookie instead of re-proving the provider, and
+/// reports whether that session came up active. Failure to mint is not
+/// fatal to the request that triggered it - that request already has its
+/// identity, and it simply tries again next time - so a mint failure is
+/// reported as `(false, <empty hash>, None)` rather than propagated.
+async fn mint_session_cookie(
+    state: &ApiState,
+    pub_dress: &str,
+    now: u64,
+    client_label: &str,
+) -> (bool, Vec<u8>, Option<String>) {
+    let Ok(token) = TokenFactory::session() else {
+        return (false, Vec::new(), None);
+    };
     let token_hash = state.secret_digester.digest("native-session", &token);
     let ttl = state.native_auth.session_ttl_seconds;
-    state
+    match state
         .repository
-        .create_native_session(&token_hash, pub_dress, now, now.saturating_add(ttl))
+        .create_native_session(&token_hash, pub_dress, now, now.saturating_add(ttl), client_label)
         .await
-        .ok()?;
-    Some(secure_cookie(SESSION_COOKIE, &token, ttl))
+    {
+        Ok(active) => (
+            active,
+            token_hash,
+            Some(secure_cookie(SESSION_COOKIE, &token, ttl)),
+        ),
+        Err(_) => (false, Vec::new(), None),
+    }
 }
 
 async fn register_identity(
@@ -1722,6 +1828,17 @@ fn unavailable() -> Response {
     )
 }
 
+/// An inactive client asked to act for the Bond. It may still read; this is
+/// only returned from a write. See Single Active Client in `nilx-one/0x1`
+/// `documents/15-devices-and-recovery.md`.
+fn session_inactive() -> Response {
+    api_error(
+        StatusCode::FORBIDDEN,
+        "session_inactive",
+        "This client is signed in but not active. Activate it to make changes.",
+    )
+}
+
 fn api_error(status: StatusCode, code: &'static str, message: &'static str) -> Response {
     no_store_error(status, code, message)
 }
@@ -1880,6 +1997,10 @@ struct ProviderIdentityProjection {
     #[serde(flatten)]
     identity: IdentityProjection,
     password_required: bool,
+    /// Whether this session is the one client currently authorized to act
+    /// for the Bond. See `authenticated_bond` and Single Active Client in
+    /// `nilx-one/0x1` `documents/15-devices-and-recovery.md`.
+    active_client: bool,
 }
 
 #[derive(Debug, Serialize)]

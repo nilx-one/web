@@ -34,6 +34,31 @@ pub struct ProviderIdentity {
     pub subject: String,
 }
 
+/// A Single Active Client activation request (`nilx-one/0x1`
+/// `documents/15-devices-and-recovery.md`). `Pending` is the confirmation
+/// window on the active client; `Objectable` is the live-device objection
+/// window that follows if it stays silent; `Accepted`/`Declined`/`Objected`
+/// are terminal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActivationRequestStatus {
+    Pending,
+    Objectable,
+    Accepted,
+    Declined,
+    Objected,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActivationRequest {
+    pub id: Vec<u8>,
+    pub pub_dress: String,
+    pub requester_token_hash: Vec<u8>,
+    pub client_label: String,
+    pub status: ActivationRequestStatus,
+    pub responds_by: u64,
+    pub objection_deadline: Option<u64>,
+}
+
 impl ProviderIdentity {
     pub fn telegram(user_id: i64) -> Self {
         Self {
@@ -182,6 +207,11 @@ impl IdentityRepository {
             .await?;
         self.migrate_avaia_prefix().await?;
         self.migrate_bond_roles().await?;
+        if !self.has_native_sessions_column("active").await? {
+            sqlx::raw_sql(include_str!("../migrations/0016_session_activation.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
         Ok(())
     }
 
@@ -304,6 +334,15 @@ impl IdentityRepository {
 
     async fn has_identity_column(&self, name: &str) -> Result<bool, RepositoryError> {
         let columns = sqlx::query("PRAGMA table_info(identities)")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(columns
+            .iter()
+            .any(|column| column.get::<String, _>("name") == name))
+    }
+
+    async fn has_native_sessions_column(&self, name: &str) -> Result<bool, RepositoryError> {
+        let columns = sqlx::query("PRAGMA table_info(native_sessions)")
             .fetch_all(&self.pool)
             .await?;
         Ok(columns
@@ -918,24 +957,46 @@ impl IdentityRepository {
         Ok(Some(record))
     }
 
+    /// A new session starts active only if the Bond currently holds no other
+    /// active, still-valid session — the base case where there is nothing to
+    /// activate against. Otherwise it starts inactive: activation is a
+    /// separate, explicit step (`SessionActivationRequest`), never implied by
+    /// merely authenticating on a new client. See `nilx-one/0x1`
+    /// `documents/15-devices-and-recovery.md`, Single Active Client.
+    /// Returns whether the new session became active.
     pub async fn create_native_session(
         &self,
         token_hash: &[u8],
         pub_dress: &str,
         now: u64,
         expires_at: u64,
-    ) -> Result<(), RepositoryError> {
+        client_label: &str,
+    ) -> Result<bool, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let has_active = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM native_sessions \
+             WHERE pub_dress = ? AND active = 1 AND revoked_at IS NULL AND expires_at > ?)",
+        )
+        .bind(pub_dress)
+        .bind(now as i64)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let becomes_active = !has_active;
         sqlx::query(
-            "INSERT INTO native_sessions (token_hash, pub_dress, expires_at, created_at) \
-             VALUES (?, ?, ?, ?)",
+            "INSERT INTO native_sessions \
+             (token_hash, pub_dress, expires_at, created_at, active, client_label) \
+             VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(token_hash)
         .bind(pub_dress)
         .bind(expires_at as i64)
         .bind(now as i64)
-        .execute(&self.pool)
+        .bind(becomes_active)
+        .bind(client_label)
+        .execute(&mut *transaction)
         .await?;
-        Ok(())
+        transaction.commit().await?;
+        Ok(becomes_active)
     }
 
     pub async fn find_native_session(
@@ -957,6 +1018,51 @@ impl IdentityRepository {
         }
     }
 
+    /// Same lookup as `find_native_session`, plus whether this session is
+    /// currently the active one. An inactive session still identifies its
+    /// Bond for reads; only a caller that would act for the Bond needs the
+    /// flag.
+    /// The client label a session was minted with, so an action taken in its
+    /// name (such as requesting activation) can be shown under the same
+    /// name the person already sees for that session.
+    pub async fn native_session_client_label(
+        &self,
+        token_hash: &[u8],
+    ) -> Result<Option<String>, RepositoryError> {
+        Ok(sqlx::query_scalar::<_, String>(
+            "SELECT client_label FROM native_sessions WHERE token_hash = ?",
+        )
+        .bind(token_hash)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    pub async fn find_native_session_with_activity(
+        &self,
+        token_hash: &[u8],
+        now: u64,
+    ) -> Result<Option<(IdentityRecord, bool)>, RepositoryError> {
+        let row = sqlx::query(
+            "SELECT pub_dress, active FROM native_sessions \
+             WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?",
+        )
+        .bind(token_hash)
+        .bind(now as i64)
+        .fetch_optional(&self.pool)
+        .await?;
+        match row {
+            Some(row) => {
+                let pub_dress: String = row.get("pub_dress");
+                let active: bool = row.get("active");
+                Ok(Some((
+                    identity_for_pub_dress(&self.pool, pub_dress).await?,
+                    active,
+                )))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub async fn revoke_native_session(
         &self,
         token_hash: &[u8],
@@ -971,6 +1077,243 @@ impl IdentityRepository {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Creates a pending activation request naming the requesting client.
+    /// The caller already authenticated the requester (a session cookie or a
+    /// fresh provider/credential check) before this is reachable.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_activation_request(
+        &self,
+        id: &[u8],
+        pub_dress: &str,
+        requester_token_hash: &[u8],
+        client_label: &str,
+        now: u64,
+        responds_by: u64,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO session_activation_requests \
+             (id, pub_dress, requester_token_hash, client_label, status, created_at, responds_by) \
+             VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+        )
+        .bind(id)
+        .bind(pub_dress)
+        .bind(requester_token_hash)
+        .bind(client_label)
+        .bind(now as i64)
+        .bind(responds_by as i64)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// The request the active client should be shown, if any, with the lazy
+    /// pending -> objectable and objectable -> accepted transitions applied
+    /// first. There is no background sweep; every read of a request passes
+    /// through this.
+    pub async fn pending_activation_request_for(
+        &self,
+        pub_dress: &str,
+        now: u64,
+        objection_window_seconds: u64,
+    ) -> Result<Option<ActivationRequest>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            "SELECT id, pub_dress, requester_token_hash, client_label, status, \
+                    responds_by, objection_deadline \
+             FROM session_activation_requests \
+             WHERE pub_dress = ? AND status IN ('pending', 'objectable') \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(pub_dress)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(row) = row else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+        let request = decode_activation_request(&row)?;
+        let request = advance_activation_request(&mut transaction, request, now, objection_window_seconds)
+            .await?;
+        transaction.commit().await?;
+        Ok(match request.status {
+            ActivationRequestStatus::Pending | ActivationRequestStatus::Objectable => Some(request),
+            _ => None,
+        })
+    }
+
+    /// The requester's own view of a request it created, so it can learn the
+    /// outcome without guessing from whether its session became active.
+    pub async fn activation_request_status(
+        &self,
+        id: &[u8],
+        requester_token_hash: &[u8],
+        now: u64,
+        objection_window_seconds: u64,
+    ) -> Result<Option<ActivationRequest>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            "SELECT id, pub_dress, requester_token_hash, client_label, status, \
+                    responds_by, objection_deadline \
+             FROM session_activation_requests \
+             WHERE id = ? AND requester_token_hash = ?",
+        )
+        .bind(id)
+        .bind(requester_token_hash)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(row) = row else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+        let request = decode_activation_request(&row)?;
+        let request = advance_activation_request(&mut transaction, request, now, objection_window_seconds)
+            .await?;
+        transaction.commit().await?;
+        Ok(Some(request))
+    }
+
+    /// Accepts a request on behalf of the currently active session: the
+    /// requester becomes active, and whichever session was active becomes
+    /// inactive but stays signed in. Returns `false` if there is no such
+    /// pending/objectable request for this Bond (already resolved, wrong
+    /// Bond, or never existed) rather than erroring, since a stale UI action
+    /// racing a lazy sweep is an ordinary outcome, not a failure.
+    pub async fn accept_activation_request(
+        &self,
+        id: &[u8],
+        pub_dress: &str,
+        now: u64,
+        objection_window_seconds: u64,
+    ) -> Result<bool, RepositoryError> {
+        self.resolve_activation_request(
+            id,
+            pub_dress,
+            now,
+            objection_window_seconds,
+            ActivationRequestStatus::Accepted,
+            true,
+        )
+        .await
+    }
+
+    /// Declines a request: terminal, no session changes. Same "false means
+    /// nothing to do" contract as `accept_activation_request`.
+    pub async fn decline_activation_request(
+        &self,
+        id: &[u8],
+        pub_dress: &str,
+        now: u64,
+        objection_window_seconds: u64,
+    ) -> Result<bool, RepositoryError> {
+        self.resolve_activation_request(
+            id,
+            pub_dress,
+            now,
+            objection_window_seconds,
+            ActivationRequestStatus::Declined,
+            false,
+        )
+        .await
+    }
+
+    /// The active client's objection during the live-device objection
+    /// window: only valid while the request is `objectable`, never while it
+    /// is still merely `pending` (that path is a decline, not an objection).
+    pub async fn object_to_activation_request(
+        &self,
+        id: &[u8],
+        pub_dress: &str,
+        now: u64,
+        objection_window_seconds: u64,
+    ) -> Result<bool, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let Some(row) = sqlx::query(
+            "SELECT id, pub_dress, requester_token_hash, client_label, status, \
+                    responds_by, objection_deadline \
+             FROM session_activation_requests \
+             WHERE id = ? AND pub_dress = ?",
+        )
+        .bind(id)
+        .bind(pub_dress)
+        .fetch_optional(&mut *transaction)
+        .await?
+        else {
+            transaction.commit().await?;
+            return Ok(false);
+        };
+        let request = decode_activation_request(&row)?;
+        let request =
+            advance_activation_request(&mut transaction, request, now, objection_window_seconds).await?;
+        if request.status != ActivationRequestStatus::Objectable {
+            transaction.commit().await?;
+            return Ok(false);
+        }
+        sqlx::query(
+            "UPDATE session_activation_requests SET status = 'objected', resolved_at = ? \
+             WHERE id = ? AND status = 'objectable'",
+        )
+        .bind(now as i64)
+        .bind(id)
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(true)
+    }
+
+    async fn resolve_activation_request(
+        &self,
+        id: &[u8],
+        pub_dress: &str,
+        now: u64,
+        objection_window_seconds: u64,
+        outcome: ActivationRequestStatus,
+        activate_requester: bool,
+    ) -> Result<bool, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let Some(row) = sqlx::query(
+            "SELECT id, pub_dress, requester_token_hash, client_label, status, \
+                    responds_by, objection_deadline \
+             FROM session_activation_requests \
+             WHERE id = ? AND pub_dress = ?",
+        )
+        .bind(id)
+        .bind(pub_dress)
+        .fetch_optional(&mut *transaction)
+        .await?
+        else {
+            transaction.commit().await?;
+            return Ok(false);
+        };
+        let request = decode_activation_request(&row)?;
+        let request =
+            advance_activation_request(&mut transaction, request, now, objection_window_seconds).await?;
+        if !matches!(
+            request.status,
+            ActivationRequestStatus::Pending | ActivationRequestStatus::Objectable
+        ) {
+            transaction.commit().await?;
+            return Ok(false);
+        }
+        let status_literal = match outcome {
+            ActivationRequestStatus::Accepted => "accepted",
+            ActivationRequestStatus::Declined => "declined",
+            _ => unreachable!("resolve_activation_request only accepts or declines"),
+        };
+        sqlx::query(
+            "UPDATE session_activation_requests SET status = ?, resolved_at = ? WHERE id = ?",
+        )
+        .bind(status_literal)
+        .bind(now as i64)
+        .bind(id)
+        .execute(&mut *transaction)
+        .await?;
+        if activate_requester {
+            activate_session_in(&mut transaction, pub_dress, &request.requester_token_hash, now).await?;
+        }
+        transaction.commit().await?;
+        Ok(true)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1224,6 +1567,108 @@ async fn identity_for_pub_dress_in(
     })
 }
 
+/// Makes `requester_token_hash` the one active session for `pub_dress` and
+/// deactivates whichever session was active. The deactivated session is not
+/// revoked: it stays signed in, only no longer able to act for the Bond.
+async fn activate_session_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    pub_dress: &str,
+    requester_token_hash: &[u8],
+    now: u64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE native_sessions SET active = 0 \
+         WHERE pub_dress = ? AND active = 1 AND revoked_at IS NULL AND expires_at > ? \
+         AND token_hash != ?",
+    )
+    .bind(pub_dress)
+    .bind(now as i64)
+    .bind(requester_token_hash)
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query("UPDATE native_sessions SET active = 1 WHERE token_hash = ?")
+        .bind(requester_token_hash)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
+fn decode_activation_request(row: &sqlx::sqlite::SqliteRow) -> Result<ActivationRequest, RepositoryError> {
+    let status = match row.get::<String, _>("status").as_str() {
+        "pending" => ActivationRequestStatus::Pending,
+        "objectable" => ActivationRequestStatus::Objectable,
+        "accepted" => ActivationRequestStatus::Accepted,
+        "declined" => ActivationRequestStatus::Declined,
+        "objected" => ActivationRequestStatus::Objected,
+        _ => return Err(RepositoryError::CorruptActivationRequestStatus),
+    };
+    Ok(ActivationRequest {
+        id: row.get("id"),
+        pub_dress: row.get("pub_dress"),
+        requester_token_hash: row.get("requester_token_hash"),
+        client_label: row.get("client_label"),
+        status,
+        responds_by: row.get::<i64, _>("responds_by") as u64,
+        objection_deadline: row
+            .get::<Option<i64>, _>("objection_deadline")
+            .map(|value| value as u64),
+    })
+}
+
+/// Applies the lazy `pending` -> `objectable` -> `accepted` transitions this
+/// request is due for as of `now`, persisting whichever transition(s) apply,
+/// and returns the request in its now-current state. There is no background
+/// sweep; every read or action on a request passes through here first, so
+/// nothing observes a state this function would have already advanced past.
+async fn advance_activation_request(
+    transaction: &mut Transaction<'_, Sqlite>,
+    request: ActivationRequest,
+    now: u64,
+    objection_window_seconds: u64,
+) -> Result<ActivationRequest, RepositoryError> {
+    if request.status == ActivationRequestStatus::Pending && now >= request.responds_by {
+        let objection_deadline = now.saturating_add(objection_window_seconds);
+        sqlx::query(
+            "UPDATE session_activation_requests \
+             SET status = 'objectable', objection_deadline = ? \
+             WHERE id = ? AND status = 'pending'",
+        )
+        .bind(objection_deadline as i64)
+        .bind(&request.id)
+        .execute(&mut **transaction)
+        .await?;
+        return Box::pin(advance_activation_request(
+            transaction,
+            ActivationRequest {
+                status: ActivationRequestStatus::Objectable,
+                objection_deadline: Some(objection_deadline),
+                ..request
+            },
+            now,
+            objection_window_seconds,
+        ))
+        .await;
+    }
+    if request.status == ActivationRequestStatus::Objectable
+        && request.objection_deadline.is_some_and(|deadline| now >= deadline)
+    {
+        sqlx::query(
+            "UPDATE session_activation_requests SET status = 'accepted', resolved_at = ? \
+             WHERE id = ? AND status = 'objectable'",
+        )
+        .bind(now as i64)
+        .bind(&request.id)
+        .execute(&mut **transaction)
+        .await?;
+        activate_session_in(transaction, &request.pub_dress, &request.requester_token_hash, now).await?;
+        return Ok(ActivationRequest {
+            status: ActivationRequestStatus::Accepted,
+            ..request
+        });
+    }
+    Ok(request)
+}
+
 async fn find_by_provider_in(
     transaction: &mut Transaction<'_, Sqlite>,
     provider_identity: &ProviderIdentity,
@@ -1313,6 +1758,8 @@ pub enum RepositoryError {
     CorruptAvaiaLocation,
     #[error("stored Bond role is not a known role")]
     CorruptBondRole,
+    #[error("stored activation request status is not a known status")]
+    CorruptActivationRequestStatus,
 }
 
 #[cfg(test)]
@@ -1848,7 +2295,7 @@ mod tests {
             .await
             .expect("activation");
         repository
-            .create_native_session(b"session", "0x0sky", 101, 200)
+            .create_native_session(b"session", "0x0sky", 101, 200, "test")
             .await
             .expect("session");
         let session = repository

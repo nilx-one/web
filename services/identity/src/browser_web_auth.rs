@@ -776,6 +776,7 @@ async fn issue_native_session(
             &identity.pub_dress,
             now,
             now.saturating_add(state.native_auth.session_ttl_seconds),
+            "Browser",
         )
         .await
     {

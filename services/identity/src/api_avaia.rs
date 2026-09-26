@@ -65,7 +65,7 @@ async fn read_owned_avaia(State(state): State<ApiState>, headers: HeaderMap) -> 
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
+    let (identity, _active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
@@ -118,10 +118,26 @@ async fn update_owned_avaia(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
+    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
+    if !active {
+        return session_inactive();
+    }
+    let mut response = update_owned_avaia_response(&state, identity, &request, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn update_owned_avaia_response(
+    state: &ApiState,
+    identity: IdentityRecord,
+    request: &AvaiaProfileUpdateRequest,
+    now: u64,
+) -> Response {
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
         tracing::error!("stored human pub_dress is invalid");
         return unavailable();
@@ -146,7 +162,7 @@ async fn update_owned_avaia(
         );
     }
 
-    let mut response = match state.repository.configure_owned_avaia(&owner, &next, now).await {
+    match state.repository.configure_owned_avaia(&owner, &next, now).await {
         Ok(crate::AvaiaUpdateOutcome::Updated(profile)) => {
             let location = match state.repository.read_avaia_location(&owner).await {
                 Ok(value) => value,
@@ -172,11 +188,7 @@ async fn update_owned_avaia(
             tracing::error!(%error, "owned Avaia profile update failed");
             unavailable()
         }
-    };
-    if let Some(cookie) = cookie {
-        append_cookie(&mut response, cookie);
     }
-    response
 }
 
 #[derive(Debug, Deserialize)]
@@ -234,10 +246,26 @@ async fn write_owned_avaia_location(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, cookie) = match authenticated_bond(&state, &headers, now).await {
+    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => return error.into_response(),
     };
+    if !active {
+        return session_inactive();
+    }
+    let mut response = write_owned_avaia_location_response(&state, identity, &request, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn write_owned_avaia_location_response(
+    state: &ApiState,
+    identity: IdentityRecord,
+    request: &AvaiaLocationUpdateRequest,
+    now: u64,
+) -> Response {
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
         tracing::error!("stored human pub_dress is invalid");
         return unavailable();
@@ -281,7 +309,7 @@ async fn write_owned_avaia_location(
         return unavailable();
     }
 
-    let mut response = match state.repository.owned_avaia_identity(&owner).await {
+    match state.repository.owned_avaia_identity(&owner).await {
         Ok(Some(profile)) => no_store_json(
             StatusCode::OK,
             avaia_identity_projection(profile, Some(location)),
@@ -291,11 +319,7 @@ async fn write_owned_avaia_location(
             tracing::error!(%error, "owned Avaia profile lookup failed");
             unavailable()
         }
-    };
-    if let Some(cookie) = cookie {
-        append_cookie(&mut response, cookie);
     }
-    response
 }
 
 #[cfg(test)]
@@ -307,7 +331,10 @@ mod avaia_api_tests {
 
     use axum::{
         body::{Body, to_bytes},
-        http::{Request, StatusCode, header::AUTHORIZATION},
+        http::{
+            Request, StatusCode,
+            header::{AUTHORIZATION, COOKIE, SET_COOKIE},
+        },
     };
     use hmac::{Hmac, Mac};
     use serde_json::Value;
@@ -464,11 +491,24 @@ mod avaia_api_tests {
             .await
             .expect("response");
         assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        // Same client as the request above, continuing its own session
+        // rather than presenting the provider proof again as if it were a
+        // second device asking to take over (Single Active Client).
+        let cookie = invalid
+            .headers()
+            .get(SET_COOKIE)
+            .expect("a session cookie is set on first authentication")
+            .to_str()
+            .expect("cookie header is valid UTF-8")
+            .split(';')
+            .next()
+            .expect("cookie has a name=value pair")
+            .to_owned();
 
         let wrong_owner = app
             .oneshot(
                 Request::post("/api/v1/identity/avaia")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .header(COOKIE, cookie)
                     .header("x-0x1-csrf", "1")
                     .header("content-type", "application/json")
                     .body(Body::from(r#"{"pub_dress":"x1newai"}"#))

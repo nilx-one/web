@@ -1206,6 +1206,7 @@ mod tests {
                 bond.as_str(),
                 now.saturating_sub(1),
                 now.saturating_add(3600),
+                "test",
             )
             .await
             .expect("native session");
