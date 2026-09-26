@@ -12,6 +12,7 @@ import {
   studyStance,
   STUDY_MS,
   walkArrived,
+  walkBearing,
   walkPosition,
   walkSpeedMetersPerSecond,
   walkStance,
@@ -32,6 +33,42 @@ describe("Avaia walking", () => {
     expect(
       startWalk({ from: here, to: east, nowMs: 0, zoom: 17 }).bearingDeg,
     ).toBeCloseTo(90, 0);
+  });
+
+  it("follows a route's turns, facing along each leg in turn", () => {
+    // East, then north: an L round a corner.
+    const corner = east;
+    const beyond = { longitude: east.longitude, latitude: north.latitude };
+    const walk = startWalk({
+      from: here,
+      to: beyond,
+      path: [here, corner, beyond],
+      nowMs: 0,
+      zoom: 17,
+    });
+    const legs = [
+      mapDistanceMeters(here, corner),
+      mapDistanceMeters(corner, beyond),
+    ];
+    const total = legs[0]! + legs[1]!;
+    const atCorner = (walk.durationMs * legs[0]!) / total;
+
+    expect(walk.durationMs).toBeCloseTo(
+      (total / walkSpeedMetersPerSecond(here.latitude, 17)) * 1_000,
+      3,
+    );
+    expect(walkBearing(walk, atCorner / 2)).toBeCloseTo(90, 0);
+    expect(walkBearing(walk, (atCorner + walk.durationMs) / 2)).toBeCloseTo(
+      0,
+      0,
+    );
+    expect(walk.arrivalBearingDeg).toBeCloseTo(0, 0);
+    const turning = walkPosition(walk, atCorner);
+    expect(mapDistanceMeters(turning, corner)).toBeLessThan(0.01);
+    // Halfway down the second leg is off the straight line between the ends.
+    const second = walkPosition(walk, (atCorner + walk.durationMs) / 2);
+    expect(second.longitude).toBeCloseTo(corner.longitude, 9);
+    expect(walkPosition(walk, walk.durationMs)).toEqual(beyond);
   });
 
   it("takes as long as the distance at the pace the scale sets", () => {

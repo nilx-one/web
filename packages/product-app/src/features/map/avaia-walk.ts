@@ -20,10 +20,19 @@ import {
 export interface AvaiaWalk {
   readonly from: MapPointSelection;
   readonly to: MapPointSelection;
+  /**
+   * The points the body turns at, `from` first and `to` last. A walk around
+   * nothing is just the two of them.
+   */
+  readonly path: readonly MapPointSelection[];
+  /** Ground distance from `from` to each point of `path`, in metres. */
+  readonly along: readonly number[];
   readonly startedMs: number;
   readonly durationMs: number;
-  /** Compass heading from `from` to `to`, which is where the body faces. */
+  /** Compass heading of the first leg, which is where the body sets off. */
   readonly bearingDeg: number;
+  /** Compass heading of the last leg, which is how the body arrives. */
+  readonly arrivalBearingDeg: number;
   /** Set when the walk is towards a landmark the Avaia means to study. */
   readonly landmark?: MapLandmark;
 }
@@ -78,28 +87,63 @@ export function walkSpeedMetersPerSecond(
     : MIN_WALK_SPEED_MPS;
 }
 
+/**
+ * A walk from `from` to `to`. Without a `path` it goes straight; with one, it
+ * follows the route's turns, which must start at `from` and end at `to`.
+ */
 export function startWalk({
   from,
   to,
+  path,
   nowMs,
   zoom,
   landmark,
 }: {
   readonly from: MapPointSelection;
   readonly to: MapPointSelection;
+  readonly path?: readonly MapPointSelection[] | undefined;
   readonly nowMs: number;
   readonly zoom: number;
   readonly landmark?: MapLandmark | undefined;
 }): AvaiaWalk {
-  const meters = mapDistanceMeters(from, to);
+  const points = (
+    path !== undefined && path.length >= 2 ? path : [from, to]
+  ).map((point) => ({ longitude: point.longitude, latitude: point.latitude }));
+  const along = [0];
+  for (let i = 1; i < points.length; i++) {
+    along.push(along[i - 1]! + mapDistanceMeters(points[i - 1]!, points[i]!));
+  }
+  const meters = along[along.length - 1]!;
   const speed = walkSpeedMetersPerSecond(from.latitude, zoom);
   return {
-    from: { longitude: from.longitude, latitude: from.latitude },
-    to: { longitude: to.longitude, latitude: to.latitude },
+    from: points[0]!,
+    to: points[points.length - 1]!,
+    path: points,
+    along,
     startedMs: nowMs,
     durationMs: meters < MIN_WALK_METERS ? 0 : (meters / speed) * 1_000,
-    bearingDeg: mapCompassBearing(from, to),
+    bearingDeg: legBearing(points, 0),
+    arrivalBearingDeg: legBearing(points, points.length - 2),
     ...(landmark === undefined ? {} : { landmark }),
+  };
+}
+
+function legBearing(points: readonly MapPointSelection[], leg: number): number {
+  return mapCompassBearing(points[leg]!, points[leg + 1]!);
+}
+
+/** Which leg of its path a walk is on at `t` of the way, and how far along. */
+function legAt(walk: AvaiaWalk, t: number): { leg: number; share: number } {
+  const total = walk.along[walk.along.length - 1]!;
+  const reached = total * t;
+  let leg = 0;
+  while (leg < walk.path.length - 2 && walk.along[leg + 1]! < reached) {
+    leg += 1;
+  }
+  const length = walk.along[leg + 1]! - walk.along[leg]!;
+  return {
+    leg,
+    share: length <= 0 ? 1 : (reached - walk.along[leg]!) / length,
   };
 }
 
@@ -133,17 +177,29 @@ export function walkPosition(
   nowMs: number,
 ): MapPointSelection {
   if (walk.durationMs <= 0) return walk.to;
-  const t = Math.min(
-    1,
-    Math.max(0, (nowMs - walk.startedMs) / walk.durationMs),
-  );
+  const t = walkProgress(walk, nowMs);
+  if (t >= 1) return walk.to;
+  const { leg, share } = legAt(walk, t);
+  const a = walk.path[leg]!;
+  const b = walk.path[leg + 1]!;
   // At walking distances a straight line in degrees is a straight line on the
   // ground to well under a centimetre, so no great-circle step is needed.
   return {
-    longitude:
-      walk.from.longitude + (walk.to.longitude - walk.from.longitude) * t,
-    latitude: walk.from.latitude + (walk.to.latitude - walk.from.latitude) * t,
+    longitude: a.longitude + (b.longitude - a.longitude) * share,
+    latitude: a.latitude + (b.latitude - a.latitude) * share,
   };
+}
+
+function walkProgress(walk: AvaiaWalk, nowMs: number): number {
+  if (walk.durationMs <= 0) return 1;
+  return Math.min(1, Math.max(0, (nowMs - walk.startedMs) / walk.durationMs));
+}
+
+/** Where the body faces at an instant: along whichever leg it is on. */
+export function walkBearing(walk: AvaiaWalk, nowMs: number): number {
+  const t = walkProgress(walk, nowMs);
+  if (t >= 1) return walk.arrivalBearingDeg;
+  return legBearing(walk.path, legAt(walk, t).leg);
 }
 
 export function walkArrived(walk: AvaiaWalk, nowMs: number): boolean {
@@ -154,7 +210,7 @@ export function walkStance(walk: AvaiaWalk, nowMs: number): AvaiaStance {
   const since = Math.max(0, nowMs - walk.startedMs);
   return {
     point: walkPosition(walk, nowMs),
-    bearingDeg: walk.bearingDeg,
+    bearingDeg: walkBearing(walk, nowMs),
     clipId: "walk",
     clipPhase: (since % WALK_CLIP_MS) / WALK_CLIP_MS,
   };
