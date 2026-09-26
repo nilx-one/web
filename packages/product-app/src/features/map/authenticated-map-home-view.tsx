@@ -28,7 +28,11 @@ import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
 import { LanguageSettings } from "../../shell/language-settings";
-import { useLocalization, type ProductLocale } from "../../shell/localization";
+import {
+  translate,
+  useLocalization,
+  type ProductLocale,
+} from "../../shell/localization";
 import type { LocalModelDependency } from "../../shell/local-model-host";
 import { LocalModelSettings } from "../../shell/local-model-settings";
 import {
@@ -103,6 +107,7 @@ import {
 } from "./bond-dock-view-model";
 import { landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
+import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
@@ -647,6 +652,15 @@ export function AuthenticatedMapHomeView({
     renderer.mount(mapHost);
     return () => renderer.unmount();
   }, [renderer]);
+
+  // Pinned landmarks are fixed geography with localized names: they follow the
+  // locale, nothing else, and clear with the world that drew them.
+  useEffect(() => {
+    renderer.setPinnedLandmarks?.(
+      pinnedLandmarks((key) => translate(locale, key)),
+    );
+  }, [renderer, locale]);
+  useEffect(() => () => renderer.setPinnedLandmarks?.([]), [renderer]);
 
   useEffect(() => {
     renderer.setDimension(dimension);

@@ -61,6 +61,14 @@ The **card** and the body take turns. Closer than street scale the body is on th
 
 One number decides which of the two is on the world, and the map contract publishes it. The renderer hides the card by it and the application draws the body by it, so the turn is a single fact rather than two that could drift into a width showing both or neither.
 
+## Pinned landmarks
+
+A short, hand-seeded list of Kyiv's anchors is pinned on the world the way this device's own position is: a point lying flat on the ground, a soft halo around it, and a card over it (`setPinnedLandmarks`, drawn by `pinned-landmarks.ts` in `map-maplibre`). The seed lives in the product (`KYIV_PINNED_LANDMARKS`), at each landmark's real coordinates, with its name in the locale catalog. These are real places at the points they stand on, not geometry invented to imitate a reference image, and like the observed position they are presentation only.
+
+Colour says what kind of place it is: built things (`monument`, `civic`) share the spatial accent, `sacred` places are gold, and `nature` is green. Each one carries a `weight` from 0 to 1. A heavier landmark glows wider and keeps its card further out: a weight-1 landmark is named from zoom 11, a weight-0 one from zoom 15. Where two cards would overlap, the heavier one keeps its place and the lighter one steps back until the map zooms in far enough to part them, so the city view names only the few that anchor it. The card is a smaller sibling of the Bond's own, with no study and no speech, so the Bond's card stays the one the eye finds first. The points sit beneath the observed position's layers and above the fog marks.
+
+In volumetric presentation the Motherland pin shares its point with the procedural monument model, which stands over it.
+
 ## Reaching for a body
 
 A body is the most direct thing on the screen, so activating it means what a person means by pointing at it: bring the world to that identity. The camera goes to the closest scale the policy allows, and the Dock returns to the pair — a body belongs to that screen, not to whatever surface happened to be open.

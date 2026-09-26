@@ -48,6 +48,9 @@ describe("the observed position card", () => {
 
     expect((part("study") as HTMLImageElement).hidden).toBe(true);
     expect(part("detail")?.hidden).toBe(true);
+    // `hidden` alone loses to the inline layout; the part has to be gone.
+    expect(part("study")?.style.display).toBe("none");
+    expect(part("detail")?.style.display).toBe("none");
   });
 
   // Re-applying the same card must not restart the image download.

@@ -6,6 +6,7 @@ import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMapLibreRenderer } from "./index";
+import { MONUMENT_LAYER_ID } from "./monument-layer";
 
 type FakeListener = (event: { readonly error?: unknown }) => void;
 
@@ -15,6 +16,9 @@ interface FakeMap {
   readonly remove: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
+  // A painted map mounts the renderer's own custom layers, the monument's
+  // among them, once their lazy chunk resolves.
+  readonly addLayer: ReturnType<typeof vi.fn>;
   readonly getCanvas: () => HTMLCanvasElement;
   // This map never carries an observed position, so the renderer only ever
   // asks whether its presentation layers are still there after a style phase.
@@ -41,6 +45,7 @@ function makeFakeMap(): FakeMap {
     remove: vi.fn(),
     jumpTo: vi.fn(),
     setStyle: vi.fn(),
+    addLayer: vi.fn(),
     getCanvas: () => canvas,
     getSource: () => undefined,
     getLayer: () => undefined,
@@ -157,5 +162,18 @@ describe("MapLibre renderer health invariants", () => {
       kind: "unavailable",
       reason: "webgl-context-lost",
     });
+  });
+
+  it("adds the lazily loaded monument layer once the map has painted", async () => {
+    const fakeMap = makeFakeMap();
+    const renderer = rendererFor(fakeMap);
+
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    await vi.waitFor(() =>
+      expect(fakeMap.addLayer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: MONUMENT_LAYER_ID }),
+      ),
+    );
   });
 });
