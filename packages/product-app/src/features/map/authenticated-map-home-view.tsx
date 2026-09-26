@@ -235,6 +235,13 @@ const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
 /** Closer than this, a body is still standing at this device. */
 const AT_DEVICE_METERS = 5;
 
+/**
+ * Past this many pixels of scroll, a Dock detail's large title has scrolled
+ * far enough out of the way that the sticky header needs to start saying
+ * its name.
+ */
+const DETAIL_TITLE_COLLAPSE_PX = 24;
+
 function formatDistance(locale: ProductLocale, meters: number): string {
   const kilometres = meters >= 1_000;
   return new Intl.NumberFormat(locale, {
@@ -433,10 +440,17 @@ export function AuthenticatedMapHomeView({
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
   const mapHostRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLElement>(null);
+  const renderedDetailScreenKey = useRef<string | undefined>(undefined);
   const location = useDeviceLocation(geolocation);
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
   >(undefined);
+  // A Dock detail's own name is its large title, at the top of the screen it
+  // names — the same place iOS puts one — until scrolling carries it out of
+  // view, at which point the sticky header's small title takes over saying
+  // it. The two are one name in two states, never both said at once.
+  const [detailTitleCollapsed, setDetailTitleCollapsed] = useState(false);
   const appearance = useAppearance();
   const [mapStatus, setMapStatus] = useState<MapRendererStatus>(() =>
     renderer.getStatus(),
@@ -591,6 +605,16 @@ export function AuthenticatedMapHomeView({
   useEffect(() => {
     fogRevealRef.current = fogReveal;
   });
+  // A screen just opened reads from its own top, its large title showing —
+  // never scrolled to wherever the screen before it was left.
+  const detailScreenKey = `${section}:${activeDetail ?? ""}`;
+  if (detailScreenKey !== renderedDetailScreenKey.current) {
+    renderedDetailScreenKey.current = detailScreenKey;
+    if (detailTitleCollapsed) setDetailTitleCollapsed(false);
+  }
+  useEffect(() => {
+    if (dockRef.current !== null) dockRef.current.scrollTop = 0;
+  }, [activeDetail, section]);
   const avaiaSpeech =
     wheel === "avaia" && handover === undefined
       ? avaiaWalk.speech?.text
@@ -1147,6 +1171,14 @@ export function AuthenticatedMapHomeView({
     return section === "world" ? "Bond" : detailTitle();
   }
 
+  function handleDockScroll(): void {
+    const collapsed =
+      (dockRef.current?.scrollTop ?? 0) > DETAIL_TITLE_COLLAPSE_PX;
+    setDetailTitleCollapsed((current) =>
+      current === collapsed ? current : collapsed,
+    );
+  }
+
   return (
     <AppShell
       className="authenticated-map-home"
@@ -1210,6 +1242,12 @@ export function AuthenticatedMapHomeView({
           className="bond-dock"
           data-screen={dockScreen}
           aria-label={dockTitle()}
+          ref={dockRef}
+          onScroll={
+            activeDetail === undefined && section === "world"
+              ? undefined
+              : handleDockScroll
+          }
         >
           <DockWindow screen={dockScreen} depth={dockDepth}>
             {section === "world" && activeDetail === undefined ? (
@@ -1276,7 +1314,10 @@ export function AuthenticatedMapHomeView({
               </>
             ) : (
               <div className="bond-dock__detail">
-                <div className="bond-dock__detail-header">
+                <div
+                  className="bond-dock__detail-header"
+                  data-collapsed={detailTitleCollapsed}
+                >
                   <button
                     className="interface-settings__back"
                     type="button"
@@ -1289,9 +1330,18 @@ export function AuthenticatedMapHomeView({
                     <span className="interface-settings__eyebrow">
                       {detailEyebrow()}
                     </span>
-                    <h2>{detailTitle()}</h2>
+                    <h2 aria-hidden={!detailTitleCollapsed}>{detailTitle()}</h2>
                   </div>
                 </div>
+                {/* The same name the collapsed header takes over saying once
+                    this has scrolled out of view — never both at once. */}
+                <h1
+                  className="bond-dock__detail-large-title"
+                  data-collapsed={detailTitleCollapsed}
+                  aria-hidden={detailTitleCollapsed}
+                >
+                  {detailTitle()}
+                </h1>
 
                 {section === "identity" && activeDetail === undefined ? (
                   <div className="bond-profile">
