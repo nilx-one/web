@@ -57,6 +57,10 @@ and the projection the Dock reads is the service's own — never a draft this
 client hoped would be accepted. The notice is not dismissed on a timer; it is
 closed when it has been read, like every other notice in this client.
 
+The first save that reaches `configured` also pays this client's own local
+experience reward — see [progression](progression.md). A later save that only
+changes the address again pays nothing more.
+
 ## What this is not
 
 Configuring an Avaia is an owner deciding about something they own. It creates

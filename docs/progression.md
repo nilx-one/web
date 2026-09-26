@@ -7,13 +7,13 @@ identity service.
 
 ## What earns experience
 
-| Action                                     | Who did it | Reward |
-| ------------------------------------------- | ---------- | -----: |
-| Configuring an owned Avaia (one-time)       | the owner  |     40 |
-| A zone (fog cell) revealed                  | the Avaia  |      n |
-| A zone (fog cell) revealed                  | the owner  |     3n |
-| A monument studied, full description kept   | the Avaia  |   4.5n |
-| A monument noticed in passing               | the owner  |     2n |
+| Action                                    | Who did it | Reward |
+| ----------------------------------------- | ---------- | -----: |
+| Configuring an owned Avaia (one-time)     | the owner  |     40 |
+| A zone (fog cell) revealed                | the Avaia  |      n |
+| A zone (fog cell) revealed                | the owner  |     3n |
+| A monument studied, full description kept | the Avaia  |   4.5n |
+| A monument noticed in passing             | the owner  |     2n |
 
 `n` is `EXPERIENCE_UNIT` in `progression.ts`, currently `10`. Walking a zone
 open yourself costs more effort than sending the Avaia, so it pays more (`3n`
@@ -21,7 +21,9 @@ against `n`); the Avaia's own study is the one that keeps the archive's full
 description, so it pays more than a passing notice (`4.5n` against `2n`).
 Something is always more worth doing yourself, and something else is always
 more worth handing to the Avaia — the table is deliberately asymmetric both
-ways.
+ways. How a zone opens and how a landmark gets noticed or studied are
+[Avaia walks the world](avaia-walk.md)'s own; this file only prices what
+already happens there.
 
 Configuring an owned Avaia — the explicit setup save described in
 [`avaia-setup.md`](avaia-setup.md) — pays exactly what level 1 costs, so it
