@@ -34,27 +34,45 @@ const TELEGRAM_AUTH_SCHEME: &str = "tma ";
 const DEFAULT_INTENT_TTL: Duration = Duration::from_secs(5 * 60);
 const MAX_LOCATION_REQUEST_BYTES: usize = 8 * 1024;
 
-/// Application authorization role for a human Bond.
+/// Application role of a human Bond, persisted in `bond_roles`.
 ///
 /// This is not a Bond kind or protocol authority class. The role only gates
-/// application capabilities such as choosing an explicit manual map position.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+/// application capabilities. A Bond without a stored role is [`Self::User`],
+/// the only role public registration creates.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BondAccessRole {
+    #[default]
     User,
     Admin,
+    Business,
 }
 
-/// Current deployment authorization policy.
-///
-/// Authority is resolved only after provider authentication has identified the
-/// Bond. Provider usernames, Telegram display data, and Telegram numeric IDs do
-/// not grant admin rights.
-#[must_use]
-pub fn role_for_pub_dress(pub_dress: &PubDress) -> BondAccessRole {
-    match pub_dress.as_str() {
-        "0x0небо" | "0x0sky" => BondAccessRole::Admin,
-        _ => BondAccessRole::User,
+impl BondAccessRole {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Admin => "admin",
+            Self::Business => "business",
+        }
+    }
+
+    #[must_use]
+    pub fn from_stored(value: &str) -> Option<Self> {
+        match value {
+            "user" => Some(Self::User),
+            "admin" => Some(Self::Admin),
+            "business" => Some(Self::Business),
+            _ => None,
+        }
+    }
+
+    /// Admin holds every user capability plus declaring a manual Bond
+    /// location. Every role may submit a live location.
+    #[must_use]
+    pub const fn can_set_manual_location(self) -> bool {
+        matches!(self, Self::Admin)
     }
 }
 
@@ -120,6 +138,36 @@ impl BondLocationRepository {
             mode,
             DecimalU64::new(updated_at),
         )))
+    }
+
+    /// Refreshes a live coordinate without ever switching modes: a Bond in
+    /// `manual` keeps its declared point. Returns whether the write applied.
+    /// Leaving `manual` stays an explicit [`Self::write`].
+    pub async fn refresh_live(
+        &self,
+        pub_dress: &str,
+        coordinate: GeoCoordinate,
+        updated_at: DecimalU64,
+    ) -> Result<bool, BondLocationRepositoryError> {
+        let updated_at = i64::try_from(updated_at.get())
+            .map_err(|_| BondLocationRepositoryError::TimestampOutOfRange)?;
+        let result = sqlx::query(
+            "INSERT INTO bond_locations \
+             (pub_dress, mode, longitude_e7, latitude_e7, updated_at) \
+             VALUES (?, 'live', ?, ?, ?) \
+             ON CONFLICT(pub_dress) DO UPDATE SET \
+               longitude_e7 = excluded.longitude_e7, \
+               latitude_e7 = excluded.latitude_e7, \
+               updated_at = excluded.updated_at \
+             WHERE bond_locations.mode = 'live'",
+        )
+        .bind(pub_dress)
+        .bind(i64::from(coordinate.longitude_e7()))
+        .bind(i64::from(coordinate.latitude_e7()))
+        .bind(updated_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     /// Replaces the one active location projection for this Bond.
@@ -280,7 +328,6 @@ async fn write_live_location(
         Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
     };
     let updated_at = DecimalU64::new(now);
-    let location = BondLocation::new(coordinate, BondLocationMode::Live, updated_at);
     let pub_dress = match identity.pub_dress.parse::<PubDress>() {
         Ok(value) => value,
         Err(error) => {
@@ -288,14 +335,32 @@ async fn write_live_location(
             return status(StatusCode::SERVICE_UNAVAILABLE);
         }
     };
-    match state.locations.write(pub_dress.as_str(), location).await {
-        Ok(()) => no_store_json(
+    let role = match state.identities.role_for(pub_dress.as_str()).await {
+        Ok(role) => role,
+        Err(error) => {
+            tracing::error!(%error, "Bond role lookup failed");
+            return status(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+    // This is the Mini App's background sink. It only keeps an already-live
+    // location fresh; a declared manual point is never replaced from here.
+    match state
+        .locations
+        .refresh_live(pub_dress.as_str(), coordinate, updated_at)
+        .await
+    {
+        Ok(true) => no_store_json(
             StatusCode::OK,
             LocationControlProjection {
-                role: role_for_pub_dress(&pub_dress),
-                location: Some(location),
+                role,
+                location: Some(BondLocation::new(
+                    coordinate,
+                    BondLocationMode::Live,
+                    updated_at,
+                )),
             },
         ),
+        Ok(false) => status(StatusCode::CONFLICT),
         Err(error) => {
             tracing::error!(%error, "Bond live location write failed");
             status(StatusCode::SERVICE_UNAVAILABLE)
@@ -338,14 +403,15 @@ async fn read_location_control(
             return status(StatusCode::SERVICE_UNAVAILABLE);
         }
     };
+    let role = match state.identities.role_for(pub_dress.as_str()).await {
+        Ok(role) => role,
+        Err(error) => {
+            tracing::error!(%error, "Bond role lookup failed");
+            return status(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
     match state.locations.read(pub_dress.as_str()).await {
-        Ok(location) => no_store_json(
-            StatusCode::OK,
-            LocationControlProjection {
-                role: role_for_pub_dress(&pub_dress),
-                location,
-            },
-        ),
+        Ok(location) => no_store_json(StatusCode::OK, LocationControlProjection { role, location }),
         Err(error) => {
             tracing::error!(%error, "Bond location read failed");
             status(StatusCode::SERVICE_UNAVAILABLE)
@@ -379,21 +445,170 @@ mod tests {
 
     use super::{
         BondAccessRole, BondLocationRepository, PendingLocationIntent, TelegramLocationIntents,
-        role_for_pub_dress,
     };
     use crate::{IdentityRepository, ProviderIdentity, RegistrationOutcome};
 
-    #[test]
-    fn only_current_admin_pub_dresses_have_admin_capability() {
-        let sky: PubDress = "0x0sky".parse().expect("admin pub_dress");
-        let nebo: PubDress = "0x0небо".parse().expect("admin pub_dress");
-        let case_variant: PubDress = "0x0Sky".parse().expect("ordinary pub_dress");
-        let other: PubDress = "0x0alice".parse().expect("ordinary pub_dress");
+    async fn registered(database_url: &str, pub_dress: &str, telegram: i64) -> IdentityRepository {
+        let identities = IdentityRepository::connect(database_url)
+            .await
+            .expect("identity repository");
+        let pub_dress: PubDress = pub_dress.parse().expect("valid pub_dress");
+        let registration = identities
+            .register(&pub_dress, &ProviderIdentity::telegram(telegram), 10)
+            .await
+            .expect("registration");
+        assert!(matches!(registration, RegistrationOutcome::Registered(_)));
+        identities
+    }
 
-        assert_eq!(role_for_pub_dress(&sky), BondAccessRole::Admin);
-        assert_eq!(role_for_pub_dress(&nebo), BondAccessRole::Admin);
-        assert_eq!(role_for_pub_dress(&case_variant), BondAccessRole::User);
-        assert_eq!(role_for_pub_dress(&other), BondAccessRole::User);
+    #[test]
+    fn admin_is_user_plus_manual_location() {
+        assert!(!BondAccessRole::User.can_set_manual_location());
+        assert!(!BondAccessRole::Business.can_set_manual_location());
+        assert!(BondAccessRole::Admin.can_set_manual_location());
+        assert_eq!(BondAccessRole::default(), BondAccessRole::User);
+    }
+
+    #[tokio::test]
+    async fn registration_creates_a_user_and_only_a_stored_role_changes_it() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let identities = registered(&database_url, "0x0alice", 7).await;
+        let alice: PubDress = "0x0alice".parse().expect("valid pub_dress");
+
+        assert_eq!(
+            identities.role_for("0x0alice").await.expect("role"),
+            BondAccessRole::User
+        );
+        assert!(
+            identities
+                .set_role(&alice, BondAccessRole::Business)
+                .await
+                .expect("assign business")
+        );
+        assert_eq!(
+            identities.role_for("0x0alice").await.expect("role"),
+            BondAccessRole::Business
+        );
+
+        let unknown: PubDress = "0x0nobody".parse().expect("valid pub_dress");
+        assert!(
+            !identities
+                .set_role(&unknown, BondAccessRole::Admin)
+                .await
+                .expect("unknown Bond")
+        );
+    }
+
+    #[tokio::test]
+    async fn existing_name_derived_admins_are_carried_over_once() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let identities = registered(&database_url, "0x0sky", 7).await;
+        // A fresh database has no pre-existing admins to carry over.
+        assert_eq!(
+            identities.role_for("0x0sky").await.expect("role"),
+            BondAccessRole::User
+        );
+
+        // Simulate a deployment that predates `bond_roles`.
+        let pool = sqlx::SqlitePool::connect(&database_url)
+            .await
+            .expect("raw pool");
+        sqlx::query("DROP TABLE bond_roles")
+            .execute(&pool)
+            .await
+            .expect("drop roles");
+        pool.close().await;
+
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("upgraded repository");
+        assert_eq!(
+            identities.role_for("0x0sky").await.expect("role"),
+            BondAccessRole::Admin
+        );
+
+        // After the upgrade, the name itself grants nothing.
+        let nebo: PubDress = "0x0небо".parse().expect("valid pub_dress");
+        identities
+            .register(&nebo, &ProviderIdentity::telegram(8), 20)
+            .await
+            .expect("registration");
+        let identities = IdentityRepository::connect(&database_url)
+            .await
+            .expect("reopened repository");
+        assert_eq!(
+            identities.role_for("0x0небо").await.expect("role"),
+            BondAccessRole::User
+        );
+        assert_eq!(
+            identities.role_for("0x0sky").await.expect("role"),
+            BondAccessRole::Admin
+        );
+    }
+
+    #[tokio::test]
+    async fn background_live_refresh_never_leaves_manual() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let _identities = registered(&database_url, "0x0sky", 7).await;
+        let locations = BondLocationRepository::connect(&database_url)
+            .await
+            .expect("Bond location repository");
+
+        let first = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("first point");
+        assert!(
+            locations
+                .refresh_live("0x0sky", first, DecimalU64::new(10))
+                .await
+                .expect("first live")
+        );
+        let manual = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("manual point");
+        locations
+            .write(
+                "0x0sky",
+                BondLocation::new(manual, BondLocationMode::Manual, DecimalU64::new(20)),
+            )
+            .await
+            .expect("set manual");
+
+        let device = GeoCoordinate::from_degrees(30.5240, 50.4510).expect("device point");
+        assert!(
+            !locations
+                .refresh_live("0x0sky", device, DecimalU64::new(30))
+                .await
+                .expect("refused refresh")
+        );
+        let kept = locations
+            .read("0x0sky")
+            .await
+            .expect("read")
+            .expect("location");
+        assert_eq!(kept.mode, BondLocationMode::Manual);
+        assert_eq!(kept.coordinate, manual);
+        assert_eq!(kept.updated_at.get(), 20);
+
+        locations
+            .write(
+                "0x0sky",
+                BondLocation::new(device, BondLocationMode::Live, DecimalU64::new(40)),
+            )
+            .await
+            .expect("explicit return to live");
+        assert!(
+            locations
+                .refresh_live("0x0sky", first, DecimalU64::new(50))
+                .await
+                .expect("live refresh")
+        );
+        let refreshed = locations
+            .read("0x0sky")
+            .await
+            .expect("read")
+            .expect("location");
+        assert_eq!(refreshed.mode, BondLocationMode::Live);
+        assert_eq!(refreshed.coordinate, first);
     }
 
     #[tokio::test]

@@ -15,7 +15,7 @@ use identity_bot::{
     IdentityProvider, IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,
     PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
     TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, github_evidence,
-    location_control_router, provider_self_service_router, public_api, role_for_pub_dress,
+    location_control_router, provider_self_service_router, public_api,
 };
 use teloxide::{
     prelude::*,
@@ -91,7 +91,7 @@ fn bot_commands(role: BondAccessRole) -> Vec<BotCommand> {
         .iter()
         .map(|spec| BotCommand::new(spec.command, spec.description))
         .collect();
-    if role == BondAccessRole::Admin {
+    if role.can_set_manual_location() {
         commands.extend(
             ADMIN_ONLY_COMMANDS
                 .iter()
@@ -108,7 +108,7 @@ fn help_text(role: BondAccessRole) -> String {
             .iter()
             .map(|spec| format!("/{} — {}", spec.command, spec.description)),
     );
-    if role == BondAccessRole::Admin {
+    if role.can_set_manual_location() {
         lines.extend(
             ADMIN_ONLY_COMMANDS
                 .iter()
@@ -473,12 +473,17 @@ fn command_of(text: &str) -> &str {
         .unwrap_or_default()
 }
 
-fn role_for_identity(identity: &IdentityRecord) -> BondAccessRole {
-    identity
-        .pub_dress
-        .parse()
-        .map_or(BondAccessRole::User, |pub_dress| {
-            role_for_pub_dress(&pub_dress)
+/// A failed role read falls back to the default role, never to more rights.
+async fn role_for_identity(
+    repository: &IdentityRepository,
+    identity: &IdentityRecord,
+) -> BondAccessRole {
+    repository
+        .role_for(&identity.pub_dress)
+        .await
+        .unwrap_or_else(|error| {
+            error!(%error, "Bond role lookup failed");
+            BondAccessRole::default()
         })
 }
 
@@ -487,7 +492,7 @@ async fn role_for_telegram(
     telegram_user_id: i64,
 ) -> BondAccessRole {
     match repository.find_by_telegram(telegram_user_id).await {
-        Ok(Some(identity)) => role_for_identity(&identity),
+        Ok(Some(identity)) => role_for_identity(repository, &identity).await,
         Ok(None) => BondAccessRole::User,
         Err(error) => {
             error!(%error, "identity lookup failed while resolving access role");
@@ -518,12 +523,12 @@ async fn ensure_admin_command_menu(
     let chat_id = message.chat.id.0;
     let previously_synced = state.admin_menu_synced.lock().await.contains(&chat_id);
 
-    if role == BondAccessRole::Admin {
+    if role.can_set_manual_location() {
         if previously_synced {
             return;
         }
         if let Err(error) = bot
-            .set_my_commands(bot_commands(BondAccessRole::Admin))
+            .set_my_commands(bot_commands(role))
             .scope(BotCommandScope::Chat {
                 chat_id: message.chat.id.into(),
             })
@@ -560,7 +565,7 @@ async fn registered_identity(
 ) -> ResponseResult<Option<(IdentityRecord, BondAccessRole)>> {
     match repository.find_by_telegram(telegram_user_id).await {
         Ok(Some(identity)) => {
-            let role = role_for_identity(&identity);
+            let role = role_for_identity(repository, &identity).await;
             Ok(Some((identity, role)))
         }
         Ok(None) => {
@@ -609,13 +614,13 @@ fn resolve_location_mode(
     match intent {
         Some(PendingLocationIntent::Current) => Ok(BondLocationMode::Live),
         Some(PendingLocationIntent::Manual) => {
-            if role == BondAccessRole::Admin {
+            if role.can_set_manual_location() {
                 Ok(BondLocationMode::Manual)
             } else {
                 Err(LocationModeRefusal::ManualRequiresAdmin)
             }
         }
-        None if role == BondAccessRole::Admin => Ok(if live {
+        None if role.can_set_manual_location() => Ok(if live {
             BondLocationMode::Live
         } else {
             BondLocationMode::Manual
@@ -645,7 +650,7 @@ async fn handle_location(
                 message.chat.id,
                 "Встановлення manual position доступне лише admin.",
             )
-            .reply_markup(control_keyboard(BondAccessRole::User))
+            .reply_markup(control_keyboard(role))
             .await?;
             return Ok(());
         }
@@ -738,12 +743,12 @@ async fn begin_manual_position(
     else {
         return Ok(());
     };
-    if role != BondAccessRole::Admin {
+    if !role.can_set_manual_location() {
         bot.send_message(
             message.chat.id,
             "Встановлення manual position доступне лише admin.",
         )
-        .reply_markup(control_keyboard(BondAccessRole::User))
+        .reply_markup(control_keyboard(role))
         .await?;
         return Ok(());
     }
@@ -865,7 +870,7 @@ async fn send_help(
 fn control_keyboard(role: BondAccessRole) -> KeyboardMarkup {
     let keyboard =
         KeyboardMarkup::new([[KeyboardButton::new(CURRENT_POSITION_BUTTON)]]).resize_keyboard();
-    if role == BondAccessRole::Admin {
+    if role.can_set_manual_location() {
         keyboard.append_row([KeyboardButton::new(SET_POSITION_BUTTON)])
     } else {
         keyboard
@@ -888,7 +893,7 @@ async fn start_registration(
 ) -> ResponseResult<()> {
     match state.repository.find_by_telegram(telegram_user_id).await {
         Ok(Some(identity)) => {
-            let role = role_for_identity(&identity);
+            let role = role_for_identity(&state.repository, &identity).await;
             bot.send_message(
                 message.chat.id,
                 format!("You are already registered as {}.", identity.pub_dress),
@@ -940,7 +945,7 @@ async fn show_identity(
 ) -> ResponseResult<()> {
     match state.repository.find_by_telegram(telegram_user_id).await {
         Ok(Some(identity)) => {
-            let role = role_for_identity(&identity);
+            let role = role_for_identity(&state.repository, &identity).await;
             let location = match state.locations.read(&identity.pub_dress).await {
                 Ok(location) => location,
                 Err(error) => {

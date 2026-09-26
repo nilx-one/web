@@ -9,7 +9,7 @@ use sqlx::{
 };
 use thiserror::Error;
 
-use crate::{AvaiaPubDress, DecimalU64, GeoCoordinate, PubDress, PubDressLabel};
+use crate::{AvaiaPubDress, BondAccessRole, DecimalU64, GeoCoordinate, PubDress, PubDressLabel};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityProvider {
@@ -181,7 +181,63 @@ impl IdentityRepository {
             .execute(&self.pool)
             .await?;
         self.migrate_avaia_prefix().await?;
+        self.migrate_bond_roles().await?;
         Ok(())
+    }
+
+    /// Creates `bond_roles` and carries the previous name-derived admins over,
+    /// exactly once: a Bond that registers one of those names later gets no
+    /// role from it.
+    async fn migrate_bond_roles(&self) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema \
+             WHERE type = 'table' AND name = 'bond_roles')",
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !exists {
+            sqlx::raw_sql(include_str!("../migrations/0015_bond_roles.sql"))
+                .execute(&mut *transaction)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// The application role of a human Bond; no stored role means `user`.
+    pub async fn role_for(&self, pub_dress: &str) -> Result<BondAccessRole, RepositoryError> {
+        let stored =
+            sqlx::query_scalar::<_, String>("SELECT role FROM bond_roles WHERE pub_dress = ?")
+                .bind(pub_dress)
+                .fetch_optional(&self.pool)
+                .await?;
+        match stored {
+            None => Ok(BondAccessRole::default()),
+            Some(value) => {
+                BondAccessRole::from_stored(&value).ok_or(RepositoryError::CorruptBondRole)
+            }
+        }
+    }
+
+    /// Assigns a role to an existing human Bond. There is no public route to
+    /// this: registration only ever creates `user` Bonds.
+    pub async fn set_role(
+        &self,
+        pub_dress: &PubDress,
+        role: BondAccessRole,
+    ) -> Result<bool, RepositoryError> {
+        let result = sqlx::query(
+            "INSERT INTO bond_roles (pub_dress, role) \
+             SELECT pub_dress, ? FROM identities \
+             WHERE pub_dress = ? AND identity_kind = 'human' \
+             ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role",
+        )
+        .bind(role.as_str())
+        .bind(pub_dress.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     /// Stored Avaia addresses predate the literal `x` prefix. Rewrite them once,
@@ -1255,6 +1311,8 @@ pub enum RepositoryError {
     CorruptPublicLabelSuffix,
     #[error("stored Avaia location violates its contract")]
     CorruptAvaiaLocation,
+    #[error("stored Bond role is not a known role")]
+    CorruptBondRole,
 }
 
 #[cfg(test)]
