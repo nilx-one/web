@@ -285,6 +285,7 @@ async fn main() {
         repository.clone(),
         locations.clone(),
         telegram_activity_verifier.clone(),
+        native_auth.clone(),
     );
     let avaia_api = api::avaia_router(
         repository.clone(),
