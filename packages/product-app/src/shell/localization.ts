@@ -83,6 +83,8 @@ const EN_MESSAGES = {
   "fog.status.revealing": "Revealing {count} of {limit}",
   "fog.status.next": "next in {time}",
   "fog.announce.revealed": "A patch of fog was revealed.",
+  "avaia.progression.title": "Progress",
+  "avaia.progression.summary": "Level {level} · {xp} xp",
   "avaia.notebook.title": "Landmarks studied",
   "avaia.notebook.empty":
     "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
@@ -217,6 +219,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "fog.status.revealing": "Відкривається {count} з {limit}",
   "fog.status.next": "наступна за {time}",
   "fog.announce.revealed": "Клітинку туману відкрито.",
+  "avaia.progression.title": "Прокачка",
+  "avaia.progression.summary": "Рівень {level} · {xp} досвіду",
   "avaia.notebook.title": "Вивчені пам’ятки",
   "avaia.notebook.empty":
     "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",
