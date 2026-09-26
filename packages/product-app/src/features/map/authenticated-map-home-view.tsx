@@ -21,7 +21,7 @@ import {
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
 import { StatusToastStack, type StatusToastItem } from "@nilx-one/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
@@ -107,6 +107,15 @@ import {
 } from "./bond-dock-view-model";
 import { landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
+import {
+  awardExperience,
+  progressionSnapshot,
+  subscribeProgression,
+  updateProgression,
+  EMPTY_PROGRESSION,
+  XP_ZONE_REVEALED_BY_AVAIA,
+  XP_ZONE_REVEALED_MANUALLY,
+} from "../progression/progression";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
@@ -597,11 +606,24 @@ export function AuthenticatedMapHomeView({
     owner: pubDress,
     onRevealed: (_cell, via) => {
       setFogAnnouncement(t("fog.announce.revealed"));
+      updateProgression(pubDress, (current) =>
+        awardExperience(
+          current,
+          via === "avaia"
+            ? XP_ZONE_REVEALED_BY_AVAIA
+            : XP_ZONE_REVEALED_MANUALLY,
+        ),
+      );
       if (via === "avaia" && wheel === "avaia" && handover === undefined) {
         avaiaWalk.announce("fog.revealed");
       }
     },
   });
+  const progression = useSyncExternalStore(
+    subscribeProgression,
+    () => progressionSnapshot(pubDress),
+    () => EMPTY_PROGRESSION,
+  );
   useEffect(() => {
     fogRevealRef.current = fogReveal;
   });
@@ -1487,6 +1509,22 @@ export function AuthenticatedMapHomeView({
 
                 {activeDetail === "avaia" ? (
                   <>
+                    <section
+                      className="avaia-notebook"
+                      aria-labelledby="avaia-progression-title"
+                    >
+                      <span
+                        className="interface-settings__eyebrow"
+                        id="avaia-progression-title"
+                      >
+                        {t("avaia.progression.title")}
+                      </span>
+                      <p className="profile-edit__note">
+                        {t("avaia.progression.summary")
+                          .replace("{level}", String(progression.level))
+                          .replace("{xp}", String(progression.totalXp))}
+                      </p>
+                    </section>
                     {/* A host that cannot read the Avaia's profile configures
                         nothing here; what this device noted is still its own. */}
                     {avaiaSetup === undefined ? null : (

@@ -50,6 +50,12 @@ import {
   NOTICE_RADIUS_METERS,
   type LandmarkNotebook,
 } from "./landmark-notebook";
+import {
+  awardExperience,
+  updateProgression,
+  XP_LANDMARK_NOTICED_MANUALLY,
+  XP_LANDMARK_STUDIED_BY_AVAIA,
+} from "../progression/progression";
 
 /** How long a line stays on the card before it closes again. */
 export const SPEECH_MS = 10_000;
@@ -362,6 +368,9 @@ export function useAvaiaWalk({
       updateNotebook(book, (current) =>
         studyLandmark(current, study.landmark, by, Date.now()),
       );
+      updateProgression(book, (current) =>
+        awardExperience(current, XP_LANDMARK_STUDIED_BY_AVAIA),
+      );
       setStudy(undefined);
       setRest({ point: study.at, bearingDeg: study.bearingDeg });
       say("landmark.studied", study.landmark);
@@ -399,9 +408,23 @@ export function useAvaiaWalk({
         NOTICE_RADIUS_METERS,
       );
       if (found === undefined || found.length === 0) return;
+      // Only what is actually new to the notebook earns experience — a
+      // landmark already noticed does not pay out again just because the
+      // device observation moved again nearby.
+      const known = new Set(
+        notebookSnapshot(owner).noticed.map((entry) => entry.landmark.id),
+      );
+      const newlyNoticed = found.filter(
+        (landmark) => !known.has(landmark.id),
+      ).length;
       updateNotebook(owner, (current) =>
         noticeLandmarks(current, found, Date.now()),
       );
+      if (newlyNoticed > 0) {
+        updateProgression(owner, (current) =>
+          awardExperience(current, XP_LANDMARK_NOTICED_MANUALLY * newlyNoticed),
+        );
+      }
     }
 
     notice();
