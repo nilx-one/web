@@ -35,6 +35,9 @@ export function createShadeMapFactory(
         source: runtime.source,
         store: runtime.store,
         anchor: options.anchor,
+        // Keep unrevealed geography as fog rather than a translucent dark
+        // wash: basemap details must not remain readable through the veil.
+        shadeAlpha: 0.92,
         ...(options.onCellTap === undefined
           ? {}
           : { onCellTap: options.onCellTap }),
