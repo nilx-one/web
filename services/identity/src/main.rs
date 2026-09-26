@@ -31,6 +31,7 @@ use url::Url;
 
 const MINI_APP_URL: &str = "https://nilx.one/telegram/";
 const DEFAULT_PUBLIC_ORIGIN: &str = "https://nilx.one";
+const DEFAULT_TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: u64 = 24 * 60 * 60;
 const CURRENT_POSITION_BUTTON: &str = "Поточна позиція";
 const SET_POSITION_BUTTON: &str = "Встановити позицію";
 const ADMIN_LOCATION_NOTE: &str = "Admin: можна також просто надіслати точку в чат без команди — live location поверне live mode, звичайна (не-live) точка перейде в manual.";
@@ -186,8 +187,14 @@ async fn main() {
     if public_origin.scheme() != "https" || public_origin.host_str().is_none() {
         panic!("PUBLIC_ORIGIN must be an https origin");
     }
+    // Telegram signs initData once, when the Mini App is launched, and keeps
+    // the same page alive while the person steps away to a chat and back. The
+    // window therefore has to span a session, not a request: five minutes
+    // turned every return after a short break into "Reopen 0x1 from Telegram".
     let init_data_max_age_seconds = env::var("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS")
-        .map_or(Ok(300_u64), |value| value.parse::<u64>())
+        .map_or(Ok(DEFAULT_TELEGRAM_INIT_DATA_MAX_AGE_SECONDS), |value| {
+            value.parse::<u64>()
+        })
         .expect("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS must be an unsigned integer");
     let native_auth = NativeAuthConfig::new(
         env::var("NATIVE_AUTH_SECRET").expect("NATIVE_AUTH_SECRET must be configured"),

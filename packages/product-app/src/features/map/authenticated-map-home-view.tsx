@@ -109,6 +109,7 @@ import { landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
+import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
@@ -720,7 +721,8 @@ export function AuthenticatedMapHomeView({
   );
 
   // The observation reaches the renderer as presentation geometry and display
-  // text. It is never persisted, sent to a backend, or written to telemetry.
+  // text. It is never sent to a backend or written to telemetry; the last one
+  // is kept on this device only, to reopen the world where it was left.
   useEffect(() => {
     if (observedPosition === undefined) {
       renderer.setObservedPosition(null);
@@ -749,19 +751,83 @@ export function AuthenticatedMapHomeView({
     wheelStudy,
   ]);
 
-  // The first fix of a world recenters once. Later updates move the marker;
-  // they never take the camera back from the person holding it.
+  // A world opened again starts where it was left: the camera goes straight
+  // to where the body at the wheel was last seen on this device, rather than
+  // the bootstrap camera, while the first fix is still on its way.
+  const resumeApplied = useRef(false);
+  useEffect(() => {
+    if (resumeApplied.current || mapStatus.kind !== "ready") return;
+    resumeApplied.current = true;
+    if (firstFixApplied.current || cameraMovedByPerson.current) return;
+    const remembered = readWorldMemory(pubDress);
+    const point = remembered.avaia ?? remembered.bond;
+    if (point === undefined) return;
+
+    const context = { presentation, dimension, safeArea };
+    renderer.setCamera(
+      firstFixCamera(
+        {
+          longitude: point.longitude,
+          latitude: point.latitude,
+          accuracyMeters: 0,
+          observedAt: 0,
+          declared: true,
+        },
+        context,
+      ),
+      { motion: "immediate", padding: locationCameraPadding(context) },
+    );
+  }, [dimension, mapStatus.kind, presentation, pubDress, renderer, safeArea]);
+
+  // Only the first fix decides where the camera goes, so the wheel and the
+  // walk are read as they stand at that instant rather than followed.
+  const wheelAvaiaPoint = (): MapPointSelection | undefined =>
+    wheel === "avaia"
+      ? avaiaWalk.stance(globalThis.performance.now())?.point
+      : undefined;
+  const wheelAvaiaPointRef = useRef(wheelAvaiaPoint);
+  useEffect(() => {
+    wheelAvaiaPointRef.current = wheelAvaiaPoint;
+  });
+
+  // The first fix of a world recenters once, on the body at the wheel: an
+  // Avaia that was left somewhere is framed where it stands. Later updates
+  // move the marker; they never take the camera back from the person holding
+  // it.
   useEffect(() => {
     if (observedPosition === undefined || firstFixApplied.current) return;
     firstFixApplied.current = true;
     if (cameraMovedByPerson.current) return;
 
+    const avaiaPoint = wheelAvaiaPointRef.current();
     const context = { presentation, dimension, safeArea };
-    renderer.setCamera(firstFixCamera(observedPosition, context), {
-      motion: cameraMotion(prefersReducedMotion()),
-      padding: locationCameraPadding(context),
-    });
+    renderer.setCamera(
+      firstFixCamera(
+        avaiaPoint === undefined
+          ? observedPosition
+          : { ...observedPosition, ...avaiaPoint },
+        context,
+      ),
+      {
+        motion: cameraMotion(prefersReducedMotion()),
+        padding: locationCameraPadding(context),
+      },
+    );
   }, [dimension, observedPosition, presentation, renderer, safeArea]);
+
+  // Where this device last observed itself is kept on this device alone, so
+  // the next opening of the world starts there. A declared point is the
+  // service's to hold and is not copied here.
+  const observedLongitude = deviceObservation?.longitude;
+  const observedLatitude = deviceObservation?.latitude;
+  useEffect(() => {
+    if (observedLongitude === undefined || observedLatitude === undefined) {
+      return;
+    }
+    rememberWorld(pubDress, {
+      bond: { longitude: observedLongitude, latitude: observedLatitude },
+    });
+  }, [observedLatitude, observedLongitude, pubDress]);
 
   useEffect(() => {
     try {
