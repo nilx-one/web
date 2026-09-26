@@ -760,7 +760,10 @@ export function AuthenticatedMapHomeView({
     resumeApplied.current = true;
     if (firstFixApplied.current || cameraMovedByPerson.current) return;
     const remembered = readWorldMemory(pubDress);
-    const point = remembered.avaia ?? remembered.bond;
+    const point =
+      wheel === "avaia"
+        ? (remembered.avaia ?? remembered.bond)
+        : remembered.bond;
     if (point === undefined) return;
 
     const context = { presentation, dimension, safeArea };
@@ -777,7 +780,15 @@ export function AuthenticatedMapHomeView({
       ),
       { motion: "immediate", padding: locationCameraPadding(context) },
     );
-  }, [dimension, mapStatus.kind, presentation, pubDress, renderer, safeArea]);
+  }, [
+    dimension,
+    mapStatus.kind,
+    presentation,
+    pubDress,
+    renderer,
+    safeArea,
+    wheel,
+  ]);
 
   // Only the first fix decides where the camera goes, so the wheel and the
   // walk are read as they stand at that instant rather than followed.
