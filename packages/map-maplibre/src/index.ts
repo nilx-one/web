@@ -83,6 +83,7 @@ import {
 import {
   applyObservedPositionLabel,
   createObservedPositionLabelElement,
+  setPartShown,
 } from "./observed-position-label";
 import {
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
@@ -556,8 +557,11 @@ export function createMapLibreRenderer(
     // A body that is talking keeps its card at every scale: the line is the
     // card's to carry, and hiding it would be the body falling silent.
     const speaking = (observedLabel?.speech ?? "").length > 0;
-    labelElement.hidden =
-      !speaking && mounted.getZoom() >= MAP_BODY_HANDOVER_ZOOM;
+    setPartShown(
+      labelElement,
+      speaking || mounted.getZoom() < MAP_BODY_HANDOVER_ZOOM,
+      "flex",
+    );
   }
 
   function applyLabel(mounted: MapLibreMap): void {

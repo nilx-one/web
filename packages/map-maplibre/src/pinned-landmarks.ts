@@ -304,6 +304,7 @@ export function applyPinnedLandmarkLabel(
   if (detail !== null) {
     setText(detail, landmark.detail ?? "");
     detail.hidden = landmark.detail === undefined;
+    detail.style.display = landmark.detail === undefined ? "none" : "block";
     detail.style.color = palette.detail;
   }
   if (connector !== null) {

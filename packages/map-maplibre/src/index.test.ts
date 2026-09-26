@@ -555,6 +555,7 @@ describe("observed position label", () => {
     renderer.setObservedPositionLabel({ title: "0x0sky" });
 
     expect(markers[0]?.element.hidden).toBe(true);
+    expect(markers[0]?.element.style.display).toBe("none");
 
     fakeMap.camera.zoom = MAP_BODY_HANDOVER_ZOOM - 1;
     fakeMap.emit("zoom");
