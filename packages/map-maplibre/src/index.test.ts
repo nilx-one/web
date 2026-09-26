@@ -20,6 +20,9 @@ import {
   OBSERVED_POSITION_EDGE_LAYER_ID,
   OBSERVED_POSITION_POINT_LAYER_ID,
   OBSERVED_POSITION_SOURCE_ID,
+  PINNED_LANDMARKS_GLOW_LAYER_ID,
+  PINNED_LANDMARKS_POINT_LAYER_ID,
+  PINNED_LANDMARKS_SOURCE_ID,
   createMapLibreRenderer,
   resolvePmtilesProtocolUrl,
   type MapLabelMarker,
@@ -552,6 +555,7 @@ describe("observed position label", () => {
     renderer.setObservedPositionLabel({ title: "0x0sky" });
 
     expect(markers[0]?.element.hidden).toBe(true);
+    expect(markers[0]?.element.style.display).toBe("none");
 
     fakeMap.camera.zoom = MAP_BODY_HANDOVER_ZOOM - 1;
     fakeMap.emit("zoom");
@@ -1031,6 +1035,75 @@ describe("a card that talks", () => {
     // Silent again at close range, the body speaks for itself.
     expect(marker?.element.hidden).toBe(true);
     expect(marker?.center).toEqual([30.5234, 50.4501]);
+  });
+});
+
+describe("pinned landmarks", () => {
+  const landmark = (id: string, weight: number, longitude = 30.5636) => ({
+    id,
+    longitude,
+    latitude: 50.4267,
+    kind: "monument" as const,
+    weight,
+    title: id,
+  });
+
+  it("draws beneath the observed position and survives a style swap", () => {
+    const fakeMap = makeFakeMap();
+    const order: string[] = [];
+    fakeMap.addLayer.mockImplementation(
+      (layer: Record<string, unknown>, before?: string) => {
+        const id = String(layer.id);
+        fakeMap.layers.set(id, layer);
+        const at = before === undefined ? -1 : order.indexOf(before);
+        if (at < 0) order.push(id);
+        else order.splice(at, 0, id);
+      },
+    );
+    const renderer = readyRenderer(fakeMap, labelMarkers().createLabelMarker);
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setPinnedLandmarks?.([landmark("kyiv.motherland", 1)]);
+
+    expect(fakeMap.sources.has(PINNED_LANDMARKS_SOURCE_ID)).toBe(true);
+    expect(order.indexOf(PINNED_LANDMARKS_POINT_LAYER_ID)).toBeLessThan(
+      order.indexOf(OBSERVED_POSITION_POINT_LAYER_ID),
+    );
+
+    renderer.setAppearance("dark");
+    fakeMap.reloadStyle();
+    expect(fakeMap.layers.has(PINNED_LANDMARKS_GLOW_LAYER_ID)).toBe(true);
+  });
+
+  it("names a landmark only from the zoom its weight earns", () => {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const renderer = readyRenderer(fakeMap, createLabelMarker);
+    fakeMap.camera.zoom = 12;
+    // Far enough apart on screen that only zoom decides.
+    renderer.setPinnedLandmarks?.([
+      landmark("heavy", 1),
+      landmark("light", 0, 30.9636),
+    ]);
+
+    expect(markers).toHaveLength(2);
+    expect(markers[0]?.element.hidden).toBe(false);
+    expect(markers[1]?.element.hidden).toBe(true);
+
+    fakeMap.camera.zoom = 15;
+    fakeMap.emit("zoom");
+    expect(markers[1]?.element.hidden).toBe(false);
+  });
+
+  it("clears layers and cards with an empty list", () => {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const renderer = readyRenderer(fakeMap, createLabelMarker);
+    renderer.setPinnedLandmarks?.([landmark("kyiv.motherland", 1)]);
+    renderer.setPinnedLandmarks?.([]);
+
+    expect(fakeMap.sources.has(PINNED_LANDMARKS_SOURCE_ID)).toBe(false);
+    expect(fakeMap.layers.has(PINNED_LANDMARKS_GLOW_LAYER_ID)).toBe(false);
+    expect(markers[0]?.removed).toBe(true);
   });
 });
 

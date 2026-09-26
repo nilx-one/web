@@ -26,6 +26,7 @@ import {
   type MapObstacle,
   type MapObservedPosition,
   type MapObservedPositionLabel,
+  type MapPinnedLandmark,
   type MapPointSelection,
   type MapRenderer,
   type MapRendererStatus,
@@ -67,10 +68,23 @@ import {
   fogPulseLevel,
 } from "./fog-marks";
 import landmarkKinds from "./landmark-kinds.json";
+import {
+  PINNED_LANDMARKS_GLOW_LAYER_ID,
+  PINNED_LANDMARKS_POINT_LAYER_ID,
+  PINNED_LANDMARKS_SOURCE_ID,
+  applyPinnedLandmarkLabel,
+  createPinnedLandmarkLabelElement,
+  pinnedLandmarksData,
+  pinnedLandmarksLayers,
+  pinnedLandmarksSource,
+  setPinnedLandmarkLabelShown,
+  visiblePinnedLabels,
+} from "./pinned-landmarks";
 
 import {
   applyObservedPositionLabel,
   createObservedPositionLabelElement,
+  setPartShown,
 } from "./observed-position-label";
 import {
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
@@ -99,6 +113,13 @@ export {
   FOG_MARKS_OUTLINE_LAYER_ID,
   FOG_MARKS_SOURCE_ID,
 } from "./fog-marks";
+export {
+  PINNED_LANDMARKS_GLOW_LAYER_ID,
+  PINNED_LANDMARKS_POINT_LAYER_ID,
+  PINNED_LANDMARKS_SOURCE_ID,
+  PINNED_LANDMARK_LABEL_CLASS,
+  pinnedLandmarkLabelZoom,
+} from "./pinned-landmarks";
 export {
   OBSERVED_POSITION_LABEL_CLASS,
   createObservedPositionLabelElement,
@@ -395,6 +416,11 @@ export function createMapLibreRenderer(
   let selectionMarker: MapLabelMarker | undefined;
   let fogMarks: readonly MapFogMark[] = [];
   let fogPulseFrame: number | undefined;
+  let pinnedLandmarks: readonly MapPinnedLandmark[] = [];
+  const pinnedLabels = new Map<
+    string,
+    { readonly element: HTMLElement; readonly marker: MapLabelMarker }
+  >();
   const isGroundRevealed =
     options.isGroundRevealed ??
     (options.fog === undefined
@@ -533,8 +559,11 @@ export function createMapLibreRenderer(
     // A body that is talking keeps its card at every scale: the line is the
     // card's to carry, and hiding it would be the body falling silent.
     const speaking = (observedLabel?.speech ?? "").length > 0;
-    labelElement.hidden =
-      !speaking && mounted.getZoom() >= MAP_BODY_HANDOVER_ZOOM;
+    setPartShown(
+      labelElement,
+      speaking || mounted.getZoom() < MAP_BODY_HANDOVER_ZOOM,
+      "flex",
+    );
   }
 
   function applyLabel(mounted: MapLibreMap): void {
@@ -715,6 +744,7 @@ export function createMapLibreRenderer(
     // Beneath the observation, so the Bond's own marker stays on top of the
     // cells around it; the observation layers are appended after these.
     const before = [
+      PINNED_LANDMARKS_GLOW_LAYER_ID,
       OBSERVED_POSITION_CELL_LAYER_ID,
       OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
     ].find((id) => mounted.getLayer(id) !== undefined);
@@ -724,6 +754,109 @@ export function createMapLibreRenderer(
       }
     }
     ensureFogPulse();
+  }
+
+  function releasePinnedLabels(): void {
+    for (const { marker } of pinnedLabels.values()) marker.remove();
+    pinnedLabels.clear();
+  }
+
+  function updatePinnedLabelVisibility(mounted: MapLibreMap): void {
+    if (pinnedLabels.size === 0) return;
+    const shown = visiblePinnedLabels(
+      pinnedLandmarks.map((landmark) => {
+        const { x, y } = mounted.project([
+          landmark.longitude,
+          landmark.latitude,
+        ]);
+        return {
+          id: landmark.id,
+          weight: landmark.weight,
+          title: landmark.title,
+          ...(landmark.detail === undefined ? {} : { detail: landmark.detail }),
+          x,
+          y,
+        };
+      }),
+      mounted.getZoom(),
+    );
+    for (const [id, { element }] of pinnedLabels) {
+      setPinnedLandmarkLabelShown(element, shown.has(id));
+    }
+  }
+
+  function applyPinnedLandmarkLabels(mounted: MapLibreMap): void {
+    const wanted = new Set(pinnedLandmarks.map((landmark) => landmark.id));
+    for (const [id, { marker }] of pinnedLabels) {
+      if (wanted.has(id)) continue;
+      marker.remove();
+      pinnedLabels.delete(id);
+    }
+    for (const landmark of pinnedLandmarks) {
+      const center: [number, number] = [landmark.longitude, landmark.latitude];
+      const existing = pinnedLabels.get(landmark.id);
+      if (existing !== undefined) {
+        applyPinnedLandmarkLabel(existing.element, landmark, appearance);
+        existing.marker.setLngLat(center);
+        continue;
+      }
+      const element = createPinnedLandmarkLabelElement(globalThis.document);
+      applyPinnedLandmarkLabel(element, landmark, appearance);
+      pinnedLabels.set(landmark.id, {
+        element,
+        marker: createLabelMarker(mounted, element, center),
+      });
+    }
+    updatePinnedLabelVisibility(mounted);
+  }
+
+  function applyPinnedLandmarks(mounted: MapLibreMap): void {
+    if (pinnedLandmarks.length === 0) {
+      for (const layerId of [
+        PINNED_LANDMARKS_GLOW_LAYER_ID,
+        PINNED_LANDMARKS_POINT_LAYER_ID,
+      ]) {
+        if (mounted.getLayer(layerId) !== undefined)
+          mounted.removeLayer(layerId);
+      }
+      if (mounted.getSource(PINNED_LANDMARKS_SOURCE_ID) !== undefined) {
+        mounted.removeSource(PINNED_LANDMARKS_SOURCE_ID);
+      }
+      releasePinnedLabels();
+      return;
+    }
+
+    const source = mounted.getSource(PINNED_LANDMARKS_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    if (source === undefined) {
+      mounted.addSource(
+        PINNED_LANDMARKS_SOURCE_ID,
+        pinnedLandmarksSource(
+          pinnedLandmarks,
+        ) as unknown as SourceSpecification,
+      );
+    } else {
+      source.setData(
+        pinnedLandmarksData(pinnedLandmarks) as Parameters<
+          GeoJSONSource["setData"]
+        >[0],
+      );
+    }
+    // Beneath the observation, so the Bond's own marker stays on top of a
+    // landmark it stands next to; above the fog marks, which list these first.
+    const before = [
+      OBSERVED_POSITION_CELL_LAYER_ID,
+      OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
+      OBSERVED_POSITION_ACCURACY_LAYER_ID,
+      OBSERVED_POSITION_EDGE_LAYER_ID,
+      OBSERVED_POSITION_POINT_LAYER_ID,
+    ].find((id) => mounted.getLayer(id) !== undefined);
+    for (const layer of pinnedLandmarksLayers()) {
+      if (mounted.getLayer(String(layer.id)) === undefined) {
+        mounted.addLayer(layer as unknown as LayerSpecification, before);
+      }
+    }
+    applyPinnedLandmarkLabels(mounted);
   }
 
   function ensureAvatarLayer(mounted: MapLibreMap): void {
@@ -741,6 +874,7 @@ export function createMapLibreRenderer(
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
     applyFogMarks(mounted);
+    applyPinnedLandmarks(mounted);
     applyObservedPosition(mounted);
     applySelectionPoint(mounted);
     if (firstPaintDone && avatarLayer?.hasInstances())
@@ -952,6 +1086,12 @@ export function createMapLibreRenderer(
         });
         mountedMap.on("zoom", () => {
           updateLabelVisibility(mountedMap);
+          updatePinnedLabelVisibility(mountedMap);
+        });
+        // Pitch and bearing move cards relative to each other without a zoom,
+        // so which ones collide is settled again once the camera stops.
+        mountedMap.on("moveend", () => {
+          updatePinnedLabelVisibility(mountedMap);
         });
         // Point-selection mode consumes the tap before ordinary world actions.
         // That keeps an editor gesture from also activating a body underneath.
@@ -1027,6 +1167,7 @@ export function createMapLibreRenderer(
       stopFogPulse();
       releaseLabel();
       releaseSelectionMarker();
+      releasePinnedLabels();
       map?.remove();
       map = undefined;
       styleResolved = false;
@@ -1197,6 +1338,11 @@ export function createMapLibreRenderer(
     setFogMarks(next: readonly MapFogMark[]) {
       fogMarks = [...next];
       if (map !== undefined && presentationApplied) applyFogMarks(map);
+    },
+
+    setPinnedLandmarks(next: readonly MapPinnedLandmark[]) {
+      pinnedLandmarks = next.map((landmark) => ({ ...landmark }));
+      if (map !== undefined && presentationApplied) applyPinnedLandmarks(map);
     },
   };
 }

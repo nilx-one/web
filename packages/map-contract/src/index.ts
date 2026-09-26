@@ -264,6 +264,35 @@ export interface MapLandmark {
 }
 
 /**
+ * What a pinned landmark is, as far as its colour goes: something built, a
+ * place of worship, a square people gather on, or ground that is green.
+ */
+export type MapPinnedLandmarkKind = "monument" | "sacred" | "civic" | "nature";
+
+/**
+ * A landmark the product names on the world at its real coordinates, drawn
+ * the way this device's own position is: a glowing point on the ground and a
+ * card over it. Unlike a `MapLandmark` it is not read from the archive — it is
+ * a short, hand-seeded list — and like one it is presentation only: never
+ * protocol state, never a claim that anyone was there.
+ */
+export interface MapPinnedLandmark {
+  /** Stable across sessions and locales. */
+  readonly id: string;
+  readonly longitude: number;
+  readonly latitude: number;
+  readonly kind: MapPinnedLandmarkKind;
+  /**
+   * 0 to 1. A heavier landmark glows wider and keeps its card further out;
+   * values outside the range are clamped, never rejected.
+   */
+  readonly weight: number;
+  /** Display text, already localized by the application. */
+  readonly title: string;
+  readonly detail?: string;
+}
+
+/**
  * Ground a body walks around rather than through: a building footprint or a
  * stretch of water, as the basemap draws it. Each polygon is its rings in
  * `[longitude, latitude]` order, outer ring first and holes after — a
@@ -431,6 +460,8 @@ export interface MapRenderer {
   readonly fog?: MapFogField;
   /** Marks fog cells on the world; an empty list clears them. */
   setFogMarks?(marks: readonly MapFogMark[]): void;
+  /** Pins landmarks on the world; an empty list clears them. */
+  setPinnedLandmarks?(landmarks: readonly MapPinnedLandmark[]): void;
 }
 
 /**

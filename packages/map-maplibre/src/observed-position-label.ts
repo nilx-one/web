@@ -26,6 +26,19 @@ function prefersReducedMotion(document: Document): boolean {
   }
 }
 
+/**
+ * Every part here lays itself out with an inline `display`, which outranks the
+ * `hidden` attribute's own `display: none`, so both are set together.
+ */
+export function setPartShown(
+  element: HTMLElement,
+  shown: boolean,
+  display: string,
+): void {
+  element.hidden = !shown;
+  element.style.display = shown ? display : "none";
+}
+
 function setText(element: HTMLElement, value: string): void {
   // A label is re-applied every frame an Avaia walks; writing the same text
   // again would still be a DOM mutation, and an announcement for the live one.
@@ -166,7 +179,7 @@ export function applyObservedPositionLabel(
   }
   if (detail !== null) {
     setText(detail, label.detail ?? "");
-    detail.hidden = label.detail === undefined;
+    setPartShown(detail, label.detail !== undefined, "block");
     detail.style.color = palette.detail;
   }
   if (connector !== null) {
@@ -186,7 +199,7 @@ export function applyObservedPositionLabel(
   if (study !== null) {
     // A card with no study to show is text alone rather than a gap where a
     // body would be: nothing is drawn for a body that was never chosen.
-    study.hidden = label.avatarUrl === undefined;
+    setPartShown(study, label.avatarUrl !== undefined, "block");
     if (
       label.avatarUrl !== undefined &&
       study.getAttribute("src") !== label.avatarUrl
