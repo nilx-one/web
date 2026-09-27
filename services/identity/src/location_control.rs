@@ -376,6 +376,8 @@ async fn mint_session_cookie(
             now,
             now.saturating_add(ttl),
             "Telegram",
+            false,
+            None,
         )
         .await
         .ok()?;

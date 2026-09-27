@@ -8,7 +8,7 @@ use axum::{
     extract::{Query, State},
     http::{
         HeaderMap, HeaderValue, StatusCode,
-        header::{CACHE_CONTROL, COOKIE, LOCATION, SET_COOKIE},
+        header::{CACHE_CONTROL, COOKIE, LOCATION, SET_COOKIE, USER_AGENT},
     },
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -304,9 +304,13 @@ async fn start_browser_auth(
     let connect_pub_dress = match intent {
         BrowserAuthIntent::SignIn => None,
         BrowserAuthIntent::Connect => {
-            let Some(identity) = native_session_identity(&state, &headers, now).await else {
+            let Some((identity, active)) = native_session_identity(&state, &headers, now).await
+            else {
                 return auth_failure("native_authentication_required");
             };
+            if !active {
+                return session_inactive();
+            }
             Some(identity.pub_dress)
         }
     };
@@ -442,6 +446,7 @@ async fn telegram_callback(
     };
     finish_provider_callback(
         &state,
+        &headers,
         BrowserProvider::Telegram.identity(subject),
         &transaction,
     )
@@ -519,6 +524,7 @@ async fn discord_callback(
     };
     finish_provider_callback(
         &state,
+        &headers,
         BrowserProvider::Discord.identity(user.id),
         &transaction,
     )
@@ -599,6 +605,7 @@ async fn github_callback(
     };
     finish_provider_callback(
         &state,
+        &headers,
         BrowserProvider::Github.identity(user.id.to_string()),
         &transaction,
     )
@@ -648,6 +655,7 @@ fn callback_transaction(
 
 async fn finish_provider_callback(
     state: &BrowserAuthState,
+    headers: &HeaderMap,
     provider: ProviderIdentity,
     transaction: &OAuthTransaction,
 ) -> Response {
@@ -690,7 +698,7 @@ async fn finish_provider_callback(
     }
 
     match state.repository.find_by_provider(&provider).await {
-        Ok(Some(identity)) => return issue_native_session(state, identity, now).await,
+        Ok(Some(identity)) => return issue_native_session(state, headers, identity, now).await,
         Ok(None) => {}
         Err(error) => {
             tracing::error!(%error, "browser provider binding lookup failed");
@@ -730,7 +738,7 @@ async fn native_session_identity(
     state: &BrowserAuthState,
     headers: &HeaderMap,
     now: u64,
-) -> Option<IdentityRecord> {
+) -> Option<(IdentityRecord, bool)> {
     let token = read_cookie(headers, SESSION_COOKIE)?;
     let hash = state
         .native_auth
@@ -738,13 +746,22 @@ async fn native_session_identity(
         .digest("native-session", &token);
     state
         .repository
-        .find_native_session(&hash, now)
+        .find_native_session_with_activity(&hash, now)
         .await
         .ok()?
 }
 
+fn session_inactive() -> Response {
+    no_store_error(
+        StatusCode::FORBIDDEN,
+        "session_inactive",
+        "This client is signed in but not active. Activate it to make changes.",
+    )
+}
+
 async fn issue_native_session(
     state: &BrowserAuthState,
+    headers: &HeaderMap,
     mut identity: IdentityRecord,
     now: u64,
 ) -> Response {
@@ -769,6 +786,18 @@ async fn issue_native_session(
         .native_auth
         .secret_digester()
         .digest("native-session", &token);
+    let label = crate::repository::session_client_label(
+        "Browser",
+        headers
+            .get(USER_AGENT)
+            .and_then(|value| value.to_str().ok()),
+    );
+    let supersede = read_cookie(headers, SESSION_COOKIE).map(|token| {
+        state
+            .native_auth
+            .secret_digester()
+            .digest("native-session", &token)
+    });
     if let Err(error) = state
         .repository
         .create_native_session(
@@ -776,7 +805,9 @@ async fn issue_native_session(
             &identity.pub_dress,
             now,
             now.saturating_add(state.native_auth.session_ttl_seconds),
-            "Browser",
+            &label,
+            false,
+            supersede.as_deref(),
         )
         .await
     {
@@ -881,7 +912,8 @@ async fn read_provider_connections(
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(native_identity) = native_session_identity(&state, &headers, now).await else {
+    let Some((native_identity, _active)) = native_session_identity(&state, &headers, now).await
+    else {
         return no_store_error(
             StatusCode::UNAUTHORIZED,
             "native_authentication_required",
@@ -944,13 +976,17 @@ async fn disconnect_provider(
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(native_identity) = native_session_identity(&state, &headers, now).await else {
+    let Some((native_identity, active)) = native_session_identity(&state, &headers, now).await
+    else {
         return no_store_error(
             StatusCode::UNAUTHORIZED,
             "native_authentication_required",
             "Sign in to the Bond before disconnecting a provider.",
         );
     };
+    if !active {
+        return session_inactive();
+    }
     let pub_dress = match native_identity.pub_dress.parse::<PubDress>() {
         Ok(value) => value,
         Err(_) => return service_unavailable(),
@@ -998,13 +1034,17 @@ async fn link_pending_provider(
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(native_identity) = native_session_identity(&state, &headers, now).await else {
+    let Some((native_identity, active)) = native_session_identity(&state, &headers, now).await
+    else {
         return no_store_error(
             StatusCode::UNAUTHORIZED,
             "native_authentication_required",
             "Sign in to the Bond before linking this provider.",
         );
     };
+    if !active {
+        return session_inactive();
+    }
     if native_identity.pub_dress != request.pub_dress {
         return no_store_error(
             StatusCode::CONFLICT,

@@ -7,8 +7,9 @@
 // This module is the explicit, three-route path by which activation moves
 // from one session to another: confirmation on the active client, a
 // credential-authenticated request that still needs that confirmation, and
-// - only once the active client stays silent past the activation request
-// TTL - the live-device objection window.
+// — only for that credential-authenticated requester, once the active client
+// stays silent past the activation request TTL — the live-device objection
+// window. Host material expires at the TTL and changes nothing.
 //
 // `ApiState` and `authenticated_bond` are shared with `api.rs` via the
 // `include!` that assembles `mod api`; this file does not redefine them.
@@ -107,6 +108,7 @@ fn status_str(status: ActivationRequestStatus) -> &'static str {
         ActivationRequestStatus::Accepted => "accepted",
         ActivationRequestStatus::Declined => "declined",
         ActivationRequestStatus::Objected => "objected",
+        ActivationRequestStatus::Expired => "expired",
     }
 }
 
@@ -173,11 +175,27 @@ async fn create_activation_request(
             Err(error) => return error.into_response(),
         };
     if active {
-        return no_store_error(
-            StatusCode::CONFLICT,
-            "already_active",
-            "This client is already the active session for this Bond.",
+        return with_session_cookie(
+            no_store_error(
+                StatusCode::CONFLICT,
+                "already_active",
+                "This client is already the active session for this Bond.",
+            ),
+            cookie,
         );
+    }
+    // A failed mint reports an empty hash. Inserting a request for it would
+    // name no live session, and accepting it would deactivate everyone else.
+    if token_hash.is_empty() {
+        return with_session_cookie(unavailable(), cookie);
+    }
+    if let Err(retry_after) = state.limiter.consume(
+        format!("activation:{}", identity.pub_dress),
+        now,
+        8,
+        60 * 60,
+    ) {
+        return with_session_cookie(rate_limited(retry_after), cookie);
     }
     let client_label = state
         .repository
@@ -187,7 +205,7 @@ async fn create_activation_request(
         .flatten()
         .unwrap_or_else(|| UNKNOWN_CLIENT_LABEL.to_owned());
     let Some(id) = generate_activation_id() else {
-        return unavailable();
+        return with_session_cookie(unavailable(), cookie);
     };
     let responds_by = now.saturating_add(state.native_auth.activation_request_ttl_seconds);
     if let Err(error) = state
@@ -196,7 +214,7 @@ async fn create_activation_request(
         .await
     {
         tracing::error!(%error, "activation request creation failed");
-        return unavailable();
+        return with_session_cookie(unavailable(), cookie);
     }
     let mut response = no_store_json(
         StatusCode::CREATED,
@@ -231,7 +249,7 @@ async fn read_pending_activation_request(
             Err(error) => return error.into_response(),
         };
     if !active {
-        return not_the_active_client();
+        return with_session_cookie(not_the_active_client(), cookie);
     }
     let pending = match state
         .repository
@@ -280,7 +298,7 @@ async fn read_activation_request_status(
         }
     };
     let Some(request) = request else {
-        return activation_request_not_found();
+        return with_session_cookie(activation_request_not_found(), cookie);
     };
     let mut response = no_store_json(StatusCode::OK, activation_view(&request));
     if let Some(cookie) = cookie {
@@ -310,7 +328,7 @@ async fn accept_activation_request(
             Err(error) => return error.into_response(),
         };
     if !active {
-        return not_the_active_client();
+        return with_session_cookie(not_the_active_client(), cookie);
     }
     let mut response = match state
         .repository
@@ -351,7 +369,7 @@ async fn decline_activation_request(
             Err(error) => return error.into_response(),
         };
     if !active {
-        return not_the_active_client();
+        return with_session_cookie(not_the_active_client(), cookie);
     }
     let mut response = match state
         .repository
@@ -392,7 +410,7 @@ async fn object_to_activation_request(
             Err(error) => return error.into_response(),
         };
     if !active {
-        return not_the_active_client();
+        return with_session_cookie(not_the_active_client(), cookie);
     }
     let mut response = match state
         .repository
@@ -750,7 +768,7 @@ mod session_activation_tests {
     }
 
     #[tokio::test]
-    async fn an_unanswered_request_activates_after_the_objection_window_elapses() {
+    async fn a_host_authenticated_request_expires_without_taking_over() {
         let (_database, database_url) = test_database();
         register(&database_url, "0x0dana", 13).await;
         let auth = signed_init_data(13);
@@ -780,8 +798,190 @@ mod session_activation_tests {
         let b_cookie = cookie_from(&created);
         let id = json(created).await["id"].as_str().expect("id").to_owned();
 
-        // Past the activation request TTL (120s), A never answered: the
-        // request is now in its live-device objection window.
+        // Telegram initData is host material, not the long-lived credential.
+        // Past the activation request TTL the request expires. It never
+        // becomes objectable, and A stays the active client.
+        let app_ttl_elapsed = app_at(&database_url, NOW + 121).await;
+        let expired = app_ttl_elapsed
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/v1/session/activation-requests/{id}"))
+                    .header(COOKIE, &b_cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(json(expired).await["status"], "expired");
+
+        let a_still_active = app_ttl_elapsed
+            .oneshot(
+                Request::get("/api/v1/session/activation-requests/pending")
+                    .header(COOKIE, &a_cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(a_still_active.status(), StatusCode::OK);
+
+        let app_window_elapsed = app_at(&database_url, NOW + 121 + 60 * 60 * 24 + 1).await;
+        let still_expired = app_window_elapsed
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/v1/session/activation-requests/{id}"))
+                    .header(COOKIE, &b_cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(json(still_expired).await["status"], "expired");
+        let a_still_active = app_window_elapsed
+            .oneshot(
+                Request::get("/api/v1/session/activation-requests/pending")
+                    .header(COOKIE, &a_cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(a_still_active.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn a_second_request_expires_the_first_so_it_cannot_activate_later() {
+        let (_database, database_url) = test_database();
+        register(&database_url, "0x0erin", 15).await;
+        let auth = signed_init_data(15);
+        let app = app_at(&database_url, NOW).await;
+
+        let a_first = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/session/activation-requests/pending")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let a_cookie = cookie_from(&a_first);
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/session/activation-requests")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .header("x-0x1-csrf", "1")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let b_cookie = cookie_from(&first);
+        let first_id = json(first).await["id"].as_str().expect("id").to_owned();
+
+        let second = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/session/activation-requests")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .header("x-0x1-csrf", "1")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(second.status(), StatusCode::CREATED);
+        let second_id = json(second).await["id"].as_str().expect("id").to_owned();
+        assert_ne!(first_id, second_id);
+
+        let superseded = app
+            .oneshot(
+                Request::get(format!("/api/v1/session/activation-requests/{first_id}"))
+                    .header(COOKIE, &b_cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(json(superseded).await["status"], "expired");
+
+        let app_later = app_at(&database_url, NOW + 121 + 60 * 60 * 24 + 1).await;
+        let still_expired = app_later
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/v1/session/activation-requests/{first_id}"))
+                    .header(COOKIE, &b_cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(json(still_expired).await["status"], "expired");
+        let a_still_active = app_later
+            .oneshot(
+                Request::get("/api/v1/session/activation-requests/pending")
+                    .header(COOKIE, &a_cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(a_still_active.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn a_credential_authenticated_request_activates_after_the_objection_window() {
+        let (_database, database_url) = test_database();
+        register(&database_url, "0x0fran", 17).await;
+        let auth = signed_init_data(17);
+        let app = app_at(&database_url, NOW).await;
+
+        let a_first = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/session/activation-requests/pending")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let a_cookie = cookie_from(&a_first);
+
+        let minted = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/session/activation-requests")
+                    .header(AUTHORIZATION, format!("tma {auth}"))
+                    .header("x-0x1-csrf", "1")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let b_cookie = cookie_from(&minted);
+        drop(json(minted).await);
+
+        mark_session_credential(&database_url, &session_hash(&b_cookie)).await;
+
+        let created = app
+            .oneshot(
+                Request::post("/api/v1/session/activation-requests")
+                    .header(COOKIE, &b_cookie)
+                    .header("x-0x1-csrf", "1")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(created.status(), StatusCode::CREATED);
+        let created_body = json(created).await;
+        let id = created_body["id"].as_str().expect("id").to_owned();
+        let responds_by = created_body["responds_by"].as_u64().expect("responds_by");
+
         let app_ttl_elapsed = app_at(&database_url, NOW + 121).await;
         let objectable = app_ttl_elapsed
             .oneshot(
@@ -794,12 +994,12 @@ mod session_activation_tests {
             .expect("response");
         let objectable_body = json(objectable).await;
         assert_eq!(objectable_body["status"], "objectable");
-        assert!(objectable_body["objection_deadline"].is_u64());
+        assert_eq!(
+            objectable_body["objection_deadline"],
+            responds_by + 60 * 60 * 24
+        );
 
-        // Past the objection window (1 day) too, with no objection: B
-        // activates on its own, and A - still silent - loses activity
-        // without being revoked.
-        let app_window_elapsed = app_at(&database_url, NOW + 121 + 60 * 60 * 24 + 1).await;
+        let app_window_elapsed = app_at(&database_url, responds_by + 60 * 60 * 24).await;
         let accepted = app_window_elapsed
             .clone()
             .oneshot(
@@ -822,5 +1022,34 @@ mod session_activation_tests {
             .await
             .expect("response");
         assert_eq!(a_now_inactive.status(), StatusCode::FORBIDDEN);
+    }
+
+    fn session_hash(cookie: &str) -> Vec<u8> {
+        let token = cookie
+            .strip_prefix("__Host-0x1_session=")
+            .expect("session cookie");
+        NativeAuthConfig::new(
+            "test-auth-secret-that-is-at-least-thirty-two-bytes",
+            "test-password-pepper-that-is-at-least-thirty-two-bytes",
+        )
+        .expect("valid native auth configuration")
+        .secret_digester()
+        .digest("native-session", token)
+    }
+
+    async fn mark_session_credential(database_url: &str, token_hash: &[u8]) {
+        let pool = sqlx::SqlitePool::connect(database_url)
+            .await
+            .expect("pool");
+        let updated = sqlx::query(
+            "UPDATE native_sessions SET credential_authenticated = 1 WHERE token_hash = ?",
+        )
+        .bind(token_hash)
+        .execute(&pool)
+        .await
+        .expect("credential flag")
+        .rows_affected();
+        assert_eq!(updated, 1);
+        pool.close().await;
     }
 }
