@@ -10,6 +10,8 @@ on:
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/deploy-web.yml"
       - ".github/workflows/validate-deploy-contract.yml"
+      - "deploy/infra-workload.sh"
+      - "deploy/infra-workload.test.sh"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   push:
@@ -20,6 +22,8 @@ on:
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/deploy-web.yml"
       - ".github/workflows/validate-deploy-contract.yml"
+      - "deploy/infra-workload.sh"
+      - "deploy/infra-workload.test.sh"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   workflow_dispatch:
@@ -197,6 +201,24 @@ jobs:
           grep -Fq "IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web" "$file"
           grep -Fq 'sha-$RELEASE_SHA' "$file"
 
+      - name: Validate infra activation is awaited
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # A repository_dispatch returns before infra deploys anything, so a client or identity
+          # job that does not wait would let "all" report success while hosts are still rolling out
+          # side by side, or after one of them failed.
+          for file in .github/workflows/deploy-web.yml .github/workflows/deploy-identity-service.yml; do
+            grep -Fq "deploy/infra-workload.sh await" "$file" ||
+              { echo "::error file=$file::the infra deployment must be awaited through deploy/infra-workload.sh"; exit 1; }
+          done
+
+          grep -Fq "max-parallel: 1" .github/workflows/deploy-production.yml ||
+            { echo "::error file=.github/workflows/deploy-production.yml::client hosts must be deployed one at a time"; exit 1; }
+
+          bash deploy/infra-workload.test.sh
+
       - name: Publish summary
         if: always()
         shell: bash
@@ -211,5 +233,6 @@ jobs:
             echo "- identity handoff: validated"
             echo "- provider environment: transient"
             echo "- client handoff: validated"
+            echo "- infra activation: awaited"
             echo "- deployment: not performed"
           } >> "$GITHUB_STEP_SUMMARY"
