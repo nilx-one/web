@@ -49,6 +49,7 @@ import { avaiaStudy } from "./avatar-presence";
 import { avaiaLines } from "./avaia-lines";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
+import { rememberWorld } from "./world-memory";
 import {
   AuthenticatedMapHomeView,
   type ConnectedProvider,
@@ -308,6 +309,28 @@ describe("AuthenticatedMapHomeView", () => {
     expect(setCamera.mock.calls.length).toBe(firstFix + 1);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
     expect(camera?.zoom).toBeGreaterThan(15);
+  });
+
+  it("focuses an Avaia at the wheel where it stands, not on its Bond", async () => {
+    const avaiaAt = { longitude: 30.53, latitude: 50.455, bearingDeg: 0 };
+    rememberWorld("0x0sky", { avaia: avaiaAt });
+    const mapRenderer = renderer();
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+    });
+    await screen.findByRole("button", {
+      name: /Focus the world on x0skai/,
+    });
+    await act(async () => undefined);
+    const setCamera = vi.mocked(mapRenderer.setCamera);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Focus the world on x0skai" }),
+    );
+
+    const [camera] = setCamera.mock.calls.at(-1) ?? [];
+    expect(camera?.center).toEqual([avaiaAt.longitude, avaiaAt.latitude]);
   });
 
   it("comes in far enough to see the identity that just took the wheel", async () => {

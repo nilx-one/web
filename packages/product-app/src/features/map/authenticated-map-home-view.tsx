@@ -1140,10 +1140,17 @@ export function AuthenticatedMapHomeView({
     return () => globalThis.clearTimeout(settled);
   }, [handover]);
 
+  // An Avaia at the wheel is focused where its body stands, which after a walk
+  // is not where its Bond is.
   function focusWorldOnWheel(): void {
     if (observedPosition === undefined) return;
+    const avaiaPoint = wheelAvaiaPoint();
+    const target =
+      avaiaPoint === undefined
+        ? observedPosition
+        : { ...observedPosition, ...avaiaPoint };
     const context = { presentation, dimension, safeArea };
-    renderer.setCamera(closeUpCamera(observedPosition, context), {
+    renderer.setCamera(closeUpCamera(target, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
     });
