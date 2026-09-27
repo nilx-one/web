@@ -63,10 +63,39 @@ describe("shell layout contract", () => {
   it("anchors the toast stack top right, always below the header", () => {
     const toasts = rule(shellCss, ".app-shell__toasts");
 
+    expect(toasts).toMatch(/top:\s*calc\([\s\S]*--shell-top/);
     expect(toasts).toMatch(/top:\s*calc\([\s\S]*--shell-header-block/);
     expect(toasts).toMatch(/right:\s*calc\([^;]*--safe-right/);
     expect(toasts).toContain("align-items: flex-end");
     expect(toasts).not.toMatch(/(^|\n)\s*bottom:/);
+  });
+
+  it("keeps a top inset and a transparent header, and leaves the Dock's surface painted", () => {
+    const shell = rule(shellCss, ".app-shell");
+    const header = rule(shellCss, ".app-shell__header");
+    const headerCss = stylesheet(
+      "packages/product-app/src/shell/app-header.css",
+    );
+    const dock = rule(
+      stylesheet(
+        "packages/product-app/src/features/map/authenticated-map-home-view.css",
+      ),
+      ".bond-dock",
+    );
+
+    expect(shell).toMatch(/--shell-top:\s*calc\(/);
+    expect(shell).toContain("--shell-inset");
+    expect(header).toMatch(/top:\s*var\(--shell-top\)/);
+    expect(header).toMatch(/background:\s*transparent/);
+    expect(rule(headerCss, ".app-header")).toMatch(/background:\s*transparent/);
+    expect(dock).toMatch(/background:\s*var\(--map-glass\)/);
+    expect(dock).not.toMatch(/background:\s*transparent/);
+
+    const detailHeader = rule(dockCss, ".bond-dock__detail-header");
+    expect(detailHeader).toMatch(/background:\s*transparent/);
+    expect(detailHeader).toMatch(/top:\s*0/);
+    expect(detailHeader).not.toMatch(/--dock-pad-top/);
+    expect(detailHeader).not.toMatch(/--map-glass/);
   });
 
   it("uses the measured bottom layer as the toast ceiling", () => {

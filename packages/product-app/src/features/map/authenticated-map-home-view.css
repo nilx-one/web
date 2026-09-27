@@ -209,9 +209,7 @@
    bottom-anchored by AppShell, while this material is deliberately light and
    compact enough that the map keeps visual priority. */
 .bond-dock {
-  /* The detail header (authenticated-map-settings.css) reads these back to
-     stay flush with this card's own edges while it is pinned in place, so a
-     breakpoint below only has to change the padding once, here. */
+  /* Card inset. The detail header does not cancel the top of it. */
   --dock-pad-top: 1rem;
   --dock-pad-inline: 1.15rem;
   --dock-radius: 1.35rem;
