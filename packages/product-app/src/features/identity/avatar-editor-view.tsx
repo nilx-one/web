@@ -43,7 +43,7 @@ export function AvatarEditorView({
       </div>
 
       <fieldset className="avatar-editor__models">
-        <legend>{t("dock.threeDModel")}</legend>
+        <legend>{t("dock.model")}</legend>
         {state.models.map((option) => (
           <label
             key={option.model}
@@ -118,7 +118,7 @@ export function AvatarEditorView({
 //   readonly slot: AvatarSlot;
 //   readonly label: string;
 //   readonly multiple: boolean;
-//   readonly items: readonly AvatarEditorViewState["sections"][number]["items"];
+//   readonly items: AvatarEditorViewState["sections"][number]["items"];
 //   readonly busy: boolean;
 //   readonly onEquip: (itemId: string) => void;
 // }
@@ -142,6 +142,9 @@ export function AvatarEditorView({
 //               className={`wardrobe__item${
 //                 item.selected ? " wardrobe__item--worn" : ""
 //               }`}
+//               // A picker where one thing is on is a set of radios; one where
+//               // several may be is a set of switches. Saying which it is out
+//               // loud is what lets it be used without seeing it.
 //               role={multiple ? "switch" : "radio"}
 //               aria-checked={item.selected}
 //               disabled={busy}

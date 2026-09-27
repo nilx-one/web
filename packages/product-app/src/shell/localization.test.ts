@@ -9,6 +9,7 @@ import {
   readLocalePreference,
   resolveLocale,
   translate,
+  translateIf,
 } from "./localization";
 
 afterEach(() => {
@@ -60,5 +61,22 @@ describe("frontend localization", () => {
     expect(translate("en", "header.settings")).toBe("Settings");
     expect(translate("uk-UA", "header.settings")).toBe("Налаштування");
     expect(translate("uk-UA", "failure.retry")).toBe("Спробувати знову");
+  });
+
+  it("translates Dock copy from the catalog and leaves other notes alone", () => {
+    const uk = (key: Parameters<typeof translateIf>[1]) =>
+      translate("uk-UA", key);
+    expect(translate("uk-UA", "dock.save")).toBe("Зберегти");
+    expect(translate("uk-UA", "dock.personalBond")).toBe("Особистий Bond");
+    expect(
+      translateIf(
+        uk,
+        "dock.caseSensitiveAvaia",
+        translate("en", "dock.caseSensitiveAvaia"),
+      ),
+    ).toBe(translate("uk-UA", "dock.caseSensitiveAvaia"));
+    expect(translateIf(uk, "dock.caseSensitiveAvaia", "a different note")).toBe(
+      "a different note",
+    );
   });
 });
