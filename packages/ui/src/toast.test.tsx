@@ -147,4 +147,21 @@ describe("Toast", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
+
+  it("speaks its own controls in the words a host passes", () => {
+    render(
+      <Toast
+        tone="neutral"
+        title="Запит відхилено"
+        details="ref-1"
+        copy={{ reference: "Довідка", dismiss: "Закрити" }}
+        onDismiss={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Довідка")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Закрити: Запит відхилено" }),
+    ).toBeVisible();
+  });
 });

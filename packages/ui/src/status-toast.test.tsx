@@ -121,4 +121,30 @@ describe("StatusToastStack", () => {
     const results = await axe.run(container);
     expect(results.violations).toEqual([]);
   });
+
+  it("speaks its own controls in the words a host passes", () => {
+    render(
+      <StatusToastStack
+        toasts={[
+          {
+            id: "long",
+            kind: "error",
+            title: "Мапа недоступна",
+            description: "x".repeat(120),
+          },
+        ]}
+        copy={{
+          readMore: "Докладніше",
+          readLess: "Згорнути",
+          dismiss: "Закрити",
+        }}
+        onDismiss={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Докладніше" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Закрити: Мапа недоступна" }),
+    ).toBeVisible();
+  });
 });

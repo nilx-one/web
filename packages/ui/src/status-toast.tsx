@@ -15,11 +15,25 @@ export interface StatusToastItem {
   readonly dismissible?: boolean;
 }
 
+/** Words the stack itself supplies; a localized host passes its own. */
+export interface StatusToastCopy {
+  readonly readMore: string;
+  readonly readLess: string;
+  readonly dismiss: string;
+}
+
+export const STATUS_TOAST_COPY: StatusToastCopy = {
+  readMore: "Read more",
+  readLess: "Read less",
+  dismiss: "Dismiss",
+};
+
 export interface StatusToastStackProps {
   readonly toasts: readonly StatusToastItem[];
   readonly label?: string;
   readonly maxVisible?: number;
   readonly placement?: ToastPlacement;
+  readonly copy?: StatusToastCopy;
   onDismiss(id: string): void;
 }
 
@@ -32,9 +46,11 @@ function isDismissible(toast: StatusToastItem): boolean {
 
 function StatusToast({
   toast,
+  copy,
   onDismiss,
 }: {
   readonly toast: StatusToastItem;
+  readonly copy: StatusToastCopy;
   onDismiss(id: string): void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -68,7 +84,7 @@ function StatusToast({
                 aria-expanded={expanded}
                 onClick={() => setExpanded((value) => !value)}
               >
-                {expanded ? "Read less" : "Read more"}
+                {expanded ? copy.readLess : copy.readMore}
               </button>
             ) : null}
           </>
@@ -79,7 +95,7 @@ function StatusToast({
           <button
             className="toast__dismiss"
             type="button"
-            aria-label={`Dismiss: ${toast.title}`}
+            aria-label={`${copy.dismiss}: ${toast.title}`}
             onClick={() => onDismiss(toast.id)}
           >
             <span aria-hidden="true">×</span>
@@ -95,6 +111,7 @@ export function StatusToastStack({
   label = "Status notifications",
   maxVisible = 3,
   placement = "viewport",
+  copy = STATUS_TOAST_COPY,
   onDismiss,
 }: StatusToastStackProps) {
   const visible = toasts.slice(-Math.max(0, maxVisible)).toReversed();
@@ -116,7 +133,7 @@ export function StatusToastStack({
       >
         {visible.map((toast) => (
           <li className="toast-region__item" key={toast.id}>
-            <StatusToast toast={toast} onDismiss={onDismiss} />
+            <StatusToast toast={toast} copy={copy} onDismiss={onDismiss} />
           </li>
         ))}
       </ol>

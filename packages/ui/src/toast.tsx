@@ -22,7 +22,19 @@ export interface ToastContent {
   readonly details?: string;
 }
 
+/** Words the toast itself supplies; a localized host passes its own. */
+export interface ToastCopy {
+  readonly reference: string;
+  readonly dismiss: string;
+}
+
+export const TOAST_COPY: ToastCopy = {
+  reference: "Reference",
+  dismiss: "Dismiss",
+};
+
 export interface ToastProps extends ToastContent {
+  readonly copy?: ToastCopy;
   onDismiss(): void;
 }
 
@@ -32,6 +44,7 @@ export function Toast({
   action,
   description,
   details,
+  copy = TOAST_COPY,
   onDismiss,
 }: ToastProps) {
   return (
@@ -44,7 +57,7 @@ export function Toast({
         )}
         {details === undefined ? null : (
           <details className="toast__details">
-            <summary>Reference</summary>
+            <summary>{copy.reference}</summary>
             <p>{details}</p>
           </details>
         )}
@@ -62,7 +75,7 @@ export function Toast({
         <button
           className="toast__dismiss"
           type="button"
-          aria-label={`Dismiss: ${title}`}
+          aria-label={`${copy.dismiss}: ${title}`}
           onClick={onDismiss}
         >
           <span aria-hidden="true">×</span>
@@ -80,6 +93,7 @@ export interface ToastRegionProps {
   readonly toasts: readonly ToastRegionItem[];
   readonly label?: string;
   readonly placement?: ToastPlacement;
+  readonly copy?: ToastCopy;
   onDismiss(id: string): void;
 }
 
@@ -87,6 +101,7 @@ export function ToastRegion({
   toasts,
   label = "Notifications",
   placement = "viewport",
+  copy = TOAST_COPY,
   onDismiss,
 }: ToastRegionProps) {
   return (
@@ -106,7 +121,7 @@ export function ToastRegion({
       >
         {toasts.map(({ id, ...content }) => (
           <li className="toast-region__item" key={id}>
-            <Toast {...content} onDismiss={() => onDismiss(id)} />
+            <Toast {...content} copy={copy} onDismiss={() => onDismiss(id)} />
           </li>
         ))}
       </ol>
