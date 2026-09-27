@@ -12,9 +12,9 @@ import {
   resolveLocale,
   RUNTIME_LABEL_KEYS,
   translate,
+  translateCopy,
   translateFirst,
   translateIf,
-  translateNamedFirst,
 } from "./localization";
 
 afterEach(() => {
@@ -112,13 +112,77 @@ describe("frontend localization", () => {
       "a custom host",
     );
     expect(
-      translateNamedFirst(uk, "Hand the wheel to x0skai", DOCK_ACTION_KEYS),
+      translateFirst(uk, "Hand the wheel to x0skai", DOCK_ACTION_KEYS),
     ).toBe("Передати кермо x0skai");
-    expect(translateNamedFirst(uk, "Edit 0x0sky", DOCK_ACTION_KEYS)).toBe(
+    expect(translateFirst(uk, "Edit 0x0sky", DOCK_ACTION_KEYS)).toBe(
       "Змінити 0x0sky",
     );
-    expect(translateNamedFirst(uk, "Edit", DOCK_ACTION_KEYS)).toBe("Edit");
+    expect(translateFirst(uk, "Edit", DOCK_ACTION_KEYS)).toBe("Edit");
     expect(translate("uk-UA", "dock.you")).toBe("Ви");
     expect(translate("uk-UA", "dock.spectate")).toBe("спостерігає");
+  });
+
+  it("carries every filled-in placeholder, including repeated ones, into the translation", () => {
+    const uk = (key: Parameters<typeof translateIf>[1]) =>
+      translate("uk-UA", key);
+    expect(translateCopy(uk, "Connecting Discord to 0x0sky…")).toBe(
+      "Підключаємо Discord до 0x0sky…",
+    );
+    expect(translateCopy(uk, "Case-sensitive · 2–32 characters")).toBe(
+      "З урахуванням регістру · 2–32 символи",
+    );
+    expect(translateCopy(uk, "Case-sensitive · 3–40 characters")).toBe(
+      "З урахуванням регістру · символів: 3–40",
+    );
+    expect(
+      translateCopy(
+        uk,
+        "Could not connect GitHub to this Bond. Authorize GitHub again.",
+      ),
+    ).toBe(
+      "Не вдалося підключити GitHub до цього Bond. Авторизуйте GitHub ще раз.",
+    );
+    expect(
+      translateCopy(
+        uk,
+        "Could not connect GitHub to this Bond. Authorize Discord again.",
+      ),
+    ).toBe("Could not connect GitHub to this Bond. Authorize Discord again.");
+  });
+
+  it("prefers an exact catalog sentence over a template that would also match", () => {
+    const uk = (key: Parameters<typeof translateIf>[1]) =>
+      translate("uk-UA", key);
+    expect(
+      translateCopy(uk, "Could not connect Telegram to this Bond right now."),
+    ).toBe("Зараз не вдалося підключити Telegram до цього Bond.");
+    expect(translateCopy(uk, "Could not connect Discord right now.")).toBe(
+      "Зараз не вдалося підключити Discord.",
+    );
+  });
+
+  it("presents view-model copy in Ukrainian and leaves unknown wording alone", () => {
+    const uk = (key: Parameters<typeof translateIf>[1]) =>
+      translate("uk-UA", key);
+    expect(translateCopy(uk, "Map unavailable")).toBe("Мапа недоступна");
+    expect(translateCopy(uk, "Bond found — sign in")).toBe(
+      "Bond знайдено — увійдіть",
+    );
+    expect(translateCopy(uk, "Disconnect Telegram from this Bond")).toBe(
+      "Від’єднати Telegram від цього Bond",
+    );
+    expect(
+      translateCopy(uk, "Change your 3D model — currently Dasha 2.0"),
+    ).toBe("Змінити свою 3D модель — зараз Dasha 2.0");
+    expect(translateCopy(uk, "Couldn’t save this choice. Try again.")).toBe(
+      "Не вдалося зберегти цей вибір. Спробуйте ще раз.",
+    );
+    expect(translateCopy(uk, "Something no catalog says")).toBe(
+      "Something no catalog says",
+    );
+    const en = (key: Parameters<typeof translateIf>[1]) => translate("en", key);
+    expect(translateCopy(en, "Connecting Discord to 0x0sky…")).toBe(
+      "Connecting Discord to 0x0sky…",
+    );
   });
 });

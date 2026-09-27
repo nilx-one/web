@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { IDENTITY_EN, IDENTITY_UK } from "./messages/identity";
+import { WORLD_EN, WORLD_UK } from "./messages/world";
 
 /** A real language locale the product can render today. */
 export type ProductLocale = "en" | "uk-UA";
@@ -222,6 +224,8 @@ const EN_MESSAGES = {
   "dock.connect": "Connect",
   "dock.avaiaSaved": "Avaia saved",
   "dock.saveChoiceFailed": "Couldn’t save this choice. Try again.",
+  ...IDENTITY_EN,
+  ...WORLD_EN,
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -474,6 +478,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.connect": "Підключити",
   "dock.avaiaSaved": "Avaia збережено",
   "dock.saveChoiceFailed": "Не вдалося зберегти цей вибір. Спробуйте ще раз.",
+  ...IDENTITY_UK,
+  ...WORLD_UK,
 };
 
 const CATALOGS: Readonly<
@@ -535,53 +541,110 @@ export function translateIf(
   return value === translate("en", key) ? t(key) : value;
 }
 
-/** Present `value` from the first catalog sentence it still matches. */
+const PLACEHOLDER = /\{([A-Za-z]+)\}/g;
+
+interface CompiledTemplate {
+  readonly key: TranslationKey;
+  readonly pattern: RegExp;
+  readonly names: readonly string[];
+  readonly literalLength: number;
+}
+
+const compiledTemplates = new Map<TranslationKey, CompiledTemplate | null>();
+
+function escapePattern(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function compileTemplate(key: TranslationKey): CompiledTemplate | null {
+  const cached = compiledTemplates.get(key);
+  if (cached !== undefined) return cached;
+  const english = translate("en", key);
+  const names: string[] = [];
+  const seen = new Map<string, number>();
+  let source = "";
+  let cursor = 0;
+  let literalLength = 0;
+  for (const match of english.matchAll(PLACEHOLDER)) {
+    const literal = english.slice(cursor, match.index);
+    source += escapePattern(literal);
+    literalLength += literal.length;
+    const name = match[1] ?? "";
+    const group = seen.get(name);
+    if (group === undefined) {
+      names.push(name);
+      seen.set(name, names.length);
+      source += "(.+?)";
+    } else {
+      source += `\\${group}`;
+    }
+    cursor = match.index + match[0].length;
+  }
+  const tail = english.slice(cursor);
+  literalLength += tail.length;
+  const compiled =
+    names.length === 0
+      ? null
+      : {
+          key,
+          pattern: new RegExp(`^${source}${escapePattern(tail)}$`, "s"),
+          names,
+          literalLength,
+        };
+  compiledTemplates.set(key, compiled);
+  return compiled;
+}
+
+function fillTemplate(
+  t: Translate,
+  template: CompiledTemplate,
+  value: string,
+): string | undefined {
+  const match = template.pattern.exec(value);
+  if (match === null) return undefined;
+  return template.names.reduce(
+    (text, name, index) => text.replaceAll(`{${name}}`, match[index + 1] ?? ""),
+    t(template.key),
+  );
+}
+
+/**
+ * Present `value` from the first catalog sentence among `keys` it still
+ * matches. Exact sentences win over templates; `{placeholder}` templates are
+ * tried from the most specific wording down, and their filled-in values are
+ * carried into the translation unchanged. Anything else is shown as written.
+ */
 export function translateFirst(
   t: Translate,
   value: string,
   keys: readonly TranslationKey[],
 ): string {
-  return keys.reduce((current, key) => translateIf(t, key, current), value);
-}
-
-/**
- * Present `value` when it is still an English catalog sentence with `token`
- * filled in. Any other wording is shown as written.
- */
-export function translateNamed(
-  t: Translate,
-  key: TranslationKey,
-  value: string,
-  token = "{name}",
-): string {
-  const english = translate("en", key);
-  const pivot = english.indexOf(token);
-  if (pivot < 0) return value === english ? t(key) : value;
-  const prefix = english.slice(0, pivot);
-  const suffix = english.slice(pivot + token.length);
-  if (
-    value.length <= prefix.length + suffix.length ||
-    !value.startsWith(prefix) ||
-    !value.endsWith(suffix)
-  ) {
-    return value;
-  }
-  const name = value.slice(prefix.length, value.length - suffix.length);
-  return t(key).replaceAll(token, name);
-}
-
-/** Present `value` from the first named catalog sentence it still matches. */
-export function translateNamedFirst(
-  t: Translate,
-  value: string,
-  keys: readonly TranslationKey[],
-  token = "{name}",
-): string {
+  const templates: CompiledTemplate[] = [];
   for (const key of keys) {
-    const next = translateNamed(t, key, value, token);
-    if (next !== value) return next;
+    if (value === translate("en", key)) return t(key);
+    const template = compileTemplate(key);
+    if (template !== null) templates.push(template);
+  }
+  templates.sort((a, b) => b.literalLength - a.literalLength);
+  for (const template of templates) {
+    const filled = fillTemplate(t, template, value);
+    if (filled !== undefined) return filled;
   }
   return value;
+}
+
+const COPY_KEYS = [
+  "dock.saveChoiceFailed",
+  ...Object.keys(IDENTITY_EN),
+  ...Object.keys(WORLD_EN),
+] as readonly TranslationKey[];
+
+/**
+ * Present view-model copy — statuses, errors, notes and details that arrive
+ * as English sentences — in the active locale.
+ */
+export function translateCopy(t: Translate, value: string): string {
+  return translateFirst(t, value, COPY_KEYS);
 }
 
 let sessionPreference: LocalePreference | undefined;
