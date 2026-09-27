@@ -144,6 +144,31 @@ const EN_MESSAGES = {
     "The model you chose is no longer offered, so the default is used.",
   "settings.localModel.status.unsupportedOverBudget":
     "Unavailable: this model needs more memory than this surface allows.",
+  "dock.edit": "edit",
+  "dock.ai": "AI",
+  "dock.unconfigured": "unconfigured",
+  "dock.configured": "configured",
+  "dock.notRead": "not read",
+  "dock.ownedAvaia": "Owned Avaia",
+  "dock.personalBond": "Personal Bond",
+  "dock.providers": "Providers",
+  "dock.connected": "Connected",
+  "dock.notConnected": "Not connected",
+  "dock.open": "Open",
+  "dock.providerDescription":
+    "A provider account is an identity this Bond points at, one account per provider. Disconnecting detaches it from this Bond; it never deletes the account on the provider.",
+  "dock.model": "Model",
+  "dock.threeDModel": "3D model",
+  "dock.fixed": "fixed",
+  "dock.cancel": "Cancel",
+  "dock.save": "Save",
+  "dock.saving": "Saving…",
+  "dock.caseSensitiveAvaia":
+    "Case-sensitive · the owner discriminator and ai suffix are fixed by 0x1.",
+  "dock.caseSensitiveBond":
+    "Case-sensitive · the address is part of the Bond identity.",
+  "dock.studies":
+    "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.",
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -281,6 +306,31 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Обрану модель більше не пропонують, тож працює типова.",
   "settings.localModel.status.unsupportedOverBudget":
     "Недоступно: цій моделі потрібно більше пам’яті, ніж дозволено тут.",
+  "dock.edit": "змінити",
+  "dock.ai": "ШІ",
+  "dock.unconfigured": "не налаштовано",
+  "dock.configured": "налаштовано",
+  "dock.notRead": "не прочитано",
+  "dock.ownedAvaia": "Власна Avaia",
+  "dock.personalBond": "Особистий Bond",
+  "dock.providers": "Провайдери",
+  "dock.connected": "Підключено",
+  "dock.notConnected": "Не підключено",
+  "dock.open": "Відкрити",
+  "dock.providerDescription":
+    "Обліковий запис провайдера — це ідентичність, на яку вказує цей Bond; по одному обліковому запису на провайдера. Від’єднання від’єднує його від цього Bond і ніколи не видаляє обліковий запис у провайдера.",
+  "dock.model": "Модель",
+  "dock.threeDModel": "3D модель",
+  "dock.fixed": "не змінюється",
+  "dock.cancel": "Скасувати",
+  "dock.save": "Зберегти",
+  "dock.saving": "Зберігаємо…",
+  "dock.caseSensitiveAvaia":
+    "З урахуванням регістру · дискримінатор власника та суфікс ai фіксуються 0x1.",
+  "dock.caseSensitiveBond":
+    "З урахуванням регістру · адреса є частиною ідентичності Bond.",
+  "dock.studies":
+    "Дослідження використовують один скелет і один набір кліпів; вибір змінює тіло, а не спосіб його руху.",
 };
 
 const CATALOGS: Readonly<
@@ -327,6 +377,19 @@ export function resolveLocale(
 
 export function translate(locale: ProductLocale, key: TranslationKey): string {
   return CATALOGS[locale][key];
+}
+
+/**
+ * Present `value` in the active locale when it is still the English catalog
+ * sentence for `key`. Any other wording — a view-model that has since changed
+ * the copy — is shown as written.
+ */
+export function translateIf(
+  t: Translate,
+  key: TranslationKey,
+  value: string,
+): string {
+  return value === translate("en", key) ? t(key) : value;
 }
 
 let sessionPreference: LocalePreference | undefined;

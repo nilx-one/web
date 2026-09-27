@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { translateIf, useLocalization } from "../../shell/localization";
 import { AvatarPreviewCanvas } from "./avatar-preview-canvas";
 import type { AvatarFieldViewState } from "./avatar-editor-view-model";
 
@@ -21,6 +22,8 @@ export function AvatarModelField({
   state,
   onOpen,
 }: AvatarModelFieldProps): React.ReactElement {
+  const { t } = useLocalization();
+
   return (
     <button
       className="avatar-field"
@@ -54,10 +57,12 @@ export function AvatarModelField({
         )}
       </span>
       <span className="avatar-field__text">
-        <small>{state.label}</small>
+        <small>{translateIf(t, "dock.threeDModel", state.label)}</small>
         <strong>{state.modelName}</strong>
         <small>
-          {state.editable ? state.detail : `${state.detail} · fixed`}
+          {state.editable
+            ? state.detail
+            : `${state.detail} · ${t("dock.fixed")}`}
         </small>
       </span>
       <span className="avatar-field__disclosure" aria-hidden="true">

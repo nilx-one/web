@@ -30,6 +30,7 @@ import { DockWindow } from "../../shell/dock-window";
 import { LanguageSettings } from "../../shell/language-settings";
 import {
   translate,
+  translateIf,
   useLocalization,
   type ProductLocale,
 } from "../../shell/localization";
@@ -318,6 +319,7 @@ function AddressField({
   readonly onChange: ((slug: string) => void) | undefined;
   readonly onSubmit: (() => void) | undefined;
 }) {
+  const { t } = useLocalization();
   if (state === undefined || state.kind === "fixed") {
     return (
       <dl className="bond-profile__rows">
@@ -366,11 +368,11 @@ function AddressField({
           type="submit"
           disabled={!state.canSave}
         >
-          {state.busy ? "Saving…" : "Save"}
+          {state.busy ? t("dock.saving") : t("dock.save")}
         </button>
       </div>
       <p className="profile-edit__note" id={`${id}-note`}>
-        {state.note}
+        {translateIf(t, "dock.caseSensitiveBond", state.note)}
       </p>
       {state.error === undefined ? null : (
         <p className="profile-edit__error" role="alert">
@@ -1255,17 +1257,17 @@ export function AuthenticatedMapHomeView({
     if (activeDetail === "avatar") {
       return detailState?.subject === "avaia" ? avaiaLabel : pubDress;
     }
-    if (activeDetail === "avaia") return "Owned Avaia";
+    if (activeDetail === "avaia") return t("dock.ownedAvaia");
     if (section === "settings") return "Application";
-    return "Personal Bond";
+    return t("dock.personalBond");
   }
 
   function detailTitle(): string {
     switch (activeDetail) {
       case "providers":
-        return "Providers";
+        return t("dock.providers");
       case "avatar":
-        return "3D model";
+        return t("dock.threeDModel");
       case "avaia":
         return avaiaLabel;
       case undefined:
@@ -1367,7 +1369,7 @@ export function AuthenticatedMapHomeView({
                     aria-label={dock.configure.label}
                     onClick={activateConfigure}
                   >
-                    edit
+                    {t("dock.edit")}
                   </button>
                 </div>
                 <div className="bond-dock__pair">
@@ -1378,15 +1380,17 @@ export function AuthenticatedMapHomeView({
                     onClick={() => activateDockIdentity("left")}
                     aria-label={dock.left.actionLabel}
                   >
-                    <span className="bond-dock__glyph">{dock.left.glyph}</span>
+                    <span className="bond-dock__glyph">
+                      {translateIf(t, "dock.ai", dock.left.glyph)}
+                    </span>
                     <strong>{dock.left.address}</strong>
                     <small>
-                      {dock.left.seat === "bond" ? "You" : "AI"}
+                      {dock.left.seat === "bond" ? "You" : t("dock.ai")}
                       <i
                         className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
                         aria-hidden="true"
                       />
-                      {dock.left.role}
+                      {translateIf(t, "dock.unconfigured", dock.left.role)}
                     </small>
                   </button>
                   <span
@@ -1406,15 +1410,17 @@ export function AuthenticatedMapHomeView({
                     onClick={() => activateDockIdentity("right")}
                     aria-label={dock.right.actionLabel}
                   >
-                    <span className="bond-dock__glyph">{dock.right.glyph}</span>
+                    <span className="bond-dock__glyph">
+                      {translateIf(t, "dock.ai", dock.right.glyph)}
+                    </span>
                     <strong>{dock.right.address}</strong>
                     <small>
-                      {dock.right.seat === "bond" ? "You" : "AI"}
+                      {dock.right.seat === "bond" ? "You" : t("dock.ai")}
                       <i
                         className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
                         aria-hidden="true"
                       />
-                      {dock.right.role}
+                      {translateIf(t, "dock.unconfigured", dock.right.role)}
                     </small>
                   </button>
                 </div>
@@ -1471,7 +1477,7 @@ export function AuthenticatedMapHomeView({
                             ? `This Bond chose ${avatarChoice.unsupportedModel}, which this client cannot display. Update 0x1 to render that choice.`
                             : avatarChoice.unchosen
                               ? "No study chosen yet — no avatar is drawn until you choose."
-                              : "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves."}
+                              : t("dock.studies")}
                         </p>
                         {avatarChoice.error === undefined ? null : (
                           <p className="profile-edit__error" role="alert">
@@ -1482,7 +1488,7 @@ export function AuthenticatedMapHomeView({
                     )}
                     <dl className="bond-profile__rows">
                       <div>
-                        <dt>Providers</dt>
+                        <dt>{t("dock.providers")}</dt>
                         <dd>
                           {providers === undefined ? (
                             <small className="profile-edit__note" role="status">
@@ -1714,11 +1720,22 @@ export function AuthenticatedMapHomeView({
                               </span>
                               <span>
                                 <strong>{row.label}</strong>
-                                <small>{row.status}</small>
+                                <small>
+                                  {row.status === "Not connected"
+                                    ? t("dock.notConnected")
+                                    : translateIf(
+                                        t,
+                                        "dock.connected",
+                                        row.status,
+                                      )}
+                                </small>
                               </span>
                               {row.connected ? (
                                 <span className="provider-management__actions">
-                                  <ProviderMark row={row} label="Open" />
+                                  <ProviderMark
+                                    row={row}
+                                    label={t("dock.open")}
+                                  />
                                   <button
                                     className="provider-management__disconnect"
                                     type="button"
@@ -1744,10 +1761,7 @@ export function AuthenticatedMapHomeView({
                           ))}
                         </ul>
                         <p className="interface-settings__note">
-                          A provider account is an identity this Bond points at,
-                          one account per provider. Disconnecting detaches it
-                          from this Bond; it never deletes the account on the
-                          provider.
+                          {t("dock.providerDescription")}
                         </p>
                       </>
                     )}

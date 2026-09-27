@@ -1,6 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import {
+  translateIf,
+  useLocalization,
+  type Translate,
+} from "../../shell/localization";
 import type { AvaiaSetupViewState } from "./avaia-setup-view-model";
 import "./avaia-setup.css";
 
@@ -11,21 +16,36 @@ export interface AvaiaSetupViewProps {
   onSubmit(): void;
 }
 
+function configurationCopy(label: string, t: Translate): string {
+  switch (label) {
+    case "configured":
+      return t("dock.configured");
+    case "unconfigured":
+      return t("dock.unconfigured");
+    case "not read":
+      return t("dock.notRead");
+    default:
+      return label;
+  }
+}
+
 /**
  * The compact surface an owner configures their Avaia from.
  *
  * It carries the address and nothing it cannot honestly offer. A disabled "3D
  * model: Not available yet" field used to sit here for the same reason the
  * Dock's own `AvatarModelField` now sits right below this surface — but that
- * field is real, so the dead one only duplicated it. Commented out rather
- * than deleted, in case this surface ever needs to say something about a
- * model capability of its own again.
+ * field is real, so the dead one only duplicated it. Commented out rather than
+ * deleted, in case this surface ever needs to say something about a model
+ * capability of its own again.
  */
 export function AvaiaSetupView({
   state,
   onDraftChange,
   onSubmit,
 }: AvaiaSetupViewProps) {
+  const { t } = useLocalization();
+
   return (
     <div className="avaia-setup" data-configuration={state.configuration}>
       {/* The address itself is the screen's own large title, right above
@@ -33,9 +53,9 @@ export function AvaiaSetupView({
           one screen, so this only adds what the title does not already say. */}
       <div className="avaia-setup__summary">
         <span className="bond-dock__glyph" aria-hidden="true">
-          AI
+          {t("dock.ai")}
         </span>
-        <small>{state.configurationLabel}</small>
+        <small>{configurationCopy(state.configurationLabel, t)}</small>
       </div>
 
       <form
@@ -73,11 +93,11 @@ export function AvaiaSetupView({
             type="submit"
             disabled={!state.canSave}
           >
-            {state.busy ? "Saving…" : "Save"}
+            {state.busy ? t("dock.saving") : t("dock.save")}
           </button>
         </div>
         <p className="profile-edit__note" id="avaia-pub-dress-note">
-          {state.note}
+          {translateIf(t, "dock.caseSensitiveAvaia", state.note)}
         </p>
 
         {/* Hidden for now: duplicated the real AvatarModelField rendered
