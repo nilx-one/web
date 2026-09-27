@@ -144,6 +144,25 @@ const EN_MESSAGES = {
     "The model you chose is no longer offered, so the default is used.",
   "settings.localModel.status.unsupportedOverBudget":
     "Unavailable: this model needs more memory than this surface allows.",
+  "dock.edit": "edit",
+  "dock.ai": "AI",
+  "dock.unconfigured": "unconfigured",
+  "dock.ownedAvaia": "Owned Avaia",
+  "dock.personalBond": "Personal Bond",
+  "dock.providers": "Providers",
+  "dock.connected": "Connected",
+  "dock.open": "Open",
+  "dock.providerDescription":
+    "A provider account is an identity this Bond points at, one account per provider.",
+  "dock.threeDModel": "3D model",
+  "dock.cancel": "Cancel",
+  "dock.save": "Save",
+  "dock.saving": "Saving…",
+  "dock.caseSensitiveAvaia":
+    "Case-sensitive · the owner discriminator and ai suffix are fixed by 0x1.",
+  "dock.caseSensitiveBond": "Case-sensitive · the address is part of the Bond identity.",
+  "dock.studies":
+    "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.",
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -281,6 +300,26 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Обрану модель більше не пропонують, тож працює типова.",
   "settings.localModel.status.unsupportedOverBudget":
     "Недоступно: цій моделі потрібно більше пам’яті, ніж дозволено тут.",
+  "dock.edit": "змінити",
+  "dock.ai": "ШІ",
+  "dock.unconfigured": "не налаштовано",
+  "dock.ownedAvaia": "Власна Avaia",
+  "dock.personalBond": "Персоналія Bond",
+  "dock.providers": "Провайдери",
+  "dock.connected": "Підключено",
+  "dock.open": "Відкрити",
+  "dock.providerDescription":
+    "Обліковий запис провайдера — це ідентичність, на яку вказує цей Bond; по одному обліковому запису на провайдера.",
+  "dock.threeDModel": "3D модель",
+  "dock.cancel": "Скасувати",
+  "dock.save": "Збер",
+  "dock.saving": "Зберігаємо…",
+  "dock.caseSensitiveAvaia":
+    "З урахуванням регістру · дискримінатор власника та суфікс ai фіксуються 0x1.",
+  "dock.caseSensitiveBond":
+    "З урахуванням регістру · адреса є частиною ідентичності Bond.",
+  "dock.studies":
+    "Дослідження використовують один скелет і один набір кліпів; вибір змінює тіло, а не спосіб його руху.",
 };
 
 const CATALOGS: Readonly<
