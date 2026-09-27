@@ -56,7 +56,7 @@ export const DOCK_WINDOW_TRANSITION_MS = 420;
 
 function prefersReducedMotion(): boolean {
   return (
-    window.matchMedia?.("(prefers-reduced-motion: reduce").matches ?? false
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
   );
 }
 
@@ -139,8 +139,6 @@ export function DockWindow({ screen, depth, children }: DockWindowProps) {
   const settledHeight = useRef(0);
 
   if (settled.screen !== screen) {
-    // The screen the window still shows becomes the outgoing half of the pair,
-    // held as it was rather than re-derived from the props that replaced it.
     setTransition({
       navigation: depth < settled.depth ? "pop" : "push",
       from: settled.content,
@@ -159,24 +157,18 @@ export function DockWindow({ screen, depth, children }: DockWindowProps) {
       return;
     }
 
-    // A move that interrupts another starts from wherever the window is now.
     const from =
       element.style.height === ""
         ? settledHeight.current
         : element.getBoundingClientRect().height;
     const to = enteringRef.current?.offsetHeight ?? 0;
 
-    // A window with no measurable layout has no two heights to travel between,
-    // and a person who asked for less motion is not asking for this one. Both
-    // arrive settled, before the browser has painted the pair.
     if (from === 0 || to === 0 || prefersReducedMotion()) {
       setTransition(undefined);
       return;
     }
 
     element.style.height = `${from}px`;
-    // Reading the box back commits that height, so the browser animates from it
-    // instead of jumping straight to the height that replaces it.
     void element.offsetHeight;
     element.style.height = `${to}px`;
   }, [transition]);
