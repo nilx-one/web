@@ -12,7 +12,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{
         HeaderMap, HeaderValue, StatusCode,
-        header::{AUTHORIZATION, CACHE_CONTROL, COOKIE, RETRY_AFTER, SET_COOKIE},
+        header::{AUTHORIZATION, CACHE_CONTROL, COOKIE, RETRY_AFTER, SET_COOKIE, USER_AGENT},
     },
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -395,7 +395,7 @@ async fn acknowledge_native_recovery_key(
         .activate_native_registration(&challenge_hash, now)
         .await
     {
-        Ok(Some(identity)) => authenticated_response(&state, identity, now, None).await,
+        Ok(Some(identity)) => authenticated_response(&state, &headers, identity, now, None).await,
         Ok(None) => no_store_error(
             StatusCode::BAD_REQUEST,
             "invalid_registration_challenge",
@@ -479,6 +479,7 @@ async fn authenticate_native_identity(
     }
     authenticated_response(
         &state,
+        &headers,
         IdentityRecord::unresolved(credential.pub_dress),
         now,
         None,
@@ -515,7 +516,7 @@ async fn link_telegram_provider(
         Err(error) => return error.into_response(),
     };
     if !active {
-        return session_inactive();
+        return with_session_cookie(session_inactive(), cookie);
     }
     let mut response = link_telegram_provider_response(&state, &headers, identity, &request).await;
     if let Some(cookie) = cookie {
@@ -694,6 +695,7 @@ async fn recover_native_identity(
         Ok(true) => {
             authenticated_response(
                 &state,
+                &headers,
                 IdentityRecord::unresolved(pub_dress.to_string()),
                 now,
                 Some(replacement_recovery_key),
@@ -742,6 +744,7 @@ async fn reconcile_authenticated_identity(
 
 async fn authenticated_response(
     state: &ApiState,
+    headers: &HeaderMap,
     identity: IdentityRecord,
     now: u64,
     replacement_recovery_key: Option<String>,
@@ -761,14 +764,27 @@ async fn authenticated_response(
     let token_hash = state
         .secret_digester
         .digest("native-session", &session_token);
-    if let Err(error) = state
+    let label = crate::repository::session_client_label("Browser", request_user_agent(headers));
+    let supersede = presented_session_hash(state, headers);
+    let active_client = match state
         .repository
-        .create_native_session(&token_hash, &identity.pub_dress, now, session_expires_at, "Browser")
+        .create_native_session(
+            &token_hash,
+            &identity.pub_dress,
+            now,
+            session_expires_at,
+            &label,
+            true,
+            supersede.as_deref(),
+        )
         .await
     {
-        tracing::error!(%error, "native session creation failed");
-        return unavailable();
-    }
+        Ok(active) => active,
+        Err(error) => {
+            tracing::error!(%error, "native session creation failed");
+            return unavailable();
+        }
+    };
     let remembered_expires_at = now.saturating_add(state.native_auth.remembered_bond_ttl_seconds);
     let remembered_hint = match state
         .remembered_bond_signer
@@ -786,6 +802,7 @@ async fn authenticated_response(
         NativeAuthenticationResponse {
             state: "authenticated",
             identity: identity.into(),
+            active_client,
             replacement_recovery_key,
         },
     );
@@ -1081,6 +1098,7 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
         Ok(Some(identity)) => {
             let (active, _token_hash, cookie) = mint_session_cookie(
                 &state,
+                &headers,
                 &identity.pub_dress,
                 now,
                 client_label_for(provider_identity.provider),
@@ -1268,7 +1286,7 @@ async fn rename_pub_dress(
         Err(error) => return error.into_response(),
     };
     if !active {
-        return session_inactive();
+        return with_session_cookie(session_inactive(), cookie);
     }
     let mut response = rename_pub_dress_response(&state, &headers, identity, &request, now).await;
     if let Some(cookie) = cookie {
@@ -1365,7 +1383,7 @@ async fn choose_avatar_model(
         Err(error) => return error.into_response(),
     };
     if !active {
-        return session_inactive();
+        return with_session_cookie(session_inactive(), cookie);
     }
     let mut response = choose_avatar_model_response(&state, identity, request, now).await;
     if let Some(cookie) = cookie {
@@ -1440,7 +1458,7 @@ async fn rename_owned_avaia(
         Err(error) => return error.into_response(),
     };
     if !active {
-        return session_inactive();
+        return with_session_cookie(session_inactive(), cookie);
     }
     let mut response = rename_owned_avaia_response(&state, identity, &request, now).await;
     if let Some(cookie) = cookie {
@@ -1542,30 +1560,17 @@ fn renamed_response(
     response
 }
 
-/// The Bond behind a request, however this host proves it: a native session
-/// cookie, or a verified provider account bound to exactly one Bond.
-/// The Bond behind a request, and a session cookie to set on the response
-/// when one did not already exist.
+/// The Bond behind a request: a session cookie, or a verified provider
+/// account bound to exactly one Bond.
 ///
-/// A provider header such as Telegram `initData` is signed once per Mini App
-/// launch; requiring it fresh on every request would force its own validity
-/// window to span a whole session. Minting a native session the first time a
-/// provider header succeeds lets every later request in that session use the
-/// cookie instead, so the provider header's own TTL can stay short. See
-/// `nilx-one/0x1` `documents/15-devices-and-recovery.md`, Single Active
-/// Client.
-/// The Bond, whether this session is the active client, and a session
-/// cookie to set on the response when one did not already exist.
-///
-/// A caller that only reads may ignore the activity flag; a caller that
-/// would act for the Bond MUST refuse when it is `false` — an inactive
-/// client "can show what its host is authorized to show, but it cannot act
-/// for the Bond" (`nilx-one/0x1` `documents/15-devices-and-recovery.md`,
-/// Single Active Client).
-/// The Bond, whether this session is the active client, this session's own
-/// token hash (so a caller can name it, e.g. as the requester of an
-/// activation request), and a session cookie to set on the response when
-/// one did not already exist.
+/// Returns the Bond, whether this session is the active client, this
+/// session's token hash, and a session cookie to set when one was just
+/// minted. A provider header such as Telegram `initData` is signed once per
+/// Mini App launch, so the first success mints a native session and later
+/// requests use the cookie. A caller that only reads may ignore the activity
+/// flag. A caller that would act for the Bond must refuse when it is
+/// `false`. See `nilx-one/0x1` `documents/15-devices-and-recovery.md`,
+/// Single Active Client.
 async fn authenticated_bond(
     state: &ApiState,
     headers: &HeaderMap,
@@ -1592,6 +1597,7 @@ async fn authenticated_bond(
         Ok(Some(identity)) => {
             let (active, token_hash, cookie) = mint_session_cookie(
                 state,
+                headers,
                 &identity.pub_dress,
                 now,
                 client_label_for(provider.provider),
@@ -1617,24 +1623,37 @@ fn client_label_for(provider: crate::IdentityProvider) -> &'static str {
 
 /// Mints a native session for a just-verified provider identity so a later
 /// request can present the cookie instead of re-proving the provider, and
-/// reports whether that session came up active. Failure to mint is not
-/// fatal to the request that triggered it - that request already has its
-/// identity, and it simply tries again next time - so a mint failure is
-/// reported as `(false, <empty hash>, None)` rather than propagated.
+/// reports whether that session came up active. Host material is never
+/// `credential_authenticated`. Failure to mint is not fatal to the request
+/// that triggered it — that request already has its identity, and it simply
+/// tries again next time — so a mint failure is reported as
+/// `(false, <empty hash>, None)` rather than propagated. Callers must not
+/// treat that empty hash as a session that can open an activation request.
 async fn mint_session_cookie(
     state: &ApiState,
+    headers: &HeaderMap,
     pub_dress: &str,
     now: u64,
-    client_label: &str,
+    host: &str,
 ) -> (bool, Vec<u8>, Option<String>) {
     let Ok(token) = TokenFactory::session() else {
         return (false, Vec::new(), None);
     };
     let token_hash = state.secret_digester.digest("native-session", &token);
     let ttl = state.native_auth.session_ttl_seconds;
+    let label = crate::repository::session_client_label(host, request_user_agent(headers));
+    let supersede = presented_session_hash(state, headers);
     match state
         .repository
-        .create_native_session(&token_hash, pub_dress, now, now.saturating_add(ttl), client_label)
+        .create_native_session(
+            &token_hash,
+            pub_dress,
+            now,
+            now.saturating_add(ttl),
+            &label,
+            false,
+            supersede.as_deref(),
+        )
         .await
     {
         Ok(active) => (
@@ -1644,6 +1663,18 @@ async fn mint_session_cookie(
         ),
         Err(_) => (false, Vec::new(), None),
     }
+}
+
+fn presented_session_hash(state: &ApiState, headers: &HeaderMap) -> Option<Vec<u8>> {
+    let token = read_cookie(headers, SESSION_COOKIE)?;
+    Some(state.secret_digester.digest("native-session", &token))
+}
+
+fn request_user_agent(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
 }
 
 async fn register_identity(
@@ -1839,6 +1870,13 @@ fn session_inactive() -> Response {
     )
 }
 
+fn with_session_cookie(mut response: Response, cookie: Option<String>) -> Response {
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
 fn api_error(status: StatusCode, code: &'static str, message: &'static str) -> Response {
     no_store_error(status, code, message)
 }
@@ -1974,6 +2012,10 @@ struct NativeRegistrationResponse {
 struct NativeAuthenticationResponse {
     state: &'static str,
     identity: IdentityProjection,
+    /// Whether the session just minted is the client authorized to act.
+    /// A password login on a browser that was already active stays active;
+    /// a different device starts inactive and still needs the active client.
+    active_client: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     replacement_recovery_key: Option<String>,
 }

@@ -123,7 +123,7 @@ async fn update_owned_avaia(
         Err(error) => return error.into_response(),
     };
     if !active {
-        return session_inactive();
+        return with_session_cookie(session_inactive(), cookie);
     }
     let mut response = update_owned_avaia_response(&state, identity, &request, now).await;
     if let Some(cookie) = cookie {
@@ -251,7 +251,7 @@ async fn write_owned_avaia_location(
         Err(error) => return error.into_response(),
     };
     if !active {
-        return session_inactive();
+        return with_session_cookie(session_inactive(), cookie);
     }
     let mut response = write_owned_avaia_location_response(&state, identity, &request, now).await;
     if let Some(cookie) = cookie {
