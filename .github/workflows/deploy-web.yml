@@ -117,7 +117,8 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
-          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$GITHUB_OUTPUT"
+          baseline="$(bash deploy/infra-workload.sh latest-run-id)"
+          echo "baseline_run_id=$baseline" >>"$GITHUB_OUTPUT"
 
           jq -n \
             --arg workload "$WORKLOAD" \
@@ -136,8 +137,8 @@ jobs:
       - name: Wait for infra deployment
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
-          STARTED_AT: ${{ steps.dispatch.outputs.started_at }}
-        run: bash deploy/infra-workload.sh await "$WORKLOAD" "$CLIENT_IMAGE" "$STARTED_AT"
+          BASELINE_RUN_ID: ${{ steps.dispatch.outputs.baseline_run_id }}
+        run: bash deploy/infra-workload.sh await "$WORKLOAD" "$CLIENT_IMAGE" "$BASELINE_RUN_ID"
 
       - name: Publish summary
         if: always()

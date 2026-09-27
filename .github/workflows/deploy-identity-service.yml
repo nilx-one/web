@@ -129,55 +129,16 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
-
-          contract_at() {
-            local value
-            value="$(git show "$1:services/identity/deploy/contract.version" 2>/dev/null | tr -d '[:space:]')" || return 1
-            [[ "$value" =~ ^[0-9]+$ ]] || return 1
-            printf '%s' "$value"
-          }
-
-          package_contract="$(contract_at "$IDENTITY_RELEASE_SHA")" || {
-            echo "Identity package $IDENTITY_RELEASE_SHA has no readable contract.version." >&2
-            exit 1
-          }
-          if (( package_contract < REQUIRED_IDENTITY_CONTRACT )); then
-            echo "Identity package $IDENTITY_RELEASE_SHA provides contract $package_contract, clients require $REQUIRED_IDENTITY_CONTRACT." >&2
-            exit 1
-          fi
-
           active_image="$(bash deploy/infra-workload.sh active-image nilxone-identity)"
-          active_sha=""
-          active_contract=""
-          if [[ "$active_image" == "${IMAGE_REPOSITORY}:sha-"* ]]; then
-            active_sha="${active_image#"${IMAGE_REPOSITORY}:sha-"}"
-            if [[ "$active_sha" =~ ^[0-9a-f]{40}$ ]]; then
-              active_contract="$(contract_at "$active_sha" || true)"
-            else
-              active_sha=""
-            fi
-          fi
+          echo "IDENTITY_ACTIVE_IMAGE=${active_image:-none}" >>"$GITHUB_ENV"
 
-          deploy=true
-          if [ "$FORCE_IDENTITY" = true ]; then
-            reason="forced by the requested target"
-          elif [ -z "$active_sha" ]; then
-            reason="active identity package is unknown"
-          elif [ "$active_sha" = "$IDENTITY_RELEASE_SHA" ]; then
-            deploy=false
-            reason="identity package $active_sha is already active"
-          elif [ -n "$active_contract" ] &&
-            (( active_contract >= REQUIRED_IDENTITY_CONTRACT )) &&
-            git merge-base --is-ancestor "$IDENTITY_RELEASE_SHA" "$active_sha" 2>/dev/null; then
-            deploy=false
-            reason="newer identity package $active_sha with contract $active_contract is already active"
-          else
-            reason="identity package changed from $active_sha"
-          fi
+          decision="$(ACTIVE_IMAGE="$active_image" bash deploy/identity-activation.sh)"
+          deploy="$(sed -n 's/^deploy=//p' <<<"$decision")"
+          reason="$(sed -n 's/^reason=//p' <<<"$decision")"
+          [[ "$deploy" =~ ^(true|false)$ ]]
 
           echo "Identity activation required: $deploy ($reason)."
           echo "deploy=$deploy" >>"$GITHUB_OUTPUT"
-          echo "IDENTITY_ACTIVE_IMAGE=${active_image:-unknown}" >>"$GITHUB_ENV"
           echo "IDENTITY_DECISION=$reason" >>"$GITHUB_ENV"
 
       - id: provider
@@ -213,8 +174,8 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
-          dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "started_at=$dispatch_started" >>"$GITHUB_OUTPUT"
+          baseline="$(bash deploy/infra-workload.sh latest-run-id)"
+          echo "baseline_run_id=$baseline" >>"$GITHUB_OUTPUT"
 
           jq -n \
             --arg workload "nilxone-identity" \
@@ -240,8 +201,8 @@ jobs:
         if: steps.need.outputs.deploy == 'true'
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
-          STARTED_AT: ${{ steps.dispatch.outputs.started_at }}
-        run: bash deploy/infra-workload.sh await nilxone-identity "$IDENTITY_IMAGE" "$STARTED_AT"
+          BASELINE_RUN_ID: ${{ steps.dispatch.outputs.baseline_run_id }}
+        run: bash deploy/infra-workload.sh await nilxone-identity "$IDENTITY_IMAGE" "$BASELINE_RUN_ID"
 
       - name: Revoke transient provider environment
         if: always() && steps.provider.outputs.published == 'true'
@@ -271,7 +232,7 @@ jobs:
             echo "- force requested: \`$FORCE_IDENTITY\`"
             echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
             echo "- previously active: \`${IDENTITY_ACTIVE_IMAGE:-unknown}\`"
-            echo "- activation: \`${{ steps.need.outputs.deploy || 'not decided' }}\` (${IDENTITY_DECISION:-not decided})"
+            echo "- activation: \`${{ steps.need.outputs.deploy || 'not decided' }}\` (${IDENTITY_DECISION:-see the decision step log})"
             echo "- provider environment: \`transient\`"
             echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"
