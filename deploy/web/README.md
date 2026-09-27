@@ -77,11 +77,17 @@ discord
 identity
 ```
 
-For an individual client target, the orchestrator reads `requiresIdentityContract` from the deployment manifest. The identity dependency workflow inspects the active production identity contract and performs no environment transition when the active contract is already sufficient. When a newer contract is required, it resolves the newest successful packaged identity image in the selected release ancestry, verifies the image contract label, activates identity first, and only then allows client deployment.
+For every target, the orchestrator reads `requiresIdentityContract` from the deployment manifest and runs the identity dependency workflow first. It resolves the newest successful packaged identity image in the selected release ancestry and verifies that its `contract.version` satisfies the requirement. The running identity image is read from the newest successful `nilxone-identity` run in infra (`deploy/infra-workload.sh active-image`). `deploy/identity-activation.sh` then decides:
 
-`identity` is an explicit maintenance target that forces activation of the newest verified identity package available in the selected master ancestry.
+- activate when the target forces it, when no successful identity run exists, when the package descends from the running one, or when the running contract is below the requirement;
+- leave it alone when that package is already running, or when the running package is newer and its contract is sufficient;
+- fail without touching production when the running package cannot be read, or has diverged from the release package while its contract is already sufficient. Deploy the `identity` target to replace it deliberately.
 
-`all` is the complete release path: it forces activation of the newest verified Identity package in the selected ancestry, then rolls out every client target from the manifest. Client activations are serialized and each target retains its own rollback boundary; `all` is coordinated but not a cross-target transactional rollback.
+Client deployment starts only after identity is settled.
+
+`identity` is an explicit maintenance target that forces activation of the newest verified identity package available in the selected ancestry.
+
+`all` is the complete release path: it settles Identity as above, then rolls out every client target from the manifest in `deployOrder`, one host at a time. Each client job waits for its infra `deploy-workload` run to finish (`deploy/infra-workload.sh await`), and a failed host stops the remaining ones. Each target retains its own rollback boundary; `all` is coordinated but not a cross-target transactional rollback.
 
 Each client target has its own release directory under `${CLIENT_DEPLOYMENT_ROOT:-.local/share/nilx-one}/<target>` and its own Compose project. Updating one target does not move the others to a new image SHA.
 

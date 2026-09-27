@@ -10,6 +10,10 @@ on:
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/deploy-web.yml"
       - ".github/workflows/validate-deploy-contract.yml"
+      - "deploy/infra-workload.sh"
+      - "deploy/infra-workload.test.sh"
+      - "deploy/identity-activation.sh"
+      - "deploy/identity-activation.test.sh"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   push:
@@ -20,6 +24,10 @@ on:
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/deploy-web.yml"
       - ".github/workflows/validate-deploy-contract.yml"
+      - "deploy/infra-workload.sh"
+      - "deploy/infra-workload.test.sh"
+      - "deploy/identity-activation.sh"
+      - "deploy/identity-activation.test.sh"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   workflow_dispatch:
@@ -197,6 +205,48 @@ jobs:
           grep -Fq "IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web" "$file"
           grep -Fq 'sha-$RELEASE_SHA' "$file"
 
+      - name: Validate infra activation is awaited
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # A repository_dispatch returns before infra deploys anything, so a client or identity
+          # job that does not wait would let "all" report success while hosts are still rolling out
+          # side by side, or after one of them failed.
+          for file in .github/workflows/deploy-web.yml .github/workflows/deploy-identity-service.yml; do
+            grep -Fq "deploy/infra-workload.sh await" "$file" ||
+              { echo "::error file=$file::the infra deployment must be awaited through deploy/infra-workload.sh"; exit 1; }
+          done
+
+          grep -Fq "max-parallel: 1" .github/workflows/deploy-production.yml ||
+            { echo "::error file=.github/workflows/deploy-production.yml::client hosts must be deployed one at a time"; exit 1; }
+
+          bash deploy/infra-workload.test.sh
+
+      - name: Validate identity is activated on demand
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          file=".github/workflows/deploy-production.yml"
+
+          force_for() {
+            awk -v arm="$1)" '
+              $1 == arm { inside = 1; next }
+              inside && /force_identity=/ { sub(/.*force_identity=/, ""); print; exit }
+              inside && $1 == ";;" { exit }
+            ' "$file"
+          }
+
+          [ "$(force_for all)" = false ] ||
+            { echo "::error file=$file::'all' must activate identity only when the release needs it (force_identity=false)"; exit 1; }
+          [ "$(force_for identity)" = true ] ||
+            { echo "::error file=$file::'identity' must force identity activation (force_identity=true)"; exit 1; }
+
+          grep -Fq "bash deploy/identity-activation.sh" .github/workflows/deploy-identity-service.yml ||
+            { echo "::error file=.github/workflows/deploy-identity-service.yml::the activation decision must go through deploy/identity-activation.sh"; exit 1; }
+
+          bash deploy/identity-activation.test.sh
+
       - name: Publish summary
         if: always()
         shell: bash
@@ -211,5 +261,6 @@ jobs:
             echo "- identity handoff: validated"
             echo "- provider environment: transient"
             echo "- client handoff: validated"
+            echo "- infra activation: awaited"
             echo "- deployment: not performed"
           } >> "$GITHUB_STEP_SUMMARY"

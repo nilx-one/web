@@ -15,7 +15,7 @@ on:
         required: true
         type: number
       force:
-        description: Redeploy the latest verified identity package even when the active contract is sufficient
+        description: Redeploy the latest verified identity package even when it is already active
         required: true
         type: boolean
     secrets:
@@ -37,7 +37,7 @@ jobs:
   deploy:
     name: Ensure identity contract ${{ inputs.required_contract }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     environment:
       name: production
     env:
@@ -123,8 +123,27 @@ jobs:
             exit 1
           fi
 
+      - id: need
+        name: Decide whether identity must be activated
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          active_image="$(bash deploy/infra-workload.sh active-image nilxone-identity)"
+          echo "IDENTITY_ACTIVE_IMAGE=${active_image:-none}" >>"$GITHUB_ENV"
+
+          decision="$(ACTIVE_IMAGE="$active_image" bash deploy/identity-activation.sh)"
+          deploy="$(sed -n 's/^deploy=//p' <<<"$decision")"
+          reason="$(sed -n 's/^reason=//p' <<<"$decision")"
+          [[ "$deploy" =~ ^(true|false)$ ]]
+
+          echo "Identity activation required: $deploy ($reason)."
+          echo "deploy=$deploy" >>"$GITHUB_OUTPUT"
+          echo "IDENTITY_DECISION=$reason" >>"$GITHUB_ENV"
+
       - id: provider
         name: Publish transient provider environment
+        if: steps.need.outputs.deploy == 'true'
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
           TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
@@ -150,12 +169,13 @@ jobs:
 
       - id: dispatch
         name: Request infra identity deployment
+        if: steps.need.outputs.deploy == 'true'
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
-          dispatch_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "started_at=$dispatch_started" >>"$GITHUB_OUTPUT"
+          baseline="$(bash deploy/infra-workload.sh latest-run-id)"
+          echo "baseline_run_id=$baseline" >>"$GITHUB_OUTPUT"
 
           jq -n \
             --arg workload "nilxone-identity" \
@@ -178,40 +198,11 @@ jobs:
             gh api --method POST "repos/${INFRA_REPOSITORY}/dispatches" --input -
 
       - name: Wait for infra deployment
+        if: steps.need.outputs.deploy == 'true'
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
-          STARTED_AT: ${{ steps.dispatch.outputs.started_at }}
-        run: |
-          set -Eeuo pipefail
-          for attempt in $(seq 1 40); do
-            response="$(gh api --method GET "repos/${INFRA_REPOSITORY}/actions/workflows/deploy-workload.yml/runs" -f event=repository_dispatch -f per_page=20)"
-            deployment_run="$(jq -r --arg started "$STARTED_AT" '.workflow_runs | map(select(.created_at >= $started)) | sort_by(.created_at) | last | .id // empty' <<<"$response")"
-
-            if [ -n "$deployment_run" ]; then
-              state="$(jq -r --argjson id "$deployment_run" '.workflow_runs[] | select(.id == $id) | .status' <<<"$response")"
-              conclusion="$(jq -r --argjson id "$deployment_run" '.workflow_runs[] | select(.id == $id) | (.conclusion // "")' <<<"$response")"
-              url="$(jq -r --argjson id "$deployment_run" '.workflow_runs[] | select(.id == $id) | .html_url' <<<"$response")"
-
-              if [ "$state" = completed ]; then
-                if [ "$conclusion" != success ]; then
-                  echo "Infra identity deployment failed: $conclusion" >&2
-                  echo "$url" >&2
-                  exit 1
-                fi
-                echo "Infra identity deployment completed successfully: $url"
-                exit 0
-              fi
-
-              echo "Infra identity deployment is $state (attempt $attempt/40)."
-            else
-              echo "Waiting for infra repository_dispatch run (attempt $attempt/40)."
-            fi
-
-            sleep 10
-          done
-
-          echo "Timed out waiting for infra identity deployment." >&2
-          exit 1
+          BASELINE_RUN_ID: ${{ steps.dispatch.outputs.baseline_run_id }}
+        run: bash deploy/infra-workload.sh await nilxone-identity "$IDENTITY_IMAGE" "$BASELINE_RUN_ID"
 
       - name: Revoke transient provider environment
         if: always() && steps.provider.outputs.published == 'true'
@@ -240,6 +231,8 @@ jobs:
             echo "- required contract: \`$REQUIRED_IDENTITY_CONTRACT\`"
             echo "- force requested: \`$FORCE_IDENTITY\`"
             echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
+            echo "- previously active: \`${IDENTITY_ACTIVE_IMAGE:-unknown}\`"
+            echo "- activation: \`${{ steps.need.outputs.deploy || 'not decided' }}\` (${IDENTITY_DECISION:-see the decision step log})"
             echo "- provider environment: \`transient\`"
             echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"

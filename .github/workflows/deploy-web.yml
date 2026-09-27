@@ -26,11 +26,12 @@ jobs:
   deploy:
     name: Request infra activation for ${{ inputs.target }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       CLIENT_NAME: ${{ inputs.target }}
       IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web
+      INFRA_REPOSITORY: aiaiaiai-org/infra
       INFRA_DEPLOY_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -100,11 +101,25 @@ jobs:
             exit 1
           fi
 
-      - name: Request infra workload deployment
+      - name: Validate infra deployment credential
         env:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         run: |
           set -Eeuo pipefail
+          if ! gh api --method GET "repos/${INFRA_REPOSITORY}/actions/workflows/deploy-workload.yml" >/dev/null; then
+            echo "::error::INFRA_DEPLOY_TOKEN cannot read Actions workflows in ${INFRA_REPOSITORY}. Grant the token Actions: Read access to the infra repository." >&2
+            exit 1
+          fi
+
+      - id: dispatch
+        name: Request infra workload deployment
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          baseline="$(bash deploy/infra-workload.sh latest-run-id)"
+          echo "baseline_run_id=$baseline" >>"$GITHUB_OUTPUT"
+
           jq -n \
             --arg workload "$WORKLOAD" \
             --arg image "$CLIENT_IMAGE" \
@@ -117,16 +132,22 @@ jobs:
                 source_repository: $source
               }
             }' |
-            gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
+            gh api --method POST "repos/${INFRA_REPOSITORY}/dispatches" --input -
+
+      - name: Wait for infra deployment
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+          BASELINE_RUN_ID: ${{ steps.dispatch.outputs.baseline_run_id }}
+        run: bash deploy/infra-workload.sh await "$WORKLOAD" "$CLIENT_IMAGE" "$BASELINE_RUN_ID"
 
       - name: Publish summary
         if: always()
         run: |
           {
-            echo "### 0x1 client deployment request"
+            echo "### 0x1 client deployment"
             echo
-            echo "- target: `$CLIENT_NAME`"
-            echo "- workload: `$WORKLOAD`"
-            echo "- image: `$CLIENT_IMAGE`"
-            echo "- result: `${{ job.status }}`"
+            echo "- target: \`$CLIENT_NAME\`"
+            echo "- workload: \`${WORKLOAD:-unknown}\`"
+            echo "- image: \`${CLIENT_IMAGE:-unknown}\`"
+            echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"

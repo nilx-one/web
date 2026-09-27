@@ -71,7 +71,7 @@ jobs:
               ;;
             all)
               clients="$(jq -c '.deployOrder' deploy/web/targets.json)"
-              force_identity=true
+              force_identity=false
               required_identity_contract="$(jq -r '[.deployOrder[] as $name | .targets[$name].requiresIdentityContract] | max' deploy/web/targets.json)"
               ;;
             web|telegram|discord)
@@ -112,7 +112,7 @@ jobs:
             echo "- source branch: \`$source_ref\`"
             echo "- release: \`$release_sha\`"
             echo "- requested target: \`$TARGET\`"
-            echo "- client targets: \`$clients\`"
+            echo "- client targets (one at a time, in order): \`$clients\`"
             echo "- required identity contract: \`$required_identity_contract\`"
             echo "- force identity: \`$force_identity\`"
           } >>"$GITHUB_STEP_SUMMARY"
