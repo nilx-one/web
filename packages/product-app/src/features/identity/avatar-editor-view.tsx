@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { useLocalization } from "../../shell/localization";
 import { AvatarPreviewCanvas } from "./avatar-preview-canvas";
 import type { AvatarEditorViewState } from "./avatar-editor-view-model";
 
@@ -27,6 +28,8 @@ export function AvatarEditorView({
   onCancel,
   onSave,
 }: AvatarEditorViewProps): React.ReactElement {
+  const { t } = useLocalization();
+
   return (
     <div className="avatar-editor">
       <div className="avatar-editor__stage">
@@ -40,7 +43,7 @@ export function AvatarEditorView({
       </div>
 
       <fieldset className="avatar-editor__models">
-        <legend>Model</legend>
+        <legend>{t("dock.threeDModel")}</legend>
         {state.models.map((option) => (
           <label
             key={option.model}
@@ -93,7 +96,7 @@ export function AvatarEditorView({
 
       <div className="avatar-editor__actions">
         <button type="button" onClick={onCancel} disabled={state.busy}>
-          Cancel
+          {t("dock.cancel")}
         </button>
         <button
           type="button"
@@ -101,7 +104,7 @@ export function AvatarEditorView({
           onClick={onSave}
           disabled={!state.canSave}
         >
-          {state.busy ? "Saving…" : "Save"}
+          {state.busy ? t("dock.saving") : t("dock.save")}
         </button>
       </div>
     </div>
@@ -115,7 +118,7 @@ export function AvatarEditorView({
 //   readonly slot: AvatarSlot;
 //   readonly label: string;
 //   readonly multiple: boolean;
-//   readonly items: AvatarEditorViewState["sections"][number]["items"];
+//   readonly items: readonly AvatarEditorViewState["sections"][number]["items"];
 //   readonly busy: boolean;
 //   readonly onEquip: (itemId: string) => void;
 // }
@@ -139,9 +142,6 @@ export function AvatarEditorView({
 //               className={`wardrobe__item${
 //                 item.selected ? " wardrobe__item--worn" : ""
 //               }`}
-//               // A picker where one thing is on is a set of radios; one where
-//               // several may be is a set of switches. Saying which it is out
-//               // loud is what lets it be used without seeing it.
 //               role={multiple ? "switch" : "radio"}
 //               aria-checked={item.selected}
 //               disabled={busy}
