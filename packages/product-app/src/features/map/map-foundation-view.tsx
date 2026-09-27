@@ -6,12 +6,14 @@ import { useEffect, useRef, useState } from "react";
 
 import "./map-foundation-view.css";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
+import { translateCopy, useLocalization } from "../../shell/localization";
 
 export interface MapFoundationViewProps {
   readonly renderer: MapRenderer;
 }
 
 export function MapFoundationView({ renderer }: MapFoundationViewProps) {
+  const { t } = useLocalization();
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<MapRendererStatus>(() =>
     renderer.getStatus(),
@@ -35,8 +37,8 @@ export function MapFoundationView({ renderer }: MapFoundationViewProps) {
     <main className="map-foundation" data-map-tone={viewModel.tone}>
       <div className="map-foundation__canvas" ref={containerRef} />
       <aside className="map-foundation__status" aria-live="polite">
-        <strong>{viewModel.label}</strong>
-        <span>{viewModel.detail}</span>
+        <strong>{translateCopy(t, viewModel.label)}</strong>
+        <span>{translateCopy(t, viewModel.detail)}</span>
       </aside>
     </main>
   );

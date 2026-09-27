@@ -10,6 +10,7 @@ import {
   PUB_DRESS_URL_ZONE_LABEL,
   type PubDressUrlViewState,
 } from "./pub-dress-url-view-model";
+import { translateCopy, useLocalization } from "../../shell/localization";
 
 export interface PubDressUrlFieldProps {
   readonly state: PubDressUrlViewState;
@@ -39,6 +40,7 @@ export function PubDressUrlField({
   busy = false,
   onSuffixChange,
 }: PubDressUrlFieldProps) {
+  const { t } = useLocalization();
   if (state.kind === "idle") {
     return null;
   }
@@ -48,7 +50,7 @@ export function PubDressUrlField({
   return (
     <section className="pub-dress-url" aria-labelledby="pub-dress-url-label">
       <span className="surface-kicker" id="pub-dress-url-label">
-        public address
+        {t("identity.url.label")}
       </span>
 
       {state.kind === "unrepresentable" ? (
@@ -91,7 +93,10 @@ export function PubDressUrlField({
             spellCheck={false}
             placeholder="00"
             disabled={busy}
-            aria-label={`Distinguishing part of ${state.stem}${PUB_DRESS_URL_ZONE_LABEL}`}
+            aria-label={t("identity.url.suffix").replaceAll(
+              "{name}",
+              `${state.stem}${PUB_DRESS_URL_ZONE_LABEL}`,
+            )}
             aria-invalid={state.status === "invalid"}
             aria-describedby={statusId}
             onChange={(event) =>
@@ -107,7 +112,7 @@ export function PubDressUrlField({
             className="status-action"
             type="button"
             disabled={busy}
-            aria-label="Suggest another distinguishing part"
+            aria-label={t("identity.url.suggest")}
             onClick={() => onSuffixChange(suggestPubDressUrlSuffix())}
           >
             <ShuffleGlyph />
@@ -138,7 +143,7 @@ export function PubDressUrlField({
         className={`identity-status identity-status--${state.kind === "unrepresentable" ? "invalid" : state.status}`}
         aria-live="polite"
       >
-        {state.detail}
+        {translateCopy(t, state.detail)}
       </p>
     </section>
   );

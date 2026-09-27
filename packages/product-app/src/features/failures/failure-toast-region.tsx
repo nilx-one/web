@@ -196,11 +196,13 @@ function FailureToastRegion({
   label,
   onDismiss,
 }: FailureToastRegionProps) {
+  const { t } = useLocalization();
   const viewport = useToastViewportNode();
   const region = (
     <ToastRegion
       toasts={toasts}
       label={label}
+      copy={{ reference: t("toast.reference"), dismiss: t("toast.dismiss") }}
       placement={viewport === undefined ? "viewport" : "inline"}
       onDismiss={onDismiss}
     />

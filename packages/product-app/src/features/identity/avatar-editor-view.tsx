@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useLocalization } from "../../shell/localization";
+import { translateCopy, useLocalization } from "../../shell/localization";
 import { AvatarPreviewCanvas } from "./avatar-preview-canvas";
 import type { AvatarEditorViewState } from "./avatar-editor-view-model";
 
@@ -36,7 +36,10 @@ export function AvatarEditorView({
         <AvatarPreviewCanvas
           scene={state.scene}
           framing="full-body"
-          label={`${state.selectedName}, as this draft would look`}
+          label={t("avatar.preview.draft").replaceAll(
+            "{name}",
+            state.selectedName,
+          )}
           className="avatar-editor__preview"
           animated
         />
@@ -54,7 +57,7 @@ export function AvatarEditorView({
             <img src={option.thumbnailUrl} alt="" aria-hidden="true" />
             <span>
               <strong>{option.name}</strong>
-              <small>{option.detail}</small>
+              <small>{translateCopy(t, option.detail)}</small>
             </span>
             <input
               type="radio"
@@ -68,7 +71,9 @@ export function AvatarEditorView({
         ))}
       </fieldset>
 
-      <p className="avatar-editor__note">{state.appearanceNote}</p>
+      <p className="avatar-editor__note">
+        {translateCopy(t, state.appearanceNote)}
+      </p>
 
       {/* Hidden for now: equipping an item here does not persist. Re-enable
           once that is fixed — onEquip and state.sections are untouched, only
@@ -88,11 +93,13 @@ export function AvatarEditorView({
 
       {state.error === undefined ? null : (
         <p className="profile-edit__error" role="alert">
-          {state.error}
+          {translateCopy(t, state.error)}
         </p>
       )}
 
-      <p className="avatar-editor__note">{state.storageNote}</p>
+      <p className="avatar-editor__note">
+        {translateCopy(t, state.storageNote)}
+      </p>
 
       <div className="avatar-editor__actions">
         <button type="button" onClick={onCancel} disabled={state.busy}>

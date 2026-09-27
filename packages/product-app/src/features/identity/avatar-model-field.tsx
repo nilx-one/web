@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { translateIf, useLocalization } from "../../shell/localization";
+import {
+  translateCopy,
+  translateIf,
+  useLocalization,
+} from "../../shell/localization";
 import { AvatarPreviewCanvas } from "./avatar-preview-canvas";
 import type { AvatarFieldViewState } from "./avatar-editor-view-model";
 
@@ -29,7 +33,7 @@ export function AvatarModelField({
       className="avatar-field"
       type="button"
       onClick={onOpen}
-      aria-label={state.openLabel}
+      aria-label={translateCopy(t, state.openLabel)}
     >
       <span className="avatar-field__figure">
         {state.scene === undefined ? (
@@ -51,18 +55,21 @@ export function AvatarModelField({
           <AvatarPreviewCanvas
             scene={state.scene}
             framing="full-body"
-            label={`${state.modelName}, as it is saved`}
+            label={t("avatar.preview.saved").replaceAll(
+              "{name}",
+              translateCopy(t, state.modelName),
+            )}
             className="avatar-field__preview"
           />
         )}
       </span>
       <span className="avatar-field__text">
         <small>{translateIf(t, "dock.threeDModel", state.label)}</small>
-        <strong>{state.modelName}</strong>
+        <strong>{translateCopy(t, state.modelName)}</strong>
         <small>
           {state.editable
-            ? state.detail
-            : `${state.detail} · ${t("dock.fixed")}`}
+            ? translateCopy(t, state.detail)
+            : `${translateCopy(t, state.detail)} · ${t("dock.fixed")}`}
         </small>
       </span>
       <span className="avatar-field__disclosure" aria-hidden="true">

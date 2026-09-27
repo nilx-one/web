@@ -33,8 +33,10 @@ import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 import {
   HOST_LABEL_KEYS,
   RUNTIME_LABEL_KEYS,
+  translateCopy,
   translateFirst,
   useLocalization,
+  type Translate,
 } from "../../shell/localization";
 
 export interface BrowserProviderAuthViewState {
@@ -193,61 +195,67 @@ function VisibilityGlyph({ visible }: { visible: boolean }) {
   );
 }
 
-function heading(identity: IdentityViewState): string {
+function heading(identity: IdentityViewState, t: Translate): string {
   switch (identity.kind) {
     case "avatar-choice":
-      return "Choose your body.";
+      return t("identity.heading.avatar");
     case "provider-password":
-      return "Create your password.";
+      return t("identity.heading.password");
     case "recovery-key":
-      return "Save your recovery key.";
+      return t("identity.heading.recovery");
     case "form":
       switch (identity.mode) {
         case "register":
-          return "Create your Bond.";
+          return t("identity.heading.register");
         case "sign-in":
         case "remembered":
-          return "Welcome back.";
+          return t("identity.heading.welcome");
         case "provider-register":
-          return "Choose your pub_dress.";
+          return t("identity.heading.choose");
         case "initial":
         case "resolving":
-          return "Enter your pub_dress.";
+          return t("identity.heading.enter");
       }
-      return "Enter your pub_dress.";
+      return t("identity.heading.enter");
     case "authenticated":
     case "loading":
     case "provider-required":
     case "unavailable":
-      return "One address. One way in.";
+      return t("identity.heading.default");
   }
 }
 
-function lede(identity: IdentityViewState): string {
+function lede(identity: IdentityViewState, t: Translate): string {
   switch (identity.kind) {
     case "avatar-choice":
-      return "This is how the world will draw you. You can change it any time in your profile.";
+      return t("identity.lede.avatar");
     case "provider-password":
-      return `Use this password to sign in to the same Bond outside ${identity.provider}.`;
+      return t("identity.lede.password").replaceAll(
+        "{provider}",
+        identity.provider,
+      );
     case "recovery-key":
-      return "This is the only native recovery proof. It appears once.";
+      return t("identity.lede.recovery");
     case "authenticated":
-      return "The world is loading behind this surface.";
+      return t("identity.lede.authenticated");
     case "form":
       if (identity.mode === "register") {
-        return "No provider required. Your exact, case-sensitive address belongs to this Bond.";
+        return t("identity.lede.register");
       }
       if (identity.mode === "remembered") {
-        return `${identity.rememberedPubDress ?? "This Bond"} is remembered on this browser.`;
+        return t("identity.lede.remembered").replaceAll(
+          "{name}",
+          identity.rememberedPubDress ?? t("identity.lede.rememberedFallback"),
+        );
       }
       if (identity.mode === "provider-register") {
-        return "The provider proves who you are; 0x1 still owns the identity.";
+        return t("identity.lede.provider");
       }
-      return "The same field resolves registration or sign-in for you.";
+      return t("identity.lede.default");
     case "loading":
     case "provider-required":
     case "unavailable":
-      return identity.detail;
+      return translateCopy(t, identity.detail);
   }
 }
 
@@ -256,6 +264,9 @@ function ProviderRow({
 }: {
   auth: BrowserProviderAuthViewState | undefined;
 }) {
+  const { t } = useLocalization();
+  const signInWith = (provider: string) =>
+    t("identity.provider.signInWithNamed").replaceAll("{provider}", provider);
   const pendingLabel =
     auth?.pendingProvider === "telegram"
       ? "Telegram"
@@ -266,24 +277,24 @@ function ProviderRow({
           : undefined;
   return (
     <section className="provider-row" aria-labelledby="provider-row-label">
-      <span id="provider-row-label">Sign in with</span>
+      <span id="provider-row-label">{t("identity.provider.signInWith")}</span>
       <div className="provider-buttons">
         <button
           type="button"
           disabled={auth?.available.telegram !== true}
-          aria-label="Sign in with Telegram"
+          aria-label={signInWith("Telegram")}
           onClick={() => auth?.onAuthorize("telegram")}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="m4 11 15-6-4.7 14-3.6-4.1L8 17l.6-4.1L17 7.4 6.4 12.2 4 11Z" />
           </svg>
           <span>Telegram</span>
-          <small>web</small>
+          <small>{t("identity.provider.web")}</small>
         </button>
         <button
           type="button"
           disabled={auth?.available.discord !== true}
-          aria-label="Sign in with Discord"
+          aria-label={signInWith("Discord")}
           onClick={() => auth?.onAuthorize("discord")}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -292,19 +303,19 @@ function ProviderRow({
             <circle cx="14.5" cy="11.5" r="1" />
           </svg>
           <span>Discord</span>
-          <small>web</small>
+          <small>{t("identity.provider.web")}</small>
         </button>
         <button
           type="button"
           disabled={auth?.available.github !== true}
-          aria-label="Sign in with GitHub"
+          aria-label={signInWith("GitHub")}
           onClick={() => auth?.onAuthorize("github")}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 2.8a9.3 9.3 0 0 0-2.9 18.1c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 0 1.6 1 1.6 1 .9 1.6 2.4 1.1 2.9.9.1-.7.4-1.1.7-1.4-2.3-.3-4.6-1.1-4.6-4.9 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.5 9.5 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.8-2.3 4.6-4.6 4.9.4.3.7 1 .7 1.9v2.8c0 .3.2.6.7.5A9.3 9.3 0 0 0 12 2.8Z" />
           </svg>
           <span>GitHub</span>
-          <small>web</small>
+          <small>{t("identity.provider.web")}</small>
         </button>
       </div>
       {pendingLabel === undefined ? null : (
@@ -312,8 +323,10 @@ function ProviderRow({
           className="identity-status identity-status--available"
           aria-live="polite"
         >
-          {pendingLabel} verified. Already have a Bond? Sign in below and we’ll
-          connect {pendingLabel}. New here? Create your Bond below.
+          {t("identity.provider.verified").replaceAll(
+            "{provider}",
+            pendingLabel,
+          )}
         </p>
       )}
     </section>
@@ -329,8 +342,9 @@ function AvatarChoiceView({
   onChoose(model: AvatarChoiceViewState["options"][number]["model"]): void;
   onSkip(): void;
 }) {
+  const { t } = useLocalization();
   return (
-    <section className="avatar-surface" aria-label="Avatar study">
+    <section className="avatar-surface" aria-label={t("identity.avatar.label")}>
       <span className="surface-kicker">{state.pubDress}</span>
       <ul className="avatar-gallery">
         {state.choice.options.map((option) => (
@@ -346,18 +360,18 @@ function AvatarChoiceView({
                   body the world would not draw. */}
               <img src={option.previewUrl} alt="" width={210} height={450} />
               <strong>{option.name}</strong>
-              <small>{option.detail}</small>
+              <small>{translateCopy(t, option.detail)}</small>
             </button>
           </li>
         ))}
       </ul>
       {state.choice.error === undefined ? null : (
         <p className="identity-error" role="alert">
-          {state.choice.error}
+          {translateCopy(t, state.choice.error)}
         </p>
       )}
       <button className="text-action" type="button" onClick={onSkip}>
-        Decide later
+        {t("identity.avatar.later")}
       </button>
     </section>
   );
@@ -370,6 +384,7 @@ function RecoveryKeyView({
   state: Extract<IdentityViewState, { kind: "recovery-key" }>;
   onAcknowledge(challenge: string): void;
 }) {
+  const { t } = useLocalization();
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -381,7 +396,9 @@ function RecoveryKeyView({
   function download(): void {
     const blob = new Blob(
       [
-        `0x1 native recovery key\n\nBond: ${state.pubDress}\nKey: ${state.recoveryKey}\n`,
+        t("identity.recovery.file")
+          .replaceAll("{pubDress}", state.pubDress)
+          .replaceAll("{key}", state.recoveryKey),
       ],
       { type: "text/plain;charset=utf-8" },
     );
@@ -394,15 +411,18 @@ function RecoveryKeyView({
   }
 
   return (
-    <section className="recovery-surface" aria-label="Recovery key">
+    <section
+      className="recovery-surface"
+      aria-label={t("identity.recovery.label")}
+    >
       <span className="surface-kicker">{state.pubDress}</span>
       <code>{state.recoveryKey}</code>
       <div className="recovery-actions">
         <button type="button" onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy"}
+          {copied ? t("identity.recovery.copied") : t("identity.recovery.copy")}
         </button>
         <button type="button" onClick={download}>
-          Download
+          {t("identity.recovery.download")}
         </button>
       </div>
       <label className="recovery-confirmation">
@@ -411,11 +431,11 @@ function RecoveryKeyView({
           checked={saved}
           onChange={(event) => setSaved(event.currentTarget.checked)}
         />
-        <span>I saved this recovery key</span>
+        <span>{t("identity.recovery.saved")}</span>
       </label>
       {state.error === undefined ? null : (
         <p className="identity-error" role="alert">
-          {state.error}
+          {translateCopy(t, state.error)}
         </p>
       )}
       <button
@@ -424,7 +444,9 @@ function RecoveryKeyView({
         disabled={!saved || state.busy}
         onClick={() => onAcknowledge(state.challenge)}
       >
-        {state.busy ? "Completing…" : "Continue to 0x1"}
+        {state.busy
+          ? t("identity.recovery.completing")
+          : t("identity.recovery.continue")}
       </button>
     </section>
   );
@@ -457,6 +479,7 @@ function IdentityForm({
   onSelectionChange(selection: PubDressSelection): void;
   onSubmit(): void;
 }) {
+  const { t } = useLocalization();
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [availableTransition, setAvailableTransition] = useState<{
     key: string;
@@ -840,8 +863,8 @@ function IdentityForm({
 
   const actionLabel =
     identity.mode === "sign-in" || remembered
-      ? "Sign in"
-      : `Create 0x${displayedSelection.discriminator}${displayedSelection.slug}`;
+      ? t("identity.form.signIn")
+      : t("identity.form.create").replaceAll("{name}", credentialUsername);
 
   return (
     <form
@@ -900,7 +923,10 @@ function IdentityForm({
             className="status-action"
             type="button"
             disabled={identity.busy}
-            aria-label={`Edit ${credentialUsername}`}
+            aria-label={t("identity.form.edit").replaceAll(
+              "{name}",
+              credentialUsername,
+            )}
             onClick={editAddress}
           >
             <EditGlyph />
@@ -919,11 +945,11 @@ function IdentityForm({
           </span>
           <label className="digit-selector">
             <span className="visually-hidden">
-              pub_dress hexadecimal discriminator
+              {t("identity.form.discriminator")}
             </span>
             <select
               value={displayedSelection.discriminator}
-              aria-label="pub_dress hexadecimal discriminator"
+              aria-label={t("identity.form.discriminator")}
               onChange={(event) =>
                 changeSelection({
                   ...displayedSelection,
@@ -958,7 +984,7 @@ function IdentityForm({
             autoCorrect="off"
             enterKeyHint="go"
             spellCheck={false}
-            placeholder="slug"
+            placeholder={t("identity.form.slugPlaceholder")}
             disabled={identity.busy}
             aria-busy={identity.status.kind === "checking"}
             aria-invalid={
@@ -1009,7 +1035,10 @@ function IdentityForm({
               className="status-action"
               type="button"
               disabled={identity.busy}
-              aria-label={`Continue with 0x${displayedSelection.discriminator}${displayedSelection.slug}`}
+              aria-label={t("identity.form.continueWith").replaceAll(
+                "{name}",
+                credentialUsername,
+              )}
               onClick={confirmAddress}
             >
               <ActionGlyph />
@@ -1026,7 +1055,7 @@ function IdentityForm({
         }`}
         aria-live="polite"
       >
-        {identity.status.detail}
+        {translateCopy(t, identity.status.detail)}
       </p>
 
       {choosesAddress && !addressCollapsed ? (
@@ -1056,8 +1085,10 @@ function IdentityForm({
               ? "new-password"
               : "current-password"
           }
-          placeholder={showsPassword ? "password" : undefined}
-          aria-label={showsPassword ? "Password" : undefined}
+          placeholder={
+            showsPassword ? t("identity.form.passwordPlaceholder") : undefined
+          }
+          aria-label={showsPassword ? t("identity.form.password") : undefined}
           aria-hidden={!showsPassword}
           aria-invalid={identity.error !== undefined}
           disabled={identity.busy}
@@ -1093,7 +1124,11 @@ function IdentityForm({
           <button
             className="visibility-action"
             type="button"
-            aria-label={passwordVisible ? "Hide password" : "Show password"}
+            aria-label={
+              passwordVisible
+                ? t("identity.form.hidePassword")
+                : t("identity.form.showPassword")
+            }
             onClick={() => setPasswordVisible((visible) => !visible)}
           >
             <VisibilityGlyph visible={passwordVisible} />
@@ -1112,10 +1147,7 @@ function IdentityForm({
       </div>
 
       {showsPassword && identity.mode === "register" ? (
-        <p className="password-note">
-          8–128 Unicode characters · no leading/trailing whitespace · no line
-          breaks
-        </p>
+        <p className="password-note">{t("identity.form.passwordRules")}</p>
       ) : null}
       {remembered ? (
         <button
@@ -1124,12 +1156,12 @@ function IdentityForm({
           disabled={identity.busy}
           onClick={onForgetRemembered}
         >
-          Not you?
+          {t("identity.form.notYou")}
         </button>
       ) : null}
       {identity.error === undefined ? null : (
         <p className="identity-error" role="alert">
-          {identity.error}
+          {translateCopy(t, identity.error)}
         </p>
       )}
     </form>
@@ -1158,11 +1190,16 @@ export function IdentityFoundationView({
   const { t } = useLocalization();
   return (
     <AppChrome
+      copy={{
+        skip: t("chrome.skip"),
+        home: t("chrome.home"),
+        currentHost: t("chrome.currentHost"),
+      }}
       hostLabel={translateFirst(t, viewModel.hostLabel, HOST_LABEL_KEYS)}
       safeArea={viewModel.safeArea}
       footer={
         <>
-          <span>0x1 · pre-alpha</span>
+          <span>0x1 · {t("identity.stage")}</span>
           <span>© 2026 aiaiaiai · aiaiaiai.org</span>
         </>
       }
@@ -1170,9 +1207,9 @@ export function IdentityFoundationView({
       <div className="foundation-layout">
         <section className="identity-panel" aria-labelledby="foundation-title">
           <div className="identity-copy">
-            <p className="eyebrow">0x1 identity</p>
-            <h1 id="foundation-title">{heading(viewModel.identity)}</h1>
-            <p className="foundation-lede">{lede(viewModel.identity)}</p>
+            <p className="eyebrow">{t("identity.eyebrow")}</p>
+            <h1 id="foundation-title">{heading(viewModel.identity, t)}</h1>
+            <p className="foundation-lede">{lede(viewModel.identity, t)}</p>
           </div>
 
           <div className="identity-surface">
@@ -1180,7 +1217,7 @@ export function IdentityFoundationView({
               <>
                 <ProviderRow auth={browserProviderAuth} />
                 <div className="identity-divider" aria-hidden="true">
-                  <span>or</span>
+                  <span>{t("identity.or")}</span>
                 </div>
               </>
             ) : null}
@@ -1224,7 +1261,9 @@ export function IdentityFoundationView({
               />
             ) : viewModel.identity.kind === "authenticated" ? (
               <section className="authenticated-surface" aria-live="polite">
-                <span className="surface-kicker">Authenticated Bond</span>
+                <span className="surface-kicker">
+                  {t("identity.authenticated")}
+                </span>
                 <strong>{viewModel.identity.pubDress}</strong>
                 {viewModel.identity.native ? (
                   <button type="button" onClick={onLogout}>
@@ -1235,7 +1274,7 @@ export function IdentityFoundationView({
             ) : (
               <section className="identity-message" aria-live="polite">
                 <span className="message-orbit" aria-hidden="true" />
-                <p>{viewModel.identity.detail}</p>
+                <p>{translateCopy(t, viewModel.identity.detail)}</p>
               </section>
             )}
           </div>
@@ -1247,7 +1286,7 @@ export function IdentityFoundationView({
               viewModel.runtime.label,
               RUNTIME_LABEL_KEYS,
             )}
-            detail={viewModel.runtime.detail}
+            detail={translateCopy(t, viewModel.runtime.detail)}
           />
         </section>
       </div>
