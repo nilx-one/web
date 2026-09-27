@@ -59,9 +59,9 @@ const PRESENTATION_ZOOM_OFFSET: Readonly<Record<ShellPresentation, number>> = {
  * insets are added on top of these by `locationCameraPadding`.
  */
 const CHROME_INSETS: Readonly<Record<ShellPresentation, MapCameraPadding>> = {
-  compact: { top: 72, right: 16, bottom: 232, left: 16 },
-  regular: { top: 76, right: 24, bottom: 248, left: 24 },
-  wide: { top: 80, right: 32, bottom: 264, left: 32 },
+  compact: { top: 88, right: 16, bottom: 232, left: 16 },
+  regular: { top: 100, right: 24, bottom: 248, left: 24 },
+  wide: { top: 112, right: 32, bottom: 264, left: 32 },
 };
 
 /**

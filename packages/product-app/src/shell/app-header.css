@@ -14,6 +14,7 @@
   gap: var(--shell-gap, 1rem);
   min-height: var(--shell-header-block, 3.25rem);
   color: var(--header-ink);
+  background: transparent;
 }
 
 .app-header__zone {

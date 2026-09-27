@@ -68,32 +68,14 @@
 
 .bond-dock__detail-header {
   align-items: flex-start;
-  /* Pinned to the top of the Dock's own scroll box: the back button and title
-     stay reachable while everything under them scrolls. The negative margin
-     cancels .bond-dock's own padding so this reaches its edges exactly, and
-     the matching inline padding puts the back button and title back where
-     they were before this had a background of its own to carry — but the top
-     inset is dropped rather than restored, so the title sits flush against
-     this card's own top edge instead of leaving an indent above it. A sticky
-     offset is measured from the scroll box's content edge, inside its
-     padding, so top: 0 would push this back down by --dock-pad-top and undo
-     the negative margin; the offset cancels that padding the same way. */
+  /* Stays inside the Dock's padding, so the back control keeps the card's top
+     inset instead of sitting on the card's edge. Sticky top: 0 is measured
+     from that padded content edge, which is the indent. The row paints
+     nothing of its own: the Dock card is the surface. */
   position: sticky;
-  top: calc(-1 * var(--dock-pad-top, 1rem));
+  top: 0;
   z-index: 2;
-  margin: calc(-1 * var(--dock-pad-top, 1rem))
-    calc(-1 * var(--dock-pad-inline, 1.15rem)) 0;
-  padding: 0 var(--dock-pad-inline, 1.15rem);
-  border-top-left-radius: var(--dock-radius, 1.35rem);
-  border-top-right-radius: var(--dock-radius, 1.35rem);
-  /* --map-glass is tuned for the static outer card, which is meant to hint at
-     the map behind it. A sticky header instead sits over content that is
-     actively scrolling underneath, and that same translucency lets the
-     scrolled-under text show through as a legible ghost. --map-glass-strong
-     is what the rest of the shell already uses to occlude moving content
-     (see .app-header__menu), so the pinned header borrows it too. */
-  background: var(--map-glass-strong);
-  backdrop-filter: blur(22px) saturate(1.08);
+  background: transparent;
 }
 
 .bond-dock__detail-header > div {
