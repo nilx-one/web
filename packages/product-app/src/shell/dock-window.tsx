@@ -44,7 +44,8 @@ function prefersReducedMotion(): boolean {
 }
 
 function localizeText(value: string, t: Translate): string {
-  switch (value) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  switch (normalized) {
     case "edit":
       return t("dock.edit");
     case "AI":
@@ -75,7 +76,7 @@ function localizeText(value: string, t: Translate): string {
       return t("dock.caseSensitiveBond");
     case "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.":
       return t("dock.studies");
-    case "A provider account is an identity this Bond points at, one account per provider.":
+    case "A provider account is an identity this Bond points at, one account per provider. Disconnecting detaches it from this Bond; it never deletes the account on the provider.":
       return t("dock.providerDescription");
     default:
       return value;
