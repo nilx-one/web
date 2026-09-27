@@ -95,6 +95,14 @@ describe("what an Avaia says to itself", () => {
       facts: {},
     };
     expect(landmarkLabel("uk-UA", unnamed)).toBe("пам’ятник");
+    expect(landmarkLabel("ru-RU", unnamed)).toBe("памятник");
+    expect(landmarkLabel("ru-RU", monument)).toBe("«Volodymyr the Great»");
+    expect(
+      landmarkLabel("ru-RU", {
+        ...monument,
+        facts: { "name:ru": "Владимир Великий" },
+      }),
+    ).toBe("«Владимир Великий»");
     expect(
       pickAvaiaLine({
         locale: "en",

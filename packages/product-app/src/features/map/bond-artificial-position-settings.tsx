@@ -52,47 +52,70 @@ export function BondArtificialPositionSettings({
   const localization = useLocalization();
   const copy = useMemo(
     () =>
-      localization.resolved === "uk-UA"
+      localization.resolved === "ru-RU"
         ? {
-            legend: "Штучна позиція",
+            legend: "Искусственная позиция",
             target: "Bond.pub_dress",
             targetPlaceholder: "0x1friend",
-            targetHint: "Вкажіть Bond, лише для якого діятиме ця позиція.",
-            invalidTarget: "Потрібен pub_dress іншого Bond.",
-            notSelected: "Не обрано",
-            tapMap: "Торкніться точки на мапі…",
-            choose: "Обрати на мапі",
-            replace: "Змінити на мапі",
-            clear: "Очистити",
-            cancel: "Скасувати",
-            unavailable: "Цей рендерер не підтримує вибір точки на мапі.",
+            targetHint:
+              "Укажите Bond, только для которого будет действовать эта позиция.",
+            invalidTarget: "Нужен pub_dress другого Bond.",
+            notSelected: "Не выбрано",
+            tapMap: "Коснитесь точки на карте…",
+            choose: "Выбрать на карте",
+            replace: "Изменить на карте",
+            clear: "Очистить",
+            cancel: "Отмена",
+            unavailable: "Этот рендерер не поддерживает выбор точки на карте.",
             storageUnavailable:
-              "Сховище недоступне: зміна діятиме лише в цій сесії.",
+              "Хранилище недоступно: изменение будет действовать только в этой сессии.",
             corrupt:
-              "Збережена політика пошкоджена. Вона не буде замінена реальною позицією.",
-            reset: "Скинути пошкоджену політику",
-            note: "Реальна геопозиція пристрою не змінюється. Це перевизначення стосується лише вказаного Bond.",
+              "Сохранённая политика повреждена. Она не будет заменена реальной позицией.",
+            reset: "Сбросить повреждённую политику",
+            note: "Реальная геопозиция устройства не меняется. Это переопределение касается только указанного Bond.",
           }
-        : {
-            legend: "Artificial position",
-            target: "Bond.pub_dress",
-            targetPlaceholder: "0x1friend",
-            targetHint: "Name the Bond for which this position alone applies.",
-            invalidTarget: "Enter another Bond's valid pub_dress.",
-            notSelected: "Not selected",
-            tapMap: "Tap a point on the map…",
-            choose: "Choose on map",
-            replace: "Change on map",
-            clear: "Clear",
-            cancel: "Cancel",
-            unavailable: "This renderer cannot select a point on the map.",
-            storageUnavailable:
-              "Storage is unavailable: this change lasts for this session only.",
-            corrupt:
-              "The saved policy is corrupt. It will not fall back to the real position.",
-            reset: "Reset corrupt policy",
-            note: "The device's real location does not change. This override is addressed only to the named Bond.",
-          },
+        : localization.resolved === "uk-UA"
+          ? {
+              legend: "Штучна позиція",
+              target: "Bond.pub_dress",
+              targetPlaceholder: "0x1friend",
+              targetHint: "Вкажіть Bond, лише для якого діятиме ця позиція.",
+              invalidTarget: "Потрібен pub_dress іншого Bond.",
+              notSelected: "Не обрано",
+              tapMap: "Торкніться точки на мапі…",
+              choose: "Обрати на мапі",
+              replace: "Змінити на мапі",
+              clear: "Очистити",
+              cancel: "Скасувати",
+              unavailable: "Цей рендерер не підтримує вибір точки на мапі.",
+              storageUnavailable:
+                "Сховище недоступне: зміна діятиме лише в цій сесії.",
+              corrupt:
+                "Збережена політика пошкоджена. Вона не буде замінена реальною позицією.",
+              reset: "Скинути пошкоджену політику",
+              note: "Реальна геопозиція пристрою не змінюється. Це перевизначення стосується лише вказаного Bond.",
+            }
+          : {
+              legend: "Artificial position",
+              target: "Bond.pub_dress",
+              targetPlaceholder: "0x1friend",
+              targetHint:
+                "Name the Bond for which this position alone applies.",
+              invalidTarget: "Enter another Bond's valid pub_dress.",
+              notSelected: "Not selected",
+              tapMap: "Tap a point on the map…",
+              choose: "Choose on map",
+              replace: "Change on map",
+              clear: "Clear",
+              cancel: "Cancel",
+              unavailable: "This renderer cannot select a point on the map.",
+              storageUnavailable:
+                "Storage is unavailable: this change lasts for this session only.",
+              corrupt:
+                "The saved policy is corrupt. It will not fall back to the real position.",
+              reset: "Reset corrupt policy",
+              note: "The device's real location does not change. This override is addressed only to the named Bond.",
+            },
     [localization.resolved],
   );
   const [counterpartDraft, setCounterpartDraft] = useState("");
