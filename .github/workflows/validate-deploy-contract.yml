@@ -12,6 +12,8 @@ on:
       - ".github/workflows/validate-deploy-contract.yml"
       - "deploy/infra-workload.sh"
       - "deploy/infra-workload.test.sh"
+      - "deploy/identity-activation.sh"
+      - "deploy/identity-activation.test.sh"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   push:
@@ -24,6 +26,8 @@ on:
       - ".github/workflows/validate-deploy-contract.yml"
       - "deploy/infra-workload.sh"
       - "deploy/infra-workload.test.sh"
+      - "deploy/identity-activation.sh"
+      - "deploy/identity-activation.test.sh"
       - "deploy/web/**"
       - "services/identity/deploy/**"
   workflow_dispatch:
@@ -218,6 +222,30 @@ jobs:
             { echo "::error file=.github/workflows/deploy-production.yml::client hosts must be deployed one at a time"; exit 1; }
 
           bash deploy/infra-workload.test.sh
+
+      - name: Validate identity is activated on demand
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          file=".github/workflows/deploy-production.yml"
+
+          force_for() {
+            awk -v arm="$1)" '
+              $1 == arm { inside = 1; next }
+              inside && /force_identity=/ { sub(/.*force_identity=/, ""); print; exit }
+              inside && $1 == ";;" { exit }
+            ' "$file"
+          }
+
+          [ "$(force_for all)" = false ] ||
+            { echo "::error file=$file::'all' must activate identity only when the release needs it (force_identity=false)"; exit 1; }
+          [ "$(force_for identity)" = true ] ||
+            { echo "::error file=$file::'identity' must force identity activation (force_identity=true)"; exit 1; }
+
+          grep -Fq "bash deploy/identity-activation.sh" .github/workflows/deploy-identity-service.yml ||
+            { echo "::error file=.github/workflows/deploy-identity-service.yml::the activation decision must go through deploy/identity-activation.sh"; exit 1; }
+
+          bash deploy/identity-activation.test.sh
 
       - name: Publish summary
         if: always()

@@ -77,7 +77,13 @@ discord
 identity
 ```
 
-For every target, the orchestrator reads `requiresIdentityContract` from the deployment manifest and runs the identity dependency workflow first. It resolves the newest successful packaged identity image in the selected release ancestry and verifies that its `contract.version` satisfies the requirement. The active identity image is read from the newest successful `nilxone-identity` run in infra. Identity is activated only when needed: when the target forces it, when the active image is unknown, or when the release carries a different identity package. It is left alone when that package is already active, or when a newer package with a sufficient contract is (so a branch deploy never downgrades it). Client deployment starts only after identity is settled.
+For every target, the orchestrator reads `requiresIdentityContract` from the deployment manifest and runs the identity dependency workflow first. It resolves the newest successful packaged identity image in the selected release ancestry and verifies that its `contract.version` satisfies the requirement. The running identity image is read from the newest successful `nilxone-identity` run in infra (`deploy/infra-workload.sh active-image`). `deploy/identity-activation.sh` then decides:
+
+- activate when the target forces it, when no successful identity run exists, when the package descends from the running one, or when the running contract is below the requirement;
+- leave it alone when that package is already running, or when the running package is newer and its contract is sufficient;
+- fail without touching production when the running package cannot be read, or has diverged from the release package while its contract is already sufficient. Deploy the `identity` target to replace it deliberately.
+
+Client deployment starts only after identity is settled.
 
 `identity` is an explicit maintenance target that forces activation of the newest verified identity package available in the selected ancestry.
 
