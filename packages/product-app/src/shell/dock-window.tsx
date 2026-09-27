@@ -2,23 +2,35 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
-  cloneElement,
-  isValidElement,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
-  type ReactElement,
   type ReactNode,
 } from "react";
 
-import { useLocalization, type Translate } from "./localization";
 import "./dock-window.css";
+
+/**
+ * The Dock is one window onto a small navigation stack.
+ *
+ * A screen change is a from-to pair rather than a replacement: the screen being
+ * left and the screen being entered are both on the surface for the length of
+ * the move, and the window itself travels between their two heights. Forward
+ * arrives from the trailing edge while the previous screen recedes; back is
+ * exactly that reversed — the idiom iOS made familiar, so a person already
+ * knows which direction they are going before reading anything.
+ *
+ * Depth is what tells the two apart. Presentation never infers direction from
+ * which screen is named; it is told.
+ */
 
 export type DockNavigation = "push" | "pop";
 
 export interface DockWindowProps {
+  /** Which screen the window is presenting. A change is a navigation. */
   readonly screen: string;
+  /** How deep that screen sits. Deeper is forward, shallower is back. */
   readonly depth: number;
   readonly children: ReactNode;
 }
@@ -35,78 +47,13 @@ interface DockTransition {
   readonly pair: string;
 }
 
+/** Long enough to read as travel, short enough to stay out of the way. */
 export const DOCK_WINDOW_TRANSITION_MS = 420;
 
 function prefersReducedMotion(): boolean {
   return (
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false
   );
-}
-
-function localizeText(value: string, t: Translate): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  switch (normalized) {
-    case "edit":
-      return t("dock.edit");
-    case "AI":
-      return t("dock.ai");
-    case "unconfigured":
-      return t("dock.unconfigured");
-    case "Owned Avaia":
-      return t("dock.ownedAvaia");
-    case "Personal Bond":
-      return t("dock.personalBond");
-    case "Providers":
-      return t("dock.providers");
-    case "Connected":
-      return t("dock.connected");
-    case "Open":
-      return t("dock.open");
-    case "3D model":
-      return t("dock.threeDModel");
-    case "Cancel":
-      return t("dock.cancel");
-    case "Save":
-      return t("dock.save");
-    case "Saving…":
-      return t("dock.saving");
-    case "Case-sensitive · the owner discriminator and ai suffix are fixed by 0x1.":
-      return t("dock.caseSensitiveAvaia");
-    case "Case-sensitive · the address is part of the Bond identity.":
-      return t("dock.caseSensitiveBond");
-    case "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.":
-      return t("dock.studies");
-    case "A provider account is an identity this Bond points at, one account per provider. Disconnecting detaches it from this Bond; it never deletes the account on the provider.":
-      return t("dock.providerDescription");
-    default:
-      return value;
-  }
-}
-
-function localizeNode(node: ReactNode, t: Translate): ReactNode {
-  if (typeof node === "string") return localizeText(node, t);
-  if (Array.isArray(node)) return node.map((child) => localizeNode(child, t));
-  if (!isValidElement(node)) return node;
-
-  const element = node as ReactElement<Record<string, unknown>>;
-  const props = element.props;
-  const nextProps: Record<string, unknown> = { ...props };
-
-  for (const key of ["aria-label", "title", "label"] as const) {
-    const value = props[key];
-    if (typeof value === "string") nextProps[key] = localizeText(value, t);
-  }
-
-  if ("children" in props) {
-    nextProps.children = localizeNode(props.children as ReactNode, t);
-  }
-
-  return cloneElement(element, nextProps);
-}
-
-function LocalizedDockContent({ children }: { children: ReactNode }) {
-  const { t } = useLocalization();
-  return <>{localizeNode(children, t)}</>;
 }
 
 export function DockWindow({ screen, depth, children }: DockWindowProps) {
@@ -123,6 +70,8 @@ export function DockWindow({ screen, depth, children }: DockWindowProps) {
   const settledHeight = useRef(0);
 
   if (settled.screen !== screen) {
+    // The screen the window still shows becomes the outgoing half of the pair,
+    // held as it was rather than re-derived from the props that replaced it.
     setTransition({
       navigation: depth < settled.depth ? "pop" : "push",
       from: settled.content,
@@ -141,18 +90,24 @@ export function DockWindow({ screen, depth, children }: DockWindowProps) {
       return;
     }
 
+    // A move that interrupts another starts from wherever the window is now.
     const from =
       element.style.height === ""
         ? settledHeight.current
         : element.getBoundingClientRect().height;
     const to = enteringRef.current?.offsetHeight ?? 0;
 
+    // A window with no measurable layout has no two heights to travel between,
+    // and a person who asked for less motion is not asking for this one. Both
+    // arrive settled, before the browser has painted the pair.
     if (from === 0 || to === 0 || prefersReducedMotion()) {
       setTransition(undefined);
       return;
     }
 
     element.style.height = `${from}px`;
+    // Reading the box back commits that height, so the browser animates from it
+    // instead of jumping straight to the height that replaces it.
     void element.offsetHeight;
     element.style.height = `${to}px`;
   }, [transition]);
@@ -182,7 +137,7 @@ export function DockWindow({ screen, depth, children }: DockWindowProps) {
           aria-hidden="true"
           inert
         >
-          <LocalizedDockContent>{transition.from}</LocalizedDockContent>
+          {transition.from}
         </div>
       )}
       <div
@@ -191,7 +146,7 @@ export function DockWindow({ screen, depth, children }: DockWindowProps) {
         key={screen}
         ref={enteringRef}
       >
-        <LocalizedDockContent>{children}</LocalizedDockContent>
+        {children}
       </div>
     </div>
   );

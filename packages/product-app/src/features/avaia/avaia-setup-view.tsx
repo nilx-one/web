@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useLocalization } from "../../shell/localization";
+import {
+  translateIf,
+  useLocalization,
+  type Translate,
+} from "../../shell/localization";
 import type { AvaiaSetupViewState } from "./avaia-setup-view-model";
 import "./avaia-setup.css";
 
@@ -10,6 +14,19 @@ export interface AvaiaSetupViewProps {
   /** Receives only the mutable portion between discriminator and `ai`. */
   onDraftChange(value: string): void;
   onSubmit(): void;
+}
+
+function configurationCopy(label: string, t: Translate): string {
+  switch (label) {
+    case "configured":
+      return t("dock.configured");
+    case "unconfigured":
+      return t("dock.unconfigured");
+    case "not read":
+      return t("dock.notRead");
+    default:
+      return label;
+  }
 }
 
 /**
@@ -28,18 +45,17 @@ export function AvaiaSetupView({
   onSubmit,
 }: AvaiaSetupViewProps) {
   const { t } = useLocalization();
-  const configurationLabel =
-    state.configuration === "unconfigured"
-      ? t("dock.unconfigured")
-      : state.configurationLabel;
 
   return (
     <div className="avaia-setup" data-configuration={state.configuration}>
+      {/* The address itself is the screen's own large title, right above
+          this surface — repeating it here would be the same name twice on
+          one screen, so this only adds what the title does not already say. */}
       <div className="avaia-setup__summary">
         <span className="bond-dock__glyph" aria-hidden="true">
           {t("dock.ai")}
         </span>
-        <small>{configurationLabel}</small>
+        <small>{configurationCopy(state.configurationLabel, t)}</small>
       </div>
 
       <form
@@ -81,7 +97,7 @@ export function AvaiaSetupView({
           </button>
         </div>
         <p className="profile-edit__note" id="avaia-pub-dress-note">
-          {t("dock.caseSensitiveAvaia")}
+          {translateIf(t, "dock.caseSensitiveAvaia", state.note)}
         </p>
 
         {/* Hidden for now: duplicated the real AvatarModelField rendered
