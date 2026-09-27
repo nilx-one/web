@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
-  translateIf,
+  translateCopy,
+  translateFirst,
   useLocalization,
   type Translate,
 } from "../../shell/localization";
@@ -97,7 +98,11 @@ export function AvaiaSetupView({
           </button>
         </div>
         <p className="profile-edit__note" id="avaia-pub-dress-note">
-          {translateIf(t, "dock.caseSensitiveAvaia", state.note)}
+          {translateFirst(t, state.note, [
+            "dock.caseSensitiveAvaia",
+            "address.note.fixed",
+            "address.note.range",
+          ])}
         </p>
 
         {/* Hidden for now: duplicated the real AvatarModelField rendered
@@ -124,12 +129,12 @@ export function AvaiaSetupView({
 
         {state.status === undefined ? null : (
           <p className="profile-edit__note" role="status">
-            {state.status}
+            {translateCopy(t, state.status)}
           </p>
         )}
         {state.error === undefined ? null : (
           <p className="profile-edit__error" role="alert">
-            {state.error}
+            {translateCopy(t, state.error)}
           </p>
         )}
       </form>

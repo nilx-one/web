@@ -3,6 +3,8 @@
 
 import { useState } from "react";
 
+import { translateCopy, useLocalization } from "../../shell/localization";
+
 export function ProviderPasswordForm({
   pubDress,
   password,
@@ -18,6 +20,7 @@ export function ProviderPasswordForm({
   onPasswordChange(password: string): void;
   onSubmit(): void;
 }) {
+  const { t } = useLocalization();
   const [confirmation, setConfirmation] = useState("");
   const [visible, setVisible] = useState(false);
   const normalized = password.normalize("NFC");
@@ -50,7 +53,7 @@ export function ProviderPasswordForm({
         value={pubDress}
       />
       <label className="surface-kicker" htmlFor="provider-new-password">
-        Password
+        {t("identity.form.password")}
       </label>
       <div className="password-field">
         <input
@@ -66,11 +69,10 @@ export function ProviderPasswordForm({
         />
       </div>
       <p className="password-note" id="provider-password-policy">
-        8–128 Unicode characters · no leading/trailing whitespace · no line
-        breaks
+        {t("identity.form.passwordRules")}
       </p>
       <label className="surface-kicker" htmlFor="provider-confirm-password">
-        Confirm password
+        {t("identity.password.confirm")}
       </label>
       <div className="password-field">
         <input
@@ -91,7 +93,7 @@ export function ProviderPasswordForm({
         type="button"
         onClick={() => setVisible(!visible)}
       >
-        {visible ? "Hide passwords" : "Show passwords"}
+        {visible ? t("identity.password.hide") : t("identity.password.show")}
       </button>
       {mismatch ? (
         <p
@@ -99,12 +101,12 @@ export function ProviderPasswordForm({
           id="provider-password-mismatch"
           role="alert"
         >
-          Passwords don’t match.
+          {t("identity.password.mismatch")}
         </p>
       ) : null}
       {error === undefined ? null : (
         <p className="identity-error" role="alert">
-          {error}
+          {translateCopy(t, error)}
         </p>
       )}
       <button
@@ -112,7 +114,7 @@ export function ProviderPasswordForm({
         type="submit"
         disabled={busy || !valid || !matches}
       >
-        {busy ? "Saving…" : "Save password"}
+        {busy ? t("identity.password.saving") : t("identity.password.save")}
       </button>
     </form>
   );

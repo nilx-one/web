@@ -3,8 +3,22 @@
 
 import type { CSSProperties, ReactNode } from "react";
 
+/** Words the chrome itself supplies; a localized host passes its own. */
+export interface AppChromeCopy {
+  readonly skip: string;
+  readonly home: string;
+  readonly currentHost: string;
+}
+
+export const APP_CHROME_COPY: AppChromeCopy = {
+  skip: "Skip to content",
+  home: "0x1 home",
+  currentHost: "Current host",
+};
+
 export interface AppChromeProps {
   children: ReactNode;
+  copy?: AppChromeCopy;
   footer: ReactNode;
   hostLabel: string;
   safeArea: {
@@ -24,6 +38,7 @@ interface SafeAreaStyle extends CSSProperties {
 
 export function AppChrome({
   children,
+  copy = APP_CHROME_COPY,
   footer,
   hostLabel,
   safeArea,
@@ -38,13 +53,16 @@ export function AppChrome({
   return (
     <div className="app-chrome" style={style}>
       <a className="skip-link" href="#main-content">
-        Skip to content
+        {copy.skip}
       </a>
       <header className="topbar">
-        <a className="wordmark" href="/" aria-label="0x1 home">
+        <a className="wordmark" href="/" aria-label={copy.home}>
           <span aria-hidden="true">0x1</span>
         </a>
-        <div className="host-label" aria-label={`Current host: ${hostLabel}`}>
+        <div
+          className="host-label"
+          aria-label={`${copy.currentHost}: ${hostLabel}`}
+        >
           <span className="host-dot" aria-hidden="true" />
           {hostLabel}
         </div>

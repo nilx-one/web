@@ -289,7 +289,10 @@ export function LocalModelSettings({
             : t("settings.localModel.detail.upstream")}{" "}
           {view.detailBytes === undefined
             ? t("settings.localModel.detail.unknownSize")
-            : `${megabytes(view.detailBytes)} MB`}
+            : t("settings.localModel.bytes").replace(
+                "{size}",
+                megabytes(view.detailBytes),
+              )}
         </p>
       ) : null}
 

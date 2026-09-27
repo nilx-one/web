@@ -29,7 +29,12 @@ import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
 import { LanguageSettings } from "../../shell/language-settings";
 import {
+  DOCK_ACTION_KEYS,
+  DOCK_ROLE_KEYS,
+  RUNTIME_LABEL_KEYS,
   translate,
+  translateCopy,
+  translateFirst,
   translateIf,
   useLocalization,
   type ProductLocale,
@@ -106,7 +111,7 @@ import {
   type AvaiaAvailability,
   type DockSeat,
 } from "./bond-dock-view-model";
-import { landmarkLabel } from "./avaia-lines";
+import { landmarkKindLabel, landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
 import {
   awardExperience,
@@ -372,16 +377,21 @@ function AddressField({
         </button>
       </div>
       <p className="profile-edit__note" id={`${id}-note`}>
-        {translateIf(t, "dock.caseSensitiveBond", state.note)}
+        {translateFirst(t, state.note, [
+          "dock.caseSensitiveBond",
+          "address.note.fixed",
+          "address.note.range",
+          "identity.status.idle",
+        ])}
       </p>
       {state.error === undefined ? null : (
         <p className="profile-edit__error" role="alert">
-          {state.error}
+          {translateCopy(t, state.error)}
         </p>
       )}
       {state.saved === undefined ? null : (
         <p className="profile-edit__saved" role="status">
-          {`Saved. This is ${state.saved}.`}
+          {t("address.saved").replaceAll("{name}", state.saved)}
         </p>
       )}
     </form>
@@ -401,6 +411,7 @@ function ProviderMark({
   readonly row: ProviderRowViewState;
   readonly label?: string;
 }) {
+  const { t } = useLocalization();
   if (row.openUrl === undefined) return null;
 
   return (
@@ -412,7 +423,7 @@ function ProviderMark({
       }
       href={row.openUrl}
       data-open={row.openKind}
-      aria-label={row.openLabel}
+      aria-label={translateCopy(t, row.openLabel)}
       title={row.label}
       // A provider scheme is handed to the platform in place; only a web
       // address is worth a second browsing context.
@@ -519,21 +530,6 @@ export function AuthenticatedMapHomeView({
       : createBondProvidersViewState(connectedProviders, {
           deepLinkProviders: providerDeepLinks,
         });
-  const statusToast = mapStatusToast(
-    mapStatus,
-    mapViewModel.label,
-    mapViewModel.detail,
-  );
-  const statusToasts = [
-    ...(statusToast === undefined || statusToast.id === dismissedStatus
-      ? []
-      : [statusToast]),
-    ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
-  ];
-  const headerActions: readonly HeaderAction[] =
-    onLogout === undefined
-      ? []
-      : [{ id: "sign-out", label: "Sign out", perform: onLogout }];
   // The stored address the service answered with outranks the projection this
   // client last carried; both are the same identity, only one is newer.
   const storedAvaiaPubDress =
@@ -574,6 +570,21 @@ export function AuthenticatedMapHomeView({
   // the identity standing there changes hands with the wheel.
   const wheelAddress = wheel === "bond" ? pubDress : avaiaAddress;
   const { t, resolved: locale } = useLocalization();
+  const statusToast = mapStatusToast(
+    mapStatus,
+    translateCopy(t, mapViewModel.label),
+    translateCopy(t, mapViewModel.detail),
+  );
+  const statusToasts = [
+    ...(statusToast === undefined || statusToast.id === dismissedStatus
+      ? []
+      : [statusToast]),
+    ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
+  ];
+  const headerActions: readonly HeaderAction[] =
+    onLogout === undefined
+      ? []
+      : [{ id: "sign-out", label: t("header.signOut"), perform: onLogout }];
   // The study the Avaia is drawn in, whose voice it speaks in. No body drawn
   // means no voice either: a card does not talk on behalf of nobody.
   const avaiaVoice: AvatarModelId | undefined = avaiaAvatar?.modelId as
@@ -939,9 +950,7 @@ export function AuthenticatedMapHomeView({
       const outcome = await onAvatarChoice(selection.modelId);
       setAvatarSaving(false);
       if (outcome?.kind !== "chosen") {
-        setAvatarError(
-          avatarChoice?.error ?? "Couldn’t save this choice. Try again.",
-        );
+        setAvatarError(avatarChoice?.error ?? t("dock.saveChoiceFailed"));
         return;
       }
     }
@@ -1175,7 +1184,7 @@ export function AuthenticatedMapHomeView({
     setAvaiaSavedToast({
       id: `avaia-saved:${result.profile.pubDress}`,
       kind: "active",
-      title: "Avaia saved",
+      title: t("dock.avaiaSaved"),
       description: result.profile.pubDress,
     });
   }
@@ -1258,7 +1267,7 @@ export function AuthenticatedMapHomeView({
       return detailState?.subject === "avaia" ? avaiaLabel : pubDress;
     }
     if (activeDetail === "avaia") return t("dock.ownedAvaia");
-    if (section === "settings") return "Application";
+    if (section === "settings") return t("settings.application");
     return t("dock.personalBond");
   }
 
@@ -1271,7 +1280,7 @@ export function AuthenticatedMapHomeView({
       case "avaia":
         return avaiaLabel;
       case undefined:
-        return section === "settings" ? "Settings" : pubDress;
+        return section === "settings" ? t("header.settings") : pubDress;
     }
   }
 
@@ -1321,8 +1330,13 @@ export function AuthenticatedMapHomeView({
       toasts={
         <StatusToastStack
           toasts={statusToasts}
-          label="World status"
+          label={t("shell.worldStatus")}
           placement="inline"
+          copy={{
+            readMore: t("toast.readMore"),
+            readLess: t("toast.readLess"),
+            dismiss: t("toast.dismiss"),
+          }}
           onDismiss={(id) => {
             if (avaiaSavedToast?.id === id) {
               setAvaiaSavedToast(undefined);
@@ -1339,9 +1353,13 @@ export function AuthenticatedMapHomeView({
         >
           <i aria-hidden="true" />
           <span>
-            <strong>{runtime.label}</strong>
+            <strong>
+              {translateFirst(t, runtime.label, RUNTIME_LABEL_KEYS)}
+            </strong>
             {contractVersion === undefined ? null : (
-              <small>contract {contractVersion}</small>
+              <small>
+                {t("runtime.contract").replace("{version}", contractVersion)}
+              </small>
             )}
           </span>
         </section>
@@ -1366,7 +1384,11 @@ export function AuthenticatedMapHomeView({
                   <button
                     className="bond-dock__edit"
                     type="button"
-                    aria-label={dock.configure.label}
+                    aria-label={translateFirst(
+                      t,
+                      dock.configure.label,
+                      DOCK_ACTION_KEYS,
+                    )}
                     onClick={activateConfigure}
                   >
                     {t("dock.edit")}
@@ -1378,24 +1400,28 @@ export function AuthenticatedMapHomeView({
                     type="button"
                     disabled={!dock.left.actionable}
                     onClick={() => activateDockIdentity("left")}
-                    aria-label={dock.left.actionLabel}
+                    aria-label={translateFirst(
+                      t,
+                      dock.left.actionLabel,
+                      DOCK_ACTION_KEYS,
+                    )}
                   >
                     <span className="bond-dock__glyph">
                       {translateIf(t, "dock.ai", dock.left.glyph)}
                     </span>
                     <strong>{dock.left.address}</strong>
                     <small>
-                      {dock.left.seat === "bond" ? "You" : t("dock.ai")}
+                      {dock.left.seat === "bond" ? t("dock.you") : t("dock.ai")}
                       <i
                         className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
                         aria-hidden="true"
                       />
-                      {translateIf(t, "dock.unconfigured", dock.left.role)}
+                      {translateFirst(t, dock.left.role, DOCK_ROLE_KEYS)}
                     </small>
                   </button>
                   <span
                     className="bond-dock__link"
-                    aria-label="No reciprocal relationship asserted"
+                    aria-label={t("dock.noRelationship")}
                   >
                     —
                   </span>
@@ -1408,19 +1434,25 @@ export function AuthenticatedMapHomeView({
                     type="button"
                     disabled={!dock.right.actionable}
                     onClick={() => activateDockIdentity("right")}
-                    aria-label={dock.right.actionLabel}
+                    aria-label={translateFirst(
+                      t,
+                      dock.right.actionLabel,
+                      DOCK_ACTION_KEYS,
+                    )}
                   >
                     <span className="bond-dock__glyph">
                       {translateIf(t, "dock.ai", dock.right.glyph)}
                     </span>
                     <strong>{dock.right.address}</strong>
                     <small>
-                      {dock.right.seat === "bond" ? "You" : t("dock.ai")}
+                      {dock.right.seat === "bond"
+                        ? t("dock.you")
+                        : t("dock.ai")}
                       <i
                         className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
                         aria-hidden="true"
                       />
-                      {translateIf(t, "dock.unconfigured", dock.right.role)}
+                      {translateFirst(t, dock.right.role, DOCK_ROLE_KEYS)}
                     </small>
                   </button>
                 </div>
@@ -1434,7 +1466,7 @@ export function AuthenticatedMapHomeView({
                   <button
                     className="interface-settings__back"
                     type="button"
-                    aria-label="Back"
+                    aria-label={t("settings.back")}
                     onClick={leaveDetail}
                   >
                     <span aria-hidden="true">←</span>
@@ -1474,14 +1506,17 @@ export function AuthenticatedMapHomeView({
                         />
                         <p className="profile-edit__note">
                           {avatarChoice.unsupportedModel !== undefined
-                            ? `This Bond chose ${avatarChoice.unsupportedModel}, which this client cannot display. Update 0x1 to render that choice.`
+                            ? t("dock.unsupportedStudy").replace(
+                                "{model}",
+                                avatarChoice.unsupportedModel,
+                              )
                             : avatarChoice.unchosen
-                              ? "No study chosen yet — no avatar is drawn until you choose."
+                              ? t("dock.noStudy")
                               : t("dock.studies")}
                         </p>
                         {avatarChoice.error === undefined ? null : (
                           <p className="profile-edit__error" role="alert">
-                            {avatarChoice.error}
+                            {translateCopy(t, avatarChoice.error)}
                           </p>
                         )}
                       </div>
@@ -1492,7 +1527,7 @@ export function AuthenticatedMapHomeView({
                         <dd>
                           {providers === undefined ? (
                             <small className="profile-edit__note" role="status">
-                              Loading…
+                              {t("dock.loading")}
                             </small>
                           ) : (
                             <span className="provider-controls">
@@ -1502,7 +1537,7 @@ export function AuthenticatedMapHomeView({
                               <button
                                 className="provider-control provider-control--add"
                                 type="button"
-                                aria-label="Add a provider"
+                                aria-label={t("dock.addProvider")}
                                 onClick={() => openDetail("providers")}
                               >
                                 +
@@ -1532,21 +1567,33 @@ export function AuthenticatedMapHomeView({
                     />
                     */}
                     <fieldset className="interface-settings__appearance">
-                      <legend>Appearance</legend>
-                      {(["light", "dark", "auto"] as const).map((mode) => (
+                      <legend>{t("settings.appearance.legend")}</legend>
+                      {(
+                        [
+                          [
+                            "light",
+                            "settings.appearance.light",
+                            "settings.appearance.lightDetail",
+                          ],
+                          [
+                            "dark",
+                            "settings.appearance.dark",
+                            "settings.appearance.darkDetail",
+                          ],
+                          [
+                            "auto",
+                            "settings.appearance.auto",
+                            "settings.appearance.autoDetail",
+                          ],
+                        ] as const
+                      ).map(([mode, label, detail]) => (
                         <label
                           key={mode}
                           className="interface-settings__option"
                         >
                           <span>
-                            <strong>
-                              {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                            </strong>
-                            <small>
-                              {mode === "auto"
-                                ? "Follow this device"
-                                : `Keep the map ${mode}`}
-                            </small>
+                            <strong>{t(label)}</strong>
+                            <small>{t(detail)}</small>
                           </span>
                           <input
                             type="radio"
@@ -1559,19 +1606,28 @@ export function AuthenticatedMapHomeView({
                       ))}
                     </fieldset>
                     <fieldset className="interface-settings__appearance">
-                      <legend>Depth</legend>
-                      {(["volumetric", "flat"] as const).map((mode) => (
+                      <legend>{t("settings.depth.legend")}</legend>
+                      {(
+                        [
+                          [
+                            "volumetric",
+                            "settings.depth.threeD",
+                            "settings.depth.threeDDetail",
+                          ],
+                          [
+                            "flat",
+                            "settings.depth.twoD",
+                            "settings.depth.twoDDetail",
+                          ],
+                        ] as const
+                      ).map(([mode, label, detail]) => (
                         <label
                           key={mode}
                           className="interface-settings__option"
                         >
                           <span>
-                            <strong>{mode === "flat" ? "2D" : "3D"}</strong>
-                            <small>
-                              {mode === "flat"
-                                ? "Keep buildings as footprints"
-                                : "Raise buildings at close zoom"}
-                            </small>
+                            <strong>{t(label)}</strong>
+                            <small>{t(detail)}</small>
                           </span>
                           <input
                             type="radio"
@@ -1584,8 +1640,7 @@ export function AuthenticatedMapHomeView({
                       ))}
                     </fieldset>
                     <p className="interface-settings__note">
-                      This is local interface presentation state. It does not
-                      change Bond, BondChain, or shared Core state.
+                      {t("settings.presentation")}
                     </p>
                   </>
                 ) : null}
@@ -1647,7 +1702,9 @@ export function AuthenticatedMapHomeView({
                               <strong>{landmarkLabel(locale, landmark)}</strong>
                               <small>
                                 {[
-                                  landmark.kind,
+                                  locale === "en"
+                                    ? landmark.kind
+                                    : landmarkKindLabel(locale, landmark.kind),
                                   ...Object.entries(landmark.facts)
                                     .filter(([key]) => !key.startsWith("name"))
                                     .map(([key, value]) => `${key}: ${value}`),
@@ -1698,7 +1755,7 @@ export function AuthenticatedMapHomeView({
                   <div className="provider-management">
                     {providers === undefined ? (
                       <p className="interface-settings__note" role="status">
-                        Loading provider connections…
+                        {t("dock.loadingProviders")}
                       </p>
                     ) : (
                       <>
@@ -1739,8 +1796,14 @@ export function AuthenticatedMapHomeView({
                                   <button
                                     className="provider-management__disconnect"
                                     type="button"
-                                    aria-label={row.disconnectLabel}
-                                    title={row.disconnectLabel}
+                                    aria-label={translateCopy(
+                                      t,
+                                      row.disconnectLabel,
+                                    )}
+                                    title={translateCopy(
+                                      t,
+                                      row.disconnectLabel,
+                                    )}
                                     onClick={() =>
                                       onDisconnectProvider?.(row.provider)
                                     }
@@ -1752,9 +1815,12 @@ export function AuthenticatedMapHomeView({
                                 <a
                                   className="provider-management__connect"
                                   href={row.connectHref}
-                                  aria-label={row.connectLabel}
+                                  aria-label={translateCopy(
+                                    t,
+                                    row.connectLabel,
+                                  )}
                                 >
-                                  Connect
+                                  {t("dock.connect")}
                                 </a>
                               )}
                             </li>
@@ -1797,11 +1863,11 @@ export function AuthenticatedMapHomeView({
               meaning is announced here rather than left to a cyan dot. */}
           <span className="visually-hidden" aria-live="polite">
             {focusState === "locating"
-              ? "Locating this device for local map focus."
+              ? t("map.focus.locating")
               : focusState === "focused"
-                ? "Map camera focused near this device."
+                ? t("map.focus.focused")
                 : focusState === "unavailable"
-                  ? "Device location is unavailable."
+                  ? t("map.focus.unavailable")
                   : ""}
           </span>
         </>

@@ -4,7 +4,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { ProgressBar } from "./primitives";
+import { AppChrome, ProgressBar } from "./primitives";
 
 describe("ProgressBar", () => {
   it("reads the ratio as a percentage a screen reader can announce", () => {
@@ -27,5 +27,30 @@ describe("ProgressBar", () => {
     expect(
       screen.getByRole("progressbar", { name: "Loading" }),
     ).toHaveAttribute("aria-valuenow", "0");
+  });
+});
+
+describe("AppChrome", () => {
+  it("speaks its own chrome in the words a host passes", () => {
+    render(
+      <AppChrome
+        copy={{
+          skip: "Перейти до вмісту",
+          home: "Головна 0x1",
+          currentHost: "Поточний хост",
+        }}
+        footer={null}
+        hostLabel="хост браузера"
+        safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+      >
+        <p>content</p>
+      </AppChrome>,
+    );
+
+    expect(screen.getByText("Перейти до вмісту")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Головна 0x1" })).toBeVisible();
+    expect(
+      screen.getByLabelText("Поточний хост: хост браузера"),
+    ).toBeInTheDocument();
   });
 });

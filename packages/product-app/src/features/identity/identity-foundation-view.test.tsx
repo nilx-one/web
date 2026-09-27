@@ -15,9 +15,12 @@ import {
   IdentityFoundationView,
   calculateFieldReflection,
 } from "./identity-foundation-view";
+import { chooseLocale } from "../../shell/localization";
 
 afterEach(() => {
   vi.useRealTimers();
+  chooseLocale("auto");
+  window.localStorage.clear();
 });
 
 describe("progressive native identity form", () => {
@@ -488,5 +491,125 @@ describe("public address inside the identity form", () => {
 
     expect(suffix).toHaveValue("7412");
     expect(screen.getByText("0xda-sha")).toBeInTheDocument();
+  });
+});
+
+describe("identity surface in Ukrainian", () => {
+  const handlers = {
+    onAcknowledgeRecovery: vi.fn(),
+    onCredentialAutofill: vi.fn(),
+    onForgetRemembered: vi.fn(),
+    onLogout: vi.fn(),
+    onPasswordChange: vi.fn(),
+    onResolvePubDress: vi.fn(),
+    onSelectionChange: vi.fn(),
+    onSubmit: vi.fn(),
+  };
+  const chrome = {
+    hostLabel: "browser host",
+    safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+    runtime: {
+      tone: "ready" as const,
+      label: "Shared Core ready" as const,
+      detail: "Contract 1 is available to the Web client.",
+    },
+  };
+
+  it("presents the sign-in form, its status and its errors in Ukrainian", () => {
+    chooseLocale("uk-UA");
+    render(
+      <IdentityFoundationView
+        {...handlers}
+        password=""
+        selection={{ discriminator: "0", slug: "sky" }}
+        viewModel={{
+          ...chrome,
+          showProviderRow: true,
+          identity: {
+            kind: "form",
+            mode: "sign-in",
+            status: { kind: "registered", detail: "Bond found — sign in" },
+            busy: false,
+            error: "The pub_dress or password is invalid.",
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "З поверненням." }),
+    ).toBeVisible();
+    expect(screen.getByText("Bond знайдено — увійдіть")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Неправильний pub_dress або пароль.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Увійти через Telegram" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Увійти через")).toBeVisible();
+    expect(screen.getByText("або")).toBeInTheDocument();
+    expect(screen.getByText("Контракт 1 доступний вебклієнту.")).toBeVisible();
+    expect(screen.getByText("Перейти до вмісту")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("шістнадцятковий дискримінатор pub_dress"),
+    ).toBeInTheDocument();
+  });
+
+  it("presents the recovery key and provider password steps in Ukrainian", () => {
+    chooseLocale("uk-UA");
+    const { rerender } = render(
+      <IdentityFoundationView
+        {...handlers}
+        password=""
+        selection={{ discriminator: "0", slug: "sky" }}
+        viewModel={{
+          ...chrome,
+          showProviderRow: false,
+          identity: {
+            kind: "recovery-key",
+            pubDress: "0x0sky",
+            recoveryKey: "key",
+            challenge: "challenge",
+            busy: false,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Збережіть ключ відновлення." }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Копіювати" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Перейти до 0x1" }),
+    ).toBeDisabled();
+
+    rerender(
+      <IdentityFoundationView
+        {...handlers}
+        password=""
+        selection={{ discriminator: "0", slug: "sky" }}
+        viewModel={{
+          ...chrome,
+          showProviderRow: false,
+          identity: {
+            kind: "provider-password",
+            pubDress: "0x0sky",
+            provider: "Telegram",
+            busy: false,
+          },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Цей пароль дає змогу входити в той самий Bond поза Telegram.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Підтвердьте пароль")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Зберегти пароль" }),
+    ).toBeDisabled();
   });
 });
