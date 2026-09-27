@@ -3,10 +3,7 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-/** A real language locale the product can render today. */
 export type ProductLocale = "en" | "uk-UA";
-
-/** `auto` follows available host/device language evidence; an explicit locale is local UI state. */
 export type LocalePreference = ProductLocale | "auto";
 
 export const LOCALE_STORAGE_KEY = "nilx-one.interface.locale";
@@ -72,12 +69,9 @@ const EN_MESSAGES = {
   "landmark.pinnedKind.civic": "Square",
   "landmark.pinnedKind.nature": "Green space",
   "fog.prompt.title": "Reveal this patch of fog?",
-  "fog.prompt.detail":
-    "{avaia} will go there and reveal it in about {minutes} min.",
-  "fog.prompt.landmarks":
-    "Landmarks here: {count}. Each one takes longer to look over.",
-  "fog.prompt.busy":
-    "{avaia} is already revealing {limit} cells. Wait for one to clear.",
+  "fog.prompt.detail": "{avaia} will go there and reveal it in about {minutes} min.",
+  "fog.prompt.landmarks": "Landmarks here: {count}. Each one takes longer to look over.",
+  "fog.prompt.busy": "{avaia} is already revealing {limit} cells. Wait for one to clear.",
   "fog.prompt.confirm": "Reveal",
   "fog.prompt.cancel": "Not now",
   "fog.status.revealing": "Revealing {count} of {limit}",
@@ -86,10 +80,8 @@ const EN_MESSAGES = {
   "avaia.progression.title": "Progress",
   "avaia.progression.summary": "Level {level} · {xp} xp",
   "avaia.notebook.title": "Landmarks studied",
-  "avaia.notebook.empty":
-    "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
-  "avaia.notebook.note":
-    "Kept on this device only. Nothing here is sent anywhere or asserted about anyone.",
+  "avaia.notebook.empty": "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
+  "avaia.notebook.note": "Kept on this device only. Nothing here is sent anywhere or asserted about anyone.",
   "settings.language.legend": "Language",
   "settings.language.auto": "Auto",
   "settings.language.autoAction": "Use detected language",
@@ -100,16 +92,11 @@ const EN_MESSAGES = {
   "settings.localModel.legend": "On-device model",
   "settings.localModel.choose": "Choose a model",
   "settings.localModel.status.checking": "Checking this device…",
-  "settings.localModel.status.unsupportedInsecure":
-    "Unavailable: this page is not loaded securely.",
-  "settings.localModel.status.unsupportedNoWebgpu":
-    "Unavailable: this browser has no WebGPU.",
-  "settings.localModel.status.unsupportedNoAdapter":
-    "Unavailable: no graphics adapter answered.",
-  "settings.localModel.status.unsupportedBelowFloor":
-    "Unavailable: this device is short of what the model runtime requires.",
-  "settings.localModel.status.unsupportedFeatures":
-    "Unavailable: this graphics adapter lacks a feature the model needs.",
+  "settings.localModel.status.unsupportedInsecure": "Unavailable: this page is not loaded securely.",
+  "settings.localModel.status.unsupportedNoWebgpu": "Unavailable: this browser has no WebGPU.",
+  "settings.localModel.status.unsupportedNoAdapter": "Unavailable: no graphics adapter answered.",
+  "settings.localModel.status.unsupportedBelowFloor": "Unavailable: this device is short of what the model runtime requires.",
+  "settings.localModel.status.unsupportedFeatures": "Unavailable: this graphics adapter lacks a feature the model needs.",
   "settings.localModel.status.absent": "Not downloaded yet.",
   "settings.localModel.status.downloading": "Downloading…",
   "settings.localModel.status.present": "Downloaded and cached on this device.",
@@ -117,8 +104,7 @@ const EN_MESSAGES = {
   "settings.localModel.status.error": "Something went wrong.",
   "settings.localModel.detail.mirror": "From our own mirror,",
   "settings.localModel.detail.upstream": "From the model's upstream registry,",
-  "settings.localModel.detail.unknownSize":
-    "size unknown until the download starts.",
+  "settings.localModel.detail.unknownSize": "size unknown until the download starts.",
   "settings.localModel.action.download": "Download now",
   "settings.localModel.action.remove": "Remove downloaded model",
   "settings.localModel.action.cancel": "Cancel download",
@@ -126,24 +112,16 @@ const EN_MESSAGES = {
   "settings.localModel.option.default": "default",
   "settings.localModel.option.memory": "about {size} MB of memory",
   "settings.localModel.option.unavailable": "not available here",
-  "settings.localModel.option.missingFeatures":
-    "Not offered here: this device lacks a GPU feature the model needs.",
-  "settings.localModel.option.overBudget":
-    "Not offered here: needs about {required} MB, this surface allows {budget} MB.",
-  "settings.localModel.option.unmeasured":
-    "Ukrainian phrasing not yet measured on a device.",
-  "settings.localModel.option.lowFaithfulness":
-    "Rarely passes the faithfulness check: most sentences keep their plain wording.",
+  "settings.localModel.option.missingFeatures": "Not offered here: this device lacks a GPU feature the model needs.",
+  "settings.localModel.option.overBudget": "Not offered here: needs about {required} MB, this surface allows {budget} MB.",
+  "settings.localModel.option.unmeasured": "Ukrainian phrasing not yet measured on a device.",
+  "settings.localModel.option.lowFaithfulness": "Rarely passes the faithfulness check: most sentences keep their plain wording.",
   "settings.localModel.option.usePolicy": "Acceptable use policy",
-  "settings.localModel.option.usePolicyNote":
-    "Built with Llama. Usage is subject to Meta's",
+  "settings.localModel.option.usePolicyNote": "Built with Llama. Usage is subject to Meta's",
   "settings.localModel.option.usePolicyDismiss": "Dismiss",
-  "settings.localModel.fallback.ineligible":
-    "The model you chose can’t run here, so the default is used. Your choice is kept.",
-  "settings.localModel.fallback.unknown":
-    "The model you chose is no longer offered, so the default is used.",
-  "settings.localModel.status.unsupportedOverBudget":
-    "Unavailable: this model needs more memory than this surface allows.",
+  "settings.localModel.fallback.ineligible": "The model you chose can’t run here, so the default is used. Your choice is kept.",
+  "settings.localModel.fallback.unknown": "The model you chose is no longer offered, so the default is used.",
+  "settings.localModel.status.unsupportedOverBudget": "Unavailable: this model needs more memory than this surface allows.",
   "dock.edit": "edit",
   "dock.ai": "AI",
   "dock.unconfigured": "unconfigured",
@@ -152,17 +130,14 @@ const EN_MESSAGES = {
   "dock.providers": "Providers",
   "dock.connected": "Connected",
   "dock.open": "Open",
-  "dock.providerDescription":
-    "A provider account is an identity this Bond points at, one account per provider.",
+  "dock.providerDescription": "A provider account is an identity this Bond points at, one account per provider. Disconnecting detaches it from this Bond; it never deletes the account on the provider.",
   "dock.threeDModel": "3D model",
   "dock.cancel": "Cancel",
   "dock.save": "Save",
   "dock.saving": "Saving…",
-  "dock.caseSensitiveAvaia":
-    "Case-sensitive · the owner discriminator and ai suffix are fixed by 0x1.",
+  "dock.caseSensitiveAvaia": "Case-sensitive · the owner discriminator and ai suffix are fixed by 0x1.",
   "dock.caseSensitiveBond": "Case-sensitive · the address is part of the Bond identity.",
-  "dock.studies":
-    "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.",
+  "dock.studies": "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.",
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -172,20 +147,15 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "failure.region": "Сповіщення про помилки",
   "failure.retry": "Спробувати знову",
   "failure.unavailable.title": "Запит без відповіді",
-  "failure.unavailable.description":
-    "На цей запит не вдалося отримати відповідь, тому нічого не було вирішено й нічим не підмінено.",
+  "failure.unavailable.description": "На цей запит не вдалося отримати відповідь, тому нічого не було вирішено й нічим не підмінено.",
   "failure.withheld.title": "Рішення: відмова",
-  "failure.withheld.description":
-    "Повноважний компонент отримав запит і відповів «ні»; це рішення, а не збій.",
+  "failure.withheld.description": "Повноважний компонент отримав запит і відповів «ні»; це рішення, а не збій.",
   "failure.gated.title": "Зараз не виконується",
-  "failure.gated.description":
-    "Runtime неактивний або завершує роботу, тому зараз не діє у поточному режимі.",
+  "failure.gated.description": "Runtime неактивний або завершує роботу, тому зараз не діє у поточному режимі.",
   "failure.rejected.title": "Запит відхилено",
-  "failure.rejected.description":
-    "Запит суперечить контракту й був відхилений; це потребує уваги оператора.",
+  "failure.rejected.description": "Запит суперечить контракту й був відхилений; це потребує уваги оператора.",
   "failure.exhausted.title": "Ліміт вичерпано",
-  "failure.exhausted.description":
-    "Лічильник цієї операції досяг межі; це потребує уваги оператора.",
+  "failure.exhausted.description": "Лічильник цієї операції досяг межі; це потребує уваги оператора.",
   "header.world": "Світ 0x1",
   "header.navigation": "Навігація 0x1",
   "header.settings": "Налаштування",
@@ -193,16 +163,13 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "location.unsupported.label": "Геолокація недоступна в цьому хості",
   "location.unsupported.hint": "Цей хост не надає геолокацію пристрою.",
   "location.denied.label": "Доступ до геолокації заборонено",
-  "location.denied.hint":
-    "Геолокацію заблоковано для цього сайту в налаштуваннях браузера.",
+  "location.denied.hint": "Геолокацію заблоковано для цього сайту в налаштуваннях браузера.",
   "location.enable.label": "Увімкнути геолокацію",
   "location.enable.hint": "Показати цей пристрій на мапі.",
   "location.locating.label": "Визначаємо місцезнаходження",
   "location.locating.hint": "Очікуємо координати від цього пристрою.",
-  "location.unavailable.retryLabel":
-    "Геолокація недоступна — спробувати ще раз",
-  "location.unavailable.recenterLabel":
-    "Повернутися до останньої відомої позиції",
+  "location.unavailable.retryLabel": "Геолокація недоступна — спробувати ще раз",
+  "location.unavailable.recenterLabel": "Повернутися до останньої відомої позиції",
   "location.unavailable.timeoutHint": "Пристрій не відповів вчасно.",
   "location.unavailable.positionHint": "Пристрою не вдалося визначити позицію.",
   "location.centered.label": "Мапа центрована на цьому пристрої",
@@ -228,11 +195,9 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "landmark.pinnedKind.civic": "Площа",
   "landmark.pinnedKind.nature": "Зелена зона",
   "fog.prompt.title": "Відкрити цю клітинку туману?",
-  "fog.prompt.detail":
-    "{avaia} піде туди й відкриє її приблизно за {minutes} хв.",
+  "fog.prompt.detail": "{avaia} піде туди й відкриє її приблизно за {minutes} хв.",
   "fog.prompt.landmarks": "Пам’яток тут: {count}. Кожна додає часу на огляд.",
-  "fog.prompt.busy":
-    "{avaia} вже відкриває {limit} клітинки. Зачекайте, поки одна відкриється.",
+  "fog.prompt.busy": "{avaia} вже відкриває {limit} клітинки. Зачекайте, поки одна відкриється.",
   "fog.prompt.confirm": "Відкрити",
   "fog.prompt.cancel": "Не зараз",
   "fog.status.revealing": "Відкривається {count} з {limit}",
@@ -241,10 +206,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "avaia.progression.title": "Прокачка",
   "avaia.progression.summary": "Рівень {level} · {xp} досвіду",
   "avaia.notebook.title": "Вивчені пам’ятки",
-  "avaia.notebook.empty":
-    "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",
-  "avaia.notebook.note":
-    "Зберігається лише на цьому пристрої. Нічого звідси нікуди не надсилається і ні про кого не стверджується.",
+  "avaia.notebook.empty": "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",
+  "avaia.notebook.note": "Зберігається лише на цьому пристрої. Нічого звідси нікуди не надсилається і ні про кого не стверджується.",
   "settings.language.legend": "Мова",
   "settings.language.auto": "Автоматично",
   "settings.language.autoAction": "Використовувати визначену мову",
@@ -255,26 +218,19 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.legend": "Локальна модель",
   "settings.localModel.choose": "Оберіть модель",
   "settings.localModel.status.checking": "Перевіряємо цей пристрій…",
-  "settings.localModel.status.unsupportedInsecure":
-    "Недоступно: сторінку завантажено не безпечно.",
-  "settings.localModel.status.unsupportedNoWebgpu":
-    "Недоступно: у цьому браузері немає WebGPU.",
-  "settings.localModel.status.unsupportedNoAdapter":
-    "Недоступно: жоден графічний адаптер не відповів.",
-  "settings.localModel.status.unsupportedBelowFloor":
-    "Недоступно: цьому пристрою не вистачає того, що вимагає рантайм моделі.",
-  "settings.localModel.status.unsupportedFeatures":
-    "Недоступно: графічному адаптеру бракує можливості, потрібної моделі.",
+  "settings.localModel.status.unsupportedInsecure": "Недоступно: сторінку завантажено не безпечно.",
+  "settings.localModel.status.unsupportedNoWebgpu": "Недоступно: у цьому браузері немає WebGPU.",
+  "settings.localModel.status.unsupportedNoAdapter": "Недоступно: жоден графічний адаптер не відповів.",
+  "settings.localModel.status.unsupportedBelowFloor": "Недоступно: цьому пристрою не вистачає того, що вимагає рантайм моделі.",
+  "settings.localModel.status.unsupportedFeatures": "Недоступно: графічному адаптеру бракує можливості, потрібної моделі.",
   "settings.localModel.status.absent": "Ще не завантажено.",
   "settings.localModel.status.downloading": "Завантажуємо…",
-  "settings.localModel.status.present":
-    "Завантажено і закешовано на цьому пристрої.",
+  "settings.localModel.status.present": "Завантажено і закешовано на цьому пристрої.",
   "settings.localModel.status.removing": "Видаляємо…",
   "settings.localModel.status.error": "Щось пішло не так.",
   "settings.localModel.detail.mirror": "З нашого власного мірора,",
   "settings.localModel.detail.upstream": "Зі сховища виробника моделі,",
-  "settings.localModel.detail.unknownSize":
-    "розмір невідомий, доки не почнеться завантаження.",
+  "settings.localModel.detail.unknownSize": "розмір невідомий, доки не почнеться завантаження.",
   "settings.localModel.action.download": "Завантажити зараз",
   "settings.localModel.action.remove": "Видалити завантажену модель",
   "settings.localModel.action.cancel": "Скасувати завантаження",
@@ -282,24 +238,16 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.option.default": "типова",
   "settings.localModel.option.memory": "близько {size} МБ пам’яті",
   "settings.localModel.option.unavailable": "тут недоступна",
-  "settings.localModel.option.missingFeatures":
-    "Тут недоступна: цьому пристрою бракує можливості GPU, потрібної моделі.",
-  "settings.localModel.option.overBudget":
-    "Тут недоступна: потрібно близько {required} МБ, а тут дозволено {budget} МБ.",
-  "settings.localModel.option.unmeasured":
-    "Якість українських формулювань ще не виміряна на пристрої.",
-  "settings.localModel.option.lowFaithfulness":
-    "Рідко проходить перевірку точності: більшість речень лишаються простими.",
+  "settings.localModel.option.missingFeatures": "Тут недоступна: цьому пристрою бракує можливості GPU, потрібної моделі.",
+  "settings.localModel.option.overBudget": "Тут недоступна: потрібно близько {required} МБ, а тут дозволено {budget} МБ.",
+  "settings.localModel.option.unmeasured": "Якість українських формулювань ще не виміряна на пристрої.",
+  "settings.localModel.option.lowFaithfulness": "Рідко проходить перевірку точності: більшість речень лишаються простими.",
   "settings.localModel.option.usePolicy": "Політика допустимого використання",
-  "settings.localModel.option.usePolicyNote":
-    "Побудовано на Llama. Використання підпорядковується",
+  "settings.localModel.option.usePolicyNote": "Побудовано на Llama. Використання підпорядковується",
   "settings.localModel.option.usePolicyDismiss": "Закрити",
-  "settings.localModel.fallback.ineligible":
-    "Обрана модель тут не запускається, тож працює типова. Ваш вибір збережено.",
-  "settings.localModel.fallback.unknown":
-    "Обрану модель більше не пропонують, тож працює типова.",
-  "settings.localModel.status.unsupportedOverBudget":
-    "Недоступно: цій моделі потрібно більше пам’яті, ніж дозволено тут.",
+  "settings.localModel.fallback.ineligible": "Обрана модель тут не запускається, тож працює типова. Ваш вибір збережено.",
+  "settings.localModel.fallback.unknown": "Обрану модель більше не пропонують, тож працює типова.",
+  "settings.localModel.status.unsupportedOverBudget": "Недоступно: цій моделі потрібно більше пам’яті, ніж дозволено тут.",
   "dock.edit": "змінити",
   "dock.ai": "ШІ",
   "dock.unconfigured": "не налаштовано",
@@ -308,23 +256,17 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.providers": "Провайдери",
   "dock.connected": "Підключено",
   "dock.open": "Відкрити",
-  "dock.providerDescription":
-    "Обліковий запис провайдера — це ідентичність, на яку вказує цей Bond; по одному обліковому запису на провайдера.",
+  "dock.providerDescription": "Обліковий запис провайдера — це ідентичність, на яку вказує цей Bond; по одному обліковому запису на провайдера. Від’єднання від’єднує його від цього Bond і ніколи не видаляє обліковий запис у провайдера.",
   "dock.threeDModel": "3D модель",
   "dock.cancel": "Скасувати",
   "dock.save": "Збер",
   "dock.saving": "Зберігаємо…",
-  "dock.caseSensitiveAvaia":
-    "З урахуванням регістру · дискримінатор власника та суфікс ai фіксуються 0x1.",
-  "dock.caseSensitiveBond":
-    "З урахуванням регістру · адреса є частиною ідентичності Bond.",
-  "dock.studies":
-    "Дослідження використовують один скелет і один набір кліпів; вибір змінює тіло, а не спосіб його руху.",
+  "dock.caseSensitiveAvaia": "З урахуванням регістру · дискримінатор власника та суфікс ai фіксуються 0x1.",
+  "dock.caseSensitiveBond": "З урахуванням регістру · адреса є частиною ідентичності Bond.",
+  "dock.studies": "Дослідження використовують один скелет і один набір кліпів; вибір змінює тіло, а не спосіб його руху.",
 };
 
-const CATALOGS: Readonly<
-  Record<ProductLocale, Readonly<Record<TranslationKey, string>>>
-> = {
+const CATALOGS: Readonly<Record<ProductLocale, Readonly<Record<TranslationKey, string>>>> = {
   en: EN_MESSAGES,
   "uk-UA": UK_MESSAGES,
 };
@@ -336,9 +278,7 @@ function supportedLocale(tag: string): ProductLocale | undefined {
   return undefined;
 }
 
-function firstSupportedLocale(
-  languages: readonly string[],
-): ProductLocale | undefined {
+function firstSupportedLocale(languages: readonly string[]): ProductLocale | undefined {
   for (const language of languages) {
     const locale = supportedLocale(language);
     if (locale !== undefined) return locale;
@@ -346,22 +286,13 @@ function firstSupportedLocale(
   return undefined;
 }
 
-/**
- * Resolve from explicit local preference, then ordered host evidence, then
- * ordered browser/device languages, then English. Region subtags never change
- * the language family: every `uk-*` tag resolves to the Ukrainian catalog.
- */
 export function resolveLocale(
   preference: LocalePreference,
   hostLanguages: readonly string[],
   deviceLanguages: readonly string[],
 ): ProductLocale {
   if (preference !== "auto") return preference;
-  return (
-    firstSupportedLocale(hostLanguages) ??
-    firstSupportedLocale(deviceLanguages) ??
-    DEFAULT_LOCALE
-  );
+  return firstSupportedLocale(hostLanguages) ?? firstSupportedLocale(deviceLanguages) ?? DEFAULT_LOCALE;
 }
 
 export function translate(locale: ProductLocale, key: TranslationKey): string {
@@ -381,16 +312,13 @@ export function readLocalePreference(): LocalePreference {
   if (sessionPreference !== undefined) return sessionPreference;
   try {
     const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored === "auto" || stored === "en" || stored === "uk-UA") {
-      return stored;
-    }
+    if (stored === "auto" || stored === "en" || stored === "uk-UA") return stored;
   } catch {
     // Storage is optional. The interface remains usable with detected language.
   }
   return "auto";
 }
 
-/** A person's standing language choice. It never enters Bond, BondChain, or Core state. */
 export function chooseLocale(preference: LocalePreference): void {
   sessionPreference = preference;
   try {
@@ -401,19 +329,12 @@ export function chooseLocale(preference: LocalePreference): void {
   notify();
 }
 
-/**
- * Supply ordered host language hints before the product mounts. These hints are
- * presentation evidence only: they must never be promoted to authentication or
- * protocol truth. An empty list removes host-specific evidence.
- */
 export function declareHostLanguages(languages: readonly string[]): void {
   const next = languages.map((language) => language.trim()).filter(Boolean);
   if (
     next.length === hostLanguageEvidence.length &&
     next.every((language, index) => language === hostLanguageEvidence[index])
-  ) {
-    return;
-  }
+  ) return;
   hostLanguageEvidence = next;
   notify();
 }
@@ -443,7 +364,6 @@ export interface LocalizationState {
   readonly t: Translate;
 }
 
-/** One frontend-owned locale store shared by every product host. */
 export function useLocalization(): LocalizationState {
   const preference = useSyncExternalStore(
     subscribe,
@@ -456,10 +376,7 @@ export function useLocalization(): LocalizationState {
     () => DEFAULT_LOCALE,
   );
   const resolved = preference === "auto" ? autoLocale : preference;
-  const t = useCallback<Translate>(
-    (key) => translate(resolved, key),
-    [resolved],
-  );
+  const t = useCallback<Translate>((key) => translate(resolved, key), [resolved]);
 
   useEffect(() => {
     document.documentElement.lang = resolved;
