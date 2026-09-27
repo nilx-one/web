@@ -51,4 +51,44 @@ describe("LanguageSettings", () => {
     expect(screen.getByRole("group", { name: "Мова" })).toBeVisible();
     expect(screen.getByRole("radio", { name: "Українська" })).toBeChecked();
   });
+
+  it("does not offer Russian to hosts and devices that do not speak it", () => {
+    declareHostLanguages(["uk-UA"]);
+    render(<LanguageSettings />);
+
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(
+      screen.queryByRole("radio", { name: "Русский" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Russian to a Russian host and resolves to it automatically", () => {
+    declareHostLanguages(["ru-KZ"]);
+    render(<LanguageSettings />);
+
+    expect(screen.getByRole("group", { name: "Язык" })).toBeVisible();
+    expect(screen.getByText("Определено: Русский")).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Русский" })).toBeVisible();
+  });
+
+  it("defaults a Belarusian host to Ukrainian and still offers Russian", () => {
+    declareHostLanguages(["be-BY"]);
+    render(<LanguageSettings />);
+
+    expect(screen.getByText("Визначено: Українська")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Русский" }));
+
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("ru-RU");
+    expect(screen.getByRole("group", { name: "Язык" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Русский" })).toBeChecked();
+  });
+
+  it("keeps a standing Russian choice selectable once the host stops speaking it", () => {
+    chooseLocale("ru-RU");
+    declareHostLanguages(["en-US"]);
+    render(<LanguageSettings />);
+
+    expect(screen.getByRole("radio", { name: "Русский" })).toBeChecked();
+  });
 });

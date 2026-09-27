@@ -3,17 +3,22 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { IDENTITY_EN, IDENTITY_UK } from "./messages/identity";
+import { RU_MESSAGES } from "./messages/russian";
 import { WORLD_EN, WORLD_UK } from "./messages/world";
 
 /** A real language locale the product can render today. */
-export type ProductLocale = "en" | "uk-UA";
+export type ProductLocale = "en" | "uk-UA" | "ru-RU";
 
 /** `auto` follows available host/device language evidence; an explicit locale is local UI state. */
 export type LocalePreference = ProductLocale | "auto";
 
 export const LOCALE_STORAGE_KEY = "nilx-one.interface.locale";
 export const DEFAULT_LOCALE: ProductLocale = "en";
-export const SUPPORTED_LOCALES: readonly ProductLocale[] = ["en", "uk-UA"];
+export const SUPPORTED_LOCALES: readonly ProductLocale[] = [
+  "en",
+  "uk-UA",
+  "ru-RU",
+];
 
 const EN_MESSAGES = {
   "failure.region": "Failure notices",
@@ -99,6 +104,8 @@ const EN_MESSAGES = {
   "settings.language.detected.uk": "Detected: Ukrainian",
   "settings.language.english": "English",
   "settings.language.ukrainian": "Українська",
+  "settings.language.russian": "Русский",
+  "settings.language.detected.ru": "Detected: Russian",
   "settings.localModel.legend": "On-device model",
   "settings.localModel.choose": "Choose a model",
   "settings.localModel.status.checking": "Checking this device…",
@@ -351,6 +358,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.language.detected.uk": "Визначено: Українська",
   "settings.language.english": "English",
   "settings.language.ukrainian": "Українська",
+  "settings.language.russian": "Русский",
+  "settings.language.detected.ru": "Визначено: Русский",
   "settings.localModel.legend": "Локальна модель",
   "settings.localModel.choose": "Оберіть модель",
   "settings.localModel.status.checking": "Перевіряємо цей пристрій…",
@@ -487,11 +496,21 @@ const CATALOGS: Readonly<
 > = {
   en: EN_MESSAGES,
   "uk-UA": UK_MESSAGES,
+  "ru-RU": RU_MESSAGES,
 };
 
+function languageOf(tag: string): string | undefined {
+  return tag.trim().replaceAll("_", "-").toLowerCase().split("-")[0];
+}
+
+/**
+ * Belarusian has no catalog of its own; it resolves to Ukrainian, while Russian
+ * stays one explicit choice away.
+ */
 function supportedLocale(tag: string): ProductLocale | undefined {
-  const language = tag.trim().replaceAll("_", "-").toLowerCase().split("-")[0];
-  if (language === "uk") return "uk-UA";
+  const language = languageOf(tag);
+  if (language === "uk" || language === "be") return "uk-UA";
+  if (language === "ru") return "ru-RU";
   if (language === "en") return "en";
   return undefined;
 }
@@ -509,7 +528,8 @@ function firstSupportedLocale(
 /**
  * Resolve from explicit local preference, then ordered host evidence, then
  * ordered browser/device languages, then English. Region subtags never change
- * the language family: every `uk-*` tag resolves to the Ukrainian catalog.
+ * the language family: every `uk-*` and `be-*` tag resolves to the Ukrainian
+ * catalog, and every `ru-*` tag to the Russian one.
  */
 export function resolveLocale(
   preference: LocalePreference,
@@ -522,6 +542,36 @@ export function resolveLocale(
     firstSupportedLocale(deviceLanguages) ??
     DEFAULT_LOCALE
   );
+}
+
+const LOCALES_WITHOUT_RUSSIAN: readonly ProductLocale[] =
+  SUPPORTED_LOCALES.filter((locale) => locale !== "ru-RU");
+
+/**
+ * Russian is offered only where the host or device already speaks Russian or
+ * Belarusian, or where it is the standing choice; everyone else never sees it.
+ */
+export function offersRussian(
+  preference: LocalePreference,
+  hostLanguages: readonly string[],
+  deviceLanguages: readonly string[],
+): boolean {
+  if (preference === "ru-RU") return true;
+  return [...hostLanguages, ...deviceLanguages].some((tag) => {
+    const language = languageOf(tag);
+    return language === "ru" || language === "be";
+  });
+}
+
+/** The locales a person may choose from, in the order they are offered. */
+export function offeredLocales(
+  preference: LocalePreference,
+  hostLanguages: readonly string[],
+  deviceLanguages: readonly string[],
+): readonly ProductLocale[] {
+  return offersRussian(preference, hostLanguages, deviceLanguages)
+    ? SUPPORTED_LOCALES
+    : LOCALES_WITHOUT_RUSSIAN;
 }
 
 export function translate(locale: ProductLocale, key: TranslationKey): string {
@@ -660,7 +710,12 @@ export function readLocalePreference(): LocalePreference {
   if (sessionPreference !== undefined) return sessionPreference;
   try {
     const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (stored === "auto" || stored === "en" || stored === "uk-UA") {
+    if (
+      stored === "auto" ||
+      stored === "en" ||
+      stored === "uk-UA" ||
+      stored === "ru-RU"
+    ) {
       return stored;
     }
   } catch {
@@ -707,6 +762,14 @@ function currentAutoLocale(): ProductLocale {
   return resolveLocale("auto", hostLanguageEvidence, deviceLanguages());
 }
 
+function currentRussianOffered(): boolean {
+  return offersRussian(
+    readLocalePreference(),
+    hostLanguageEvidence,
+    deviceLanguages(),
+  );
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   if (!deviceLanguageWatched && typeof window !== "undefined") {
@@ -719,6 +782,7 @@ function subscribe(listener: () => void): () => void {
 export interface LocalizationState {
   readonly preference: LocalePreference;
   readonly resolved: ProductLocale;
+  readonly offered: readonly ProductLocale[];
   readonly t: Translate;
 }
 
@@ -734,7 +798,13 @@ export function useLocalization(): LocalizationState {
     currentAutoLocale,
     () => DEFAULT_LOCALE,
   );
+  const russianOffered = useSyncExternalStore(
+    subscribe,
+    currentRussianOffered,
+    () => false,
+  );
   const resolved = preference === "auto" ? autoLocale : preference;
+  const offered = russianOffered ? SUPPORTED_LOCALES : LOCALES_WITHOUT_RUSSIAN;
   const t = useCallback<Translate>(
     (key) => translate(resolved, key),
     [resolved],
@@ -744,5 +814,5 @@ export function useLocalization(): LocalizationState {
     document.documentElement.lang = resolved;
   }, [resolved]);
 
-  return { preference, resolved, t };
+  return { preference, resolved, offered, t };
 }

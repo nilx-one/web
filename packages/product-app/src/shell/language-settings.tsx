@@ -5,13 +5,22 @@ import {
   chooseLocale,
   useLocalization,
   type LocalePreference,
+  type TranslationKey,
 } from "./localization";
 
-const LANGUAGE_OPTIONS: readonly LocalePreference[] = ["auto", "en", "uk-UA"];
+const DETECTED_KEYS = {
+  en: "settings.language.detected.en",
+  "uk-UA": "settings.language.detected.uk",
+  "ru-RU": "settings.language.detected.ru",
+} as const satisfies Record<string, TranslationKey>;
 
 /** Local interface language choice. This never enters identity or Core state. */
 export function LanguageSettings() {
   const localization = useLocalization();
+  const options: readonly LocalePreference[] = [
+    "auto",
+    ...localization.offered,
+  ];
 
   function optionLabel(preference: LocalePreference): string {
     switch (preference) {
@@ -21,21 +30,21 @@ export function LanguageSettings() {
         return localization.t("settings.language.english");
       case "uk-UA":
         return localization.t("settings.language.ukrainian");
+      case "ru-RU":
+        return localization.t("settings.language.russian");
     }
   }
 
   return (
     <fieldset className="interface-settings__appearance">
       <legend>{localization.t("settings.language.legend")}</legend>
-      {LANGUAGE_OPTIONS.map((preference) => (
+      {options.map((preference) => (
         <label key={preference} className="interface-settings__option">
           <span>
             <strong>{optionLabel(preference)}</strong>
             {preference === "auto" ? (
               <small>
-                {localization.resolved === "uk-UA"
-                  ? localization.t("settings.language.detected.uk")
-                  : localization.t("settings.language.detected.en")}
+                {localization.t(DETECTED_KEYS[localization.resolved])}
               </small>
             ) : null}
           </span>

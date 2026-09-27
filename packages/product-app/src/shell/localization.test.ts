@@ -8,6 +8,7 @@ import {
   declareHostLanguages,
   DOCK_ACTION_KEYS,
   HOST_LABEL_KEYS,
+  offeredLocales,
   readLocalePreference,
   resolveLocale,
   RUNTIME_LABEL_KEYS,
@@ -184,5 +185,49 @@ describe("frontend localization", () => {
     expect(translateCopy(en, "Connecting Discord to 0x0sky…")).toBe(
       "Connecting Discord to 0x0sky…",
     );
+  });
+
+  it("resolves Russian from any ru-* tag and Belarusian to Ukrainian", () => {
+    for (const language of ["ru", "ru-RU", "ru_UA", "ru-KZ"]) {
+      expect(resolveLocale("auto", [], [language])).toBe("ru-RU");
+    }
+    expect(resolveLocale("auto", [], ["be-BY"])).toBe("uk-UA");
+    expect(resolveLocale("auto", [], ["be"])).toBe("uk-UA");
+    expect(resolveLocale("auto", ["be-BY"], ["ru-RU"])).toBe("uk-UA");
+    expect(resolveLocale("auto", [], ["ru-RU", "be-BY"])).toBe("ru-RU");
+    expect(resolveLocale("ru-RU", ["uk-UA"], ["en-US"])).toBe("ru-RU");
+  });
+
+  it("offers Russian only to Russian or Belarusian speakers, or a standing choice", () => {
+    expect(offeredLocales("auto", [], ["en-US"])).toEqual(["en", "uk-UA"]);
+    expect(offeredLocales("auto", ["uk-UA"], ["pl-PL"])).toEqual([
+      "en",
+      "uk-UA",
+    ]);
+    expect(offeredLocales("auto", [], ["en-US", "ru-RU"])).toEqual([
+      "en",
+      "uk-UA",
+      "ru-RU",
+    ]);
+    expect(offeredLocales("auto", ["be-BY"], [])).toEqual([
+      "en",
+      "uk-UA",
+      "ru-RU",
+    ]);
+    expect(offeredLocales("ru-RU", [], ["en-US"])).toContain("ru-RU");
+  });
+
+  it("presents catalog and view-model copy in Russian without renaming proper names", () => {
+    const ru = (key: Parameters<typeof translateIf>[1]) =>
+      translate("ru-RU", key);
+    expect(translate("ru-RU", "header.signOut")).toBe("Выйти");
+    expect(translate("ru-RU", "settings.language.russian")).toBe("Русский");
+    expect(translate("ru-RU", "settings.presentation")).toContain("BondChain");
+    expect(translateCopy(ru, "Connecting Discord to 0x0sky…")).toBe(
+      "Подключаем Discord к 0x0sky…",
+    );
+    expect(
+      translateFirst(ru, "Hand the wheel to x0skai", DOCK_ACTION_KEYS),
+    ).toBe("Передать руль x0skai");
   });
 });
