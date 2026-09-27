@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { useLocalization } from "@nilx-one/product-app/localization";
 import { useEffect, useState } from "react";
 
 import "./public-bond.css";
@@ -151,6 +152,7 @@ export async function readPublicBond(
 }
 
 function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
+  const { t } = useLocalization();
   return (
     <main className="public-bond-page">
       <article className="public-bond-card" aria-labelledby="public-bond-title">
@@ -169,13 +171,13 @@ function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
           )}
           {bond.avaia?.avatarModel === undefined ? null : (
             <div>
-              <dt>body</dt>
+              <dt>{t("public.body")}</dt>
               <dd>{bond.avaia.avatarModel}</dd>
             </div>
           )}
           {bond.avaia?.location === undefined ? null : (
             <div>
-              <dt>location</dt>
+              <dt>{t("public.location")}</dt>
               <dd>
                 {bond.avaia.location.coordinate.latitude.toFixed(4)},{" "}
                 {bond.avaia.location.coordinate.longitude.toFixed(4)}
@@ -185,7 +187,7 @@ function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
         </dl>
 
         <a className="public-bond-home" href="https://nilx.one/">
-          enter nilx.one <span aria-hidden="true">↗</span>
+          {t("public.enter")} <span aria-hidden="true">↗</span>
         </a>
       </article>
       <footer>© 2026 aiaiaiai · aiaiaiai.org</footer>
@@ -194,6 +196,7 @@ function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
 }
 
 function PublicBondMessage({ state }: { state: "not-found" | "unavailable" }) {
+  const { t } = useLocalization();
   return (
     <main className="public-bond-page">
       <section
@@ -203,13 +206,13 @@ function PublicBondMessage({ state }: { state: "not-found" | "unavailable" }) {
         <p className="public-bond-kicker">0x1 · Bond</p>
         <h1>
           {state === "not-found"
-            ? "Bond not found."
-            : "Temporarily unavailable."}
+            ? t("public.notFound")
+            : t("public.unavailable")}
         </h1>
         <p>
           {state === "not-found"
-            ? "No Bond is allocated to this public address."
-            : "The public identity service could not answer this address."}
+            ? t("public.notFoundDetail")
+            : t("public.unavailableDetail")}
         </p>
         <a className="public-bond-home" href="https://nilx.one/">
           nilx.one <span aria-hidden="true">↗</span>
@@ -221,6 +224,7 @@ function PublicBondMessage({ state }: { state: "not-found" | "unavailable" }) {
 }
 
 export function PublicBondPage({ fetchImpl }: PublicBondPageProps) {
+  const { t } = useLocalization();
   const [state, setState] = useState<PublicBondState>({ kind: "loading" });
 
   useEffect(() => {
@@ -243,7 +247,7 @@ export function PublicBondPage({ fetchImpl }: PublicBondPageProps) {
     <main className="public-bond-page" aria-busy="true">
       <section className="public-bond-card public-bond-card--message">
         <p className="public-bond-kicker">0x1 · Bond</p>
-        <h1>Resolving address…</h1>
+        <h1>{t("public.resolving")}</h1>
       </section>
     </main>
   );

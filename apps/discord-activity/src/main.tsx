@@ -20,6 +20,11 @@ import {
 import { createFogField, createShadeMapFactory } from "@nilx-one/map-shade";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
 import { ProductApp } from "@nilx-one/product-app";
+import {
+  readLocalePreference,
+  resolveLocale,
+  translate,
+} from "@nilx-one/product-app/localization";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
@@ -40,10 +45,11 @@ installDiscordProxyRouting();
 const root = createRoot(container);
 
 function reportBootstrapFailure(mount: HTMLElement, error: unknown): void {
+  const locale = resolveLocale(readLocalePreference(), [], navigator.languages);
   const reason =
     error instanceof Error && error.message.length > 0
       ? error.message
-      : "Unknown failure";
+      : translate(locale, "discord.unknownFailure");
 
   // The Activity has no shell yet, so the failure has to describe itself here
   // rather than disappear into an embedded console nobody can open.
@@ -52,7 +58,10 @@ function reportBootstrapFailure(mount: HTMLElement, error: unknown): void {
   notice.setAttribute("role", "alert");
   notice.style.cssText =
     "margin:0;padding:24px;font:16px/1.5 system-ui,sans-serif;color:#f5f4ef;background:#101014;min-height:100vh";
-  notice.textContent = `0x1 could not start this Discord Activity session. Reopen the Activity and try again. (${reason})`;
+  notice.textContent = translate(locale, "discord.bootstrapFailed").replace(
+    "{reason}",
+    reason,
+  );
   mount.append(notice);
 }
 
