@@ -15,26 +15,10 @@ import {
 import { useLocalization, type Translate } from "./localization";
 import "./dock-window.css";
 
-/**
- * The Dock is one window onto a small navigation stack.
- *
- * A screen change is a from-to pair rather than a replacement: the screen being
- * left and the screen being entered are both on the surface for the length of
- * the move, and the window itself travels between their two heights. Forward
- * arrives from the trailing edge while the previous screen recedes; back is
- * exactly that reversed — the idiom iOS made familiar, so a person already
- * knows which direction they are going before reading anything.
- *
- * Depth is what tells the two apart. Presentation never infers direction from
- * which screen is named; it is told.
- */
-
 export type DockNavigation = "push" | "pop";
 
 export interface DockWindowProps {
-  /** Which screen the window is presenting. A change is a navigation. */
   readonly screen: string;
-  /** How deep that screen sits. Deeper is forward, shallower is back. */
   readonly depth: number;
   readonly children: ReactNode;
 }
@@ -51,7 +35,6 @@ interface DockTransition {
   readonly pair: string;
 }
 
-/** Long enough to read as travel, short enough to stay out of the way. */
 export const DOCK_WINDOW_TRANSITION_MS = 420;
 
 function prefersReducedMotion(): boolean {
@@ -108,7 +91,7 @@ function localizeNode(node: ReactNode, t: Translate): ReactNode {
   const props = element.props;
   const nextProps: Record<string, unknown> = { ...props };
 
-  for (const key of ["aria-label", "title"] as const) {
+  for (const key of ["aria-label", "title", "label"] as const) {
     const value = props[key];
     if (typeof value === "string") nextProps[key] = localizeText(value, t);
   }
