@@ -37,6 +37,8 @@ import {
   type PubDressSelection,
 } from "@nilx-one/application";
 
+export * from "./bond-location-control";
+
 interface IdentityHttpAdapterOptions {
   fetch?: typeof globalThis.fetch;
   getAuthorization(): string | undefined;

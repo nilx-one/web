@@ -92,6 +92,9 @@ importers:
       '@nilx-one/host-browser':
         specifier: workspace:*
         version: link:../../packages/host-browser
+      '@nilx-one/host-contract':
+        specifier: workspace:*
+        version: link:../../packages/host-contract
       '@nilx-one/host-discord':
         specifier: workspace:*
         version: link:../../packages/host-discord
@@ -134,6 +137,9 @@ importers:
       '@nilx-one/host-browser':
         specifier: workspace:*
         version: link:../../packages/host-browser
+      '@nilx-one/host-contract':
+        specifier: workspace:*
+        version: link:../../packages/host-contract
       '@nilx-one/identity-http':
         specifier: workspace:*
         version: link:../../packages/identity-http
