@@ -10,12 +10,15 @@
   /* Distance between two stacked overlay layers. */
   --shell-gap: 1rem;
   /* Where the header's top edge sits: the larger of the host inset and the
-     device safe area, then the same design inset the Dock keeps at the
-     bottom. The header is never flush with the viewport. */
+     device safe area, then the design inset. The header is never flush with
+     the viewport. */
   --shell-top: calc(
     max(var(--safe-top, 0px), env(safe-area-inset-top, 0px)) +
       var(--shell-inset)
   );
+  /* Where the Dock's lower edge sits. This is the bottom anchor only; the
+     top inset already lives inside --shell-top and is not part of this. */
+  --shell-bottom: calc(var(--shell-inset) + var(--safe-bottom, 0px));
   /* Deterministic header height: one row of controls at the control size. */
   --shell-control-size: 3.25rem;
   --shell-header-block: var(--shell-control-size);
@@ -103,12 +106,13 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.6rem;
-  /* A long stack scrolls inside its own bounds rather than reaching the Dock. */
+  /* A long stack scrolls inside its own bounds rather than reaching the Dock.
+     --shell-bottom is the lower anchor, not a second top inset. */
   max-height: max(
     3rem,
     calc(
-      100dvh - var(--shell-top) - var(--safe-bottom, 0px) -
-        var(--shell-header-block) - var(--shell-gap) * 2 - var(--shell-inset) -
+      100dvh - var(--shell-top) - var(--shell-header-block) - var(--shell-gap) *
+        2 - var(--shell-bottom) -
         var(--shell-bottom-height, var(--shell-dock-reserve))
     )
   );
@@ -132,15 +136,17 @@
   position: absolute;
   z-index: 2;
   right: calc(var(--shell-inset) + var(--safe-right, 0px));
-  bottom: calc(var(--shell-inset) + var(--safe-bottom, 0px));
+  bottom: var(--shell-bottom);
   left: calc(var(--shell-inset) + var(--safe-left, 0px));
   display: flex;
   flex-direction: column-reverse;
   align-items: stretch;
   gap: var(--shell-gap);
+  /* Ceiling is one gap under the header. --shell-bottom is only the lower
+     anchor, so the top inset inside --shell-top is counted once. */
   max-height: calc(
-    100dvh - var(--shell-top) - var(--safe-bottom, 0px) -
-      var(--shell-header-block) - var(--shell-gap) - var(--shell-inset)
+    100dvh - var(--shell-top) - var(--shell-header-block) - var(--shell-gap) -
+      var(--shell-bottom)
   );
   pointer-events: none;
 }

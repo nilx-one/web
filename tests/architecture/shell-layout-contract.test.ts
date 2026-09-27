@@ -46,7 +46,12 @@ describe("shell layout contract", () => {
   it("keeps the Dock's lower edge attached to the bottom safe area", () => {
     const bottom = rule(shellCss, ".app-shell__bottom");
 
-    expect(bottom).toMatch(/bottom:\s*calc\([^;]*--safe-bottom/);
+    expect(rule(shellCss, ".app-shell")).toMatch(
+      /--shell-bottom:\s*calc\([^;]*--shell-inset[^;]*--safe-bottom/,
+    );
+    expect(bottom).toMatch(/bottom:\s*var\(--shell-bottom\)/);
+    expect(bottom).toMatch(/max-height:\s*calc\([\s\S]*--shell-bottom/);
+    expect(bottom).not.toMatch(/max-height:\s*calc\([\s\S]*--shell-inset/);
     expect(bottom).not.toMatch(/(^|\n)\s*top:/);
     expect(bottom).toMatch(/position:\s*absolute/);
   });
@@ -65,6 +70,8 @@ describe("shell layout contract", () => {
 
     expect(toasts).toMatch(/top:\s*calc\([\s\S]*--shell-top/);
     expect(toasts).toMatch(/top:\s*calc\([\s\S]*--shell-header-block/);
+    expect(toasts).toMatch(/max-height:\s*max\([\s\S]*--shell-bottom/);
+    expect(toasts).not.toMatch(/max-height:\s*max\([\s\S]*--shell-inset/);
     expect(toasts).toMatch(/right:\s*calc\([^;]*--safe-right/);
     expect(toasts).toContain("align-items: flex-end");
     expect(toasts).not.toMatch(/(^|\n)\s*bottom:/);
