@@ -358,7 +358,7 @@ async fn start_connection(
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(identity) =
+    let Some((identity, active)) =
         authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return no_store_error(
@@ -367,6 +367,9 @@ async fn start_connection(
             "Sign in to the Bond before connecting GitHub evidence.",
         );
     };
+    if !active {
+        return session_inactive();
+    }
     let Some(credentials) = state.config.credentials.as_ref() else {
         return no_store_error(
             StatusCode::SERVICE_UNAVAILABLE,
@@ -438,11 +441,14 @@ async fn callback(
     let Some(code) = query.code.as_deref() else {
         return callback_failure("github_evidence_code_missing");
     };
-    let Some(identity) =
+    let Some((identity, active)) =
         authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return callback_failure("native_authentication_required");
     };
+    if !active {
+        return session_inactive();
+    }
     if identity.pub_dress != transaction.pub_dress {
         return callback_failure("native_session_changed");
     }
@@ -533,7 +539,7 @@ async fn read_connection(State(state): State<GithubEvidenceState>, headers: Head
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(identity) =
+    let Some((identity, _active)) =
         authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return no_store_error(
@@ -647,7 +653,7 @@ async fn disconnect(State(state): State<GithubEvidenceState>, headers: HeaderMap
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Some(identity) =
+    let Some((identity, active)) =
         authenticated_native_session(&state.identities, &state.native_auth, &headers, now).await
     else {
         return no_store_error(
@@ -656,6 +662,9 @@ async fn disconnect(State(state): State<GithubEvidenceState>, headers: HeaderMap
             "Sign in to the Bond before disconnecting GitHub evidence.",
         );
     };
+    if !active {
+        return session_inactive();
+    }
     let pub_dress = match identity.pub_dress.parse::<PubDress>() {
         Ok(value) => value,
         Err(_) => return service_unavailable(),
@@ -918,12 +927,23 @@ async fn authenticated_native_session(
     native_auth: &NativeAuthConfig,
     headers: &HeaderMap,
     now: u64,
-) -> Option<IdentityRecord> {
+) -> Option<(IdentityRecord, bool)> {
     let token = read_cookie(headers, SESSION_COOKIE)?;
     let hash = native_auth
         .secret_digester()
         .digest("native-session", &token);
-    repository.find_native_session(&hash, now).await.ok()?
+    repository
+        .find_native_session_with_activity(&hash, now)
+        .await
+        .ok()?
+}
+
+fn session_inactive() -> Response {
+    no_store_error(
+        StatusCode::FORBIDDEN,
+        "session_inactive",
+        "This client is signed in but not active. Activate it to make changes.",
+    )
 }
 
 fn read_cookie(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -1206,6 +1226,9 @@ mod tests {
                 bond.as_str(),
                 now.saturating_sub(1),
                 now.saturating_add(3600),
+                "test",
+                false,
+                None,
             )
             .await
             .expect("native session");

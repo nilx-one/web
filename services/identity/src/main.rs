@@ -299,6 +299,13 @@ async fn main() {
         provider_links.clone(),
         telegram_activity_verifier.clone(),
     );
+    let session_activation_api = api::session_activation_router(
+        repository.clone(),
+        provider_links.clone(),
+        telegram_activity_verifier.clone(),
+        discord_activity_oauth.clone(),
+        native_auth.clone(),
+    );
     let api = api::router(
         repository.clone(),
         provider_links.clone(),
@@ -310,6 +317,7 @@ async fn main() {
     .merge(location_api)
     .merge(provider_api)
     .merge(provider_self_service_api)
+    .merge(session_activation_api)
     .merge(github_evidence_api)
     .merge(public_api);
     let listener = tokio::net::TcpListener::bind(http_bind)

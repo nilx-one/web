@@ -48,6 +48,15 @@ pub struct NativeAuthConfig {
     pub session_ttl_seconds: u64,
     pub remembered_bond_ttl_seconds: u64,
     pub registration_challenge_ttl_seconds: u64,
+    /// How long an activation request waits for the active client to
+    /// answer before the live-device objection window opens instead. See
+    /// `nilx-one/0x1` `documents/17-protocol-constants-and-open-questions.md`,
+    /// "Activation request TTL".
+    pub activation_request_ttl_seconds: u64,
+    /// The live-device objection window itself, shared by device recovery
+    /// and Single Active Client activation. See the same document,
+    /// "Live-device objection window".
+    pub objection_window_seconds: u64,
 }
 
 impl NativeAuthConfig {
@@ -70,6 +79,8 @@ impl NativeAuthConfig {
             session_ttl_seconds: 60 * 60 * 24 * 30,
             remembered_bond_ttl_seconds: 60 * 60 * 24 * 180,
             registration_challenge_ttl_seconds: 60 * 15,
+            activation_request_ttl_seconds: 60 * 2,
+            objection_window_seconds: 60 * 60 * 24,
         })
     }
 

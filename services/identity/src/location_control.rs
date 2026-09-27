@@ -370,7 +370,15 @@ async fn mint_session_cookie(
     let ttl = state.native_auth.session_ttl_seconds;
     state
         .identities
-        .create_native_session(&token_hash, pub_dress, now, now.saturating_add(ttl))
+        .create_native_session(
+            &token_hash,
+            pub_dress,
+            now,
+            now.saturating_add(ttl),
+            "Telegram",
+            false,
+            None,
+        )
         .await
         .ok()?;
     Some(secure_cookie(SESSION_COOKIE, &token, ttl))
