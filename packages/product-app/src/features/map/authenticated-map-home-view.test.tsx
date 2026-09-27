@@ -42,6 +42,7 @@ import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-mode
 import { forgetAvatarChoices } from "../identity/avatar-wardrobe-store";
 import { createProfileSlugViewState } from "../identity/profile-slug-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
+import { chooseLocale } from "../../shell/localization";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
 import type { AvaiaAvailability } from "./bond-dock-view-model";
 import { avaiaStudy } from "./avatar-presence";
@@ -156,6 +157,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  chooseLocale("auto");
 });
 
 describe("AuthenticatedMapHomeView", () => {
@@ -861,6 +863,31 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByText(/never deletes the account on the provider/),
     ).toBeVisible();
+  });
+
+  it("presents the settings dock and sign-out in Ukrainian", () => {
+    chooseLocale("uk-UA");
+    const onLogout = vi.fn();
+    renderView({ section: "settings", onLogout });
+
+    expect(screen.getByRole("heading", { name: "Налаштування" })).toBeVisible();
+    expect(screen.getByText("Застосунок")).toBeVisible();
+    expect(screen.getByText("Вигляд")).toBeVisible();
+    expect(screen.getByText("Залишити мапу світлою")).toBeVisible();
+    expect(screen.getByText("Глибина")).toBeVisible();
+    expect(screen.getByText("Піднімати будівлі при наближенні")).toBeVisible();
+    expect(screen.getByText("Залишати будівлі контурами")).toBeVisible();
+    expect(
+      screen.getByText(/не змінює стан Bond, BondChain чи спільного Core/),
+    ).toBeVisible();
+    expect(screen.getByText("хост браузера")).toBeVisible();
+    expect(screen.getByText("Спільний Core готовий")).toBeVisible();
+    expect(screen.getByText("контракт 0.1.0")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Назад" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Більше" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Вийти" }));
+    expect(onLogout).toHaveBeenCalledOnce();
   });
 
   it("presents appearance on the settings route and persists it locally", () => {

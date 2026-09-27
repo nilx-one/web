@@ -169,10 +169,99 @@ const EN_MESSAGES = {
     "Case-sensitive · the address is part of the Bond identity.",
   "dock.studies":
     "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.",
+  "header.signOut": "Sign out",
+  "shell.worldStatus": "World status",
+  "settings.application": "Application",
+  "settings.back": "Back",
+  "settings.appearance.legend": "Appearance",
+  "settings.appearance.light": "Light",
+  "settings.appearance.lightDetail": "Keep the map light",
+  "settings.appearance.dark": "Dark",
+  "settings.appearance.darkDetail": "Keep the map dark",
+  "settings.appearance.auto": "Auto",
+  "settings.appearance.autoDetail": "Follow this device",
+  "settings.depth.legend": "Depth",
+  "settings.depth.threeD": "3D",
+  "settings.depth.threeDDetail": "Raise buildings at close zoom",
+  "settings.depth.twoD": "2D",
+  "settings.depth.twoDDetail": "Keep buildings as footprints",
+  "settings.presentation":
+    "This is local interface presentation state. It does not change Bond, BondChain, or shared Core state.",
+  "settings.localModel.bytes": "{size} MB",
+  "runtime.loading": "Loading shared Core",
+  "runtime.ready": "Shared Core ready",
+  "runtime.required": "Shared Core required",
+  "runtime.contract": "contract {version}",
+  "host.browser": "browser host",
+  "host.browserUnavailable": "browser unavailable",
+  "host.telegram": "telegram host",
+  "host.telegramUnavailable": "telegram unavailable",
+  "host.discord": "discord host",
+  "host.discordUnavailable": "discord unavailable",
+  "host.native": "native host",
+  "host.nativeUnavailable": "native unavailable",
+  "dock.you": "You",
+  "dock.spectate": "spectate",
+  "dock.driving": "driving",
+  "dock.ready": "ready",
+  "dock.preparing": "preparing",
+  "dock.download": "download",
+  "dock.unavailable": "unavailable",
+  "dock.noRelationship": "No reciprocal relationship asserted",
+  "dock.focusWorld": "Focus the world on {name}",
+  "dock.takeWheel": "Take the wheel as {name}",
+  "dock.handWheel": "Hand the wheel to {name}",
+  "dock.setUp": "Set up {name}",
+  "dock.editNamed": "Edit {name}",
+  "dock.noStudy": "No study chosen yet — no avatar is drawn until you choose.",
+  "dock.unsupportedStudy":
+    "This Bond chose {model}, which this client cannot display. Update 0x1 to render that choice.",
+  "dock.addProvider": "Add a provider",
+  "dock.loading": "Loading…",
+  "dock.loadingProviders": "Loading provider connections…",
+  "dock.connect": "Connect",
+  "dock.avaiaSaved": "Avaia saved",
+  "dock.saveChoiceFailed": "Couldn’t save this choice. Try again.",
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
 export type Translate = (key: TranslationKey) => string;
+
+export const HOST_LABEL_KEYS = [
+  "host.browser",
+  "host.browserUnavailable",
+  "host.telegram",
+  "host.telegramUnavailable",
+  "host.discord",
+  "host.discordUnavailable",
+  "host.native",
+  "host.nativeUnavailable",
+] as const satisfies readonly TranslationKey[];
+
+export const RUNTIME_LABEL_KEYS = [
+  "runtime.loading",
+  "runtime.ready",
+  "runtime.required",
+] as const satisfies readonly TranslationKey[];
+
+export const DOCK_ROLE_KEYS = [
+  "dock.you",
+  "dock.spectate",
+  "dock.driving",
+  "dock.ready",
+  "dock.preparing",
+  "dock.download",
+  "dock.unavailable",
+  "dock.unconfigured",
+] as const satisfies readonly TranslationKey[];
+
+export const DOCK_ACTION_KEYS = [
+  "dock.focusWorld",
+  "dock.takeWheel",
+  "dock.handWheel",
+  "dock.setUp",
+  "dock.editNamed",
+] as const satisfies readonly TranslationKey[];
 
 const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "failure.region": "Сповіщення про помилки",
@@ -331,6 +420,60 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "З урахуванням регістру · адреса є частиною ідентичності Bond.",
   "dock.studies":
     "Дослідження використовують один скелет і один набір кліпів; вибір змінює тіло, а не спосіб його руху.",
+  "header.signOut": "Вийти",
+  "shell.worldStatus": "Стан світу",
+  "settings.application": "Застосунок",
+  "settings.back": "Назад",
+  "settings.appearance.legend": "Вигляд",
+  "settings.appearance.light": "Світлий",
+  "settings.appearance.lightDetail": "Залишити мапу світлою",
+  "settings.appearance.dark": "Темний",
+  "settings.appearance.darkDetail": "Залишити мапу темною",
+  "settings.appearance.auto": "Автоматично",
+  "settings.appearance.autoDetail": "Як на цьому пристрої",
+  "settings.depth.legend": "Глибина",
+  "settings.depth.threeD": "3D",
+  "settings.depth.threeDDetail": "Піднімати будівлі при наближенні",
+  "settings.depth.twoD": "2D",
+  "settings.depth.twoDDetail": "Залишати будівлі контурами",
+  "settings.presentation":
+    "Це локальний стан показу інтерфейсу. Він не змінює стан Bond, BondChain чи спільного Core.",
+  "settings.localModel.bytes": "{size} МБ",
+  "runtime.loading": "Завантаження спільного Core",
+  "runtime.ready": "Спільний Core готовий",
+  "runtime.required": "Потрібен спільний Core",
+  "runtime.contract": "контракт {version}",
+  "host.browser": "хост браузера",
+  "host.browserUnavailable": "браузер недоступний",
+  "host.telegram": "хост Telegram",
+  "host.telegramUnavailable": "Telegram недоступний",
+  "host.discord": "хост Discord",
+  "host.discordUnavailable": "Discord недоступний",
+  "host.native": "нативний хост",
+  "host.nativeUnavailable": "нативний хост недоступний",
+  "dock.you": "Ви",
+  "dock.spectate": "спостерігає",
+  "dock.driving": "за кермом",
+  "dock.ready": "готово",
+  "dock.preparing": "готується",
+  "dock.download": "завантажити",
+  "dock.unavailable": "недоступно",
+  "dock.noRelationship": "Взаємний зв’язок не стверджується",
+  "dock.focusWorld": "Сфокусувати світ на {name}",
+  "dock.takeWheel": "Сісти за кермо як {name}",
+  "dock.handWheel": "Передати кермо {name}",
+  "dock.setUp": "Налаштувати {name}",
+  "dock.editNamed": "Змінити {name}",
+  "dock.noStudy":
+    "Дослідження ще не обрано — аватар не з’являється, доки ви не оберете.",
+  "dock.unsupportedStudy":
+    "Цей Bond обрав {model}, і цей клієнт не може це показати. Оновіть 0x1, щоб відобразити цей вибір.",
+  "dock.addProvider": "Додати провайдера",
+  "dock.loading": "Завантаження…",
+  "dock.loadingProviders": "Завантаження підключень провайдерів…",
+  "dock.connect": "Підключити",
+  "dock.avaiaSaved": "Avaia збережено",
+  "dock.saveChoiceFailed": "Не вдалося зберегти цей вибір. Спробуйте ще раз.",
 };
 
 const CATALOGS: Readonly<
@@ -390,6 +533,55 @@ export function translateIf(
   value: string,
 ): string {
   return value === translate("en", key) ? t(key) : value;
+}
+
+/** Present `value` from the first catalog sentence it still matches. */
+export function translateFirst(
+  t: Translate,
+  value: string,
+  keys: readonly TranslationKey[],
+): string {
+  return keys.reduce((current, key) => translateIf(t, key, current), value);
+}
+
+/**
+ * Present `value` when it is still an English catalog sentence with `token`
+ * filled in. Any other wording is shown as written.
+ */
+export function translateNamed(
+  t: Translate,
+  key: TranslationKey,
+  value: string,
+  token = "{name}",
+): string {
+  const english = translate("en", key);
+  const pivot = english.indexOf(token);
+  if (pivot < 0) return value === english ? t(key) : value;
+  const prefix = english.slice(0, pivot);
+  const suffix = english.slice(pivot + token.length);
+  if (
+    value.length <= prefix.length + suffix.length ||
+    !value.startsWith(prefix) ||
+    !value.endsWith(suffix)
+  ) {
+    return value;
+  }
+  const name = value.slice(prefix.length, value.length - suffix.length);
+  return t(key).replaceAll(token, name);
+}
+
+/** Present `value` from the first named catalog sentence it still matches. */
+export function translateNamedFirst(
+  t: Translate,
+  value: string,
+  keys: readonly TranslationKey[],
+  token = "{name}",
+): string {
+  for (const key of keys) {
+    const next = translateNamed(t, key, value, token);
+    if (next !== value) return next;
+  }
+  return value;
 }
 
 let sessionPreference: LocalePreference | undefined;

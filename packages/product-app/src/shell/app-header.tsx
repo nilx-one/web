@@ -12,7 +12,11 @@ import {
 } from "react";
 
 import "./app-header.css";
-import { useLocalization } from "./localization";
+import {
+  HOST_LABEL_KEYS,
+  translateFirst,
+  useLocalization,
+} from "./localization";
 import {
   IDENTITY_ROUTE,
   SETTINGS_ROUTE,
@@ -208,7 +212,7 @@ export function AppHeader({
       <div className="app-header__zone app-header__zone--trail">
         <span className="app-header__host">
           <i aria-hidden="true" />
-          {hostLabel}
+          {translateFirst(t, hostLabel, HOST_LABEL_KEYS)}
         </span>
         {presentation === "regular" ? (
           <ShellLink
@@ -245,7 +249,7 @@ export function AppHeader({
               {/* The host is already announced by the indicator beside the
                   trigger, so the menu repeats it visually only. */}
               <p className="app-header__menu-context" aria-hidden="true">
-                {hostLabel}
+                {translateFirst(t, hostLabel, HOST_LABEL_KEYS)}
               </p>
               {settingsInOverflow ? (
                 <ShellLink

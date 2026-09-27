@@ -30,6 +30,12 @@ import { normalizePubDressCredentialInput } from "./pub-dress-credential-input";
 import { ProviderPasswordForm } from "./provider-password-form";
 import { PubDressUrlField } from "./pub-dress-url-field";
 import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
+import {
+  HOST_LABEL_KEYS,
+  RUNTIME_LABEL_KEYS,
+  translateFirst,
+  useLocalization,
+} from "../../shell/localization";
 
 export interface BrowserProviderAuthViewState {
   available: {
@@ -1149,9 +1155,10 @@ export function IdentityFoundationView({
   onSelectionChange,
   onSubmit,
 }: IdentityFoundationViewProps) {
+  const { t } = useLocalization();
   return (
     <AppChrome
-      hostLabel={viewModel.hostLabel}
+      hostLabel={translateFirst(t, viewModel.hostLabel, HOST_LABEL_KEYS)}
       safeArea={viewModel.safeArea}
       footer={
         <>
@@ -1221,7 +1228,7 @@ export function IdentityFoundationView({
                 <strong>{viewModel.identity.pubDress}</strong>
                 {viewModel.identity.native ? (
                   <button type="button" onClick={onLogout}>
-                    Sign out
+                    {t("header.signOut")}
                   </button>
                 ) : null}
               </section>
@@ -1233,7 +1240,15 @@ export function IdentityFoundationView({
             )}
           </div>
 
-          <RuntimeStatus {...viewModel.runtime} />
+          <RuntimeStatus
+            tone={viewModel.runtime.tone}
+            label={translateFirst(
+              t,
+              viewModel.runtime.label,
+              RUNTIME_LABEL_KEYS,
+            )}
+            detail={viewModel.runtime.detail}
+          />
         </section>
       </div>
     </AppChrome>

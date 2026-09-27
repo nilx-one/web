@@ -6,10 +6,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   chooseLocale,
   declareHostLanguages,
+  DOCK_ACTION_KEYS,
+  HOST_LABEL_KEYS,
   readLocalePreference,
   resolveLocale,
+  RUNTIME_LABEL_KEYS,
   translate,
+  translateFirst,
   translateIf,
+  translateNamedFirst,
 } from "./localization";
 
 afterEach(() => {
@@ -78,5 +83,42 @@ describe("frontend localization", () => {
     expect(translateIf(uk, "dock.caseSensitiveAvaia", "a different note")).toBe(
       "a different note",
     );
+  });
+
+  it("translates settings, sign-out, and host chrome without renaming Bond or Core", () => {
+    expect(translate("uk-UA", "header.signOut")).toBe("Вийти");
+    expect(translate("uk-UA", "settings.application")).toBe("Застосунок");
+    expect(translate("uk-UA", "settings.appearance.lightDetail")).toBe(
+      "Залишити мапу світлою",
+    );
+    expect(translate("uk-UA", "settings.depth.twoD")).toBe("2D");
+    expect(translate("uk-UA", "settings.presentation")).toContain("Bond");
+    expect(translate("uk-UA", "settings.presentation")).toContain("BondChain");
+    expect(translate("uk-UA", "settings.presentation")).toContain("Core");
+    expect(translate("uk-UA", "runtime.ready")).toBe("Спільний Core готовий");
+    expect(translate("uk-UA", "runtime.contract")).toBe("контракт {version}");
+    expect(translate("uk-UA", "host.browser")).toBe("хост браузера");
+    expect(translate("en", "header.signOut")).toBe("Sign out");
+
+    const uk = (key: Parameters<typeof translateIf>[1]) =>
+      translate("uk-UA", key);
+    expect(translateFirst(uk, "browser host", HOST_LABEL_KEYS)).toBe(
+      "хост браузера",
+    );
+    expect(translateFirst(uk, "Shared Core ready", RUNTIME_LABEL_KEYS)).toBe(
+      "Спільний Core готовий",
+    );
+    expect(translateFirst(uk, "a custom host", HOST_LABEL_KEYS)).toBe(
+      "a custom host",
+    );
+    expect(
+      translateNamedFirst(uk, "Hand the wheel to x0skai", DOCK_ACTION_KEYS),
+    ).toBe("Передати кермо x0skai");
+    expect(translateNamedFirst(uk, "Edit 0x0sky", DOCK_ACTION_KEYS)).toBe(
+      "Змінити 0x0sky",
+    );
+    expect(translateNamedFirst(uk, "Edit", DOCK_ACTION_KEYS)).toBe("Edit");
+    expect(translate("uk-UA", "dock.you")).toBe("Ви");
+    expect(translate("uk-UA", "dock.spectate")).toBe("спостерігає");
   });
 });
