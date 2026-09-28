@@ -110,7 +110,11 @@ function parseAvaiaProjection(
 }
 
 function parseExperience(value: unknown): PublicExperience {
-  if (!isRecord(value) || !isRecord(value.experience)) {
+  if (
+    !isRecord(value) ||
+    !isRecord(value.experience) ||
+    value.experience.authority !== "client"
+  ) {
     return { bondXp: 0, avaiaXp: 0 };
   }
   return {
@@ -226,6 +230,10 @@ function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
                 standing.avaia.xp,
               )}
             </dd>
+          </div>
+          <div className="public-bond-reported">
+            <dt>{t("public.experience.reported")}</dt>
+            <dd hidden />
           </div>
           {bond.avaia === undefined ? null : (
             <div>

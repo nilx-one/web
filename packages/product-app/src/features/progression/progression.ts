@@ -6,14 +6,15 @@
  * revealed, monuments either of them studied, and the achievements that pay
  * once.
  *
- * Activity experience is `pub_info` on the Bond's `.bnd`: one shared total,
- * synced through the identity service and readable with the public Bond.
- * This device keeps a copy so play still counts while a request is in
- * flight, and it keeps the achievements that are about this device. That
- * local copy is transport-eligible (state-placement.ts): not synced state
- * and not service state. Levels are derived here. Nothing in this file is
- * BondChain evidence, and the service stores totals — it does not price an
- * action.
+ * Activity experience is `pub_info` on the Bond's `.bnd`: one shared total
+ * the owner asserts, synced through the identity service and readable with
+ * the public Bond. The service labels that total `authority: "client"`. It
+ * stores the report; it does not price an action or attest the play. This
+ * device keeps a copy so play still counts while a request is in flight,
+ * and it keeps the achievements that are about this device. That local copy
+ * is transport-eligible (state-placement.ts): not synced state and not
+ * service state. Levels are derived here. Nothing in this file is BondChain
+ * evidence.
  *
  * The Bond and its Avaia level apart. What the owner did themselves pays the
  * Bond; what the Avaia did pays the Avaia. The two curves are deliberately

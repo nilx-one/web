@@ -160,6 +160,7 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                     avaia,
                     pub_info: PublicPubInfo {
                         experience: PublicExperience {
+                            authority: crate::repository::EXPERIENCE_AUTHORITY,
                             bond_xp: experience.bond_xp,
                             avaia_xp: experience.avaia_xp,
                         },
@@ -283,7 +284,8 @@ struct PublicIdentityProjection {
     avaia: Option<PublicAvaiaProjection>,
     pub_dress_url: String,
     /// The public slice of this Bond's `.bnd`. Experience totals are always
-    /// present; zero is a Bond that has not published any.
+    /// present; zero is a Bond that has not published any. They are the
+    /// owner's report (`authority: client`), not a service attestation of play.
     pub_info: PublicPubInfo,
 }
 
@@ -294,6 +296,7 @@ struct PublicPubInfo {
 
 #[derive(Debug, Serialize)]
 struct PublicExperience {
+    authority: &'static str,
     bond_xp: u64,
     avaia_xp: u64,
 }
@@ -401,6 +404,7 @@ mod tests {
         );
         assert_eq!(body["avaia"]["configuration_state"], "unconfigured");
         assert!(body["avaia"]["location"].is_null());
+        assert_eq!(body["pub_info"]["experience"]["authority"], "client");
         assert_eq!(body["pub_info"]["experience"]["bond_xp"], 0);
         assert_eq!(body["pub_info"]["experience"]["avaia_xp"], 0);
     }
@@ -486,6 +490,7 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
+        assert_eq!(body["pub_info"]["experience"]["authority"], "client");
         assert_eq!(body["pub_info"]["experience"]["bond_xp"], 120);
         assert_eq!(body["pub_info"]["experience"]["avaia_xp"], 45);
         assert_eq!(body["avaia"]["configuration_state"], "unconfigured");

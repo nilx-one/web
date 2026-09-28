@@ -1001,6 +1001,9 @@ class IdentityHttpAdapter
 
 function parsePubInfoExperience(value: unknown): PubInfoExperience | undefined {
   if (!isRecord(value) || !isRecord(value.experience)) return undefined;
+  // The service writes this. A missing or different label is not a total
+  // this client will treat as the shared standing.
+  if (value.experience.authority !== "client") return undefined;
   const bondXp = value.experience.bond_xp;
   const avaiaXp = value.experience.avaia_xp;
   if (!isExperienceTotal(bondXp) || !isExperienceTotal(avaiaXp))

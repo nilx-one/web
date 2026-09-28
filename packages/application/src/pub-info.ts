@@ -4,10 +4,14 @@
 /**
  * The public, synced slice of a Bond's `.bnd`.
  *
- * Experience totals are what `pub_info` holds today. The service stores them
- * and answers them to anyone reading the Bond; it does not price an action
- * or decide a level. Event ids are client nonces. A place never travels with
- * an award.
+ * Experience totals are what `pub_info` holds today. They are an owner
+ * assertion: the service stores them and answers them to anyone reading the
+ * Bond, labeled `authority: "client"` on the wire. That label is written by
+ * the service. A client cannot choose it, and a payload that does not carry
+ * it is not adopted. The service does not price an action, decide a level,
+ * or attest that the play happened. Event ids are client nonces. A place
+ * never travels with an award. Caps on carry and on an event amount are
+ * abuse bounds on an untrusted number, not proof the award was earned.
  */
 export interface PubInfoExperience {
   readonly bondXp: number;

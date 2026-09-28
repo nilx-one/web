@@ -98,6 +98,7 @@ export const WORLD_EN = {
   "public.experience.bond": "Bond",
   "public.experience.avaia": "Avaia",
   "public.experience.summary": "Level {level} · {xp} xp",
+  "public.experience.reported": "Reported by this Bond",
   "public.enter": "enter nilx.one",
   "discord.bootstrapFailed":
     "0x1 could not start this Discord Activity session. Reopen the Activity and try again. ({reason})",
@@ -197,6 +198,7 @@ export const WORLD_UK: Readonly<Record<keyof typeof WORLD_EN, string>> = {
   "public.experience.bond": "Bond",
   "public.experience.avaia": "Avaia",
   "public.experience.summary": "Рівень {level} · {xp} досвіду",
+  "public.experience.reported": "Повідомлено цим Bond",
   "public.enter": "перейти на nilx.one",
   "discord.bootstrapFailed":
     "0x1 не вдалося запустити цей сеанс Discord Activity. Відкрийте Activity знову й повторіть спробу. ({reason})",

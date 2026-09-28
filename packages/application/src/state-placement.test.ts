@@ -33,6 +33,7 @@ describe("State placement", () => {
       "identity.pubDress",
       "identity.authorization",
       "identity.avatarModel",
+      "pubInfo.experience",
     ]);
     for (const record of placedStateAt("server")) {
       expect(record.medium).toBe("identity-service");
@@ -117,9 +118,16 @@ describe("State placement", () => {
     const progression = STATE_PLACEMENT.find(
       (record) => record.id === "progression",
     );
-    expect(progression?.key).toBe("nilx-one.progression.v1");
+    expect(progression?.key).toBe("nilx-one.progression.v3");
     expect(progression?.legacy).toBeUndefined();
-    expect(progression?.deviceOnlyFields).toBeUndefined();
+    expect(progression?.deviceOnlyFields).toEqual([
+      "deviceAchievements",
+      "settingsHintSeen",
+    ]);
+    const experience = STATE_PLACEMENT.find(
+      (record) => record.id === "pubInfo.experience",
+    );
+    expect(experience?.what).toContain("authority: client");
   });
 
   it("resolves an owner-suffixed key to its record", () => {

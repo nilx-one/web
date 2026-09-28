@@ -3,8 +3,11 @@
 
 /// Owner-authenticated `pub_info` for a Bond's `.bnd`.
 ///
-/// Experience totals are the public, synced part of that file. This router
-/// accepts them; it does not price actions or decide levels.
+/// Experience totals are the public, synced part of that file, and they are
+/// an owner assertion. This router stores and redistributes them. It does
+/// not price actions, decide levels, or attest that the play happened.
+/// Every answer labels the totals `authority: "client"`; the request cannot
+/// choose that label.
 pub fn pub_info_router(
     repository: IdentityRepository,
     provider_links: ProviderLinkRepository,
@@ -169,6 +172,10 @@ fn validate_publication(request: &PublishExperienceRequest) -> Option<Publicatio
     }
     let carry = match &request.carry {
         None => None,
+        // Carry is the owner's assertion of a pre-sync total. The cap is an
+        // abuse bound on an untrusted number, not proof the experience was
+        // earned. Idempotency does not prove it either. The service stores
+        // the assertion and answers `authority: "client"`.
         Some(carry) if carry.bond_xp <= MAX_CARRY_XP && carry.avaia_xp <= MAX_CARRY_XP => {
             Some(crate::repository::PubInfoExperience {
                 bond_xp: carry.bond_xp,
@@ -184,6 +191,9 @@ fn validate_publication(request: &PublishExperienceRequest) -> Option<Publicatio
             continue;
         }
         let earner = crate::repository::ExperienceEarner::parse(&event.earner)?;
+        // The amount is the same kind of assertion as carry. The cap bounds
+        // how much one opaque id can add; it is not evidence the award was
+        // earned, and neither is the rate limit.
         if event.amount == 0 || event.amount > MAX_EVENT_AMOUNT || !valid_event_id(&event.id) {
             return None;
         }
@@ -213,6 +223,7 @@ fn valid_event_id(id: &str) -> bool {
 fn experience_response(experience: crate::repository::PubInfoExperience) -> PubInfoResponse {
     PubInfoResponse {
         experience: ExperienceBody {
+            authority: crate::repository::EXPERIENCE_AUTHORITY,
             bond_xp: experience.bond_xp,
             avaia_xp: experience.avaia_xp,
         },
@@ -250,6 +261,7 @@ struct PubInfoResponse {
 
 #[derive(Debug, Serialize)]
 struct ExperienceBody {
+    authority: &'static str,
     bond_xp: u64,
     avaia_xp: u64,
 }
@@ -427,6 +439,7 @@ mod pub_info_api_tests {
         assert_eq!(published.status(), StatusCode::OK);
         let cookie = session_cookie(&published);
         let body = json(published).await;
+        assert_eq!(body["experience"]["authority"], "client");
         assert_eq!(body["experience"]["bond_xp"], 60);
         assert_eq!(body["experience"]["avaia_xp"], 0);
 
@@ -445,7 +458,9 @@ mod pub_info_api_tests {
             .await
             .expect("response");
         assert_eq!(replay.status(), StatusCode::OK);
-        assert_eq!(json(replay).await["experience"]["bond_xp"], 60);
+        let replayed = json(replay).await;
+        assert_eq!(replayed["experience"]["authority"], "client");
+        assert_eq!(replayed["experience"]["bond_xp"], 60);
 
         let read = app
             .oneshot(
@@ -457,7 +472,9 @@ mod pub_info_api_tests {
             .await
             .expect("response");
         assert_eq!(read.status(), StatusCode::OK);
-        assert_eq!(json(read).await["experience"]["bond_xp"], 60);
+        let read_body = json(read).await;
+        assert_eq!(read_body["experience"]["authority"], "client");
+        assert_eq!(read_body["experience"]["bond_xp"], 60);
     }
 
     #[tokio::test]
@@ -468,6 +485,8 @@ mod pub_info_api_tests {
             r#"{"events":[{"id":"zone:8a2a1072b59ffff:avaia","earner":"avaia","amount":10}]}"#,
             r#"{"events":[{"id":"xp:1","earner":"owner","amount":10}]}"#,
             r#"{"events":[{"id":"xp:1","earner":"bond","amount":0}]}"#,
+            r#"{"authority":"service","events":[]}"#,
+            r#"{"carry":{"authority":"service","bond_xp":1,"avaia_xp":0},"events":[]}"#,
         ] {
             let mut request = Request::post("/api/v1/identity/pub-info");
             request = match &session {

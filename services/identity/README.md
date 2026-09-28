@@ -70,11 +70,11 @@ A Bond has exactly one location, whichever host it is set from. `GET /api/v1/loc
 
 ## pub_info
 
-`pub_info` is the public, synced slice of a Bond's `.bnd`. Experience is what it holds: `bond_xp` and `avaia_xp`, one shared total each.
+`pub_info` is the public, synced slice of a Bond's `.bnd`. Experience is what it holds: `bond_xp` and `avaia_xp`, one shared total each. Those totals are an owner assertion. The service stores and redistributes them. It does not price an action or attest that the play happened. Every experience object the service writes includes `"authority": "client"`. The client cannot choose that field; a body that tries to is refused.
 
-- `GET /api/v1/identity/pub-info` returns `{ "experience": { "bond_xp": 0, "avaia_xp": 0 } }` for the authenticated Bond. No stored row is zero.
-- `POST /api/v1/identity/pub-info` accepts `{ "carry": { "bond_xp": 0, "avaia_xp": 0 }, "events": [{ "id": "xp:…", "earner": "bond", "amount": 30 }] }`. It requires the CSRF header and an active authenticated Bond. Carry only rises, to the greatest pre-sync total a device reports. An event id is an opaque `xp:` nonce; a repeat does not pay again, and an id that names a subject is refused. The service stores the totals. It does not price the action.
-- `GET /api/v1/identity/public` nests the same totals under `pub_info.experience`, and nests the owned Avaia's `configuration_state`, so a public reader can derive the same levels the owner sees from the shared totals. The per-device model-download achievement is not part of this projection.
+- `GET /api/v1/identity/pub-info` returns `{ "experience": { "authority": "client", "bond_xp": 0, "avaia_xp": 0 } }` for the authenticated Bond. No stored row is zero.
+- `POST /api/v1/identity/pub-info` accepts `{ "carry": { "bond_xp": 0, "avaia_xp": 0 }, "events": [{ "id": "xp:…", "earner": "bond", "amount": 30 }] }`. It requires the CSRF header and an active authenticated Bond. Carry only rises, to the greatest pre-sync total a device reports. An event id is an opaque `xp:` nonce; a repeat does not pay again, and an id that names a subject is refused. Carry is capped, and so is one event amount. The caps are abuse bounds on an untrusted number, not proof the award was earned. Idempotency and the rate limit are not that proof either.
+- `GET /api/v1/identity/public` nests the same totals under `pub_info.experience`, with the same `authority: "client"`, and nests the owned Avaia's `configuration_state`, so a public reader can derive the same levels the owner sees from the shared report. The per-device model-download achievement is not part of this projection. The public card says the standing is reported by this Bond.
 
 ## Secret boundary
 

@@ -2,8 +2,10 @@
 
 A Bond and its Avaia level up by playing: revealing fog, studying what the
 Avaia notices along the way, and a few one-time achievements. The activity
-experience that pays for it is `pub_info` on the Bond's `.bnd`: synced, and
-readable with the public Bond. Core is not asked to price it.
+experience that pays for it is `pub_info` on the Bond's `.bnd`: the owner's
+report, synced and readable with the public Bond. The service labels every
+total `authority: "client"`. Core is not asked to price it, and the service
+does not attest that the play happened.
 
 ## Two earners
 
@@ -67,11 +69,17 @@ zones walked open.
 
 Activity experience is part of `pub_info`, the public slice of a Bond's
 [`.bnd`](bnd-file-lifecycle.md). There is one total per Bond and one per its
-Avaia. The identity service stores them and answers them with the public Bond,
-so every host — the web, Telegram, Discord, and anyone opening the public
-address — reads the same standing. Publishing is
+Avaia. Those totals are an owner assertion. The identity service stores them
+and answers them with the public Bond, so every host — the web, Telegram,
+Discord, and anyone opening the public address — reads the same report.
+Every experience object, authenticated and public, carries
+`authority: "client"`, written by the service. A request cannot set it, and
+a reader does not adopt a total that arrives without it. Publishing is
 `GET`/`POST /api/v1/identity/pub-info`. The public projection nests the same
-totals under `pub_info.experience`.
+totals under `pub_info.experience`. A carry total is capped, and so is one
+event; the caps bound an untrusted number. They are not proof the award was
+earned, and neither is an idempotent id or the rate limit. The public card
+says the standing is reported by this Bond.
 
 A device still remembers what it has not managed to publish yet, under
 `nilx-one.progression.v3.<owner>`, the same way fog reveals
@@ -92,16 +100,19 @@ The **Avaia model downloaded** achievement stays on the device that downloaded
 it. It is added to that device's own standing and is not part of `pub_info`.
 
 A level is still not a protocol fact: it creates no Interaction and completes
-no BondChain. The service stores the totals the client publishes; it does not
-price an action or derive a level. Fog reveals and the landmark notebook stay
-on the device. What left the device is the experience those actions paid.
+no BondChain. The service stores the totals the client publishes and
+redistributes that report; it does not price an action, derive a level, or
+attest the play. See [State placement](state-placement.md): the local copy
+stays transport-eligible, and `bond_pub_info` is a separate client-asserted
+record. Fog reveals and the landmark notebook stay on the device. What left
+the device is the experience the owner says those actions paid.
 
 ## What this is not
 
 This is not a badge shop or a quest system. It is not evidence of presence or
-attendance, and it asserts nothing about any Bond. The published totals say
-how much was earned, not where. Losing local storage loses the device
-achievement and any award that had not reached `pub_info` yet; the shared
-totals remain.
+attendance. The published totals are how much this Bond reports, not where
+it was earned and not a rank nilx attested. Losing local storage loses the
+device achievement and any award that had not reached `pub_info` yet; the
+shared report remains.
 
 © 2026 aiaiaiai · aiaiaiai.org

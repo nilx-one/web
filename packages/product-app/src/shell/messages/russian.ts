@@ -498,6 +498,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "public.experience.bond": "Bond",
   "public.experience.avaia": "Avaia",
   "public.experience.summary": "Уровень {level} · {xp} опыта",
+  "public.experience.reported": "Сообщено этим Bond",
   "public.enter": "перейти на nilx.one",
   "discord.bootstrapFailed":
     "0x1 не удалось запустить этот сеанс Discord Activity. Откройте Activity снова и повторите попытку. ({reason})",

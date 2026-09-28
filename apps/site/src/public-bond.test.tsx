@@ -99,7 +99,13 @@ describe("public Bond host routing", () => {
               pub_dress: "x0skai",
               configuration_state: "configured",
             },
-            pub_info: { experience: { bond_xp: 90, avaia_xp: 150 } },
+            pub_info: {
+              experience: {
+                authority: "client",
+                bond_xp: 90,
+                avaia_xp: 150,
+              },
+            },
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
@@ -118,6 +124,35 @@ describe("public Bond host routing", () => {
     render(<PublicBondPage fetchImpl={fetchImpl} />);
     expect(await screen.findByText("Level 1 · 110 xp")).toBeVisible();
     expect(screen.getByText("Level 2 · 150 xp")).toBeVisible();
+    expect(screen.getByText("Reported by this Bond")).toBeVisible();
+  });
+
+  it("does not present an unlabeled total as this Bond's standing", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            pub_dress: "0x0sky",
+            pub_dress_url: "https://0x0sky.nilx.one",
+            avaia: {
+              pub_dress: "x0skai",
+              configuration_state: "configured",
+            },
+            pub_info: { experience: { bond_xp: 90, avaia_xp: 150 } },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    ) as unknown as typeof fetch;
+
+    await expect(readPublicBond(fetchImpl)).resolves.toEqual({
+      kind: "ready",
+      bond: {
+        pubDress: "0x0sky",
+        pubDressUrl: "https://0x0sky.nilx.one",
+        avaia: { pubDress: "x0skai", configurationState: "configured" },
+        experience: { bondXp: 0, avaiaXp: 0 },
+      },
+    });
   });
 
   it("renders the pub_dress rather than the DNS transport label", async () => {

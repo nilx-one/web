@@ -624,11 +624,11 @@ describe("Avaia profile transport", () => {
 
 describe("pub_info experience transport", () => {
   it("publishes carry and events with CSRF protection", async () => {
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValue(
-        response(200, { experience: { bond_xp: 60, avaia_xp: 10 } }),
-      );
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        experience: { authority: "client", bond_xp: 60, avaia_xp: 10 },
+      }),
+    );
     const adapter = createIdentityHttpAdapter({
       fetch,
       getAuthorization: () => "tma proof",
@@ -663,7 +663,9 @@ describe("pub_info experience transport", () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
-        response(200, { experience: { bond_xp: 90, avaia_xp: 0 } }),
+        response(200, {
+          experience: { authority: "client", bond_xp: 90, avaia_xp: 0 },
+        }),
       )
       .mockResolvedValueOnce(
         response(422, { error: { code: "invalid_pub_info", message: "" } }),
@@ -687,6 +689,22 @@ describe("pub_info experience transport", () => {
     await expect(adapter.readPubInfo()).resolves.toEqual({
       kind: "rejected",
       reason: "inactive",
+    });
+  });
+
+  it("does not adopt a total the service did not label as the client's report", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        experience: { authority: "service", bond_xp: 1_000_000, avaia_xp: 0 },
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readPubInfo()).resolves.toEqual({
+      kind: "service-unavailable",
     });
   });
 });

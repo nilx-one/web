@@ -1,8 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-/// Who an experience event pays. The service stores the amount; it does not
-/// price the action.
+/// Who an experience event pays. The service stores the amount the owner
+/// asserts; it does not price the action or attest that the play happened.
+///
+/// The wire label for every total this service answers is
+/// [`EXPERIENCE_AUTHORITY`]. A client cannot choose a different one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExperienceEarner {
     Bond,
@@ -28,7 +31,15 @@ impl ExperienceEarner {
     }
 }
 
+/// Every experience object this service writes carries this authority.
+/// The value is fixed: the totals are an owner assertion, not a service
+/// attestation of play.
+pub const EXPERIENCE_AUTHORITY: &str = "client";
+
 /// The shared experience totals published in a Bond's `pub_info`.
+///
+/// These are the owner's report. Storing them does not make them evidence
+/// that the Bond earned them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PubInfoExperience {
     pub bond_xp: u64,
