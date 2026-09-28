@@ -21,7 +21,13 @@ import {
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
 import { StatusToastStack, type StatusToastItem } from "@nilx-one/ui";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type UIEvent,
+} from "react";
 
 import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
@@ -253,7 +259,7 @@ const AT_DEVICE_METERS = 5;
 
 /**
  * Past this many pixels of scroll, a Dock detail's large title has scrolled
- * far enough out of the way that the sticky header needs to start saying
+ * far enough out of the way that the fixed header needs to start saying
  * its name.
  */
 const DETAIL_TITLE_COLLAPSE_PX = 24;
@@ -471,7 +477,7 @@ export function AuthenticatedMapHomeView({
   >(undefined);
   // A Dock detail's own name is its large title, at the top of the screen it
   // names — the same place iOS puts one — until scrolling carries it out of
-  // view, at which point the sticky header's small title takes over saying
+  // view, at which point the fixed header's small title takes over saying
   // it. The two are one name in two states, never both said at once.
   const [detailTitleCollapsed, setDetailTitleCollapsed] = useState(false);
   const appearance = useAppearance();
@@ -655,7 +661,12 @@ export function AuthenticatedMapHomeView({
     if (detailTitleCollapsed) setDetailTitleCollapsed(false);
   }
   useEffect(() => {
-    if (dockRef.current !== null) dockRef.current.scrollTop = 0;
+    // The header stays put. Only the body under it scrolls, and a screen
+    // just opened starts that body at its top.
+    const scroller = dockRef.current?.querySelector<HTMLElement>(
+      ".bond-dock__screen:not([data-phase='from']) .bond-dock__scroll",
+    );
+    if (scroller !== null) scroller.scrollTop = 0;
   }, [activeDetail, section]);
   const avaiaSpeech =
     wheel === "avaia" && handover === undefined
@@ -1296,9 +1307,8 @@ export function AuthenticatedMapHomeView({
     return section === "world" ? "Bond" : detailTitle();
   }
 
-  function handleDockScroll(): void {
-    const collapsed =
-      (dockRef.current?.scrollTop ?? 0) > DETAIL_TITLE_COLLAPSE_PX;
+  function handleDockScroll(event: UIEvent<HTMLElement>): void {
+    const collapsed = event.currentTarget.scrollTop > DETAIL_TITLE_COLLAPSE_PX;
     setDetailTitleCollapsed((current) =>
       current === collapsed ? current : collapsed,
     );
@@ -1377,11 +1387,6 @@ export function AuthenticatedMapHomeView({
           data-screen={dockScreen}
           aria-label={dockTitle()}
           ref={dockRef}
-          onScroll={
-            activeDetail === undefined && section === "world"
-              ? undefined
-              : handleDockScroll
-          }
         >
           <DockWindow screen={dockScreen} depth={dockDepth}>
             {section === "world" && activeDetail === undefined ? (
@@ -1401,67 +1406,71 @@ export function AuthenticatedMapHomeView({
                     {t("dock.edit")}
                   </button>
                 </div>
-                <div className="bond-dock__pair">
-                  <button
-                    className="bond-dock__bond bond-dock__bond--active"
-                    type="button"
-                    disabled={!dock.left.actionable}
-                    onClick={() => activateDockIdentity("left")}
-                    aria-label={translateFirst(
-                      t,
-                      dock.left.actionLabel,
-                      DOCK_ACTION_KEYS,
-                    )}
-                  >
-                    <span className="bond-dock__glyph">
-                      {translateIf(t, "dock.ai", dock.left.glyph)}
+                <div className="bond-dock__scroll">
+                  <div className="bond-dock__pair">
+                    <button
+                      className="bond-dock__bond bond-dock__bond--active"
+                      type="button"
+                      disabled={!dock.left.actionable}
+                      onClick={() => activateDockIdentity("left")}
+                      aria-label={translateFirst(
+                        t,
+                        dock.left.actionLabel,
+                        DOCK_ACTION_KEYS,
+                      )}
+                    >
+                      <span className="bond-dock__glyph">
+                        {translateIf(t, "dock.ai", dock.left.glyph)}
+                      </span>
+                      <strong>{dock.left.address}</strong>
+                      <small>
+                        {dock.left.seat === "bond"
+                          ? t("dock.you")
+                          : t("dock.ai")}
+                        <i
+                          className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
+                          aria-hidden="true"
+                        />
+                        {translateFirst(t, dock.left.role, DOCK_ROLE_KEYS)}
+                      </small>
+                    </button>
+                    <span
+                      className="bond-dock__link"
+                      aria-label={t("dock.noRelationship")}
+                    >
+                      —
                     </span>
-                    <strong>{dock.left.address}</strong>
-                    <small>
-                      {dock.left.seat === "bond" ? t("dock.you") : t("dock.ai")}
-                      <i
-                        className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
-                        aria-hidden="true"
-                      />
-                      {translateFirst(t, dock.left.role, DOCK_ROLE_KEYS)}
-                    </small>
-                  </button>
-                  <span
-                    className="bond-dock__link"
-                    aria-label={t("dock.noRelationship")}
-                  >
-                    —
-                  </span>
-                  <button
-                    className={`bond-dock__bond${
-                      dock.right.actionable
-                        ? ""
-                        : " bond-dock__bond--unavailable"
-                    }`}
-                    type="button"
-                    disabled={!dock.right.actionable}
-                    onClick={() => activateDockIdentity("right")}
-                    aria-label={translateFirst(
-                      t,
-                      dock.right.actionLabel,
-                      DOCK_ACTION_KEYS,
-                    )}
-                  >
-                    <span className="bond-dock__glyph">
-                      {translateIf(t, "dock.ai", dock.right.glyph)}
-                    </span>
-                    <strong>{dock.right.address}</strong>
-                    <small>
-                      {dock.right.seat === "bond"
-                        ? t("dock.you")
-                        : t("dock.ai")}
-                      <i
-                        className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
-                        aria-hidden="true"
-                      />
-                      {translateFirst(t, dock.right.role, DOCK_ROLE_KEYS)}
-                    </small>
-                  </button>
+                    <button
+                      className={`bond-dock__bond${
+                        dock.right.actionable
+                          ? ""
+                          : " bond-dock__bond--unavailable"
+                      }`}
+                      type="button"
+                      disabled={!dock.right.actionable}
+                      onClick={() => activateDockIdentity("right")}
+                      aria-label={translateFirst(
+                        t,
+                        dock.right.actionLabel,
+                        DOCK_ACTION_KEYS,
+                      )}
+                    >
+                      <span className="bond-dock__glyph">
+                        {translateIf(t, "dock.ai", dock.right.glyph)}
+                      </span>
+                      <strong>{dock.right.address}</strong>
+                      <small>
+                        {dock.right.seat === "bond"
+                          ? t("dock.you")
+                          : t("dock.ai")}
+                        <i
+                          className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
+                          aria-hidden="true"
+                        />
+                        {translateFirst(t, dock.right.role, DOCK_ROLE_KEYS)}
+                      </small>
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
@@ -1485,361 +1494,380 @@ export function AuthenticatedMapHomeView({
                     <h2 aria-hidden={!detailTitleCollapsed}>{detailTitle()}</h2>
                   </div>
                 </div>
-                {/* The same name the collapsed header takes over saying once
+                <div className="bond-dock__scroll" onScroll={handleDockScroll}>
+                  {/* The same name the collapsed header takes over saying once
                     this has scrolled out of view — never both at once. */}
-                <h1
-                  className="bond-dock__detail-large-title"
-                  data-collapsed={detailTitleCollapsed}
-                  aria-hidden={detailTitleCollapsed}
-                >
-                  {detailTitle()}
-                </h1>
+                  <h1
+                    className="bond-dock__detail-large-title"
+                    data-collapsed={detailTitleCollapsed}
+                    aria-hidden={detailTitleCollapsed}
+                  >
+                    {detailTitle()}
+                  </h1>
 
-                {section === "identity" && activeDetail === undefined ? (
-                  <div className="bond-profile">
-                    <AddressField
-                      id="profile-slug"
-                      label="pub_dress"
-                      state={slugEdit}
-                      fallback={pubDress}
-                      onChange={onSlugChange}
-                      onSubmit={onSlugSubmit}
-                    />
-                    {avatarChoice === undefined ? null : (
-                      <div className="avatar-choice">
-                        <AvatarModelField
-                          state={createAvatarFieldViewState("bond", bondAvatar)}
-                          onOpen={() => openAvatarEditor("bond")}
-                        />
-                        <p className="profile-edit__note">
-                          {avatarChoice.unsupportedModel !== undefined
-                            ? t("dock.unsupportedStudy").replace(
-                                "{model}",
-                                avatarChoice.unsupportedModel,
-                              )
-                            : avatarChoice.unchosen
-                              ? t("dock.noStudy")
-                              : t("dock.studies")}
-                        </p>
-                        {avatarChoice.error === undefined ? null : (
-                          <p className="profile-edit__error" role="alert">
-                            {translateCopy(t, avatarChoice.error)}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    <dl className="bond-profile__rows">
-                      <div>
-                        <dt>{t("dock.providers")}</dt>
-                        <dd>
-                          {providers === undefined ? (
-                            <small className="profile-edit__note" role="status">
-                              {t("dock.loading")}
-                            </small>
-                          ) : (
-                            <span className="provider-controls">
-                              {providers.connected.map((row) => (
-                                <ProviderMark key={row.provider} row={row} />
-                              ))}
-                              <button
-                                className="provider-control provider-control--add"
-                                type="button"
-                                aria-label={t("dock.addProvider")}
-                                onClick={() => openDetail("providers")}
-                              >
-                                +
-                              </button>
-                            </span>
-                          )}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                ) : null}
-
-                {section === "settings" ? (
-                  <>
-                    <LanguageSettings />
-                    {localModel === undefined ? null : (
-                      <LocalModelSettings
-                        host={localModel.host}
-                        catalog={localModel.catalog}
-                        defaultModelId={localModel.defaultModelId}
+                  {section === "identity" && activeDetail === undefined ? (
+                    <div className="bond-profile">
+                      <AddressField
+                        id="profile-slug"
+                        label="pub_dress"
+                        state={slugEdit}
+                        fallback={pubDress}
+                        onChange={onSlugChange}
+                        onSubmit={onSlugSubmit}
                       />
-                    )}
-                    {/* Hidden for now — uncomment together with the import above.
+                      {avatarChoice === undefined ? null : (
+                        <div className="avatar-choice">
+                          <AvatarModelField
+                            state={createAvatarFieldViewState(
+                              "bond",
+                              bondAvatar,
+                            )}
+                            onOpen={() => openAvatarEditor("bond")}
+                          />
+                          <p className="profile-edit__note">
+                            {avatarChoice.unsupportedModel !== undefined
+                              ? t("dock.unsupportedStudy").replace(
+                                  "{model}",
+                                  avatarChoice.unsupportedModel,
+                                )
+                              : avatarChoice.unchosen
+                                ? t("dock.noStudy")
+                                : t("dock.studies")}
+                          </p>
+                          {avatarChoice.error === undefined ? null : (
+                            <p className="profile-edit__error" role="alert">
+                              {translateCopy(t, avatarChoice.error)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      <dl className="bond-profile__rows">
+                        <div>
+                          <dt>{t("dock.providers")}</dt>
+                          <dd>
+                            {providers === undefined ? (
+                              <small
+                                className="profile-edit__note"
+                                role="status"
+                              >
+                                {t("dock.loading")}
+                              </small>
+                            ) : (
+                              <span className="provider-controls">
+                                {providers.connected.map((row) => (
+                                  <ProviderMark key={row.provider} row={row} />
+                                ))}
+                                <button
+                                  className="provider-control provider-control--add"
+                                  type="button"
+                                  aria-label={t("dock.addProvider")}
+                                  onClick={() => openDetail("providers")}
+                                >
+                                  +
+                                </button>
+                              </span>
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : null}
+
+                  {section === "settings" ? (
+                    <>
+                      <LanguageSettings />
+                      {localModel === undefined ? null : (
+                        <LocalModelSettings
+                          host={localModel.host}
+                          catalog={localModel.catalog}
+                          defaultModelId={localModel.defaultModelId}
+                        />
+                      )}
+                      {/* Hidden for now — uncomment together with the import above.
                     <BondArtificialPositionSettings
                       ownerPubDress={pubDress}
                       renderer={renderer}
                     />
                     */}
-                    <fieldset className="interface-settings__appearance">
-                      <legend>{t("settings.appearance.legend")}</legend>
-                      {(
-                        [
+                      <fieldset className="interface-settings__appearance">
+                        <legend>{t("settings.appearance.legend")}</legend>
+                        {(
                           [
-                            "light",
-                            "settings.appearance.light",
-                            "settings.appearance.lightDetail",
-                          ],
+                            [
+                              "light",
+                              "settings.appearance.light",
+                              "settings.appearance.lightDetail",
+                            ],
+                            [
+                              "dark",
+                              "settings.appearance.dark",
+                              "settings.appearance.darkDetail",
+                            ],
+                            [
+                              "auto",
+                              "settings.appearance.auto",
+                              "settings.appearance.autoDetail",
+                            ],
+                          ] as const
+                        ).map(([mode, label, detail]) => (
+                          <label
+                            key={mode}
+                            className="interface-settings__option"
+                          >
+                            <span>
+                              <strong>{t(label)}</strong>
+                              <small>{t(detail)}</small>
+                            </span>
+                            <input
+                              type="radio"
+                              name="appearance"
+                              value={mode}
+                              checked={appearance.preference === mode}
+                              onChange={() => chooseAppearance(mode)}
+                            />
+                          </label>
+                        ))}
+                      </fieldset>
+                      <fieldset className="interface-settings__appearance">
+                        <legend>{t("settings.depth.legend")}</legend>
+                        {(
                           [
-                            "dark",
-                            "settings.appearance.dark",
-                            "settings.appearance.darkDetail",
-                          ],
-                          [
-                            "auto",
-                            "settings.appearance.auto",
-                            "settings.appearance.autoDetail",
-                          ],
-                        ] as const
-                      ).map(([mode, label, detail]) => (
-                        <label
-                          key={mode}
-                          className="interface-settings__option"
-                        >
-                          <span>
-                            <strong>{t(label)}</strong>
-                            <small>{t(detail)}</small>
-                          </span>
-                          <input
-                            type="radio"
-                            name="appearance"
-                            value={mode}
-                            checked={appearance.preference === mode}
-                            onChange={() => chooseAppearance(mode)}
-                          />
-                        </label>
-                      ))}
-                    </fieldset>
-                    <fieldset className="interface-settings__appearance">
-                      <legend>{t("settings.depth.legend")}</legend>
-                      {(
-                        [
-                          [
-                            "volumetric",
-                            "settings.depth.threeD",
-                            "settings.depth.threeDDetail",
-                          ],
-                          [
-                            "flat",
-                            "settings.depth.twoD",
-                            "settings.depth.twoDDetail",
-                          ],
-                        ] as const
-                      ).map(([mode, label, detail]) => (
-                        <label
-                          key={mode}
-                          className="interface-settings__option"
-                        >
-                          <span>
-                            <strong>{t(label)}</strong>
-                            <small>{t(detail)}</small>
-                          </span>
-                          <input
-                            type="radio"
-                            name="dimension"
-                            value={mode}
-                            checked={dimension === mode}
-                            onChange={() => setDimension(mode)}
-                          />
-                        </label>
-                      ))}
-                    </fieldset>
-                    <p className="interface-settings__note">
-                      {t("settings.presentation")}
-                    </p>
-                  </>
-                ) : null}
-
-                {activeDetail === "avaia" ? (
-                  <>
-                    <section
-                      className="avaia-notebook"
-                      aria-labelledby="avaia-progression-title"
-                    >
-                      <span
-                        className="interface-settings__eyebrow"
-                        id="avaia-progression-title"
-                      >
-                        {t("avaia.progression.title")}
-                      </span>
-                      <p className="profile-edit__note">
-                        {t("avaia.progression.summary")
-                          .replace("{level}", String(progression.level))
-                          .replace("{xp}", String(progression.totalXp))}
+                            [
+                              "volumetric",
+                              "settings.depth.threeD",
+                              "settings.depth.threeDDetail",
+                            ],
+                            [
+                              "flat",
+                              "settings.depth.twoD",
+                              "settings.depth.twoDDetail",
+                            ],
+                          ] as const
+                        ).map(([mode, label, detail]) => (
+                          <label
+                            key={mode}
+                            className="interface-settings__option"
+                          >
+                            <span>
+                              <strong>{t(label)}</strong>
+                              <small>{t(detail)}</small>
+                            </span>
+                            <input
+                              type="radio"
+                              name="dimension"
+                              value={mode}
+                              checked={dimension === mode}
+                              onChange={() => setDimension(mode)}
+                            />
+                          </label>
+                        ))}
+                      </fieldset>
+                      <p className="interface-settings__note">
+                        {t("settings.presentation")}
                       </p>
-                    </section>
-                    {/* A host that cannot read the Avaia's profile configures
-                        nothing here; what this device noted is still its own. */}
-                    {avaiaSetup === undefined ? null : (
-                      <>
-                        <AvaiaSetupView
-                          state={avaiaSetup}
-                          onDraftChange={(value) => onAvaiaSetupChange?.(value)}
-                          onSubmit={() => void submitAvaiaSetup()}
-                        />
-                        <AvatarModelField
-                          state={createAvatarFieldViewState(
-                            "avaia",
-                            avaiaAvatar,
-                          )}
-                          onOpen={() => openAvatarEditor("avaia")}
-                        />
-                      </>
-                    )}
-                    <section
-                      className="avaia-notebook"
-                      aria-labelledby="avaia-notebook-title"
-                    >
-                      <span
-                        className="interface-settings__eyebrow"
-                        id="avaia-notebook-title"
+                    </>
+                  ) : null}
+
+                  {activeDetail === "avaia" ? (
+                    <>
+                      <section
+                        className="avaia-notebook"
+                        aria-labelledby="avaia-progression-title"
                       >
-                        {t("avaia.notebook.title")}
-                      </span>
-                      {avaiaStudied.length === 0 ? (
+                        <span
+                          className="interface-settings__eyebrow"
+                          id="avaia-progression-title"
+                        >
+                          {t("avaia.progression.title")}
+                        </span>
                         <p className="profile-edit__note">
-                          {t("avaia.notebook.empty")}
+                          {t("avaia.progression.summary")
+                            .replace("{level}", String(progression.level))
+                            .replace("{xp}", String(progression.totalXp))}
+                        </p>
+                      </section>
+                      {/* A host that cannot read the Avaia's profile configures
+                        nothing here; what this device noted is still its own. */}
+                      {avaiaSetup === undefined ? null : (
+                        <>
+                          <AvaiaSetupView
+                            state={avaiaSetup}
+                            onDraftChange={(value) =>
+                              onAvaiaSetupChange?.(value)
+                            }
+                            onSubmit={() => void submitAvaiaSetup()}
+                          />
+                          <AvatarModelField
+                            state={createAvatarFieldViewState(
+                              "avaia",
+                              avaiaAvatar,
+                            )}
+                            onOpen={() => openAvatarEditor("avaia")}
+                          />
+                        </>
+                      )}
+                      <section
+                        className="avaia-notebook"
+                        aria-labelledby="avaia-notebook-title"
+                      >
+                        <span
+                          className="interface-settings__eyebrow"
+                          id="avaia-notebook-title"
+                        >
+                          {t("avaia.notebook.title")}
+                        </span>
+                        {avaiaStudied.length === 0 ? (
+                          <p className="profile-edit__note">
+                            {t("avaia.notebook.empty")}
+                          </p>
+                        ) : (
+                          <ul className="avaia-notebook__list">
+                            {avaiaStudied.map(({ landmark }) => (
+                              <li key={landmark.id}>
+                                <strong>
+                                  {landmarkLabel(locale, landmark)}
+                                </strong>
+                                <small>
+                                  {[
+                                    locale === "en"
+                                      ? landmark.kind
+                                      : landmarkKindLabel(
+                                          locale,
+                                          landmark.kind,
+                                        ),
+                                    ...Object.entries(landmark.facts)
+                                      .filter(
+                                        ([key]) => !key.startsWith("name"),
+                                      )
+                                      .map(
+                                        ([key, value]) => `${key}: ${value}`,
+                                      ),
+                                  ].join(" · ")}
+                                </small>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <p className="interface-settings__note">
+                          {t("avaia.notebook.note")}
+                        </p>
+                      </section>
+                    </>
+                  ) : null}
+
+                  {activeDetail === "avatar" && avatarDraft !== undefined ? (
+                    <AvatarEditorView
+                      state={createAvatarEditorViewState({
+                        subject: detailState?.subject ?? "bond",
+                        ...((detailState?.subject === "avaia"
+                          ? avaiaAvatar
+                          : bondAvatar) === undefined
+                          ? {}
+                          : {
+                              persisted: (detailState?.subject === "avaia"
+                                ? avaiaAvatar
+                                : bondAvatar) as AvatarSelection,
+                            }),
+                        draft: avatarDraft,
+                        busy: avatarSaving,
+                        ...(avatarError === undefined
+                          ? {}
+                          : { error: avatarError }),
+                      })}
+                      onChooseModel={(model) =>
+                        setAvatarDraft(chooseDraftModel(avatarDraft, model))
+                      }
+                      onEquip={(itemId) =>
+                        setAvatarDraft(equipInDraft(avatarDraft, itemId))
+                      }
+                      onCancel={closeAvatarEditor}
+                      onSave={() => void saveAvatarDraft()}
+                    />
+                  ) : null}
+
+                  {activeDetail === "providers" ? (
+                    <div className="provider-management">
+                      {providers === undefined ? (
+                        <p className="interface-settings__note" role="status">
+                          {t("dock.loadingProviders")}
                         </p>
                       ) : (
-                        <ul className="avaia-notebook__list">
-                          {avaiaStudied.map(({ landmark }) => (
-                            <li key={landmark.id}>
-                              <strong>{landmarkLabel(locale, landmark)}</strong>
-                              <small>
-                                {[
-                                  locale === "en"
-                                    ? landmark.kind
-                                    : landmarkKindLabel(locale, landmark.kind),
-                                  ...Object.entries(landmark.facts)
-                                    .filter(([key]) => !key.startsWith("name"))
-                                    .map(([key, value]) => `${key}: ${value}`),
-                                ].join(" · ")}
-                              </small>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <p className="interface-settings__note">
-                        {t("avaia.notebook.note")}
-                      </p>
-                    </section>
-                  </>
-                ) : null}
-
-                {activeDetail === "avatar" && avatarDraft !== undefined ? (
-                  <AvatarEditorView
-                    state={createAvatarEditorViewState({
-                      subject: detailState?.subject ?? "bond",
-                      ...((detailState?.subject === "avaia"
-                        ? avaiaAvatar
-                        : bondAvatar) === undefined
-                        ? {}
-                        : {
-                            persisted: (detailState?.subject === "avaia"
-                              ? avaiaAvatar
-                              : bondAvatar) as AvatarSelection,
-                          }),
-                      draft: avatarDraft,
-                      busy: avatarSaving,
-                      ...(avatarError === undefined
-                        ? {}
-                        : { error: avatarError }),
-                    })}
-                    onChooseModel={(model) =>
-                      setAvatarDraft(chooseDraftModel(avatarDraft, model))
-                    }
-                    onEquip={(itemId) =>
-                      setAvatarDraft(equipInDraft(avatarDraft, itemId))
-                    }
-                    onCancel={closeAvatarEditor}
-                    onSave={() => void saveAvatarDraft()}
-                  />
-                ) : null}
-
-                {activeDetail === "providers" ? (
-                  <div className="provider-management">
-                    {providers === undefined ? (
-                      <p className="interface-settings__note" role="status">
-                        {t("dock.loadingProviders")}
-                      </p>
-                    ) : (
-                      <>
-                        <ul className="provider-management__list">
-                          {providers.rows.map((row) => (
-                            <li
-                              key={row.provider}
-                              data-connected={row.connected}
-                            >
-                              <span
-                                className={`provider-control${
-                                  row.connected
-                                    ? " provider-control--connected"
-                                    : " provider-control--idle"
-                                }`}
-                                aria-hidden="true"
+                        <>
+                          <ul className="provider-management__list">
+                            {providers.rows.map((row) => (
+                              <li
+                                key={row.provider}
+                                data-connected={row.connected}
                               >
-                                {row.glyph}
-                              </span>
-                              <span>
-                                <strong>{row.label}</strong>
-                                <small>
-                                  {row.status === "Not connected"
-                                    ? t("dock.notConnected")
-                                    : translateIf(
+                                <span
+                                  className={`provider-control${
+                                    row.connected
+                                      ? " provider-control--connected"
+                                      : " provider-control--idle"
+                                  }`}
+                                  aria-hidden="true"
+                                >
+                                  {row.glyph}
+                                </span>
+                                <span>
+                                  <strong>{row.label}</strong>
+                                  <small>
+                                    {row.status === "Not connected"
+                                      ? t("dock.notConnected")
+                                      : translateIf(
+                                          t,
+                                          "dock.connected",
+                                          row.status,
+                                        )}
+                                  </small>
+                                </span>
+                                {row.connected ? (
+                                  <span className="provider-management__actions">
+                                    <ProviderMark
+                                      row={row}
+                                      label={t("dock.open")}
+                                    />
+                                    <button
+                                      className="provider-management__disconnect"
+                                      type="button"
+                                      aria-label={translateCopy(
                                         t,
-                                        "dock.connected",
-                                        row.status,
+                                        row.disconnectLabel,
                                       )}
-                                </small>
-                              </span>
-                              {row.connected ? (
-                                <span className="provider-management__actions">
-                                  <ProviderMark
-                                    row={row}
-                                    label={t("dock.open")}
-                                  />
-                                  <button
-                                    className="provider-management__disconnect"
-                                    type="button"
+                                      title={translateCopy(
+                                        t,
+                                        row.disconnectLabel,
+                                      )}
+                                      onClick={() =>
+                                        onDisconnectProvider?.(row.provider)
+                                      }
+                                    >
+                                      <span aria-hidden="true">🗑</span>
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <a
+                                    className="provider-management__connect"
+                                    href={row.connectHref}
                                     aria-label={translateCopy(
                                       t,
-                                      row.disconnectLabel,
+                                      row.connectLabel,
                                     )}
-                                    title={translateCopy(
-                                      t,
-                                      row.disconnectLabel,
-                                    )}
-                                    onClick={() =>
-                                      onDisconnectProvider?.(row.provider)
-                                    }
                                   >
-                                    <span aria-hidden="true">🗑</span>
-                                  </button>
-                                </span>
-                              ) : (
-                                <a
-                                  className="provider-management__connect"
-                                  href={row.connectHref}
-                                  aria-label={translateCopy(
-                                    t,
-                                    row.connectLabel,
-                                  )}
-                                >
-                                  {t("dock.connect")}
-                                </a>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="interface-settings__note">
-                          {t("dock.providerDescription")}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                ) : null}
+                                    {t("dock.connect")}
+                                  </a>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="interface-settings__note">
+                            {t("dock.providerDescription")}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
           </DockWindow>
