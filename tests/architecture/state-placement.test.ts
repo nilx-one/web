@@ -327,9 +327,25 @@ describe("State placement contract", () => {
     }
   });
 
+  it("finds every browser cookie where the service mints it", () => {
+    const service = sourceFiles(join(ROOT, "services/identity/src"))
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+    const missing = STATE_PLACEMENT.filter(
+      (record) => record.medium === "cookie" && !service.includes(record.key),
+    ).map((record) => record.key);
+
+    expect(missing).toEqual([]);
+  });
+
   it("gives the network no device-resident or transport-eligible key to read", () => {
+    // A cookie name is the HTTP contract: the service mints it and reads it
+    // back. The bytes live in the browser, which is why the record is device
+    // state. Local storage, the journal, and the model cache have no such
+    // reason to be named in the service.
     const local = STATE_PLACEMENT.filter(
-      (record) => record.medium !== "identity-service",
+      (record) =>
+        record.medium !== "identity-service" && record.medium !== "cookie",
     );
     const violations: string[] = [];
 

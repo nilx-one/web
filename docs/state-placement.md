@@ -9,11 +9,11 @@ client writes and nobody placed fails the build.
 
 ## Residence and mobility
 
-| Placement          | The bytes live                                                                                                     | Mobility                                                                                                        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| **server**         | in the identity service: the `pub_dress`, everything a sign-in needs, the named study in `identities.avatar_model` | resident. This is service authority, not synchronization.                                                       |
-| **device**         | on this device: the on-device model and its download, the journal key, work in flight, an outfit                   | resident. It does not travel, because it would mean nothing on another device, or because no contract holds it. |
-| **synchronizable** | on this device, today                                                                                              | transport eligibility. Not a third store.                                                                       |
+| Placement          | The bytes live                                                                                                          | Mobility                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **server**         | in the identity service: the `pub_dress`, the server-side sign-in records, the named study in `identities.avatar_model` | resident. This is service authority, not synchronization.                                                       |
+| **device**         | on this device: the on-device model and its download, the journal key, work in flight, an outfit, the `__Host-` cookies | resident. It does not travel, because it would mean nothing on another device, or because no contract holds it. |
+| **synchronizable** | on this device, today                                                                                                   | transport eligibility. Not a third store.                                                                       |
 
 Synchronizable is not shared state, not protocol state, and not synced
 state. Nothing in that column leaves the device. `mobility` splits the
@@ -38,10 +38,11 @@ The identity service keeps three things about a Bond's identity:
 
 - **`pub_dress`** — the Bond's address, its owned Avaia's address, and the
   public label folded from it ([Public Bond address](pub-dress-url.md)).
-- **Everything needed for authorization** — provider bindings
+- **The server-side records a sign-in needs** — provider bindings
   (`identity_providers`), Argon2id verifiers and recovery keys
-  (`native_credentials`), sessions and the remembered-Bond hint
-  (`native_sessions`, the `__Host-` cookies).
+  (`native_credentials`), and session rows (`native_sessions`). The
+  `__Host-` cookies that carry a session or a remembered Bond are not in
+  this list: the browser holds those bytes.
 - **The named study** — `identities.avatar_model`, one of the studies this
   runtime publishes (`kai-study`, `dasha-v2-study`, and the others the column
   allows). That is the identifier the service stores today.
@@ -55,6 +56,12 @@ position placed below.
 
 These are not carried:
 
+- **the `__Host-` cookies** — `__Host-0x1_session` (the session credential;
+  the row it names stays in `native_sessions`), `__Host-0x1_bond` (the
+  signed remembered-Bond hint, which is not a server table and not itself
+  authentication), and the short-lived `__Host-0x1_oauth` and
+  `__Host-0x1_provider` transactions. The service mints them. The browser
+  stores them. They are HttpOnly, so page script does not read them;
 - **what a body wears** (`nilx-one.avatar.wardrobe`), and which body an Avaia
   chose when the contract has no field for it. The editor says so
   ([Profile editing](profile-editing.md)). It is device-resident because that

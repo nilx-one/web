@@ -93,7 +93,7 @@ The bounded identity API remains same-origin under `/api/v1/*`. A separate API o
 Every persisted record has one residence, declared in `STATE_PLACEMENT` (`packages/application/src/state-placement.ts`). Residence agrees with the medium that holds the bytes: a localStorage record is never server state. An architecture test checks the table against real `setItem` call sites.
 
 - **server** — identity-service tables: the `pub_dress`, everything a sign-in needs, and the named study in `identities.avatar_model`;
-- **device** — resident, and not transport-eligible: the on-device model and its download, the presence journal key, work in flight, and an outfit the identity contract has no field for;
+- **device** — resident, and not transport-eligible: the on-device model and its download, the presence journal key, work in flight, an outfit the identity contract has no field for, and the `__Host-` cookies whose bytes the browser keeps;
 - **synchronizable** — transport eligibility, not a third store and not synced state. Interface preferences and play records may one day follow a Bond between its own devices. BondChain copies and the presence journal are a separate class (`sealed-transport`): they move only under their own lifecycle.
 
 See [State placement](state-placement.md). Synchronizable is not shared state, not protocol state, and not synced state.

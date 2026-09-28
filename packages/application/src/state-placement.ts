@@ -9,11 +9,13 @@
  * and calling it server state would invent an authority the identity contract
  * has not given it.
  *
- * - `server` — an identity-service table. The `pub_dress`, everything a
- *   sign-in needs, and the named study stored as `identities.avatar_model`.
+ * - `server` — an identity-service table. The `pub_dress`, the server-side
+ *   records a sign-in needs, and the named study stored as
+ *   `identities.avatar_model`.
  * - `device` — resident on this device. It does not travel: the on-device
- *   model and its download, the journal key, work in flight, and an outfit
- *   the identity contract has no field for.
+ *   model and its download, the journal key, work in flight, an outfit the
+ *   identity contract has no field for, and the `__Host-` cookies whose
+ *   bytes the browser keeps.
  * - `synchronizable` — also resident on this device today. The word names
  *   transport eligibility, not a third store and not a fact of having synced.
  *   Synchronizable is not shared state, not protocol state, and not synced
@@ -47,7 +49,8 @@ export type StateMedium =
   | "local-storage"
   | "indexed-db"
   | "model-cache"
-  | "bnd-file";
+  | "bnd-file"
+  | "cookie";
 
 export interface PlacedState {
   /** A stable name for the record, for prose and for the test's messages. */
@@ -93,7 +96,7 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     medium: "identity-service",
     key: "identity_providers, native_credentials, native_sessions",
     perOwner: false,
-    what: "Everything a sign-in needs: provider bindings, Argon2id verifiers, recovery keys, sessions and the remembered-Bond hint.",
+    what: "The server-side records a sign-in needs: provider bindings, Argon2id verifiers, recovery keys, and session rows. The cookies that carry those credentials live on the device.",
   },
   {
     id: "identity.avatarModel",
@@ -106,6 +109,42 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
   },
 
   // ─── device: resident, never transported ───────────────────────────────
+  {
+    id: "identity.sessionCookie",
+    placement: "device",
+    mobility: "resident",
+    medium: "cookie",
+    key: "__Host-0x1_session",
+    perOwner: false,
+    what: "The browser's copy of the session credential. The row it names is native_sessions, which stays on the server.",
+  },
+  {
+    id: "identity.rememberedBondCookie",
+    placement: "device",
+    mobility: "resident",
+    medium: "cookie",
+    key: "__Host-0x1_bond",
+    perOwner: false,
+    what: "The signed remembered-Bond hint. It is not a server table and it is not itself authentication.",
+  },
+  {
+    id: "identity.oauthTransactionCookie",
+    placement: "device",
+    mobility: "resident",
+    medium: "cookie",
+    key: "__Host-0x1_oauth",
+    perOwner: false,
+    what: "The short-lived browser OAuth transaction. It does not outlive the sign-in it belongs to.",
+  },
+  {
+    id: "identity.pendingProviderCookie",
+    placement: "device",
+    mobility: "resident",
+    medium: "cookie",
+    key: "__Host-0x1_provider",
+    perOwner: false,
+    what: "The short-lived pending provider binding, kept in the browser until the sign-in finishes.",
+  },
   {
     id: "avatar.wardrobe",
     placement: "device",

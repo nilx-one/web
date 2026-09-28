@@ -51,6 +51,25 @@ describe("State placement", () => {
     });
   });
 
+  it("keeps the session row on the server and the session cookie on the device", () => {
+    const sessions = STATE_PLACEMENT.find(
+      (record) => record.id === "identity.authorization",
+    );
+    expect(sessions?.medium).toBe("identity-service");
+    expect(sessions?.key).toContain("native_sessions");
+    expect(sessions?.key).not.toContain("__Host-");
+
+    const cookie = STATE_PLACEMENT.find(
+      (record) => record.id === "identity.sessionCookie",
+    );
+    expect(cookie).toMatchObject({
+      placement: "device",
+      mobility: "resident",
+      medium: "cookie",
+      key: "__Host-0x1_session",
+    });
+  });
+
   it("keeps the on-device model and the journal key on the device", () => {
     const device = placedStateAt("device").map((record) => record.id);
     expect(device).toContain("localModel.choice");
