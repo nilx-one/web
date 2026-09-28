@@ -128,11 +128,15 @@ transport-eligible, not synced state, and the timers of reveals still in flight
 (see [State placement](state-placement.md)). The shade layer draws a reveal
 alongside what the journal lit.
 
-1. **The Avaia reveals it.** The cells a Bond can reach into are marked on the
-   world with a dashed outline: the cell it stands in and its neighbours, and
-   every cell within three rings of it that touches ground already revealed.
-   A tap on one asks first (“Reveal this patch of fog?”). A yes sends the
-   Avaia there, and the cell opens after a minute, plus a minute for each
+1. **The Avaia reveals it.** A Bond is never in the fog: the cell it stands
+   on is its own ground, whether or not its fog has lifted, and it is never
+   offered. The cells a Bond can reach into are marked on the world with a
+   dashed outline: every cell within three rings of it that touches open
+   ground — revealed, or the Bond's own cell. A tap on one asks first
+   (“Reveal this patch of fog?”). A yes sends the Avaia up to the cell's
+   edge — just outside it, on open ground, on the side nearest where the
+   Avaia stands — never into the fog. It works the cell open from there,
+   and the cell opens after a minute, plus a minute for each
    landmark the archive draws inside it, never more than five minutes. An
    Avaia works on at most three cells at once. A fourth tap gets told to
    wait. While a cell is opening it fills in on the world, and a status chip

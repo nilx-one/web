@@ -30,6 +30,7 @@ function fogRenderer(
 
 const BOND: MapPointSelection = { longitude: 30.52, latitude: 50.45 };
 const NEXT_DOOR: MapPointSelection = { longitude: 30.53, latitude: 50.45 };
+const ACROSS: MapPointSelection = { longitude: 30.51, latitude: 50.45 };
 
 function render(input: Partial<FogRevealInput> & { renderer: MapRenderer }) {
   return renderHook((props: FogRevealInput) => useFogReveal(props), {
@@ -59,8 +60,13 @@ describe("revealing the fog around a Bond", () => {
     const { result } = render({ renderer });
 
     expect(result.current.frontier.map((cell) => cell.id)).toContain(
+      "strip:3053",
+    );
+    // The Bond is never in the fog: the ground under it is not offered.
+    expect(result.current.frontier.map((cell) => cell.id)).not.toContain(
       "strip:3052",
     );
+    expect(result.current.handleFogTap(BOND)).toBe("out-of-reach");
     expect(
       renderer.marks.at(-1)?.every((mark) => mark.state === "available"),
     ).toBe(true);
@@ -119,7 +125,7 @@ describe("revealing the fog around a Bond", () => {
     const fog = createFogFieldDouble(0.01);
     const { result } = render({ renderer: fogRenderer(fog) });
 
-    for (const longitude of [30.52, 30.53, 30.51]) {
+    for (const longitude of [30.54, 30.53, 30.51]) {
       act(
         () => void result.current.handleFogTap({ longitude, latitude: 50.45 }),
       );
@@ -130,7 +136,7 @@ describe("revealing the fog around a Bond", () => {
     let outcome: string | undefined;
     act(() => {
       outcome = result.current.handleFogTap({
-        longitude: 30.54,
+        longitude: 30.5,
         latitude: 50.45,
       });
     });
@@ -207,16 +213,16 @@ describe("revealing the fog around a Bond", () => {
 
     // Alice signs into the same device: the field is rebound to her Bond,
     // and Sky's revealed cell must not come with it — the frontier still
-    // offers it, and revealing her own cell must not silently answer for
-    // Sky's.
+    // offers it, and revealing a cell of her own must not silently answer
+    // for Sky's.
     const alice = render({ renderer, owner: "0x0alice" });
     expect(alice.result.current.frontier.map((cell) => cell.id)).toContain(
       "strip:3053",
     );
-    act(() => void alice.result.current.handleFogTap(BOND));
+    act(() => void alice.result.current.handleFogTap(ACROSS));
     act(() => void alice.result.current.confirm());
     act(() => vi.advanceTimersByTime(FOG_REVEAL_MIN_MS));
-    expect(fog.isRevealed("strip:3052")).toBe(true);
+    expect(fog.isRevealed("strip:3051")).toBe(true);
     alice.unmount();
 
     // Sky signs back in: her own reveal is exactly as she left it, unmixed
@@ -227,8 +233,23 @@ describe("revealing the fog around a Bond", () => {
       skyAgain.result.current.frontier.map((cell) => cell.id),
     ).not.toContain("strip:3053");
     expect(skyAgain.result.current.frontier.map((cell) => cell.id)).toContain(
-      "strip:3052",
+      "strip:3051",
     );
+  });
+
+  it("sends the Avaia to the cell's edge on open ground, never into the fog", () => {
+    const fog = createFogFieldDouble(0.01);
+    const renderer = fogRenderer(fog);
+    const { result } = render({ renderer });
+    act(() => void result.current.handleFogTap(NEXT_DOOR));
+    act(() => void result.current.confirm());
+    const cell = fog.cellAt(NEXT_DOOR);
+    expect(result.current.jobs.map((job) => job.cell.id)).toEqual([cell.id]);
+
+    const stand = result.current.approach(cell);
+    expect(fog.cellAt(stand).id).not.toBe(cell.id);
+    // The Bond's own ground is where it approaches from.
+    expect(fog.cellAt(stand).id).toBe("strip:3052");
   });
 
   it("offers nothing where no fog is drawn", () => {

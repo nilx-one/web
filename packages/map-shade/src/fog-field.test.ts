@@ -64,7 +64,7 @@ describe("fog field", () => {
     expect(field.frontier(HERE, 3)).toEqual([]);
   });
 
-  it("offers the Bond's own cell and its neighbours when nothing is revealed", async () => {
+  it("never offers the Bond's own cell, only the neighbours it stands next to", async () => {
     const { field, runtime } = createFogField(
       journal([]).runtime,
       memoryStorage(),
@@ -72,8 +72,10 @@ describe("fog field", () => {
     await runtime;
 
     const frontier = field.frontier(HERE, 3).map((cell) => cell.id);
-    expect(frontier[0]).toBe(HERE_CELL);
-    expect(new Set(frontier)).toEqual(new Set(gridDisk(HERE_CELL, 1)));
+    expect(frontier).not.toContain(HERE_CELL);
+    expect(new Set(frontier)).toEqual(
+      new Set(gridDisk(HERE_CELL, 1).filter((cell) => cell !== HERE_CELL)),
+    );
   });
 
   it("offers the edge of revealed ground within reach, nearest first", async () => {

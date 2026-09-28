@@ -305,9 +305,9 @@ export function useAvaiaWalk({
       const nearDevice =
         device !== undefined &&
         mapDistanceMeters(device, tap) <= NEAR_DEVICE_OPEN_METERS;
-      // Fog is first offered for revealing — the Bond's own cell included,
-      // which is how a Bond standing in the fog gets its first ground. Only
-      // what nobody takes falls back to walking or to a refusal.
+      // Fog is first offered for revealing. A Bond is never in the fog —
+      // the ground under it is its own — so only what nobody takes falls
+      // back to walking or to a refusal.
       if (tap.ground === "fog") {
         const taken = latest.current.onFogTap?.({
           longitude: tap.longitude,

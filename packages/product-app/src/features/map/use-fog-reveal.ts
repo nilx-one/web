@@ -16,6 +16,7 @@ import {
 } from "react";
 
 import {
+  approachPoint,
   FOG_APPROACH_ACCURACY_METERS,
   FOG_FRONTIER_RINGS,
   fogMarks,
@@ -76,6 +77,11 @@ export interface FogRevealState {
   /** The Bond said yes: the reveal starts now. */
   confirm(): FogRevealJob | undefined;
   dismiss(): void;
+  /**
+   * Where the Avaia stands to work `cell` open: just outside its edge, on
+   * open ground, nearest `from`. It never walks into the fog it reveals.
+   */
+  approach(cell: MapFogCell, from?: MapPointSelection): MapPointSelection;
 }
 
 const NO_FOG_SUBSCRIPTION = (): (() => void) => () => undefined;
@@ -83,7 +89,9 @@ const NO_FOG_SUBSCRIPTION = (): (() => void) => () => undefined;
 /**
  * The fog around a Bond, and its Avaia working it open.
  *
- * The cells in reach are marked on the world and answer a tap with a prompt.
+ * The Bond is never in the fog: the cell it stands on is its own ground, so
+ * the cells in reach are those that touch open ground — never the one under
+ * its feet. They are marked on the world and answer a tap with a prompt.
  * A yes starts a reveal that runs on the wall clock — a minute, and up to five
  * where the archive draws landmarks — three at most at once, and it survives
  * the page being reopened. This device observing itself inside a fogged cell
@@ -305,6 +313,20 @@ export function useFogReveal({
 
   const dismiss = useCallback(() => setPrompt(undefined), []);
 
+  const approach = useCallback(
+    (cell: MapFogCell, from?: MapPointSelection): MapPointSelection =>
+      approachPoint(
+        cell,
+        (point) => {
+          if (fog === undefined) return false;
+          const id = fog.cellAt(point).id;
+          return id !== cell.id && (id === bondCell || fog.isRevealed(id));
+        },
+        from ?? bondPoint,
+      ),
+    [bondCell, bondPoint, fog],
+  );
+
   return useMemo(
     () => ({
       active,
@@ -314,8 +336,18 @@ export function useFogReveal({
       handleFogTap,
       confirm,
       dismiss,
+      approach,
     }),
-    [active, confirm, dismiss, frontier, handleFogTap, jobs, livePrompt],
+    [
+      active,
+      approach,
+      confirm,
+      dismiss,
+      frontier,
+      handleFogTap,
+      jobs,
+      livePrompt,
+    ],
   );
 }
 

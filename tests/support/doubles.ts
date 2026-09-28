@@ -204,7 +204,8 @@ export function createFogFieldDouble(
     boundary: [
       [(at - 0.5) * step, 50.449],
       [(at + 0.5) * step, 50.449],
-      [at * step, 50.451],
+      [(at + 0.5) * step, 50.451],
+      [(at - 0.5) * step, 50.451],
     ],
   });
   const currentRevealed = (): Set<string> => {
@@ -227,10 +228,9 @@ export function createFogFieldDouble(
       const revealed = currentRevealed();
       const origin = index(point);
       const found: MapFogCell[] = [];
-      for (let ring = 0; ring <= rings; ring += 1) {
-        for (const at of ring === 0
-          ? [origin]
-          : [origin - ring, origin + ring]) {
+      // The Bond's own strip is ground it stands on, never offered.
+      for (let ring = 1; ring <= rings; ring += 1) {
+        for (const at of [origin - ring, origin + ring]) {
           if (!revealed.has(`strip:${at}`)) found.push(cell(at));
         }
       }
