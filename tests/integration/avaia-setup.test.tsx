@@ -12,7 +12,7 @@ import {
   type HostPort,
 } from "@nilx-one/host-contract";
 import { ProductApp } from "@nilx-one/product-app";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +33,15 @@ async function avaiaAtWheel(
   address = "x0skai",
 ): Promise<void> {
   await screen.findByRole("button", { name: `Focus the world on ${address}` });
+}
+
+/**
+ * An Avaia nobody has configured is nobody to spectate, so a fresh Bond's
+ * world opens with the Bond itself at the wheel.
+ */
+async function bondAtWheel(): Promise<void> {
+  await screen.findByRole("button", { name: "Focus the world on 0x0sky" });
+  await screen.findByRole("button", { name: "Set up x0skai" });
 }
 
 function createHost(): HostPort {
@@ -114,7 +123,32 @@ describe("Avaia setup from the Bond dock", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("configures an Avaia from its Dock card without unmounting the world", async () => {
+  it("opens a fresh Bond at the wheel, with nobody to spectate yet", async () => {
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        mapRenderer={createMapRendererDouble({ kind: "ready" })}
+        identity={withAvaiaProfile(createIdentity(), {
+          readAvaiaProfile: async () => ({
+            kind: "available",
+            profile: projection(),
+          }),
+        })}
+      />,
+    );
+
+    await bondAtWheel();
+    expect(
+      screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
+    ).toHaveTextContent("You");
+    expect(screen.queryByText("spectate")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Set up x0skai" }),
+    ).toHaveTextContent("unconfigured");
+  });
+
+  it("configures an Avaia in one tap from its Dock card, and says what it paid", async () => {
     const user = userEvent.setup();
     const renderer = createMapRendererDouble({ kind: "ready" });
     let stored = projection();
@@ -139,51 +173,99 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    await avaiaAtWheel(user);
+    await bondAtWheel();
 
-    // An Avaia nobody has configured says so on its card, and the Dock's own
-    // action offers the one thing that can be done about it.
-    const configure = await screen.findByRole("button", {
-      name: "Set up x0skai",
-    });
-    expect(
-      screen.getByRole("button", { name: "Focus the world on x0skai" }),
-    ).toHaveTextContent("unconfigured");
-    expect(renderer.mount).toHaveBeenCalledOnce();
+    // An Avaia nobody has configured is not handed the wheel: its card opens
+    // the one thing that can be done about it.
+    await user.click(screen.getByRole("button", { name: "Set up x0skai" }));
 
-    await user.click(configure);
-
+    // The address it already holds types itself out, and Kai stands in as its
+    // body, so there is nothing left to decide but Save.
     const address = await screen.findByLabelText("pub_dress");
-    expect(address).toHaveValue("sk");
+    await waitFor(() => expect(address).toHaveValue("sk"));
+    expect(
+      screen.getByRole("button", {
+        name: /Change this Avaia's 3D model — currently Kai/,
+      }),
+    ).toBeVisible();
     // The world is the environment, not a screen the Dock replaced.
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
-
     // The address is the only textbox this surface itself owns; the body an
-    // Avaia is represented by is a separate, real control below it
-    // (AvatarModelField, not a disabled placeholder duplicating it here).
+    // Avaia is represented by is a separate, real control below it.
     expect(screen.getAllByRole("textbox")).toEqual([address]);
 
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("x0skai");
+
+    // What configuring paid is said once, in a dialog a person closes.
+    const dialog = await screen.findByRole("dialog", {
+      name: "Avaia configured",
+    });
+    expect(dialog).toHaveTextContent("+20 Bond experience");
+    expect(dialog).toHaveTextContent("x0skai reached level 1");
+    expect(screen.queryByLabelText("pub_dress")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // The body offered is now a choice, not a default.
+    expect(
+      JSON.parse(
+        window.localStorage.getItem("nilx-one.avatar.wardrobe") ?? "{}",
+      ) as unknown,
+    ).toMatchObject({ x0skai: { modelId: "kai-study" } });
+
+    // The Bond keeps the wheel; the Avaia can now be handed it.
+    expect(
+      await screen.findByRole("button", { name: "Hand the wheel to x0skai" }),
+    ).toHaveTextContent("AI");
+
+    // "Saved" passes on its own.
+    expect(screen.getByText("Avaia saved")).toBeVisible();
+    await waitFor(() => expect(screen.queryByText("Avaia saved")).toBeNull(), {
+      timeout: 6_000,
+    });
+    expect(renderer.unmount).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("configures under a new address when a person types one", async () => {
+    const user = userEvent.setup();
+    let stored = projection();
+    const updateAvaiaProfile = vi
+      .fn<AvaiaProfileAccessPort["updateAvaiaProfile"]>()
+      .mockImplementation(async (pubDress) => {
+        stored = projection({ pubDress, configurationState: "configured" });
+        return { kind: "updated", profile: stored };
+      });
+    render(
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        mapRenderer={createMapRendererDouble({ kind: "ready" })}
+        identity={withAvaiaProfile(createIdentity(), {
+          readAvaiaProfile: async () => ({
+            kind: "available",
+            profile: stored,
+          }),
+          updateAvaiaProfile,
+        })}
+      />,
+    );
+
+    await bondAtWheel();
+    await user.click(screen.getByRole("button", { name: "Set up x0skai" }));
+    const address = await screen.findByLabelText("pub_dress");
+    await waitFor(() => expect(address).toHaveValue("sk"));
     await user.clear(address);
     await user.type(address, "vesn");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("x0vesnai");
-
-    // The save ends on the world: the screen closes, the Dock reads the
-    // address the service answered with, and the notice is said once in the
-    // stack every transient notice is said in.
     const notice = await screen.findByText("Avaia saved");
     expect(notice.closest(".toast")).toHaveTextContent("x0vesnai");
-    expect(screen.queryByLabelText("pub_dress")).toBeNull();
     expect(
-      await screen.findByRole("button", { name: "Edit x0vesnai" }),
+      await screen.findByRole("button", { name: "Hand the wheel to x0vesnai" }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-    ).toBeVisible();
-    expect(renderer.mount).toHaveBeenCalledOnce();
-    expect(renderer.unmount).not.toHaveBeenCalled();
   });
 
   it("opens the same surface again for an Avaia already configured", async () => {
@@ -231,12 +313,11 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    await avaiaAtWheel(user);
+    await bondAtWheel();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Set up x0skai" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Set up x0skai" }));
     const address = await screen.findByLabelText("pub_dress");
+    await waitFor(() => expect(address).toHaveValue("sk"));
     await user.clear(address);
     await user.type(address, "taken");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -322,17 +403,25 @@ describe("Avaia setup from the Bond dock", () => {
             kind: "available",
             profile: projection(),
           }),
+          updateAvaiaProfile: async (pubDress) => ({
+            kind: "updated",
+            profile: projection({ pubDress, configurationState: "configured" }),
+          }),
         })}
       />,
     );
 
-    await avaiaAtWheel(user);
+    await bondAtWheel();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Set up x0skai" }),
-    );
-    await screen.findByLabelText("pub_dress");
+    await user.click(screen.getByRole("button", { name: "Set up x0skai" }));
+    const address = await screen.findByLabelText("pub_dress");
+    await waitFor(() => expect(address).toHaveValue("sk"));
     const results = await act(() => axe.run(container));
     expect(results.violations).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog", { name: "Avaia configured" });
+    const withDialog = await act(() => axe.run(container));
+    expect(withDialog.violations).toEqual([]);
   });
 });

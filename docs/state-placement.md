@@ -9,11 +9,11 @@ client writes and nobody placed fails the build.
 
 ## Residence and mobility
 
-| Placement          | The bytes live                                                                                                          | Mobility                                                                                                        |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **server**         | in the identity service: the `pub_dress`, the server-side sign-in records, the named study in `identities.avatar_model` | resident. This is service authority, not synchronization.                                                       |
-| **device**         | on this device: the on-device model and its download, the journal key, work in flight, an outfit, the `__Host-` cookies | resident. It does not travel, because it would mean nothing on another device, or because no contract holds it. |
-| **synchronizable** | on this device, today                                                                                                   | transport eligibility. Not a third store.                                                                       |
+| Placement          | The bytes live                                                                                                                               | Mobility                                                                                                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **server**         | in the identity service: the `pub_dress`, the server-side sign-in records, the named study in `identities.avatar_model`, and `bond_pub_info` | resident. The bytes are in the service. Identity records are service authority. `bond_pub_info` is an owner assertion labeled `authority: client`, not an attestation of play. |
+| **device**         | on this device: the on-device model and its download, the journal key, work in flight, an outfit, the `__Host-` cookies                      | resident. It does not travel, because it would mean nothing on another device, or because no contract holds it.                                                                |
+| **synchronizable** | on this device, today                                                                                                                        | transport eligibility. Not a third store.                                                                                                                                      |
 
 Synchronizable is not shared state, not protocol state, and not synced
 state. Nothing in that column leaves the device. `mobility` splits the
@@ -52,6 +52,16 @@ it is a declared, shared fact under the location contract in
 [Bond Dock](bond-dock.md) — not the device's observed position, and not the
 position placed below.
 
+`bond_pub_info` is service residence of a different kind. It holds the
+activity totals a Bond reports for itself and its Avaia (`bond_xp`,
+`avaia_xp`), plus the opaque event ids that keep a retry from paying twice.
+The service stores the report and answers it, including on the public Bond,
+with `authority: "client"` on every experience object. That label is written
+by the service; a client cannot choose it. Caps on a carry total and on one
+event are abuse bounds on an untrusted number. They are not proof the award
+was earned, and neither is idempotency. This row is where the bytes live. It
+is not authority over the play.
+
 ## Device — resident
 
 These are not carried:
@@ -88,9 +98,11 @@ Local-first. Eligible, not transported.
 
 **What a Bond earned and remembered by playing**
 
-- **progress** — what this Bond has earned, including the one-time setup
-  reward that reaches level 1 (`nilx-one.progression.v1.<owner>`;
-  [Progression](progression.md));
+- **progress** — this device's unsent activity awards and the device-only
+  model-download achievement (`nilx-one.progression.v3.<owner>`;
+  [Progression](progression.md)). Older keys (`nilx-one.progression.v2` and
+  `nilx-one.progression.v1`) are read once as carry and never written. The
+  shared totals are `bond_pub_info`, above, not this copy;
 - **opened cells** — fog reveals (`nilx-one.fog.reveals.v1.<owner>`) and the
   landmark notebook (`nilx-one.avaia.landmarks.v1.<owner>`;
   [Avaia walks the world](avaia-walk.md));
@@ -110,18 +122,22 @@ Local-first. Eligible, not transported.
 
 ## What eligibility does not mean
 
-Today a new device starts a Bond's fog, notebook, progress and position from
-nothing, exactly as [Progression](progression.md) and
-[Avaia walks the world](avaia-walk.md) describe. When a transport-eligible
-record does travel:
+Today a new device starts a Bond's fog, notebook and position from nothing,
+exactly as [Avaia walks the world](avaia-walk.md) describes. Activity totals
+are read back from `bond_pub_info` — the owner's report, not a played-out
+log — and anything still unsent, plus the device achievement, starts from
+nothing ([Progression](progression.md)). When a transport-eligible record
+does travel:
 
-- it goes device to device, end to end. It is never written to a service
-  table and never read by `identity-http` or `services/identity`. The
-  architecture test checks that;
+- it goes device to device, end to end. The local copy is never written to
+  a service table and never read by `identity-http` or `services/identity`.
+  The architecture test checks that. `bond_pub_info` is a different record:
+  the service holds the owner's asserted totals, and that is not this
+  device's progression key traveling through the service;
 - it does not become truth on arrival. A transported level creates no
   Interaction; a transported reveal is not presence evidence; a transported
-  position is not a `Bond.location`. Nothing here is Bond, BondChain,
-  Relationship, Core, or identity state.
+  position is not a `Bond.location`. A published total is the owner's report.
+  Nothing here is Bond, BondChain, Relationship, Core, or identity state.
 
 Losing local storage before a record travelled is local data loss, not
 protocol corruption.

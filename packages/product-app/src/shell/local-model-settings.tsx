@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { ProgressBar } from "@nilx-one/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +22,15 @@ import {
 } from "./local-model-settings-view-model";
 import { type Translate, useLocalization } from "./localization";
 
-export type LocalModelSettingsProps = LocalModelDependency;
+export interface LocalModelSettingsProps extends LocalModelDependency {
+  /**
+   * Downloading is the next step this Bond is invited to take: "Download now"
+   * carries the same mark that led here, and says what it pays.
+   */
+  readonly attention?: { readonly bondXp: number; readonly avaiaXp: number };
+  /** The model in effect is on this device — downloaded here, or found cached. */
+  readonly onModelPresent?: () => void;
+}
 
 type LocalModelCheck =
   | { readonly kind: "unsupported"; readonly reason: UnsupportedReason }
@@ -117,6 +125,8 @@ export function LocalModelSettings({
   host,
   catalog,
   defaultModelId,
+  attention,
+  onModelPresent,
 }: LocalModelSettingsProps) {
   const { t } = useLocalization();
   const stored = useLocalModelChoice();
@@ -204,6 +214,14 @@ export function LocalModelSettings({
   });
 
   const phase = phaseFrom(statusQuery, download, remove, progress);
+  const present = phase.kind === "present";
+  const onModelPresentRef = useRef(onModelPresent);
+  useEffect(() => {
+    onModelPresentRef.current = onModelPresent;
+  });
+  useEffect(() => {
+    if (present) onModelPresentRef.current?.();
+  }, [present]);
   const described =
     statusQuery.data?.kind === "absent" ? statusQuery.data.notices : [];
   const entryNotices = entry?.notices ?? [];
@@ -211,6 +229,8 @@ export function LocalModelSettings({
     ...entryNotices,
     ...described.filter((notice) => !entryNotices.includes(notice)),
   ]);
+  const rewardId = useId();
+  const inviting = attention !== undefined && view.canDownload && !view.busy;
 
   return (
     <fieldset className="local-model-settings interface-settings__appearance">
@@ -324,14 +344,29 @@ export function LocalModelSettings({
         </details>
       )}
 
+      {inviting ? (
+        <p className="local-model-settings__reward" id={rewardId}>
+          {t("settings.localModel.reward")
+            .replace("{bond}", String(attention.bondXp))
+            .replace("{avaia}", String(attention.avaiaXp))}
+        </p>
+      ) : null}
+
       <div className="local-model-settings__actions">
         <button
           type="button"
           className="bond-profile__action"
           disabled={!view.canDownload || view.busy}
           onClick={() => download.mutate()}
+          {...(inviting ? { "aria-describedby": rewardId } : {})}
         >
           {t("settings.localModel.action.download")}
+          {inviting ? (
+            <i
+              className="attention-dot local-model-settings__attention"
+              aria-hidden="true"
+            />
+          ) : null}
         </button>
         {view.canCancel ? (
           <button

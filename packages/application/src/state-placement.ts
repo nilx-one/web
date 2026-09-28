@@ -10,8 +10,12 @@
  * has not given it.
  *
  * - `server` — an identity-service table. The `pub_dress`, the server-side
- *   records a sign-in needs, and the named study stored as
- *   `identities.avatar_model`.
+ *   records a sign-in needs, the named study stored as
+ *   `identities.avatar_model`, and `bond_pub_info`. Residence here means the
+ *   bytes are in the service. For the identity records that is service
+ *   authority. `bond_pub_info` is the exception: it holds the owner's
+ *   cosmetic activity totals, labeled `authority: "client"` on the wire.
+ *   Storing that report is not an attestation that the play happened.
  * - `device` — resident on this device. It does not travel: the on-device
  *   model and its download, the journal key, work in flight, an outfit the
  *   identity contract has no field for, and the `__Host-` cookies whose
@@ -106,6 +110,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     key: "identities.avatar_model",
     perOwner: false,
     what: "The named study the identity service stores for a body. This repository does not define a customization identifier; that form belongs to a future identity contract.",
+  },
+  {
+    id: "pubInfo.experience",
+    placement: "server",
+    mobility: "resident",
+    medium: "identity-service",
+    key: "bond_pub_info",
+    perOwner: false,
+    what: "Client-asserted cosmetic activity totals (bond_xp, avaia_xp) and the opaque event ids that keep a retry from paying twice. The wire labels every total authority: client. The service stores and redistributes the owner's report; it does not attest that the play happened.",
   },
 
   // ─── device: resident, never transported ───────────────────────────────
@@ -226,9 +239,30 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     placement: "synchronizable",
     mobility: "transport",
     medium: "local-storage",
+    key: "nilx-one.progression.v3",
+    perOwner: true,
+    deviceOnlyFields: ["deviceAchievements", "settingsHintSeen"],
+    what: "This device's unsent activity awards and the device-only model-download achievement. The shared totals are the separate client-asserted record in bond_pub_info, not this copy.",
+  },
+  {
+    id: "progression.v2",
+    placement: "synchronizable",
+    mobility: "transport",
+    medium: "local-storage",
+    key: "nilx-one.progression.v2",
+    perOwner: true,
+    legacy: true,
+    what: "The previous local progression key. Read once as unsent carry, never written.",
+  },
+  {
+    id: "progression.v1",
+    placement: "synchronizable",
+    mobility: "transport",
+    medium: "local-storage",
     key: "nilx-one.progression.v1",
     perOwner: true,
-    what: "What this Bond has earned. Level 1 is the only level defined.",
+    legacy: true,
+    what: "The first local progression key. Read once as unsent carry, less the old configuration reward, never written.",
   },
   {
     id: "fog.reveals",

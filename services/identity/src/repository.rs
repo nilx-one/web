@@ -211,6 +211,9 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0013_avaia_location.sql"))
             .execute(&self.pool)
             .await?;
+        sqlx::raw_sql(include_str!("../migrations/0017_bond_pub_info.sql"))
+            .execute(&self.pool)
+            .await?;
         self.migrate_avaia_prefix().await?;
         self.migrate_bond_roles().await?;
         if !self.has_native_sessions_column("active").await? {
@@ -2004,6 +2007,8 @@ pub enum RepositoryError {
     CorruptBondRole,
     #[error("stored activation request status is not a known status")]
     CorruptActivationRequestStatus,
+    #[error("stored pub_info experience is not a known total")]
+    CorruptPubInfo,
 }
 
 #[cfg(test)]

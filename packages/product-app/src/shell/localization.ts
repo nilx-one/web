@@ -92,6 +92,19 @@ const EN_MESSAGES = {
   "fog.announce.revealed": "A patch of fog was revealed.",
   "avaia.progression.title": "Progress",
   "avaia.progression.summary": "Level {level} · {xp} xp",
+  "progression.summaryNext": "Level {level} · {xp} of {next} xp",
+  "avaia.progression.unconfigured": "Level 0 · save the setup to reach level 1",
+  "achievement.avaiaConfigured": "Avaia configured",
+  "achievement.avaiaModelDownloaded": "Avaia model downloaded",
+  "achievement.bondXp": "+{xp} Bond experience",
+  "achievement.avaiaXp": "+{xp} Avaia experience",
+  "achievement.level": "{name} reached level {level}",
+  "achievement.nextDownload":
+    "Next: download the model in Settings — once per device.",
+  "achievement.continue": "OK",
+  "header.attention": "A next step is waiting in Settings",
+  "settings.localModel.reward":
+    "Pays once on this device: +{bond} Bond and +{avaia} Avaia experience.",
   "avaia.notebook.title": "Landmarks studied",
   "avaia.notebook.empty":
     "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
@@ -346,6 +359,20 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "fog.announce.revealed": "Клітинку туману відкрито.",
   "avaia.progression.title": "Прокачка",
   "avaia.progression.summary": "Рівень {level} · {xp} досвіду",
+  "progression.summaryNext": "Рівень {level} · {xp} з {next} досвіду",
+  "avaia.progression.unconfigured":
+    "Рівень 0 · збережіть налаштування, щоб отримати рівень 1",
+  "achievement.avaiaConfigured": "Avaia налаштовано",
+  "achievement.avaiaModelDownloaded": "Модель Avaia завантажено",
+  "achievement.bondXp": "+{xp} досвіду Bond",
+  "achievement.avaiaXp": "+{xp} досвіду Avaia",
+  "achievement.level": "{name} досягає рівня {level}",
+  "achievement.nextDownload":
+    "Далі: завантажте модель у налаштуваннях — один раз на пристрій.",
+  "achievement.continue": "Гаразд",
+  "header.attention": "У налаштуваннях чекає наступний крок",
+  "settings.localModel.reward":
+    "Один раз на цьому пристрої: +{bond} досвіду Bond і +{avaia} досвіду Avaia.",
   "avaia.notebook.title": "Вивчені пам’ятки",
   "avaia.notebook.empty":
     "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",

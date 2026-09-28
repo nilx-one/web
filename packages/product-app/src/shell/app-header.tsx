@@ -42,7 +42,21 @@ export interface AppHeaderProps {
   readonly pubDress?: string;
   /** Host-specific and low-frequency application actions. */
   readonly actions?: readonly HeaderAction[];
+  /**
+   * A next step is waiting in Settings. The mark goes on whichever control
+   * reaches Settings at this width, and on the menu item behind the overflow.
+   */
+  readonly settingsAttention?: boolean;
   onNavigate(route: ShellRoute): void;
+}
+
+function AttentionDot({ label }: { readonly label: string }) {
+  return (
+    <>
+      <i className="attention-dot app-header__attention" aria-hidden="true" />
+      <span className="visually-hidden">{label}</span>
+    </>
+  );
 }
 
 interface ShellLinkProps {
@@ -113,9 +127,13 @@ export function AppHeader({
   section,
   pubDress,
   actions = [],
+  settingsAttention = false,
   onNavigate,
 }: AppHeaderProps) {
   const { t } = useLocalization();
+  const attention = settingsAttention ? (
+    <AttentionDot label={t("header.attention")} />
+  ) : null;
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -195,6 +213,7 @@ export function AppHeader({
               onNavigate={onNavigate}
             >
               /settings
+              {attention}
             </ShellLink>
           </nav>
         ) : pubDress === undefined ? null : (
@@ -223,6 +242,7 @@ export function AppHeader({
             onNavigate={onNavigate}
           >
             <span aria-hidden="true">⚙︎</span>
+            {attention}
           </ShellLink>
         ) : null}
         <div className="app-header__overflow">
@@ -230,13 +250,23 @@ export function AppHeader({
             className="app-header__overflow-trigger"
             type="button"
             ref={triggerRef}
-            aria-label={t("header.more")}
+            aria-label={
+              settingsInOverflow && settingsAttention
+                ? `${t("header.more")} — ${t("header.attention")}`
+                : t("header.more")
+            }
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             aria-controls={menuId}
             onClick={() => setMenuOpen((open) => !open)}
           >
             <span aria-hidden="true">•••</span>
+            {settingsInOverflow && settingsAttention ? (
+              <i
+                className="attention-dot app-header__attention"
+                aria-hidden="true"
+              />
+            ) : null}
           </button>
           {menuOpen ? (
             <div
@@ -261,6 +291,7 @@ export function AppHeader({
                   onFollow={() => closeMenu(false)}
                 >
                   {t("header.settings")}
+                  {attention}
                 </ShellLink>
               ) : null}
               {actions.map((action) => (

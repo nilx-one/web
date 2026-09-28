@@ -79,10 +79,27 @@ describe("Avaia setup surface", () => {
     ).toBe("configured");
   });
 
-  it("offers no save until the slug stem is actually changed", () => {
-    expect(createAvaiaSetupViewState(input()).canSave).toBe(false);
+  it("offers the derived address as-is to an Avaia nobody configured", () => {
+    expect(createAvaiaSetupViewState(input()).canSave).toBe(true);
     expect(
       createAvaiaSetupViewState(input({ draftSlugStem: "sk" })).canSave,
+    ).toBe(true);
+    expect(createAvaiaSetupViewState(input({ pending: true })).canSave).toBe(
+      false,
+    );
+  });
+
+  it("offers a configured Avaia no save until the slug stem is changed", () => {
+    const configured = {
+      load: {
+        kind: "available",
+        profile: { ...profile, configurationState: "configured" },
+      },
+    } as const;
+    expect(createAvaiaSetupViewState(input(configured)).canSave).toBe(false);
+    expect(
+      createAvaiaSetupViewState(input({ ...configured, draftSlugStem: "sk" }))
+        .canSave,
     ).toBe(false);
     expect(
       createAvaiaSetupViewState(input({ draftSlugStem: "vesn", pending: true }))

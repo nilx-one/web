@@ -82,6 +82,20 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "fog.announce.revealed": "Клетка тумана открыта.",
   "avaia.progression.title": "Прогресс",
   "avaia.progression.summary": "Уровень {level} · {xp} опыта",
+  "progression.summaryNext": "Уровень {level} · {xp} из {next} опыта",
+  "avaia.progression.unconfigured":
+    "Уровень 0 · сохраните настройки, чтобы получить уровень 1",
+  "achievement.avaiaConfigured": "Avaia настроена",
+  "achievement.avaiaModelDownloaded": "Модель Avaia загружена",
+  "achievement.bondXp": "+{xp} опыта Bond",
+  "achievement.avaiaXp": "+{xp} опыта Avaia",
+  "achievement.level": "{name} достигает уровня {level}",
+  "achievement.nextDownload":
+    "Дальше: загрузите модель в настройках — один раз на устройство.",
+  "achievement.continue": "Хорошо",
+  "header.attention": "В настройках ждёт следующий шаг",
+  "settings.localModel.reward":
+    "Один раз на этом устройстве: +{bond} опыта Bond и +{avaia} опыта Avaia.",
   "avaia.notebook.title": "Изученные достопримечательности",
   "avaia.notebook.empty":
     "Пока ничего. Пройдите мимо памятника, а потом передайте руль своей Avaia.",
@@ -481,6 +495,10 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Публичный сервис идентичности не смог ответить для этого адреса.",
   "public.body": "тело",
   "public.location": "местоположение",
+  "public.experience.bond": "Bond",
+  "public.experience.avaia": "Avaia",
+  "public.experience.summary": "Уровень {level} · {xp} опыта",
+  "public.experience.reported": "Сообщено этим Bond",
   "public.enter": "перейти на nilx.one",
   "discord.bootstrapFailed":
     "0x1 не удалось запустить этот сеанс Discord Activity. Откройте Activity снова и повторите попытку. ({reason})",

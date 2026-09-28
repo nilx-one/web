@@ -156,7 +156,11 @@ export function createAvaiaSetupViewState(
       ? address
       : `${storedParts.prefix}${slugStem}${storedParts.suffix}`;
   const editable = profile !== undefined && storedParts !== undefined;
-  const changed = candidatePubDress !== address;
+  // An Avaia nobody configured already holds the address derived from its
+  // owner's, so accepting it unchanged is itself the decision to save.
+  const changed =
+    candidatePubDress !== address ||
+    profile?.configurationState === "unconfigured";
   const error =
     input.result === undefined ? undefined : saveError(input.result);
   const status = loadStatus(input.load);

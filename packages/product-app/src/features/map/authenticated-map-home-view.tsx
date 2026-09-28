@@ -8,6 +8,7 @@ import {
   type AvatarSelection,
   type BondProviderConnections,
   type BondProviderType,
+  type PubInfoAccessPort,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import {
@@ -44,6 +45,7 @@ import {
   translateIf,
   useLocalization,
   type ProductLocale,
+  type Translate,
 } from "../../shell/localization";
 import type { LocalModelDependency } from "../../shell/local-model-host";
 import { LocalModelSettings } from "../../shell/local-model-settings";
@@ -104,6 +106,7 @@ import {
   avaiaStudy,
   BODY_HANDLE_IDS,
   createWheelBodyHandle,
+  unconfiguredAvaiaStudy,
 } from "./avatar-presence";
 
 import {
@@ -114,20 +117,32 @@ import {
 } from "./wheel-handover";
 import {
   createBondDockViewState,
+  openingWheel,
   type AvaiaAvailability,
   type DockSeat,
 } from "./bond-dock-view-model";
 import { landmarkKindLabel, landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
 import {
-  awardExperience,
+  ACHIEVEMENTS,
+  earnDeviceAchievement,
+  markSettingsHintSeen,
+  newExperienceEventId,
   progressionSnapshot,
+  progressionStanding,
+  queueExperience,
   subscribeProgression,
   updateProgression,
   EMPTY_PROGRESSION,
   XP_ZONE_REVEALED_BY_AVAIA,
   XP_ZONE_REVEALED_MANUALLY,
+  type LevelStanding,
 } from "../progression/progression";
+import { usePubInfoSync } from "../progression/use-pub-info-sync";
+import {
+  AchievementDialog,
+  type AchievementDialogState,
+} from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { readWorldMemory, rememberWorld } from "./world-memory";
@@ -158,6 +173,12 @@ export interface AuthenticatedMapHomeViewProps {
    * honest state — Settings then simply has nothing to show here — not a degraded one.
    */
   readonly localModel?: LocalModelDependency;
+  /**
+   * Publishes activity experience into this Bond's `pub_info` and reads the
+   * shared total back. Absent when this host's identity client has no such
+   * capability — the device then keeps what it earned until one does.
+   */
+  readonly pubInfo?: PubInfoAccessPort;
   /**
    * The provider accounts this Bond carries. Account text never reaches this
    * surface as content: an attachment resolves where it opens, nothing more.
@@ -263,6 +284,16 @@ const AT_DEVICE_METERS = 5;
  * its name.
  */
 const DETAIL_TITLE_COLLAPSE_PX = 24;
+
+/** Long enough to read "saved", short enough not to linger over the world. */
+const AVAIA_SAVED_TOAST_MS = 4_000;
+
+function levelSummary(t: Translate, standing: LevelStanding): string {
+  return t("progression.summaryNext")
+    .replace("{level}", String(standing.level))
+    .replace("{xp}", String(standing.xp))
+    .replace("{next}", String(standing.nextLevelXp));
+}
 
 function formatDistance(locale: ProductLocale, meters: number): string {
   const kilometres = meters >= 1_000;
@@ -452,6 +483,7 @@ export function AuthenticatedMapHomeView({
   safeArea,
   section = "world",
   localModel,
+  pubInfo,
   connectedProviders,
   providerDeepLinks = [],
   onDisconnectProvider,
@@ -492,11 +524,27 @@ export function AuthenticatedMapHomeView({
   const [avaiaSavedToast, setAvaiaSavedToast] = useState<
     StatusToastItem | undefined
   >(undefined);
+  const [achievementDialog, setAchievementDialog] = useState<
+    AchievementDialogState | undefined
+  >(undefined);
   // Who is at the wheel is presentation: it moves nothing in the shared world.
   // The authenticated world opens on the Avaia, with its Bond spectating: the
   // first thing a person sees is the character they point around the world,
-  // and taking the wheel back is one tap on the Dock.
-  const [wheel, setWheel] = useState<DockSeat>("avaia");
+  // and taking the wheel back is one tap on the Dock. An Avaia nobody has
+  // configured yet is not someone to spectate, so a fresh Bond opens driving
+  // itself. The opening seat is decided once, when the configuration is first
+  // known; after that the wheel only moves when a person moves it.
+  const avaiaConfiguration = avaiaSetup?.configuration;
+  const [chosenWheel, setChosenWheel] = useState<DockSeat | undefined>(
+    undefined,
+  );
+  if (
+    chosenWheel === undefined &&
+    (avaiaSetup === undefined || avaiaConfiguration !== undefined)
+  ) {
+    setChosenWheel(openingWheel(avaiaConfiguration));
+  }
+  const wheel: DockSeat = chosenWheel ?? "avaia";
   const [handover, setHandover] = useState<WheelHandover | undefined>(
     undefined,
   );
@@ -561,7 +609,9 @@ export function AuthenticatedMapHomeView({
     avaiaAddress,
     bondAvatar === undefined
       ? undefined
-      : avaiaStudy(avaiaAddress, bondAvatar.modelId),
+      : avaiaConfiguration === "unconfigured"
+        ? unconfiguredAvaiaStudy(avaiaAddress, bondAvatar.modelId)
+        : avaiaStudy(avaiaAddress, bondAvatar.modelId),
   );
 
   // The study of whoever is at the wheel: the body on the world, and the still
@@ -627,23 +677,51 @@ export function AuthenticatedMapHomeView({
     onRevealed: (_cell, via) => {
       setFogAnnouncement(t("fog.announce.revealed"));
       updateProgression(pubDress, (current) =>
-        awardExperience(
-          current,
-          via === "avaia"
-            ? XP_ZONE_REVEALED_BY_AVAIA
-            : XP_ZONE_REVEALED_MANUALLY,
-        ),
+        queueExperience(current, {
+          id: newExperienceEventId(),
+          earner: via === "avaia" ? "avaia" : "bond",
+          amount:
+            via === "avaia"
+              ? XP_ZONE_REVEALED_BY_AVAIA
+              : XP_ZONE_REVEALED_MANUALLY,
+        }),
       );
       if (via === "avaia" && wheel === "avaia" && handover === undefined) {
         avaiaWalk.announce("fog.revealed");
       }
     },
   });
+  usePubInfoSync(pubDress, pubInfo);
   const progression = useSyncExternalStore(
     subscribeProgression,
     () => progressionSnapshot(pubDress),
     () => EMPTY_PROGRESSION,
   );
+  const accountFacts = { avaiaConfigured: avaiaConfiguration === "configured" };
+  const standing = progressionStanding(progression, accountFacts);
+  // Once the Avaia is configured, downloading its model on this device is the
+  // next step: Settings is marked until it has been opened, and "Download now"
+  // until the model is here.
+  const downloadPending =
+    localModel !== undefined &&
+    standing.achievements.includes("avaia-configured") &&
+    !standing.achievements.includes("avaia-model-downloaded");
+  const settingsAttention =
+    downloadPending && !progression.settingsHintSeen && section !== "settings";
+  useEffect(() => {
+    if (section === "settings" && downloadPending) {
+      updateProgression(pubDress, markSettingsHintSeen);
+    }
+  }, [downloadPending, pubDress, section]);
+  // "Saved" is a passing confirmation; what it paid is the dialog's to say.
+  useEffect(() => {
+    if (avaiaSavedToast === undefined) return;
+    const fades = globalThis.setTimeout(
+      () => setAvaiaSavedToast(undefined),
+      AVAIA_SAVED_TOAST_MS,
+    );
+    return () => globalThis.clearTimeout(fades);
+  }, [avaiaSavedToast]);
   useEffect(() => {
     fogRevealRef.current = fogReveal;
   });
@@ -1176,11 +1254,17 @@ export function AuthenticatedMapHomeView({
    * the world to it; the one spectating takes the wheel from it.
    */
   function activateDockIdentity(seated: "left" | "right"): void {
-    if (seated === "left") {
-      focusWorldOnWheel();
-      return;
+    switch ((seated === "left" ? dock.left : dock.right).intent) {
+      case "focus":
+        focusWorldOnWheel();
+        return;
+      case "configure":
+        openDetail("avaia");
+        return;
+      case "wheel":
+        activateSpectator();
+        return;
     }
-    activateSpectator();
   }
 
   /** The Dock's own action configures whoever is currently driving. */
@@ -1199,6 +1283,8 @@ export function AuthenticatedMapHomeView({
    * underneath was never a screen to come back to; it stayed mounted.
    */
   async function submitAvaiaSetup(): Promise<void> {
+    const firstConfiguration = avaiaConfiguration === "unconfigured";
+    const offeredBody = avaiaAvatar;
     const result = await onAvaiaSetupSubmit?.();
     if (result?.kind !== "updated") return;
     setDetailState(undefined);
@@ -1207,6 +1293,46 @@ export function AuthenticatedMapHomeView({
       kind: "active",
       title: t("dock.avaiaSaved"),
       description: result.profile.pubDress,
+    });
+    if (
+      !firstConfiguration ||
+      result.profile.configurationState !== "configured"
+    ) {
+      return;
+    }
+    // The body the setup offered is the one that was accepted, so it becomes a
+    // choice this device remembers under the address the service stored.
+    if (offeredBody !== undefined) {
+      commitAvatar({
+        subject: "avaia",
+        address: result.profile.pubDress,
+        selection: offeredBody,
+        modelIsLocal: true,
+      });
+    }
+    const current = progressionSnapshot(pubDress);
+    setAchievementDialog({
+      achievement: "avaia-configured",
+      before: progressionStanding(current, { avaiaConfigured: false }),
+      after: progressionStanding(current, { avaiaConfigured: true }),
+      ...(localModel !== undefined &&
+      !current.deviceAchievements.includes("avaia-model-downloaded")
+        ? { next: "download" as const }
+        : {}),
+    });
+  }
+
+  /** The model is on this device: the download achievement pays, once. */
+  function earnModelDownloaded(): void {
+    const current = progressionSnapshot(pubDress);
+    if (current.deviceAchievements.includes("avaia-model-downloaded")) return;
+    const next = updateProgression(pubDress, (progression) =>
+      earnDeviceAchievement(progression, "avaia-model-downloaded"),
+    );
+    setAchievementDialog({
+      achievement: "avaia-model-downloaded",
+      before: progressionStanding(current, accountFacts),
+      after: progressionStanding(next, accountFacts),
     });
   }
 
@@ -1227,7 +1353,7 @@ export function AuthenticatedMapHomeView({
     // stops wherever it was going. Neither walks on in the background.
     avaiaWalk.reset();
     setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
-    setWheel(to);
+    setChosenWheel(to);
 
     if (observedPosition === undefined) return;
     const context = { presentation, dimension, safeArea };
@@ -1344,6 +1470,7 @@ export function AuthenticatedMapHomeView({
           section={section}
           pubDress={pubDress}
           actions={headerActions}
+          settingsAttention={settingsAttention}
           onNavigate={navigate}
         />
       }
@@ -1544,6 +1671,20 @@ export function AuthenticatedMapHomeView({
                           )}
                         </div>
                       )}
+                      <section
+                        className="avaia-notebook"
+                        aria-labelledby="bond-progression-title"
+                      >
+                        <span
+                          className="interface-settings__eyebrow"
+                          id="bond-progression-title"
+                        >
+                          {t("avaia.progression.title")}
+                        </span>
+                        <p className="profile-edit__note">
+                          {levelSummary(t, standing.bond)}
+                        </p>
+                      </section>
                       <dl className="bond-profile__rows">
                         <div>
                           <dt>{t("dock.providers")}</dt>
@@ -1584,6 +1725,19 @@ export function AuthenticatedMapHomeView({
                           host={localModel.host}
                           catalog={localModel.catalog}
                           defaultModelId={localModel.defaultModelId}
+                          {...(downloadPending
+                            ? {
+                                attention: {
+                                  bondXp:
+                                    ACHIEVEMENTS["avaia-model-downloaded"]
+                                      .bondXp,
+                                  avaiaXp:
+                                    ACHIEVEMENTS["avaia-model-downloaded"]
+                                      .avaiaXp,
+                                },
+                              }
+                            : {})}
+                          onModelPresent={earnModelDownloaded}
                         />
                       )}
                       {/* Hidden for now — uncomment together with the import above.
@@ -1684,9 +1838,9 @@ export function AuthenticatedMapHomeView({
                           {t("avaia.progression.title")}
                         </span>
                         <p className="profile-edit__note">
-                          {t("avaia.progression.summary")
-                            .replace("{level}", String(progression.level))
-                            .replace("{xp}", String(progression.totalXp))}
+                          {avaiaConfiguration === "unconfigured"
+                            ? t("avaia.progression.unconfigured")
+                            : levelSummary(t, standing.avaia)}
                         </p>
                       </section>
                       {/* A host that cannot read the Avaia's profile configures
@@ -1889,6 +2043,14 @@ export function AuthenticatedMapHomeView({
             onConfirm={confirmFogReveal}
             onDismiss={fogReveal.dismiss}
           />
+          {achievementDialog === undefined ? null : (
+            <AchievementDialog
+              state={achievementDialog}
+              bondName={pubDress}
+              avaiaName={avaiaLabel}
+              onClose={() => setAchievementDialog(undefined)}
+            />
+          )}
           <span className="visually-hidden" aria-live="polite">
             {fogAnnouncement}
           </span>

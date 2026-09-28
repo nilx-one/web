@@ -38,6 +38,11 @@ export interface DockIdentityViewState {
   readonly tone: "authenticated" | "ready" | "working" | "idle";
   readonly actionable: boolean;
   readonly actionLabel: string;
+  /**
+   * What activating the card does. An Avaia its owner has not configured has
+   * nothing to hand the wheel to yet, so its card opens its setup instead.
+   */
+  readonly intent: "focus" | "wheel" | "configure";
 }
 
 export interface BondDockViewState {
@@ -105,6 +110,17 @@ function avaiaTone(
   }
 }
 
+/**
+ * Who the world opens with at the wheel. An Avaia nobody has configured yet
+ * is not someone a Bond can watch, so a fresh Bond opens driving itself; any
+ * other world opens on the Avaia.
+ */
+export function openingWheel(
+  configuration: AvaiaConfigurationState | undefined,
+): DockSeat {
+  return configuration === "unconfigured" ? "bond" : "avaia";
+}
+
 export function createBondDockViewState(
   input: BondDockInput,
 ): BondDockViewState {
@@ -114,7 +130,10 @@ export function createBondDockViewState(
   // A device that cannot run a model is still a device its owner watches the
   // world from, so the runtime is stated on the card and gates nothing.
   const preparesRuntime =
-    driving === "bond" && input.avaia === "downloadable" && input.downloadable;
+    driving === "bond" &&
+    input.avaia === "downloadable" &&
+    input.downloadable &&
+    input.avaiaConfiguration !== "unconfigured";
   // Configuration state can change the wording, but never which identity the
   // action targets: the left seat is the source of truth for the Dock action.
   const configure: DockConfigureAction =
@@ -140,26 +159,34 @@ export function createBondDockViewState(
       seated === "left"
         ? `Focus the world on ${input.pubDress}`
         : `Take the wheel as ${input.pubDress}`,
+    intent: seated === "left" ? "focus" : "wheel",
   });
 
-  const avaia = (seated: "left" | "right"): DockIdentityViewState => ({
-    seat: "avaia",
-    address: avaiaAddress,
-    glyph: "AI",
-    role:
-      seated === "left" && input.avaiaConfiguration !== "unconfigured"
-        ? "driving"
-        : avaiaRole(input.avaiaConfiguration, input.avaia),
-    // Driving is about the wheel; the status dot is about the runtime. An
-    // Avaia can be the identity the world is showing while its runtime is not
-    // up, and the dot must not claim otherwise.
-    tone: avaiaTone(input.avaia),
-    actionable: seated === "left" ? input.focusable : true,
-    actionLabel:
-      seated === "left"
-        ? `Focus the world on ${avaiaAddress}`
-        : `Hand the wheel to ${avaiaAddress}`,
-  });
+  const avaia = (seated: "left" | "right"): DockIdentityViewState => {
+    const setUp =
+      seated === "right" && input.avaiaConfiguration === "unconfigured";
+    return {
+      seat: "avaia",
+      address: avaiaAddress,
+      glyph: "AI",
+      role:
+        seated === "left" && input.avaiaConfiguration !== "unconfigured"
+          ? "driving"
+          : avaiaRole(input.avaiaConfiguration, input.avaia),
+      // Driving is about the wheel; the status dot is about the runtime. An
+      // Avaia can be the identity the world is showing while its runtime is
+      // not up, and the dot must not claim otherwise.
+      tone: avaiaTone(input.avaia),
+      actionable: seated === "left" ? input.focusable : true,
+      actionLabel:
+        seated === "left"
+          ? `Focus the world on ${avaiaAddress}`
+          : setUp
+            ? `Set up ${avaiaAddress}`
+            : `Hand the wheel to ${avaiaAddress}`,
+      intent: seated === "left" ? "focus" : setUp ? "configure" : "wheel",
+    };
+  };
 
   return {
     wheel: driving,

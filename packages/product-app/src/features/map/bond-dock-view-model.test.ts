@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   avaiaAvailability,
   createBondDockViewState,
+  openingWheel,
   type BondDockInput,
 } from "./bond-dock-view-model";
 
@@ -117,7 +118,8 @@ describe("Avaia configuration on the Dock", () => {
         .right,
     ).toMatchObject({
       role: "unconfigured",
-      actionLabel: "Hand the wheel to x0skai",
+      actionLabel: "Set up x0skai",
+      intent: "configure",
     });
     expect(
       createBondDockViewState({
@@ -128,7 +130,35 @@ describe("Avaia configuration on the Dock", () => {
     ).toMatchObject({
       role: "unconfigured",
       actionLabel: "Focus the world on x0skai",
+      intent: "focus",
     });
+  });
+
+  it("hands the wheel to a configured Avaia", () => {
+    expect(
+      createBondDockViewState({ ...base, avaiaConfiguration: "configured" })
+        .right,
+    ).toMatchObject({
+      actionLabel: "Hand the wheel to x0skai",
+      intent: "wheel",
+    });
+  });
+
+  it("asks for no runtime on behalf of an Avaia nobody configured", () => {
+    expect(
+      createBondDockViewState({
+        ...base,
+        avaia: "downloadable",
+        downloadable: true,
+        avaiaConfiguration: "unconfigured",
+      }).preparesRuntime,
+    ).toBe(false);
+  });
+
+  it("opens a fresh Bond driving itself, and any other world on the Avaia", () => {
+    expect(openingWheel("unconfigured")).toBe("bond");
+    expect(openingWheel("configured")).toBe("avaia");
+    expect(openingWheel(undefined)).toBe("avaia");
   });
 
   it("keeps an unconfigured Avaia unconfigured whatever the device can run", () => {

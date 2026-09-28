@@ -109,15 +109,22 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                     return unavailable();
                 }
             };
+            let owner: PubDress = match record.identity.pub_dress.parse() {
+                Ok(value) => value,
+                Err(_) => {
+                    tracing::error!("public Bond pub_dress is invalid");
+                    return unavailable();
+                }
+            };
+            let experience = match state.repository.read_pub_info(&owner).await {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, "public pub_info lookup failed");
+                    return unavailable();
+                }
+            };
             let avaia = match &record.identity.avaia_pub_dress {
                 Some(avaia_pub_dress) => {
-                    let owner: PubDress = match record.identity.pub_dress.parse() {
-                        Ok(value) => value,
-                        Err(_) => {
-                            tracing::error!("public Bond pub_dress is invalid");
-                            return unavailable();
-                        }
-                    };
                     let location = match state.repository.read_avaia_location(&owner).await {
                         Ok(value) => value,
                         Err(error) => {
@@ -125,9 +132,19 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                             return unavailable();
                         }
                     };
+                    let configuration_state =
+                        match state.repository.owned_avaia_identity(&owner).await {
+                            Ok(Some(profile)) => profile.configuration_state.as_str(),
+                            Ok(None) => "unconfigured",
+                            Err(error) => {
+                                tracing::error!(%error, "public Avaia configuration lookup failed");
+                                return unavailable();
+                            }
+                        };
                     Some(PublicAvaiaProjection {
                         pub_dress: avaia_pub_dress.clone(),
                         avatar_model,
+                        configuration_state,
                         location: location.map(|location| PublicAvaiaLocation {
                             coordinate: location.coordinate,
                         }),
@@ -141,6 +158,13 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                     pub_dress_url: record.readable_url(PUBLIC_ZONE),
                     pub_dress: record.identity.pub_dress,
                     avaia,
+                    pub_info: PublicPubInfo {
+                        experience: PublicExperience {
+                            authority: crate::repository::EXPERIENCE_AUTHORITY,
+                            bond_xp: experience.bond_xp,
+                            avaia_xp: experience.avaia_xp,
+                        },
+                    },
                 },
             )
         }
@@ -259,6 +283,22 @@ struct PublicIdentityProjection {
     #[serde(skip_serializing_if = "Option::is_none")]
     avaia: Option<PublicAvaiaProjection>,
     pub_dress_url: String,
+    /// The public slice of this Bond's `.bnd`. Experience totals are always
+    /// present; zero is a Bond that has not published any. They are the
+    /// owner's report (`authority: client`), not a service attestation of play.
+    pub_info: PublicPubInfo,
+}
+
+#[derive(Debug, Serialize)]
+struct PublicPubInfo {
+    experience: PublicExperience,
+}
+
+#[derive(Debug, Serialize)]
+struct PublicExperience {
+    authority: &'static str,
+    bond_xp: u64,
+    avaia_xp: u64,
 }
 
 /// The Avaia a Bond owns, nested under it in the public projection.
@@ -272,6 +312,7 @@ struct PublicAvaiaProjection {
     pub_dress: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     avatar_model: Option<String>,
+    configuration_state: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     location: Option<PublicAvaiaLocation>,
 }
@@ -361,7 +402,11 @@ mod tests {
                 .as_str()
                 .is_some_and(|value| value.ends_with("ai")),
         );
+        assert_eq!(body["avaia"]["configuration_state"], "unconfigured");
         assert!(body["avaia"]["location"].is_null());
+        assert_eq!(body["pub_info"]["experience"]["authority"], "client");
+        assert_eq!(body["pub_info"]["experience"]["bond_xp"], 0);
+        assert_eq!(body["pub_info"]["experience"]["avaia_xp"], 0);
     }
 
     #[tokio::test]
@@ -405,6 +450,50 @@ mod tests {
             body["avaia"]["location"]["coordinate"]["latitude_e7"],
             "504501000"
         );
+    }
+
+    #[tokio::test]
+    async fn public_projection_includes_the_published_experience() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let address: PubDress = "0x0sky".parse().expect("pub_dress");
+        repository
+            .register(&address, &ProviderIdentity::telegram(44), 100)
+            .await
+            .expect("registration");
+        repository
+            .publish_experience(
+                &address,
+                Some(crate::repository::PubInfoExperience {
+                    bond_xp: 90,
+                    avaia_xp: 45,
+                }),
+                &[crate::repository::ExperienceAward {
+                    id: "xp:public".to_owned(),
+                    earner: crate::repository::ExperienceEarner::Bond,
+                    amount: 30,
+                }],
+                300,
+            )
+            .await
+            .expect("publish experience");
+
+        let response = router(repository)
+            .oneshot(
+                Request::get("/api/v1/identity/public")
+                    .header("host", "0x0sky.nilx.one")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json(response).await;
+        assert_eq!(body["pub_info"]["experience"]["authority"], "client");
+        assert_eq!(body["pub_info"]["experience"]["bond_xp"], 120);
+        assert_eq!(body["pub_info"]["experience"]["avaia_xp"], 45);
+        assert_eq!(body["avaia"]["configuration_state"], "unconfigured");
     }
 
     #[tokio::test]

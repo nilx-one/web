@@ -123,6 +123,14 @@
     monospace;
 }
 
+.public-bond-facts .public-bond-reported {
+  grid-template-columns: 1fr;
+}
+
+.public-bond-facts .public-bond-reported dt {
+  text-transform: none;
+}
+
 .public-bond-home {
   display: inline-flex;
   gap: 0.45rem;

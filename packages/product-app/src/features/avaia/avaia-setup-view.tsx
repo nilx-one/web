@@ -1,14 +1,68 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { useEffect, useState } from "react";
+
 import {
   translateCopy,
   translateFirst,
   useLocalization,
   type Translate,
 } from "../../shell/localization";
+import { prefersReducedMotion } from "../../shell/motion";
 import type { AvaiaSetupViewState } from "./avaia-setup-view-model";
 import "./avaia-setup.css";
+
+/** Before the first character, so the screen has settled before it types. */
+export const AVAIA_TYPING_DELAY_MS = 280;
+export const AVAIA_TYPING_STEP_MS = 110;
+
+/**
+ * How much of the derived address has been typed out: `waiting` until there
+ * is a profile to read, a count while it types, `done` once it has or never
+ * needed to.
+ */
+type TypingPhase = "waiting" | number | "done";
+
+/**
+ * An Avaia nobody configured is offered the address it already holds, typed
+ * out as if the Avaia were introducing itself. It is presentation only: the
+ * address is the stored one throughout, and a person who asked for reduced
+ * motion sees it whole.
+ */
+function useTypedSlugStem(state: AvaiaSetupViewState): {
+  readonly value: string;
+  readonly typing: boolean;
+} {
+  const [phase, setPhase] = useState<TypingPhase>("waiting");
+  const target = [...state.slugStem];
+  if (phase === "waiting" && state.editable) {
+    setPhase(
+      state.configuration === "unconfigured" &&
+        target.length > 0 &&
+        !prefersReducedMotion()
+        ? 0
+        : "done",
+    );
+  }
+  const length = target.length;
+  if (typeof phase === "number" && phase >= length) setPhase("done");
+  const typing = typeof phase === "number" && phase < length;
+
+  useEffect(() => {
+    if (typeof phase !== "number" || phase >= length) return;
+    const next = globalThis.setTimeout(
+      () => setPhase(phase + 1),
+      phase === 0 ? AVAIA_TYPING_DELAY_MS : AVAIA_TYPING_STEP_MS,
+    );
+    return () => globalThis.clearTimeout(next);
+  }, [phase, length]);
+
+  return {
+    value: typing ? target.slice(0, phase).join("") : state.slugStem,
+    typing,
+  };
+}
 
 export interface AvaiaSetupViewProps {
   readonly state: AvaiaSetupViewState;
@@ -46,6 +100,7 @@ export function AvaiaSetupView({
   onSubmit,
 }: AvaiaSetupViewProps) {
   const { t } = useLocalization();
+  const typed = useTypedSlugStem(state);
 
   return (
     <div className="avaia-setup" data-configuration={state.configuration}>
@@ -69,7 +124,10 @@ export function AvaiaSetupView({
         <label className="avaia-setup__label" htmlFor="avaia-pub-dress">
           pub_dress
         </label>
-        <div className="profile-edit__address avaia-setup__address">
+        <div
+          className="profile-edit__address avaia-setup__address"
+          data-typing={typed.typing}
+        >
           <span className="profile-edit__discriminator" aria-hidden="true">
             {state.prefix}
           </span>
@@ -80,7 +138,9 @@ export function AvaiaSetupView({
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
-            value={state.slugStem}
+            value={typed.value}
+            readOnly={typed.typing}
+            aria-busy={typed.typing}
             disabled={!state.editable || state.busy}
             aria-describedby="avaia-pub-dress-note"
             aria-invalid={state.error !== undefined}

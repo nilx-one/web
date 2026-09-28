@@ -288,6 +288,13 @@ async fn main() {
         discord_activity_oauth.clone(),
         native_auth.clone(),
     );
+    let pub_info_api = api::pub_info_router(
+        repository.clone(),
+        provider_links.clone(),
+        telegram_activity_verifier.clone(),
+        discord_activity_oauth.clone(),
+        native_auth.clone(),
+    );
     let avaia_api = api::avaia_router(
         repository.clone(),
         provider_links.clone(),
@@ -315,6 +322,7 @@ async fn main() {
         native_auth,
     )
     .merge(avaia_api)
+    .merge(pub_info_api)
     .merge(location_api)
     .merge(provider_api)
     .merge(provider_self_service_api)

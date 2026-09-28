@@ -4,6 +4,7 @@
 pub mod api {
     include!("api.rs");
     include!("api_avaia.rs");
+    include!("api_pub_info.rs");
     include!("session_activation.rs");
 }
 pub mod browser_web_auth;
@@ -19,6 +20,7 @@ pub mod rate_limit;
 pub mod repository {
     include!("repository.rs");
     include!("repository_avaia.rs");
+    include!("repository_pub_info.rs");
 }
 pub mod telegram_init_data;
 
