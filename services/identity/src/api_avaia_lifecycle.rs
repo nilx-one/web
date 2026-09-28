@@ -362,7 +362,7 @@ mod tests {
     }
 
     fn signed_init_data(user_id: i64) -> String {
-        let fields = std::collections::BTreeMap::from([
+        let mut fields = std::collections::BTreeMap::from([
             ("auth_date", NOW.to_string()),
             ("query_id", "avaia-lifecycle-query".to_owned()),
             ("user", format!(r#"{{"id":{user_id},"first_name":"Sasha"}}"#)),
@@ -383,7 +383,6 @@ mod tests {
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
-        let mut fields = fields;
         fields.insert("hash", hash);
         form_urlencoded::Serializer::new(String::new())
             .extend_pairs(fields)
