@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS avaia_locations (
     updated_at INTEGER NOT NULL CHECK (updated_at >= 0)
 ) STRICT;
 
+-- The configuration sidecar must exist before its guarded identity trigger can
+-- be installed. The dedicated 0007 migration remains responsible for legacy
+-- backfill when an Avaia profile is first read/configured.
+CREATE TABLE IF NOT EXISTS avaia_configuration (
+    avaia_pub_dress TEXT PRIMARY KEY COLLATE BINARY NOT NULL
+        REFERENCES identities(pub_dress) ON UPDATE CASCADE ON DELETE CASCADE,
+    owner_pub_dress TEXT NOT NULL UNIQUE COLLATE BINARY
+        REFERENCES identities(pub_dress) ON UPDATE CASCADE ON DELETE CASCADE,
+    configuration_state TEXT NOT NULL
+        CHECK (configuration_state IN ('unconfigured', 'configured'))
+) STRICT;
+
 -- Avaia creation is an explicit owner action. Legacy registration, rename and
 -- reconciliation paths still share the old insertion helper, so the database
 -- enforces the lifecycle boundary underneath all of them. The explicit create
@@ -27,7 +39,32 @@ CREATE TABLE IF NOT EXISTS avaia_creation_intents (
         REFERENCES identities(pub_dress) ON UPDATE CASCADE ON DELETE CASCADE
 ) STRICT;
 
-CREATE TRIGGER IF NOT EXISTS identities_reject_implicit_avaia_creation
+-- Replace the older unconditional configuration trigger from 0007 with the
+-- lifecycle-aware form. This also upgrades databases that already installed
+-- the old trigger before this change.
+DROP TRIGGER IF EXISTS identities_create_avaia_configuration;
+CREATE TRIGGER identities_create_avaia_configuration
+AFTER INSERT ON identities
+WHEN NEW.identity_kind = 'avaia'
+    AND EXISTS (
+        SELECT 1
+        FROM avaia_creation_intents
+        WHERE owner_pub_dress = NEW.owner_pub_dress
+    )
+BEGIN
+    INSERT OR IGNORE INTO avaia_configuration (
+        avaia_pub_dress,
+        owner_pub_dress,
+        configuration_state
+    ) VALUES (
+        NEW.pub_dress,
+        NEW.owner_pub_dress,
+        'unconfigured'
+    );
+END;
+
+DROP TRIGGER IF EXISTS identities_reject_implicit_avaia_creation;
+CREATE TRIGGER identities_reject_implicit_avaia_creation
 AFTER INSERT ON identities
 WHEN NEW.identity_kind = 'avaia'
     AND NOT EXISTS (
