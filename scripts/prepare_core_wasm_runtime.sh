@@ -6,7 +6,7 @@ set -Eeuo pipefail
 
 core_dir="${1:?path to checked-out nilx-one/core is required}"
 expected_core_revision="c224304947280169017e298237bcf5361d1bfb30"
-expected_wasm_sha256="173c3e9164c030384865013df87d36a29846b09cd2b8ee59b433509b2d77c90d"
+expected_wasm_sha256="43ab28588d8e097decf77b4710ae560b82bc812a629a6fdf9ef7b5d73a8cd325"
 runtime_version="0.1.0"
 runtime_build="$PWD/.core-wasm-runtime"
 
@@ -16,14 +16,18 @@ if [[ "$actual_core_revision" != "$expected_core_revision" ]]; then
   exit 1
 fi
 
+# A fresh `cargo generate-lockfile` re-resolves to whatever crates.io serves
+# that day, and the Wasm bytes move with it. `core-wasm.Cargo.lock` is the
+# resolution this digest was built from, tinyvec 1.12.0 included. The Core
+# build script passes `--locked`, so a dependency that is not in the file
+# fails closed instead of being solved again.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+lockfile="$script_dir/core-wasm.Cargo.lock"
+
 rm -rf "$runtime_build"
 (
   cd "$core_dir"
-  cargo generate-lockfile
-  # Keep the pinned Core revision reproducible across the known tinyvec
-  # compatibility break in wasm/no_std builds. The resulting Wasm bytes are
-  # still verified below, so any other dependency drift fails closed.
-  cargo update -p tinyvec --precise 1.12.0
+  cp "$lockfile" Cargo.lock
   ./scripts/build_wasm_package.sh "$runtime_build"
 )
 
