@@ -150,6 +150,14 @@ import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
+import { GuideCutsceneView } from "../guide/guide-cutscene-view";
+import {
+  guideIntroOwed,
+  postponeGuideIntro,
+  rememberGuideIntro,
+} from "../guide/guide-memory";
+import type { GuideOutcome, GuideSceneId } from "../guide/guide-script";
+import { useGuideCutscene } from "../guide/use-guide-cutscene";
 
 /** The provider types this client can present. The domain owns the list. */
 export type ConnectedProvider = BondProviderType;
@@ -287,6 +295,12 @@ const DETAIL_TITLE_COLLAPSE_PX = 24;
 
 /** Long enough to read "saved", short enough not to linger over the world. */
 const AVAIA_SAVED_TOAST_MS = 4_000;
+
+/**
+ * The world has settled — the map painted, the first fix framed — before
+ * 0xda-sha walks up, so her arrival is not lost in the camera finding its feet.
+ */
+export const GUIDE_INTRO_DELAY_MS = 1_800;
 
 function levelSummary(t: Translate, standing: LevelStanding): string {
   return t("progression.summaryNext")
@@ -754,6 +768,36 @@ export function AuthenticatedMapHomeView({
       ? avaiaWalk.speech?.text
       : undefined;
   const avaiaStudied = studiedBy(avaiaWalk.notebook, avaiaAddress);
+  const reducedMotion = prefersReducedMotion();
+  const guide = useGuideCutscene({
+    renderer,
+    anchor: observedPosition,
+    bondModel: bondAvatar?.modelId as AvatarModelId | undefined,
+    bondName: pubDress,
+    names: { avaia: avaiaLabel },
+    reducedMotion,
+    onEnd: (scene, outcome) => endGuideScene(scene, outcome),
+  });
+  const guideActive = guide.state !== undefined;
+  const playGuide = guide.play;
+  // She introduces herself to a Bond whose Avaia nobody has configured yet,
+  // once the world is there to be filmed and nothing else is being asked.
+  const guideIntroDue =
+    avaiaConfiguration === "unconfigured" &&
+    section === "world" &&
+    activeDetail === undefined &&
+    mapStatus.kind === "ready" &&
+    (focusState === "focused" || focusState === "unavailable") &&
+    !guideActive &&
+    achievementDialog === undefined;
+  useEffect(() => {
+    if (!guideIntroDue || !guideIntroOwed(pubDress)) return;
+    const arrives = globalThis.setTimeout(
+      () => playGuide("intro"),
+      GUIDE_INTRO_DELAY_MS,
+    );
+    return () => globalThis.clearTimeout(arrives);
+  }, [guideIntroDue, playGuide, pubDress]);
 
   /**
    * The card over whoever is at the wheel. It stands over the body — which for
@@ -1310,16 +1354,42 @@ export function AuthenticatedMapHomeView({
         modelIsLocal: true,
       });
     }
+    // She comes back to say what it paid.
     const current = progressionSnapshot(pubDress);
-    setAchievementDialog({
-      achievement: "avaia-configured",
-      before: progressionStanding(current, { avaiaConfigured: false }),
-      after: progressionStanding(current, { avaiaConfigured: true }),
-      ...(localModel !== undefined &&
-      !current.deviceAchievements.includes("avaia-model-downloaded")
-        ? { next: "download" as const }
-        : {}),
+    guide.play("reward", {
+      reward: {
+        achievement: "avaia-configured",
+        before: progressionStanding(current, { avaiaConfigured: false }),
+        after: progressionStanding(current, { avaiaConfigured: true }),
+        ...(localModel !== undefined &&
+        !current.deviceAchievements.includes("avaia-model-downloaded")
+          ? { next: "download" as const }
+          : {}),
+      },
     });
+  }
+
+  /**
+   * How a scene with 0xda-sha ended is all the world hears of it. An
+   * introduction played through or skipped is not played again on this
+   * device; one put off comes back the next time the world opens.
+   */
+  function endGuideScene(scene: GuideSceneId, outcome: GuideOutcome): void {
+    if (scene === "intro") {
+      if (outcome === "later") postponeGuideIntro(pubDress);
+      else {
+        rememberGuideIntro(
+          pubDress,
+          outcome === "skipped" ? "skipped" : "done",
+        );
+      }
+      if (outcome === "create") openDetail("avaia");
+      return;
+    }
+    // The Bond and its new Avaia take it from here: the Avaia arrives on the
+    // world. Nothing is fetched for it — a reply to her is not the gesture
+    // that asks a device to download a model.
+    if (outcome === "together" && wheel === "bond") handWheel("avaia");
   }
 
   /** The model is on this device: the download achievement pays, once. */
@@ -1347,8 +1417,10 @@ export function AuthenticatedMapHomeView({
    */
   function activateSpectator(): void {
     if (dock.preparesRuntime) onPrepareAvaia?.();
+    handWheel(wheel === "bond" ? "avaia" : "bond");
+  }
 
-    const to: DockSeat = wheel === "bond" ? "avaia" : "bond";
+  function handWheel(to: DockSeat): void {
     // An Avaia taking the wheel starts from where its owner is; one leaving it
     // stops wherever it was going. Neither walks on in the background.
     avaiaWalk.reset();
@@ -1451,6 +1523,7 @@ export function AuthenticatedMapHomeView({
       data-theme={resolvedAppearance}
       data-focus-state={focusState}
       data-section={section}
+      data-cutscene={guideActive}
       world={
         <>
           <div className="authenticated-map-home__map" aria-hidden="true">
@@ -2043,6 +2116,16 @@ export function AuthenticatedMapHomeView({
             onConfirm={confirmFogReveal}
             onDismiss={fogReveal.dismiss}
           />
+          {guide.state === undefined ? null : (
+            <GuideCutsceneView
+              state={guide.state}
+              bondName={pubDress}
+              avaiaName={avaiaLabel}
+              reducedMotion={reducedMotion}
+              onChoose={guide.choose}
+              onAdvance={guide.advance}
+            />
+          )}
           {achievementDialog === undefined ? null : (
             <AchievementDialog
               state={achievementDialog}

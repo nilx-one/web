@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { TranslationKey } from "../localization";
+import { GUIDE_RU } from "./guide";
 
 /**
  * The Russian catalog. It is only ever offered to hosts and devices that speak
@@ -505,4 +506,5 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "discord.bootstrapFailed":
     "0x1 не удалось запустить этот сеанс Discord Activity. Откройте Activity снова и повторите попытку. ({reason})",
   "discord.unknownFailure": "Неизвестный сбой",
+  ...GUIDE_RU,
 };

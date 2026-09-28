@@ -180,7 +180,7 @@ describe("Avaia setup from the Bond dock", () => {
     await user.click(screen.getByRole("button", { name: "Set up x0skai" }));
 
     // The address it already holds types itself out, and Kai stands in as its
-    // body, so there is nothing left to decide but Save.
+    // body, so there is nothing left to decide but Create.
     const address = await screen.findByLabelText("pub_dress");
     await waitFor(() => expect(address).toHaveValue("sk"));
     expect(
@@ -195,17 +195,22 @@ describe("Avaia setup from the Bond dock", () => {
     // Avaia is represented by is a separate, real control below it.
     expect(screen.getAllByRole("textbox")).toEqual([address]);
 
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Create" }));
     expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("x0skai");
 
-    // What configuring paid is said once, in a dialog a person closes.
+    // What configuring paid is said once, by 0xda-sha, who walks up to say it.
+    expect(screen.queryByLabelText("pub_dress")).toBeNull();
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Avaia configured",
     });
+    expect(dialog).toHaveTextContent("0xda-sha");
     expect(dialog).toHaveTextContent("+20 Bond experience");
     expect(dialog).toHaveTextContent("x0skai reached level 1");
-    expect(screen.queryByLabelText("pub_dress")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "OK" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "(skip)" }));
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
     expect(screen.queryByRole("dialog")).toBeNull();
 
     // The body offered is now a choice, not a default.
@@ -258,7 +263,7 @@ describe("Avaia setup from the Bond dock", () => {
     await waitFor(() => expect(address).toHaveValue("sk"));
     await user.clear(address);
     await user.type(address, "vesn");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("x0vesnai");
     const notice = await screen.findByText("Avaia saved");
@@ -320,7 +325,7 @@ describe("Avaia setup from the Bond dock", () => {
     await waitFor(() => expect(address).toHaveValue("sk"));
     await user.clear(address);
     await user.type(address, "taken");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     // A refusal keeps the person where they were, with what they typed.
     expect(
@@ -419,7 +424,8 @@ describe("Avaia setup from the Bond dock", () => {
     const results = await act(() => axe.run(container));
     expect(results.violations).toEqual([]);
 
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
     await screen.findByRole("dialog", { name: "Avaia configured" });
     const withDialog = await act(() => axe.run(container));
     expect(withDialog.violations).toEqual([]);

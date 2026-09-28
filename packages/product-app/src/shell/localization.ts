@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { GUIDE_EN, GUIDE_UK } from "./messages/guide";
 import { IDENTITY_EN, IDENTITY_UK } from "./messages/identity";
 import { RU_MESSAGES } from "./messages/russian";
 import { WORLD_EN, WORLD_UK } from "./messages/world";
@@ -248,6 +249,7 @@ const EN_MESSAGES = {
   "dock.saveChoiceFailed": "Couldn’t save this choice. Try again.",
   ...IDENTITY_EN,
   ...WORLD_EN,
+  ...GUIDE_EN,
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -520,6 +522,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.saveChoiceFailed": "Не вдалося зберегти цей вибір. Спробуйте ще раз.",
   ...IDENTITY_UK,
   ...WORLD_UK,
+  ...GUIDE_UK,
 };
 
 const CATALOGS: Readonly<
