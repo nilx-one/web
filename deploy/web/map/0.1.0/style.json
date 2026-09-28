@@ -21,7 +21,7 @@
     "nilx-one:accent-primary": "#37d7e5",
     "nilx-one:label-primary": "#536166",
     "nilx-one:label-secondary": "#7d8a90",
-    "nilx-one:label-state": "reserved-pending-same-origin-glyphs",
+    "nilx-one:label-state": "same-origin-glyphs",
     "nilx-one:accent-semantics": "presentation-only",
     "nilx-one:surface-building-faces": "#eef3f4",
     "nilx-one:building-height-source": "openstreetmap-height",
@@ -29,8 +29,10 @@
     "nilx-one:zoom-city": 11,
     "nilx-one:zoom-neighborhood": 13,
     "nilx-one:zoom-street": 15,
-    "nilx-one:zoom-building": 16.5
+    "nilx-one:zoom-building": 16.5,
+    "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold"
   },
+  "glyphs": "/map/0.1.0/fonts/{fontstack}/{range}.pbf",
   "projection": {
     "type": "globe"
   },
@@ -467,6 +469,177 @@
         ],
         "circle-color": "#7d8a90",
         "circle-opacity": 0.3
+      }
+    },
+    {
+      "id": "water-labels",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "water",
+      "minzoom": 11,
+      "filter": ["has", "name"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "text-letter-spacing": 0.15,
+        "text-max-width": 6
+      },
+      "paint": {
+        "text-halo-color": "#f1f4f5",
+        "text-halo-width": 1.4,
+        "text-halo-blur": 0.4,
+        "text-color": "#7d8a90"
+      }
+    },
+    {
+      "id": "road-labels-major",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "roads",
+      "minzoom": 13,
+      "filter": [
+        "all",
+        ["has", "name"],
+        ["in", "kind", "highway", "major_road"]
+      ],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "symbol-placement": "line",
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 17, 13],
+        "text-letter-spacing": 0.05,
+        "symbol-spacing": 320
+      },
+      "paint": {
+        "text-halo-color": "#f1f4f5",
+        "text-halo-width": 1.4,
+        "text-halo-blur": 0.4,
+        "text-color": "#536166"
+      }
+    },
+    {
+      "id": "road-labels-minor",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "roads",
+      "minzoom": 15,
+      "filter": [
+        "all",
+        ["has", "name"],
+        ["in", "kind", "medium_road", "minor_road"]
+      ],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "symbol-placement": "line",
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 15, 10, 18, 12.5],
+        "symbol-spacing": 280
+      },
+      "paint": {
+        "text-halo-color": "#f1f4f5",
+        "text-halo-width": 1.4,
+        "text-halo-blur": 0.4,
+        "text-color": "#7d8a90"
+      }
+    },
+    {
+      "id": "place-neighbourhood",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "places",
+      "minzoom": 13,
+      "maxzoom": 17.5,
+      "filter": ["==", "kind", "neighbourhood"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 13],
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.12,
+        "text-max-width": 7
+      },
+      "paint": {
+        "text-halo-color": "#f1f4f5",
+        "text-halo-width": 1.4,
+        "text-halo-blur": 0.4,
+        "text-color": "#7d8a90"
+      }
+    },
+    {
+      "id": "place-district",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "places",
+      "minzoom": 10,
+      "maxzoom": 15,
+      "filter": ["in", "kind", "macrohood", "borough", "localadmin"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans SemiBold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 10, 11, 14, 15],
+        "text-transform": "uppercase",
+        "text-letter-spacing": 0.14,
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-halo-color": "#f1f4f5",
+        "text-halo-width": 1.4,
+        "text-halo-blur": 0.4,
+        "text-color": "#536166"
+      }
+    },
+    {
+      "id": "place-locality",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "places",
+      "minzoom": 6,
+      "filter": ["==", "kind", "locality"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans SemiBold"],
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          6,
+          11,
+          10,
+          15,
+          14,
+          19
+        ],
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-halo-color": "#f1f4f5",
+        "text-halo-width": 1.4,
+        "text-halo-blur": 0.4,
+        "text-color": "#536166"
+      }
+    },
+    {
+      "id": "poi-labels",
+      "type": "symbol",
+      "source": "basemap",
+      "source-layer": "pois",
+      "minzoom": 16.5,
+      "filter": ["has", "name"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "text-anchor": "top",
+        "text-offset": [0, 0.6],
+        "text-max-width": 7,
+        "text-optional": true
+      },
+      "paint": {
+        "text-halo-color": "#f1f4f5",
+        "text-halo-width": 1.4,
+        "text-halo-blur": 0.4,
+        "text-color": "#7d8a90"
       }
     }
   ]

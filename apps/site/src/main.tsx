@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import "./world-wipe-boot";
 import { createBrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import {
   createCoreWasmClient,
