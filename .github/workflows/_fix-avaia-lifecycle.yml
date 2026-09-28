@@ -1,0 +1,259 @@
+name: temporary-avaia-lifecycle-fix
+
+on:
+  push:
+    branches:
+      - fix/avaia-read-no-create
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply lifecycle fix
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          repo = Path('.')
+          repository = repo / 'services/identity/src/repository.rs'
+          api = repo / 'services/identity/src/api_avaia.rs'
+
+          text = repository.read_text()
+
+          old = '''        if let Some(mut record) = find_by_provider_in(&mut transaction, provider_identity).await? {
+            if record.avaia_pub_dress.is_none() {
+                let owner = pub_dress_for(&record)?;
+                record.avaia_pub_dress =
+                    create_owned_avaia_in(&mut transaction, &owner, now).await?;
+            }
+            transaction.commit().await?;
+            return Ok(RegistrationOutcome::AlreadyRegistered(record));
+        }
+'''
+          new = '''        if let Some(record) = find_by_provider_in(&mut transaction, provider_identity).await? {
+            transaction.commit().await?;
+            return Ok(RegistrationOutcome::AlreadyRegistered(record));
+        }
+'''
+          assert text.count(old) == 1, 'provider registration block not found exactly once'
+          text = text.replace(old, new)
+
+          old = '''        let Some(_avaia_pub_dress) =
+            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        else {
+            transaction.rollback().await?;
+            return Ok(RegistrationOutcome::AvaiaUnavailable);
+        };
+
+'''
+          assert text.count(old) == 1, 'provider Avaia creation block not found exactly once'
+          text = text.replace(old, '')
+
+          old = '''        let Some(_avaia_pub_dress) =
+            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
+        else {
+            transaction.rollback().await?;
+            return Ok(NativeRegistrationOutcome::AvaiaUnavailable);
+        };
+
+'''
+          assert text.count(old) == 1, 'native Avaia creation block not found exactly once'
+          text = text.replace(old, '')
+
+          repository.write_text(text)
+
+          text = api.read_text()
+
+          old = '''    match state.repository.reconcile_owned_avaia(&owner, now).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia reconciliation failed");
+            return unavailable();
+        }
+    }
+
+    let mut response = match state.repository.owned_avaia_identity(&owner).await {
+        Ok(Some(profile)) => {
+            let location = match state.repository.read_avaia_location(&owner).await {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, "owned Avaia location lookup failed");
+                    return unavailable();
+                }
+            };
+            no_store_json(StatusCode::OK, avaia_identity_projection(profile, location))
+        }
+        Ok(None) => unavailable(),
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia profile lookup failed");
+            unavailable()
+        }
+    };
+'''
+          new = '''    let mut response = match state.repository.owned_avaia_identity(&owner).await {
+        Ok(Some(profile)) => {
+            let location = match state.repository.read_avaia_location(&owner).await {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, "owned Avaia location lookup failed");
+                    return unavailable();
+                }
+            };
+            no_store_json(StatusCode::OK, avaia_identity_projection(profile, location))
+        }
+        Ok(None) => {
+            // Before the first Create action there is no Avaia identity to read.
+            // The derived address is only a suggestion; it is not persisted and
+            // does not become protocol truth until the explicit POST below.
+            let suggested = AvaiaPubDress::derive_default(&owner).to_string();
+            let profile = crate::AvaiaIdentityRecord {
+                pub_dress: suggested,
+                owner_pub_dress: owner.as_str().to_owned(),
+                configuration_state: crate::AvaiaConfigurationState::Unconfigured,
+            };
+            no_store_json(StatusCode::OK, avaia_identity_projection(profile, None))
+        }
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia profile lookup failed");
+            unavailable()
+        }
+    };
+'''
+          assert text.count(old) == 1, 'Avaia GET reconciliation block not found exactly once'
+          text = text.replace(old, new)
+
+          old = '''    // The owned Avaia must exist before its location can be published.
+    match state.repository.reconcile_owned_avaia(&owner, now).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return unauthorized(),
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia reconciliation failed");
+            return unavailable();
+        }
+    }
+
+    let location = crate::AvaiaLocation::new(coordinate, crate::DecimalU64::new(now));
+'''
+          new = '''    // Publishing a location is an action on an already-created Avaia. It must
+    // never be the operation that creates the identity as a side effect.
+    match state.repository.owned_avaia_identity(&owner).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return no_store_error(
+                StatusCode::CONFLICT,
+                "avaia_unavailable",
+                "Create the Avaia before publishing its location.",
+            );
+        }
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia profile lookup failed");
+            return unavailable();
+        }
+    }
+
+    let location = crate::AvaiaLocation::new(coordinate, crate::DecimalU64::new(now));
+'''
+          assert text.count(old) == 1, 'location reconciliation block not found exactly once'
+          text = text.replace(old, new)
+
+          api.write_text(text)
+          PY
+
+      - name: Update tests for deferred Avaia creation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('services/identity/src/repository.rs')
+          text = p.read_text()
+
+          replacements = {
+            '''    async fn provider_registration_atomically_creates_the_owned_avaia() {''': '''    async fn provider_registration_does_not_create_the_owned_avaia() {''',
+            '''            RegistrationOutcome::Registered(record)
+                if record.pub_dress == "0xda-sha."
+                    && record.avaia_pub_dress.as_deref() == Some("xda-sha.ai")
+''': '''            RegistrationOutcome::Registered(record)
+                if record.pub_dress == "0xda-sha."
+                    && record.avaia_pub_dress.is_none()
+''',
+            '''    async fn provider_registration_rolls_back_when_the_default_avaia_collides() {''': '''    async fn provider_registration_is_independent_of_default_avaia_collisions() {''',
+            '''        assert!(matches!(
+            repository
+                .register(&candidate_owner, &ProviderIdentity::discord("20"), 101)
+                .await,
+            Ok(RegistrationOutcome::AvaiaUnavailable)
+        ));
+''': '''        assert!(matches!(
+            repository
+                .register(&candidate_owner, &ProviderIdentity::discord("20"), 101)
+                .await,
+            Ok(RegistrationOutcome::Registered(record)) if record.avaia_pub_dress.is_none()
+        ));
+''',
+            '''        assert!(
+            repository
+                .is_pub_dress_available(&candidate_owner)
+                .await
+                .expect("rolled-back human address remains available")
+        );
+''': '''        assert!(
+            !repository
+                .is_pub_dress_available(&candidate_owner)
+                .await
+                .expect("human address is registered")
+        );
+        let avaia_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia' AND owner_pub_dress = '0x0sk'",
+        )
+        .fetch_one(&repository.pool)
+        .await
+        .expect("Avaia count");
+        assert_eq!(avaia_count, 0);
+''',
+            '''        assert_eq!(telegram.avaia_pub_dress.as_deref(), Some("x0skai"));
+''': '''        assert_eq!(telegram.avaia_pub_dress, None);
+''',
+            '''                if record.avaia_pub_dress.as_deref() == Some("x7skai")
+''': '''                if record.avaia_pub_dress.is_none()
+''',
+            '''                if record.avaia_pub_dress.as_deref() == Some("x0skai")
+                    && record.readable_url("nilx.one").as_deref() == Some("https://0x0sky.nilx.one")
+''': '''                if record.avaia_pub_dress.is_none()
+                    && record.readable_url("nilx.one").as_deref() == Some("https://0x0sky.nilx.one")
+''',
+            '''    async fn native_idempotency_does_not_create_a_second_avaia() {''': '''    async fn native_idempotency_does_not_create_an_avaia() {''',
+            '''                if record.avaia_pub_dress.as_deref() == Some("x0skai")
+                    && record.pub_dress_label.as_deref() == Some("0x0sky")
+''': '''                if record.avaia_pub_dress.is_none()
+                    && record.pub_dress_label.as_deref() == Some("0x0sky")
+''',
+            '''        assert_eq!(count, 1);
+''': '''        assert_eq!(count, 0);
+''',
+            '''        assert_eq!(session.avaia_pub_dress.as_deref(), Some("x0skai"));
+''': '''        assert_eq!(session.avaia_pub_dress, None);
+''',
+          }
+          for old, new in replacements.items():
+              if text.count(old) != 1:
+                  raise SystemExit(f'replacement count for {old[:70]!r}: {text.count(old)}')
+              text = text.replace(old, new)
+          p.write_text(text)
+          PY
+
+      - name: Commit and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "0x0sky's bot"
+          git config user.email "x0sky@proton.me"
+          rm .github/workflows/_fix-avaia-lifecycle.yml
+          git add services/identity/src/repository.rs services/identity/src/api_avaia.rs .github/workflows/_fix-avaia-lifecycle.yml
+          git commit -m "fix(avaia): defer creation until explicit setup"
+          git push origin HEAD:fix/avaia-read-no-create
