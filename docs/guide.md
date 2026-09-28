@@ -29,7 +29,12 @@ own engine:
 - the camera is staged around the two of them — over the Bond's shoulder
   while she approaches, a two-shot from the side, shot and reverse shot while
   they talk, a slow drift while a line is held — and handed back exactly where
-  it was when she leaves;
+  it was when she leaves. No shot is filmed through a wall: the buildings the
+  basemap has already loaded around the Bond, at the height it raises them,
+  are read once as a scene starts, and a shot whose eye would stand behind
+  one is turned the shortest way round the two of them, lowered towards
+  overhead where turning is not enough, and taken from straight above when
+  they are walled in on every side;
 - what she says is typed out in subtitles under her name, and the replies a
   person can give are listed beneath them. A reply is said back in the Bond's
   own voice, with the camera on the Bond, before she answers it.

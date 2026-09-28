@@ -29,16 +29,21 @@ import {
   GUIDE_NODES,
 } from "./guide-script";
 import {
+  clearShot,
   driftCamera,
   GUIDE_LEAVE_MS,
   GUIDE_WALK_MS,
   guideCameraPadding,
   guideModel,
   guideShotCamera,
+  guideSightlines,
   guideStage,
+  OPEN_GROUND,
   sampleGuideBody,
+  shotIsClear,
   type GuideBodyMotion,
   type GuideShot,
+  type GuideSightlines,
   type GuideStage,
 } from "./guide-stage";
 
@@ -131,6 +136,7 @@ export function useGuideCutscene({
   const [playing, setPlayingState] = useState<Playing | undefined>(undefined);
   const playingRef = useRef<Playing | undefined>(undefined);
   const stageRef = useRef<GuideStage | undefined>(undefined);
+  const sightlinesRef = useRef<GuideSightlines>(OPEN_GROUND);
   const baseCameraRef = useRef<MapCamera | undefined>(undefined);
   const motionRef = useRef<GuideBodyMotion | undefined>(undefined);
   const anchorRef = useRef(anchor);
@@ -156,16 +162,41 @@ export function useGuideCutscene({
     [renderer, reducedMotion],
   );
 
+  /** A written shot, turned off any wall that would stand in front of it. */
+  const frame = useCallback(
+    (shot: GuideShot, stage: GuideStage): MapCamera =>
+      clearShot(
+        guideShotCamera(shot, stage),
+        stage,
+        sightlinesRef.current,
+        viewportHeight(),
+      ),
+    [],
+  );
+
+  /** Breathing, unless the creep sideways would walk into a wall: then in only. */
+  const drift = useCallback((camera: MapCamera, stage: GuideStage) => {
+    const drifted = driftCamera(camera);
+    return shotIsClear(drifted, stage, sightlinesRef.current, viewportHeight())
+      ? drifted
+      : { ...camera, zoom: drifted.zoom };
+  }, []);
+
   const play = useCallback(
     (scene: GuideSceneId, options: GuidePlayOptions = {}) => {
       if (playingRef.current !== undefined) return;
       const base = renderer.getCamera();
       baseCameraRef.current = base;
-      stageRef.current = guideStage(
-        anchorRef.current ?? {
-          longitude: base.center[0],
-          latitude: base.center[1],
-        },
+      const you = anchorRef.current ?? {
+        longitude: base.center[0],
+        latitude: base.center[1],
+      };
+      stageRef.current = guideStage(you);
+      sightlinesRef.current = guideSightlines(
+        you,
+        renderer.obstaclesWithin === undefined
+          ? undefined
+          : (bounds) => renderer.obstaclesWithin?.(bounds) ?? [],
       );
       playedScenes += 1;
       setPlaying({
@@ -265,16 +296,13 @@ export function useGuideCutscene({
               durationMs: GUIDE_WALK_MS,
             };
         if (reducedMotion) {
-          shoot(guideShotCamera("two-shot", stage), 0);
+          shoot(frame("two-shot", stage), 0);
           later(0, toLine);
           break;
         }
-        shoot(guideShotCamera("establish", stage), ESTABLISH_MS);
+        shoot(frame("establish", stage), ESTABLISH_MS);
         later(ESTABLISH_MS, () =>
-          shoot(
-            guideShotCamera("two-shot", stage),
-            GUIDE_WALK_MS - ESTABLISH_MS,
-          ),
+          shoot(frame("two-shot", stage), GUIDE_WALK_MS - ESTABLISH_MS),
         );
         later(GUIDE_WALK_MS, toLine);
         break;
@@ -290,15 +318,15 @@ export function useGuideCutscene({
             : {}),
         };
         const shot: GuideShot = script.shot;
-        const camera = guideShotCamera(shot, stage);
+        const camera = frame(shot, stage);
         shoot(camera, SHOT_MS);
         if (!reducedMotion) {
-          later(SHOT_MS, () => shoot(driftCamera(camera), DRIFT_MS));
+          later(SHOT_MS, () => shoot(drift(camera, stage), DRIFT_MS));
         }
         break;
       }
       case "reply": {
-        shoot(guideShotCamera("you", stage), REPLY_SHOT_MS);
+        shoot(frame("you", stage), REPLY_SHOT_MS);
         later(GUIDE_REPLY_BEAT_MS, advance);
         break;
       }
@@ -322,7 +350,7 @@ export function useGuideCutscene({
     return () => {
       for (const timer of timers) globalThis.clearTimeout(timer);
     };
-  }, [beat, node, reducedMotion, shoot, finish, toLine, advance]);
+  }, [beat, node, reducedMotion, shoot, frame, drift, finish, toLine, advance]);
 
   // Her body, frame by frame, for as long as the scene lasts.
   const active = playing !== undefined;

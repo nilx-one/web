@@ -310,6 +310,12 @@ export interface MapObstacle {
     number,
     number,
   ])[])[])[];
+  /**
+   * How tall each building polygon is raised, in metres, in the same order as
+   * `polygons` — what the basemap draws, its default where the data is
+   * silent. Absent for water, and for a renderer that cannot say.
+   */
+  readonly heights?: readonly number[];
 }
 
 /** A geographic box, west to east and south to north. */

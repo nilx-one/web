@@ -5,6 +5,8 @@ import {
   MAP_BODY_HANDOVER_ZOOM,
   mapCompassBearing,
   mapDistanceMeters,
+  type MapObstacle,
+  type MapPointSelection,
 } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
@@ -13,10 +15,15 @@ import {
   GUIDE_MAX_PITCH,
   GUIDE_STAND_METERS,
   GUIDE_WALK_MS,
+  clearShot,
   guideModel,
   guideShotCamera,
+  guideSightlines,
   guideStage,
+  offsetPoint,
+  OPEN_GROUND,
   sampleGuideBody,
+  shotIsClear,
   type GuideShot,
 } from "./guide-stage";
 
@@ -104,5 +111,102 @@ describe("where a scene with xSasha is staged", () => {
     expect(guideModel("sky-study")).toBe("dasha-v2-study");
     expect(guideModel(undefined)).toBe("dasha-v2-study");
     expect(guideModel("dasha-v2-study")).toBe("dasha-study");
+  });
+});
+
+describe("a shot is never filmed through a wall", () => {
+  const stage = guideStage(KYIV);
+  const VIEWPORT = 800;
+
+  /** A block `width` × `depth` metres, its near face `from` metres away. */
+  function block(
+    bearing: number,
+    from: number,
+    depth: number,
+    width: number,
+    height: number,
+    around: MapPointSelection = KYIV,
+  ): MapObstacle {
+    const side = bearing + 90;
+    const corner = (along: number, across: number): [number, number] => {
+      const p = offsetPoint(offsetPoint(around, bearing, along), side, across);
+      return [p.longitude, p.latitude];
+    };
+    const ring = [
+      corner(from, -width / 2),
+      corner(from, width / 2),
+      corner(from + depth, width / 2),
+      corner(from + depth, -width / 2),
+      corner(from, -width / 2),
+    ];
+    return { kind: "building", polygons: [[ring]], heights: [height] };
+  }
+
+  const within = (obstacles: readonly MapObstacle[]) => () => obstacles;
+
+  it("keeps the written shot where nothing is built", () => {
+    for (const shot of ["establish", "dasha", "you", "two-shot"] as const) {
+      const camera = guideShotCamera(shot, stage);
+      expect(clearShot(camera, stage, OPEN_GROUND, VIEWPORT)).toEqual(camera);
+      expect(
+        clearShot(camera, stage, guideSightlines(KYIV, undefined), VIEWPORT),
+      ).toEqual(camera);
+    }
+  });
+
+  it("turns round the two of them when a building stands behind the camera", () => {
+    // Her close-up looks north-north-east, so its eye stands to the south.
+    const camera = guideShotCamera("dasha", stage);
+    const wall = guideSightlines(
+      KYIV,
+      within([block(camera.bearing + 180, 5, 12, 24, 18)]),
+    );
+    expect(shotIsClear(camera, stage, wall, VIEWPORT)).toBe(false);
+
+    const reshot = clearShot(camera, stage, wall, VIEWPORT);
+    expect(shotIsClear(reshot, stage, wall, VIEWPORT)).toBe(true);
+    expect(reshot).not.toEqual(camera);
+    // The nearest way round, not a leap to the other side of them.
+    const turned = Math.abs(
+      ((reshot.bearing - camera.bearing + 540) % 360) - 180,
+    );
+    expect(turned).toBeLessThan(90);
+    expect(reshot.zoom).toBe(camera.zoom);
+  });
+
+  it("looks over what is too low to hide anyone", () => {
+    const camera = guideShotCamera("dasha", stage);
+    const kerb = guideSightlines(
+      KYIV,
+      within([block(camera.bearing + 180, 5, 3, 24, 0.5)]),
+    );
+    expect(clearShot(camera, stage, kerb, VIEWPORT)).toEqual(camera);
+  });
+
+  it("ignores water, which hides no one", () => {
+    const camera = guideShotCamera("dasha", stage);
+    const pond = block(camera.bearing + 180, 5, 12, 24, 18);
+    const water = guideSightlines(
+      KYIV,
+      within([{ kind: "water", polygons: pond.polygons }]),
+    );
+    expect(clearShot(camera, stage, water, VIEWPORT)).toEqual(camera);
+  });
+
+  it("lets be a building the Bond is standing inside", () => {
+    const camera = guideShotCamera("dasha", stage);
+    const hall = guideSightlines(KYIV, within([block(180, -40, 80, 80, 20)]));
+    expect(clearShot(camera, stage, hall, VIEWPORT)).toEqual(camera);
+  });
+
+  it("films from overhead when it is walled in on every side", () => {
+    const camera = guideShotCamera("two-shot", stage);
+    const courtyard = guideSightlines(
+      KYIV,
+      within([0, 90, 180, 270].map((bearing) => block(bearing, 6, 30, 60, 60))),
+    );
+    const reshot = clearShot(camera, stage, courtyard, VIEWPORT);
+    expect(shotIsClear(reshot, stage, courtyard, VIEWPORT)).toBe(true);
+    expect(reshot.pitch).toBeLessThan(camera.pitch);
   });
 });

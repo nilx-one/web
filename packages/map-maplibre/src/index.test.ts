@@ -6,6 +6,7 @@ import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  BUILDING_DEFAULT_HEIGHT_METERS,
   BUILDING_EXTRUSION_LAYER_ID,
   FOG_MARKS_FILL_LAYER_ID,
   FOG_MARKS_OUTLINE_LAYER_ID,
@@ -958,6 +959,11 @@ describe("obstacles the basemap draws", () => {
         query.sourceLayer === "buildings"
           ? [
               { geometry: square(30.5234, 50.4501), properties: {} },
+              // A tower the data measures stands at its own height.
+              {
+                geometry: square(30.5244, 50.4511),
+                properties: { height: 48 },
+              },
               // Far outside the box: never an obstacle to this walk.
               { geometry: square(31.5, 51.5), properties: {} },
               // A line is not ground anything stands on.
@@ -1003,8 +1009,15 @@ describe("obstacles the basemap draws", () => {
     ]);
     expect(obstacles?.[0]?.polygons).toEqual([
       square(30.5234, 50.4501).coordinates,
+      square(30.5244, 50.4511).coordinates,
+    ]);
+    // Unmeasured buildings stand as tall as the style raises them.
+    expect(obstacles?.[0]?.heights).toEqual([
+      BUILDING_DEFAULT_HEIGHT_METERS,
+      48,
     ]);
     expect(obstacles?.[1]?.polygons).toHaveLength(1);
+    expect(obstacles?.[1]?.heights).toBeUndefined();
   });
 
   it("answers nothing before a map is mounted", () => {

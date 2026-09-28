@@ -5,8 +5,10 @@ import {
   mapCompassBearing,
   type AvatarClipId,
   type AvatarModelId,
+  type MapBounds,
   type MapCamera,
   type MapCameraPadding,
+  type MapObstacle,
   type MapPointSelection,
 } from "@nilx-one/map-contract";
 
@@ -129,6 +131,246 @@ export function guideShotCamera(shot: GuideShot, stage: GuideStage): MapCamera {
     pitch: Math.min(GUIDE_MAX_PITCH, frame.pitch),
     bearing: frame.bearing,
   };
+}
+
+/**
+ * What is built around the stage, in metres east and north of the Bond, and
+ * how tall — everything that could stand between the camera and the two of
+ * them.
+ */
+export interface GuideSightlines {
+  readonly origin: MapPointSelection;
+  readonly walls: readonly GuideWall[];
+}
+
+interface GuideWall {
+  readonly ring: readonly Local[];
+  readonly height: number;
+}
+
+type Local = readonly [east: number, north: number];
+
+/** Nothing built is known: every shot is as clear as it was written. */
+export const OPEN_GROUND: GuideSightlines = {
+  origin: { longitude: 0, latitude: 0 },
+  walls: [],
+};
+
+/** Far enough to hold where the widest shot puts the camera. */
+const SIGHTLINE_REACH_METERS = 180;
+/** A building the basemap raises without saying how far. */
+const UNKNOWN_WALL_METERS = 7;
+
+function localOf(origin: MapPointSelection, lngLat: readonly number[]): Local {
+  return [
+    ((lngLat[0] ?? origin.longitude) - origin.longitude) *
+      METERS_PER_DEGREE_LATITUDE *
+      Math.cos(radians(origin.latitude)),
+    ((lngLat[1] ?? origin.latitude) - origin.latitude) *
+      METERS_PER_DEGREE_LATITUDE,
+  ];
+}
+
+function boundsAround(center: MapPointSelection, meters: number): MapBounds {
+  const dLat = meters / METERS_PER_DEGREE_LATITUDE;
+  const dLng =
+    meters / (METERS_PER_DEGREE_LATITUDE * Math.cos(radians(center.latitude)));
+  return {
+    west: center.longitude - dLng,
+    south: center.latitude - dLat,
+    east: center.longitude + dLng,
+    north: center.latitude + dLat,
+  };
+}
+
+/**
+ * The buildings the basemap has already loaded around the Bond, read once as
+ * a scene starts. Water never hides anyone, so it is left out. A renderer
+ * that cannot say leaves the ground open.
+ */
+export function guideSightlines(
+  you: MapPointSelection,
+  obstaclesWithin?: (bounds: MapBounds) => readonly MapObstacle[],
+): GuideSightlines {
+  if (obstaclesWithin === undefined) return OPEN_GROUND;
+  const walls = obstaclesWithin(boundsAround(you, SIGHTLINE_REACH_METERS))
+    .filter((obstacle) => obstacle.kind === "building")
+    .flatMap((obstacle) =>
+      obstacle.polygons.map((polygon, index) => ({
+        ring: (polygon[0] ?? []).map((lngLat) => localOf(you, lngLat)),
+        height: obstacle.heights?.[index] ?? UNKNOWN_WALL_METERS,
+      })),
+    )
+    .filter((wall) => wall.ring.length >= 3);
+  return { origin: you, walls };
+}
+
+function insideRing(point: Local, ring: readonly Local[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const a = ring[i];
+    const b = ring[j];
+    if (a === undefined || b === undefined) continue;
+    if (
+      a[1] > point[1] !== b[1] > point[1] &&
+      point[0] < ((b[0] - a[0]) * (point[1] - a[1])) / (b[1] - a[1]) + a[0]
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/** How far along `from`→`to`, 0 to 1, the segment first meets the ring. */
+function firstCrossing(
+  from: Local,
+  to: Local,
+  ring: readonly Local[],
+): number | undefined {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  let first: number | undefined;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const a = ring[j];
+    const b = ring[i];
+    if (a === undefined || b === undefined) continue;
+    const ex = b[0] - a[0];
+    const ey = b[1] - a[1];
+    const denominator = dx * ey - dy * ex;
+    if (denominator === 0) continue;
+    const t = ((a[0] - from[0]) * ey - (a[1] - from[1]) * ex) / denominator;
+    const u = ((a[0] - from[0]) * dy - (a[1] - from[1]) * dx) / denominator;
+    if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+    if (first === undefined || t < first) first = t;
+  }
+  return first;
+}
+
+/**
+ * MapLibre's default field of view puts the eye one and a half viewport
+ * heights from the point it looks at, in pixels of the tile world.
+ */
+const EYE_DISTANCE_PER_VIEWPORT_HEIGHT = 1.5;
+const EARTH_CIRCUMFERENCE_METERS = 40_075_016.686;
+const TILE_WORLD_PIXELS = 512;
+/** Seen from the chest up: a sightline is drawn to here, not to the feet. */
+const SUBJECT_SIGHT_METERS = 1.2;
+/** The frame is wider than a line: a wall just beside it still fills it. */
+const SIGHT_SHOULDER_METERS = 1.5;
+
+/** Where the camera's eye is, over the ground, for a camera on this stage. */
+function eyeOf(
+  camera: MapCamera,
+  origin: MapPointSelection,
+  viewportHeight: number,
+): { readonly at: Local; readonly height: number; readonly across: Local } {
+  const metersPerPixel =
+    (EARTH_CIRCUMFERENCE_METERS * Math.cos(radians(camera.center[1]))) /
+    (TILE_WORLD_PIXELS * 2 ** camera.zoom);
+  const distance =
+    EYE_DISTANCE_PER_VIEWPORT_HEIGHT * viewportHeight * metersPerPixel;
+  const pitch = radians(camera.pitch);
+  const behind = radians(camera.bearing + 180);
+  const reach = distance * Math.sin(pitch);
+  const center = localOf(origin, camera.center);
+  return {
+    at: [
+      center[0] + Math.sin(behind) * reach,
+      center[1] + Math.cos(behind) * reach,
+    ],
+    height: distance * Math.cos(pitch),
+    across: [Math.cos(behind), -Math.sin(behind)],
+  };
+}
+
+/**
+ * Whether the camera sees both of them: no building the basemap raises
+ * stands between its eye and either body. A building someone is standing
+ * inside — a fix taken indoors — cannot be filmed round, and is let be.
+ */
+export function shotIsClear(
+  camera: MapCamera,
+  stage: GuideStage,
+  sightlines: GuideSightlines,
+  viewportHeight: number,
+): boolean {
+  if (sightlines.walls.length === 0) return true;
+  const eye = eyeOf(camera, sightlines.origin, viewportHeight);
+  for (const subject of [stage.you, stage.dasha]) {
+    const body = localOf(sightlines.origin, [
+      subject.longitude,
+      subject.latitude,
+    ]);
+    for (const wall of sightlines.walls) {
+      if (insideRing(body, wall.ring)) continue;
+      for (const shoulder of [0, -1, 1]) {
+        const offset = shoulder * SIGHT_SHOULDER_METERS;
+        const t = firstCrossing(
+          body,
+          [
+            eye.at[0] + eye.across[0] * offset,
+            eye.at[1] + eye.across[1] * offset,
+          ],
+          wall.ring,
+        );
+        if (t === undefined) continue;
+        const sight =
+          SUBJECT_SIGHT_METERS + (eye.height - SUBJECT_SIGHT_METERS) * t;
+        if (wall.height > sight) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** Turning round them costs a degree a degree; looking down costs more. */
+const RESHOOT_BEARING_STEP = 10;
+const RESHOOT_PITCH_STEP = 8;
+const RESHOOT_MIN_PITCH = 20;
+const RESHOOT_PITCH_COST = 3;
+
+/**
+ * The written shot, or the nearest one to it that is not filmed through a
+ * wall: turned a little round the two of them first, lowered towards
+ * overhead where turning is not enough, and straight down when nothing else
+ * sees them — from overhead nothing stands in the way.
+ */
+export function clearShot(
+  camera: MapCamera,
+  stage: GuideStage,
+  sightlines: GuideSightlines,
+  viewportHeight: number,
+): MapCamera {
+  if (shotIsClear(camera, stage, sightlines, viewportHeight)) return camera;
+  const candidates: { readonly camera: MapCamera; readonly cost: number }[] =
+    [];
+  for (
+    let pitch = camera.pitch;
+    pitch >= Math.min(camera.pitch, RESHOOT_MIN_PITCH);
+    pitch -= RESHOOT_PITCH_STEP
+  ) {
+    for (
+      let turn = -180 + RESHOOT_BEARING_STEP;
+      turn <= 180;
+      turn += RESHOOT_BEARING_STEP
+    ) {
+      candidates.push({
+        camera: {
+          ...camera,
+          pitch,
+          bearing: (((camera.bearing + turn) % 360) + 360) % 360,
+        },
+        cost: Math.abs(turn) + (camera.pitch - pitch) * RESHOOT_PITCH_COST,
+      });
+    }
+  }
+  candidates.sort((a, b) => a.cost - b.cost);
+  for (const candidate of candidates) {
+    if (shotIsClear(candidate.camera, stage, sightlines, viewportHeight)) {
+      return candidate.camera;
+    }
+  }
+  return { ...camera, pitch: 0 };
 }
 
 /** A held shot keeps breathing: a slow creep sideways and in. */
