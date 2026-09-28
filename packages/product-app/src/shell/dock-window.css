@@ -11,8 +11,23 @@
   --dock-window-ease: cubic-bezier(0.32, 0.72, 0, 1);
   /* The screen being left does not leave; it gives way behind the new one. */
   --dock-window-recede: 26%;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
   position: relative;
   transition: height var(--dock-window-duration) var(--dock-window-ease);
+}
+
+/* A screen is a fixed header over a scrolling body. min-height: 0 lets that
+   body shrink once the card is as tall as the shell allows. */
+.bond-dock__screen {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
 }
 
 /* Clipping is only true while a pair is travelling. A settled window must not

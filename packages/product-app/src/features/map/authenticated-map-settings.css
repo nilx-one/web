@@ -4,6 +4,7 @@
 .bond-dock__header,
 .bond-dock__detail-header {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -62,19 +63,27 @@
 }
 
 .bond-dock__detail {
-  display: grid;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+/* Spacing that used to be the detail grid's gap now lives in the scroller,
+   so it scrolls away with the body instead of holding a gap open under the
+   fixed header. */
+.bond-dock__detail > .bond-dock__scroll {
   gap: 1.35rem;
+  padding-top: 1.35rem;
 }
 
 .bond-dock__detail-header {
   align-items: flex-start;
-  /* Stays inside the Dock's padding, so the back control keeps the card's top
-     inset instead of sitting on the card's edge. Sticky top: 0 is measured
-     from that padded content edge, which is the indent. The row paints
-     nothing of its own: the Dock card is the surface. */
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  /* Stays inside the Dock's padding, above the scrolling body, so the back
+     control keeps the card's top inset instead of sitting on the card's edge.
+     The row paints nothing of its own: the Dock card is the surface. */
   background: transparent;
 }
 
