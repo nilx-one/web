@@ -88,10 +88,12 @@ impl IdentityRepository {
 
     /// Folds a carry and a batch of events into the shared totals.
     ///
+    /// Both numbers are the owner's assertion, not an attestation of play.
     /// Carry only ever rises: the greatest pre-sync total a device reports
     /// becomes the baseline, and a smaller report later does not lower it.
-    /// An event id that was already counted is ignored, so a retry cannot
-    /// pay twice. The returned totals are what `pub_info` now says.
+    /// An event id that was already stored is ignored, so a retry is not
+    /// added twice. The id and the caps are not evidence the amount was
+    /// earned. The returned totals are the report `pub_info` redistributes.
     pub async fn publish_experience(
         &self,
         owner: &PubDress,

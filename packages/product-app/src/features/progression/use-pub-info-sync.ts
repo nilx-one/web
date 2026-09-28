@@ -8,8 +8,10 @@ import { publishProgression, subscribeProgression } from "./progression";
 
 /**
  * Keeps one Bond's activity experience in step with `pub_info`: offers what
- * this device has earned, and adopts what the service already holds.
- * A host that cannot publish simply does not pass a port.
+ * this device has not published yet, and adopts the report the service
+ * redistributes. That report is the owner's assertion, labeled
+ * `authority: "client"`. A host that cannot publish simply does not pass a
+ * port.
  */
 export function usePubInfoSync(
   owner: string,

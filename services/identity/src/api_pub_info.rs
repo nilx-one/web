@@ -207,8 +207,8 @@ fn validate_publication(request: &PublishExperienceRequest) -> Option<Publicatio
 }
 
 /// `xp:` plus a nonce. A colon after the prefix is refused, so an id cannot
-/// carry a cell, a landmark, or any other subject — only the fact that
-/// something was earned.
+/// name a cell, a landmark, or any other subject. The id keeps a retry from
+/// being stored twice. It is not evidence that anything was earned.
 fn valid_event_id(id: &str) -> bool {
     let Some(nonce) = id.strip_prefix("xp:") else {
         return false;
