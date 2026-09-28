@@ -401,12 +401,7 @@ impl IdentityRepository {
     ) -> Result<RegistrationOutcome, RepositoryError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
-        if let Some(mut record) = find_by_provider_in(&mut transaction, provider_identity).await? {
-            if record.avaia_pub_dress.is_none() {
-                let owner = pub_dress_for(&record)?;
-                record.avaia_pub_dress =
-                    create_owned_avaia_in(&mut transaction, &owner, now).await?;
-            }
+        if let Some(record) = find_by_provider_in(&mut transaction, provider_identity).await? {
             transaction.commit().await?;
             return Ok(RegistrationOutcome::AlreadyRegistered(record));
         }
@@ -422,13 +417,6 @@ impl IdentityRepository {
                 return Ok(RegistrationOutcome::PublicLabelUnavailable);
             }
         }
-
-        let Some(_avaia_pub_dress) =
-            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
-        else {
-            transaction.rollback().await?;
-            return Ok(RegistrationOutcome::AvaiaUnavailable);
-        };
 
         sqlx::query(
             "INSERT INTO identity_providers (provider, provider_subject, pub_dress) VALUES (?, ?, ?)",
@@ -467,10 +455,12 @@ impl IdentityRepository {
         }
     }
 
-    pub async fn reconcile_owned_avaia(
+    /// Reads the full record of a human Bond. Observational only: a Bond
+    /// without an Avaia stays without one until its owner creates it through
+    /// the explicit Avaia setup.
+    pub async fn resolve_human_identity(
         &self,
         pub_dress: &PubDress,
-        now: u64,
     ) -> Result<Option<IdentityRecord>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let human_exists = sqlx::query_scalar::<_, bool>(
@@ -485,7 +475,6 @@ impl IdentityRepository {
             return Ok(None);
         }
 
-        create_owned_avaia_in(&mut transaction, pub_dress, now).await?;
         let record = identity_for_pub_dress_in(&mut transaction, pub_dress.to_string()).await?;
         transaction.commit().await?;
         Ok(Some(record))
@@ -501,7 +490,6 @@ impl IdentityRepository {
         &self,
         current: &PubDress,
         next: &PubDress,
-        now: u64,
     ) -> Result<PubDressRenameOutcome, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         // `identities.owner_pub_dress` is the one reference without
@@ -585,6 +573,8 @@ impl IdentityRepository {
             .execute(&mut *transaction)
             .await?;
 
+        // A Bond without an Avaia keeps none: renaming is not a creation
+        // boundary.
         if let Some(existing) = existing_avaia {
             let moved = derived_avaia.unwrap_or(existing);
             sqlx::query(
@@ -596,13 +586,6 @@ impl IdentityRepository {
             .bind(current.as_str())
             .execute(&mut *transaction)
             .await?;
-        } else {
-            // A pre-amendment Bond crossing this boundary gains the Avaia its
-            // new address derives, exactly as an authenticated read would.
-            let Some(_created) = create_owned_avaia_in(&mut transaction, next, now).await? else {
-                transaction.rollback().await?;
-                return Ok(PubDressRenameOutcome::AvaiaUnavailable);
-            };
         }
 
         let record = identity_for_pub_dress_in(&mut transaction, next.to_string()).await?;
@@ -617,7 +600,6 @@ impl IdentityRepository {
         &self,
         owner: &PubDress,
         next: &AvaiaPubDress,
-        now: u64,
     ) -> Result<PubDressRenameOutcome, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
 
@@ -659,19 +641,11 @@ impl IdentityRepository {
                 .execute(&mut *transaction)
                 .await?;
             }
-            // A Bond that predates the Avaia amendment names one here rather
-            // than waiting for a derivation it has already replaced.
+            // Naming is not a creation boundary: only the explicit Avaia
+            // setup creates one.
             None => {
-                sqlx::query(
-                    "INSERT INTO identities \
-                     (pub_dress, identity_kind, owner_pub_dress, created_at) \
-                     VALUES (?, 'avaia', ?, ?)",
-                )
-                .bind(next.as_str())
-                .bind(owner.as_str())
-                .bind(now as i64)
-                .execute(&mut *transaction)
-                .await?;
+                transaction.rollback().await?;
+                return Ok(PubDressRenameOutcome::AvaiaMissing);
             }
         }
 
@@ -779,13 +753,6 @@ impl IdentityRepository {
                 return Ok(NativeRegistrationOutcome::PublicLabelUnavailable);
             }
         }
-
-        let Some(_avaia_pub_dress) =
-            create_owned_avaia_in(&mut transaction, pub_dress, now).await?
-        else {
-            transaction.rollback().await?;
-            return Ok(NativeRegistrationOutcome::AvaiaUnavailable);
-        };
 
         sqlx::query(
             "INSERT INTO native_credentials \
@@ -1938,13 +1905,6 @@ async fn find_by_provider_in(
     }
 }
 
-fn pub_dress_for(record: &IdentityRecord) -> Result<PubDress, RepositoryError> {
-    record
-        .pub_dress
-        .parse()
-        .map_err(|_| RepositoryError::CorruptHumanPubDress)
-}
-
 fn native_credential_from_row(row: sqlx::sqlite::SqliteRow) -> NativeCredentialRecord {
     NativeCredentialRecord {
         pub_dress: row.get("pub_dress"),
@@ -1970,7 +1930,6 @@ pub enum NativeRegistrationOutcome {
     IdempotentReplay(IdentityRecord),
     HandleUnavailable,
     PublicLabelUnavailable,
-    AvaiaUnavailable,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1980,6 +1939,8 @@ pub enum PubDressRenameOutcome {
     Unavailable,
     /// The Avaia address the new owner address derives belongs to someone else.
     AvaiaUnavailable,
+    /// The owner has not created an Avaia yet, so there is nothing to name.
+    AvaiaMissing,
     /// The address the caller presented is no longer a human Bond.
     Unknown,
 }
@@ -1990,7 +1951,6 @@ pub enum RegistrationOutcome {
     AlreadyRegistered(IdentityRecord),
     HandleUnavailable,
     PublicLabelUnavailable,
-    AvaiaUnavailable,
 }
 
 #[derive(Debug, Error)]
@@ -2016,8 +1976,8 @@ mod tests {
     use std::str::FromStr;
 
     use super::{
-        IdentityRepository, NativeRegistrationOutcome, ProviderIdentity, RegistrationOutcome,
-        identity_for_pub_dress,
+        IdentityRepository, NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome,
+        RegistrationOutcome,
     };
     use crate::{AvaiaPubDress, PubDress, PubDressLabel};
 
@@ -2127,7 +2087,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_registration_atomically_creates_the_owned_avaia() {
+    async fn provider_registration_creates_only_the_human_bond() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
@@ -2140,8 +2100,7 @@ mod tests {
         assert!(matches!(
             outcome,
             RegistrationOutcome::Registered(record)
-                if record.pub_dress == "0xda-sha."
-                    && record.avaia_pub_dress.as_deref() == Some("xda-sha.ai")
+                if record.pub_dress == "0xda-sha." && record.avaia_pub_dress.is_none()
         ));
     }
 
@@ -2297,7 +2256,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_registration_rolls_back_when_the_default_avaia_collides() {
+    async fn provider_registration_is_not_gated_on_the_default_avaia_address() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
@@ -2306,31 +2265,98 @@ mod tests {
             .register(&occupying_owner, &ProviderIdentity::telegram(10), 100)
             .await
             .expect("occupying registration");
+        let occupied = AvaiaPubDress::derive_default(&occupying_owner);
+        repository
+            .configure_owned_avaia(&occupying_owner, &occupied, 100)
+            .await
+            .expect("explicit Avaia creation");
 
         // Core deliberately maps both `sky` and `sk` to the same default
-        // Avaia stem, so this is a real canonical-address collision rather
-        // than a hand-written guess at the naming contract.
+        // Avaia stem. Registration creates no Avaia, so that collision is no
+        // longer a reason to refuse the human Bond.
         let candidate_owner = PubDress::from_str("0x0sk").expect("valid second owner");
-        assert_eq!(
-            AvaiaPubDress::derive_default(&occupying_owner),
-            AvaiaPubDress::derive_default(&candidate_owner)
-        );
+        assert_eq!(occupied, AvaiaPubDress::derive_default(&candidate_owner));
+        let registered = repository
+            .register(&candidate_owner, &ProviderIdentity::discord("20"), 101)
+            .await
+            .expect("registration");
         assert!(matches!(
-            repository
-                .register(&candidate_owner, &ProviderIdentity::discord("20"), 101)
-                .await,
-            Ok(RegistrationOutcome::AvaiaUnavailable)
+            registered,
+            RegistrationOutcome::Registered(ref record) if record.avaia_pub_dress.is_none()
         ));
-        assert!(
-            repository
-                .is_pub_dress_available(&candidate_owner)
-                .await
-                .expect("rolled-back human address remains available")
+    }
+
+    #[tokio::test]
+    async fn repeated_provider_registration_reports_no_avaia_it_did_not_create() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let owner = PubDress::from_str("0x0sky").expect("valid owner");
+        repository
+            .register(&owner, &ProviderIdentity::telegram(11), 100)
+            .await
+            .expect("registration");
+        let again = repository
+            .register(&owner, &ProviderIdentity::telegram(11), 101)
+            .await
+            .expect("repeated registration");
+        assert!(matches!(
+            again,
+            RegistrationOutcome::AlreadyRegistered(ref record) if record.avaia_pub_dress.is_none()
+        ));
+        assert_eq!(
+            repository.owned_avaia_identity(&owner).await.expect("read"),
+            None
         );
     }
 
     #[tokio::test]
-    async fn pre_amendment_human_is_reconciled_only_at_the_current_boundary() {
+    async fn renaming_a_bond_without_an_avaia_creates_none() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let current = PubDress::from_str("0x0sky").expect("valid owner");
+        let next = PubDress::from_str("0x0mira").expect("valid next");
+        repository
+            .register(&current, &ProviderIdentity::telegram(12), 100)
+            .await
+            .expect("registration");
+        let renamed = repository
+            .rename_pub_dress(&current, &next)
+            .await
+            .expect("rename");
+        assert!(matches!(
+            renamed,
+            PubDressRenameOutcome::Renamed(ref record) if record.avaia_pub_dress.is_none()
+        ));
+    }
+
+    #[tokio::test]
+    async fn naming_an_avaia_that_does_not_exist_is_refused() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository must initialize");
+        let owner = PubDress::from_str("0x0sky").expect("valid owner");
+        repository
+            .register(&owner, &ProviderIdentity::telegram(13), 100)
+            .await
+            .expect("registration");
+        let next = AvaiaPubDress::from_str("x0newai").expect("valid Avaia");
+        assert_eq!(
+            repository
+                .rename_owned_avaia(&owner, &next)
+                .await
+                .expect("rename"),
+            PubDressRenameOutcome::AvaiaMissing
+        );
+        assert_eq!(
+            repository.owned_avaia_identity(&owner).await.expect("read"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn pre_amendment_human_is_resolved_without_gaining_an_avaia() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
@@ -2340,24 +2366,20 @@ mod tests {
             .expect("legacy human fixture");
         let address = PubDress::from_str("0xda-sha.").expect("valid pub_dress");
 
-        let before = identity_for_pub_dress(&repository.pool, address.to_string())
+        let resolved = repository
+            .resolve_human_identity(&address)
             .await
-            .expect("identity lookup");
-        assert_eq!(before.avaia_pub_dress, None);
-
-        let reconciled = repository
-            .reconcile_owned_avaia(&address, 777)
-            .await
-            .expect("reconciliation")
+            .expect("resolution")
             .expect("human exists");
-        assert_eq!(reconciled.avaia_pub_dress.as_deref(), Some("xda-sha.ai"));
-        let created_at = sqlx::query_scalar::<_, i64>(
-            "SELECT CAST(created_at AS INTEGER) FROM identities WHERE pub_dress = 'xda-sha.ai'",
+        assert_eq!(resolved.pub_dress, "0xda-sha.");
+        assert_eq!(resolved.avaia_pub_dress, None);
+        let avaia_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia'",
         )
         .fetch_one(&repository.pool)
         .await
-        .expect("creation timestamp");
-        assert_eq!(created_at, 777);
+        .expect("count");
+        assert_eq!(avaia_count, 0);
     }
 
     #[tokio::test]
@@ -2382,7 +2404,7 @@ mod tests {
             .await
             .expect("lookup")
             .expect("identity");
-        assert_eq!(telegram.avaia_pub_dress.as_deref(), Some("x0skai"));
+        assert_eq!(telegram.avaia_pub_dress, None);
         assert_eq!(
             telegram.readable_url("nilx.one").as_deref(),
             Some("https://0x0sky.nilx.one")
@@ -2392,7 +2414,7 @@ mod tests {
                 .register(&discord_address, &ProviderIdentity::discord("42"), 101)
                 .await,
             Ok(RegistrationOutcome::AlreadyRegistered(record))
-                if record.avaia_pub_dress.as_deref() == Some("x7skai")
+                if record.pub_dress == "0x7sky" && record.avaia_pub_dress.is_none()
         ));
     }
 
@@ -2451,7 +2473,7 @@ mod tests {
         assert!(matches!(
             outcome,
             NativeRegistrationOutcome::Registered(record)
-                if record.avaia_pub_dress.as_deref() == Some("x0skai")
+                if record.avaia_pub_dress.is_none()
                     && record.readable_url("nilx.one").as_deref() == Some("https://0x0sky.nilx.one")
         ));
         assert!(
@@ -2468,14 +2490,13 @@ mod tests {
                 .await
                 .expect("activation")
                 .expect("identity")
-                .avaia_pub_dress
-                .as_deref(),
-            Some("x0skai")
+                .avaia_pub_dress,
+            None
         );
     }
 
     #[tokio::test]
-    async fn native_idempotency_does_not_create_a_second_avaia() {
+    async fn native_idempotency_replays_without_creating_an_avaia() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
@@ -2508,7 +2529,7 @@ mod tests {
                 )
                 .await,
             Ok(NativeRegistrationOutcome::IdempotentReplay(record))
-                if record.avaia_pub_dress.as_deref() == Some("x0skai")
+                if record.avaia_pub_dress.is_none()
                     && record.pub_dress_label.as_deref() == Some("0x0sky")
         ));
         let count = sqlx::query_scalar::<_, i64>(
@@ -2517,7 +2538,7 @@ mod tests {
         .fetch_one(&repository.pool)
         .await
         .expect("count");
-        assert_eq!(count, 1);
+        assert_eq!(count, 0);
     }
 
     #[tokio::test]
@@ -2543,6 +2564,11 @@ mod tests {
             .activate_native_registration(b"challenge", 101)
             .await
             .expect("activation");
+        let avaia = AvaiaPubDress::from_str("x0skai").expect("valid Avaia");
+        repository
+            .configure_owned_avaia(&address, &avaia, 101)
+            .await
+            .expect("explicit Avaia creation");
         repository
             .create_native_session(b"session", "0x0sky", 101, 200, "test", false, None)
             .await

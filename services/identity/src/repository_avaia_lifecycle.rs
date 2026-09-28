@@ -271,7 +271,7 @@ fn avaia_identity_from_row(
 }
 
 #[cfg(test)]
-mod tests {
+mod avaia_lifecycle_repository_tests {
     use super::*;
 
     #[tokio::test]

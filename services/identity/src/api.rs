@@ -211,7 +211,7 @@ async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) 
         let token_hash = state.secret_digester.digest("native-session", &token);
         match state.repository.find_native_session(&token_hash, now).await {
             Ok(Some(identity)) => {
-                let identity = match reconcile_authenticated_identity(&state, identity, now).await {
+                let identity = match reconcile_authenticated_identity(&state, identity).await {
                     Some(value) => value,
                     None => return unavailable(),
                 };
@@ -362,11 +362,10 @@ async fn register_native_identity(
             "Registration committed and its recovery key was already issued.",
         ),
         Ok(NativeRegistrationOutcome::HandleUnavailable)
-        | Ok(NativeRegistrationOutcome::PublicLabelUnavailable)
-        | Ok(NativeRegistrationOutcome::AvaiaUnavailable) => no_store_error(
+        | Ok(NativeRegistrationOutcome::PublicLabelUnavailable) => no_store_error(
             StatusCode::CONFLICT,
             "pub_dress_unavailable",
-            "That pub_dress is already registered or cannot own its required Avaia address.",
+            "That pub_dress is already registered.",
         ),
         Err(error) => {
             tracing::error!(%error, "native identity registration failed");
@@ -713,7 +712,6 @@ async fn recover_native_identity(
 async fn reconcile_authenticated_identity(
     state: &ApiState,
     identity: IdentityRecord,
-    now: u64,
 ) -> Option<IdentityRecord> {
     if identity.avaia_pub_dress.is_some() {
         return Some(identity);
@@ -727,16 +725,16 @@ async fn reconcile_authenticated_identity(
     };
     match state
         .repository
-        .reconcile_owned_avaia(&pub_dress, now)
+        .resolve_human_identity(&pub_dress)
         .await
     {
         Ok(Some(record)) => Some(record),
         Ok(None) => {
-            tracing::error!(pub_dress = %identity.pub_dress, "authenticated human identity disappeared during Avaia reconciliation");
+            tracing::error!(pub_dress = %identity.pub_dress, "authenticated human identity disappeared during resolution");
             None
         }
         Err(error) => {
-            tracing::error!(%error, "authenticated Avaia reconciliation failed");
+            tracing::error!(%error, "authenticated identity resolution failed");
             None
         }
     }
@@ -749,7 +747,7 @@ async fn authenticated_response(
     now: u64,
     replacement_recovery_key: Option<String>,
 ) -> Response {
-    let identity = match reconcile_authenticated_identity(state, identity, now).await {
+    let identity = match reconcile_authenticated_identity(state, identity).await {
         Some(value) => value,
         None => return unavailable(),
     };
@@ -1079,7 +1077,7 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
             .await
         {
             Ok(Some((identity, active))) => {
-                return identity_response(&state, identity, now, active, None).await;
+                return identity_response(&state, identity, active, None).await;
             }
             Ok(None) => {}
             Err(error) => {
@@ -1104,7 +1102,7 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
                 client_label_for(provider_identity.provider),
             )
             .await;
-            identity_response(&state, identity, now, active, cookie).await
+            identity_response(&state, identity, active, cookie).await
         }
         Ok(None) => api_error(
             StatusCode::NOT_FOUND,
@@ -1121,11 +1119,10 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
 async fn identity_response(
     state: &ApiState,
     identity: IdentityRecord,
-    now: u64,
     active_client: bool,
     cookie: Option<String>,
 ) -> Response {
-    let identity = match reconcile_authenticated_identity(state, identity, now).await {
+    let identity = match reconcile_authenticated_identity(state, identity).await {
         Some(value) => value,
         None => return unavailable(),
     };
@@ -1333,7 +1330,7 @@ async fn rename_pub_dress_response(
     }
     match state
         .repository
-        .rename_pub_dress(&current, &next, now)
+        .rename_pub_dress(&current, &next)
         .await
     {
         Ok(PubDressRenameOutcome::Renamed(identity)) => {
@@ -1349,6 +1346,7 @@ async fn rename_pub_dress_response(
             "avaia_unavailable",
             "The Avaia address this name derives belongs to another identity.",
         ),
+        Ok(PubDressRenameOutcome::AvaiaMissing) => avaia_missing(),
         Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
         Err(error) => {
             tracing::error!(%error, "pub_dress rename failed");
@@ -1494,7 +1492,7 @@ async fn rename_owned_avaia_response(
     }
     match state
         .repository
-        .rename_owned_avaia(&owner, &next, now)
+        .rename_owned_avaia(&owner, &next)
         .await
     {
         Ok(PubDressRenameOutcome::Renamed(identity)) => {
@@ -1507,12 +1505,23 @@ async fn rename_owned_avaia_response(
                 "That Avaia address belongs to another identity.",
             )
         }
+        Ok(PubDressRenameOutcome::AvaiaMissing) => avaia_missing(),
         Ok(PubDressRenameOutcome::Unknown) => unauthorized(),
         Err(error) => {
             tracing::error!(%error, "Avaia rename failed");
             unavailable()
         }
     }
+}
+
+// Only the explicit Avaia setup creates an Avaia; naming one that does not
+// exist yet is refused rather than treated as a creation.
+fn avaia_missing() -> Response {
+    no_store_error(
+        StatusCode::CONFLICT,
+        "avaia_unavailable",
+        "Create the Avaia before naming it.",
+    )
 }
 
 fn invalid_avaia_pub_dress(error: crate::AvaiaPubDressError) -> Response {
@@ -1719,11 +1728,10 @@ async fn register_identity(
             .await
         }
         Ok(RegistrationOutcome::HandleUnavailable)
-        | Ok(RegistrationOutcome::PublicLabelUnavailable)
-        | Ok(RegistrationOutcome::AvaiaUnavailable) => api_error(
+        | Ok(RegistrationOutcome::PublicLabelUnavailable) => api_error(
             StatusCode::CONFLICT,
             "pub_dress_unavailable",
-            "That pub_dress cannot be registered with its required owned Avaia. Choose another one.",
+            "That pub_dress is already registered. Choose another one.",
         ),
         Err(error) => {
             tracing::error!(%error, "identity API registration failed");
@@ -2232,18 +2240,43 @@ mod tests {
         let provider_links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository must initialize");
+        let native_auth = NativeAuthConfig::new(
+            "test-auth-secret-that-is-at-least-thirty-two-bytes",
+            "test-password-pepper-that-is-at-least-thirty-two-bytes",
+        )
+        .expect("valid native auth configuration");
+        // Production serves the explicit Avaia setup next to the identity
+        // routes; tests create an Avaia the same way an owner does.
+        let avaia = super::avaia_router_with_clock(
+            repository.clone(),
+            provider_links.clone(),
+            TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
+            None,
+            native_auth.clone(),
+            Arc::new(StaticClock),
+        );
         router_with_clock(
             repository,
             provider_links,
             TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
             None,
-            NativeAuthConfig::new(
-                "test-auth-secret-that-is-at-least-thirty-two-bytes",
-                "test-password-pepper-that-is-at-least-thirty-two-bytes",
-            )
-            .expect("valid native auth configuration"),
+            native_auth,
             Arc::new(StaticClock),
         )
+        .merge(avaia)
+    }
+
+    async fn create_avaia(app: &axum::Router, cookies: &str, pub_dress: &str) {
+        let request = Request::post("/api/v1/identity/avaia")
+            .header("cookie", cookies)
+            .header(super::CSRF_HEADER, "1")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::json!({ "pub_dress": pub_dress }).to_string(),
+            ))
+            .expect("request");
+        let response = app.clone().oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -2320,7 +2353,8 @@ mod tests {
         let body = to_bytes(second.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["identity"]["pub_dress"], "0x0sky");
-        assert_eq!(body["identity"]["avaia_pub_dress"], "x0skai");
+        // Registration creates the human Bond only.
+        assert!(body["identity"]["avaia_pub_dress"].is_null());
         assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
         assert!(body.to_string().find("provider_subject").is_none());
     }
@@ -2440,7 +2474,7 @@ mod tests {
         let body = to_bytes(response.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["state"], "recovery_key_required");
-        assert_eq!(body["identity"]["avaia_pub_dress"], "x0Skai");
+        assert!(body["identity"]["avaia_pub_dress"].is_null());
         assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
         assert!(
             body["recovery_key"]
@@ -2494,10 +2528,7 @@ mod tests {
             serde_json::from_slice(&authenticated_context).expect("JSON body");
         assert_eq!(authenticated_context["state"], "authenticated");
         assert_eq!(authenticated_context["identity"]["pub_dress"], "0x0Sky");
-        assert_eq!(
-            authenticated_context["identity"]["avaia_pub_dress"],
-            "x0Skai"
-        );
+        assert!(authenticated_context["identity"]["avaia_pub_dress"].is_null());
         assert_eq!(
             authenticated_context["identity"]["pub_dress_url"],
             "https://0x0sky.nilx.one"
@@ -3137,6 +3168,7 @@ mod tests {
     async fn rename_moves_the_bond_its_avaia_and_its_session_to_the_new_address() {
         let app = app().await;
         let cookies = native_session_cookies(&app, "0x0Sky", "rename-test-0001").await;
+        create_avaia(&app, &cookies, "x0Skai").await;
         let mut rename = rename_request("Rain");
         rename
             .headers_mut()
@@ -3404,6 +3436,16 @@ mod tests {
             request
         };
 
+        // Naming is not creation: without an Avaia there is nothing to name.
+        let missing = app
+            .clone()
+            .oneshot(with_session(avaia_rename_request("Vesnai")))
+            .await
+            .expect("response");
+        assert_eq!(missing.status(), StatusCode::CONFLICT);
+        assert_eq!(json_body(missing).await["error"]["code"], "avaia_unavailable");
+        create_avaia(&app, &cookies, "x0Skai").await;
+
         let named = app
             .clone()
             .oneshot(with_session(avaia_rename_request("Vesnai")))
@@ -3438,8 +3480,9 @@ mod tests {
     async fn avaia_rename_requires_the_canonical_suffix_and_a_free_address() {
         let app = app().await;
         let neighbour = native_session_cookies(&app, "0x0Rain", "avaia-rename-test-0002").await;
-        drop(neighbour);
+        create_avaia(&app, &neighbour, "x0Rainai").await;
         let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0003").await;
+        create_avaia(&app, &cookies, "x0Skai").await;
         let with_session = |slug: &str| {
             let mut request = avaia_rename_request(slug);
             request
@@ -3489,6 +3532,7 @@ mod tests {
     async fn owner_rename_still_moves_an_avaia_it_derived() {
         let app = app().await;
         let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0004").await;
+        create_avaia(&app, &cookies, "x0Skai").await;
         let mut rename = rename_request("Rain");
         rename
             .headers_mut()

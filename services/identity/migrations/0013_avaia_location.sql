@@ -28,12 +28,12 @@ CREATE TABLE IF NOT EXISTS avaia_configuration (
         CHECK (configuration_state IN ('unconfigured', 'configured'))
 ) STRICT;
 
--- Avaia creation is an explicit owner action. Legacy registration, rename and
--- reconciliation paths still share the old insertion helper, so the database
--- enforces the lifecycle boundary underneath all of them. The explicit create
--- transaction records its owner here before invoking that helper. Any other
--- Avaia INSERT is immediately removed in the same transaction, leaving the
--- human Bond intact and making implicit creation observationally impossible.
+-- Avaia creation is an explicit owner action. Registration, renames and
+-- identity resolution no longer insert Avaia identities; the database still
+-- enforces the lifecycle boundary underneath them as a backstop. The explicit
+-- create transaction records its owner here before inserting. Any other Avaia
+-- INSERT is immediately removed in the same transaction, leaving the human
+-- Bond intact and making implicit creation observationally impossible.
 CREATE TABLE IF NOT EXISTS avaia_creation_intents (
     owner_pub_dress TEXT PRIMARY KEY COLLATE BINARY NOT NULL
         REFERENCES identities(pub_dress) ON UPDATE CASCADE ON DELETE CASCADE

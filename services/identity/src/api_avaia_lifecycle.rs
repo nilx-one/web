@@ -330,10 +330,16 @@ async fn write_owned_avaia_location_response(
 }
 
 #[cfg(test)]
-mod tests {
+mod avaia_lifecycle_api_tests {
     use std::sync::{atomic::{AtomicU64, Ordering}, Arc};
 
-    use axum::{body::{Body, to_bytes}, http::{Request, StatusCode, header::AUTHORIZATION}};
+    use axum::{
+        body::{Body, to_bytes},
+        http::{
+            Request, StatusCode,
+            header::{AUTHORIZATION, COOKIE, SET_COOKIE},
+        },
+    };
     use hmac::{Hmac, Mac};
     use serde_json::Value;
     use sha2::Sha256;
@@ -460,21 +466,42 @@ mod tests {
     #[tokio::test]
     async fn explicit_create_is_idempotent() {
         let (app, auth) = app(8903, "0x0sky").await;
-        for _ in 0..2 {
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::post("/api/v1/identity/avaia")
-                        .header(AUTHORIZATION, format!("tma {auth}"))
-                        .header("x-0x1-csrf", "1")
-                        .header("content-type", "application/json")
-                        .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
-                        .expect("request"),
-                )
-                .await
-                .expect("response");
-            assert_eq!(response.status(), StatusCode::OK);
-            assert_eq!(json(response).await["configuration_state"], "configured");
-        }
+        let create = |credential: (axum::http::HeaderName, String)| {
+            Request::post("/api/v1/identity/avaia")
+                .header(credential.0, credential.1)
+                .header("x-0x1-csrf", "1")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
+                .expect("request")
+        };
+        let first = app
+            .clone()
+            .oneshot(create((AUTHORIZATION, format!("tma {auth}"))))
+            .await
+            .expect("response");
+        assert_eq!(first.status(), StatusCode::OK);
+        // The replay continues the same client's session rather than
+        // presenting the provider proof again as a second device would
+        // (Single Active Client).
+        let cookie = first
+            .headers()
+            .get(SET_COOKIE)
+            .expect("a session cookie is set on first authentication")
+            .to_str()
+            .expect("cookie header is valid UTF-8")
+            .split(';')
+            .next()
+            .expect("cookie has a name=value pair")
+            .to_owned();
+        assert_eq!(json(first).await["configuration_state"], "configured");
+
+        let replay = app
+            .oneshot(create((COOKIE, cookie)))
+            .await
+            .expect("response");
+        assert_eq!(replay.status(), StatusCode::OK);
+        let body = json(replay).await;
+        assert_eq!(body["pub_dress"], "x0newai");
+        assert_eq!(body["configuration_state"], "configured");
     }
 }

@@ -770,11 +770,7 @@ async fn issue_native_session(
         Err(_) => return callback_failure("provider_authentication_unavailable"),
     };
     if identity.avaia_pub_dress.is_none() {
-        identity = match state
-            .repository
-            .reconcile_owned_avaia(&pub_dress, now)
-            .await
-        {
+        identity = match state.repository.resolve_human_identity(&pub_dress).await {
             Ok(Some(value)) => value,
             _ => return callback_failure("provider_authentication_unavailable"),
         };
