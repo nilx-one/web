@@ -98,11 +98,9 @@ describe("State placement", () => {
     const progression = STATE_PLACEMENT.find(
       (record) => record.id === "progression",
     );
-    expect(progression).toMatchObject({
-      key: "nilx-one.progression.v1",
-      legacy: undefined,
-      deviceOnlyFields: undefined,
-    });
+    expect(progression?.key).toBe("nilx-one.progression.v1");
+    expect(progression?.legacy).toBeUndefined();
+    expect(progression?.deviceOnlyFields).toBeUndefined();
   });
 
   it("resolves an owner-suffixed key to its record", () => {
