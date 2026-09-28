@@ -464,14 +464,19 @@ describe("AuthenticatedMapHomeView", () => {
     expect(largeTitle).toHaveAttribute("aria-hidden", "false");
     expect(headerTitle).toHaveAttribute("aria-hidden", "true");
 
+    // The header stays outside the scroller; only the body under it moves.
+    const scroll = container.querySelector<HTMLElement>(".bond-dock__scroll");
+    expect(scroll).not.toBeNull();
+    expect(scroll?.contains(headerTitle)).toBe(false);
+    expect(scroll?.contains(largeTitle)).toBe(true);
+
     // Scrolled past it, the header's own small title takes over saying it —
     // still one heading, never both at once.
-    const surface = dock(container);
-    Object.defineProperty(surface, "scrollTop", {
+    Object.defineProperty(scroll, "scrollTop", {
       configurable: true,
       value: 200,
     });
-    fireEvent.scroll(surface);
+    fireEvent.scroll(scroll as HTMLElement);
 
     expect(largeTitle).toHaveAttribute("aria-hidden", "true");
     expect(headerTitle).toHaveAttribute("aria-hidden", "false");

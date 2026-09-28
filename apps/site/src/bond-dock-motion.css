@@ -41,7 +41,7 @@
 .profile-edit,
 .provider-management,
 .interface-settings__appearance,
-.bond-dock__detail > .interface-settings__note {
+.bond-dock__scroll > .interface-settings__note {
   animation: bond-dock-detail-content-enter var(--bond-motion-surface)
     var(--bond-motion-ease) both;
 }

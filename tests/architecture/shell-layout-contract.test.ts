@@ -100,9 +100,18 @@ describe("shell layout contract", () => {
 
     const detailHeader = rule(dockCss, ".bond-dock__detail-header");
     expect(detailHeader).toMatch(/background:\s*transparent/);
-    expect(detailHeader).toMatch(/top:\s*0/);
+    expect(detailHeader).not.toMatch(/position:\s*(sticky|fixed)/);
     expect(detailHeader).not.toMatch(/--dock-pad-top/);
     expect(detailHeader).not.toMatch(/--map-glass/);
+
+    const homeCss = stylesheet(
+      "packages/product-app/src/features/map/authenticated-map-home-view.css",
+    );
+    expect(dock).not.toMatch(/overflow-y:\s*auto/);
+    expect(dock).toMatch(/overflow:\s*hidden/);
+    const scroll = rule(homeCss, ".bond-dock__scroll");
+    expect(scroll).toMatch(/overflow-y:\s*auto/);
+    expect(scroll).toMatch(/min-height:\s*0/);
   });
 
   it("uses the measured bottom layer as the toast ceiling", () => {
