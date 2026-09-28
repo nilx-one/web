@@ -43,16 +43,17 @@ MAP_BASEMAP_PATH=/srv/nilx-one/map/basemap.pmtiles deploy/web/inspect-basemap.sh
 
 The published styles currently rely on exactly this much of the schema:
 
-| Source layer | Used for                        | Attributes read        |
-| ------------ | ------------------------------- | ---------------------- |
-| `earth`      | land mass                       | —                      |
-| `landcover`  | coarse natural cover            | `kind`                 |
-| `landuse`    | parks, green mass, urban fabric | `kind`                 |
-| `water`      | water bodies and rivers         | `kind_detail`          |
-| `roads`      | road hierarchy and rail         | `kind`                 |
-| `buildings`  | footprints and extruded volumes | `height`, `min_height` |
-| `boundaries` | administrative edges            | —                      |
-| `pois`       | quiet point detail              | —                      |
+| Source layer | Used for                        | Attributes read           |
+| ------------ | ------------------------------- | ------------------------- |
+| `earth`      | land mass                       | —                         |
+| `landcover`  | coarse natural cover            | `kind`                    |
+| `landuse`    | parks, green mass, urban fabric | `kind`                    |
+| `water`      | water bodies and rivers         | `kind_detail`             |
+| `roads`      | road hierarchy and rail         | `kind`                    |
+| `buildings`  | footprints and extruded volumes | `height`, `min_height`    |
+| `boundaries` | administrative edges            | —                         |
+| `places`     | locality and district names     | `kind`, `name`, `name:uk` |
+| `pois`       | quiet point detail, names       | `name`                    |
 
 `tests/deployment/map-assets.test.ts` keeps the styles inside that list, so
 adding an attribute to a style is a deliberate change that has to be verified
@@ -85,6 +86,28 @@ Building heights come from OpenStreetMap `height` where the data has it. Where
 it does not, the style falls back to a single conservative value declared in
 metadata as `presentation-only-7m`. That fallback is presentation, never
 geographic data, and it is never surfaced as a property of the building.
+
+## Labels
+
+Street, water, district and landmark names are drawn by MapLibre `symbol`
+layers from same-origin glyph ranges at `/map/0.1.0/fonts/{fontstack}/{range}.pbf`
+(Noto Sans Regular and SemiBold, ranges 0–8447: Latin, Cyrillic, punctuation;
+OFL-1.1, see `deploy/web/third_party/noto-sans`). Names read `name:uk` first and
+fall back to `name`. Appearance in zoom follows the scale ladder:
+
+| Layer                 | Kind filter                          | From zoom |
+| --------------------- | ------------------------------------ | --------- |
+| `place-locality`      | `locality`                           | 6         |
+| `place-district`      | `macrohood`, `borough`, `localadmin` | 10–15     |
+| `water-labels`        | named water                          | 11        |
+| `road-labels-major`   | `highway`, `major_road`              | 13        |
+| `place-neighbourhood` | `neighbourhood`                      | 13–17.5   |
+| `road-labels-minor`   | `medium_road`, `minor_road`          | 15        |
+| `poi-labels`          | any named `pois` point               | 16.5      |
+
+Districts hand over to neighbourhoods as the camera closes in, and streets
+appear before neighbourhood names fade. The `kind` values are Protomaps v4's;
+verify against a real archive with `inspect-basemap.sh` before relying on a new one.
 
 ## Visual language
 

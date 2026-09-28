@@ -1,0 +1,1 @@
+Noto Sans glyph ranges (map labels) — SIL Open Font License 1.1, https://openfontlicense.org — © The Noto Project Authors. Glyphs generated from the Noto Sans TTF via fontnik.

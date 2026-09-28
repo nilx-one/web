@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
@@ -22,6 +22,7 @@ interface MapStyleLayer {
   readonly minzoom?: number;
   readonly maxzoom?: number;
   readonly paint?: Record<string, unknown>;
+  readonly layout?: Record<string, unknown>;
 }
 
 interface MapStyleLight {
@@ -34,6 +35,7 @@ interface MapStyleLight {
 interface MapStyleContract {
   readonly version: number;
   readonly metadata?: Record<string, unknown>;
+  readonly glyphs?: string;
   readonly light?: MapStyleLight;
   readonly sources: Record<string, MapStyleSource>;
   readonly layers: readonly MapStyleLayer[];
@@ -62,7 +64,14 @@ const SOURCE_LAYERS = [
 // docs/map-data.md and verifiable against a real archive with
 // deploy/web/inspect-basemap.sh. A style that reads anything else is guessing
 // at a schema, and a wrong guess fails silently as missing geography.
-const SOURCE_ATTRIBUTES = ["kind", "kind_detail", "height", "min_height"];
+const SOURCE_ATTRIBUTES = [
+  "kind",
+  "kind_detail",
+  "height",
+  "min_height",
+  "name",
+  "name:uk",
+];
 
 function readStyleText(appearance: keyof typeof APPEARANCE_FILES): string {
   return readFileSync(resolve(APPEARANCE_FILES[appearance]), "utf8");
@@ -87,6 +96,10 @@ const OPACITY_PROPERTY: Readonly<Record<string, string>> = {
   "fill-extrusion": "fill-extrusion-opacity",
   circle: "circle-opacity",
 };
+
+// Labels are text over the ground, not ground: they have no fill of their own
+// to count when asking which layers paint at a zoom.
+const LABEL_LAYER_TYPE = "symbol";
 
 // Schema validation proves a style is well formed, not that it paints. These
 // evaluate the published zoom ramps so a layer cannot go silently invisible.
@@ -164,6 +177,7 @@ function layersPaintingAt(
   zoom: number,
 ): readonly string[] {
   return style.layers
+    .filter((layer) => layer.type !== LABEL_LAYER_TYPE)
     .filter((layer) => paintsAt(layer, zoom))
     .map((layer) => String(layer.id));
 }
@@ -222,6 +236,7 @@ describe("map deployment assets", () => {
       const zooms = Array.from({ length: 49 }, (_, step) => step * 0.5);
 
       const neverPainted = style.layers
+        .filter((layer) => layer.type !== LABEL_LAYER_TYPE)
         .filter((layer) => !zooms.some((zoom) => paintsAt(layer, zoom)))
         .map((layer) => layer.id);
 
@@ -288,8 +303,40 @@ describe("map deployment assets", () => {
       "buildings",
       "boundaries",
       "pois",
+      "water-labels",
+      "road-labels-major",
+      "road-labels-minor",
+      "place-neighbourhood",
+      "place-district",
+      "place-locality",
+      "poi-labels",
     ]);
   });
+
+  it.each(["light", "dark"] as const)(
+    "serves every label font from same-origin glyph ranges (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      expect(style.glyphs).toBe("/map/0.1.0/fonts/{fontstack}/{range}.pbf");
+
+      const fonts = new Set(
+        style.layers
+          .filter((layer) => layer.type === LABEL_LAYER_TYPE)
+          .flatMap((layer) => layer.layout?.["text-font"] as string[]),
+      );
+      expect(fonts.size).toBeGreaterThan(0);
+      // Latin, Cyrillic (Ukrainian names) and general punctuation.
+      for (const font of fonts) {
+        for (const range of ["0-255", "1024-1279", "8192-8447"]) {
+          expect(
+            existsSync(
+              resolve(`deploy/web/map/0.1.0/fonts/${font}/${range}.pbf`),
+            ),
+          ).toBe(true);
+        }
+      }
+    },
+  );
 
   it("keeps both appearances structurally identical so appearance is a palette swap", () => {
     expect(structure(readStyle("dark"))).toEqual(structure(readStyle("light")));
@@ -370,7 +417,7 @@ describe("map deployment assets", () => {
     "reads only feature attributes the published archive carries (%s)",
     (appearance) => {
       const read = [
-        ...readStyleText(appearance).matchAll(/"get",\s*"([a-z_]+)"/g),
+        ...readStyleText(appearance).matchAll(/"get",\s*"([a-z_:]+)"/g),
       ].map((match) => match[1]);
 
       expect([...new Set(read)].sort()).toEqual([...SOURCE_ATTRIBUTES].sort());

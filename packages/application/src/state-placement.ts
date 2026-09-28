@@ -177,6 +177,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "Which on-device model this device runs. Another device has its own memory, GPU and eligibility, so the choice means nothing there.",
   },
   {
+    id: "wipe.epoch",
+    placement: "device",
+    mobility: "resident",
+    medium: "local-storage",
+    key: "nilx-one.wipe-epoch",
+    perOwner: false,
+    what: "Which full wipe this device has already applied, so a wipe runs once per browser and not on every load.",
+  },
+  {
     id: "localModel.download",
     placement: "device",
     mobility: "resident",

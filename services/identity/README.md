@@ -140,3 +140,8 @@ The normative identity contract remains in [`nilx-one/0x1`](https://github.com/n
 ---
 
 © 2026 aiaiaiai · aiaiaiai.org
+
+## Wiping registered users
+
+`deploy/wipe-users.sh` deletes every identity; all identity-owned tables
+cascade. Dry run unless `WIPE_CONFIRM` equals the database name. Irreversible.
