@@ -76,6 +76,40 @@ wheel to its new Avaia: from here it is the two of them. Handing the wheel over
 this way fetches nothing — a reply to her is not the gesture that asks a
 device to download a model.
 
+## What this is not
+
+0xda-sha guides and stages; she is not a second protocol. The rules below are
+what keeps her that way, and `tests/architecture/guide-boundary.test.ts` and
+`tests/integration/guide-onboarding.test.tsx` hold the code to them.
+
+- **Presentation, not protocol truth.** A scene played or skipped, a line
+  chosen, the chrome stepping aside, the experience shown beside "Growing." —
+  none of it is an Interaction, BondChain evidence, presence evidence, or a
+  change to a Bond, an Avaia or a Relationship.
+- **A reply is not reciprocity.** A numbered answer is something a person did
+  on this screen and nothing more. It asks the service for nothing, completes
+  nothing and consents to nothing. If a reply ever has to mean something
+  shared, it will be because it is a real, typed Interaction whose
+  counterpart completes it — defined in Core first, and consumed here.
+- **The UI does not define semantics.** The guide reads what already exists:
+  the Avaia's configuration state as the identity service answered it, the
+  achievement progression already priced, the published avatar scene. It adds
+  no identifier, no state and no meaning of its own beyond one play record.
+- **Bond and Avaia keep their boundaries.** The introduction plays only for an
+  Avaia the service called `unconfigured`; a host that cannot read an Avaia
+  profile gets no scene rather than one invented for it. The scene may open
+  the Avaia screen, but only a person pressing **Create** configures anything.
+  Configuration, runtime and identity stay three facts: handing the wheel to
+  a new Avaia fetches no runtime and claims no availability.
+- **Everything the guide keeps can be lost.** Delete every local record —
+  scenes, progress, bodies — and the world opened again against the same
+  service is the same world: the Avaia is configured because the service says
+  so, and nobody introduces it again. If that ever stops being true, the guide
+  has leaked into protocol state.
+
+The only thing a scene ends in is navigation (the Avaia screen, the wheel) and
+its own play record. The code that ends a scene is pinned to exactly that.
+
 ## What is kept
 
 Whether the introduction was played through or skipped is a play record on
