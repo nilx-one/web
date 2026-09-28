@@ -8,6 +8,7 @@ import {
   type AvatarSelection,
   type BondProviderConnections,
   type BondProviderType,
+  type PubInfoAccessPort,
 } from "@nilx-one/application";
 import type { GeolocationCapability } from "@nilx-one/host-contract";
 import {
@@ -118,11 +119,12 @@ import { landmarkKindLabel, landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
 import {
   ACHIEVEMENTS,
-  awardExperience,
   earnDeviceAchievement,
   markSettingsHintSeen,
+  newExperienceEventId,
   progressionSnapshot,
   progressionStanding,
+  queueExperience,
   subscribeProgression,
   updateProgression,
   EMPTY_PROGRESSION,
@@ -130,6 +132,7 @@ import {
   XP_ZONE_REVEALED_MANUALLY,
   type LevelStanding,
 } from "../progression/progression";
+import { usePubInfoSync } from "../progression/use-pub-info-sync";
 import {
   AchievementDialog,
   type AchievementDialogState,
@@ -164,6 +167,12 @@ export interface AuthenticatedMapHomeViewProps {
    * honest state — Settings then simply has nothing to show here — not a degraded one.
    */
   readonly localModel?: LocalModelDependency;
+  /**
+   * Publishes activity experience into this Bond's `pub_info` and reads the
+   * shared total back. Absent when this host's identity client has no such
+   * capability — the device then keeps what it earned until one does.
+   */
+  readonly pubInfo?: PubInfoAccessPort;
   /**
    * The provider accounts this Bond carries. Account text never reaches this
    * surface as content: an attachment resolves where it opens, nothing more.
@@ -468,6 +477,7 @@ export function AuthenticatedMapHomeView({
   safeArea,
   section = "world",
   localModel,
+  pubInfo,
   connectedProviders,
   providerDeepLinks = [],
   onDisconnectProvider,
@@ -661,15 +671,21 @@ export function AuthenticatedMapHomeView({
     onRevealed: (_cell, via) => {
       setFogAnnouncement(t("fog.announce.revealed"));
       updateProgression(pubDress, (current) =>
-        via === "avaia"
-          ? awardExperience(current, "avaia", XP_ZONE_REVEALED_BY_AVAIA)
-          : awardExperience(current, "bond", XP_ZONE_REVEALED_MANUALLY),
+        queueExperience(current, {
+          id: newExperienceEventId(),
+          earner: via === "avaia" ? "avaia" : "bond",
+          amount:
+            via === "avaia"
+              ? XP_ZONE_REVEALED_BY_AVAIA
+              : XP_ZONE_REVEALED_MANUALLY,
+        }),
       );
       if (via === "avaia" && wheel === "avaia" && handover === undefined) {
         avaiaWalk.announce("fog.revealed");
       }
     },
   });
+  usePubInfoSync(pubDress, pubInfo);
   const progression = useSyncExternalStore(
     subscribeProgression,
     () => progressionSnapshot(pubDress),

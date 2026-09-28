@@ -108,8 +108,9 @@ Protomaps basemap schema the archive is built from. `inspect-basemap.sh` checks
 it against the real archive with `landmark-kinds.mjs`, and fails when none of
 its kinds occur there (see [map data](map-data.md)).
 
-Noticing a landmark and the Avaia studying one each pay their own local
-experience, priced differently on purpose — see [progression](progression.md).
+Noticing a landmark and the Avaia studying one each pay their own experience,
+priced differently on purpose. That experience is published in `pub_info` —
+see [progression](progression.md). The notebook itself stays on this device.
 
 ## Revealing the fog
 
@@ -145,8 +146,9 @@ alongside what the journal lit.
 
 A tap into fog that nobody can reach is refused the way it always was.
 
-Either way a zone opens pays its own local experience, priced differently on
-purpose — see [progression](progression.md).
+Either way a zone opens pays its own experience, priced differently on
+purpose. The reveal stays on this device; the experience is published in
+`pub_info` — see [progression](progression.md).
 
 ## A declared position
 

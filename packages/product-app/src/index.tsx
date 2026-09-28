@@ -26,6 +26,7 @@ import {
   UpdateAvaiaProfile,
   formatPubDress,
   hasAvaiaProfileAccess,
+  hasPubInfoAccess,
   type BondProviderConnections,
   type BondProviderType,
   type BrowserIdentityProvider,
@@ -1045,6 +1046,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         {...(dependencies.localModel === undefined
           ? {}
           : { localModel: dependencies.localModel })}
+        {...(hasPubInfoAccess(dependencies.identity)
+          ? { pubInfo: dependencies.identity }
+          : {})}
         {...(providerConnections === undefined
           ? {}
           : { connectedProviders: providerConnections })}

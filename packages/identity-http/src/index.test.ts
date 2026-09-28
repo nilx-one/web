@@ -622,6 +622,75 @@ describe("Avaia profile transport", () => {
   });
 });
 
+describe("pub_info experience transport", () => {
+  it("publishes carry and events with CSRF protection", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        response(200, { experience: { bond_xp: 60, avaia_xp: 10 } }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma proof",
+    });
+
+    await expect(
+      adapter.publishExperience({
+        carry: { bondXp: 30, avaiaXp: 10 },
+        events: [{ id: "xp:1", earner: "bond", amount: 30 }],
+      }),
+    ).resolves.toEqual({
+      kind: "published",
+      experience: { bondXp: 60, avaiaXp: 10 },
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/v1/identity/pub-info", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        authorization: "tma proof",
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({
+        carry: { bond_xp: 30, avaia_xp: 10 },
+        events: [{ id: "xp:1", earner: "bond", amount: 30 }],
+      }),
+    });
+  });
+
+  it("reads the shared total and keeps a refusal", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        response(200, { experience: { bond_xp: 90, avaia_xp: 0 } }),
+      )
+      .mockResolvedValueOnce(
+        response(422, { error: { code: "invalid_pub_info", message: "" } }),
+      )
+      .mockResolvedValueOnce(
+        response(403, { error: { code: "session_inactive", message: "" } }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readPubInfo()).resolves.toEqual({
+      kind: "published",
+      experience: { bondXp: 90, avaiaXp: 0 },
+    });
+    await expect(adapter.publishExperience({ events: [] })).resolves.toEqual({
+      kind: "rejected",
+      reason: "invalid",
+    });
+    await expect(adapter.readPubInfo()).resolves.toEqual({
+      kind: "rejected",
+      reason: "inactive",
+    });
+  });
+});
+
 describe("Browser provider connection transport", () => {
   it("reads canonical provider bindings from the authenticated service", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(

@@ -51,7 +51,8 @@ import {
   type LandmarkNotebook,
 } from "./landmark-notebook";
 import {
-  awardExperience,
+  newExperienceEventId,
+  queueExperience,
   updateProgression,
   XP_LANDMARK_NOTICED_MANUALLY,
   XP_LANDMARK_STUDIED_BY_AVAIA,
@@ -383,7 +384,11 @@ export function useAvaiaWalk({
         studyLandmark(current, study.landmark, by, Date.now()),
       );
       updateProgression(book, (current) =>
-        awardExperience(current, "avaia", XP_LANDMARK_STUDIED_BY_AVAIA),
+        queueExperience(current, {
+          id: newExperienceEventId(),
+          earner: "avaia",
+          amount: XP_LANDMARK_STUDIED_BY_AVAIA,
+        }),
       );
       setStudy(undefined);
       setRest({ point: study.at, bearingDeg: study.bearingDeg });
@@ -454,18 +459,20 @@ export function useAvaiaWalk({
       const known = new Set(
         notebookSnapshot(owner).noticed.map((entry) => entry.landmark.id),
       );
-      const newlyNoticed = found.filter(
-        (landmark) => !known.has(landmark.id),
-      ).length;
+      const newlyNoticed = found.filter((landmark) => !known.has(landmark.id));
       updateNotebook(owner, (current) =>
         noticeLandmarks(current, found, Date.now()),
       );
-      if (newlyNoticed > 0) {
+      if (newlyNoticed.length > 0) {
         updateProgression(owner, (current) =>
-          awardExperience(
+          newlyNoticed.reduce(
+            (progression) =>
+              queueExperience(progression, {
+                id: newExperienceEventId(),
+                earner: "bond",
+                amount: XP_LANDMARK_NOTICED_MANUALLY,
+              }),
             current,
-            "bond",
-            XP_LANDMARK_NOTICED_MANUALLY * newlyNoticed,
           ),
         );
       }

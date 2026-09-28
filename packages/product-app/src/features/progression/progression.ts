@@ -4,18 +4,29 @@
 /**
  * What a Bond and its Avaia have earned by playing: fog either of them
  * revealed, monuments either of them studied, and the achievements that pay
- * once. This is local presentation, in the same sense fog reveals and the
- * landmark notebook are: what this device kept track of for one Bond, never
- * asserted as a protocol fact. It is not BondChain evidence and it is not
- * identity state — Core and the identity service know nothing about it.
- * Experience is transport-eligible (state-placement.ts): not synced state,
- * and not service state.
+ * once.
+ *
+ * Activity experience is `pub_info` on the Bond's `.bnd`: one shared total,
+ * synced through the identity service and readable with the public Bond.
+ * This device keeps a copy so play still counts while a request is in
+ * flight, and it keeps the achievements that are about this device. That
+ * local copy is transport-eligible (state-placement.ts): not synced state
+ * and not service state. Levels are derived here. Nothing in this file is
+ * BondChain evidence, and the service stores totals — it does not price an
+ * action.
  *
  * The Bond and its Avaia level apart. What the owner did themselves pays the
  * Bond; what the Avaia did pays the Avaia. The two curves are deliberately
  * different: an Avaia climbs linearly and a high level is ordinary, a Bond
  * climbs a steep curve and every level past the first is a real amount of play.
  */
+
+import type {
+  ExperienceEvent,
+  ExperiencePublication,
+  PubInfoAccessPort,
+  PubInfoExperience,
+} from "@nilx-one/application";
 
 /**
  * The base unit ("n") the activity economy is priced in. Revealing a zone
@@ -114,15 +125,29 @@ export function avaiaLevelForExperience(
   return 1 + Math.floor(Math.max(0, totalXp) / AVAIA_EXPERIENCE_PER_LEVEL);
 }
 
-/** What this device remembers for one Bond. Levels are derived, never stored. */
+/**
+ * What this device remembers for one Bond, plus the shared totals it last
+ * read from `pub_info`. Levels are derived, never stored.
+ */
 export interface Progression {
-  /** Activity experience the owner earned on this device. */
+  /**
+   * Activity experience this device had earned before it was part of
+   * `pub_info`. It is offered once as carry, then the shared total takes over.
+   */
   readonly bondXp: number;
-  /** Activity experience the Avaia earned on this device. */
+  /** The Avaia's pre-sync activity, offered once as carry. */
   readonly avaiaXp: number;
   readonly deviceAchievements: readonly AchievementId[];
   /** The owner has already been pointed at Settings for the next step. */
   readonly settingsHintSeen: boolean;
+  /** Activity experience `pub_info` already holds for the Bond. */
+  readonly publishedBondXp: number;
+  /** Activity experience `pub_info` already holds for the Avaia. */
+  readonly publishedAvaiaXp: number;
+  /** Awards from this device that `pub_info` has not accepted yet. */
+  readonly pendingEvents: readonly ExperienceEvent[];
+  /** The pre-sync totals have been offered as carry. */
+  readonly carrySubmitted: boolean;
 }
 
 export const EMPTY_PROGRESSION: Progression = {
@@ -130,6 +155,10 @@ export const EMPTY_PROGRESSION: Progression = {
   avaiaXp: 0,
   deviceAchievements: [],
   settingsHintSeen: false,
+  publishedBondXp: 0,
+  publishedAvaiaXp: 0,
+  pendingEvents: [],
+  carrySubmitted: false,
 };
 
 /** Service-kept facts account achievements are read from. */
@@ -164,16 +193,37 @@ export function earnedAchievements(
   );
 }
 
+/** Activity experience, before achievements: the shared total plus anything still unsent. */
+export function activityExperience(progression: Progression): {
+  bondXp: number;
+  avaiaXp: number;
+} {
+  const baseBond = progression.carrySubmitted
+    ? progression.publishedBondXp
+    : progression.bondXp;
+  const baseAvaia = progression.carrySubmitted
+    ? progression.publishedAvaiaXp
+    : progression.avaiaXp;
+  return progression.pendingEvents.reduce(
+    (totals, event) =>
+      event.earner === "bond"
+        ? { ...totals, bondXp: totals.bondXp + event.amount }
+        : { ...totals, avaiaXp: totals.avaiaXp + event.amount },
+    { bondXp: baseBond, avaiaXp: baseAvaia },
+  );
+}
+
 export function progressionStanding(
   progression: Progression,
   facts: AccountFacts,
 ): ProgressionStanding {
   const achievements = earnedAchievements(progression, facts);
+  const activity = activityExperience(progression);
   const bondXp =
-    progression.bondXp +
+    activity.bondXp +
     achievements.reduce((sum, id) => sum + ACHIEVEMENTS[id].bondXp, 0);
   const avaiaXp =
-    progression.avaiaXp +
+    activity.avaiaXp +
     achievements.reduce((sum, id) => sum + ACHIEVEMENTS[id].avaiaXp, 0);
   const bondLevel = bondLevelForExperience(bondXp);
   const avaiaLevel = avaiaLevelForExperience(avaiaXp, facts.avaiaConfigured);
@@ -204,6 +254,116 @@ export function awardExperience(
     : { ...progression, avaiaXp: progression.avaiaXp + amount };
 }
 
+const EVENT_ID = /^xp:[A-Za-z0-9._-]{1,76}$/;
+const MAX_EVENT_AMOUNT = 10_000;
+
+/**
+ * An opaque nonce for one award. The prefix is fixed and the rest is random,
+ * so the id can be retried without ever naming a cell or a landmark.
+ */
+export function newExperienceEventId(): string {
+  const nonce =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  return `xp:${nonce}`;
+}
+
+/** Queues one award for `pub_info`. A repeat of the same id pays nothing. */
+export function queueExperience(
+  progression: Progression,
+  event: ExperienceEvent,
+): Progression {
+  const amount = Math.round(event.amount);
+  if (
+    !EVENT_ID.test(event.id) ||
+    !Number.isSafeInteger(amount) ||
+    amount <= 0 ||
+    amount > MAX_EVENT_AMOUNT ||
+    progression.pendingEvents.some((pending) => pending.id === event.id)
+  ) {
+    return progression;
+  }
+  return {
+    ...progression,
+    pendingEvents: [
+      ...progression.pendingEvents,
+      { id: event.id, earner: event.earner, amount },
+    ],
+  };
+}
+
+/** What still has to be offered to `pub_info`. */
+export function experienceToPublish(
+  progression: Progression,
+): ExperiencePublication {
+  return {
+    ...(progression.carrySubmitted
+      ? {}
+      : {
+          carry: {
+            bondXp: carryAmount(progression.bondXp),
+            avaiaXp: carryAmount(progression.avaiaXp),
+          },
+        }),
+    events: progression.pendingEvents,
+  };
+}
+
+const MAX_CARRY_XP = 1_000_000_000;
+
+function carryAmount(value: number): number {
+  if (!Number.isSafeInteger(value) || value <= 0) return 0;
+  return Math.min(value, MAX_CARRY_XP);
+}
+
+/**
+ * Folds an accepted `pub_info` total back into what this device remembers.
+ * Acknowledged events leave the pending queue; anything earned during the
+ * request stays in it.
+ */
+export function notePublishedExperience(
+  progression: Progression,
+  published: PubInfoExperience,
+  acknowledged: readonly string[],
+): Progression {
+  const acked = new Set(acknowledged);
+  const pendingEvents = progression.pendingEvents.filter(
+    (event) => !acked.has(event.id),
+  );
+  if (
+    progression.carrySubmitted &&
+    progression.publishedBondXp === published.bondXp &&
+    progression.publishedAvaiaXp === published.avaiaXp &&
+    pendingEvents.length === progression.pendingEvents.length
+  ) {
+    return progression;
+  }
+  return {
+    ...progression,
+    publishedBondXp: published.bondXp,
+    publishedAvaiaXp: published.avaiaXp,
+    carrySubmitted: true,
+    pendingEvents,
+  };
+}
+
+/** The standing anyone can read from published totals and account facts. */
+export function standingForPublishedExperience(
+  experience: PubInfoExperience,
+  facts: AccountFacts,
+): ProgressionStanding {
+  return progressionStanding(
+    {
+      ...EMPTY_PROGRESSION,
+      publishedBondXp: experience.bondXp,
+      publishedAvaiaXp: experience.avaiaXp,
+      carrySubmitted: true,
+    },
+    facts,
+  );
+}
+
 /** Pays a device achievement once; a repeat pays nothing. */
 export function earnDeviceAchievement(
   progression: Progression,
@@ -227,7 +387,8 @@ export function markSettingsHintSeen(progression: Progression): Progression {
     : { ...progression, settingsHintSeen: true };
 }
 
-const STORAGE_PREFIX = "nilx-one.progression.v2.";
+const STORAGE_PREFIX = "nilx-one.progression.v3.";
+const PREVIOUS_STORAGE_PREFIX = "nilx-one.progression.v2.";
 const LEGACY_STORAGE_PREFIX = "nilx-one.progression.v1.";
 /** What version 1 paid for configuring, before that became an account achievement. */
 const LEGACY_CONFIGURED_REWARD = 40;
@@ -265,7 +426,45 @@ function parseProgression(value: unknown): Progression | undefined {
     avaiaXp: candidate.avaiaXp,
     deviceAchievements: candidate.deviceAchievements.filter(isAchievementId),
     settingsHintSeen: candidate.settingsHintSeen,
+    publishedBondXp: nonNegative(candidate.publishedBondXp),
+    publishedAvaiaXp: nonNegative(candidate.publishedAvaiaXp),
+    pendingEvents: parsePendingEvents(candidate.pendingEvents),
+    carrySubmitted: candidate.carrySubmitted === true,
   };
+}
+
+function nonNegative(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : 0;
+}
+
+function parsePendingEvents(value: unknown): readonly ExperienceEvent[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const candidate = entry as Record<string, unknown>;
+    const amount = Math.round(
+      typeof candidate.amount === "number" ? candidate.amount : 0,
+    );
+    if (
+      typeof candidate.id !== "string" ||
+      !EVENT_ID.test(candidate.id) ||
+      (candidate.earner !== "bond" && candidate.earner !== "avaia") ||
+      !Number.isSafeInteger(amount) ||
+      amount <= 0 ||
+      amount > MAX_EVENT_AMOUNT
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: candidate.id,
+        earner: candidate.earner,
+        amount,
+      },
+    ];
+  });
 }
 
 /**
@@ -309,6 +508,12 @@ export function readProgression(
     const current = readJson(storage, STORAGE_PREFIX + owner);
     if (current !== undefined) {
       return parseProgression(current) ?? EMPTY_PROGRESSION;
+    }
+    // Version 2 is the same activity totals, kept locally before they were
+    // pub_info. Reading it offers them once as carry.
+    const previous = readJson(storage, PREVIOUS_STORAGE_PREFIX + owner);
+    if (previous !== undefined) {
+      return parseProgression(previous) ?? EMPTY_PROGRESSION;
     }
     const legacy = readJson(storage, LEGACY_STORAGE_PREFIX + owner);
     return parseLegacyProgression(legacy) ?? EMPTY_PROGRESSION;
@@ -365,4 +570,62 @@ export function subscribeProgression(listener: () => void): () => void {
 /** Forgets what was read, so the next snapshot reads storage again. */
 export function forgetProgressionCache(): void {
   progressions.clear();
+}
+
+const publicationFlights = new Map<
+  string,
+  { running: boolean; again: boolean }
+>();
+
+/**
+ * Offers this device's unsent experience to `pub_info` and adopts the shared
+ * total. A refusal leaves the local record as it was, so the next attempt
+ * can offer the same awards again. Overlapping calls for one Bond collapse
+ * into one flight.
+ */
+export async function publishProgression(
+  owner: string,
+  port: PubInfoAccessPort,
+): Promise<void> {
+  const flight = publicationFlights.get(owner) ?? {
+    running: false,
+    again: false,
+  };
+  publicationFlights.set(owner, flight);
+  if (flight.running) {
+    flight.again = true;
+    return;
+  }
+  flight.running = true;
+  try {
+    do {
+      flight.again = false;
+      await flushProgression(owner, port);
+    } while (flight.again);
+  } finally {
+    flight.running = false;
+  }
+}
+
+async function flushProgression(
+  owner: string,
+  port: PubInfoAccessPort,
+): Promise<void> {
+  const current = progressionSnapshot(owner);
+  const payload = experienceToPublish(current);
+  const acknowledged = payload.events.map((event) => event.id);
+  const sending = payload.carry !== undefined || payload.events.length > 0;
+  let result;
+  try {
+    result = sending
+      ? await port.publishExperience(payload)
+      : await port.readPubInfo();
+  } catch {
+    return;
+  }
+  if (result.kind !== "published") return;
+  const experience = result.experience;
+  updateProgression(owner, (latest) =>
+    notePublishedExperience(latest, experience, sending ? acknowledged : []),
+  );
 }

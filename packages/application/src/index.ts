@@ -74,6 +74,16 @@ export {
   type AvaiaProfileUpdateResult,
 } from "./avaia-profile";
 export {
+  hasPubInfoAccess,
+  type ExperienceEarner,
+  type ExperienceEvent,
+  type ExperiencePublication,
+  type PubInfoAccessPort,
+  type PubInfoExperience,
+  type PubInfoExperienceResult,
+  type PubInfoRejection,
+} from "./pub-info";
+export {
   removeBondLocationOverride,
   resolveBondLocationPresentation,
   setBondLocationOverride,

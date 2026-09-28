@@ -95,6 +95,9 @@ export const WORLD_EN = {
     "The public identity service could not answer this address.",
   "public.body": "body",
   "public.location": "location",
+  "public.experience.bond": "Bond",
+  "public.experience.avaia": "Avaia",
+  "public.experience.summary": "Level {level} · {xp} xp",
   "public.enter": "enter nilx.one",
   "discord.bootstrapFailed":
     "0x1 could not start this Discord Activity session. Reopen the Activity and try again. ({reason})",
@@ -191,6 +194,9 @@ export const WORLD_UK: Readonly<Record<keyof typeof WORLD_EN, string>> = {
     "Публічний сервіс ідентичності не зміг відповісти для цієї адреси.",
   "public.body": "тіло",
   "public.location": "місцезнаходження",
+  "public.experience.bond": "Bond",
+  "public.experience.avaia": "Avaia",
+  "public.experience.summary": "Рівень {level} · {xp} досвіду",
   "public.enter": "перейти на nilx.one",
   "discord.bootstrapFailed":
     "0x1 не вдалося запустити цей сеанс Discord Activity. Відкрийте Activity знову й повторіть спробу. ({reason})",

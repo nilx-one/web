@@ -495,6 +495,9 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Публичный сервис идентичности не смог ответить для этого адреса.",
   "public.body": "тело",
   "public.location": "местоположение",
+  "public.experience.bond": "Bond",
+  "public.experience.avaia": "Avaia",
+  "public.experience.summary": "Уровень {level} · {xp} опыта",
   "public.enter": "перейти на nilx.one",
   "discord.bootstrapFailed":
     "0x1 не удалось запустить этот сеанс Discord Activity. Откройте Activity снова и повторите попытку. ({reason})",

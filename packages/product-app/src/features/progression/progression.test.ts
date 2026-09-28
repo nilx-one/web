@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   ACHIEVEMENTS,
@@ -13,12 +13,17 @@ import {
   avaiaExperienceForLevel,
   avaiaLevelForExperience,
   awardExperience,
+  activityExperience,
   bondExperienceForLevel,
   bondLevelForExperience,
   earnDeviceAchievement,
   forgetProgressionCache,
   markSettingsHintSeen,
+  newExperienceEventId,
+  notePublishedExperience,
   progressionSnapshot,
+  publishProgression,
+  queueExperience,
   progressionStanding,
   readProgression,
   subscribeProgression,
@@ -232,6 +237,105 @@ describe("storage", () => {
       JSON.stringify({ bondXp: "forty" }),
     );
     expect(readProgression("0x0sky", storage)).toBe(EMPTY_PROGRESSION);
+  });
+});
+
+describe("pub_info", () => {
+  afterEach(() => {
+    localStorage.clear();
+    forgetProgressionCache();
+  });
+
+  it("queues an award once, under an opaque id", () => {
+    const queued = queueExperience(EMPTY_PROGRESSION, {
+      id: "xp:zone-1",
+      earner: "bond",
+      amount: XP_ZONE_REVEALED_MANUALLY,
+    });
+    expect(queueExperience(queued, queued.pendingEvents[0]!)).toBe(queued);
+    expect(queued.pendingEvents).toEqual([
+      { id: "xp:zone-1", earner: "bond", amount: XP_ZONE_REVEALED_MANUALLY },
+    ]);
+    expect(activityExperience(queued).bondXp).toBe(XP_ZONE_REVEALED_MANUALLY);
+    expect(newExperienceEventId()).toMatch(/^xp:[A-Za-z0-9._-]+$/);
+    expect(
+      queueExperience(EMPTY_PROGRESSION, {
+        id: "zone:8a2a1072b59ffff:avaia",
+        earner: "avaia",
+        amount: 10,
+      }),
+    ).toBe(EMPTY_PROGRESSION);
+  });
+
+  it("adopts the shared total and stops counting the carry it already offered", () => {
+    const carried = queueExperience(
+      { ...EMPTY_PROGRESSION, bondXp: 30 },
+      { id: "xp:1", earner: "avaia", amount: 10 },
+    );
+    const published = notePublishedExperience(
+      carried,
+      { bondXp: 30, avaiaXp: 10 },
+      ["xp:1"],
+    );
+    expect(published.carrySubmitted).toBe(true);
+    expect(published.pendingEvents).toEqual([]);
+    expect(activityExperience(published)).toEqual({ bondXp: 30, avaiaXp: 10 });
+    expect(
+      notePublishedExperience(published, { bondXp: 30, avaiaXp: 10 }, []),
+    ).toBe(published);
+  });
+
+  it("publishes unsent carry and events, then shows the shared total", async () => {
+    localStorage.clear();
+    forgetProgressionCache();
+    updateProgression("0x0sky", (current) =>
+      queueExperience(
+        { ...current, bondXp: 30 },
+        { id: "xp:1", earner: "bond", amount: 30 },
+      ),
+    );
+    const port = {
+      readPubInfo: async () => ({
+        kind: "published" as const,
+        experience: { bondXp: 60, avaiaXp: 0 },
+      }),
+      publishExperience: async (input: {
+        carry?: { bondXp: number; avaiaXp: number };
+        events: readonly { id: string; amount: number }[];
+      }) => {
+        expect(input.carry).toEqual({ bondXp: 30, avaiaXp: 0 });
+        expect(input.events.map((event) => event.id)).toEqual(["xp:1"]);
+        return {
+          kind: "published" as const,
+          experience: { bondXp: 60, avaiaXp: 0 },
+        };
+      },
+    };
+
+    await publishProgression("0x0sky", port);
+
+    const standing = progressionStanding(
+      progressionSnapshot("0x0sky"),
+      unconfigured,
+    );
+    expect(standing.bond.xp).toBe(60);
+    expect(progressionSnapshot("0x0sky").carrySubmitted).toBe(true);
+    expect(progressionSnapshot("0x0sky").pendingEvents).toEqual([]);
+  });
+
+  it("keeps a refused award queued", async () => {
+    localStorage.clear();
+    forgetProgressionCache();
+    updateProgression("0x0mira", (current) =>
+      queueExperience(current, { id: "xp:2", earner: "bond", amount: 30 }),
+    );
+    await publishProgression("0x0mira", {
+      readPubInfo: async () => ({ kind: "service-unavailable" }),
+      publishExperience: async () => ({ kind: "service-unavailable" }),
+    });
+    expect(progressionSnapshot("0x0mira").carrySubmitted).toBe(false);
+    expect(progressionSnapshot("0x0mira").pendingEvents).toHaveLength(1);
+    expect(activityExperience(progressionSnapshot("0x0mira")).bondXp).toBe(30);
   });
 });
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { useLocalization } from "@nilx-one/product-app/localization";
+import { standingForPublishedExperience } from "@nilx-one/product-app/progression";
 import { useEffect, useState } from "react";
 
 import "./public-bond.css";
@@ -25,13 +26,21 @@ export interface PublicAvaiaLocation {
 export interface PublicAvaiaProjection {
   pubDress: string;
   avatarModel?: string;
+  configurationState?: "configured" | "unconfigured";
   location?: PublicAvaiaLocation;
+}
+
+/** Activity experience published in this Bond's `pub_info`. */
+export interface PublicExperience {
+  bondXp: number;
+  avaiaXp: number;
 }
 
 export interface PublicBondProjection {
   pubDress: string;
   pubDressUrl: string;
   avaia?: PublicAvaiaProjection;
+  experience: PublicExperience;
 }
 
 export type PublicBondState =
@@ -85,13 +94,35 @@ function parseAvaiaProjection(
     return undefined;
   }
   const location = parseAvaiaLocation(value.location);
+  const configurationState =
+    value.configuration_state === "configured" ||
+    value.configuration_state === "unconfigured"
+      ? value.configuration_state
+      : undefined;
   return {
     pubDress: value.pub_dress,
     ...(typeof value.avatar_model === "string"
       ? { avatarModel: value.avatar_model }
       : {}),
+    ...(configurationState === undefined ? {} : { configurationState }),
     ...(location === undefined ? {} : { location }),
   };
+}
+
+function parseExperience(value: unknown): PublicExperience {
+  if (!isRecord(value) || !isRecord(value.experience)) {
+    return { bondXp: 0, avaiaXp: 0 };
+  }
+  return {
+    bondXp: experienceTotal(value.experience.bond_xp),
+    avaiaXp: experienceTotal(value.experience.avaia_xp),
+  };
+}
+
+function experienceTotal(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : 0;
 }
 
 function parseProjection(value: unknown): PublicBondProjection | undefined {
@@ -107,6 +138,7 @@ function parseProjection(value: unknown): PublicBondProjection | undefined {
     pubDress: value.pub_dress,
     pubDressUrl: value.pub_dress_url,
     ...(avaia === undefined ? {} : { avaia }),
+    experience: parseExperience(value.pub_info),
   };
 }
 
@@ -151,8 +183,20 @@ export async function readPublicBond(
   }
 }
 
+function experienceSummary(
+  template: string,
+  level: number,
+  xp: number,
+): string {
+  return template.replace("{level}", String(level)).replace("{xp}", String(xp));
+}
+
 function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
   const { t } = useLocalization();
+  const standing = standingForPublishedExperience(bond.experience, {
+    avaiaConfigured: bond.avaia?.configurationState === "configured",
+  });
+  const summary = t("public.experience.summary");
   return (
     <main className="public-bond-page">
       <article className="public-bond-card" aria-labelledby="public-bond-title">
@@ -163,6 +207,26 @@ function PublicBondCard({ bond }: { bond: PublicBondProjection }) {
         </a>
 
         <dl className="public-bond-facts">
+          <div>
+            <dt>{t("public.experience.bond")}</dt>
+            <dd>
+              {experienceSummary(
+                summary,
+                standing.bond.level,
+                standing.bond.xp,
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt>{t("public.experience.avaia")}</dt>
+            <dd>
+              {experienceSummary(
+                summary,
+                standing.avaia.level,
+                standing.avaia.xp,
+              )}
+            </dd>
+          </div>
           {bond.avaia === undefined ? null : (
             <div>
               <dt>Avaia</dt>

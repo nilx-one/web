@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.tsx",
     "./appearance": "./src/shell/appearance.ts",
-    "./localization": "./src/shell/localization.ts"
+    "./localization": "./src/shell/localization.ts",
+    "./progression": "./src/features/progression/progression.ts"
   },
   "dependencies": {
     "@nilx-one/application": "workspace:*",

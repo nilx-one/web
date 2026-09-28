@@ -1,9 +1,9 @@
 # Progression
 
 A Bond and its Avaia level up by playing: revealing fog, studying what the
-Avaia notices along the way, and a few one-time achievements. This is
-"прокачка" from what is already local presentation — nothing new asked of
-Core or the identity service.
+Avaia notices along the way, and a few one-time achievements. The activity
+experience that pays for it is `pub_info` on the Bond's `.bnd`: synced, and
+readable with the public Bond. Core is not asked to price it.
 
 ## Two earners
 
@@ -65,27 +65,43 @@ zones walked open.
 
 ## Where it lives
 
-Progression is device-local, the same way fog reveals
+Activity experience is part of `pub_info`, the public slice of a Bond's
+[`.bnd`](bnd-file-lifecycle.md). There is one total per Bond and one per its
+Avaia. The identity service stores them and answers them with the public Bond,
+so every host — the web, Telegram, Discord, and anyone opening the public
+address — reads the same standing. Publishing is
+`GET`/`POST /api/v1/identity/pub-info`. The public projection nests the same
+totals under `pub_info.experience`.
+
+A device still remembers what it has not managed to publish yet, under
+`nilx-one.progression.v3.<owner>`, the same way fog reveals
 (`nilx-one.fog.reveals.v1.<owner>`) and the landmark notebook
-(`nilx-one.avaia.landmarks.v1.<owner>`) are. It is kept under
-`nilx-one.progression.v2.<owner>`, one Bond's alone. Nothing sends it
-anywhere today. The experience is transport-eligible — it may follow a Bond
-between its own devices, and that is not synced state and not service state
-(see [State placement](state-placement.md)). Version 1
-(`nilx-one.progression.v1.<owner>`) carries over as the Bond's own activity,
-less the configuration reward it used to pay — that is now the account
-achievement above. Reaching a level is not a protocol fact: it creates no
-Interaction, completes no BondChain, and Core and the identity service know
-nothing about activity experience. Until progression travels, a new device
-starts a Bond's activity experience at zero, the same way it starts a new
-local fog field and a new local notebook; account achievements are read again
-from the service.
+(`nilx-one.avaia.landmarks.v1.<owner>`) stay on the device. That local copy
+is transport-eligible — it may follow a Bond between its own devices — and
+that copy is not synced state and not service state (see
+[State placement](state-placement.md)). An award is an opaque `xp:` nonce
+plus an amount. The nonce is how a retry stays idempotent; it is not a cell,
+a landmark, or any other place, and it is not part of the public projection.
+Only the totals are. Version 2 (`nilx-one.progression.v2.<owner>`) and version
+1 (`nilx-one.progression.v1.<owner>`, less the configuration reward it used to
+pay) are offered once as carry: the service keeps the greatest such baseline
+and does not add it again. Experience earned after that is the event log, so
+two devices playing at once both count.
+
+The **Avaia model downloaded** achievement stays on the device that downloaded
+it. It is added to that device's own standing and is not part of `pub_info`.
+
+A level is still not a protocol fact: it creates no Interaction and completes
+no BondChain. The service stores the totals the client publishes; it does not
+price an action or derive a level. Fog reveals and the landmark notebook stay
+on the device. What left the device is the experience those actions paid.
 
 ## What this is not
 
 This is not a badge shop or a quest system. It is not evidence of presence or
-attendance, and it asserts nothing about any Bond. Losing local storage loses
-activity experience the same way it loses fog reveals — that is local data
-loss, not protocol corruption.
+attendance, and it asserts nothing about any Bond. The published totals say
+how much was earned, not where. Losing local storage loses the device
+achievement and any award that had not reached `pub_info` yet; the shared
+totals remain.
 
 © 2026 aiaiaiai · aiaiaiai.org

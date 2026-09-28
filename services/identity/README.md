@@ -68,6 +68,14 @@ ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role;
 
 A Bond has exactly one location, whichever host it is set from. `GET /api/v1/location-control` answers it to every host: the Telegram Mini App with `initData`, the website with its `__Host-0x1_session` cookie, and the Discord Activity with `authorization: discord <access token>`. While the location is `manual`, each host stands the Bond at the declared point and never asks its device, so no host draws the same Bond a second time at its own position.
 
+## pub_info
+
+`pub_info` is the public, synced slice of a Bond's `.bnd`. Experience is what it holds: `bond_xp` and `avaia_xp`, one shared total each.
+
+- `GET /api/v1/identity/pub-info` returns `{ "experience": { "bond_xp": 0, "avaia_xp": 0 } }` for the authenticated Bond. No stored row is zero.
+- `POST /api/v1/identity/pub-info` accepts `{ "carry": { "bond_xp": 0, "avaia_xp": 0 }, "events": [{ "id": "xp:…", "earner": "bond", "amount": 30 }] }`. It requires the CSRF header and an active authenticated Bond. Carry only rises, to the greatest pre-sync total a device reports. An event id is an opaque `xp:` nonce; a repeat does not pay again, and an id that names a subject is refused. The service stores the totals. It does not price the action.
+- `GET /api/v1/identity/public` nests the same totals under `pub_info.experience`, and nests the owned Avaia's `configuration_state`, so a public reader can derive the same levels the owner sees from the shared totals. The per-device model-download achievement is not part of this projection.
+
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`, and

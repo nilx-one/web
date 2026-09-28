@@ -35,6 +35,10 @@ import {
   type PubDressLabelResolutionResult,
   type PubDressResolutionResult,
   type PubDressSelection,
+  type ExperiencePublication,
+  type PubInfoAccessPort,
+  type PubInfoExperience,
+  type PubInfoExperienceResult,
 } from "@nilx-one/application";
 
 export * from "./bond-location-control";
@@ -136,7 +140,7 @@ function isBrowserProvider(value: unknown): value is BrowserIdentityProvider {
 }
 
 class IdentityHttpAdapter
-  implements IdentityAccessPort, AvaiaProfileAccessPort
+  implements IdentityAccessPort, AvaiaProfileAccessPort, PubInfoAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
 
@@ -936,6 +940,57 @@ class IdentityHttpAdapter
       : { kind: "service-unavailable" };
   }
 
+  public async readPubInfo(): Promise<PubInfoExperienceResult> {
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/pub-info", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        ...(authorization === undefined ? {} : { authorization }),
+      },
+    });
+    return parsePubInfoResult(
+      response,
+      await response.json().catch(() => undefined),
+    );
+  }
+
+  public async publishExperience(
+    publication: ExperiencePublication,
+  ): Promise<PubInfoExperienceResult> {
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/pub-info", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        ...(authorization === undefined ? {} : { authorization }),
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({
+        ...(publication.carry === undefined
+          ? {}
+          : {
+              carry: {
+                bond_xp: publication.carry.bondXp,
+                avaia_xp: publication.carry.avaiaXp,
+              },
+            }),
+        events: publication.events.map((event) => ({
+          id: event.id,
+          earner: event.earner,
+          amount: event.amount,
+        })),
+      }),
+    });
+    return parsePubInfoResult(
+      response,
+      await response.json().catch(() => undefined),
+    );
+  }
+
   private authorization(): string | undefined {
     const authorization = this.options.getAuthorization();
     return authorization === undefined || authorization.length === 0
@@ -944,8 +999,43 @@ class IdentityHttpAdapter
   }
 }
 
+function parsePubInfoExperience(value: unknown): PubInfoExperience | undefined {
+  if (!isRecord(value) || !isRecord(value.experience)) return undefined;
+  const bondXp = value.experience.bond_xp;
+  const avaiaXp = value.experience.avaia_xp;
+  if (!isExperienceTotal(bondXp) || !isExperienceTotal(avaiaXp))
+    return undefined;
+  return { bondXp, avaiaXp };
+}
+
+function isExperienceTotal(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function parsePubInfoResult(
+  response: Response,
+  body: unknown,
+): PubInfoExperienceResult {
+  if (response.ok) {
+    const experience = parsePubInfoExperience(body);
+    if (experience !== undefined) return { kind: "published", experience };
+  }
+  switch (parseErrorCode(body)) {
+    case "provider_authentication_required":
+      return { kind: "rejected", reason: "authentication-required" };
+    case "session_inactive":
+      return { kind: "rejected", reason: "inactive" };
+    case "invalid_pub_info":
+      return { kind: "rejected", reason: "invalid" };
+    case "rate_limited":
+      return { kind: "rejected", reason: "rate-limited" };
+    default:
+      return { kind: "service-unavailable" };
+  }
+}
+
 export function createIdentityHttpAdapter(
   options: IdentityHttpAdapterOptions,
-): IdentityAccessPort & AvaiaProfileAccessPort {
+): IdentityAccessPort & AvaiaProfileAccessPort & PubInfoAccessPort {
   return new IdentityHttpAdapter(options);
 }
