@@ -10,7 +10,11 @@ import {
   createBrowserGeolocation,
   createBrowserHost,
 } from "@nilx-one/host-browser";
-import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
+import { createBondLocationGeolocation } from "@nilx-one/host-contract";
+import {
+  createIdentityHttpAdapter,
+  readBondLocationControl,
+} from "@nilx-one/identity-http";
 import {
   MAP_BOOTSTRAP_CAMERA,
   createMapLibreRenderer,
@@ -137,10 +141,15 @@ if (isPublicBondHostname(window.location.hostname)) {
     createBrowserGeolocation(),
     tracker,
   );
+  // A manual location declared from Telegram is the Bond's location here too:
+  // the browser is asked only while the Bond is live.
   const host = createBrowserHost({
     matchMedia: (query) => window.matchMedia(query),
     open: (url, target, features) => window.open(url, target, features),
-    geolocation: browserGeolocation,
+    geolocation: createBondLocationGeolocation({
+      device: browserGeolocation,
+      readLocation: () => readBondLocationControl(),
+    }),
   });
   const fog = createFogField(localPresence);
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;

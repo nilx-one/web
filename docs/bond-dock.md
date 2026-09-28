@@ -9,8 +9,10 @@ two identities stays the honest em dash until a Relationship projection exists.
 ## What each side does
 
 **Left — the identity at the wheel.** Activating it brings the world to that
-identity: the camera moves to the closest scale the map policy allows, over the
-observation the host already provides. A camera centred on a coordinate is
+identity: the camera moves to the closest scale the map policy allows, over
+where that identity's body stands. For the Bond that is the observation the
+host already provides; for an Avaia that walked off it is where the Avaia is
+now, never its Bond's position. A camera centred on a coordinate is
 presentation, never evidence of presence, and with no observation there is
 nothing to focus, so the control is inert rather than misleading.
 

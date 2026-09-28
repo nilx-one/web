@@ -66,6 +66,8 @@ ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role;
 
 `Bond.location` has two modes. Every role may use `live`: it is entered only by an explicit current-location share in the bot, where Telegram asks for the device location. The Mini App's background `POST /api/v1/location-control` only refreshes a location that is already `live` and answers `409` for a `manual` one. `manual` is a declared point and needs `admin`, whose rights are exactly those of `user` plus setting a manual location.
 
+A Bond has exactly one location, whichever host it is set from. `GET /api/v1/location-control` answers it to every host: the Telegram Mini App with `initData`, the website with its `__Host-0x1_session` cookie, and the Discord Activity with `authorization: discord <access token>`. While the location is `manual`, each host stands the Bond at the declared point and never asks its device, so no host draws the same Bond a second time at its own position.
+
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`, and

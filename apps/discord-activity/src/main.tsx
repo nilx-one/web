@@ -12,7 +12,11 @@ import {
   installDiscordProxyRouting,
   resolveDiscordProxyUrl,
 } from "@nilx-one/host-discord";
-import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
+import { createBondLocationGeolocation } from "@nilx-one/host-contract";
+import {
+  createIdentityHttpAdapter,
+  readBondLocationControl,
+} from "@nilx-one/identity-http";
 import {
   MAP_BOOTSTRAP_CAMERA,
   createMapLibreRenderer,
@@ -68,14 +72,28 @@ function reportBootstrapFailure(mount: HTMLElement, error: unknown): void {
 async function main(): Promise<void> {
   // An Activity runs in an embedded browser, so the host reuses the browser
   // geolocation capability. Presence capture remains intentionally unwired
-  // until Discord's permission policy has been verified firsthand; ordinary
-  // map geolocation remains exactly as it was.
+  // until Discord's permission policy has been verified firsthand. A manual
+  // Bond location is the Bond's location here too, so the device is asked only
+  // while the Bond is live; the read needs the session the bootstrap returns.
+  const authenticated: {
+    current?: { fetch: typeof globalThis.fetch; authorization: string };
+  } = {};
   const session = await bootstrapDiscordActivity({
     environment: {
       matchMedia: (query: string) => window.matchMedia(query),
-      geolocation: createBrowserGeolocation(),
+      geolocation: createBondLocationGeolocation({
+        device: createBrowserGeolocation(),
+        readLocation: async () =>
+          authenticated.current === undefined
+            ? { kind: "unavailable" }
+            : readBondLocationControl(authenticated.current),
+      }),
     },
   });
+  authenticated.current = {
+    fetch: session.fetch,
+    authorization: session.authorization,
+  };
   const coreRuntimeBaseUrl = resolveDiscordProxyUrl(
     CORE_RUNTIME_BASE_URL,
     window.location,

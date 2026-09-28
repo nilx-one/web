@@ -29,10 +29,12 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 
 use crate::{
-    IdentityRecord, IdentityRepository, NativeAuthConfig, TelegramInitDataVerifier, TokenFactory,
+    DiscordOAuthClient, DiscordOAuthError, IdentityRecord, IdentityRepository, NativeAuthConfig,
+    ProviderIdentity, TelegramInitDataVerifier, TokenFactory,
 };
 
 const TELEGRAM_AUTH_SCHEME: &str = "tma ";
+const DISCORD_AUTH_SCHEME: &str = "discord ";
 const SESSION_COOKIE: &str = "__Host-0x1_session";
 const DEFAULT_INTENT_TTL: Duration = Duration::from_secs(5 * 60);
 const MAX_LOCATION_REQUEST_BYTES: usize = 8 * 1024;
@@ -264,6 +266,7 @@ struct LocationControlApiState {
     identities: IdentityRepository,
     locations: BondLocationRepository,
     telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
 }
 
@@ -271,6 +274,7 @@ pub fn location_control_router(
     identities: IdentityRepository,
     locations: BondLocationRepository,
     telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
 ) -> Router {
     Router::new()
@@ -281,6 +285,7 @@ pub fn location_control_router(
             identities,
             locations,
             telegram_verifier,
+            discord_oauth,
             native_auth,
         })
 }
@@ -313,7 +318,10 @@ fn append_cookie(response: &mut Response, cookie: String) {
 /// mints a session cookie the *next* request can use instead. See
 /// `nilx-one/0x1` `documents/15-devices-and-recovery.md`, Single Active
 /// Client.
-async fn authenticate_telegram_bond(
+///
+/// A Discord Activity has no cookie of its own, so it proves itself with its
+/// access token on every read and is never minted a session here.
+async fn authenticate_bond(
     state: &LocationControlApiState,
     headers: &HeaderMap,
     now: u64,
@@ -333,9 +341,40 @@ async fn authenticate_telegram_bond(
         }
     }
 
-    let init_data = headers
+    let authorization = headers
         .get(AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.to_str().ok());
+
+    if let Some(access_token) = authorization
+        .and_then(|value| value.strip_prefix(DISCORD_AUTH_SCHEME))
+        .filter(|value| !value.is_empty())
+    {
+        let discord = state
+            .discord_oauth
+            .as_ref()
+            .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+        let user_id = discord
+            .authenticate(access_token)
+            .await
+            .map_err(|error| match error {
+                DiscordOAuthError::Rejected(_) | DiscordOAuthError::InvalidResponse => {
+                    StatusCode::UNAUTHORIZED
+                }
+                DiscordOAuthError::Transport(_) => StatusCode::SERVICE_UNAVAILABLE,
+            })?;
+        let identity = state
+            .identities
+            .find_by_provider(&ProviderIdentity::discord(user_id))
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "Bond identity lookup failed");
+                StatusCode::SERVICE_UNAVAILABLE
+            })?
+            .ok_or(StatusCode::NOT_FOUND)?;
+        return Ok((identity, None));
+    }
+
+    let init_data = authorization
         .and_then(|value| value.strip_prefix(TELEGRAM_AUTH_SCHEME))
         .filter(|value| !value.is_empty())
         .ok_or(StatusCode::UNAUTHORIZED)?;
@@ -384,8 +423,9 @@ async fn mint_session_cookie(
     Some(secure_cookie(SESSION_COOKIE, &token, ttl))
 }
 
-/// Authenticated operational projection consumed by the Telegram-hosted Web
-/// client. `location: null` means no Bond location has been submitted yet; the
+/// Authenticated operational projection consumed by every Web host: Telegram,
+/// the website, and Discord. `location: null` means no Bond location has been
+/// submitted yet; the
 /// ordinary device-location mode remains available.
 #[derive(Serialize)]
 struct LocationControlProjection {
@@ -481,7 +521,7 @@ async fn read_location_control(
         Ok(value) => value.as_secs(),
         Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
     };
-    let (identity, cookie) = match authenticate_telegram_bond(&state, &headers, now).await {
+    let (identity, cookie) = match authenticate_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(code) => return status(code),
     };
@@ -552,7 +592,11 @@ mod tests {
         BondAccessRole, BondLocationRepository, PendingLocationIntent, TelegramLocationIntents,
         location_control_router,
     };
-    use crate::{IdentityRepository, NativeAuthConfig, ProviderIdentity, RegistrationOutcome};
+    use crate::{
+        DiscordOAuthClient, IdentityRepository, NativeAuthConfig, ProviderIdentity,
+        RegistrationOutcome,
+    };
+    use axum::response::IntoResponse as _;
 
     const SESSION_TOKEN: &str = "123456:development-token";
 
@@ -600,6 +644,42 @@ mod tests {
     }
 
     async fn session_test_app(database_url: &str) -> axum::Router {
+        test_app(database_url, None).await
+    }
+
+    // A stand-in for Discord's user endpoint: `access-<id>` names the account.
+    async fn discord_oauth() -> DiscordOAuthClient {
+        let api = axum::Router::new().route(
+            "/v10/users/@me",
+            axum::routing::get(|headers: axum::http::HeaderMap| async move {
+                match headers
+                    .get(AUTHORIZATION)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.strip_prefix("Bearer "))
+                    .and_then(|token| token.strip_prefix("access-"))
+                {
+                    Some(user_id) => (
+                        StatusCode::OK,
+                        axum::Json(serde_json::json!({ "id": user_id })),
+                    )
+                        .into_response(),
+                    None => StatusCode::UNAUTHORIZED.into_response(),
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let origin = format!("http://{}", listener.local_addr().expect("address"));
+        tokio::spawn(async move {
+            axum::serve(listener, api)
+                .await
+                .expect("Discord API stand-in");
+        });
+        DiscordOAuthClient::with_api_origin("client-1", "client-secret", origin)
+    }
+
+    async fn test_app(database_url: &str, discord: Option<DiscordOAuthClient>) -> axum::Router {
         let identities = IdentityRepository::connect(database_url)
             .await
             .expect("identity repository");
@@ -610,6 +690,7 @@ mod tests {
             identities,
             locations,
             super::TelegramInitDataVerifier::new(SESSION_TOKEN.to_owned(), 300),
+            discord,
             NativeAuthConfig::new(
                 "test-auth-secret-that-is-at-least-thirty-two-bytes",
                 "test-password-pepper-that-is-at-least-thirty-two-bytes",
@@ -678,6 +759,61 @@ mod tests {
         let body = to_bytes(second.into_body(), 4096).await.expect("body");
         let body: serde_json::Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["role"], "user");
+    }
+
+    #[tokio::test]
+    async fn a_discord_activity_reads_the_same_manual_location_telegram_declared() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let app = test_app(&database_url, Some(discord_oauth().await)).await;
+        let pub_dress: PubDress = "0x0sky".parse().expect("valid pub_dress");
+        IdentityRepository::connect(&database_url)
+            .await
+            .expect("identity repository")
+            .register(&pub_dress, &ProviderIdentity::discord("42"), 10)
+            .await
+            .expect("registration");
+        let manual = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("manual point");
+        BondLocationRepository::connect(&database_url)
+            .await
+            .expect("Bond location repository")
+            .write(
+                "0x0sky",
+                BondLocation::new(manual, BondLocationMode::Manual, DecimalU64::new(30)),
+            )
+            .await
+            .expect("set manual");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/location-control")
+                    .header(AUTHORIZATION, "discord access-42")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get(SET_COOKIE).is_none());
+        let body = to_bytes(response.into_body(), 4096).await.expect("body");
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("JSON body");
+        assert_eq!(body["location"]["mode"], "manual");
+        assert_eq!(
+            body["location"]["coordinate"]["longitude_e7"],
+            manual.longitude_e7().to_string()
+        );
+
+        let unbound = app
+            .oneshot(
+                Request::get("/api/v1/location-control")
+                    .header(AUTHORIZATION, "discord access-99")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(unbound.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
