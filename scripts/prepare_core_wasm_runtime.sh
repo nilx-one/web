@@ -4,9 +4,9 @@
 
 set -Eeuo pipefail
 
-core_dir="${1:?path to checked-out nilx-one/core is required}"
+core_dir="$(cd "${1:?path to checked-out nilx-one/core is required}" && pwd)"
 expected_core_revision="c224304947280169017e298237bcf5361d1bfb30"
-expected_wasm_sha256="43ab28588d8e097decf77b4710ae560b82bc812a629a6fdf9ef7b5d73a8cd325"
+expected_wasm_sha256="8e26c08c3538b92b41ce701d6d06899308a00c0081b186806df6c6bef08ff3e8"
 runtime_version="0.1.0"
 runtime_build="$PWD/.core-wasm-runtime"
 
@@ -28,6 +28,17 @@ rm -rf "$runtime_build"
 (
   cd "$core_dir"
   cp "$lockfile" Cargo.lock
+  cargo fetch --locked
+  cargo_home="${CARGO_HOME:-${HOME}/.cargo}"
+  registry_src=("${cargo_home}"/registry/src/index.crates.io-*)
+  if [[ ${#registry_src[@]} -ne 1 || ! -d ${registry_src[0]} ]]; then
+    echo "expected one cargo registry source directory, got: ${registry_src[*]}" >&2
+    exit 1
+  fi
+  # Panic locations embed this machine's cargo registry path, including the
+  # index hash in the directory name. Remap it, and the Core checkout, so the
+  # Wasm digest does not depend on where the runner keeps crates.
+  export RUSTFLAGS="--remap-path-prefix=${registry_src[0]}=/cargo-registry --remap-path-prefix=${core_dir}=/core-source${RUSTFLAGS:+ ${RUSTFLAGS}}"
   ./scripts/build_wasm_package.sh "$runtime_build"
 )
 

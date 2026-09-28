@@ -217,14 +217,24 @@ export function storageWrites(source: string): StorageWrites {
     if (expression === undefined) continue;
     const key = resolveKey(expression, constants, functions);
     if (key === undefined) unresolved.push(expression.trim());
-    else written.push(key.replace(/[.:]+$/, ""));
+    else written.push(withoutTrailingSeparator(key));
   }
 
   return { written, unresolved };
 }
 
+function withoutTrailingSeparator(key: string): string {
+  let end = key.length;
+  while (end > 0) {
+    const char = key[end - 1];
+    if (char !== "." && char !== ":") break;
+    end -= 1;
+  }
+  return key.slice(0, end);
+}
+
 function normalizeKey(key: string): string {
-  return key.replace(/[.:]+$/, "");
+  return withoutTrailingSeparator(key);
 }
 
 function filesOf(files: readonly string[]): {

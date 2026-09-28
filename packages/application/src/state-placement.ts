@@ -265,9 +265,20 @@ export function mobilityAgreesWithPlacement(record: PlacedState): boolean {
   return record.mobility === "resident";
 }
 
+/** Drops a trailing run of `.` or `:` without a regular expression. */
+function withoutTrailingSeparator(key: string): string {
+  let end = key.length;
+  while (end > 0) {
+    const char = key[end - 1];
+    if (char !== "." && char !== ":") break;
+    end -= 1;
+  }
+  return key.slice(0, end);
+}
+
 /** The record a browser storage key belongs to, or `undefined` for a stranger. */
 export function placedStateForKey(key: string): PlacedState | undefined {
-  const normalized = key.replace(/[.:]+$/, "");
+  const normalized = withoutTrailingSeparator(key);
   return STATE_PLACEMENT.find((record) => {
     if (record.medium === "identity-service") return false;
     if (record.key === normalized) return true;

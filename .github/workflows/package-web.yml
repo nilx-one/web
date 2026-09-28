@@ -64,7 +64,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           expected_core=c224304947280169017e298237bcf5361d1bfb30
-          expected_wasm=43ab28588d8e097decf77b4710ae560b82bc812a629a6fdf9ef7b5d73a8cd325
+          expected_wasm=8e26c08c3538b92b41ce701d6d06899308a00c0081b186806df6c6bef08ff3e8
           for host in site telegram-mini-app discord-activity; do
             runtime="apps/$host/public/core/0.1.0"
             test -f "$runtime/index.js"
