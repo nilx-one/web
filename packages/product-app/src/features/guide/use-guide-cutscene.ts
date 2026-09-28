@@ -111,7 +111,7 @@ function viewportHeight(): number {
 }
 
 /**
- * A scene with 0xda-sha, played on the world itself.
+ * A scene with xSasha, played on the world itself.
  *
  * She walks up to the Bond's body in the same renderer that draws it, and the
  * camera is staged around the two of them — establishing, shot, reverse shot —

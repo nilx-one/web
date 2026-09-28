@@ -111,8 +111,8 @@ Local-first. Eligible, not transported.
   positions an owner declared for counterparts
   (`nilx-one.bond-location-overrides.v1:<owner>`). A remembered position is
   not a `Bond.location`;
-- **scenes played** — whether 0xda-sha's introduction was played through or
-  skipped (`nilx-one.guide.v1.<owner>`; [0xda-sha](guide.md)).
+- **scenes played** — whether xSasha's introduction was played through or
+  skipped (`nilx-one.guide.v1.<owner>`; [xSasha](guide.md)).
 
 **Sealed history**, under its own lifecycle and not under this one:
 

@@ -15,7 +15,7 @@ const HOME = join(
 );
 
 /**
- * 0xda-sha is presentation and guidance. What she may read and write is
+ * xSasha is presentation and guidance. What she may read and write is
  * pinned here, so a scene can never quietly become a second protocol: she
  * reads the published avatar scene, the camera and the local copy, and keeps
  * one play record of her own. Identity, BondChain, presence, pub_info and the
@@ -76,7 +76,7 @@ function functionBody(source: string, name: string): string {
   throw new Error(`${name} never closes.`);
 }
 
-describe("0xda-sha stays presentation", () => {
+describe("xSasha stays presentation", () => {
   it("imports nothing that could write identity, presence or protocol state", () => {
     const violations: string[] = [];
     for (const { file, code } of guideSources()) {

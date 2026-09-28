@@ -199,13 +199,13 @@ describe("Avaia setup from the Bond dock", () => {
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(updateAvaiaProfile).toHaveBeenCalledExactlyOnceWith("x0skai");
 
-    // What configuring paid is said once, by 0xda-sha, who walks up to say it.
+    // What configuring paid is said once, by xSasha, who walks up to say it.
     expect(screen.queryByLabelText("pub_dress")).toBeNull();
     await user.click(await screen.findByRole("button", { name: "Continue" }));
     const dialog = await screen.findByRole("dialog", {
       name: "Avaia configured",
     });
-    expect(dialog).toHaveTextContent("0xda-sha");
+    expect(dialog).toHaveTextContent("xSasha");
     expect(dialog).toHaveTextContent("+20 Bond experience");
     expect(dialog).toHaveTextContent("x0skai reached level 1");
     await user.click(screen.getByRole("button", { name: "Continue" }));

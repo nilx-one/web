@@ -11,7 +11,7 @@ import {
 } from "@nilx-one/map-contract";
 
 /**
- * Where a scene with 0xda-sha is staged, and how the camera frames it.
+ * Where a scene with xSasha is staged, and how the camera frames it.
  *
  * All of it is presentation. She is drawn beside the body this device already
  * draws, at the one place this client observed — never at a place she claims

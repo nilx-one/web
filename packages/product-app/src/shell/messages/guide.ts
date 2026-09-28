@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * What 0xda-sha says, and what a person may say back. A line with several
+ * What xSasha says, and what a person may say back. A line with several
  * numbered keys is one line in several wordings: the scene picks a different
  * one each time it plays, and every wording means the same thing.
  */
 export const GUIDE_EN = {
-  "guide.speaker": "0xda-sha",
+  "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Continue",
   "guide.intro.greeting.0":
     "Hi, bunny. The two of us are going to have fun — but I’m busy right now. Go create your Avaia.",
@@ -43,7 +43,7 @@ export const GUIDE_EN = {
 } as const;
 
 export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
-  "guide.speaker": "0xda-sha",
+  "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далі",
   "guide.intro.greeting.0":
     "Привіт, зайчик. Нам удвох буде прікольно, проте наразі я зайнята — створи свою Avaia.",
@@ -78,7 +78,7 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
 };
 
 export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
-  "guide.speaker": "0xda-sha",
+  "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далее",
   "guide.intro.greeting.0":
     "Привет, зайчик. Нам вдвоём будет прикольно, но сейчас я занята — создай свою Avaia.",

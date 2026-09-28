@@ -18,10 +18,10 @@ const uk = (key: Parameters<typeof translate>[1]) => translate("uk-UA", key);
 const en = (key: Parameters<typeof translate>[1]) => translate("en", key);
 const names = { avaia: "xda-shai" };
 
-describe("0xda-sha's script", () => {
+describe("xSasha's script", () => {
   it("opens the introduction with her greeting and three replies", () => {
     const line = createGuideLineState(GUIDE_OPENING.intro, 0, uk, names);
-    expect(line.speaker).toBe("0xda-sha");
+    expect(line.speaker).toBe("xSasha");
     expect(line.text).toMatch(/зайчик/);
     expect(line.text).toMatch(/Avaia/);
     expect(line.choices.map((choice) => choice.reply)).toEqual([

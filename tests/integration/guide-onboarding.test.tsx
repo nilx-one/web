@@ -181,7 +181,7 @@ function renderWorld(
   return Object.assign(renderer, { container });
 }
 
-describe("0xda-sha, the first time a Bond opens the world", () => {
+describe("xSasha, the first time a Bond opens the world", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
@@ -197,7 +197,7 @@ describe("0xda-sha, the first time a Bond opens the world", () => {
 
     const dialog = await screen.findByRole(
       "dialog",
-      { name: "0xda-sha" },
+      { name: "xSasha" },
       ARRIVAL_WAIT,
     );
     // She is on the world itself, beside the Bond, in a body of her own.
@@ -277,7 +277,7 @@ describe("0xda-sha, the first time a Bond opens the world", () => {
     const user = userEvent.setup();
     renderWorld();
 
-    await screen.findByRole("dialog", { name: "0xda-sha" }, ARRIVAL_WAIT);
+    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
     const replies = await untilReplies(user);
     await user.click(replies[2] as HTMLElement);
     await untilGone(user);
@@ -296,7 +296,7 @@ describe("0xda-sha, the first time a Bond opens the world", () => {
     const user = userEvent.setup();
     const { container } = renderWorld();
 
-    await screen.findByRole("dialog", { name: "0xda-sha" }, ARRIVAL_WAIT);
+    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
     await untilReplies(user);
     const results = await act(() => axe.run(container));
     expect(results.violations).toEqual([]);
@@ -307,7 +307,7 @@ describe("0xda-sha, the first time a Bond opens the world", () => {
     const identity = createIdentity();
     renderWorld(createMapRendererDouble({ kind: "ready" }), identity);
 
-    await screen.findByRole("dialog", { name: "0xda-sha" }, ARRIVAL_WAIT);
+    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
     await user.click((await untilReplies(user))[0] as HTMLElement);
     await user.click((await untilReplies(user))[0] as HTMLElement);
     await untilGone(user);
@@ -375,7 +375,7 @@ describe("0xda-sha, the first time a Bond opens the world", () => {
     const user = userEvent.setup();
     renderWorld();
 
-    await screen.findByRole("dialog", { name: "0xda-sha" }, ARRIVAL_WAIT);
+    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
     const replies = await untilReplies(user);
     await user.click(replies[1] as HTMLElement);
     const farewell = await untilReplies(user);

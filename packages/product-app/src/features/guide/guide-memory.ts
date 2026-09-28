@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 /**
- * Whether 0xda-sha's introduction still has to be played for a Bond.
+ * Whether xSasha's introduction still has to be played for a Bond.
  *
  * Two answers are kept on this device: the scene was played through, or a
  * person skipped it. "Later" is kept for this session only — she comes back

@@ -68,7 +68,7 @@ client hoped would be accepted. "Avaia saved" is a passing confirmation and
 fades on its own after a few seconds.
 
 The first save that reaches `configured` is an achievement — see
-[progression](progression.md). [0xda-sha](guide.md) comes back to say it: a
+[progression](progression.md). [xSasha](guide.md) comes back to say it: a
 scene titled **Avaia configured** says what it paid (20 Bond experience, and
 level 1 for the Avaia), and, where this deployment can download an on-device
 model, that the next step waits in Settings; a person answers her to close it.

@@ -5,7 +5,7 @@ import type { Translate, TranslationKey } from "../../shell/localization";
 import type { GuideShot } from "./guide-stage";
 
 /**
- * 0xda-sha's scenes, as a small dialogue graph.
+ * xSasha's scenes, as a small dialogue graph.
  *
  * A scene is presentation and nothing else: what she says creates no
  * Interaction, completes no BondChain and asserts nothing about any Bond. The

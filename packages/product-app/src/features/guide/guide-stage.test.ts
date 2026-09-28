@@ -22,7 +22,7 @@ import {
 
 const KYIV = { longitude: 30.5234, latitude: 50.4501 };
 
-describe("where a scene with 0xda-sha is staged", () => {
+describe("where a scene with xSasha is staged", () => {
   const stage = guideStage(KYIV);
 
   it("stands her just in front of the Bond, who faces north", () => {

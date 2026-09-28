@@ -23,7 +23,7 @@ function memoryStorage(): GuideMemoryStorage & { items: Map<string, string> } {
 
 afterEach(() => forgetGuideSession());
 
-describe("whether 0xda-sha still has to introduce herself", () => {
+describe("whether xSasha still has to introduce herself", () => {
   it("is owed to a Bond she has never met", () => {
     expect(guideIntroOwed("0x0sky", memoryStorage())).toBe(true);
   });

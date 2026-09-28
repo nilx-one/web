@@ -298,7 +298,7 @@ const AVAIA_SAVED_TOAST_MS = 4_000;
 
 /**
  * The world has settled — the map painted, the first fix framed — before
- * 0xda-sha walks up, so her arrival is not lost in the camera finding its feet.
+ * xSasha walks up, so her arrival is not lost in the camera finding its feet.
  */
 export const GUIDE_INTRO_DELAY_MS = 1_800;
 
@@ -1370,7 +1370,7 @@ export function AuthenticatedMapHomeView({
   }
 
   /**
-   * How a scene with 0xda-sha ended is all the world hears of it. An
+   * How a scene with xSasha ended is all the world hears of it. An
    * introduction played through or skipped is not played again on this
    * device; one put off comes back the next time the world opens.
    */

@@ -1,6 +1,6 @@
-# 0xda-sha
+# xSasha
 
-0xda-sha is a character who comes to a Bond from time to time and tells it
+xSasha is a character who comes to a Bond from time to time and tells it
 what to do next. Her first job is onboarding: she introduces herself to a Bond
 whose Avaia nobody has configured, sends it to create one, and comes back to
 say what that paid.
@@ -10,6 +10,11 @@ BondChain and asserts nothing about any Bond. She is not an Avaia, not a
 second identity and not evidence that anyone is anywhere. The one thing a
 scene with her may pay is an achievement [progression](progression.md) already
 priced; she only says it out loud.
+
+Her name is not an address. `xSasha` is neither a Bond's `pub_dress` (those
+begin `0x`) nor an Avaia's (an `x`, the owner's hexadecimal discriminator, and
+the `ai` ending), so no identity can hold it and she is never mistaken for a
+real Bond or someone's Avaia.
 
 ## A scene
 
@@ -52,7 +57,7 @@ Bond (or the device has said it cannot locate itself), a Bond whose Avaia is
 `unconfigured` is met by her, provided nothing else is open in the Dock:
 
 ```text
-0xda-sha   Hi, bunny. The two of us are going to have fun — but I'm busy
+xSasha   Hi, bunny. The two of us are going to have fun — but I'm busy
            right now. Go create your Avaia.
 
   1. This is strange. I feel like I've been here before.
@@ -78,7 +83,7 @@ device to download a model.
 
 ## What this is not
 
-0xda-sha guides and stages; she is not a second protocol. The rules below are
+xSasha guides and stages; she is not a second protocol. The rules below are
 what keeps her that way, and `tests/architecture/guide-boundary.test.ts` and
 `tests/integration/guide-onboarding.test.tsx` hold the code to them.
 
