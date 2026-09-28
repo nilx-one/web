@@ -19,6 +19,7 @@ import {
   GUIDE_OPENING,
   isSpokenReply,
   replyText,
+  studyVoice,
   type GuideChoice,
   type GuideLineViewState,
   type GuideNames,
@@ -29,16 +30,24 @@ import {
   GUIDE_NODES,
 } from "./guide-script";
 import {
+  clearShot,
   driftCamera,
   GUIDE_LEAVE_MS,
+  GUIDE_TURN_MS,
   GUIDE_WALK_MS,
+  guideAsideBearing,
+  guideAsideStage,
   guideCameraPadding,
   guideModel,
   guideShotCamera,
+  guideSightlines,
   guideStage,
+  OPEN_GROUND,
   sampleGuideBody,
+  shotIsClear,
   type GuideBodyMotion,
   type GuideShot,
+  type GuideSightlines,
   type GuideStage,
 } from "./guide-stage";
 
@@ -85,7 +94,7 @@ export interface GuideCutsceneInput {
   readonly renderer: MapRenderer;
   /** Where the Bond's body stands, when this device observed one. */
   readonly anchor: MapPointSelection | undefined;
-  /** The body the Bond wears, so she never wears the same one beside it. */
+  /** The body the Bond wears, which she mirrors — body and voice. */
   readonly bondModel: AvatarModelId | undefined;
   readonly bondName: string;
   readonly names: GuideNames;
@@ -115,8 +124,10 @@ function viewportHeight(): number {
  *
  * She walks up to the Bond's body in the same renderer that draws it, and the
  * camera is staged around the two of them — establishing, shot, reverse shot —
- * then handed back exactly where it was. A person who asked for reduced motion
- * gets cuts instead of moves, and she is simply standing there.
+ * then handed back exactly where it was. The reward scene finds her a way off
+ * instead, her back to the Bond and the place behind her, and she turns round
+ * to say it. A person who asked for reduced motion gets cuts instead of moves,
+ * and she is simply standing there, already facing them.
  */
 export function useGuideCutscene({
   renderer,
@@ -131,6 +142,7 @@ export function useGuideCutscene({
   const [playing, setPlayingState] = useState<Playing | undefined>(undefined);
   const playingRef = useRef<Playing | undefined>(undefined);
   const stageRef = useRef<GuideStage | undefined>(undefined);
+  const sightlinesRef = useRef<GuideSightlines>(OPEN_GROUND);
   const baseCameraRef = useRef<MapCamera | undefined>(undefined);
   const motionRef = useRef<GuideBodyMotion | undefined>(undefined);
   const anchorRef = useRef(anchor);
@@ -156,16 +168,52 @@ export function useGuideCutscene({
     [renderer, reducedMotion],
   );
 
+  /** A written shot, turned off any wall that would stand in front of it. */
+  const frame = useCallback(
+    (shot: GuideShot, stage: GuideStage): MapCamera =>
+      clearShot(
+        guideShotCamera(shot, stage),
+        stage,
+        sightlinesRef.current,
+        viewportHeight(),
+      ),
+    [],
+  );
+
+  /** Breathing, unless the creep sideways would walk into a wall: then in only. */
+  const drift = useCallback((camera: MapCamera, stage: GuideStage) => {
+    const drifted = driftCamera(camera);
+    return shotIsClear(drifted, stage, sightlinesRef.current, viewportHeight())
+      ? drifted
+      : { ...camera, zoom: drifted.zoom };
+  }, []);
+
   const play = useCallback(
     (scene: GuideSceneId, options: GuidePlayOptions = {}) => {
       if (playingRef.current !== undefined) return;
       const base = renderer.getCamera();
       baseCameraRef.current = base;
-      stageRef.current = guideStage(
-        anchorRef.current ?? {
-          longitude: base.center[0],
-          latitude: base.center[1],
-        },
+      const you = anchorRef.current ?? {
+        longitude: base.center[0],
+        latitude: base.center[1],
+      };
+      stageRef.current =
+        scene === "reward"
+          ? guideAsideStage(
+              you,
+              guideAsideBearing(
+                you,
+                renderer.obstaclesWithin === undefined
+                  ? undefined
+                  : (bounds) => renderer.obstaclesWithin?.(bounds) ?? [],
+              ),
+            )
+          : guideStage(you);
+      sightlinesRef.current = guideSightlines(
+        you,
+        renderer.obstaclesWithin === undefined
+          ? undefined
+          : (bounds) => renderer.obstaclesWithin?.(bounds) ?? [],
       );
       playedScenes += 1;
       setPlaying({
@@ -255,6 +303,39 @@ export function useGuideCutscene({
 
     switch (beat) {
       case "arriving": {
+        if (stage.kind === "aside") {
+          // Her back to the Bond, the place ahead of her; then she turns.
+          const facingBond = (stage.bearing + 180) % 360;
+          if (reducedMotion) {
+            motionRef.current = {
+              kind: "stand",
+              at: stage.dasha,
+              facing: stage.you,
+            };
+            shoot(frame("dasha", stage), 0);
+            later(0, toLine);
+            break;
+          }
+          motionRef.current = {
+            kind: "stand",
+            at: stage.dasha,
+            facing: stage.entry,
+          };
+          shoot(frame("establish", stage), ESTABLISH_MS);
+          later(ESTABLISH_MS, () => {
+            motionRef.current = {
+              kind: "turn",
+              at: stage.dasha,
+              fromBearing: stage.bearing,
+              toBearing: facingBond,
+              startedMs: globalThis.performance.now(),
+              durationMs: GUIDE_TURN_MS,
+            };
+            shoot(frame("dasha", stage), GUIDE_TURN_MS);
+          });
+          later(ESTABLISH_MS + GUIDE_TURN_MS, toLine);
+          break;
+        }
         motionRef.current = reducedMotion
           ? { kind: "stand", at: stage.dasha, facing: stage.you }
           : {
@@ -265,16 +346,13 @@ export function useGuideCutscene({
               durationMs: GUIDE_WALK_MS,
             };
         if (reducedMotion) {
-          shoot(guideShotCamera("two-shot", stage), 0);
+          shoot(frame("two-shot", stage), 0);
           later(0, toLine);
           break;
         }
-        shoot(guideShotCamera("establish", stage), ESTABLISH_MS);
+        shoot(frame("establish", stage), ESTABLISH_MS);
         later(ESTABLISH_MS, () =>
-          shoot(
-            guideShotCamera("two-shot", stage),
-            GUIDE_WALK_MS - ESTABLISH_MS,
-          ),
+          shoot(frame("two-shot", stage), GUIDE_WALK_MS - ESTABLISH_MS),
         );
         later(GUIDE_WALK_MS, toLine);
         break;
@@ -290,15 +368,15 @@ export function useGuideCutscene({
             : {}),
         };
         const shot: GuideShot = script.shot;
-        const camera = guideShotCamera(shot, stage);
+        const camera = frame(shot, stage);
         shoot(camera, SHOT_MS);
         if (!reducedMotion) {
-          later(SHOT_MS, () => shoot(driftCamera(camera), DRIFT_MS));
+          later(SHOT_MS, () => shoot(drift(camera, stage), DRIFT_MS));
         }
         break;
       }
       case "reply": {
-        shoot(guideShotCamera("you", stage), REPLY_SHOT_MS);
+        shoot(frame("you", stage), REPLY_SHOT_MS);
         later(GUIDE_REPLY_BEAT_MS, advance);
         break;
       }
@@ -322,11 +400,12 @@ export function useGuideCutscene({
     return () => {
       for (const timer of timers) globalThis.clearTimeout(timer);
     };
-  }, [beat, node, reducedMotion, shoot, finish, toLine, advance]);
+  }, [beat, node, reducedMotion, shoot, frame, drift, finish, toLine, advance]);
 
   // Her body, frame by frame, for as long as the scene lasts.
   const active = playing !== undefined;
   const model = guideModel(bondModel);
+  const voice = studyVoice(bondModel);
   useEffect(() => {
     const avatars = renderer.avatars;
     if (!active || avatars === undefined) return;
@@ -367,10 +446,18 @@ export function useGuideCutscene({
       : {
           scene: playing.scene,
           beat: playing.beat,
-          line: createGuideLineState(playing.node, playing.seed, t, names),
+          line: createGuideLineState(
+            playing.node,
+            playing.seed,
+            t,
+            names,
+            voice,
+          ),
           ...(playing.reply === undefined
             ? {}
-            : { reply: replyText(t, playing.reply, playing.seed, names) }),
+            : {
+                reply: replyText(t, playing.reply, playing.seed, names, voice),
+              }),
           replySpeaker: bondName,
           ...(playing.reward === undefined ? {} : { reward: playing.reward }),
         };

@@ -134,6 +134,12 @@ export const BUILDING_LAYER_IDS: readonly string[] = [
   "buildings-flat",
 ];
 
+/**
+ * How tall the published styles raise a building the data gives no height,
+ * as `fill-extrusion-height` falls back to it.
+ */
+export const BUILDING_DEFAULT_HEIGHT_METERS = 7;
+
 /** The style layers whose paint means "this is water". */
 export const WATER_LAYER_IDS: readonly string[] = ["water"];
 
@@ -926,7 +932,7 @@ export function createMapLibreRenderer(
     mounted: MapLibreMap,
     layerId: string,
     bounds: MapBounds,
-  ): MapObstacle["polygons"] {
+  ): Pick<MapObstacle, "polygons"> & { readonly heights: readonly number[] } {
     const layer = mounted.getLayer(layerId) as
       | {
           readonly source?: string;
@@ -935,10 +941,13 @@ export function createMapLibreRenderer(
         }
       | undefined;
     if (layer?.source === undefined || layer.sourceLayer === undefined) {
-      return [];
+      return { polygons: [], heights: [] };
     }
-    if (mounted.getSource(layer.source) === undefined) return [];
+    if (mounted.getSource(layer.source) === undefined) {
+      return { polygons: [], heights: [] };
+    }
     const polygons: (readonly (readonly [number, number])[])[][] = [];
+    const heights: number[] = [];
     for (const feature of mounted.querySourceFeatures(layer.source, {
       sourceLayer: layer.sourceLayer,
       ...(layer.filter == null ? {} : { filter: layer.filter }),
@@ -947,6 +956,11 @@ export function createMapLibreRenderer(
         readonly type: string;
         readonly coordinates: unknown;
       };
+      const raised = Number(feature.properties?.["height"]);
+      const height =
+        Number.isFinite(raised) && raised > 0
+          ? raised
+          : BUILDING_DEFAULT_HEIGHT_METERS;
       const parts =
         geometry.type === "Polygon"
           ? [geometry.coordinates as [number, number][][]]
@@ -957,9 +971,10 @@ export function createMapLibreRenderer(
         const outer = rings[0];
         if (outer === undefined || !ringTouches(outer, bounds)) continue;
         polygons.push(rings);
+        heights.push(height);
       }
     }
-    return polygons;
+    return { polygons, heights };
   }
 
   function landmarkFrom(feature: {
@@ -1237,9 +1252,17 @@ export function createMapLibreRenderer(
         // The flat and the raised building layers paint the same footprints;
         // one of them is enough.
         for (const layerId of existingLayers(mounted, layerIds)) {
-          const polygons = polygonsPainted(mounted, layerId, bounds);
+          const { polygons, heights } = polygonsPainted(
+            mounted,
+            layerId,
+            bounds,
+          );
           if (polygons.length === 0) continue;
-          obstacles.push({ kind, polygons });
+          obstacles.push(
+            kind === "building"
+              ? { kind, polygons, heights }
+              : { kind, polygons },
+          );
           return;
         }
       };

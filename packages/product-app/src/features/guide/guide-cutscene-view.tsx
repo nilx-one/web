@@ -5,12 +5,21 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { useLocalization, type TranslationKey } from "../../shell/localization";
 import { ACHIEVEMENTS, type AchievementId } from "../progression/progression";
+import { GuideConfetti, type GuideXpSubject } from "./guide-confetti";
 import type { GuideReply } from "./guide-script";
 import type { GuideCutsceneState } from "./use-guide-cutscene";
 import "./guide-cutscene.css";
 
 /** Quick enough to keep up with reading, slow enough to be her talking. */
 export const GUIDE_TYPING_STEP_MS = 28;
+
+/** The Bond's experience lands first, then its Avaia's. */
+export const GUIDE_XP_LANDS_MS: Readonly<Record<GuideXpSubject, number>> = {
+  bond: 380,
+  avaia: 700,
+};
+/** How long a number takes to count up once its line has landed. */
+export const GUIDE_XP_COUNT_MS = 900;
 
 const TITLE_KEYS: Readonly<Record<AchievementId, TranslationKey>> = {
   "avaia-configured": "achievement.avaiaConfigured",
@@ -50,6 +59,75 @@ function useTypedLine(
     done,
     complete: () => setTyped({ text, count: scalars.length }),
   };
+}
+
+/**
+ * A number counted up from nothing once its line has landed. Only the eye
+ * gets the count: what is read out is the number itself.
+ */
+function useCountUp(target: number, delayMs: number, animate: boolean): number {
+  const [shown, setShown] = useState(animate ? 0 : target);
+  useEffect(() => {
+    if (!animate) return;
+    let frame: number | undefined;
+    const started = globalThis.performance.now() + delayMs;
+    function step(now: number): void {
+      const t = Math.min(1, Math.max(0, (now - started) / GUIDE_XP_COUNT_MS));
+      const eased = 1 - (1 - t) ** 3;
+      setShown(Math.round(target * eased));
+      if (t < 1) frame = globalThis.requestAnimationFrame(step);
+    }
+    frame = globalThis.requestAnimationFrame(step);
+    return () => {
+      if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
+    };
+  }, [animate, delayMs, target]);
+  return animate ? shown : target;
+}
+
+interface GuideXpLineProps {
+  readonly subject: GuideXpSubject;
+  /** What counts up; a line with no number is shown whole. */
+  readonly value: number | undefined;
+  readonly label: (value: number | undefined) => string;
+  readonly level: boolean;
+  /** The first line of a subject is the one its burst goes off from. */
+  readonly burst: boolean;
+  readonly salt: string;
+  readonly animate: boolean;
+}
+
+/** One line of what was paid, in its subject's colour. */
+function GuideXpLine({
+  subject,
+  value,
+  label,
+  level,
+  burst,
+  salt,
+  animate,
+}: GuideXpLineProps) {
+  const landsMs = GUIDE_XP_LANDS_MS[subject];
+  const counted = useCountUp(
+    value ?? 0,
+    landsMs,
+    animate && value !== undefined,
+  );
+  return (
+    <li
+      className="guide-xp"
+      data-subject={subject}
+      data-kind={level ? "level" : "xp"}
+    >
+      <span className="visually-hidden">{label(value)}</span>
+      <span className="guide-xp__chip" aria-hidden="true">
+        {label(value === undefined ? undefined : counted)}
+      </span>
+      {animate && burst ? (
+        <GuideConfetti subject={subject} salt={salt} delayMs={landsMs} />
+      ) : null}
+    </li>
+  );
 }
 
 export interface GuideCutsceneViewProps {
@@ -138,17 +216,47 @@ export function GuideCutsceneView({
 
   const achievement =
     reward === undefined ? undefined : ACHIEVEMENTS[reward.achievement];
-  const levels =
-    reward === undefined
-      ? []
-      : [
-          reward.after.bond.level > reward.before.bond.level
-            ? { name: bondName, level: reward.after.bond.level }
-            : undefined,
-          reward.after.avaia.level > reward.before.avaia.level
-            ? { name: avaiaName, level: reward.after.avaia.level }
-            : undefined,
-        ].filter((entry) => entry !== undefined);
+  // Everything the scene paid, the Bond's first and then its Avaia's, each
+  // in its own colour. Nothing here is priced by the scene: it only reads
+  // what the achievement already paid.
+  const paid: {
+    readonly key: string;
+    readonly subject: GuideXpSubject;
+    readonly value: number | undefined;
+    readonly level: boolean;
+    readonly label: (value: number | undefined) => string;
+  }[] = [];
+  if (reward !== undefined && achievement !== undefined) {
+    for (const subject of ["bond", "avaia"] as const) {
+      const xp = subject === "bond" ? achievement.bondXp : achievement.avaiaXp;
+      if (xp > 0) {
+        paid.push({
+          key: `${subject}:xp`,
+          subject,
+          value: xp,
+          level: false,
+          label: (value) =>
+            t(
+              subject === "bond" ? "achievement.bondXp" : "achievement.avaiaXp",
+            ).replace("{xp}", String(value ?? xp)),
+        });
+      }
+      const before = reward.before[subject].level;
+      const after = reward.after[subject].level;
+      if (after > before) {
+        paid.push({
+          key: `${subject}:level`,
+          subject,
+          value: undefined,
+          level: true,
+          label: () =>
+            t("achievement.level")
+              .replace("{name}", subject === "bond" ? bondName : avaiaName)
+              .replace("{level}", String(after)),
+        });
+      }
+    }
+  }
 
   return (
     <div
@@ -176,28 +284,21 @@ export function GuideCutsceneView({
               {t(TITLE_KEYS[reward.achievement])}
             </h2>
             <ul className="guide-cutscene__rewards">
-              {achievement.bondXp > 0 ? (
-                <li>
-                  {t("achievement.bondXp").replace(
-                    "{xp}",
-                    String(achievement.bondXp),
-                  )}
-                </li>
-              ) : null}
-              {achievement.avaiaXp > 0 ? (
-                <li>
-                  {t("achievement.avaiaXp").replace(
-                    "{xp}",
-                    String(achievement.avaiaXp),
-                  )}
-                </li>
-              ) : null}
-              {levels.map((entry) => (
-                <li key={entry.name} className="guide-cutscene__level">
-                  {t("achievement.level")
-                    .replace("{name}", entry.name)
-                    .replace("{level}", String(entry.level))}
-                </li>
+              {paid.map((line, index) => (
+                <GuideXpLine
+                  key={line.key}
+                  subject={line.subject}
+                  value={line.value}
+                  label={line.label}
+                  level={line.level}
+                  burst={
+                    paid.findIndex(
+                      (other) => other.subject === line.subject,
+                    ) === index
+                  }
+                  salt={reward.achievement}
+                  animate={!reducedMotion}
+                />
               ))}
             </ul>
             {reward.next === "download" ? (

@@ -18,6 +18,12 @@
   --guide-gold: #e6c47c;
   --guide-ink: #f4efe6;
   --guide-ink-muted: rgba(244, 239, 230, 0.62);
+  /* The scene is always filmed dark, so experience wears the bright shades:
+     the Bond's blue, its Avaia's violet. */
+  --guide-xp-bond: #6ea8ff;
+  --guide-xp-bond-deep: #2f6ff0;
+  --guide-xp-avaia: #b794ff;
+  --guide-xp-avaia-deep: #7b45f5;
 
   position: fixed;
   inset: 0;
@@ -293,9 +299,210 @@
   font-variant-numeric: tabular-nums;
 }
 
-.guide-cutscene__level {
-  color: var(--guide-ink-muted);
-  font-weight: 520;
+/* What was paid lands one line at a time — the Bond's, then its Avaia's —
+   each in its own colour, and goes off like a popper when it lands. */
+.guide-xp {
+  --xp: var(--guide-xp-bond);
+  --xp-deep: var(--guide-xp-bond-deep);
+  --xp-ink: #e3edff;
+  --xp-lands: 380ms;
+
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.guide-xp[data-subject="avaia"] {
+  --xp: var(--guide-xp-avaia);
+  --xp-deep: var(--guide-xp-avaia-deep);
+  --xp-ink: #efe6ff;
+  --xp-lands: 700ms;
+}
+
+.guide-xp__chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.85rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--xp) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--xp-deep) 30%, rgba(0, 0, 0, 0.45));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.2),
+    0 0 22px color-mix(in srgb, var(--xp) 45%, transparent);
+  color: var(--xp-ink);
+  text-shadow: none;
+  animation: guide-xp-pop 640ms var(--xp-lands) cubic-bezier(0.2, 1.6, 0.35, 1)
+    both;
+}
+
+.guide-xp[data-kind="level"] .guide-xp__chip {
+  border-style: dashed;
+  font-weight: 560;
+}
+
+/* A glint crosses the chip once it has landed. */
+.guide-xp__chip::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 70%
+  );
+  content: "";
+  transform: translateX(-120%);
+  animation: guide-xp-glint 900ms calc(var(--xp-lands) + 520ms) ease-out
+    forwards;
+}
+
+@keyframes guide-xp-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes guide-xp-glint {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+.guide-confetti {
+  --light: var(--guide-xp-bond);
+  --deep: var(--guide-xp-bond-deep);
+
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.guide-confetti[data-subject="avaia"] {
+  --light: var(--guide-xp-avaia);
+  --deep: var(--guide-xp-avaia-deep);
+}
+
+.guide-confetti__piece {
+  --piece: var(--deep);
+
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--size);
+  height: calc(var(--size) * 0.45);
+  opacity: 0;
+  animation: guide-confetti-fly var(--duration) var(--delay) both;
+}
+
+.guide-confetti__piece[data-tone="1"] {
+  --piece: var(--light);
+}
+
+.guide-confetti__piece[data-shape="dot"] {
+  width: calc(var(--size) * 0.7);
+  height: calc(var(--size) * 0.7);
+}
+
+.guide-confetti__piece[data-shape="spark"] {
+  height: var(--size);
+}
+
+.guide-confetti__piece[data-shape="x"] {
+  width: auto;
+  height: auto;
+}
+
+.guide-confetti__paper {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--piece);
+  animation: guide-confetti-flutter 700ms linear infinite;
+}
+
+.guide-confetti__piece[data-shape="dot"] .guide-confetti__paper {
+  border-radius: 50%;
+}
+
+.guide-confetti__piece[data-shape="spark"] .guide-confetti__paper {
+  clip-path: polygon(
+    50% 0%,
+    62% 38%,
+    100% 50%,
+    62% 62%,
+    50% 100%,
+    38% 62%,
+    0% 50%,
+    38% 38%
+  );
+}
+
+/* An x of its own, the letter every Avaia's name begins with. */
+.guide-confetti__piece[data-shape="x"] .guide-confetti__paper {
+  background: none;
+  color: var(--piece);
+  font-size: calc(var(--size) * 1.7);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.guide-confetti__piece[data-shape="x"] .guide-confetti__paper::before {
+  content: "×";
+}
+
+.guide-confetti__piece:nth-child(3n) .guide-confetti__paper {
+  animation-duration: 520ms;
+}
+
+.guide-confetti__piece:nth-child(3n + 1) .guide-confetti__paper {
+  animation-duration: 880ms;
+  animation-direction: reverse;
+}
+
+/* Up fast and slowing, then tumbling down faster and faster, and gone. */
+@keyframes guide-confetti-fly {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.1, 0.75, 0.35, 1);
+  }
+  6% {
+    opacity: 1;
+  }
+  42% {
+    transform: translate(calc(var(--dx) - 50%), calc(var(--dy) - 50%)) scale(1)
+      rotate(calc(var(--spin) * 0.5));
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.6);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(
+        calc(var(--dx) * 1.2 - 50%),
+        calc(var(--dy) + var(--fall) - 50%)
+      )
+      scale(0.85) rotate(var(--spin));
+  }
+}
+
+@keyframes guide-confetti-flutter {
+  to {
+    transform: rotate3d(1, 0.4, 0.2, 360deg);
+  }
 }
 
 .guide-cutscene__next {
@@ -313,8 +520,14 @@
   .guide-cutscene__panel,
   .guide-cutscene__choice,
   .guide-cutscene__reward,
-  .guide-cutscene__caret {
+  .guide-cutscene__caret,
+  .guide-xp__chip,
+  .guide-xp__chip::after {
     animation: none;
+  }
+
+  .guide-confetti {
+    display: none;
   }
 
   .app-shell[data-cutscene="true"] .app-shell__header,

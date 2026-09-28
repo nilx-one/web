@@ -200,9 +200,10 @@ describe("xSasha, the first time a Bond opens the world", () => {
       { name: "xSasha" },
       ARRIVAL_WAIT,
     );
-    // She is on the world itself, beside the Bond, in a body of her own.
+    // She is on the world itself, beside the Bond, mirroring it: the Bond
+    // wears Sky, so she is drawn in Sky too.
     expect(renderer.avatars?.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "guide", modelId: "dasha-v2-study" }),
+      expect.objectContaining({ id: "guide", modelId: "sky-study" }),
     );
     // The camera is the scene's: it is staged close in, not left where it was.
     await waitFor(() =>
@@ -256,9 +257,20 @@ describe("xSasha, the first time a Bond opens the world", () => {
 
     const thanks = await untilReplies(user);
     const dialog = screen.getByRole("dialog", { name: "Avaia configured" });
-    expect(dialog).toHaveTextContent(/[Gg]rowing/);
+    // She nearly forgot: she calls the Bond by its pub_dress as she pays it.
+    expect(dialog).toHaveTextContent("0x0sky");
+    expect(dialog).toHaveTextContent(/forgot|nearly left|yours/);
     expect(dialog).toHaveTextContent("+20 Bond experience");
     expect(dialog).toHaveTextContent("x0skai reached level 1");
+    // The Bond's gain is blue, its Avaia's violet.
+    expect(
+      dialog.querySelector('.guide-xp[data-subject="bond"][data-kind="xp"]'),
+    ).toHaveTextContent("+20 Bond experience");
+    expect(
+      dialog.querySelector(
+        '.guide-xp[data-subject="avaia"][data-kind="level"]',
+      ),
+    ).toHaveTextContent("x0skai reached level 1");
 
     await user.click(thanks[0] as HTMLElement);
     const onward = await untilReplies(user);
