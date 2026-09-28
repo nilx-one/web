@@ -140,10 +140,13 @@ studies: they publish no slots and no items, and the editor says so rather
 than offering controls that would change nothing.
 
 The body is identity state and goes to the service. What the body wears does
-not: the identity contract publishes no field for an appearance, so this client
-keeps it on the device, per study, and the editor says so. A model the service
-refuses leaves the outfit unwritten too — a half-saved body is not what anyone
-asked for. It follows that an outfit does not travel between devices yet.
+not yet: the identity contract publishes no field for an appearance, so this
+client keeps it on the device, per study, and the editor says so. A model the
+service refuses leaves the outfit unwritten too — a half-saved body is not what
+anyone asked for. It follows that an outfit does not travel between devices
+yet. Its destination is the service all the same: a customized body is to be
+identified by the digest its customization hashes to, kept where the named
+study is kept today (see [State placement](state-placement.md)).
 
 An Avaia's body is its own. Where nothing has been chosen for it, it is derived
 from its address so that an Avaia never wears the study of the Bond that owns

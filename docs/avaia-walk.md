@@ -95,8 +95,10 @@ verbatim. Nothing is generated, looked up elsewhere, or invented. The studied
 entries appear on the Avaia's own screen in the Dock ("Landmarks studied").
 
 The notebook is kept per Bond, and its study notes per Avaia address, in local
-storage under `nilx-one.avaia.landmarks.v1.<pub_dress>`. It is never synced,
-exported or used as training signal. It asserts nothing about presence,
+storage under `nilx-one.avaia.landmarks.v1.<pub_dress>`. Nothing sends it
+anywhere today, and it is never used as training signal; it is placed as
+synchronizable — eligible to follow its Bond between devices, never to become
+service state (see [State placement](state-placement.md)). It asserts nothing about presence,
 attendance or any Bond, and it is not a landmark projection in the sense of
 the map architecture. The Avaia only ever chooses among what its owner already
 walked past. It never goes looking beyond that.
@@ -117,9 +119,12 @@ storage under `nilx-one.fog.reveals.v1.<pub_dress>`, one Bond's alone. The
 field reads and writes nothing until the product binds it to a Bond
 (`MapFogField.bindOwner`), and switching the bound Bond — signing into the
 same device as someone else — swaps in that Bond's own reveals rather than
-merging with the last one's. A reveal is never written into the journal,
-never counts as a visit, and is never synced or sent anywhere. The shade
-layer draws it alongside what the journal lit.
+merging with the last one's. A reveal is never written into the journal and
+never counts as a visit. Nothing sends it anywhere today; opened cells are
+placed as synchronizable, and the timers of reveals still in flight
+(`nilx-one.fog.jobs.v1.<pub_dress>`) stay on the device that started them
+(see [State placement](state-placement.md)). The shade layer draws a reveal
+alongside what the journal lit.
 
 1. **The Avaia reveals it.** The cells a Bond can reach into are marked on the
    world with a dashed outline: the cell it stands in and its neighbours, and

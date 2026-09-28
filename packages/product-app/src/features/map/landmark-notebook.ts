@@ -13,9 +13,10 @@ import {
  * A person walking past a monument is what puts it here: the device observed
  * itself close to something the basemap draws, and that is the whole of the
  * evidence. Its Avaia later walks up to what was noticed and studies it, which
- * is the second half. Both halves are this device's own and nothing else's:
- * the notebook is never synced, exported, sent anywhere, or used as training
- * signal, and it asserts nothing about presence, attendance, or any Bond.
+ * is the second half. Both halves are one Bond's own: the notebook is never
+ * used as training signal, nothing sends it anywhere today (it is placed as
+ * synchronizable, never as service state), and it asserts nothing about
+ * presence, attendance, or any Bond.
  */
 export interface NoticedLandmark {
   readonly landmark: MapLandmark;

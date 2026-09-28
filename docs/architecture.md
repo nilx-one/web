@@ -88,6 +88,16 @@ The canonical production Web origin is `https://nilx.one`. Telegram Mini App aut
 
 The bounded identity API remains same-origin under `/api/v1/*`. A separate API origin is not part of the current contract because it would add cross-origin and cookie policy without changing the identity boundary.
 
+## State placement
+
+Every persisted record has one of three placements, declared in `STATE_PLACEMENT` (`packages/application/src/state-placement.ts`) and checked against the source tree by an architecture test:
+
+- **server** — the `pub_dress`, everything a sign-in needs, and the 3D-model identifier of a body. Nothing else is service state;
+- **device** — never leaves the device: the on-device model and its download, the presence journal key, work in flight;
+- **synchronizable** — local-first and eligible to follow a Bond between its own devices under the `.bnd` discipline: interface preferences, and what a Bond earned or remembered by playing (progress and levels, opened cells, position, `bch` and history).
+
+See [State placement](state-placement.md) for the table and what "synchronizable" does and does not claim.
+
 ## Rendering boundary
 
 Custom graphics select WebGPU by capability. Failure to acquire an adapter falls back to WebGL2. If neither is available, the feature exposes an unsupported state. There is no `CanvasRenderingContext2D` fallback.

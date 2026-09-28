@@ -42,12 +42,14 @@ for what comes after is decided — this file does not guess one.
 Progression is device-local, the same way fog reveals
 (`nilx-one.fog.reveals.v1.<owner>`) and the landmark notebook
 (`nilx-one.avaia.landmarks.v1.<owner>`) are. It is kept under
-`nilx-one.progression.v1.<owner>`, one Bond's alone, and it is never synced,
-exported, or sent anywhere. Reaching level 1 is not a protocol fact: it
-creates no Interaction, completes no BondChain, and Core and the identity
-service know nothing about it. A new device starts a new Bond's progression
-at zero, the same way it starts a new local fog field and a new local
-notebook.
+`nilx-one.progression.v1.<owner>`, one Bond's alone. Nothing sends it
+anywhere today. The experience is transport-eligible — it may follow a Bond
+between its own devices, and that is not synced state and not service state
+(see [State placement](state-placement.md)). Reaching level 1 is not a
+protocol fact: it creates no Interaction, completes no BondChain, and Core
+and the identity service know nothing about it. Until progression travels, a
+new device starts a new Bond's progression at zero, the same way it starts a
+new local fog field and a new local notebook.
 
 ## What this is not
 

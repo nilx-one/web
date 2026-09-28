@@ -9,10 +9,11 @@ import type { MapPointSelection } from "@nilx-one/map-contract";
  * background, a reload — picks up where it was left instead of at the
  * bootstrap camera with the Avaia back at its owner's feet.
  *
- * It is this device's own and nothing else's: never synced, exported, sent
- * anywhere, or used as evidence of presence. A remembered Bond point only
- * places the camera before the first fix; it is never drawn as an
- * observation.
+ * It is one Bond's own and never evidence of presence: nothing sends it
+ * anywhere today, and it is placed as synchronizable — a position the world
+ * may reopen on from another device, never a `Bond.location`. A remembered
+ * Bond point only places the camera before the first fix; it is never drawn
+ * as an observation.
  */
 export interface RememberedPoint extends MapPointSelection {
   readonly bearingDeg: number;

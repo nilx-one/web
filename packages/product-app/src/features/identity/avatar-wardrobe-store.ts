@@ -13,7 +13,10 @@ import { useSyncExternalStore } from "react";
  * here is Bond, Relationship or shared-world state.
  *
  * It follows that an outfit does not travel between devices yet, and a person
- * should be able to tell that from the interface rather than discover it.
+ * should be able to tell that from the interface rather than discover it. Its
+ * destination is the service all the same: a customization is to be named by
+ * the digest it hashes to, in the field that holds the named study today
+ * (avatar-model-identifier.ts in `application`).
  */
 export const AVATAR_WARDROBE_STORAGE_KEY = "nilx-one.avatar.wardrobe";
 
