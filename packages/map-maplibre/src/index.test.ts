@@ -598,6 +598,20 @@ describe("camera ownership", () => {
     expect(fakeMap.jumpTo).not.toHaveBeenCalled();
   });
 
+  it("stages a slower shot when the caller names its length", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setCamera(
+      { center: [30.52, 50.45], zoom: 21, bearing: 100, pitch: 58 },
+      { motion: "eased", durationMs: 4_500 },
+    );
+
+    expect(fakeMap.easeTo).toHaveBeenCalledWith(
+      expect.objectContaining({ bearing: 100, duration: 4_500 }),
+    );
+  });
+
   it("cuts immediately when motion is not requested", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);
