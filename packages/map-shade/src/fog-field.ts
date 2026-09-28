@@ -187,16 +187,17 @@ export function createFogField(
         lat: point.latitude,
       });
       const reach = Math.max(1, Math.floor(rings));
-      const near = new Set(gridDisk(origin, 1));
+      // The Bond is never in the fog: the cell it stands on is ground it
+      // already has, whether or not its fog has lifted yet. It is never
+      // offered, and it is open ground its neighbours touch.
+      const open = (cell: CellIndex): boolean =>
+        cell === origin || isRevealed(cell);
       const found: CellIndex[] = [];
       // gridDisk answers ring by ring from the origin outwards, which is
       // already nearest first.
       for (const cell of gridDisk(origin, reach)) {
-        if (isRevealed(cell)) continue;
-        if (
-          near.has(cell) ||
-          gridDisk(cell, 1).some((next) => next !== cell && isRevealed(next))
-        ) {
+        if (open(cell)) continue;
+        if (gridDisk(cell, 1).some((next) => next !== cell && open(next))) {
           found.push(cell);
         }
       }

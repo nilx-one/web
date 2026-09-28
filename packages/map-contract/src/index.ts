@@ -353,9 +353,11 @@ export interface MapFogField {
   cellAt(point: MapPointSelection): MapFogCell;
   isRevealed(cellId: string): boolean;
   /**
-   * The unrevealed cells a Bond standing at `point` can reach into: its own
-   * cell and its neighbours, and every cell within `rings` of it that touches
-   * ground already revealed. Nearest first.
+   * The unrevealed cells a Bond standing at `point` can reach into: every
+   * cell within `rings` of it that touches open ground — revealed, or the
+   * cell the Bond stands on. That cell is never offered: a Bond is never in
+   * the fog, so what is under its feet is not something to send an Avaia
+   * into. Nearest first.
    */
   frontier(point: MapPointSelection, rings: number): readonly MapFogCell[];
   /** Lifts the fog from one cell on this device. Idempotent. */

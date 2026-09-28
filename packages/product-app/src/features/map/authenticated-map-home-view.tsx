@@ -1436,12 +1436,16 @@ export function AuthenticatedMapHomeView({
     cameraMovedByPerson.current = false;
   }
 
-  /** The Bond said yes: the Avaia goes to the cell and starts on it. */
+  /**
+   * The Bond said yes: the Avaia walks up to the cell's edge, on open ground,
+   * and starts on it from there. It never walks into the fog.
+   */
   function confirmFogReveal(): void {
     const job = fogReveal.confirm();
     if (job === undefined) return;
     if (wheel === "avaia" && handover === undefined) {
-      avaiaWalk.walkTo(job.cell.center);
+      const body = avaiaWalk.stance(globalThis.performance.now())?.point;
+      avaiaWalk.walkTo(fogReveal.approach(job.cell, body));
       avaiaWalk.announce("fog.reveal");
     }
   }

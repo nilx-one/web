@@ -1,18 +1,21 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type {
-  MapFogCell,
-  MapFogField,
-  MapFogMark,
-  MapLandmark,
+import {
+  mapDistanceMeters,
+  type MapFogCell,
+  type MapFogField,
+  type MapFogMark,
+  type MapLandmark,
+  type MapPointSelection,
 } from "@nilx-one/map-contract";
 
 /**
  * An Avaia lifting the fog off one cell at the edge of its Bond's ground.
  *
- * A Bond points at a cell it can reach into, says yes, and its Avaia goes
- * there and works the cell open. It takes a minute for bare ground and up to
+ * A Bond points at a cell it can reach into, says yes, and its Avaia walks up
+ * to the cell's edge — from ground already open, never into the fog — and
+ * works the cell open from there. It takes a minute for bare ground and up to
  * five where the archive draws landmarks, and an Avaia works at most three
  * cells at once. What a reveal leaves behind is the fog field's own local
  * note: it is never presence evidence, never a visit, and never sent anywhere.
@@ -50,6 +53,58 @@ export const FOG_CELL_LANDMARK_RADIUS_METERS = 220;
 
 /** An observation vaguer than this does not say which cell the device is in. */
 export const FOG_APPROACH_ACCURACY_METERS = 50;
+
+/**
+ * How far past a cell's edge the Avaia stops, as a share of the way from the
+ * cell's centre to that edge: a step back onto open ground, not a step in.
+ */
+export const FOG_APPROACH_STEP_OUT = 0.12;
+
+/**
+ * Where an Avaia stands to work a fogged cell open: just outside one of its
+ * edges, on ground `standable` says a body can stand on — revealed, or the
+ * Bond's own — and of those the one nearest `from`. A cell with no such edge
+ * (nothing open around it yet) is still approached from outside, from the
+ * edge nearest `from`.
+ */
+export function approachPoint(
+  cell: MapFogCell,
+  standable: (point: MapPointSelection) => boolean,
+  from: MapPointSelection | undefined,
+): MapPointSelection {
+  const { center } = cell;
+  const outside: MapPointSelection[] = [];
+  const ring = cell.boundary;
+  for (let index = 0; index < ring.length; index += 1) {
+    const [aLng, aLat] = ring[index] as readonly [number, number];
+    const [bLng, bLat] = ring[(index + 1) % ring.length] as readonly [
+      number,
+      number,
+    ];
+    // A closed ring repeats its first vertex; that is no edge.
+    if (aLng === bLng && aLat === bLat) continue;
+    const scale = 1 + FOG_APPROACH_STEP_OUT;
+    outside.push({
+      longitude:
+        center.longitude + ((aLng + bLng) / 2 - center.longitude) * scale,
+      latitude: center.latitude + ((aLat + bLat) / 2 - center.latitude) * scale,
+    });
+  }
+  if (outside.length === 0) return center;
+  const open = outside.filter(standable);
+  const candidates = open.length > 0 ? open : outside;
+  if (from === undefined) return candidates[0] as MapPointSelection;
+  let best = candidates[0] as MapPointSelection;
+  let bestMeters = mapDistanceMeters(from, best);
+  for (const candidate of candidates.slice(1)) {
+    const meters = mapDistanceMeters(from, candidate);
+    if (meters < bestMeters) {
+      best = candidate;
+      bestMeters = meters;
+    }
+  }
+  return best;
+}
 
 export function revealDurationMs(landmarks: number): number {
   const count = Number.isFinite(landmarks)
