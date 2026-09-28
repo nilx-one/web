@@ -663,10 +663,13 @@ export function AuthenticatedMapHomeView({
   useEffect(() => {
     // The header stays put. Only the body under it scrolls, and a screen
     // just opened starts that body at its top.
-    const scroller = dockRef.current?.querySelector<HTMLElement>(
+    const dock = dockRef.current;
+    if (dock === null) return;
+    const scroller = dock.querySelector<HTMLElement>(
       ".bond-dock__screen:not([data-phase='from']) .bond-dock__scroll",
     );
-    if (scroller !== null) scroller.scrollTop = 0;
+    if (scroller === null) return;
+    scroller.scrollTop = 0;
   }, [activeDetail, section]);
   const avaiaSpeech =
     wheel === "avaia" && handover === undefined
