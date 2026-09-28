@@ -4,6 +4,8 @@
 import type { BrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import type { MapRendererStatus } from "@nilx-one/map-contract";
 
+import type { WipeOutcome } from "./world-wipe";
+
 const MAP_ERROR_IDS: Readonly<Record<string, string>> = {
   "style-load-failed": "map.renderer.style.load.failed",
   "basemap-load-failed": "map.renderer.basemap.load.failed",
@@ -34,5 +36,24 @@ export function reportMapRendererStatus(
     message: `Map renderer unavailable: ${status.reason}`,
     context: { reason: status.reason },
     tags: ["map", "renderer"],
+  });
+}
+
+// A wipe that could not finish is retried on the next load, but it must not be
+// silent: a device that keeps its old world is exactly what the wipe is for.
+export function reportWorldWipe(
+  reporter: BrowserReporter,
+  outcome: WipeOutcome,
+): void {
+  if (outcome.status !== "incomplete") {
+    return;
+  }
+
+  reporter.report({
+    errorId: "world.wipe.incomplete",
+    severity: "error",
+    message: "Local world wipe did not finish",
+    context: { failures: outcome.failures.join("; ") },
+    tags: ["wipe"],
   });
 }

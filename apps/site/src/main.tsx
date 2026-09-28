@@ -1,7 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import "./world-wipe-boot";
 import { createBrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import {
   createCoreWasmClient,
@@ -42,8 +41,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./bond-dock-motion.css";
-import { reportMapRendererStatus } from "./error-reporting";
+import { reportMapRendererStatus, reportWorldWipe } from "./error-reporting";
 import { PublicBondPage, isPublicBondHostname } from "./public-bond";
+import { wipeLocalWorldOnce } from "./world-wipe";
 
 /**
  * How much memory this surface declares it will spend on a local model, in MB. Declared, not
@@ -106,6 +106,9 @@ if (container === null) {
 
 const root = createRoot(container);
 
+// The wipe is confirmed before any store reads the world it clears.
+const wipe = await wipeLocalWorldOnce();
+
 if (isPublicBondHostname(window.location.hostname)) {
   // A Bond subdomain is a public identity surface, not an authenticated world
   // host. It resolves only the stored label allocation and never starts the
@@ -124,6 +127,7 @@ if (isPublicBondHostname(window.location.hostname)) {
     source: "browser",
     ...(collectorEndpoint === undefined ? {} : { collectorEndpoint }),
   });
+  reportWorldWipe(reporter, wipe);
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,
   });

@@ -13,6 +13,8 @@ export default defineConfig({
     exclude: ["@aiaiaiai/webllm"],
   },
   build: {
+    // main.tsx awaits the local wipe at the top level, which needs ES2022.
+    target: "es2022",
     outDir: "dist",
     sourcemap: true,
   },

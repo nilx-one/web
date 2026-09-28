@@ -19,18 +19,67 @@ function memoryStorage(seed: Record<string, string>): Storage {
   };
 }
 
+function factory(
+  behaviour: "success" | "error" | "throw",
+  deleted: string[] = [],
+): IDBFactory {
+  return {
+    deleteDatabase(name: string) {
+      if (behaviour === "throw") throw new Error("denied");
+      const request = {} as IDBOpenDBRequest;
+      queueMicrotask(() => {
+        deleted.push(name);
+        if (behaviour === "error") {
+          Object.defineProperty(request, "error", {
+            value: new Error("boom"),
+          });
+          request.onerror?.({} as Event);
+        } else {
+          request.onsuccess?.({} as Event);
+        }
+      });
+      return request;
+    },
+  } as unknown as IDBFactory;
+}
+
+const seed = () => ({
+  "nilx-one.fog.reveals.v1.x": "1",
+  "nilx-one.progression.v3.x": "1",
+  "nilx-one.interface.locale": "uk",
+});
+
 describe("wipeLocalWorldOnce", () => {
-  it("forgets the game, keeps the screen, and runs once", () => {
-    const storage = memoryStorage({
-      "nilx-one.fog.reveals.v1.x": "1",
-      "nilx-one.progression.v3.x": "1",
-      "nilx-one.interface.locale": "uk",
-    });
-    expect(wipeLocalWorldOnce(storage)).toBe(true);
+  it("forgets the game, keeps the screen, waits for the database, runs once", async () => {
+    const storage = memoryStorage(seed());
+    const deleted: string[] = [];
+
+    expect(
+      await wipeLocalWorldOnce(storage, factory("success", deleted)),
+    ).toEqual({ status: "wiped" });
+    expect(deleted).toEqual(["nilx-presence"]);
     expect(storage.getItem("nilx-one.fog.reveals.v1.x")).toBeNull();
     expect(storage.getItem("nilx-one.progression.v3.x")).toBeNull();
     expect(storage.getItem("nilx-one.interface.locale")).toBe("uk");
     expect(storage.getItem("nilx-one.wipe-epoch")).toBe(WIPE_EPOCH);
-    expect(wipeLocalWorldOnce(storage)).toBe(false);
+    expect(await wipeLocalWorldOnce(storage, factory("success"))).toEqual({
+      status: "skipped",
+    });
   });
+
+  it.each(["error", "throw"] as const)(
+    "reports a database that would not go (%s) and tries again next load",
+    async (behaviour) => {
+      const storage = memoryStorage(seed());
+
+      const outcome = await wipeLocalWorldOnce(storage, factory(behaviour));
+
+      expect(outcome.status).toBe("incomplete");
+      expect(storage.getItem("nilx-one.wipe-epoch")).toBeNull();
+      expect(storage.getItem("nilx-one.fog.reveals.v1.x")).toBeNull();
+      expect(
+        (await wipeLocalWorldOnce(storage, factory("success"))).status,
+      ).toBe("wiped");
+    },
+  );
 });
