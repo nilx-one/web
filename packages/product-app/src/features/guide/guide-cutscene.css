@@ -1,0 +1,326 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* While a scene plays the chrome steps aside, the way a game's interface
+   gives the screen to a cutscene. The world keeps rendering underneath: it is
+   what the camera is filming. */
+.app-shell[data-cutscene="true"] .app-shell__header,
+.app-shell[data-cutscene="true"] .app-shell__toasts,
+.app-shell[data-cutscene="true"] .app-shell__bottom,
+.app-shell[data-cutscene="true"] .app-shell__overlay > :not(.guide-cutscene) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms ease;
+}
+
+.guide-cutscene {
+  --guide-bar: clamp(2.5rem, 11vh, 6.5rem);
+  --guide-gold: #e6c47c;
+  --guide-ink: #f4efe6;
+  --guide-ink-muted: rgba(244, 239, 230, 0.62);
+
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  /* The camera is the scene's for as long as it lasts: a person answers her
+     rather than dragging the world out from under the two of them. */
+  pointer-events: auto;
+  touch-action: none;
+  color: var(--guide-ink);
+}
+
+/* Subtitles are read against the world darkened from below, never against a
+   card: the shot stays one picture. */
+.guide-cutscene::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 62%;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.78) 0%,
+    rgba(0, 0, 0, 0.5) 38%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  content: "";
+  animation: guide-shade-in 700ms ease-out both;
+  pointer-events: none;
+}
+
+.guide-cutscene[data-beat="leaving"]::before {
+  animation: guide-panel-out 900ms ease-in both;
+}
+
+@keyframes guide-shade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.guide-cutscene__bar {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: var(--guide-bar);
+  background: #000;
+  animation: guide-bar-in 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.guide-cutscene__bar--top {
+  top: 0;
+  --guide-bar-from: -100%;
+}
+
+.guide-cutscene__bar--bottom {
+  bottom: 0;
+  --guide-bar-from: 100%;
+}
+
+.guide-cutscene[data-beat="leaving"] .guide-cutscene__bar {
+  animation: guide-bar-out 900ms ease-in both;
+}
+
+@keyframes guide-bar-in {
+  from {
+    transform: translateY(var(--guide-bar-from));
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes guide-bar-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(var(--guide-bar-from));
+  }
+}
+
+.guide-cutscene__panel {
+  position: absolute;
+  bottom: calc(var(--guide-bar) + var(--safe-bottom, 0px) + 0.5rem);
+  left: 50%;
+  display: grid;
+  gap: 0.55rem;
+  width: min(44rem, calc(100vw - 2rem));
+  padding: 1.75rem 1.5rem 1rem;
+  transform: translateX(-50%);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  animation: guide-panel-in 520ms 260ms ease-out both;
+}
+
+.guide-cutscene[data-beat="leaving"] .guide-cutscene__panel {
+  animation: guide-panel-out 360ms ease-in both;
+}
+
+@keyframes guide-panel-in {
+  from {
+    opacity: 0;
+    translate: 0 0.75rem;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes guide-panel-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.guide-cutscene__speaker {
+  margin: 0;
+  color: var(--guide-gold);
+  font-size: 0.78rem;
+  font-weight: 700;
+  /* An address is case-sensitive, so the name plate is spaced out rather
+     than set in capitals. */
+  letter-spacing: 0.16em;
+}
+
+.guide-cutscene__speaker[data-speaker="you"] {
+  color: var(--guide-ink-muted);
+}
+
+.guide-cutscene__line {
+  min-height: 3.1em;
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+  line-height: 1.45;
+}
+
+.guide-cutscene__caret {
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 0.1em;
+  vertical-align: -0.12em;
+  background: var(--guide-gold);
+  opacity: 0.7;
+  animation: guide-caret 900ms steps(2, start) infinite;
+}
+
+@keyframes guide-caret {
+  to {
+    visibility: hidden;
+  }
+}
+
+.guide-cutscene__ellipsis {
+  color: var(--guide-ink-muted);
+  letter-spacing: 0.2em;
+}
+
+.guide-cutscene__choices {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-cutscene__choice {
+  display: flex;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: #d8cfbf;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.35;
+  text-align: left;
+  text-shadow: inherit;
+  cursor: pointer;
+  animation: guide-choice-in 320ms ease-out both;
+}
+
+.guide-cutscene__choices li:nth-child(2) .guide-cutscene__choice {
+  animation-delay: 60ms;
+}
+
+.guide-cutscene__choices li:nth-child(3) .guide-cutscene__choice {
+  animation-delay: 120ms;
+}
+
+@keyframes guide-choice-in {
+  from {
+    opacity: 0;
+    translate: -0.5rem 0;
+  }
+}
+
+.guide-cutscene__choice:hover,
+.guide-cutscene__choice:focus-visible {
+  background: linear-gradient(90deg, rgba(230, 196, 124, 0.18), transparent);
+  color: var(--guide-ink);
+  outline: none;
+}
+
+.guide-cutscene__choice[data-reply="skip"],
+.guide-cutscene__choice[data-reply="continue"] {
+  color: var(--guide-ink-muted);
+  font-style: italic;
+}
+
+.guide-cutscene__choice-number {
+  flex: none;
+  min-width: 1.4em;
+  color: var(--guide-gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.guide-cutscene__advance {
+  justify-self: end;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(244, 239, 230, 0.24);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--guide-ink-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.guide-cutscene__advance:hover,
+.guide-cutscene__advance:focus-visible {
+  color: var(--guide-ink);
+  border-color: var(--guide-gold);
+  outline: none;
+}
+
+.guide-cutscene__reward {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+  text-align: center;
+  animation: guide-reward-in 700ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1.1) both;
+}
+
+@keyframes guide-reward-in {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+
+.guide-cutscene__reward-title {
+  margin: 0;
+  color: var(--guide-gold);
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.guide-cutscene__rewards {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.guide-cutscene__level {
+  color: var(--guide-ink-muted);
+  font-weight: 520;
+}
+
+.guide-cutscene__next {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--guide-ink-muted);
+  font-size: 0.82rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-cutscene::before,
+  .guide-cutscene__bar,
+  .guide-cutscene__panel,
+  .guide-cutscene__choice,
+  .guide-cutscene__reward,
+  .guide-cutscene__caret {
+    animation: none;
+  }
+
+  .app-shell[data-cutscene="true"] .app-shell__header,
+  .app-shell[data-cutscene="true"] .app-shell__toasts,
+  .app-shell[data-cutscene="true"] .app-shell__bottom,
+  .app-shell[data-cutscene="true"] .app-shell__overlay > :not(.guide-cutscene) {
+    transition: none;
+  }
+}

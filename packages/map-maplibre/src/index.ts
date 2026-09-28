@@ -1275,7 +1275,10 @@ export function createMapLibreRenderer(
       // MapLibre owns the transition mechanics; the application only says
       // whether this change should read as movement or as an immediate cut.
       if (cameraOptions.motion === "eased") {
-        map?.easeTo({ ...target, duration: MAP_CAMERA_TRANSITION_MS });
+        map?.easeTo({
+          ...target,
+          duration: cameraOptions.durationMs ?? MAP_CAMERA_TRANSITION_MS,
+        });
         return;
       }
 

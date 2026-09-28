@@ -283,6 +283,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "Landmarks noticed in passing and studied by the Avaia.",
   },
   {
+    id: "guide.intro",
+    placement: "synchronizable",
+    mobility: "transport",
+    medium: "local-storage",
+    key: "nilx-one.guide.v1",
+    perOwner: true,
+    what: "Whether xSasha's introduction was played through or skipped for this Bond.",
+  },
+  {
     id: "world.memory",
     placement: "synchronizable",
     mobility: "transport",

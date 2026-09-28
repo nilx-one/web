@@ -26,6 +26,12 @@ export type MapCameraMotion = "immediate" | "eased";
 export interface MapCameraOptions {
   readonly motion?: MapCameraMotion;
   readonly padding?: MapCameraPadding;
+  /**
+   * How long an `eased` change takes, when the caller is staging a shot
+   * rather than moving the camera out of the way. Absent means the renderer's
+   * own transition length. Ignored for `immediate`.
+   */
+  readonly durationMs?: number;
 }
 
 /**
