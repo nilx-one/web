@@ -63,9 +63,25 @@ function projection(
   };
 }
 
-function createIdentity(): IdentityAccessPort & AvaiaProfileAccessPort {
-  let stored = projection();
-  return {
+type Identity = IdentityAccessPort & AvaiaProfileAccessPort;
+
+/** Every call that could change what the service holds for this Bond. */
+const MUTATIONS = [
+  "chooseAvatarModel",
+  "renameAvaiaSlug",
+  "renamePubDressSlug",
+  "setProviderPassword",
+  "registerProvider",
+  "linkTelegramProvider",
+  "updateAvaiaProfile",
+  "publishAvaiaLocation",
+] as const satisfies readonly (keyof Identity)[];
+
+function createIdentity(
+  initial: AvaiaProfileProjection = projection(),
+): Identity {
+  let stored = initial;
+  const identity: Identity = {
     acknowledgeRecoveryKey: async () => ({ kind: "service-unavailable" }),
     authenticateNative: async () => ({ kind: "service-unavailable" }),
     forgetRememberedBond: async () => ({ kind: "completed" }),
@@ -96,6 +112,27 @@ function createIdentity(): IdentityAccessPort & AvaiaProfileAccessPort {
     },
     publishAvaiaLocation: async () => ({ kind: "service-unavailable" }),
   };
+  for (const name of MUTATIONS) {
+    Object.assign(identity, { [name]: vi.fn(identity[name]) });
+  }
+  return identity;
+}
+
+/** A host whose identity client has not reached the Avaia profile contract. */
+function withoutAvaiaProfile(identity: Identity): IdentityAccessPort {
+  const {
+    readAvaiaProfile: _read,
+    updateAvaiaProfile: _update,
+    publishAvaiaLocation: _publish,
+    ...rest
+  } = identity;
+  return rest;
+}
+
+function mutationsCalled(identity: Identity): string[] {
+  return MUTATIONS.filter(
+    (name) => vi.mocked(identity[name]).mock.calls.length > 0,
+  );
 }
 
 function scene(): HTMLElement {
@@ -129,13 +166,16 @@ async function untilGone(user: User): Promise<void> {
   });
 }
 
-function renderWorld(renderer = createMapRendererDouble({ kind: "ready" })) {
+function renderWorld(
+  renderer = createMapRendererDouble({ kind: "ready" }),
+  identity: IdentityAccessPort = createIdentity(),
+) {
   const { container } = render(
     <ProductApp
       core={readyCore}
       host={createHost()}
       mapRenderer={renderer}
-      identity={createIdentity()}
+      identity={identity}
     />,
   );
   return Object.assign(renderer, { container });
@@ -261,6 +301,74 @@ describe("0xda-sha, the first time a Bond opens the world", () => {
     const results = await act(() => axe.run(container));
     expect(results.violations).toEqual([]);
   }, 15_000);
+
+  it("changes nothing the service holds by being answered", async () => {
+    const user = userEvent.setup();
+    const identity = createIdentity();
+    renderWorld(createMapRendererDouble({ kind: "ready" }), identity);
+
+    await screen.findByRole("dialog", { name: "0xda-sha" }, ARRIVAL_WAIT);
+    await user.click((await untilReplies(user))[0] as HTMLElement);
+    await user.click((await untilReplies(user))[0] as HTMLElement);
+    await untilGone(user);
+
+    // A reply is not an Interaction, a consent or a configuration: nothing
+    // was asked of the service, and the Avaia is exactly as unconfigured as
+    // the service said — the scene only opened the screen where it is set up.
+    expect(mutationsCalled(identity)).toEqual([]);
+    expect(await screen.findByLabelText("pub_dress")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create" })).toBeVisible();
+  }, 15_000);
+
+  it("never invents an Avaia on a host that cannot read one", async () => {
+    renderWorld(
+      createMapRendererDouble({ kind: "ready" }),
+      withoutAvaiaProfile(createIdentity()),
+    );
+
+    await screen.findByRole("button", { name: "Take the wheel as 0x0sky" });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 2_400)));
+    expect(document.querySelector(".guide-cutscene")).toBeNull();
+  }, 10_000);
+
+  it("leaves a world that the service alone can rebuild", async () => {
+    const user = userEvent.setup();
+    const identity = createIdentity();
+    renderWorld(createMapRendererDouble({ kind: "ready" }), identity);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Set up x0skai" }),
+    );
+    const address = await screen.findByLabelText("pub_dress");
+    await waitFor(() => expect(address).toHaveValue("sk"));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click((await untilReplies(user))[0] as HTMLElement);
+    await user.click((await untilReplies(user))[0] as HTMLElement);
+    await untilGone(user);
+
+    // The only thing the service was asked is what the person did: Create.
+    expect(mutationsCalled(identity)).toEqual(["updateAvaiaProfile"]);
+    expect(identity.updateAvaiaProfile).toHaveBeenCalledOnce();
+
+    // Forget everything this device kept — scenes, progress, bodies — and
+    // open the world again against the same service.
+    cleanup();
+    window.localStorage.clear();
+    renderWorld(
+      createMapRendererDouble({ kind: "ready" }),
+      createIdentity(
+        projection({ pubDress: "x0skai", configurationState: "configured" }),
+      ),
+    );
+
+    // The Avaia is the service's answer, not a memory of the scene: it is
+    // configured, opens at the wheel, and nobody introduces it again.
+    expect(
+      await screen.findByRole("button", { name: "Focus the world on x0skai" }),
+    ).not.toHaveTextContent("unconfigured");
+    await act(() => new Promise((resolve) => setTimeout(resolve, 2_400)));
+    expect(document.querySelector(".guide-cutscene")).toBeNull();
+  }, 20_000);
 
   // Last: "later" is remembered for the rest of this session.
   it("comes back another time when asked to", async () => {
