@@ -177,6 +177,8 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.cancel": "Отмена",
   "dock.save": "Сохранить",
   "dock.saving": "Сохраняем…",
+  "dock.create": "Создать",
+  "dock.creating": "Создаём…",
   "dock.caseSensitiveAvaia":
     "С учётом регистра · дискриминатор владельца и суффикс ai задаёт 0x1.",
   "dock.caseSensitiveBond":

@@ -66,7 +66,7 @@ describe("AvaiaSetupView", () => {
       vi.unstubAllGlobals();
     });
 
-    it("types out the address it already holds, then offers Save", () => {
+    it("types out the address it already holds, then offers Create", () => {
       vi.useFakeTimers();
       render(
         <AvaiaSetupView
@@ -90,7 +90,9 @@ describe("AvaiaSetupView", () => {
       }
       expect(input).toHaveValue("a-sh");
       expect(input).not.toHaveAttribute("readonly");
-      expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+      // Nothing exists to save yet: the first save is what creates it.
+      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     });
 
     it("shows the address whole to a person who asked for reduced motion", () => {

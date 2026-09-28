@@ -185,6 +185,8 @@ const EN_MESSAGES = {
   "dock.cancel": "Cancel",
   "dock.save": "Save",
   "dock.saving": "Saving…",
+  "dock.create": "Create",
+  "dock.creating": "Creating…",
   "dock.caseSensitiveAvaia":
     "Case-sensitive · the owner discriminator and ai suffix are fixed by 0x1.",
   "dock.caseSensitiveBond":
@@ -454,6 +456,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.cancel": "Скасувати",
   "dock.save": "Зберегти",
   "dock.saving": "Зберігаємо…",
+  "dock.create": "Створити",
+  "dock.creating": "Створюємо…",
   "dock.caseSensitiveAvaia":
     "З урахуванням регістру · дискримінатор власника та суфікс ai фіксуються 0x1.",
   "dock.caseSensitiveBond":

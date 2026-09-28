@@ -154,7 +154,13 @@ export function AvaiaSetupView({
             type="submit"
             disabled={!state.canSave}
           >
-            {state.busy ? t("dock.saving") : t("dock.save")}
+            {state.configuration === "unconfigured"
+              ? state.busy
+                ? t("dock.creating")
+                : t("dock.create")
+              : state.busy
+                ? t("dock.saving")
+                : t("dock.save")}
           </button>
         </div>
         <p className="profile-edit__note" id="avaia-pub-dress-note">
