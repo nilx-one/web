@@ -81,6 +81,9 @@ These are not carried:
 - **the on-device model** — the choice (`nilx-one.localModel.choice`) and the
   downloaded weights. Another device has its own memory, GPU and eligibility
   ([Local models](local-models.md));
+- **which wipe this device has applied** (`nilx-one.wipe-epoch`) — the marker
+  that makes a full local wipe run once per browser. It says nothing about who
+  the person is;
 - **the presence journal key** — `nilx-presence/keys`, non-extractable, never
   transmitted, never derived from identity
   ([Presence journal lifecycle](presence-journal-lifecycle.md));
