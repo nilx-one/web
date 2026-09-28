@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   STATE_PLACEMENT,
+  mobilityAgreesWithPlacement,
   placedStateAt,
   placedStateForKey,
+  placementAgreesWithMedium,
 } from "./state-placement";
 
 describe("State placement", () => {
@@ -18,14 +20,35 @@ describe("State placement", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("keeps the server to the address, authorization, and the body identifier", () => {
-    const server = placedStateAt("server").map((record) => record.id);
-    expect(server).toEqual([
+  it("keeps residence and medium on the same side of the service boundary", () => {
+    const contradictions = STATE_PLACEMENT.filter(
+      (record) => !placementAgreesWithMedium(record),
+    ).map((record) => `${record.id}: ${record.placement} in ${record.medium}`);
+
+    expect(contradictions).toEqual([]);
+  });
+
+  it("keeps the server to identity tables", () => {
+    expect(placedStateAt("server").map((record) => record.id)).toEqual([
       "identity.pubDress",
       "identity.authorization",
       "identity.avatarModel",
-      "avatar.wardrobe",
     ]);
+    for (const record of placedStateAt("server")) {
+      expect(record.medium).toBe("identity-service");
+      expect(record.mobility).toBe("resident");
+    }
+  });
+
+  it("keeps the wardrobe on the device that stored it", () => {
+    const wardrobe = STATE_PLACEMENT.find(
+      (record) => record.id === "avatar.wardrobe",
+    );
+    expect(wardrobe).toMatchObject({
+      placement: "device",
+      mobility: "resident",
+      medium: "local-storage",
+    });
   });
 
   it("keeps the on-device model and the journal key on the device", () => {
@@ -33,13 +56,14 @@ describe("State placement", () => {
     expect(device).toContain("localModel.choice");
     expect(device).toContain("localModel.download");
     expect(device).toContain("presence.journalKey");
+    expect(device).toContain("avatar.wardrobe");
   });
 
-  it("makes preferences and play synchronizable", () => {
-    const synchronizable = placedStateAt("synchronizable").map(
-      (record) => record.id,
-    );
-    expect(synchronizable).toEqual(
+  it("names transport eligibility without calling sealed history a preference", () => {
+    const transport = STATE_PLACEMENT.filter(
+      (record) => record.mobility === "transport",
+    ).map((record) => record.id);
+    expect(transport).toEqual(
       expect.arrayContaining([
         "interface.locale",
         "interface.appearance",
@@ -48,24 +72,44 @@ describe("State placement", () => {
         "fog.reveals",
         "avaia.landmarks",
         "world.memory",
-        "presence.journal",
-        "bond.chain",
       ]),
     );
+
+    const sealed = STATE_PLACEMENT.filter(
+      (record) => record.mobility === "sealed-transport",
+    ).map((record) => record.id);
+    expect(sealed).toEqual(["presence.journal", "bond.chain"]);
   });
 
-  it("leaves per-device achievements behind when progression travels", () => {
+  it("does not grant transport to a record that lives where it stays", () => {
+    const disagreements = STATE_PLACEMENT.filter(
+      (record) => !mobilityAgreesWithPlacement(record),
+    ).map((record) => record.id);
+
+    expect(disagreements).toEqual([]);
+    for (const record of STATE_PLACEMENT) {
+      if (record.placement !== "synchronizable") {
+        expect(record.mobility).toBe("resident");
+      }
+    }
+  });
+
+  it("records the progression key this client actually writes", () => {
     const progression = STATE_PLACEMENT.find(
       (record) => record.id === "progression",
     );
-    expect(progression?.deviceOnlyFields).toEqual([
-      "deviceAchievements",
-      "settingsHintSeen",
-    ]);
+    expect(progression).toMatchObject({
+      key: "nilx-one.progression.v1",
+      legacy: undefined,
+      deviceOnlyFields: undefined,
+    });
   });
 
   it("resolves an owner-suffixed key to its record", () => {
     expect(placedStateForKey("nilx-one.fog.reveals.v1.0x0sky")?.id).toBe(
+      "fog.reveals",
+    );
+    expect(placedStateForKey("nilx-one.fog.reveals.v1.")?.id).toBe(
       "fog.reveals",
     );
     expect(

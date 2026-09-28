@@ -14,8 +14,9 @@ import {
  * itself close to something the basemap draws, and that is the whole of the
  * evidence. Its Avaia later walks up to what was noticed and studies it, which
  * is the second half. Both halves are one Bond's own: the notebook is never
- * used as training signal, nothing sends it anywhere today (it is placed as
- * synchronizable, never as service state), and it asserts nothing about
+ * used as training signal, and nothing sends it anywhere today. It is
+ * transport-eligible, which is not synced state and not service state, and
+ * it asserts nothing about
  * presence, attendance, or any Bond.
  */
 export interface NoticedLandmark {

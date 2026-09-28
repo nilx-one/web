@@ -52,13 +52,6 @@ export {
   type ResolvedAvatarScene,
 } from "./avatar-scene";
 export {
-  AVATAR_MODEL_DIGEST_HEX_LENGTHS,
-  classifyAvatarModelIdentifier,
-  isAvatarModelDigest,
-  type AvatarModelDigestBits,
-  type AvatarModelIdentifier,
-} from "./avatar-model-identifier";
-export {
   createAvaiaMovementController,
   type AvaiaMovementController,
   type AvaiaMovementControllerOptions,
@@ -183,8 +176,11 @@ export {
   STATE_PLACEMENT,
   placedStateAt,
   placedStateForKey,
+  placementAgreesWithMedium,
+  mobilityAgreesWithPlacement,
   type PlacedState,
   type StateMedium,
+  type StateMobility,
   type StatePlacement,
 } from "./state-placement";
 export {
