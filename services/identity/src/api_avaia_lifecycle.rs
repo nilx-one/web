@@ -1,9 +1,9 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-/// Owner-authenticated Avaia profile routes. This is intentionally separate
-/// from the legacy identity router so the new capability can evolve without
-/// duplicating provider/session authentication semantics.
+/// Owner-authenticated Avaia profile routes. Reading setup state is strictly
+/// observational: when the Avaia does not exist, the service derives a
+/// presentation-only suggestion and never inserts an identity.
 pub fn avaia_router(
     repository: IdentityRepository,
     provider_links: ProviderLinkRepository,
@@ -50,7 +50,7 @@ fn avaia_router_with_clock(
     Router::new()
         .route(
             "/api/v1/identity/avaia",
-            get(read_owned_avaia).post(update_owned_avaia),
+            get(read_owned_avaia).post(create_or_update_owned_avaia),
         )
         .route(
             "/api/v1/identity/avaia/location",
@@ -65,48 +65,46 @@ async fn read_owned_avaia(State(state): State<ApiState>, headers: HeaderMap) -> 
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, _active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
-        Ok(value) => value,
-        Err(error) => return error.into_response(),
-    };
+    let (identity, _active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
         tracing::error!("stored human pub_dress is invalid");
         return unavailable();
     };
 
-    match state.repository.reconcile_owned_avaia(&owner, now).await {
-        Ok(Some(_)) => {}
-        Ok(None) => return unauthorized(),
-        Err(error) => {
-            tracing::error!(%error, "owned Avaia reconciliation failed");
-            return unavailable();
-        }
-    }
-
-    let mut response = match state.repository.owned_avaia_identity(&owner).await {
-        Ok(Some(profile)) => {
-            let location = match state.repository.read_avaia_location(&owner).await {
-                Ok(value) => value,
-                Err(error) => {
-                    tracing::error!(%error, "owned Avaia location lookup failed");
-                    return unavailable();
-                }
-            };
-            no_store_json(StatusCode::OK, avaia_identity_projection(profile, location))
-        }
-        Ok(None) => unavailable(),
+    let profile = match state.repository.owned_avaia_identity(&owner).await {
+        Ok(Some(profile)) => profile,
+        Ok(None) => crate::AvaiaIdentityRecord {
+            pub_dress: AvaiaPubDress::derive_default(&owner).to_string(),
+            owner_pub_dress: owner.to_string(),
+            configuration_state: crate::AvaiaConfigurationState::Unconfigured,
+        },
         Err(error) => {
             tracing::error!(%error, "owned Avaia profile lookup failed");
-            unavailable()
+            return unavailable();
         }
     };
+    let location = match state.repository.read_avaia_location(&owner).await {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "owned Avaia location lookup failed");
+            return unavailable();
+        }
+    };
+    let mut response = no_store_json(
+        StatusCode::OK,
+        avaia_identity_projection(profile, location),
+    );
     if let Some(cookie) = cookie {
         append_cookie(&mut response, cookie);
     }
     response
 }
 
-async fn update_owned_avaia(
+async fn create_or_update_owned_avaia(
     State(state): State<ApiState>,
     headers: HeaderMap,
     Json(request): Json<AvaiaProfileUpdateRequest>,
@@ -118,21 +116,22 @@ async fn update_owned_avaia(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
-        Ok(value) => value,
-        Err(error) => return error.into_response(),
-    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
-    let mut response = update_owned_avaia_response(&state, identity, &request, now).await;
+    let mut response = create_or_update_owned_avaia_response(&state, identity, &request, now).await;
     if let Some(cookie) = cookie {
         append_cookie(&mut response, cookie);
     }
     response
 }
 
-async fn update_owned_avaia_response(
+async fn create_or_update_owned_avaia_response(
     state: &ApiState,
     identity: IdentityRecord,
     request: &AvaiaProfileUpdateRequest,
@@ -246,10 +245,11 @@ async fn write_owned_avaia_location(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
-        Ok(value) => value,
-        Err(error) => return error.into_response(),
-    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
@@ -273,11 +273,7 @@ async fn write_owned_avaia_location_response(
     if let Err(retry_after) = state
         .limiter
         .consume(format!("avaia-location:{}", owner.as_str()), now, 120, 3600)
-        .and_then(|_| {
-            state
-                .limiter
-                .consume("avaia-location:global", now, 5_000, 3600)
-        })
+        .and_then(|_| state.limiter.consume("avaia-location:global", now, 5_000, 3600))
     {
         return rate_limited(retry_after);
     }
@@ -293,14 +289,21 @@ async fn write_owned_avaia_location_response(
         }
     };
 
-    // The owned Avaia must exist before its location can be published.
-    match state.repository.reconcile_owned_avaia(&owner, now).await {
-        Ok(Some(_)) => {}
-        Ok(None) => return unauthorized(),
+    // Location publication is not an Avaia creation boundary.
+    let exists = match state.repository.owned_avaia_identity(&owner).await {
+        Ok(Some(_)) => true,
+        Ok(None) => false,
         Err(error) => {
-            tracing::error!(%error, "owned Avaia reconciliation failed");
+            tracing::error!(%error, "owned Avaia profile lookup failed");
             return unavailable();
         }
+    };
+    if !exists {
+        return no_store_error(
+            StatusCode::CONFLICT,
+            "avaia_unavailable",
+            "Create the Avaia before publishing its location.",
+        );
     }
 
     let location = crate::AvaiaLocation::new(coordinate, crate::DecimalU64::new(now));
@@ -314,7 +317,11 @@ async fn write_owned_avaia_location_response(
             StatusCode::OK,
             avaia_identity_projection(profile, Some(location)),
         ),
-        Ok(None) => unavailable(),
+        Ok(None) => no_store_error(
+            StatusCode::CONFLICT,
+            "avaia_unavailable",
+            "Create the Avaia before publishing its location.",
+        ),
         Err(error) => {
             tracing::error!(%error, "owned Avaia profile lookup failed");
             unavailable()
@@ -323,11 +330,8 @@ async fn write_owned_avaia_location_response(
 }
 
 #[cfg(test)]
-mod avaia_api_tests {
-    use std::{
-        collections::BTreeMap,
-        sync::{Arc, atomic::{AtomicU64, Ordering}},
-    };
+mod avaia_lifecycle_api_tests {
+    use std::sync::{atomic::{AtomicU64, Ordering}, Arc};
 
     use axum::{
         body::{Body, to_bytes},
@@ -343,9 +347,7 @@ mod avaia_api_tests {
     use url::form_urlencoded;
 
     use super::{Clock, avaia_router_with_clock};
-    use crate::{
-        IdentityRepository, NativeAuthConfig, ProviderIdentity, PubDress, TelegramInitDataVerifier,
-    };
+    use crate::{IdentityRepository, NativeAuthConfig, ProviderIdentity, PubDress, TelegramInitDataVerifier};
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
@@ -353,7 +355,7 @@ mod avaia_api_tests {
 
     fn test_database_url() -> String {
         let id = TEST_DATABASE_ID.fetch_add(1, Ordering::Relaxed);
-        format!("sqlite:file:avaia-api-test-{id}?mode=memory&cache=shared")
+        format!("sqlite:file:avaia-api-lifecycle-{id}?mode=memory&cache=shared")
     }
 
     #[derive(Debug)]
@@ -366,13 +368,10 @@ mod avaia_api_tests {
     }
 
     fn signed_init_data(user_id: i64) -> String {
-        let mut fields = BTreeMap::from([
+        let mut fields = std::collections::BTreeMap::from([
             ("auth_date", NOW.to_string()),
-            ("query_id", "avaia-profile-query".to_owned()),
-            (
-                "user",
-                format!(r#"{{"id":{user_id},"first_name":"Sasha"}}"#),
-            ),
+            ("query_id", "avaia-lifecycle-query".to_owned()),
+            ("user", format!(r#"{{"id":{user_id},"first_name":"Sasha"}}"#)),
         ]);
         let check = fields
             .iter()
@@ -384,15 +383,13 @@ mod avaia_api_tests {
         let secret = secret.finalize().into_bytes();
         let mut signature = Hmac::<Sha256>::new_from_slice(&secret).expect("valid key");
         signature.update(check.as_bytes());
-        fields.insert(
-            "hash",
-            signature
-                .finalize()
-                .into_bytes()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect(),
-        );
+        let hash = signature
+            .finalize()
+            .into_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        fields.insert("hash", hash);
         form_urlencoded::Serializer::new(String::new())
             .extend_pairs(fields)
             .finish()
@@ -400,10 +397,8 @@ mod avaia_api_tests {
 
     async fn app(user_id: i64, owner: &str) -> (axum::Router, String) {
         let database_url = test_database_url();
-        let repository = IdentityRepository::connect(&database_url)
-            .await
-            .expect("repository");
-        let owner: PubDress = owner.parse().expect("owner pub_dress");
+        let repository = IdentityRepository::connect(&database_url).await.expect("repository");
+        let owner: PubDress = owner.parse().expect("owner");
         repository
             .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
             .await
@@ -420,7 +415,7 @@ mod avaia_api_tests {
                 "test-auth-secret-that-is-at-least-thirty-two-bytes",
                 "test-password-pepper-that-is-at-least-thirty-two-bytes",
             )
-            .expect("valid native auth configuration"),
+            .expect("native auth configuration"),
             Arc::new(StaticClock),
         );
         (app, signed_init_data(user_id))
@@ -432,19 +427,8 @@ mod avaia_api_tests {
     }
 
     #[tokio::test]
-    async fn profile_read_is_owner_authenticated_and_projects_unconfigured_state() {
-        let (app, auth) = app(8801, "0x0sky").await;
-        let anonymous = app
-            .clone()
-            .oneshot(
-                Request::get("/api/v1/identity/avaia")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
-
+    async fn read_is_observational_and_returns_derived_suggestion() {
+        let (app, auth) = app(8901, "0x0sky").await;
         let response = app
             .oneshot(
                 Request::get("/api/v1/identity/avaia")
@@ -459,42 +443,47 @@ mod avaia_api_tests {
         assert_eq!(body["pub_dress"], "x0skai");
         assert_eq!(body["owner_pub_dress"], "0x0sky");
         assert_eq!(body["configuration_state"], "unconfigured");
-        assert!(body["model_ref"].is_null());
     }
 
     #[tokio::test]
-    async fn profile_save_requires_csrf_and_canonical_owned_address() {
-        let (app, auth) = app(8802, "0x0sky").await;
-        let missing_csrf = app
-            .clone()
+    async fn location_requires_existing_avaia() {
+        let (app, auth) = app(8902, "0x0sky").await;
+        let response = app
             .oneshot(
-                Request::post("/api/v1/identity/avaia")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
-
-        let invalid = app
-            .clone()
-            .oneshot(
-                Request::post("/api/v1/identity/avaia")
+                Request::post("/api/v1/identity/avaia/location")
                     .header(AUTHORIZATION, format!("tma {auth}"))
                     .header("x-0x1-csrf", "1")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pub_dress":"0new"}"#))
+                    .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
                     .expect("request"),
             )
             .await
             .expect("response");
-        assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        // Same client as the request above, continuing its own session
-        // rather than presenting the provider proof again as if it were a
-        // second device asking to take over (Single Active Client).
-        let cookie = invalid
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(json(response).await["error"]["code"], "avaia_unavailable");
+    }
+
+    #[tokio::test]
+    async fn explicit_create_is_idempotent() {
+        let (app, auth) = app(8903, "0x0sky").await;
+        let create = |credential: (axum::http::HeaderName, String)| {
+            Request::post("/api/v1/identity/avaia")
+                .header(credential.0, credential.1)
+                .header("x-0x1-csrf", "1")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
+                .expect("request")
+        };
+        let first = app
+            .clone()
+            .oneshot(create((AUTHORIZATION, format!("tma {auth}"))))
+            .await
+            .expect("response");
+        assert_eq!(first.status(), StatusCode::OK);
+        // The replay continues the same client's session rather than
+        // presenting the provider proof again as a second device would
+        // (Single Active Client).
+        let cookie = first
             .headers()
             .get(SET_COOKIE)
             .expect("a session cookie is set on first authentication")
@@ -504,140 +493,15 @@ mod avaia_api_tests {
             .next()
             .expect("cookie has a name=value pair")
             .to_owned();
+        assert_eq!(json(first).await["configuration_state"], "configured");
 
-        let wrong_owner = app
-            .oneshot(
-                Request::post("/api/v1/identity/avaia")
-                    .header(COOKIE, cookie)
-                    .header("x-0x1-csrf", "1")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pub_dress":"x1newai"}"#))
-                    .expect("request"),
-            )
+        let replay = app
+            .oneshot(create((COOKIE, cookie)))
             .await
             .expect("response");
-        assert_eq!(wrong_owner.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    }
-
-    #[tokio::test]
-    async fn successful_save_persists_configured_projection() {
-        let (app, auth) = app(8803, "0x0sky").await;
-        let saved = app
-            .clone()
-            .oneshot(
-                Request::post("/api/v1/identity/avaia")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .header("x-0x1-csrf", "1")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(saved.status(), StatusCode::OK);
-        let body = json(saved).await;
+        assert_eq!(replay.status(), StatusCode::OK);
+        let body = json(replay).await;
         assert_eq!(body["pub_dress"], "x0newai");
         assert_eq!(body["configuration_state"], "configured");
-
-        let reread = app
-            .oneshot(
-                Request::get("/api/v1/identity/avaia")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(reread.status(), StatusCode::OK);
-        let body = json(reread).await;
-        assert_eq!(body["pub_dress"], "x0newai");
-        assert_eq!(body["configuration_state"], "configured");
-    }
-
-    #[tokio::test]
-    async fn owned_avaia_read_carries_no_location_until_one_is_published() {
-        let (app, auth) = app(8804, "0x0sky").await;
-        let response = app
-            .oneshot(
-                Request::get("/api/v1/identity/avaia")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = json(response).await;
-        assert!(body["location"].is_null());
-    }
-
-    #[tokio::test]
-    async fn publishing_a_location_requires_csrf_and_is_reflected_on_read() {
-        let (app, auth) = app(8805, "0x0sky").await;
-        let missing_csrf = app
-            .clone()
-            .oneshot(
-                Request::post("/api/v1/identity/avaia/location")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
-
-        let published = app
-            .clone()
-            .oneshot(
-                Request::post("/api/v1/identity/avaia/location")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .header("x-0x1-csrf", "1")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(published.status(), StatusCode::OK);
-        let body = json(published).await;
-        assert_eq!(
-            body["location"]["coordinate"]["longitude_e7"],
-            "305234000"
-        );
-        assert_eq!(body["location"]["coordinate"]["latitude_e7"], "504501000");
-
-        let reread = app
-            .oneshot(
-                Request::get("/api/v1/identity/avaia")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(reread.status(), StatusCode::OK);
-        let body = json(reread).await;
-        assert_eq!(
-            body["location"]["coordinate"]["longitude_e7"],
-            "305234000"
-        );
-    }
-
-    #[tokio::test]
-    async fn invalid_location_is_rejected() {
-        let (app, auth) = app(8806, "0x0sky").await;
-        let response = app
-            .oneshot(
-                Request::post("/api/v1/identity/avaia/location")
-                    .header(AUTHORIZATION, format!("tma {auth}"))
-                    .header("x-0x1-csrf", "1")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"longitude":200.0,"latitude":50.4501}"#))
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

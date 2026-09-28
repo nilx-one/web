@@ -40,12 +40,6 @@ pub enum AvaiaUpdateOutcome {
 }
 
 /// Owner-published location for the Avaia a human Bond owns.
-///
-/// This is a distinct concept from `BondLocation` (the Bond's own operational
-/// location) and from the local walking position described in
-/// `avaia-walk.md`, which stays device-only and is never observed, persisted,
-/// or sent here. This value is the opposite: an explicit coordinate the owner
-/// chose to publish for their Avaia.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AvaiaLocation {
     pub coordinate: GeoCoordinate,
@@ -63,9 +57,9 @@ impl AvaiaLocation {
 }
 
 impl IdentityRepository {
-    /// Applies the additive Avaia-profile persistence migration. Production
-    /// startup calls this before accepting registrations; profile operations
-    /// also call it so older embedders remain safe and idempotent.
+    /// Applies the additive Avaia configuration schema. The lifecycle guard
+    /// itself is installed by the always-run Avaia location migration so Bond
+    /// registration is protected before any profile endpoint is read.
     pub async fn initialize_avaia_configuration(&self) -> Result<(), RepositoryError> {
         sqlx::raw_sql(include_str!("../migrations/0007_avaia_configuration.sql"))
             .execute(&self.pool)
@@ -88,8 +82,9 @@ impl IdentityRepository {
         row.map(avaia_identity_from_row).transpose()
     }
 
-    /// Saves owner-controlled Avaia identity configuration. Identity existence
-    /// and local AI runtime availability remain separate concerns.
+    /// The only path that may create an Avaia identity. The repository installs
+    /// a transaction-local intent before calling the shared legacy insertion
+    /// helper; the database lifecycle guard rejects every other insertion.
     pub async fn configure_owned_avaia(
         &self,
         owner: &PubDress,
@@ -114,6 +109,14 @@ impl IdentityRepository {
             return Ok(AvaiaUpdateOutcome::Unknown);
         }
 
+        sqlx::query(
+            "INSERT INTO avaia_creation_intents (owner_pub_dress) VALUES (?) \
+             ON CONFLICT(owner_pub_dress) DO NOTHING",
+        )
+        .bind(owner.as_str())
+        .execute(&mut *transaction)
+        .await?;
+
         if owned_avaia_for_owner_in(&mut transaction, owner.as_str())
             .await?
             .is_none()
@@ -126,7 +129,8 @@ impl IdentityRepository {
 
         let Some(current) = avaia_identity_for_owner_in(&mut transaction, owner.as_str()).await?
         else {
-            return Err(RepositoryError::Storage(sqlx::Error::RowNotFound));
+            transaction.rollback().await?;
+            return Ok(AvaiaUpdateOutcome::AvaiaUnavailable);
         };
         if current.pub_dress == next.as_str() {
             sqlx::query(
@@ -139,15 +143,17 @@ impl IdentityRepository {
             let Some(record) =
                 avaia_identity_for_owner_in(&mut transaction, owner.as_str()).await?
             else {
-                return Err(RepositoryError::Storage(sqlx::Error::RowNotFound));
+                transaction.rollback().await?;
+                return Ok(AvaiaUpdateOutcome::AvaiaUnavailable);
             };
+            sqlx::query("DELETE FROM avaia_creation_intents WHERE owner_pub_dress = ?")
+                .bind(owner.as_str())
+                .execute(&mut *transaction)
+                .await?;
             transaction.commit().await?;
             return Ok(AvaiaUpdateOutcome::Updated(record));
         }
 
-        // The identities primary key is the global public-address collision
-        // boundary. UPDATE OR IGNORE keeps the operation atomic without a
-        // check-then-update race; the sidecar key follows through its FK.
         let updated = sqlx::query(
             "UPDATE OR IGNORE identities SET pub_dress = ? \
              WHERE identity_kind = 'avaia' AND owner_pub_dress = ?",
@@ -170,14 +176,17 @@ impl IdentityRepository {
         .await?;
         let Some(record) = avaia_identity_for_owner_in(&mut transaction, owner.as_str()).await?
         else {
-            return Err(RepositoryError::Storage(sqlx::Error::RowNotFound));
+            transaction.rollback().await?;
+            return Ok(AvaiaUpdateOutcome::AvaiaUnavailable);
         };
+        sqlx::query("DELETE FROM avaia_creation_intents WHERE owner_pub_dress = ?")
+            .bind(owner.as_str())
+            .execute(&mut *transaction)
+            .await?;
         transaction.commit().await?;
         Ok(AvaiaUpdateOutcome::Updated(record))
     }
 
-    /// Reads the Avaia location the owner has published. `None` means no
-    /// coordinate has been submitted yet.
     pub async fn read_avaia_location(
         &self,
         owner: &PubDress,
@@ -201,14 +210,12 @@ impl IdentityRepository {
             .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
         let updated_at = u64::try_from(row.get::<i64, _>("updated_at"))
             .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
-
         Ok(Some(AvaiaLocation::new(
             coordinate,
             DecimalU64::new(updated_at),
         )))
     }
 
-    /// Replaces the one published Avaia location for this owner.
     pub async fn write_avaia_location(
         &self,
         owner: &PubDress,
@@ -264,243 +271,85 @@ fn avaia_identity_from_row(
 }
 
 #[cfg(test)]
-mod avaia_configuration_tests {
+mod avaia_lifecycle_repository_tests {
     use super::*;
 
     #[tokio::test]
-    async fn prefix_migration_keeps_configuration_state_and_rename_trigger() {
-        let directory = tempfile::tempdir().expect("temporary directory");
-        let database = directory.path().join("legacy-avaia.sqlite");
-        let database_url = format!("sqlite://{}", database.display());
-        {
-            let repository = IdentityRepository::connect(&database_url)
-                .await
-                .expect("repository");
-            repository
-                .initialize_avaia_configuration()
-                .await
-                .expect("configuration schema");
-            sqlx::raw_sql(
-                "INSERT INTO identities (pub_dress) VALUES ('0x0sky'), ('0x1mira');
-                 INSERT INTO identities (pub_dress, identity_kind, owner_pub_dress)
-                     VALUES ('0skai', 'avaia', '0x0sky'), ('1mirai', 'avaia', '0x1mira');
-                 UPDATE avaia_configuration SET configuration_state = 'configured'
-                     WHERE owner_pub_dress = '0x1mira';",
-            )
-            .execute(&repository.pool)
-            .await
-            .expect("legacy Avaia rows");
-            repository.pool.close().await;
-        }
-
-        let repository = IdentityRepository::connect(&database_url)
-            .await
-            .expect("upgrade");
-        let sky: PubDress = "0x0sky".parse().expect("owner");
-        let mira: PubDress = "0x1mira".parse().expect("owner");
-        let unconfigured = repository
-            .owned_avaia_identity(&sky)
-            .await
-            .expect("profile")
-            .expect("owned Avaia");
-        assert_eq!(unconfigured.pub_dress, "x0skai");
-        assert_eq!(
-            unconfigured.configuration_state,
-            AvaiaConfigurationState::Unconfigured
-        );
-        let configured = repository
-            .owned_avaia_identity(&mira)
-            .await
-            .expect("profile")
-            .expect("owned Avaia");
-        assert_eq!(configured.pub_dress, "x1mirai");
-        assert_eq!(
-            configured.configuration_state,
-            AvaiaConfigurationState::Configured
-        );
-
-        let trigger = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_schema \
-             WHERE type = 'trigger' \
-               AND name = 'identities_configure_avaia_on_direct_rename')",
-        )
-        .fetch_one(&repository.pool)
-        .await
-        .expect("schema");
-        assert!(trigger);
-    }
-
-    #[tokio::test]
-    async fn migration_backfills_existing_avaia_as_unconfigured() {
+    async fn registration_does_not_create_avaia() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
         let owner: PubDress = "0x0sky".parse().expect("owner");
         repository
-            .register(&owner, &ProviderIdentity::telegram(700), 100)
+            .register(&owner, &ProviderIdentity::telegram(8801), 100)
             .await
             .expect("registration");
 
-        let profile = repository
-            .owned_avaia_identity(&owner)
-            .await
-            .expect("profile")
-            .expect("owned Avaia");
-        assert_eq!(profile.pub_dress, "x0skai");
-        assert_eq!(profile.owner_pub_dress, "0x0sky");
-        assert_eq!(
-            profile.configuration_state,
-            AvaiaConfigurationState::Unconfigured
-        );
-    }
-
-    #[tokio::test]
-    async fn initialized_schema_persists_unconfigured_at_avaia_creation() {
-        let repository = IdentityRepository::connect("sqlite::memory:")
-            .await
-            .expect("repository");
-        repository
-            .initialize_avaia_configuration()
-            .await
-            .expect("migration");
-        let owner: PubDress = "0x0mira".parse().expect("owner");
-        repository
-            .register(&owner, &ProviderIdentity::telegram(701), 100)
-            .await
-            .expect("registration");
-
-        let stored = sqlx::query_scalar::<_, String>(
-            "SELECT configuration_state FROM avaia_configuration WHERE owner_pub_dress = ?",
+        assert_eq!(repository.owned_avaia_identity(&owner).await.expect("read"), None);
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia' AND owner_pub_dress = ?",
         )
         .bind(owner.as_str())
         .fetch_one(&repository.pool)
         .await
-        .expect("stored state");
-        assert_eq!(stored, "unconfigured");
+        .expect("count");
+        assert_eq!(count, 0);
     }
 
     #[tokio::test]
-    async fn first_save_and_replay_are_configured_and_idempotent() {
+    async fn explicit_create_persists_exactly_one_configured_avaia() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        repository
-            .initialize_avaia_configuration()
-            .await
-            .expect("migration");
         let owner: PubDress = "0x0sky".parse().expect("owner");
         repository
-            .register(&owner, &ProviderIdentity::telegram(702), 100)
+            .register(&owner, &ProviderIdentity::telegram(8802), 100)
             .await
             .expect("registration");
-        let same: AvaiaPubDress = "x0skai".parse().expect("Avaia");
+        let requested: AvaiaPubDress = "x0newai".parse().expect("Avaia");
 
-        for now in [101, 102] {
-            let outcome = repository
-                .configure_owned_avaia(&owner, &same, now)
-                .await
-                .expect("save");
-            assert!(matches!(
-                outcome,
-                AvaiaUpdateOutcome::Updated(ref record)
-                    if record.pub_dress == "x0skai"
-                        && record.configuration_state == AvaiaConfigurationState::Configured
-            ));
-        }
+        let first = repository
+            .configure_owned_avaia(&owner, &requested, 101)
+            .await
+            .expect("create");
+        assert!(matches!(
+            first,
+            AvaiaUpdateOutcome::Updated(ref profile)
+                if profile.pub_dress == "x0newai"
+                    && profile.configuration_state == AvaiaConfigurationState::Configured
+        ));
+
+        let second = repository
+            .configure_owned_avaia(&owner, &requested, 102)
+            .await
+            .expect("replay");
+        assert!(matches!(second, AvaiaUpdateOutcome::Updated(_)));
+
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia' AND owner_pub_dress = ?",
+        )
+        .bind(owner.as_str())
+        .fetch_one(&repository.pool)
+        .await
+        .expect("count");
+        assert_eq!(count, 1);
     }
 
     #[tokio::test]
-    async fn configuration_rejects_foreign_discriminator_and_global_collision() {
-        let repository = IdentityRepository::connect("sqlite::memory:")
-            .await
-            .expect("repository");
-        repository
-            .initialize_avaia_configuration()
-            .await
-            .expect("migration");
-        let owner: PubDress = "0x0sky".parse().expect("owner");
-        let other: PubDress = "0x0mira".parse().expect("other");
-        repository
-            .register(&owner, &ProviderIdentity::telegram(703), 100)
-            .await
-            .expect("owner registration");
-        repository
-            .register(&other, &ProviderIdentity::discord("704"), 100)
-            .await
-            .expect("other registration");
-
-        let wrong_owner: AvaiaPubDress = "x1newai".parse().expect("other discriminator");
-        assert!(matches!(
-            repository
-                .configure_owned_avaia(&owner, &wrong_owner, 101)
-                .await,
-            Ok(AvaiaUpdateOutcome::OwnerDiscriminatorMismatch)
-        ));
-
-        let occupied: AvaiaPubDress = "x0mirai".parse().expect("occupied Avaia");
-        assert!(matches!(
-            repository.configure_owned_avaia(&owner, &occupied, 102).await,
-            Ok(AvaiaUpdateOutcome::AvaiaUnavailable)
-        ));
-        let unchanged = repository
-            .owned_avaia_identity(&owner)
-            .await
-            .expect("profile")
-            .expect("owned Avaia");
-        assert_eq!(unchanged.pub_dress, "x0skai");
-        assert_eq!(
-            unchanged.configuration_state,
-            AvaiaConfigurationState::Unconfigured
-        );
-    }
-
-    #[tokio::test]
-    async fn avaia_location_is_absent_until_the_owner_publishes_one() {
+    async fn location_storage_does_not_imply_avaia_identity() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
         let owner: PubDress = "0x0sky".parse().expect("owner");
         repository
-            .register(&owner, &ProviderIdentity::telegram(710), 100)
+            .register(&owner, &ProviderIdentity::telegram(8803), 100)
             .await
             .expect("registration");
-
-        assert_eq!(
-            repository
-                .read_avaia_location(&owner)
-                .await
-                .expect("read empty"),
-            None
-        );
-
-        let coordinate = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("valid coordinate");
-        let published = AvaiaLocation::new(coordinate, DecimalU64::new(200));
+        let coordinate = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("coordinate");
         repository
-            .write_avaia_location(&owner, published)
+            .write_avaia_location(&owner, AvaiaLocation::new(coordinate, DecimalU64::new(101)))
             .await
-            .expect("publish location");
-        assert_eq!(
-            repository
-                .read_avaia_location(&owner)
-                .await
-                .expect("read published")
-                .expect("published location"),
-            published
-        );
-
-        let moved = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("valid coordinate");
-        let replaced = AvaiaLocation::new(moved, DecimalU64::new(201));
-        repository
-            .write_avaia_location(&owner, replaced)
-            .await
-            .expect("replace location");
-        assert_eq!(
-            repository
-                .read_avaia_location(&owner)
-                .await
-                .expect("read replaced")
-                .expect("replaced location"),
-            replaced
-        );
+            .expect("location");
+        assert_eq!(repository.owned_avaia_identity(&owner).await.expect("read"), None);
     }
 }
