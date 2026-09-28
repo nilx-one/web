@@ -23,9 +23,11 @@ own engine:
 
 - the chrome steps aside — header, Dock, toasts and world controls fade out —
   and the frame narrows to letterbox;
-- she walks up to the Bond's body in the same renderer that draws it, in a
-  body of her own: Dasha 2.0, or the first Dasha study when the Bond itself
-  wears Dasha 2.0, so two people never share one body on the same ground;
+- she walks up to the Bond's body in the same renderer that draws it, and
+  she mirrors it: she is drawn in the study the Bond wears — Sky, Kai, Dasha
+  or Dasha 2.0 — in that study's default appearance rather than in what the
+  Bond has on, so she is the same body and not the same person. A Bond this
+  device has no body for meets her as Dasha 2.0;
 - the camera is staged around the two of them — over the Bond's shoulder
   while she approaches, a two-shot from the side, shot and reverse shot while
   they talk, a slow drift while a line is held — and handed back exactly where
@@ -38,6 +40,12 @@ own engine:
 - what she says is typed out in subtitles under her name, and the replies a
   person can give are listed beneath them. A reply is said back in the Bond's
   own voice, with the camera on the Bond, before she answers it.
+
+She speaks in the voice of the study she mirrors, and so do the Bond's own
+replies: Sky in the masculine, both Dashas in the feminine, and Kai in forms
+that carry no gender at all — the rule an Avaia's own voice already follows.
+Where a language marks it (Ukrainian and Russian do; English does not), a
+wording is written once per voice.
 
 A line is written in several wordings that all mean the same thing, and so is
 every reply. Each time a scene plays it picks a different wording, so she
@@ -77,14 +85,36 @@ xSasha   Hi, bunny. The two of us are going to have fun — but I'm busy
 - **(skip)** ends the scene, and the introduction is not played again for this
   Bond on this device.
 
-**Reward.** The first save that configures the Avaia brings her back. She says
-it — "Growing." — beside what it paid: 20 Bond experience and level 1 for the
-Avaia, and, where this deployment can download an on-device model, that the
-next step waits in Settings. This is the Avaia configured dialog, said by her.
-Thanking her leads to one more line, and when she leaves the Bond hands the
-wheel to its new Avaia: from here it is the two of them. Handing the wheel over
-this way fetches nothing — a reply to her is not the gesture that asks a
-device to download a model.
+**Reward.** The first save that configures the Avaia brings her back — or
+rather, finds her on her way out. She is some twenty metres off, her back to
+the Bond, and the camera is on her, close, with the place itself behind her:
+the stage turns her the way where the basemap already has buildings standing
+past her, never inside one, in water or behind a wall from the Bond, and
+where nothing is built (or the renderer cannot say) she is simply the way she
+walked off. She turns round and says it:
+
+```text
+xSasha   Almost forgot — here, 0x0sky.
+```
+
+— the Bond called by its `pub_dress`, in her voice (_Ледь не забула / забув /
+вилетіло з голови — тримай_). What it paid lands beside the line, one entry
+at a time, the Bond's first and then its Avaia's: 20 Bond experience and
+level 1 for the Avaia, and, where this deployment can download an on-device
+model, that the next step waits in Settings. A Bond's gain is **blue** and an
+Avaia's **violet** (`--xp-bond`, `--xp-avaia`), each number counts up from
+nothing, and each subject's first entry goes off in a burst of confetti in its
+own colour. A person who asked for reduced motion finds her already facing
+them and reads the numbers whole, without the burst.
+
+This is the Avaia configured dialog, said by her. "Here" is how she says it,
+not what pays it: the save configured the Avaia and the achievement was
+priced before she turned round, so a scene skipped, cut short or never played
+pays exactly the same. Thanking her leads to one more line, and when she
+leaves — further off the way she was going — the Bond hands the wheel to its
+new Avaia: from here it is the two of them. Handing the wheel over this way
+fetches nothing — a reply to her is not the gesture that asks a device to
+download a model.
 
 ## What this is not
 
@@ -93,7 +123,8 @@ what keeps her that way, and `tests/architecture/guide-boundary.test.ts` and
 `tests/integration/guide-onboarding.test.tsx` hold the code to them.
 
 - **Presentation, not protocol truth.** A scene played or skipped, a line
-  chosen, the chrome stepping aside, the experience shown beside "Growing." —
+  chosen, the chrome stepping aside, the experience and confetti shown as she
+  pays it —
   none of it is an Interaction, BondChain evidence, presence evidence, or a
   change to a Bond, an Avaia or a Relationship.
 - **A reply is not reciprocity.** A numbered answer is something a person did

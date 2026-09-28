@@ -5,17 +5,24 @@ import {
   MAP_BODY_HANDOVER_ZOOM,
   mapCompassBearing,
   mapDistanceMeters,
+  type MapBounds,
   type MapObstacle,
   type MapPointSelection,
 } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
+  GUIDE_ASIDE_EXIT_METERS,
+  GUIDE_ASIDE_METERS,
+  GUIDE_ENTRY_BEARING,
   GUIDE_ENTRY_METERS,
   GUIDE_MAX_PITCH,
   GUIDE_STAND_METERS,
+  GUIDE_TURN_MS,
   GUIDE_WALK_MS,
   clearShot,
+  guideAsideBearing,
+  guideAsideStage,
   guideModel,
   guideShotCamera,
   guideSightlines,
@@ -107,10 +114,114 @@ describe("where a scene with xSasha is staged", () => {
     expect(mapDistanceMeters(pose.point, stage.dasha)).toBeLessThan(0.01);
   });
 
-  it("never draws her in the body the Bond is wearing", () => {
-    expect(guideModel("sky-study")).toBe("dasha-v2-study");
+  it("mirrors the Bond: draws her in the study the Bond wears", () => {
+    expect(guideModel("sky-study")).toBe("sky-study");
+    expect(guideModel("kai-study")).toBe("kai-study");
+    expect(guideModel("dasha-study")).toBe("dasha-study");
+    expect(guideModel("dasha-v2-study")).toBe("dasha-v2-study");
+    // A Bond this device has no body for meets her as Dasha 2.0.
     expect(guideModel(undefined)).toBe("dasha-v2-study");
-    expect(guideModel("dasha-v2-study")).toBe("dasha-study");
+  });
+});
+
+/** A square building, `side` metres across, centred `meters` off along `bearing`. */
+function buildingAt(bearing: number, meters: number, side = 10): MapObstacle {
+  const center = offsetPoint(KYIV, bearing, meters);
+  const corner = (b: number) => {
+    const p = offsetPoint(center, b, (side / 2) * Math.SQRT2);
+    return [p.longitude, p.latitude] as const;
+  };
+  return {
+    kind: "building",
+    polygons: [[[corner(45), corner(135), corner(225), corner(315)]]],
+  };
+}
+
+function world(obstacles: readonly MapObstacle[]) {
+  return (_bounds: MapBounds) => obstacles;
+}
+
+describe("where the reward scene finds her", () => {
+  it("stands her a way off, and sends her further along when she goes", () => {
+    const stage = guideAsideStage(KYIV, 110);
+    expect(stage.kind).toBe("aside");
+    expect(mapDistanceMeters(stage.you, stage.dasha)).toBeCloseTo(
+      GUIDE_ASIDE_METERS,
+      0,
+    );
+    expect(mapCompassBearing(stage.you, stage.dasha)).toBeCloseTo(110, 0);
+    expect(mapDistanceMeters(stage.dasha, stage.entry)).toBeCloseTo(
+      GUIDE_ASIDE_EXIT_METERS,
+      0,
+    );
+  });
+
+  it("films her close, looking past her at the place", () => {
+    const stage = guideAsideStage(KYIV, 110);
+    const close = guideShotCamera("reward", stage);
+    const center = { longitude: close.center[0], latitude: close.center[1] };
+    expect(mapDistanceMeters(center, stage.dasha)).toBeLessThan(2);
+    // The camera looks the way the Bond looks at her, give or take a lean.
+    const lean = Math.abs(((close.bearing - 110 + 540) % 360) - 180);
+    expect(lean).toBeLessThanOrEqual(10);
+    for (const shot of [
+      "establish",
+      "two-shot",
+      "dasha",
+      "you",
+      "reward",
+    ] as const) {
+      const camera = guideShotCamera(shot, stage);
+      expect(camera.zoom).toBeGreaterThanOrEqual(MAP_BODY_HANDOVER_ZOOM);
+      expect(camera.pitch).toBeLessThanOrEqual(GUIDE_MAX_PITCH);
+    }
+  });
+
+  it("is where she walked off to when the renderer cannot say what is built", () => {
+    expect(guideAsideBearing(KYIV)).toBe(GUIDE_ENTRY_BEARING);
+    expect(guideAsideBearing(KYIV, world([]))).toBe(GUIDE_ENTRY_BEARING);
+  });
+
+  it("turns her so that buildings stand behind her", () => {
+    // A row of houses to the south-east, past where she would stand.
+    const houses = [140, 150, 160].map((bearing) =>
+      buildingAt(bearing, GUIDE_ASIDE_METERS + 30),
+    );
+    const bearing = guideAsideBearing(KYIV, world(houses));
+    expect(bearing).toBeGreaterThanOrEqual(120);
+    expect(bearing).toBeLessThanOrEqual(180);
+  });
+
+  it("never stands her inside a building, or behind a wall from the Bond", () => {
+    const inTheWay = [
+      // Right where she walked off to…
+      buildingAt(GUIDE_ENTRY_BEARING, GUIDE_ASIDE_METERS, 14),
+      // …and a wall between the Bond and the next way round.
+      buildingAt(GUIDE_ENTRY_BEARING + 30, GUIDE_ASIDE_METERS / 2, 8),
+    ];
+    const bearing = guideAsideBearing(KYIV, world(inTheWay));
+    expect(bearing).not.toBe(GUIDE_ENTRY_BEARING);
+    expect(bearing).not.toBe(GUIDE_ENTRY_BEARING + 30);
+  });
+
+  it("turns her round to the Bond the short way", () => {
+    const stage = guideAsideStage(KYIV, 350);
+    const turn = {
+      kind: "turn" as const,
+      at: stage.dasha,
+      fromBearing: 350,
+      toBearing: 170,
+      startedMs: 0,
+      durationMs: GUIDE_TURN_MS,
+    };
+    const midway = sampleGuideBody(turn, GUIDE_TURN_MS / 2, false);
+    expect(midway.clipId).toBe("turn_in_place");
+    expect(midway.moving).toBe(true);
+    const done = sampleGuideBody(turn, GUIDE_TURN_MS, false);
+    expect(done.bearingDeg).toBeCloseTo(170, 0);
+    expect(done.clipId).toBe("idle");
+    // A person who asked for less motion finds her already facing them.
+    expect(sampleGuideBody(turn, 0, true).bearingDeg).toBeCloseTo(170, 0);
   });
 });
 

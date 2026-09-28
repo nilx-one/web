@@ -5,15 +5,32 @@
  * What xSasha says, and what a person may say back. A line with several
  * numbered keys is one line in several wordings: the scene picks a different
  * one each time it plays, and every wording means the same thing.
+ *
+ * She mirrors the Bond, so a wording the language marks for gender is written
+ * once per voice — `.feminine`, `.masculine`, `.neutral` — and she and the
+ * Bond's replies are said in the voice of the study the Bond wears. English
+ * marks none of these; it carries every voice so the three catalogues agree.
  */
 export const GUIDE_EN = {
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Continue",
-  "guide.intro.greeting.0":
+  "guide.intro.greeting.0.feminine":
     "Hi, bunny. The two of us are going to have fun — but I’m busy right now. Go create your Avaia.",
-  "guide.intro.greeting.1":
+  "guide.intro.greeting.0.masculine":
+    "Hi, bunny. The two of us are going to have fun — but I’m busy right now. Go create your Avaia.",
+  "guide.intro.greeting.0.neutral":
+    "Hi, bunny. The two of us are going to have fun — but I’m busy right now. Go create your Avaia.",
+  "guide.intro.greeting.1.feminine":
     "Hey, bunny. It’ll be fun with the two of us, I promise. Only I’m tied up right now — create your Avaia first.",
-  "guide.intro.greeting.2":
+  "guide.intro.greeting.1.masculine":
+    "Hey, bunny. It’ll be fun with the two of us, I promise. Only I’m tied up right now — create your Avaia first.",
+  "guide.intro.greeting.1.neutral":
+    "Hey, bunny. It’ll be fun with the two of us, I promise. Only I’m tied up right now — create your Avaia first.",
+  "guide.intro.greeting.2.feminine":
+    "There you are, bunny. We’ll have a good time, you and me. But I’m busy for now — make yourself an Avaia.",
+  "guide.intro.greeting.2.masculine":
+    "There you are, bunny. We’ll have a good time, you and me. But I’m busy for now — make yourself an Avaia.",
+  "guide.intro.greeting.2.neutral":
     "There you are, bunny. We’ll have a good time, you and me. But I’m busy for now — make yourself an Avaia.",
   "guide.intro.howTo.0":
     "Then you already know the way. Down in the Dock sits your Avaia, {avaia}, still unconfigured. Tap it and press Create — it already knows its name.",
@@ -21,14 +38,27 @@ export const GUIDE_EN = {
     "Then this will feel familiar. Your Avaia, {avaia}, is waiting in the Dock below. Tap its card, then Create. The name is already its own.",
   "guide.intro.farewell.0": "Fine. I’ll drop by again.",
   "guide.intro.farewell.1": "Okay. I’ll be around.",
-  "guide.reward.grow.0": "Look at you. Growing.",
-  "guide.reward.grow.1": "There. You’re growing, bunny.",
-  "guide.reward.grow.2": "See? You’re growing.",
+  "guide.reward.almostForgot.0.feminine": "Almost forgot — here, {bond}.",
+  "guide.reward.almostForgot.0.masculine": "Almost forgot — here, {bond}.",
+  "guide.reward.almostForgot.0.neutral": "Almost forgot — here, {bond}.",
+  "guide.reward.almostForgot.1.feminine":
+    "Oh, I nearly left without giving you this. Here, {bond}.",
+  "guide.reward.almostForgot.1.masculine":
+    "Oh, I nearly left without giving you this. Here, {bond}.",
+  "guide.reward.almostForgot.1.neutral":
+    "Oh, I nearly left without giving you this. Here, {bond}.",
+  "guide.reward.almostForgot.2": "Wait. This is yours, {bond}.",
   "guide.reward.together.0": "And now it’s the two of you. I’ll be near.",
   "guide.reward.together.1": "Now go — you and {avaia}. I’ll find you.",
-  "guide.choice.curious.0":
+  "guide.choice.curious.0.feminine":
     "This is strange. I feel like I’ve been here before.",
-  "guide.choice.curious.1": "Strange… as if I’ve already been here.",
+  "guide.choice.curious.0.masculine":
+    "This is strange. I feel like I’ve been here before.",
+  "guide.choice.curious.0.neutral":
+    "This is strange. I feel like I’ve been here before.",
+  "guide.choice.curious.1.feminine": "Strange… as if I’ve already been here.",
+  "guide.choice.curious.1.masculine": "Strange… as if I’ve already been here.",
+  "guide.choice.curious.1.neutral": "Strange… as if I’ve already been here.",
   "guide.choice.curious.2": "Odd. All of this feels familiar.",
   "guide.choice.later.0": "Later.",
   "guide.choice.later.1": "Not now.",
@@ -45,25 +75,50 @@ export const GUIDE_EN = {
 export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далі",
-  "guide.intro.greeting.0":
+  "guide.intro.greeting.0.feminine":
     "Привіт, зайчик. Нам удвох буде прікольно, проте наразі я зайнята — створи свою Avaia.",
-  "guide.intro.greeting.1":
+  "guide.intro.greeting.0.masculine":
+    "Привіт, зайчик. Нам удвох буде прікольно, проте наразі я зайнятий — створи свою Avaia.",
+  "guide.intro.greeting.0.neutral":
+    "Привіт, зайчик. Нам удвох буде прікольно, проте наразі в мене справи — створи свою Avaia.",
+  "guide.intro.greeting.1.feminine":
     "О, зайчик, привіт. Нам з тобою буде прікольно, обіцяю. Але зараз я зайнята — спершу створи свою Avaia.",
-  "guide.intro.greeting.2":
+  "guide.intro.greeting.1.masculine":
+    "О, зайчик, привіт. Нам з тобою буде прікольно, обіцяю. Але зараз я зайнятий — спершу створи свою Avaia.",
+  "guide.intro.greeting.1.neutral":
+    "О, зайчик, привіт. Нам з тобою буде прікольно, обіцяю. Але зараз у мене купа справ — спершу створи свою Avaia.",
+  "guide.intro.greeting.2.feminine":
     "Ось і ти, зайчик. Удвох нам буде прікольно. Тільки поки я зайнята — створи собі Avaia.",
+  "guide.intro.greeting.2.masculine":
+    "Ось і ти, зайчик. Удвох нам буде прікольно. Тільки поки я зайнятий — створи собі Avaia.",
+  "guide.intro.greeting.2.neutral":
+    "Ось і ти, зайчик. Удвох нам буде прікольно. Тільки поки мені ніколи — створи собі Avaia.",
   "guide.intro.howTo.0":
     "Тоді ти знаєш дорогу. Внизу, у Dock, чекає твоя Avaia — {avaia}, поки unconfigured. Торкнись її й натисни «Створити». Ім’я вона вже знає.",
   "guide.intro.howTo.1":
     "Тоді тобі це знайоме. Твоя Avaia, {avaia}, — внизу, у Dock. Торкнись картки, потім «Створити». Своє ім’я вона вже має.",
   "guide.intro.farewell.0": "Добре. Я ще зазирну.",
   "guide.intro.farewell.1": "Гаразд. Я буду поруч.",
-  "guide.reward.grow.0": "Ростеш.",
-  "guide.reward.grow.1": "Ну от. Ростеш, зайчик.",
-  "guide.reward.grow.2": "Бачиш? Ростеш.",
+  "guide.reward.almostForgot.0.feminine": "Ледь не забула — тримай, {bond}.",
+  "guide.reward.almostForgot.0.masculine": "Ледь не забув — тримай, {bond}.",
+  "guide.reward.almostForgot.0.neutral":
+    "Ледь не вилетіло з голови — тримай, {bond}.",
+  "guide.reward.almostForgot.1.feminine":
+    "Ой, мало не пішла просто так. Тримай, {bond}.",
+  "guide.reward.almostForgot.1.masculine":
+    "Ой, мало не пішов просто так. Тримай, {bond}.",
+  "guide.reward.almostForgot.1.neutral":
+    "Ой, ще дещо наостанок. Тримай, {bond}.",
+  "guide.reward.almostForgot.2": "Стій. Це твоє, {bond}.",
   "guide.reward.together.0": "А тепер — ви удвох. Я поруч.",
   "guide.reward.together.1": "Тепер ідіть — ти і {avaia}. Я вас знайду.",
-  "guide.choice.curious.0": "Це дивно. Я відчуваю, що вже був тут.",
-  "guide.choice.curious.1": "Дивно… ніби я вже тут колись був.",
+  "guide.choice.curious.0.feminine": "Це дивно. Я відчуваю, що вже була тут.",
+  "guide.choice.curious.0.masculine": "Це дивно. Я відчуваю, що вже був тут.",
+  "guide.choice.curious.0.neutral":
+    "Це дивно. Таке відчуття, ніби тут уже доводилось бувати.",
+  "guide.choice.curious.1.feminine": "Дивно… ніби я вже тут колись була.",
+  "guide.choice.curious.1.masculine": "Дивно… ніби я вже тут колись був.",
+  "guide.choice.curious.1.neutral": "Дивно… ніби все це вже колись було.",
   "guide.choice.curious.2": "Дивне відчуття. Усе це вже було.",
   "guide.choice.later.0": "Пізніше.",
   "guide.choice.later.1": "Не зараз.",
@@ -80,25 +135,54 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
 export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далее",
-  "guide.intro.greeting.0":
+  "guide.intro.greeting.0.feminine":
     "Привет, зайчик. Нам вдвоём будет прикольно, но сейчас я занята — создай свою Avaia.",
-  "guide.intro.greeting.1":
+  "guide.intro.greeting.0.masculine":
+    "Привет, зайчик. Нам вдвоём будет прикольно, но сейчас я занят — создай свою Avaia.",
+  "guide.intro.greeting.0.neutral":
+    "Привет, зайчик. Нам вдвоём будет прикольно, но сейчас у меня дела — создай свою Avaia.",
+  "guide.intro.greeting.1.feminine":
     "О, зайчик, привет. Нам с тобой будет прикольно, обещаю. Но сейчас я занята — сначала создай свою Avaia.",
-  "guide.intro.greeting.2":
+  "guide.intro.greeting.1.masculine":
+    "О, зайчик, привет. Нам с тобой будет прикольно, обещаю. Но сейчас я занят — сначала создай свою Avaia.",
+  "guide.intro.greeting.1.neutral":
+    "О, зайчик, привет. Нам с тобой будет прикольно, обещаю. Но сейчас у меня куча дел — сначала создай свою Avaia.",
+  "guide.intro.greeting.2.feminine":
     "Вот и ты, зайчик. Вдвоём нам будет прикольно. Только пока я занята — создай себе Avaia.",
+  "guide.intro.greeting.2.masculine":
+    "Вот и ты, зайчик. Вдвоём нам будет прикольно. Только пока я занят — создай себе Avaia.",
+  "guide.intro.greeting.2.neutral":
+    "Вот и ты, зайчик. Вдвоём нам будет прикольно. Только пока мне некогда — создай себе Avaia.",
   "guide.intro.howTo.0":
     "Тогда ты знаешь дорогу. Внизу, в Dock, ждёт твоя Avaia — {avaia}, пока unconfigured. Коснись её и нажми «Создать». Имя она уже знает.",
   "guide.intro.howTo.1":
     "Тогда тебе это знакомо. Твоя Avaia, {avaia}, — внизу, в Dock. Коснись карточки, потом «Создать». Своё имя у неё уже есть.",
   "guide.intro.farewell.0": "Хорошо. Я ещё загляну.",
   "guide.intro.farewell.1": "Ладно. Я буду рядом.",
-  "guide.reward.grow.0": "Растёшь.",
-  "guide.reward.grow.1": "Ну вот. Растёшь, зайчик.",
-  "guide.reward.grow.2": "Видишь? Растёшь.",
+  "guide.reward.almostForgot.0.feminine": "Чуть не забыла — держи, {bond}.",
+  "guide.reward.almostForgot.0.masculine": "Чуть не забыл — держи, {bond}.",
+  "guide.reward.almostForgot.0.neutral":
+    "Чуть не вылетело из головы — держи, {bond}.",
+  "guide.reward.almostForgot.1.feminine":
+    "Ой, чуть не ушла просто так. Держи, {bond}.",
+  "guide.reward.almostForgot.1.masculine":
+    "Ой, чуть не ушёл просто так. Держи, {bond}.",
+  "guide.reward.almostForgot.1.neutral":
+    "Ой, ещё кое-что напоследок. Держи, {bond}.",
+  "guide.reward.almostForgot.2": "Стой. Это твоё, {bond}.",
   "guide.reward.together.0": "А теперь — вы вдвоём. Я рядом.",
   "guide.reward.together.1": "Теперь идите — ты и {avaia}. Я вас найду.",
-  "guide.choice.curious.0": "Это странно. Я чувствую, что уже был здесь.",
-  "guide.choice.curious.1": "Странно… будто я уже здесь когда-то был.",
+  "guide.choice.curious.0.feminine":
+    "Это странно. Я чувствую, что уже была здесь.",
+  "guide.choice.curious.0.masculine":
+    "Это странно. Я чувствую, что уже был здесь.",
+  "guide.choice.curious.0.neutral":
+    "Это странно. Будто здесь уже доводилось бывать.",
+  "guide.choice.curious.1.feminine":
+    "Странно… будто я уже здесь когда-то была.",
+  "guide.choice.curious.1.masculine":
+    "Странно… будто я уже здесь когда-то был.",
+  "guide.choice.curious.1.neutral": "Странно… будто всё это уже когда-то было.",
   "guide.choice.curious.2": "Странное чувство. Всё это уже было.",
   "guide.choice.later.0": "Позже.",
   "guide.choice.later.1": "Не сейчас.",

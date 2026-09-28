@@ -27,6 +27,9 @@
   --glass-surface: rgb(246 251 255 / 64%);
   --glass-line: rgb(58 126 175 / 15%);
   --field-line: rgb(42 102 146 / 17%);
+  /* Whose experience a number is: the Bond's is blue, its Avaia's violet. */
+  --xp-bond: #2563eb;
+  --xp-avaia: #7c3aed;
 }
 
 /* Dark is a variant of the same palette, not a second design. Every token the
@@ -49,6 +52,8 @@
   --glass-surface: rgb(26 24 31 / 74%);
   --glass-line: rgb(245 242 255 / 16%);
   --field-line: rgb(245 242 255 / 17%);
+  --xp-bond: #6ea8ff;
+  --xp-avaia: #b794ff;
 }
 
 * {

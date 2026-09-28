@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvatarModelId } from "@nilx-one/map-contract";
+
 import type { Translate, TranslationKey } from "../../shell/localization";
 import type { GuideShot } from "./guide-stage";
 
@@ -15,7 +17,7 @@ import type { GuideShot } from "./guide-stage";
 export type GuideSceneId = "intro" | "reward";
 
 export type GuideNodeId =
-  "greeting" | "howTo" | "farewell" | "grow" | "together";
+  "greeting" | "howTo" | "farewell" | "almostForgot" | "together";
 
 /**
  * How a scene ended, which is all the world is told about it.
@@ -31,6 +33,55 @@ export type GuideOutcome = "later" | "skipped" | "create" | "done" | "together";
 export type GuideReply =
   "curious" | "later" | "go" | "thanks" | "skip" | "continue";
 
+/**
+ * The grammatical gender a line is said in. She mirrors the Bond, so she and
+ * the Bond's own replies always share one: Sky speaks in the masculine, both
+ * Dashas in the feminine, and Kai in forms that carry no gender at all — the
+ * same rule an Avaia's own voice follows.
+ */
+export type GuideVoice = "feminine" | "masculine" | "neutral";
+
+export function studyVoice(model: AvatarModelId | undefined): GuideVoice {
+  switch (model) {
+    case "sky-study":
+      return "masculine";
+    case "dasha-study":
+    case "dasha-v2-study":
+      return "feminine";
+    case "kai-study":
+    case undefined:
+      return "neutral";
+  }
+}
+
+/**
+ * One wording of a line: the same in every voice, or written once per voice
+ * where the language marks who is speaking.
+ */
+export type GuideWording =
+  TranslationKey | Readonly<Record<GuideVoice, TranslationKey>>;
+
+function voiced(wording: GuideWording, voice: GuideVoice): TranslationKey {
+  return typeof wording === "string" ? wording : wording[voice];
+}
+
+/** One of her lines whose catalogue carries a wording for each voice. */
+type VoicedKey = TranslationKey extends infer Key
+  ? Key extends `${infer Stem extends `guide.${string}`}.feminine`
+    ? Stem
+    : never
+  : never;
+
+function inVoices(
+  key: VoicedKey,
+): Readonly<Record<GuideVoice, TranslationKey>> {
+  return {
+    feminine: `${key}.feminine`,
+    masculine: `${key}.masculine`,
+    neutral: `${key}.neutral`,
+  };
+}
+
 export interface GuideChoice {
   readonly reply: GuideReply;
   readonly next: GuideNodeId | { readonly end: GuideOutcome };
@@ -38,7 +89,7 @@ export interface GuideChoice {
 
 export interface GuideNode {
   /** One line in every wording it has. */
-  readonly line: readonly TranslationKey[];
+  readonly line: readonly GuideWording[];
   readonly shot: GuideShot;
   /** The line is said with the achievement the scene is paying beside it. */
   readonly reward?: true;
@@ -47,15 +98,15 @@ export interface GuideNode {
 
 export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
   intro: "greeting",
-  reward: "grow",
+  reward: "almostForgot",
 };
 
 export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
   greeting: {
     line: [
-      "guide.intro.greeting.0",
-      "guide.intro.greeting.1",
-      "guide.intro.greeting.2",
+      inVoices("guide.intro.greeting.0"),
+      inVoices("guide.intro.greeting.1"),
+      inVoices("guide.intro.greeting.2"),
     ],
     shot: "dasha",
     choices: [
@@ -77,8 +128,12 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
     shot: "dasha",
     choices: [{ reply: "continue", next: { end: "later" } }],
   },
-  grow: {
-    line: ["guide.reward.grow.0", "guide.reward.grow.1", "guide.reward.grow.2"],
+  almostForgot: {
+    line: [
+      inVoices("guide.reward.almostForgot.0"),
+      inVoices("guide.reward.almostForgot.1"),
+      "guide.reward.almostForgot.2",
+    ],
     shot: "reward",
     reward: true,
     choices: [
@@ -93,10 +148,10 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
   },
 };
 
-const REPLY_KEYS: Readonly<Record<GuideReply, readonly TranslationKey[]>> = {
+const REPLY_KEYS: Readonly<Record<GuideReply, readonly GuideWording[]>> = {
   curious: [
-    "guide.choice.curious.0",
-    "guide.choice.curious.1",
+    inVoices("guide.choice.curious.0"),
+    inVoices("guide.choice.curious.1"),
     "guide.choice.curious.2",
   ],
   later: [
@@ -149,6 +204,8 @@ export function pickVariant<T>(
 
 export interface GuideNames {
   readonly avaia: string;
+  /** The Bond's `pub_dress`, which is what she calls it when she pays it. */
+  readonly bond: string;
 }
 
 export interface GuideChoiceViewState {
@@ -165,7 +222,9 @@ export interface GuideLineViewState {
 }
 
 function fill(text: string, names: GuideNames): string {
-  return text.replaceAll("{avaia}", names.avaia);
+  return text
+    .replaceAll("{avaia}", names.avaia)
+    .replaceAll("{bond}", names.bond);
 }
 
 export function replyText(
@@ -173,8 +232,10 @@ export function replyText(
   reply: GuideReply,
   seed: number,
   names: GuideNames,
+  voice: GuideVoice,
 ): string {
-  return fill(t(pickVariant(REPLY_KEYS[reply], seed, `reply:${reply}`)), names);
+  const wording = pickVariant(REPLY_KEYS[reply], seed, `reply:${reply}`);
+  return fill(t(voiced(wording, voice)), names);
 }
 
 export function createGuideLineState(
@@ -182,16 +243,18 @@ export function createGuideLineState(
   seed: number,
   t: Translate,
   names: GuideNames,
+  voice: GuideVoice,
 ): GuideLineViewState {
   const script = GUIDE_NODES[node];
+  const wording = pickVariant(script.line, seed, `line:${node}`);
   return {
     node,
     speaker: t("guide.speaker"),
-    text: fill(t(pickVariant(script.line, seed, `line:${node}`)), names),
+    text: fill(t(voiced(wording, voice)), names),
     reward: script.reward === true,
     choices: script.choices.map((choice) => ({
       reply: choice.reply,
-      text: replyText(t, choice.reply, seed, names),
+      text: replyText(t, choice.reply, seed, names, voice),
     })),
   };
 }

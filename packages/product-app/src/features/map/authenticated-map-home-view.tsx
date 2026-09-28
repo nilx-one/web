@@ -774,7 +774,7 @@ export function AuthenticatedMapHomeView({
     anchor: observedPosition,
     bondModel: bondAvatar?.modelId as AvatarModelId | undefined,
     bondName: pubDress,
-    names: { avaia: avaiaLabel },
+    names: { avaia: avaiaLabel, bond: pubDress },
     reducedMotion,
     onEnd: (scene, outcome) => endGuideScene(scene, outcome),
   });
