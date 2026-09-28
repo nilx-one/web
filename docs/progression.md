@@ -115,4 +115,29 @@ it was earned and not a rank nilx attested. Losing local storage loses the
 device achievement and any award that had not reached `pub_info` yet; the
 shared report remains.
 
+## Not yet
+
+None of this is scheduled. It is written down so it is not lost before it is.
+
+- **Interaction as the main path.** Two Bonds actually meeting — a chat, any
+  other interaction between them — is meant to become the main way a Bond
+  levels up, ahead of fog and landmarks. That is a boundary this file
+  currently draws hard, twice over: "creates no Interaction, completes no
+  BondChain" (here and in `avaia-setup.md`). The day an Interaction starts
+  paying experience, that boundary has to move on purpose, with its own
+  contract for what counts as one and who attests it — not as a quiet
+  addition to the events table above.
+- **Commerce.** A first purchase at a partner venue, settled through
+  0xda-market, is meant to be a landmark achievement of its own — likely the
+  biggest single one yet. That needs its own contract too: what (if anything)
+  the identity service is told, what stays 0xda-market's alone, and what
+  "the owner asserts this" even means once real money moved.
+- **AI achievements.** Using the on-device model, or whatever AI surface
+  comes after it, is meant to earn its own way in — a sibling to "Avaia model
+  downloaded", not folded into it.
+
+All three cross into territory this file currently rules out (Interaction,
+BondChain, money, a second service). Getting there is deliberate, one
+contract at a time — not a fast follow.
+
 © 2026 aiaiaiai · aiaiaiai.org
