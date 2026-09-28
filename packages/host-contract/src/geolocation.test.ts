@@ -139,6 +139,40 @@ describe("createBondLocationGeolocation", () => {
     expect(device.requestPosition).not.toHaveBeenCalled();
   });
 
+  it("stops observing the device once a live Bond's location becomes unknown", async () => {
+    vi.useFakeTimers();
+    try {
+      const { device, stopDevice } = deviceDouble();
+      let mode: BondLocationMode = { kind: "live" };
+      const bond = createBondLocationGeolocation({
+        device,
+        readLocation: async () => mode,
+        recheckMs: 1_000,
+      });
+      const stop = bond.watchPosition(vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(device.watchPosition).toHaveBeenCalledOnce();
+
+      mode = { kind: "unavailable" };
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(stopDevice).toHaveBeenCalledOnce();
+
+      // Still unknown: nothing restarts.
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(device.watchPosition).toHaveBeenCalledOnce();
+
+      // Only a definite live answer observes the device again.
+      mode = { kind: "live" };
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(device.watchPosition).toHaveBeenCalledTimes(2);
+
+      stop();
+      expect(stopDevice).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("moves a running watch between device and declared point as the mode changes", async () => {
     vi.useFakeTimers();
     try {
@@ -164,7 +198,7 @@ describe("createBondLocationGeolocation", () => {
         }),
       );
 
-      // An unknown read keeps what the Bond last was.
+      // An unknown read leaves a declared point shown; no device is involved.
       mode = { kind: "unavailable" };
       await vi.advanceTimersByTimeAsync(1_000);
       expect(device.watchPosition).toHaveBeenCalledOnce();

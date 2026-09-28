@@ -218,7 +218,17 @@ export function createBondLocationGeolocation(
       let stopDevice: GeolocationUnsubscribe | undefined;
 
       const apply = (mode: BondLocationMode): void => {
-        if (stopped || mode.kind === "unavailable") return;
+        if (stopped) return;
+        // Unknown state never keeps the device observing; a declared point
+        // already shown involves no device and stays.
+        if (mode.kind === "unavailable") {
+          if (stopDevice !== undefined) {
+            stopDevice();
+            stopDevice = undefined;
+            current = mode.kind;
+          }
+          return;
+        }
         const fingerprint = bondLocationFingerprint(mode);
         if (fingerprint === current) return;
         const first = current === undefined;
