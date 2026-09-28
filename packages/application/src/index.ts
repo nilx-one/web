@@ -52,6 +52,13 @@ export {
   type ResolvedAvatarScene,
 } from "./avatar-scene";
 export {
+  AVATAR_MODEL_DIGEST_HEX_LENGTHS,
+  classifyAvatarModelIdentifier,
+  isAvatarModelDigest,
+  type AvatarModelDigestBits,
+  type AvatarModelIdentifier,
+} from "./avatar-model-identifier";
+export {
   createAvaiaMovementController,
   type AvaiaMovementController,
   type AvaiaMovementControllerOptions,
@@ -172,6 +179,14 @@ export {
   type PubDressSelection,
   type PubDressResolutionResult,
 } from "./identity-registration";
+export {
+  STATE_PLACEMENT,
+  placedStateAt,
+  placedStateForKey,
+  type PlacedState,
+  type StateMedium,
+  type StatePlacement,
+} from "./state-placement";
 export {
   PUB_DRESS_LABEL_MAX_LENGTH,
   PUB_DRESS_URL_SUFFIX_MAX_LENGTH,
