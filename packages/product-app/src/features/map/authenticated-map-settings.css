@@ -455,6 +455,17 @@
   gap: 0.5rem;
 }
 
+.local-model-settings__attention {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+.local-model-settings__reward {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .avatar-choice {
   display: grid;
   gap: 0.25rem;

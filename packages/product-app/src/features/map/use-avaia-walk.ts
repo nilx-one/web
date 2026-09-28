@@ -383,7 +383,7 @@ export function useAvaiaWalk({
         studyLandmark(current, study.landmark, by, Date.now()),
       );
       updateProgression(book, (current) =>
-        awardExperience(current, XP_LANDMARK_STUDIED_BY_AVAIA),
+        awardExperience(current, "avaia", XP_LANDMARK_STUDIED_BY_AVAIA),
       );
       setStudy(undefined);
       setRest({ point: study.at, bearingDeg: study.bearingDeg });
@@ -462,7 +462,11 @@ export function useAvaiaWalk({
       );
       if (newlyNoticed > 0) {
         updateProgression(owner, (current) =>
-          awardExperience(current, XP_LANDMARK_NOTICED_MANUALLY * newlyNoticed),
+          awardExperience(
+            current,
+            "bond",
+            XP_LANDMARK_NOTICED_MANUALLY * newlyNoticed,
+          ),
         );
       }
     }

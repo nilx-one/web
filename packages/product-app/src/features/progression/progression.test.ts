@@ -4,18 +4,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  ACHIEVEMENTS,
   EMPTY_PROGRESSION,
-  LEVEL_ONE_EXPERIENCE,
-  XP_AVAIA_CONFIGURED,
   XP_LANDMARK_NOTICED_MANUALLY,
   XP_LANDMARK_STUDIED_BY_AVAIA,
   XP_ZONE_REVEALED_BY_AVAIA,
   XP_ZONE_REVEALED_MANUALLY,
+  avaiaExperienceForLevel,
+  avaiaLevelForExperience,
   awardExperience,
+  bondExperienceForLevel,
+  bondLevelForExperience,
+  earnDeviceAchievement,
   forgetProgressionCache,
-  levelForExperience,
-  markAvaiaConfigured,
+  markSettingsHintSeen,
   progressionSnapshot,
+  progressionStanding,
   readProgression,
   subscribeProgression,
   updateProgression,
@@ -31,6 +35,9 @@ function memoryStorage(): ProgressionStorage & { data: Map<string, string> } {
     setItem: (key, value) => void data.set(key, value),
   };
 }
+
+const unconfigured = { avaiaConfigured: false };
+const configured = { avaiaConfigured: true };
 
 beforeEach(() => {
   forgetProgressionCache();
@@ -49,53 +56,130 @@ describe("the experience economy", () => {
     );
   });
 
-  it("pays exactly what level 1 costs for configuring an owned Avaia", () => {
-    expect(XP_AVAIA_CONFIGURED).toBe(LEVEL_ONE_EXPERIENCE);
+  it("pays each achievement what the design names", () => {
+    expect(ACHIEVEMENTS["avaia-configured"]).toMatchObject({
+      scope: "account",
+      bondXp: 20,
+      avaiaXp: 0,
+    });
+    expect(ACHIEVEMENTS["avaia-model-downloaded"]).toMatchObject({
+      scope: "device",
+      bondXp: 50,
+      avaiaXp: 100,
+    });
   });
 });
 
-describe("levelForExperience", () => {
-  it("starts at 0 and reaches 1 once 40 is earned", () => {
-    expect(levelForExperience(0)).toBe(0);
-    expect(levelForExperience(39)).toBe(0);
-    expect(levelForExperience(40)).toBe(1);
-    expect(levelForExperience(1_000)).toBe(1);
+describe("the Bond curve", () => {
+  it("reaches level 1 in one or two actions", () => {
+    expect(bondLevelForExperience(0)).toBe(0);
+    expect(bondExperienceForLevel(1)).toBe(50);
+    // Configuring the Avaia and walking one zone open.
+    expect(
+      bondLevelForExperience(
+        ACHIEVEMENTS["avaia-configured"].bondXp + XP_ZONE_REVEALED_MANUALLY,
+      ),
+    ).toBe(1);
+  });
+
+  it("climbs steeply: level 4 takes a real amount of play", () => {
+    expect(bondExperienceForLevel(2)).toBe(400);
+    expect(bondExperienceForLevel(3)).toBe(1_350);
+    expect(bondExperienceForLevel(4)).toBe(3_200);
+    expect(bondLevelForExperience(3_199)).toBe(3);
+    expect(bondLevelForExperience(3_200)).toBe(4);
+    expect(
+      bondExperienceForLevel(4) / XP_ZONE_REVEALED_MANUALLY,
+    ).toBeGreaterThan(100);
+  });
+});
+
+describe("the Avaia curve", () => {
+  it("reaches level 1 by being configured, not by experience", () => {
+    expect(avaiaLevelForExperience(0, false)).toBe(0);
+    expect(avaiaLevelForExperience(10_000, false)).toBe(0);
+    expect(avaiaLevelForExperience(0, true)).toBe(1);
+  });
+
+  it("climbs linearly, 150 per level, with no ceiling", () => {
+    expect(avaiaExperienceForLevel(2)).toBe(150);
+    expect(avaiaExperienceForLevel(3)).toBe(300);
+    expect(avaiaLevelForExperience(149, true)).toBe(1);
+    expect(avaiaLevelForExperience(150, true)).toBe(2);
+    expect(avaiaLevelForExperience(300, true)).toBe(3);
+    expect(avaiaExperienceForLevel(100)).toBe(14_850);
+    expect(avaiaLevelForExperience(36_600, true)).toBe(245);
   });
 });
 
 describe("awardExperience", () => {
-  it("adds experience and recomputes the level", () => {
-    const first = awardExperience(EMPTY_PROGRESSION, XP_ZONE_REVEALED_BY_AVAIA);
-    expect(first).toEqual({
-      totalXp: XP_ZONE_REVEALED_BY_AVAIA,
-      level: 0,
-      avaiaConfigured: false,
+  it("pays whoever earned it, and only them", () => {
+    const bond = awardExperience(
+      EMPTY_PROGRESSION,
+      "bond",
+      XP_ZONE_REVEALED_MANUALLY,
+    );
+    expect(bond).toMatchObject({
+      bondXp: XP_ZONE_REVEALED_MANUALLY,
+      avaiaXp: 0,
     });
 
-    const leveled = awardExperience(first, XP_AVAIA_CONFIGURED);
-    expect(leveled.level).toBe(1);
-    expect(leveled.totalXp).toBe(
-      XP_ZONE_REVEALED_BY_AVAIA + XP_AVAIA_CONFIGURED,
-    );
+    const both = awardExperience(bond, "avaia", XP_ZONE_REVEALED_BY_AVAIA);
+    expect(both).toMatchObject({
+      bondXp: XP_ZONE_REVEALED_MANUALLY,
+      avaiaXp: XP_ZONE_REVEALED_BY_AVAIA,
+    });
   });
 
   it("ignores a non-positive amount", () => {
-    expect(awardExperience(EMPTY_PROGRESSION, 0)).toBe(EMPTY_PROGRESSION);
-    expect(awardExperience(EMPTY_PROGRESSION, -5)).toBe(EMPTY_PROGRESSION);
+    expect(awardExperience(EMPTY_PROGRESSION, "bond", 0)).toBe(
+      EMPTY_PROGRESSION,
+    );
+    expect(awardExperience(EMPTY_PROGRESSION, "avaia", -5)).toBe(
+      EMPTY_PROGRESSION,
+    );
   });
 });
 
-describe("markAvaiaConfigured", () => {
-  it("pays the configuration reward once", () => {
-    const configured = markAvaiaConfigured(EMPTY_PROGRESSION);
-    expect(configured).toEqual({
-      totalXp: XP_AVAIA_CONFIGURED,
-      level: 1,
-      avaiaConfigured: true,
+describe("achievements", () => {
+  it("reads the configuration achievement from the service, never storage", () => {
+    expect(progressionStanding(EMPTY_PROGRESSION, unconfigured)).toEqual({
+      bond: { xp: 0, level: 0, nextLevelXp: 50 },
+      avaia: { xp: 0, level: 0, nextLevelXp: 0 },
+      achievements: [],
     });
+    expect(progressionStanding(EMPTY_PROGRESSION, configured)).toEqual({
+      bond: { xp: 20, level: 0, nextLevelXp: 50 },
+      avaia: { xp: 0, level: 1, nextLevelXp: 150 },
+      achievements: ["avaia-configured"],
+    });
+  });
 
-    // A repeat save never pays twice.
-    expect(markAvaiaConfigured(configured)).toBe(configured);
+  it("pays a device achievement once, to both the Bond and the Avaia", () => {
+    const earned = earnDeviceAchievement(
+      EMPTY_PROGRESSION,
+      "avaia-model-downloaded",
+    );
+    expect(earnDeviceAchievement(earned, "avaia-model-downloaded")).toBe(
+      earned,
+    );
+    expect(progressionStanding(earned, configured)).toEqual({
+      bond: { xp: 70, level: 1, nextLevelXp: 400 },
+      avaia: { xp: 100, level: 1, nextLevelXp: 150 },
+      achievements: ["avaia-configured", "avaia-model-downloaded"],
+    });
+  });
+
+  it("never stores an account achievement on the device", () => {
+    expect(earnDeviceAchievement(EMPTY_PROGRESSION, "avaia-configured")).toBe(
+      EMPTY_PROGRESSION,
+    );
+  });
+
+  it("remembers the settings hint was seen, once", () => {
+    const seen = markSettingsHintSeen(EMPTY_PROGRESSION);
+    expect(seen.settingsHintSeen).toBe(true);
+    expect(markSettingsHintSeen(seen)).toBe(seen);
   });
 });
 
@@ -107,9 +191,9 @@ describe("storage", () => {
 
   it("round-trips what it wrote, one Bond at a time", () => {
     const storage = memoryStorage();
-    const earned = awardExperience(
-      EMPTY_PROGRESSION,
-      XP_LANDMARK_STUDIED_BY_AVAIA,
+    const earned = earnDeviceAchievement(
+      awardExperience(EMPTY_PROGRESSION, "avaia", XP_LANDMARK_STUDIED_BY_AVAIA),
+      "avaia-model-downloaded",
     );
     writeProgression("0x0sky", earned, storage);
 
@@ -117,14 +201,35 @@ describe("storage", () => {
     expect(readProgression("0x0mira", storage)).toBe(EMPTY_PROGRESSION);
   });
 
+  it("carries version 1 over as the Bond's own activity, less its old configuration reward", () => {
+    const storage = memoryStorage();
+    storage.data.set(
+      "nilx-one.progression.v1.0x0sky",
+      JSON.stringify({ totalXp: 130, level: 1, avaiaConfigured: true }),
+    );
+    storage.data.set(
+      "nilx-one.progression.v1.0x0mira",
+      JSON.stringify({ totalXp: 30, level: 0, avaiaConfigured: false }),
+    );
+
+    expect(readProgression("0x0sky", storage)).toEqual({
+      ...EMPTY_PROGRESSION,
+      bondXp: 90,
+    });
+    expect(readProgression("0x0mira", storage)).toEqual({
+      ...EMPTY_PROGRESSION,
+      bondXp: 30,
+    });
+  });
+
   it("never throws on a corrupted record", () => {
     const storage = memoryStorage();
-    storage.data.set("nilx-one.progression.v1.0x0sky", "{not json");
+    storage.data.set("nilx-one.progression.v2.0x0sky", "{not json");
     expect(readProgression("0x0sky", storage)).toBe(EMPTY_PROGRESSION);
 
     storage.data.set(
-      "nilx-one.progression.v1.0x0sky",
-      JSON.stringify({ totalXp: "forty" }),
+      "nilx-one.progression.v2.0x0sky",
+      JSON.stringify({ bondXp: "forty" }),
     );
     expect(readProgression("0x0sky", storage)).toBe(EMPTY_PROGRESSION);
   });
@@ -138,9 +243,9 @@ describe("the shared store", () => {
     });
 
     const first = updateProgression("0x0sky", (current) =>
-      awardExperience(current, XP_ZONE_REVEALED_MANUALLY),
+      awardExperience(current, "bond", XP_ZONE_REVEALED_MANUALLY),
     );
-    expect(first.totalXp).toBe(XP_ZONE_REVEALED_MANUALLY);
+    expect(first.bondXp).toBe(XP_ZONE_REVEALED_MANUALLY);
     expect(notifications).toBe(1);
 
     // A no-op change never fires a listener.

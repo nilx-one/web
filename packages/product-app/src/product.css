@@ -694,6 +694,19 @@
   white-space: nowrap;
 }
 
+/* One shared mark for "something is waiting for you here". Blue rather than
+   red or yellow: red already means something failed and amber already means a
+   runtime is working, and this is neither — only an invitation. */
+.attention-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #2f8cff;
+  box-shadow: 0 0 0 0.2rem rgba(47, 140, 255, 0.22);
+}
+
 :root[data-appearance="dark"] .identity-surface {
   background:
     linear-gradient(145deg, rgb(32 44 71 / 82%), rgb(13 19 36 / 72%)),

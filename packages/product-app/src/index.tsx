@@ -79,10 +79,6 @@ import {
   composeAvaiaPubDress,
   createAvaiaSetupViewState,
 } from "./features/avaia/avaia-setup-view-model";
-import {
-  markAvaiaConfigured,
-  updateProgression,
-} from "./features/progression/progression";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
@@ -609,9 +605,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         kind: "available",
         profile: result.profile,
       });
-      if (result.profile.configurationState === "configured") {
-        updateProgression(result.profile.ownerPubDress, markAvaiaConfigured);
-      }
       await refreshIdentityProjections();
     },
   });
@@ -1112,16 +1105,20 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
                     ? avaiaProfileQuery.data.profile.pubDress
                     : ownedAvaiaPubDress;
                 if (
-                  avaiaProfileSlugStemDraft === undefined ||
                   currentAvaiaAddress === undefined ||
                   saveAvaiaProfile.isPending
                 ) {
                   return undefined;
                 }
-                const pubDress = composeAvaiaPubDress(
-                  currentAvaiaAddress,
-                  avaiaProfileSlugStemDraft,
-                );
+                // With no draft, the person accepted the address the Avaia
+                // already holds — saving it is what configures the Avaia.
+                const pubDress =
+                  avaiaProfileSlugStemDraft === undefined
+                    ? currentAvaiaAddress
+                    : composeAvaiaPubDress(
+                        currentAvaiaAddress,
+                        avaiaProfileSlugStemDraft,
+                      );
                 if (pubDress === undefined) return undefined;
                 return saveAvaiaProfile
                   .mutateAsync(pubDress)

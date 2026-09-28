@@ -46,6 +46,12 @@
   font-weight: 650;
 }
 
+/* While the derived address types itself out, the field reads as focused so
+   the characters arriving are the thing to look at. */
+.avaia-setup__address[data-typing="true"] {
+  border-color: var(--map-accent-spatial-strong, #00bfd4);
+}
+
 .avaia-setup__readonly {
   gap: 0.75rem;
 }

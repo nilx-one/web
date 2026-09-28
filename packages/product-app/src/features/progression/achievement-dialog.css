@@ -1,0 +1,98 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.achievement-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(4, 6, 12, 0.42);
+}
+
+.achievement-dialog__card {
+  display: grid;
+  gap: 0.75rem;
+  width: min(22rem, 100%);
+  padding: 1.25rem 1.25rem 1rem;
+  border: 1px solid var(--map-night-border, rgba(245, 243, 247, 0.14));
+  border-radius: 1.25rem;
+  background: var(--map-glass-strong, var(--map-night-raised, #11131a));
+  backdrop-filter: blur(24px);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.32);
+  color: var(--map-ink, #f5f3f7);
+  text-align: center;
+}
+
+.achievement-dialog__title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.achievement-dialog__rewards {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.95rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.achievement-dialog__level {
+  color: var(--map-ink-muted, rgba(245, 243, 247, 0.66));
+  font-weight: 520;
+}
+
+.achievement-dialog__next {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--map-ink-muted, rgba(245, 243, 247, 0.66));
+  font-size: 0.82rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.achievement-dialog__close {
+  justify-self: center;
+  min-width: 8rem;
+  min-height: 2.5rem;
+  margin-top: 0.25rem;
+  padding: 0 1.25rem;
+  border: 1px solid var(--map-accent-spatial-strong, #00bfd4);
+  border-radius: 999px;
+  background: var(--map-accent-spatial, #37d7e5);
+  color: #06363c;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.achievement-dialog__close:focus-visible {
+  outline: 2px solid var(--map-accent-spatial-strong, #00bfd4);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .achievement-dialog__card {
+    animation: achievement-dialog-in 220ms ease-out;
+  }
+}
+
+@keyframes achievement-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

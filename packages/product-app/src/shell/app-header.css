@@ -136,6 +136,26 @@
   cursor: pointer;
 }
 
+.app-header__settings,
+.app-header__overflow-trigger {
+  position: relative;
+}
+
+/* On a round control the mark sits on its shoulder, the way a badge does; in
+   running text it follows the word it belongs to. */
+.app-header__settings .app-header__attention,
+.app-header__overflow-trigger .app-header__attention {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+}
+
+.app-header__route .app-header__attention,
+.app-header__menu-item .app-header__attention {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
 .app-header__overflow-trigger span {
   transform: translateY(-0.12rem);
   font-size: 0.95rem;

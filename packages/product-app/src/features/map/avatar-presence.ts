@@ -48,6 +48,22 @@ export function avaiaStudy(
   return choice ?? bondStudy;
 }
 
+/** The body an Avaia is offered while its owner is still setting it up. */
+export const DEFAULT_AVAIA_STUDY: AvatarModelId = "kai-study";
+
+/**
+ * Kai, so accepting the setup as offered is one tap — unless Kai is the body
+ * the Bond itself wears, in which case the ambient study stands in.
+ */
+export function unconfiguredAvaiaStudy(
+  avaiaAddress: string,
+  bondStudy: AvatarModelId,
+): AvatarModelId {
+  return bondStudy === DEFAULT_AVAIA_STUDY
+    ? avaiaStudy(avaiaAddress, bondStudy)
+    : DEFAULT_AVAIA_STUDY;
+}
+
 /** A deterministic seed, so the same identity keeps the same ambient rhythm. */
 export function avatarSeed(pubDress: string): number {
   let value = 0x811c9dc5;
