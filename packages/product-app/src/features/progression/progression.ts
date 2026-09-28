@@ -6,9 +6,10 @@
  * it or its Avaia studied, and the one-time reward for actually configuring
  * an owned Avaia. This is local presentation, in the same sense fog reveals
  * and the landmark notebook are: what this device kept track of for one
- * Bond, never synced, exported, or asserted as a protocol fact. It is not
- * BondChain evidence and it is not identity state — Core and the identity
- * service know nothing about it.
+ * Bond, never asserted as a protocol fact. It is not BondChain evidence and
+ * it is not identity state — Core and the identity service know nothing
+ * about it. Experience is transport-eligible (state-placement.ts): not
+ * synced state, and not service state.
  */
 
 /**

@@ -12,8 +12,10 @@ import { useSyncExternalStore } from "react";
  * service. That boundary is the point — an outfit is presentation, and nothing
  * here is Bond, Relationship or shared-world state.
  *
- * It follows that an outfit does not travel between devices yet, and a person
+ * It follows that an outfit does not travel between devices, and a person
  * should be able to tell that from the interface rather than discover it.
+ * State placement records it as device-resident: the identity contract has
+ * no field for an appearance, so this store does not borrow server authority.
  */
 export const AVATAR_WARDROBE_STORAGE_KEY = "nilx-one.avatar.wardrobe";
 

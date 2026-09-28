@@ -126,8 +126,10 @@ export interface FogFieldComposition {
  * Composes the fog a host draws from its presence journal and the reveals
  * this device made. Reveals live in local storage under
  * `nilx-one.fog.reveals.v1.<owner>`, one Bond's alone: they are presentation
- * state, not presence evidence, and they are never synced, exported, or sent
- * anywhere. Nothing is read from or written to storage until `bindOwner`
+ * state, not presence evidence, and nothing sends them anywhere today. They
+ * are transport-eligible, which is not synced state and not service state.
+ * Nothing is read from
+ * or written to storage until `bindOwner`
  * names whose reveals these are — a device this Bond only just signed into,
  * or one another Bond used before it, must never answer from a stale or
  * absent owner's key.

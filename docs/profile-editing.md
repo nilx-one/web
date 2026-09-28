@@ -143,7 +143,10 @@ The body is identity state and goes to the service. What the body wears does
 not: the identity contract publishes no field for an appearance, so this client
 keeps it on the device, per study, and the editor says so. A model the service
 refuses leaves the outfit unwritten too — a half-saved body is not what anyone
-asked for. It follows that an outfit does not travel between devices yet.
+asked for. It follows that an outfit does not travel between devices. State
+placement records that residence as the device's: an appearance is not server
+state, and this repository does not define the identifier a future
+customization would have (see [State placement](state-placement.md)).
 
 An Avaia's body is its own. Where nothing has been chosen for it, it is derived
 from its address so that an Avaia never wears the study of the Bond that owns

@@ -130,4 +130,4 @@ The following are normative for the current implementation:
 5. local storage loss does not mutate protocol truth;
 6. encrypted records without their key do not become evidence;
 7. Core/identity `REKEY` does not imply journal re-keying;
-8. future portability requires a separate explicit contract and implementation slice.
+8. future portability requires a separate explicit contract and implementation slice. [State placement](state-placement.md) calls the sealed history `sealed-transport` and the journal key `device`: eligibility under this lifecycle, not an interface preference and not synced state. It changes nothing above.

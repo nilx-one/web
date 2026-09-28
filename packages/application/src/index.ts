@@ -173,6 +173,17 @@ export {
   type PubDressResolutionResult,
 } from "./identity-registration";
 export {
+  STATE_PLACEMENT,
+  placedStateAt,
+  placedStateForKey,
+  placementAgreesWithMedium,
+  mobilityAgreesWithPlacement,
+  type PlacedState,
+  type StateMedium,
+  type StateMobility,
+  type StatePlacement,
+} from "./state-placement";
+export {
   PUB_DRESS_LABEL_MAX_LENGTH,
   PUB_DRESS_URL_SUFFIX_MAX_LENGTH,
   PUB_DRESS_URL_ZONE,

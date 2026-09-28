@@ -4,9 +4,9 @@
 
 set -Eeuo pipefail
 
-core_dir="${1:?path to checked-out nilx-one/core is required}"
+core_dir="$(cd "${1:?path to checked-out nilx-one/core is required}" && pwd)"
 expected_core_revision="c224304947280169017e298237bcf5361d1bfb30"
-expected_wasm_sha256="173c3e9164c030384865013df87d36a29846b09cd2b8ee59b433509b2d77c90d"
+expected_wasm_sha256="8e26c08c3538b92b41ce701d6d06899308a00c0081b186806df6c6bef08ff3e8"
 runtime_version="0.1.0"
 runtime_build="$PWD/.core-wasm-runtime"
 
@@ -16,14 +16,29 @@ if [[ "$actual_core_revision" != "$expected_core_revision" ]]; then
   exit 1
 fi
 
+# A fresh `cargo generate-lockfile` re-resolves to whatever crates.io serves
+# that day, and the Wasm bytes move with it. `core-wasm.Cargo.lock` is the
+# resolution this digest was built from, tinyvec 1.12.0 included. The Core
+# build script passes `--locked`, so a dependency that is not in the file
+# fails closed instead of being solved again.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+lockfile="$script_dir/core-wasm.Cargo.lock"
+
 rm -rf "$runtime_build"
 (
   cd "$core_dir"
-  cargo generate-lockfile
-  # Keep the pinned Core revision reproducible across the known tinyvec
-  # compatibility break in wasm/no_std builds. The resulting Wasm bytes are
-  # still verified below, so any other dependency drift fails closed.
-  cargo update -p tinyvec --precise 1.12.0
+  cp "$lockfile" Cargo.lock
+  cargo fetch --locked
+  cargo_home="${CARGO_HOME:-${HOME}/.cargo}"
+  registry_src=("${cargo_home}"/registry/src/index.crates.io-*)
+  if [[ ${#registry_src[@]} -ne 1 || ! -d ${registry_src[0]} ]]; then
+    echo "expected one cargo registry source directory, got: ${registry_src[*]}" >&2
+    exit 1
+  fi
+  # Panic locations embed this machine's cargo registry path, including the
+  # index hash in the directory name. Remap it, and the Core checkout, so the
+  # Wasm digest does not depend on where the runner keeps crates.
+  export RUSTFLAGS="--remap-path-prefix=${registry_src[0]}=/cargo-registry --remap-path-prefix=${core_dir}=/core-source${RUSTFLAGS:+ ${RUSTFLAGS}}"
   ./scripts/build_wasm_package.sh "$runtime_build"
 )
 
