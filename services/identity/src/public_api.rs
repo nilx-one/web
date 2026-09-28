@@ -397,13 +397,8 @@ mod tests {
         let body = json(response).await;
         assert_eq!(body["pub_dress"], "0x0небо");
         assert_eq!(body["pub_dress_url"], "https://0x0небо.nilx.one");
-        assert!(
-            body["avaia"]["pub_dress"]
-                .as_str()
-                .is_some_and(|value| value.ends_with("ai")),
-        );
-        assert_eq!(body["avaia"]["configuration_state"], "unconfigured");
-        assert!(body["avaia"]["location"].is_null());
+        // A Bond publishes no Avaia until its owner creates one.
+        assert!(body["avaia"].is_null());
         assert_eq!(body["pub_info"]["experience"]["authority"], "client");
         assert_eq!(body["pub_info"]["experience"]["bond_xp"], 0);
         assert_eq!(body["pub_info"]["experience"]["avaia_xp"], 0);
@@ -419,6 +414,11 @@ mod tests {
             .register(&address, &ProviderIdentity::telegram(43), 100)
             .await
             .expect("registration");
+        let avaia: crate::AvaiaPubDress = "x0skai".parse().expect("Avaia");
+        repository
+            .configure_owned_avaia(&address, &avaia, 100)
+            .await
+            .expect("explicit Avaia creation");
         let coordinate =
             crate::GeoCoordinate::from_degrees(30.5234, 50.4501).expect("valid coordinate");
         repository
@@ -493,7 +493,7 @@ mod tests {
         assert_eq!(body["pub_info"]["experience"]["authority"], "client");
         assert_eq!(body["pub_info"]["experience"]["bond_xp"], 120);
         assert_eq!(body["pub_info"]["experience"]["avaia_xp"], 45);
-        assert_eq!(body["avaia"]["configuration_state"], "unconfigured");
+        assert!(body["avaia"].is_null());
     }
 
     #[tokio::test]
