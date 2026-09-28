@@ -29,6 +29,35 @@
   color: var(--guide-ink);
 }
 
+/* Subtitles are read against the world darkened from below, never against a
+   card: the shot stays one picture. */
+.guide-cutscene::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 62%;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.78) 0%,
+    rgba(0, 0, 0, 0.5) 38%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  content: "";
+  animation: guide-shade-in 700ms ease-out both;
+  pointer-events: none;
+}
+
+.guide-cutscene[data-beat="leaving"]::before {
+  animation: guide-panel-out 900ms ease-in both;
+}
+
+@keyframes guide-shade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 .guide-cutscene__bar {
   position: absolute;
   right: 0;
@@ -79,12 +108,6 @@
   width: min(44rem, calc(100vw - 2rem));
   padding: 1.75rem 1.5rem 1rem;
   transform: translateX(-50%);
-  background: radial-gradient(
-    ellipse at 50% 100%,
-    rgba(0, 0, 0, 0.72) 0%,
-    rgba(0, 0, 0, 0.5) 45%,
-    rgba(0, 0, 0, 0) 78%
-  );
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   animation: guide-panel-in 520ms 260ms ease-out both;
 }
@@ -115,8 +138,9 @@
   color: var(--guide-gold);
   font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  /* An address is case-sensitive, so the name plate is spaced out rather
+     than set in capitals. */
+  letter-spacing: 0.16em;
 }
 
 .guide-cutscene__speaker[data-speaker="you"] {
@@ -284,6 +308,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .guide-cutscene::before,
   .guide-cutscene__bar,
   .guide-cutscene__panel,
   .guide-cutscene__choice,
