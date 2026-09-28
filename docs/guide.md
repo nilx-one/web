@@ -1,0 +1,86 @@
+# 0xda-sha
+
+0xda-sha is a character who comes to a Bond from time to time and tells it
+what to do next. Her first job is onboarding: she introduces herself to a Bond
+whose Avaia nobody has configured, sends it to create one, and comes back to
+say what that paid.
+
+She is presentation. What she says creates no Interaction, completes no
+BondChain and asserts nothing about any Bond. She is not an Avaia, not a
+second identity and not evidence that anyone is anywhere. The one thing a
+scene with her may pay is an achievement [progression](progression.md) already
+priced; she only says it out loud.
+
+## A scene
+
+A scene is played on the world itself, the way a game plays a cutscene in its
+own engine:
+
+- the chrome steps aside — header, Dock, toasts and world controls fade out —
+  and the frame narrows to letterbox;
+- she walks up to the Bond's body in the same renderer that draws it, in a
+  body of her own: Dasha 2.0, or the first Dasha study when the Bond itself
+  wears Dasha 2.0, so two people never share one body on the same ground;
+- the camera is staged around the two of them — over the Bond's shoulder
+  while she approaches, a two-shot from the side, shot and reverse shot while
+  they talk, a slow drift while a line is held — and handed back exactly where
+  it was when she leaves;
+- what she says is typed out in subtitles under her name, and the replies a
+  person can give are listed beneath them. A reply is said back in the Bond's
+  own voice, with the camera on the Bond, before she answers it.
+
+A line is written in several wordings that all mean the same thing, and so is
+every reply. Each time a scene plays it picks a different wording, so she
+never repeats herself word for word. `(skip)` and `(continue)` are stage
+directions rather than things a person says, and are never said back.
+
+While a scene plays the camera is hers: the scene covers the world, so a
+gesture answers her rather than dragging the world out from under the two of
+them. **Continue** hurries the current beat — her walk, the typing, a reply,
+her departure. Replies can be chosen by number, and Escape takes the scene's
+own way out. A person who asked for reduced motion gets cuts instead of camera
+moves, sees each line whole, and finds her already standing there.
+
+Where she stands is the one place this client observed: a couple of metres in
+front of the Bond's body, which faces north. A device with no observation
+stages the scene wherever the camera already is.
+
+## Onboarding
+
+**Introduction.** Once the world has painted and the first fix has framed the
+Bond (or the device has said it cannot locate itself), a Bond whose Avaia is
+`unconfigured` is met by her, provided nothing else is open in the Dock:
+
+```text
+0xda-sha   Hi, bunny. The two of us are going to have fun — but I'm busy
+           right now. Go create your Avaia.
+
+  1. This is strange. I feel like I've been here before.
+  2. Later.
+  3. (skip)
+```
+
+- The first reply leads to how: the Avaia waiting in the Dock, and **Create**.
+  Going to do it closes the scene and opens the Avaia screen.
+- **Later** is answered with a goodbye, and she comes back the next time the
+  world opens.
+- **(skip)** ends the scene, and the introduction is not played again for this
+  Bond on this device.
+
+**Reward.** The first save that configures the Avaia brings her back. She says
+it — "Growing." — beside what it paid: 20 Bond experience and level 1 for the
+Avaia, and, where this deployment can download an on-device model, that the
+next step waits in Settings. This is the Avaia configured dialog, said by her.
+Thanking her leads to one more line, and when she leaves the Bond hands the
+wheel to its new Avaia: from here it is the two of them. Handing the wheel over
+this way fetches nothing — a reply to her is not the gesture that asks a
+device to download a model.
+
+## What is kept
+
+Whether the introduction was played through or skipped is a play record on
+this device, `nilx-one.guide.v1.<owner>`, transport-eligible like the others
+([State placement](state-placement.md)). "Later" is kept for the session only.
+Nothing she says is sent anywhere.
+
+© 2026 aiaiaiai · aiaiaiai.org

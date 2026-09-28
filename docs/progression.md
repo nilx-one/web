@@ -38,8 +38,8 @@ An achievement pays once. Where "once" is counted depends on what it is about:
 **Avaia configured** is read from what the identity service already keeps:
 an Avaia whose stored state is `configured` has earned it, on every device
 that reads it, and none of them has to remember having paid it. It is also
-what takes the Avaia to level 1. The device that saves the setup says so in a
-dialog — see [Avaia setup](avaia-setup.md).
+what takes the Avaia to level 1. On the device that saves the setup,
+[0xda-sha](guide.md) says so — see [Avaia setup](avaia-setup.md).
 
 **Avaia model downloaded** is something this device did for this Bond, so the
 web, Telegram and Discord hosts each earn it on their own. It pays the moment

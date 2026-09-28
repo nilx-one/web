@@ -39,8 +39,9 @@ An Avaia nobody configured already holds the address derived from its
 owner's (`0x0sky` owns `x0skai`, `0xda-sha` owns `xda-shai`). The surface
 types that address out when it opens, as if the Avaia were introducing itself
 — presentation only, and shown whole to a person who asked for reduced motion
-— and **Save** is offered as-is: accepting the derived address is itself the
-decision that configures the Avaia.
+— and **Create** is offered as-is: accepting the derived address is itself the
+decision that configures the Avaia. The same button reads **Save** once there
+is an Avaia to save.
 
 **3D model.** The body the Avaia is drawn in, chosen through the same editor
 as the Bond's own and kept on this device. Until the Avaia is configured it
@@ -67,11 +68,11 @@ client hoped would be accepted. "Avaia saved" is a passing confirmation and
 fades on its own after a few seconds.
 
 The first save that reaches `configured` is an achievement — see
-[progression](progression.md). A dialog says **Avaia configured**, what it paid
-(20 Bond experience, and level 1 for the Avaia), and, where this deployment
-can download an on-device model, that the next step waits in Settings; a
-person closes it. A later save that only changes the address again pays
-nothing more.
+[progression](progression.md). [0xda-sha](guide.md) comes back to say it: a
+scene titled **Avaia configured** says what it paid (20 Bond experience, and
+level 1 for the Avaia), and, where this deployment can download an on-device
+model, that the next step waits in Settings; a person answers her to close it.
+A later save that only changes the address again pays nothing more.
 
 ## What this is not
 

@@ -13,6 +13,12 @@ The precedence is deterministic:
 3. An in-flight application transition is not interrupted by automatic motion.
 4. Automatic motion is accepted only while the camera is otherwise free. After a direct gesture, automatic motion remains blocked until an explicit product focus action occurs.
 
+A scene with [0xda-sha](guide.md) is an explicit product moment rather than
+automatic motion. It starts from a world at rest, covers the world while it
+plays so no gesture competes with its shots, and hands the camera back to
+exactly where it found it. Its shots may name a longer transition than the
+renderer's default; that changes how long a move takes, never who owns it.
+
 This keeps a person's camera choice stable while still allowing controls such as “recenter”, body focus, or an explicitly selected cell-bound fragment to work immediately.
 
 ## Cancellation boundary
