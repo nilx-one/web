@@ -30,9 +30,14 @@ device fetches to serve it is not a second decision.
 The Bond reads "You" while it drives and "spectate" while its Avaia does. That
 is what spectating means here: watching a world someone else is moving through.
 
-The world opens with the Avaia at the wheel and the Bond spectating. Opening
-there is presentation only: nothing is fetched until a person hands the Avaia
-the wheel with a gesture of their own. An Avaia at the wheel walks where its
+The world opens with the Avaia at the wheel and the Bond spectating — unless
+the Avaia has never been configured. An unconfigured Avaia is nobody to
+spectate, so a fresh Bond opens driving itself, and the Avaia's card opens
+[Avaia setup](avaia-setup.md) rather than taking the wheel; it asks this device
+for no runtime either. The opening seat is decided once, when the
+configuration is first read, and configuring the Avaia afterwards does not
+move the wheel. Opening anywhere is presentation only: nothing is fetched
+until a person hands the Avaia the wheel with a gesture of their own. An Avaia at the wheel walks where its
 owner taps and goes to see what its owner walked past — see
 [Avaia walks the world](avaia-walk.md).
 

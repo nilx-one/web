@@ -15,9 +15,11 @@ something has. Both open the same screen, because the difference between
 configuring an Avaia and changing it is a sentence in a label, not a second
 screen.
 
-The cards themselves mean something else, and keep meaning it: one brings the
-world to the identity driving, the other hands the wheel over. Configuring is
-not driving, and neither is a way of doing the other.
+A fresh Bond opens with itself at the wheel — an Avaia nobody configured is
+nobody to spectate — and the Avaia's card beside it reads `unconfigured`. That
+card opens this surface too: there is no wheel to hand to an Avaia that has not
+been set up, so **Set up** is the one thing its card can do. Once configured,
+the card goes back to handing the wheel over.
 
 The world stays mounted through all of it. The Dock travels between its screens
 — the world, the Avaia, and back — and the map underneath is never remounted,
@@ -33,11 +35,18 @@ hold. A rejection is repeated in the service's own terms — a discriminator tha
 is not the owner's, an address another identity already holds — and the draft
 stays where it was so the person can fix it rather than retype it.
 
-**3D model.** Present and inert. A body is part of what an Avaia is, so the
-field belongs on the surface a person configures one from; this contract
-publishes no model capability, so there is nothing in it to choose and it says
-so rather than offering something that does not exist. Nothing about it is sent
-or stored.
+An Avaia nobody configured already holds the address derived from its
+owner's (`0x0sky` owns `x0skai`, `0xda-sha` owns `xda-shai`). The surface
+types that address out when it opens, as if the Avaia were introducing itself
+— presentation only, and shown whole to a person who asked for reduced motion
+— and **Save** is offered as-is: accepting the derived address is itself the
+decision that configures the Avaia.
+
+**3D model.** The body the Avaia is drawn in, chosen through the same editor
+as the Bond's own and kept on this device. Until the Avaia is configured it
+stands in as Kai (or, when Kai is the Bond's own body, the Avaia's ambient
+study), so the setup is complete without choosing anything; the first save
+keeps that body as a real choice under the address the service stored.
 
 ## What a save does
 
@@ -48,18 +57,21 @@ send the whole address
 receive the profile identity contract 8 now keeps
 replace the local projection with that exact answer
 close the Avaia screen
-say "Avaia saved" once, in the top-right stack
+say "Avaia saved" once, in the top-right stack, and let it pass
 ```
 
 The answer is what closes the screen. Nothing is confirmed before the service
 has spoken, so a confirmation can never describe a draft the service never saw,
 and the projection the Dock reads is the service's own — never a draft this
-client hoped would be accepted. The notice is not dismissed on a timer; it is
-closed when it has been read, like every other notice in this client.
+client hoped would be accepted. "Avaia saved" is a passing confirmation and
+fades on its own after a few seconds.
 
-The first save that reaches `configured` also pays this client's own local
-experience reward — see [progression](progression.md). A later save that only
-changes the address again pays nothing more.
+The first save that reaches `configured` is an achievement — see
+[progression](progression.md). A dialog says **Avaia configured**, what it paid
+(20 Bond experience, and level 1 for the Avaia), and, where this deployment
+can download an on-device model, that the next step waits in Settings; a
+person closes it. A later save that only changes the address again pays
+nothing more.
 
 ## What this is not
 
