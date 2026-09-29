@@ -22,6 +22,7 @@ pub mod repository {
     include!("repository_avaia_lifecycle.rs");
     include!("repository_pub_info.rs");
 }
+pub mod speech;
 pub mod telegram_init_data;
 
 pub use browser_web_auth::{BrowserOAuthConfig, OAuthClientCredentials};

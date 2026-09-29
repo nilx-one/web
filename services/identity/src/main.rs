@@ -4,7 +4,9 @@
 use std::{
     collections::{HashMap, HashSet},
     env,
+    future::Future,
     net::SocketAddr,
+    pin::Pin,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -16,6 +18,7 @@ use identity_bot::{
     PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
     TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, github_evidence,
     location_control_router, provider_self_service_router, public_api,
+    speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
     prelude::*,
@@ -150,6 +153,33 @@ impl PendingUnlinkConfirmations {
     }
 }
 
+/// Copies a spoken line into the private chats of the Telegram users who
+/// are within earshot. Plain text on purpose: a line is never parsed as
+/// markup. A user who has blocked the bot only costs a log line.
+struct TelegramSpeechRelay {
+    bot: Bot,
+}
+
+impl SpeechRelay for TelegramSpeechRelay {
+    fn deliver(
+        &self,
+        telegram_user_ids: Vec<i64>,
+        text: String,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+        Box::pin(async move {
+            for telegram_user_id in telegram_user_ids {
+                if let Err(error) = self
+                    .bot
+                    .send_message(ChatId(telegram_user_id), text.clone())
+                    .await
+                {
+                    error!(%error, "spoken line copy was not delivered");
+                }
+            }
+        })
+    }
+}
+
 #[derive(Clone)]
 struct TelegramBotState {
     repository: IdentityRepository,
@@ -195,6 +225,17 @@ async fn main() {
     )
     .expect("native authentication secrets must satisfy the minimum length");
 
+    let speech_config = env::var("SPEECH_INGEST_TOKEN")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .map(|token| {
+            let earshot_meters = env::var("SPEECH_EARSHOT_METERS")
+                .map_or(Ok(DEFAULT_EARSHOT_METERS), |value| value.parse::<u32>())
+                .expect("SPEECH_EARSHOT_METERS must be an unsigned integer");
+            SpeechConfig::new(&token, earshot_meters).expect(
+                "SPEECH_INGEST_TOKEN and SPEECH_EARSHOT_METERS must satisfy the speech contract",
+            )
+        });
     let telegram_browser_oauth = oauth_credentials_from_environment(
         "TELEGRAM_OIDC_CLIENT_ID",
         "TELEGRAM_OIDC_CLIENT_SECRET",
@@ -246,6 +287,9 @@ async fn main() {
     let locations = BondLocationRepository::connect(&database_url)
         .await
         .expect("Bond location storage must initialize");
+    let speech = SpeechRepository::connect(&database_url)
+        .await
+        .expect("spoken line storage must initialize");
     let provider_links = ProviderLinkRepository::connect(&database_url)
         .await
         .expect("provider link database connection must initialize");
@@ -295,6 +339,19 @@ async fn main() {
         discord_activity_oauth.clone(),
         native_auth.clone(),
     );
+    let speech_api = speech_config.map(|config| {
+        info!("spoken lines enabled");
+        speech_router(
+            repository.clone(),
+            locations.clone(),
+            speech.clone(),
+            telegram_activity_verifier.clone(),
+            discord_activity_oauth.clone(),
+            native_auth.clone(),
+            Arc::new(TelegramSpeechRelay { bot: bot.clone() }),
+            config,
+        )
+    });
     let avaia_api = api::avaia_router(
         repository.clone(),
         provider_links.clone(),
@@ -329,6 +386,10 @@ async fn main() {
     .merge(session_activation_api)
     .merge(github_evidence_api)
     .merge(public_api);
+    let api = match speech_api {
+        Some(speech_api) => api.merge(speech_api),
+        None => api,
+    };
     let listener = tokio::net::TcpListener::bind(http_bind)
         .await
         .expect("identity HTTP listener must bind");

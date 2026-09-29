@@ -262,12 +262,12 @@ impl TelegramLocationIntents {
 }
 
 #[derive(Clone)]
-struct LocationControlApiState {
-    identities: IdentityRepository,
-    locations: BondLocationRepository,
-    telegram_verifier: TelegramInitDataVerifier,
-    discord_oauth: Option<DiscordOAuthClient>,
-    native_auth: NativeAuthConfig,
+pub(crate) struct LocationControlApiState {
+    pub(crate) identities: IdentityRepository,
+    pub(crate) locations: BondLocationRepository,
+    pub(crate) telegram_verifier: TelegramInitDataVerifier,
+    pub(crate) discord_oauth: Option<DiscordOAuthClient>,
+    pub(crate) native_auth: NativeAuthConfig,
 }
 
 pub fn location_control_router(
@@ -306,7 +306,7 @@ fn secure_cookie(name: &str, value: &str, max_age_seconds: u64) -> String {
     format!("{name}={value}; Path=/; Max-Age={max_age_seconds}; Secure; HttpOnly; SameSite=Lax")
 }
 
-fn append_cookie(response: &mut Response, cookie: String) {
+pub(crate) fn append_cookie(response: &mut Response, cookie: String) {
     let value = HeaderValue::from_str(&cookie).expect("generated cookie must be a valid header");
     response.headers_mut().append(SET_COOKIE, value);
 }
@@ -321,7 +321,7 @@ fn append_cookie(response: &mut Response, cookie: String) {
 ///
 /// A Discord Activity has no cookie of its own, so it proves itself with its
 /// access token on every read and is never minted a session here.
-async fn authenticate_bond(
+pub(crate) async fn authenticate_bond(
     state: &LocationControlApiState,
     headers: &HeaderMap,
     now: u64,

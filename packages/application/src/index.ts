@@ -74,6 +74,11 @@ export {
   type AvaiaProfileUpdateResult,
 } from "./avaia-profile";
 export {
+  hasNearbySpeechAccess,
+  type NearbySpeechAccessPort,
+  type SpokenLineView,
+} from "./nearby-speech";
+export {
   hasPubInfoAccess,
   type ExperienceEarner,
   type ExperienceEvent,

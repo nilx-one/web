@@ -36,7 +36,9 @@ import {
   type PubDressResolutionResult,
   type PubDressSelection,
   type ExperiencePublication,
+  type NearbySpeechAccessPort,
   type PubInfoAccessPort,
+  type SpokenLineView,
   type PubInfoExperience,
   type PubInfoExperienceResult,
 } from "@nilx-one/application";
@@ -135,12 +137,55 @@ function parseErrorCode(value: unknown): string | undefined {
   return typeof value.error.code === "string" ? value.error.code : undefined;
 }
 
+const SPOKEN_LINE_ID = /^line_[0-9a-f]{64}$/;
+const CANONICAL_SECONDS = /^(0|[1-9][0-9]{0,14})$/;
+const MAX_SPOKEN_LINES = 50;
+
+/**
+ * Reads the wire shape of `GET /api/v1/speech/nearby`. Anything that is not
+ * exactly a list of well-formed lines is dropped whole: a half-understood
+ * answer is not adopted.
+ */
+function parseNearbySpeech(
+  body: unknown,
+): readonly SpokenLineView[] | undefined {
+  if (!isRecord(body) || !Array.isArray(body.lines)) return undefined;
+  if (body.lines.length > MAX_SPOKEN_LINES) return undefined;
+  const lines: SpokenLineView[] = [];
+  for (const line of body.lines as readonly unknown[]) {
+    if (
+      !isRecord(line) ||
+      typeof line.id !== "string" ||
+      !SPOKEN_LINE_ID.test(line.id) ||
+      typeof line.speaker !== "string" ||
+      line.speaker.length === 0 ||
+      typeof line.text !== "string" ||
+      line.text.length === 0 ||
+      typeof line.spoken_at !== "string" ||
+      !CANONICAL_SECONDS.test(line.spoken_at)
+    ) {
+      return undefined;
+    }
+    lines.push({
+      id: line.id,
+      speaker: line.speaker,
+      text: line.text,
+      spokenAt: Number(line.spoken_at),
+    });
+  }
+  return lines;
+}
+
 function isBrowserProvider(value: unknown): value is BrowserIdentityProvider {
   return value === "telegram" || value === "discord" || value === "github";
 }
 
 class IdentityHttpAdapter
-  implements IdentityAccessPort, AvaiaProfileAccessPort, PubInfoAccessPort
+  implements
+    IdentityAccessPort,
+    AvaiaProfileAccessPort,
+    PubInfoAccessPort,
+    NearbySpeechAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
 
@@ -956,6 +1001,26 @@ class IdentityHttpAdapter
     );
   }
 
+  public async readNearbySpeech(): Promise<
+    readonly SpokenLineView[] | undefined
+  > {
+    const authorization = this.authorization();
+    try {
+      const response = await this.fetch("/api/v1/speech/nearby", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+        },
+      });
+      if (!response.ok) return undefined;
+      return parseNearbySpeech(await response.json().catch(() => undefined));
+    } catch {
+      return undefined;
+    }
+  }
+
   public async publishExperience(
     publication: ExperiencePublication,
   ): Promise<PubInfoExperienceResult> {
@@ -1039,6 +1104,9 @@ function parsePubInfoResult(
 
 export function createIdentityHttpAdapter(
   options: IdentityHttpAdapterOptions,
-): IdentityAccessPort & AvaiaProfileAccessPort & PubInfoAccessPort {
+): IdentityAccessPort &
+  AvaiaProfileAccessPort &
+  PubInfoAccessPort &
+  NearbySpeechAccessPort {
   return new IdentityHttpAdapter(options);
 }
