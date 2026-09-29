@@ -142,7 +142,7 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
   },
   together: {
     line: ["guide.reward.together.0", "guide.reward.together.1"],
-    shot: "two-shot",
+    shot: "together",
     choices: [{ reply: "continue", next: { end: "together" } }],
   },
 };

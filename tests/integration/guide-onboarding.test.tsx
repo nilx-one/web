@@ -245,7 +245,7 @@ describe("xSasha, the first time a Bond opens the world", () => {
 
   it("comes back to say what the Avaia paid, and leaves the two of them together", async () => {
     const user = userEvent.setup();
-    renderWorld();
+    const renderer = renderWorld();
 
     await user.click(
       await screen.findByRole("button", { name: "Set up x0skai" }),
@@ -261,7 +261,7 @@ describe("xSasha, the first time a Bond opens the world", () => {
     expect(dialog).toHaveTextContent(/forgot|nearly left|yours/);
     expect(dialog).toHaveTextContent("+20 Bond experience");
     expect(dialog).toHaveTextContent("x0skai reached level 1");
-    // The Bond's gain is blue, its Avaia's violet.
+    // The Bond's gain is cyan, its Avaia's violet.
     expect(
       dialog.querySelector('.guide-xp[data-subject="bond"][data-kind="xp"]'),
     ).toHaveTextContent("+20 Bond experience");
@@ -275,8 +275,27 @@ describe("xSasha, the first time a Bond opens the world", () => {
     const onward = await untilReplies(user);
     expect(onward).toHaveLength(1);
     expect(onward[0]).toHaveTextContent("(continue)");
+    // The line said to the two of them has the Avaia there too: three on
+    // the world, the Bond and its Avaia in frame.
+    expect(renderer.avatars?.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "guide-avaia" }),
+    );
     await user.click(onward[0] as HTMLElement);
     await untilGone(user);
+
+    // What was paid has left the scene for the corner the Dock stands in,
+    // top first, the Bond's before its Avaia's.
+    const toasts = document.querySelector(".guide-reward-toasts");
+    expect(toasts).not.toBeNull();
+    expect(
+      [...(toasts?.querySelectorAll(".guide-toast") ?? [])].map((toast) => [
+        toast.getAttribute("data-subject"),
+        toast.textContent,
+      ]),
+    ).toEqual([
+      ["bond", "+20 Bond experience"],
+      ["avaia", "x0skai reached level 1"],
+    ]);
 
     // It is the Bond and its Avaia now: the Avaia takes the wheel.
     expect(

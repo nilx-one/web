@@ -32,6 +32,7 @@ import {
 import {
   clearShot,
   driftCamera,
+  GUIDE_AVAIA_WALK_MS,
   GUIDE_LEAVE_MS,
   GUIDE_TURN_MS,
   GUIDE_WALK_MS,
@@ -42,6 +43,7 @@ import {
   guideShotCamera,
   guideSightlines,
   guideStage,
+  lerpPoint,
   OPEN_GROUND,
   sampleGuideBody,
   shotIsClear,
@@ -53,6 +55,8 @@ import {
 
 /** Her body's handle, beside the one the Bond at the wheel is drawn from. */
 export const GUIDE_HANDLE_ID = "guide";
+/** The Avaia's, while it joins the two of them in a scene. */
+export const GUIDE_AVAIA_HANDLE_ID = "guide-avaia";
 
 /** Over the shoulder while she is still a little way off. */
 const ESTABLISH_MS = 1_600;
@@ -62,6 +66,8 @@ const DRIFT_MS = 9_000;
 /** Long enough to read a short reply of one's own before she answers it. */
 export const GUIDE_REPLY_BEAT_MS = 1_600;
 const RETURN_MS = 1_800;
+/** Close enough, once a scene ends together, that both bodies are drawn. */
+const GUIDE_TOGETHER_ZOOM = 19.4;
 
 export type GuideBeat = "arriving" | "line" | "reply" | "leaving";
 
@@ -96,6 +102,11 @@ export interface GuideCutsceneInput {
   readonly anchor: MapPointSelection | undefined;
   /** The body the Bond wears, which she mirrors — body and voice. */
   readonly bondModel: AvatarModelId | undefined;
+  /** The body the Bond's Avaia wears, and what it has on, when it joins them. */
+  readonly avaia?: {
+    readonly model: AvatarModelId;
+    readonly appearance: Parameters<typeof resolveAvatarScene>[1];
+  };
   readonly bondName: string;
   readonly names: GuideNames;
   readonly reducedMotion: boolean;
@@ -133,6 +144,7 @@ export function useGuideCutscene({
   renderer,
   anchor,
   bondModel,
+  avaia,
   bondName,
   names,
   reducedMotion,
@@ -145,6 +157,7 @@ export function useGuideCutscene({
   const sightlinesRef = useRef<GuideSightlines>(OPEN_GROUND);
   const baseCameraRef = useRef<MapCamera | undefined>(undefined);
   const motionRef = useRef<GuideBodyMotion | undefined>(undefined);
+  const avaiaMotionRef = useRef<GuideBodyMotion | undefined>(undefined);
   const anchorRef = useRef(anchor);
   const onEndRef = useRef(onEnd);
   useEffect(() => {
@@ -193,6 +206,7 @@ export function useGuideCutscene({
       if (playingRef.current !== undefined) return;
       const base = renderer.getCamera();
       baseCameraRef.current = base;
+      avaiaMotionRef.current = undefined;
       const you = anchorRef.current ?? {
         longitude: base.center[0],
         latitude: base.center[1],
@@ -359,6 +373,21 @@ export function useGuideCutscene({
       }
       case "line": {
         const script = GUIDE_NODES[node];
+        // The Bond's Avaia joins them for the line said to the two of them.
+        if (
+          script.shot === "together" &&
+          avaiaMotionRef.current === undefined
+        ) {
+          avaiaMotionRef.current = reducedMotion
+            ? { kind: "stand", at: stage.avaia, facing: stage.dasha }
+            : {
+                kind: "walk",
+                from: stage.avaiaEntry,
+                to: stage.avaia,
+                startedMs: now,
+                durationMs: GUIDE_AVAIA_WALK_MS,
+              };
+        }
         motionRef.current = {
           kind: "stand",
           at: stage.dasha,
@@ -391,7 +420,23 @@ export function useGuideCutscene({
               durationMs: GUIDE_LEAVE_MS,
             };
         const base = baseCameraRef.current;
-        if (base !== undefined) shoot(base, RETURN_MS);
+        // Left together, the camera stays with the Bond and its Avaia rather
+        // than going back to wherever it was.
+        if (
+          playingRef.current?.outcome === "together" &&
+          avaiaMotionRef.current !== undefined
+        ) {
+          const pair = lerpPoint(stage.you, stage.avaia, 0.5);
+          shoot(
+            {
+              center: [pair.longitude, pair.latitude],
+              zoom: Math.max(base?.zoom ?? 0, GUIDE_TOGETHER_ZOOM),
+              pitch: base?.pitch ?? 0,
+              bearing: base?.bearing ?? 0,
+            },
+            RETURN_MS,
+          );
+        } else if (base !== undefined) shoot(base, RETURN_MS);
         later(reducedMotion ? 0 : Math.max(GUIDE_LEAVE_MS, RETURN_MS), finish);
         break;
       }
@@ -406,13 +451,37 @@ export function useGuideCutscene({
   const active = playing !== undefined;
   const model = guideModel(bondModel);
   const voice = studyVoice(guideModel(bondModel));
+  const avaiaModel = avaia?.model;
+  const avaiaAppearance = avaia?.appearance;
   useEffect(() => {
     const avatars = renderer.avatars;
     if (!active || avatars === undefined) return;
     const visibleNodes = resolveAvatarScene(model, undefined).visibleNodes;
+    const avaiaNodes =
+      avaiaModel === undefined
+        ? undefined
+        : resolveAvatarScene(avaiaModel, avaiaAppearance).visibleNodes;
     let frame: number | undefined;
 
     function draw(nowMs: number): void {
+      const visible = renderer.getCamera().zoom >= MAP_BODY_HANDOVER_ZOOM;
+      const joined = avaiaMotionRef.current;
+      if (joined === undefined || avaiaModel === undefined) {
+        avatars?.remove(GUIDE_AVAIA_HANDLE_ID);
+      } else {
+        const pose = sampleGuideBody(joined, nowMs, reducedMotion);
+        avatars?.upsert({
+          id: GUIDE_AVAIA_HANDLE_ID,
+          modelId: avaiaModel,
+          lngLat: [pose.point.longitude, pose.point.latitude],
+          bearingDeg: pose.bearingDeg,
+          clipId: pose.clipId,
+          clipPhase: pose.clipPhase,
+          scale: 1,
+          visible,
+          ...(avaiaNodes === undefined ? {} : { visibleNodes: avaiaNodes }),
+        });
+      }
       const motion = motionRef.current;
       if (motion === undefined) {
         avatars?.remove(GUIDE_HANDLE_ID);
@@ -426,7 +495,7 @@ export function useGuideCutscene({
           clipId: pose.clipId,
           clipPhase: pose.clipPhase,
           scale: 1,
-          visible: renderer.getCamera().zoom >= MAP_BODY_HANDOVER_ZOOM,
+          visible,
           visibleNodes,
         });
       }
@@ -437,8 +506,9 @@ export function useGuideCutscene({
     return () => {
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       avatars.remove(GUIDE_HANDLE_ID);
+      avatars.remove(GUIDE_AVAIA_HANDLE_ID);
     };
-  }, [active, model, reducedMotion, renderer]);
+  }, [active, model, avaiaModel, avaiaAppearance, reducedMotion, renderer]);
 
   const bondVoice = studyVoice(bondModel);
   const state: GuideCutsceneState | undefined =

@@ -1040,6 +1040,59 @@ describe("ProductApp identity", () => {
     expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
   });
 
+  it("names the Bond by its new address in the phone header once renamed", async () => {
+    const user = userEvent.setup();
+    const width = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    try {
+      let pubDress = "0x0sky";
+      const avaiaPubDress = "x0skai";
+      render(
+        <ProductApp
+          core={readyCore}
+          host={createHost()}
+          identity={createIdentity({
+            readNativeContext: async () => ({
+              kind: "authenticated",
+              identity: { pubDress, avaiaPubDress },
+            }),
+            renamePubDressSlug: async (slug) => {
+              pubDress = `0x0${slug}`;
+              return { kind: "renamed", identity: { pubDress, avaiaPubDress } };
+            },
+          })}
+        />,
+      );
+
+      const header = await waitFor(() => {
+        const link = document.querySelector<HTMLAnchorElement>(
+          ".app-header__identity",
+        );
+        expect(link).toHaveTextContent(/^0x0sky$/);
+        return link as HTMLAnchorElement;
+      });
+      await user.click(header);
+      const slug = await screen.findByLabelText("pub_dress");
+      await user.clear(slug);
+      await user.type(slug, "rain");
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(
+          document.querySelector(".app-header__identity"),
+        ).toHaveTextContent(/^0x0rain$/),
+      );
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: width,
+      });
+    }
+  });
+
   it("offers a body once a Bond exists, and remembers what it chose", async () => {
     const user = userEvent.setup();
     let avatarModel:
