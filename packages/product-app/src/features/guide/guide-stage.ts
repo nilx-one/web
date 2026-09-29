@@ -653,15 +653,26 @@ export function sampleGuideBody(
 }
 
 /**
- * She mirrors the Bond: drawn in the study the Bond itself wears, and so
- * she, he or they as that study is. A Bond this device has no body for meets
- * her as Dasha 2.0.
+ * She is never the Bond's own body: two of the same would read as a mirror.
+ * Sky meets her as Dasha 2.0, Dasha and Dasha 2.0 meet her as Sky, and Kai
+ * meets her as Dasha. A Bond this device has no body for meets her as
+ * Dasha 2.0.
  *
  * A study with changeable clothes is drawn in its default appearance, never in
- * what the Bond has on: the same body, not the same person.
+ * what the Bond has on.
  */
 export function guideModel(
   bondModel: AvatarModelId | undefined,
 ): AvatarModelId {
-  return bondModel ?? "dasha-v2-study";
+  switch (bondModel) {
+    case "sky-study":
+      return "dasha-v2-study";
+    case "dasha-study":
+    case "dasha-v2-study":
+      return "sky-study";
+    case "kai-study":
+      return "dasha-study";
+    case undefined:
+      return "dasha-v2-study";
+  }
 }

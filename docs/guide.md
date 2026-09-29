@@ -24,10 +24,10 @@ own engine:
 - the chrome steps aside — header, Dock, toasts and world controls fade out —
   and the frame narrows to letterbox;
 - she walks up to the Bond's body in the same renderer that draws it, and
-  she mirrors it: she is drawn in the study the Bond wears — Sky, Kai, Dasha
-  or Dasha 2.0 — in that study's default appearance rather than in what the
-  Bond has on, so she is the same body and not the same person. A Bond this
-  device has no body for meets her as Dasha 2.0;
+  she is never its twin: Sky meets her as Dasha 2.0, Dasha and Dasha 2.0 meet
+  her as Sky, Kai meets her as Dasha — in that study's default appearance
+  rather than in what the Bond has on. A Bond this device has no body for
+  meets her as Dasha 2.0;
 - the camera is staged around the two of them — over the Bond's shoulder
   while she approaches, a two-shot from the side, shot and reverse shot while
   they talk, a slow drift while a line is held — and handed back exactly where
@@ -41,9 +41,9 @@ own engine:
   person can give are listed beneath them. A reply is said back in the Bond's
   own voice, with the camera on the Bond, before she answers it.
 
-She speaks in the voice of the study she mirrors, and so do the Bond's own
-replies: Sky in the masculine, both Dashas in the feminine, and Kai in forms
-that carry no gender at all — the rule an Avaia's own voice already follows.
+She speaks in the voice of the study she is drawn in, and the Bond's own
+replies in the voice of its study: Sky in the masculine, both Dashas in the
+feminine, and Kai in forms that carry no gender at all — the rule an Avaia's own voice already follows.
 Where a language marks it (Ukrainian and Russian do; English does not), a
 wording is written once per voice.
 
@@ -75,15 +75,12 @@ xSasha   Hi, bunny. The two of us are going to have fun — but I'm busy
 
   1. This is strange. I feel like I've been here before.
   2. Later.
-  3. (skip)
 ```
 
 - The first reply leads to how: the Avaia waiting in the Dock, and **Create**.
   Going to do it closes the scene and opens the Avaia screen.
 - **Later** is answered with a goodbye, and she comes back the next time the
   world opens.
-- **(skip)** ends the scene, and the introduction is not played again for this
-  Bond on this device.
 
 **Reward.** The first save that configures the Avaia brings her back — or
 rather, finds her on her way out. She is some twenty metres off, her back to

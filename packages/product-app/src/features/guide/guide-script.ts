@@ -34,10 +34,10 @@ export type GuideReply =
   "curious" | "later" | "go" | "thanks" | "skip" | "continue";
 
 /**
- * The grammatical gender a line is said in. She mirrors the Bond, so she and
- * the Bond's own replies always share one: Sky speaks in the masculine, both
- * Dashas in the feminine, and Kai in forms that carry no gender at all — the
- * same rule an Avaia's own voice follows.
+ * The grammatical gender a line is said in. A study speaks in its own: Sky in
+ * the masculine, both Dashas in the feminine, and Kai in forms that carry no
+ * gender at all — the same rule an Avaia's own voice follows. She speaks in
+ * the voice of the study she is drawn in, the Bond's replies in its own.
  */
 export type GuideVoice = "feminine" | "masculine" | "neutral";
 
@@ -112,7 +112,6 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
     choices: [
       { reply: "curious", next: "howTo" },
       { reply: "later", next: "farewell" },
-      { reply: "skip", next: { end: "skipped" } },
     ],
   },
   howTo: {
@@ -244,6 +243,7 @@ export function createGuideLineState(
   t: Translate,
   names: GuideNames,
   voice: GuideVoice,
+  replyVoice: GuideVoice = voice,
 ): GuideLineViewState {
   const script = GUIDE_NODES[node];
   const wording = pickVariant(script.line, seed, `line:${node}`);
@@ -254,7 +254,7 @@ export function createGuideLineState(
     reward: script.reward === true,
     choices: script.choices.map((choice) => ({
       reply: choice.reply,
-      text: replyText(t, choice.reply, seed, names, voice),
+      text: replyText(t, choice.reply, seed, names, replyVoice),
     })),
   };
 }
