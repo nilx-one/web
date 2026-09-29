@@ -143,5 +143,5 @@ The normative identity contract remains in [`nilx-one/0x1`](https://github.com/n
 
 ## Wiping registered users
 
-`deploy/wipe-users.sh` deletes every identity; all identity-owned tables
-cascade. Dry run unless `WIPE_CONFIRM` equals the database name. Irreversible.
+`deploy/wipe-users.sh` deletes every identity from the SQLite file; all identity-owned tables
+cascade. Stop the container first. Dry run unless `WIPE_CONFIRM=wipe-all-identities`; a backup copy is made beside the database. Irreversible.
