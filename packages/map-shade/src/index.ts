@@ -19,6 +19,17 @@ export {
   type ShadeRuntime,
 } from "./map-factory";
 export {
+  DARK_FOG_PALETTE,
+  DEFAULT_FOG_ZONE_FEATHER_M,
+  FOG_PALETTES,
+  LIGHT_FOG_PALETTE,
+  MAX_FOG_ZONES,
+  fogColor,
+  type FogColor,
+  type FogPalette,
+  type FogZone,
+} from "./fog-palette";
+export {
   createFogField,
   readFogReveals,
   FOG_REVEAL_LIMIT,

@@ -15,6 +15,16 @@ import {
   type MapMouseEvent,
 } from "maplibre-gl";
 
+import {
+  LIGHT_FOG_PALETTE,
+  DEFAULT_FOG_ZONE_FEATHER_M,
+  MAX_FOG_ZONES,
+  requireFogPalette,
+  requireFogZones,
+  type FogPalette,
+  type FogZone,
+} from "./fog-palette";
+import { FOG_FRAGMENT_SHADER, FOG_VERTEX_SHADER } from "./fog-shader";
 import { createTapHandler, type CellTap } from "./pick";
 
 export interface ShadeLayerOptions {
@@ -24,8 +34,25 @@ export interface ShadeLayerOptions {
   readonly id?: string;
   readonly regionM?: number;
   readonly textureSize?: number;
-  readonly shadeColor?: readonly [number, number, number];
+  /** How opaque the deepest fog is. */
   readonly shadeAlpha?: number;
+  /** How the fog is lit wherever no zone says otherwise. */
+  readonly palette?: FogPalette;
+  /** Stretches of fog wearing their own palette, blended over `palette`. */
+  readonly zones?: readonly FogZone[];
+  /**
+   * Whether the mist drifts. `"still"` draws the same mist, frozen, and never
+   * asks for a frame of its own — for a person who asked not to be moved.
+   */
+  readonly motion?: "drift" | "still";
+  /**
+   * How often drifting mist asks for a frame. Every one it asks for redraws
+   * the whole map, and mist is slow: film's 24 fps is plenty.
+   */
+  readonly frameIntervalMs?: number;
+  /** Test seams for the drift's clock. */
+  readonly now?: () => number;
+  readonly schedule?: (callback: () => void, delayMs: number) => () => void;
   /**
    * Cells rasterized into the lightmap per flush. A cold-loaded journal can
    * hand the layer thousands of already-lit cells at once; draining all of
@@ -45,6 +72,64 @@ export interface ShadeLayer extends CustomLayerInterface {
     readonly x1: number;
     readonly y1: number;
   };
+  /** Whether this layer's mist drifts or holds still. */
+  readonly motion: "drift" | "still";
+  /** Relight the fog outside every zone, e.g. when the appearance changes. */
+  setPalette(palette: FogPalette): void;
+  /** Replace the zones the fog blends. At most `MAX_FOG_ZONES`. */
+  setZones(zones: readonly FogZone[]): void;
+}
+
+/**
+ * Lightmap mip levels: level 0 holds the cells as drawn, and each level up is
+ * a wider blur of them, which is what the shader softens the frontier and
+ * throws the open ground's light with. 2048 texels down to 64.
+ */
+const LIGHTMAP_LEVELS = 6;
+
+/** The frontier's blur: at least this many metres, or pixels, whichever is wider. */
+const EDGE_BLUR_M = 18;
+const EDGE_BLUR_PX = 10;
+/** How far open ground's light reaches into the mist. */
+const HALO_BLUR_M = 70;
+const HALO_BLUR_PX = 36;
+
+/** MapLibre's zoom 0 spans the world in 512 CSS pixels. */
+const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
+const WORLD_TILE_PX = 512;
+
+const FOG_UNIFORMS = [
+  "u_matrix",
+  "u_lightmap",
+  "u_region_m",
+  "u_time",
+  "u_mpp",
+  "u_pixel_ratio",
+  "u_viewport",
+  "u_haze",
+  "u_edge_lod",
+  "u_halo_lod",
+  "u_density",
+  "u_shadow",
+  "u_light",
+  "u_glow",
+  "u_bloom",
+  "u_zone_count",
+  "u_zone_shape",
+  "u_zone_shadow",
+  "u_zone_light",
+  "u_zone_glow",
+] as const;
+
+type FogUniform = (typeof FOG_UNIFORMS)[number];
+
+function defaultSchedule(callback: () => void, delayMs: number): () => void {
+  const handle = globalThis.setTimeout(callback, delayMs);
+  return () => globalThis.clearTimeout(handle);
+}
+
+function defaultNow(): number {
+  return globalThis.performance?.now() ?? Date.now();
 }
 
 const RASTER_VERTEX_SHADER = `#version 300 es
@@ -58,28 +143,6 @@ precision highp float;
 out vec4 fragColor;
 void main() {
   fragColor = vec4(1.0);
-}`;
-
-const SHADE_VERTEX_SHADER = `#version 300 es
-in vec2 a_position;
-in vec2 a_uv;
-uniform mat4 u_matrix;
-out vec2 v_uv;
-void main() {
-  v_uv = a_uv;
-  gl_Position = u_matrix * vec4(a_position, 0.0, 1.0);
-}`;
-
-const SHADE_FRAGMENT_SHADER = `#version 300 es
-precision highp float;
-in vec2 v_uv;
-uniform sampler2D u_lightmap;
-uniform vec3 u_shade_color;
-uniform float u_shade_alpha;
-out vec4 fragColor;
-void main() {
-  float lit = texture(u_lightmap, v_uv).r;
-  fragColor = vec4(u_shade_color, u_shade_alpha * (1.0 - lit));
 }`;
 
 function shader(
@@ -144,8 +207,19 @@ function requirePositiveInteger(value: number, label: string): number {
 export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   const regionM = options.regionM ?? 20_000;
   const textureSize = options.textureSize ?? 2_048;
-  const shadeColor = options.shadeColor ?? [0, 0, 0];
-  const shadeAlpha = options.shadeAlpha ?? 0.82;
+  const shadeAlpha = options.shadeAlpha ?? 0.97;
+  let palette = options.palette ?? LIGHT_FOG_PALETTE;
+  requireFogPalette(palette, "palette");
+  const motion = options.motion ?? "drift";
+  const frameIntervalMs = options.frameIntervalMs ?? 1_000 / 24;
+  if (!Number.isFinite(frameIntervalMs) || frameIntervalMs <= 0) {
+    throw new Error(
+      `map-shade frameIntervalMs must be a positive number, got ${frameIntervalMs}`,
+    );
+  }
+  const now = options.now ?? defaultNow;
+  const schedule = options.schedule ?? defaultSchedule;
+  const startedAt = now();
   const cellsPerFlush = requirePositiveInteger(
     options.cellsPerFlush ?? 512,
     "cellsPerFlush",
@@ -160,6 +234,38 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   };
   const spanX = region.x1 - region.x0;
   const spanY = region.y1 - region.y0;
+  const texelM = regionM / textureSize;
+  const zoneShape = new Float32Array(MAX_FOG_ZONES * 4);
+  const zoneShadow = new Float32Array(MAX_FOG_ZONES * 3);
+  const zoneLight = new Float32Array(MAX_FOG_ZONES * 3);
+  const zoneGlow = new Float32Array(MAX_FOG_ZONES * 4);
+  let zoneCount = 0;
+
+  /** Zones as the shader reads them: metres from the region's centre. */
+  function packZones(zones: readonly FogZone[]): void {
+    requireFogZones(zones);
+    zoneShape.fill(0);
+    zoneShadow.fill(0);
+    zoneLight.fill(0);
+    zoneGlow.fill(0);
+    zones.forEach((zone, index) => {
+      const at = MercatorCoordinate.fromLngLat(zone.center, 0);
+      zoneShape.set(
+        [
+          ((at.x - region.x0) / spanX - 0.5) * regionM,
+          ((at.y - region.y0) / spanY - 0.5) * regionM,
+          zone.radiusM,
+          zone.featherM ?? DEFAULT_FOG_ZONE_FEATHER_M,
+        ],
+        index * 4,
+      );
+      zoneShadow.set(zone.palette.shadow, index * 3);
+      zoneLight.set(zone.palette.light, index * 3);
+      zoneGlow.set([...zone.palette.glow, zone.palette.bloom], index * 4);
+    });
+    zoneCount = zones.length;
+  }
+  packZones(options.zones ?? []);
   const pending: CellIndex[] = [];
   const tap = createTapHandler({
     source: options.source,
@@ -175,11 +281,24 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   let quadBuffer: WebGLBuffer | undefined;
   let rasterVertexArray: WebGLVertexArrayObject | undefined;
   let shadeVertexArray: WebGLVertexArrayObject | undefined;
-  let matrixUniform: WebGLUniformLocation | null = null;
-  let lightmapUniform: WebGLUniformLocation | null = null;
-  let colorUniform: WebGLUniformLocation | null = null;
-  let alphaUniform: WebGLUniformLocation | null = null;
+  let uniforms: Partial<Record<FogUniform, WebGLUniformLocation | null>> = {};
   let unsubscribeSource: (() => void) | undefined;
+  let cancelDrift: (() => void) | undefined;
+
+  /**
+   * Drifting mist asks for its next frame once this one is drawn, at most
+   * every `frameIntervalMs`. A hidden page draws no frames, so the chain
+   * pauses with it and picks up again on the first frame it draws.
+   */
+  function scheduleDrift(): void {
+    if (motion !== "drift" || map === undefined || cancelDrift !== undefined) {
+      return;
+    }
+    cancelDrift = schedule(() => {
+      cancelDrift = undefined;
+      map?.triggerRepaint();
+    }, frameIntervalMs);
+  }
 
   const onMapClick = (event: MapMouseEvent): void => {
     void tap(event.lngLat).then((hit) => {
@@ -248,6 +367,17 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       gl.drawArrays(gl.TRIANGLE_FAN, 0, vertices.length / 2);
     }
 
+    // The blurred levels are what the frontier is softened and lit from, so
+    // they follow every batch of cells drawn into level 0.
+    if (lightmap !== undefined) {
+      const previousTexture = gl.getParameter(
+        gl.TEXTURE_BINDING_2D,
+      ) as WebGLTexture | null;
+      gl.bindTexture(gl.TEXTURE_2D, lightmap);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.bindTexture(gl.TEXTURE_2D, previousTexture);
+    }
+
     // A batch capped below the full backlog leaves cells still pending; the
     // next frame's prerender is where they get drawn, not a repaint this
     // layer would otherwise have no reason to ask for.
@@ -274,11 +404,24 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     type: "custom",
     renderingMode: "2d",
     region,
+    motion,
+
+    setPalette(next) {
+      if (next === palette) return;
+      requireFogPalette(next, "palette");
+      palette = next;
+      map?.triggerRepaint();
+    },
+
+    setZones(zones) {
+      packZones(zones);
+      map?.triggerRepaint();
+    },
 
     onAdd(mountedMap, gl) {
       map = mountedMap;
       rasterProgram = program(gl, RASTER_VERTEX_SHADER, RASTER_FRAGMENT_SHADER);
-      shadeProgram = program(gl, SHADE_VERTEX_SHADER, SHADE_FRAGMENT_SHADER);
+      shadeProgram = program(gl, FOG_VERTEX_SHADER, FOG_FRAGMENT_SHADER);
       cellBuffer = requireObject(gl.createBuffer(), "cell buffer");
       quadBuffer = requireObject(gl.createBuffer(), "quad buffer");
       rasterVertexArray = requireObject(
@@ -345,8 +488,18 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
         gl.TEXTURE_BINDING_2D,
       ) as WebGLTexture | null;
       gl.bindTexture(gl.TEXTURE_2D, lightmap);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, textureSize, textureSize);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texStorage2D(
+        gl.TEXTURE_2D,
+        LIGHTMAP_LEVELS,
+        gl.R8,
+        textureSize,
+        textureSize,
+      );
+      gl.texParameteri(
+        gl.TEXTURE_2D,
+        gl.TEXTURE_MIN_FILTER,
+        gl.LINEAR_MIPMAP_LINEAR,
+      );
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -377,6 +530,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       }
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.generateMipmap(gl.TEXTURE_2D);
       gl.clearColor(
         previousClear[0] ?? 0,
         previousClear[1] ?? 0,
@@ -386,10 +540,13 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer);
       gl.bindTexture(gl.TEXTURE_2D, previousTexture);
 
-      matrixUniform = gl.getUniformLocation(shadeProgram, "u_matrix");
-      lightmapUniform = gl.getUniformLocation(shadeProgram, "u_lightmap");
-      colorUniform = gl.getUniformLocation(shadeProgram, "u_shade_color");
-      alphaUniform = gl.getUniformLocation(shadeProgram, "u_shade_alpha");
+      const fogProgram = shadeProgram;
+      uniforms = Object.fromEntries(
+        FOG_UNIFORMS.map((name) => [
+          name,
+          gl.getUniformLocation(fogProgram, name),
+        ]),
+      );
 
       pending.push(...options.source.litCells());
       unsubscribeSource = options.source.onCellLit((cell) => {
@@ -435,20 +592,69 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       const blendSrcAlpha = gl.getParameter(gl.BLEND_SRC_ALPHA) as number;
       const blendDstAlpha = gl.getParameter(gl.BLEND_DST_ALPHA) as number;
 
+      const zoom = map?.getZoom() ?? 0;
+      const latitude = map?.getCenter().lat ?? 0;
+      const metresPerPixel =
+        (EARTH_CIRCUMFERENCE_M * Math.cos((latitude * Math.PI) / 180)) /
+        (WORLD_TILE_PX * 2 ** zoom);
+      const pixelRatio = map?.getPixelRatio() ?? 1;
+      const pitch = map?.getPitch() ?? 0;
+      const blurLod = (metres: number, pixels: number): number =>
+        Math.min(
+          LIGHTMAP_LEVELS - 1,
+          Math.max(
+            0,
+            Math.log2(Math.max(metres, pixels * metresPerPixel) / texelM),
+          ),
+        );
+
       gl.useProgram(shadeProgram);
       gl.bindVertexArray(shadeVertexArray);
       gl.uniformMatrix4fv(
-        matrixUniform,
+        uniforms.u_matrix ?? null,
         false,
         new Float32Array(frame.defaultProjectionData.mainMatrix),
       );
       gl.bindTexture(gl.TEXTURE_2D, lightmap);
-      gl.uniform1i(lightmapUniform, 0);
-      gl.uniform3fv(colorUniform, shadeColor);
-      gl.uniform1f(alphaUniform, shadeAlpha);
+      gl.uniform1i(uniforms.u_lightmap ?? null, 0);
+      gl.uniform1f(uniforms.u_region_m ?? null, regionM);
+      gl.uniform1f(
+        uniforms.u_time ?? null,
+        motion === "drift" ? (now() - startedAt) / 1_000 : 0,
+      );
+      gl.uniform1f(uniforms.u_mpp ?? null, metresPerPixel);
+      gl.uniform1f(uniforms.u_pixel_ratio ?? null, pixelRatio);
+      gl.uniform2f(
+        uniforms.u_viewport ?? null,
+        gl.drawingBufferWidth,
+        gl.drawingBufferHeight,
+      );
+      gl.uniform1f(
+        uniforms.u_haze ?? null,
+        Math.min(1, Math.max(0, (pitch - 10) / 45)),
+      );
+      gl.uniform1f(
+        uniforms.u_edge_lod ?? null,
+        blurLod(EDGE_BLUR_M, EDGE_BLUR_PX),
+      );
+      gl.uniform1f(
+        uniforms.u_halo_lod ?? null,
+        blurLod(HALO_BLUR_M, HALO_BLUR_PX),
+      );
+      gl.uniform1f(uniforms.u_density ?? null, shadeAlpha);
+      gl.uniform3fv(uniforms.u_shadow ?? null, palette.shadow);
+      gl.uniform3fv(uniforms.u_light ?? null, palette.light);
+      gl.uniform3fv(uniforms.u_glow ?? null, palette.glow);
+      gl.uniform1f(uniforms.u_bloom ?? null, palette.bloom);
+      gl.uniform1i(uniforms.u_zone_count ?? null, zoneCount);
+      gl.uniform4fv(uniforms.u_zone_shape ?? null, zoneShape);
+      gl.uniform3fv(uniforms.u_zone_shadow ?? null, zoneShadow);
+      gl.uniform3fv(uniforms.u_zone_light ?? null, zoneLight);
+      gl.uniform4fv(uniforms.u_zone_glow ?? null, zoneGlow);
       gl.enable(gl.BLEND);
+      // The fog shader writes premultiplied colour, as MapLibre composites.
       gl.blendFuncSeparate(
-        gl.SRC_ALPHA,
+        gl.ONE,
         gl.ONE_MINUS_SRC_ALPHA,
         gl.ONE,
         gl.ONE_MINUS_SRC_ALPHA,
@@ -470,12 +676,16 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       gl.activeTexture(previousActiveTexture);
       gl.bindVertexArray(previousVertexArray);
       gl.useProgram(previousProgram);
+
+      scheduleDrift();
     },
 
     onRemove(mountedMap, gl) {
       mountedMap.off("click", onMapClick);
       unsubscribeSource?.();
       unsubscribeSource = undefined;
+      cancelDrift?.();
+      cancelDrift = undefined;
       map = undefined;
       pending.length = 0;
       if (rasterProgram !== undefined) gl.deleteProgram(rasterProgram);
@@ -496,6 +706,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       quadBuffer = undefined;
       rasterVertexArray = undefined;
       shadeVertexArray = undefined;
+      uniforms = {};
     },
   };
 }

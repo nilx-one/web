@@ -101,6 +101,23 @@ Who is at the wheel is presentation. It moves nobody, asserts nothing about wher
 
 No other identity is drawn. Nothing in the client carries a position for another Bond, and a body invented for one would be a presence claim the protocol never made.
 
+## Fog
+
+Ground this device has not revealed lies under fog, drawn by the shade layer in `map-shade` as mist rather than a flat veil: the pale azure haze around the Motherland on a bright morning, cool steel valleys and near-white sunlit tops, with cyan light caught inside it.
+
+- **It lives on the ground.** The mist is built from octaves at fixed world wavelengths, so a wisp stays over the street it drifts across while the camera moves. Which octaves are drawn follows the zoom, so it has the same grain from city to street, and the finest and coarsest cross-fade so zooming never pops.
+- **It hides.** Deep fog is 0.97 opaque: a pale mist over dark building faces gives the map away sooner than a dark veil did, and the basemap must not stay readable through it.
+- **The frontier is a seam of light.** The border of revealed ground is blurred, frayed into wisps by the same mist, and lit: open ground throws a soft cyan glow into the mist beside it, the one place the accent appears in the fog.
+- **It drifts, slowly.** Each octave drifts at its own pace and direction, sparse motes twinkle, and under a pitched camera the far mist pales toward the sky with faint shafts of light. Drifting mist asks for a frame at most 24 times a second and stops asking while the page is hidden; a person who asked for reduced motion gets the same mist, still.
+
+The appearance picks the palette from the style's own `nilx-one:appearance` metadata, so a style swap relights the fog. Dark mist is a moonlit deep teal whose glow may **bloom** — spill past the mist as added light — because there is dark to spill into; on the light map added light washes out, so there the glow tints the mist instead.
+
+### Zones
+
+A stretch of fog can wear its own palette: a **fog zone** is a circle on the ground (`center`, `radiusM`) that dissolves into the surrounding fog over `featherM`, its edge broken up by the mist itself so no zone ends on a drawn line. A layer blends up to eight, later ones over earlier ones; a host passes them as `fogZones` to `createShadeMapFactory`, and `ShadeLayer.setZones` replaces them live.
+
+No zone is drawn today. Like every colour on the map, a zone is presentation only: it says what the mist looks like there, never who has been there, what happened, or that anything is nearby.
+
 ## Known data-bound limits
 
 The visual reference is intent, not evidence. Features are rendered only when the published same-origin map data supports them.

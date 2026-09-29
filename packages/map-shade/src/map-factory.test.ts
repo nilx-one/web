@@ -10,12 +10,14 @@ import type * as MapLibreModule from "maplibre-gl";
 import type { MapOptions } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { DARK_FOG_PALETTE, LIGHT_FOG_PALETTE } from "./fog-palette";
 import {
   createGroundRevealed,
   createShadeMapFactory,
   type ShadeRuntime,
 } from "./map-factory";
 import { cellAtLngLat } from "./pick";
+import type { ShadeLayer } from "./shade-layer";
 
 // Declared through vi.hoisted so the mock factory below, which vitest lifts to
 // the top of the module, can still reference it.
@@ -30,6 +32,7 @@ const { FakeMap } = vi.hoisted(() => {
       readonly before: string | undefined;
     }[] = [];
     styleLoaded = true;
+    styleMetadata: Record<string, unknown> | undefined = undefined;
     styleLayers: { id: string; type: string }[] = [
       { id: "background", type: "background" },
       { id: "roads", type: "line" },
@@ -63,9 +66,19 @@ const { FakeMap } = vi.hoisted(() => {
       return this.layers.get(id);
     }
 
-    getStyle(): { layers: { id: string; type: string }[] } {
-      return { layers: this.styleLayers };
+    getStyle(): {
+      layers: { id: string; type: string }[];
+      metadata?: Record<string, unknown>;
+    } {
+      return {
+        layers: this.styleLayers,
+        ...(this.styleMetadata === undefined
+          ? {}
+          : { metadata: this.styleMetadata }),
+      };
     }
+
+    triggerRepaint(): void {}
 
     addLayer(layer: { readonly id: string }, before?: string): void {
       this.addLayerCalls.push({ id: layer.id, before });
@@ -131,12 +144,23 @@ async function unhandledDuring(work: () => Promise<void>): Promise<unknown[]> {
   return rejections;
 }
 
-function build(runtime: ShadeRuntime | null): FakeMapInstance {
+function build(
+  runtime: ShadeRuntime | null,
+  options: Partial<Parameters<typeof createShadeMapFactory>[0]> = {},
+): FakeMapInstance {
   const createMap = createShadeMapFactory({
     runtime: Promise.resolve(runtime),
     anchor: ANCHOR,
+    prefersReducedMotion: () => false,
+    ...options,
   });
   return createMap(MAP_OPTIONS) as unknown as FakeMapInstance;
+}
+
+function shadeLayerOf(map: FakeMapInstance): ShadeLayer {
+  const layer = map.layers.get(SHADE_LAYER_ID);
+  expect(layer, "the shade layer is on the map").toBeDefined();
+  return layer as unknown as ShadeLayer;
 }
 
 beforeEach(() => {
@@ -189,6 +213,75 @@ describe("shade map factory", () => {
     map.styleLoaded = true;
     map.emit("styledata");
     expect(map.addLayerCalls).toHaveLength(1);
+  });
+
+  it("lights the fog for the appearance the style declares, and relights on a swap", async () => {
+    const map = build(fakeRuntime([]));
+    await settle();
+    const layer = shadeLayerOf(map);
+    const setPalette = vi.spyOn(layer, "setPalette");
+
+    map.styleMetadata = { "nilx-one:appearance": "dark" };
+    map.emit("styledata");
+    expect(setPalette).toHaveBeenLastCalledWith(DARK_FOG_PALETTE);
+
+    map.styleMetadata = { "nilx-one:appearance": "light" };
+    map.emit("styledata");
+    expect(setPalette).toHaveBeenLastCalledWith(LIGHT_FOG_PALETTE);
+    // A swap relights the layer already on the map; it never adds a second.
+    expect(map.addLayerCalls).toHaveLength(1);
+  });
+
+  it("lets a host supply its own palettes per appearance", async () => {
+    const dusk = { ...DARK_FOG_PALETTE, bloom: 0.2 };
+    const map = build(fakeRuntime([]), {
+      fogPalettes: { light: LIGHT_FOG_PALETTE, dark: dusk },
+    });
+    await settle();
+    const setPalette = vi.spyOn(shadeLayerOf(map), "setPalette");
+
+    map.styleMetadata = { "nilx-one:appearance": "dark" };
+    map.emit("styledata");
+    expect(setPalette).toHaveBeenLastCalledWith(dusk);
+  });
+
+  it("holds the mist still for a person who asked not to be moved", async () => {
+    const drifting = build(fakeRuntime([]));
+    const still = build(fakeRuntime([]), { prefersReducedMotion: () => true });
+    await settle();
+
+    expect(shadeLayerOf(drifting).motion).toBe("drift");
+    expect(shadeLayerOf(still).motion).toBe("still");
+  });
+
+  it("tells the composing host about fog it could not draw, before any map exists", () => {
+    // Deferred into the journal's promise, this would surface as an unhandled
+    // rejection and a map quietly without fog.
+    expect(() =>
+      createShadeMapFactory({
+        runtime: Promise.resolve(fakeRuntime([])),
+        anchor: ANCHOR,
+        fogZones: [
+          {
+            id: "broken",
+            center: ANCHOR,
+            radiusM: -5,
+            palette: LIGHT_FOG_PALETTE,
+          },
+        ],
+      }),
+    ).toThrow(/radiusM must be positive/);
+    expect(() =>
+      createShadeMapFactory({
+        runtime: Promise.resolve(fakeRuntime([])),
+        anchor: ANCHOR,
+        fogPalettes: {
+          light: LIGHT_FOG_PALETTE,
+          dark: { ...DARK_FOG_PALETTE, light: [2, 0, 0] },
+        },
+      }),
+    ).toThrow(/fogPalettes\.dark\.light must be three channels/);
+    expect(FakeMap.instances).toEqual([]);
   });
 
   it("does not touch a map that was removed before the journal resolved", async () => {
