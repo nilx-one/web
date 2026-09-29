@@ -183,7 +183,10 @@ export function GuideCutsceneView({
       if (event.key === "Escape") {
         event.preventDefault();
         const skip = state.line.choices.find(
-          (choice) => choice.reply === "skip" || choice.reply === "continue",
+          (choice) =>
+            choice.reply === "skip" ||
+            choice.reply === "continue" ||
+            choice.reply === "later",
         );
         if (choosing && skip !== undefined) onChoose(skip.reply);
         else if (state.beat === "line") typed.complete();

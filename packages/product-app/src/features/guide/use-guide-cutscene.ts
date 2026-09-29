@@ -405,7 +405,7 @@ export function useGuideCutscene({
   // Her body, frame by frame, for as long as the scene lasts.
   const active = playing !== undefined;
   const model = guideModel(bondModel);
-  const voice = studyVoice(bondModel);
+  const voice = studyVoice(guideModel(bondModel));
   useEffect(() => {
     const avatars = renderer.avatars;
     if (!active || avatars === undefined) return;
@@ -440,6 +440,7 @@ export function useGuideCutscene({
     };
   }, [active, model, reducedMotion, renderer]);
 
+  const bondVoice = studyVoice(bondModel);
   const state: GuideCutsceneState | undefined =
     playing === undefined
       ? undefined
@@ -452,11 +453,18 @@ export function useGuideCutscene({
             t,
             names,
             voice,
+            bondVoice,
           ),
           ...(playing.reply === undefined
             ? {}
             : {
-                reply: replyText(t, playing.reply, playing.seed, names, voice),
+                reply: replyText(
+                  t,
+                  playing.reply,
+                  playing.seed,
+                  names,
+                  bondVoice,
+                ),
               }),
           replySpeaker: bondName,
           ...(playing.reward === undefined ? {} : { reward: playing.reward }),

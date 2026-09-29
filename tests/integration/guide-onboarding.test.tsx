@@ -200,10 +200,10 @@ describe("xSasha, the first time a Bond opens the world", () => {
       { name: "xSasha" },
       ARRIVAL_WAIT,
     );
-    // She is on the world itself, beside the Bond, mirroring it: the Bond
-    // wears Sky, so she is drawn in Sky too.
+    // She is on the world itself, beside the Bond, never its twin: the
+    // Bond wears Sky, so she is drawn as Dasha 2.0.
     expect(renderer.avatars?.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "guide", modelId: "sky-study" }),
+      expect.objectContaining({ id: "guide", modelId: "dasha-v2-study" }),
     );
     // The camera is the scene's: it is staged close in, not left where it was.
     await waitFor(() =>
@@ -217,9 +217,8 @@ describe("xSasha, the first time a Bond opens the world", () => {
     const replies = await untilReplies(user);
     expect(dialog).toHaveTextContent(/bunny/);
     expect(dialog).toHaveTextContent(/Avaia/);
-    expect(replies).toHaveLength(3);
+    expect(replies).toHaveLength(2);
     expect(replies[1]).toHaveTextContent(/Later|Not now|Some other time/);
-    expect(replies[2]).toHaveTextContent("(skip)");
 
     // "It's strange. I feel I've been here before." — said in the Bond's own
     // voice, then she tells it how.
@@ -283,25 +282,6 @@ describe("xSasha, the first time a Bond opens the world", () => {
     expect(
       await screen.findByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toBeVisible();
-  }, 15_000);
-
-  it("is skipped for good on this device", async () => {
-    const user = userEvent.setup();
-    renderWorld();
-
-    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
-    const replies = await untilReplies(user);
-    await user.click(replies[2] as HTMLElement);
-    await untilGone(user);
-    expect(
-      JSON.parse(window.localStorage.getItem("nilx-one.guide.v1.0x0sky") ?? ""),
-    ).toEqual({ intro: "skipped" });
-
-    cleanup();
-    renderWorld();
-    await screen.findByRole("button", { name: "Set up x0skai" });
-    await act(() => new Promise((resolve) => setTimeout(resolve, 2_400)));
-    expect(document.querySelector(".guide-cutscene")).toBeNull();
   }, 15_000);
 
   it("has no automatically detectable accessibility violations", async () => {

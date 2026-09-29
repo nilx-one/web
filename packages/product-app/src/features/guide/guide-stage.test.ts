@@ -114,11 +114,11 @@ describe("where a scene with xSasha is staged", () => {
     expect(mapDistanceMeters(pose.point, stage.dasha)).toBeLessThan(0.01);
   });
 
-  it("mirrors the Bond: draws her in the study the Bond wears", () => {
-    expect(guideModel("sky-study")).toBe("sky-study");
-    expect(guideModel("kai-study")).toBe("kai-study");
-    expect(guideModel("dasha-study")).toBe("dasha-study");
-    expect(guideModel("dasha-v2-study")).toBe("dasha-v2-study");
+  it("is never the Bond's own body", () => {
+    expect(guideModel("sky-study")).toBe("dasha-v2-study");
+    expect(guideModel("dasha-study")).toBe("sky-study");
+    expect(guideModel("dasha-v2-study")).toBe("sky-study");
+    expect(guideModel("kai-study")).toBe("dasha-study");
     // A Bond this device has no body for meets her as Dasha 2.0.
     expect(guideModel(undefined)).toBe("dasha-v2-study");
   });

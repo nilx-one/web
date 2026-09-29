@@ -27,7 +27,7 @@ const VOICES: readonly GuideVoice[] = ["feminine", "masculine", "neutral"];
 const NODES = Object.keys(GUIDE_NODES) as GuideNodeId[];
 
 describe("xSasha's script", () => {
-  it("opens the introduction with her greeting and three replies", () => {
+  it("opens the introduction with her greeting and two replies", () => {
     const line = createGuideLineState(
       GUIDE_OPENING.intro,
       0,
@@ -41,9 +41,7 @@ describe("xSasha's script", () => {
     expect(line.choices.map((choice) => choice.reply)).toEqual([
       "curious",
       "later",
-      "skip",
     ]);
-    expect(line.choices[2]?.text).toBe("(пропустити)");
   });
 
   it("never says the same line the same way twice in a row", () => {
@@ -147,7 +145,7 @@ describe("xSasha's script", () => {
   it("leads a curious reply to how, a later one to goodbye, and a skip out", () => {
     expect(followChoice("greeting", "curious")).toBe("howTo");
     expect(followChoice("greeting", "later")).toBe("farewell");
-    expect(followChoice("greeting", "skip")).toEqual({ end: "skipped" });
+    expect(followChoice("greeting", "skip")).toBeUndefined();
     expect(followChoice("howTo", "go")).toEqual({ end: "create" });
     expect(followChoice("farewell", "continue")).toEqual({ end: "later" });
     expect(followChoice("greeting", "thanks")).toBeUndefined();
