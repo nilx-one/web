@@ -97,6 +97,13 @@ SELECT pub_dress FROM identities WHERE identity_kind = 'human' AND pub_dress = '
 
 There is no API that assigns the capability.
 
+## Exposure
+
+The web edge proxies only `GET /api/v1/speech/nearby` to the identity service.
+`POST /api/v1/speech` is not routed publicly: the producer reaches it on the
+private `nilxone-identity:1927` alias, and the service token is a second lock,
+not the only one.
+
 ## Off by default
 
 Without `SPEECH_INGEST_TOKEN` the routes are not mounted, and a client that
