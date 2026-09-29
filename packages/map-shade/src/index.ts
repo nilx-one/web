@@ -9,6 +9,8 @@ export {
 } from "./pick";
 export {
   createShadeLayer,
+  documentVisibility,
+  type PageVisibility,
   type ShadeLayer,
   type ShadeLayerOptions,
 } from "./shade-layer";

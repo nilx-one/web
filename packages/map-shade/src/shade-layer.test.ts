@@ -8,7 +8,7 @@ import type {
 } from "@nilx-one/presence-contract";
 import { gridDisk, latLngToCell } from "h3-js";
 import type { CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DARK_FOG_PALETTE,
@@ -18,7 +18,11 @@ import {
   fogColor,
   type FogZone,
 } from "./fog-palette";
-import { createShadeLayer } from "./shade-layer";
+import {
+  createShadeLayer,
+  documentVisibility,
+  type PageVisibility,
+} from "./shade-layer";
 
 const KYIV = { lng: 30.5234, lat: 50.4501 };
 
@@ -192,6 +196,31 @@ function fakeMap(): MapLibreMap & {
 const FRAME = {
   defaultProjectionData: { mainMatrix: new Float64Array(16) },
 } as unknown as CustomRenderMethodInput;
+
+/** A page whose visibility the test flips, announcing it or not. */
+function manualVisibility(initial = true): PageVisibility & {
+  set(visible: boolean, options?: { readonly announce?: boolean }): void;
+  readonly listeners: number;
+} {
+  let visible = initial;
+  const listeners = new Set<(visible: boolean) => void>();
+  return {
+    isVisible: () => visible,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    set(next, { announce = true } = {}) {
+      visible = next;
+      if (announce) for (const listener of [...listeners]) listener(next);
+    },
+    get listeners() {
+      return listeners.size;
+    },
+  };
+}
 
 /** A hand-cranked clock and timer, so drift is observed rather than slept on. */
 function manualClock(): {
@@ -579,4 +608,141 @@ describe("shade layer drift", () => {
       ).toThrow(/frameIntervalMs must be a positive number/);
     },
   );
+});
+
+describe("shade layer drift while the page is hidden", () => {
+  function drifting(visibility: ReturnType<typeof manualVisibility>) {
+    const clock = manualClock();
+    const layer = createShadeLayer({
+      source: litSource([]),
+      store,
+      anchor: KYIV,
+      now: clock.now,
+      schedule: clock.schedule,
+      visibility,
+    });
+    const gl = fakeGl();
+    const map = fakeMap();
+    layer.onAdd!(map, gl);
+    return { layer, gl, map, clock };
+  }
+
+  it("cancels the frame it asked for when the page hides, and asks for none while hidden", () => {
+    const visibility = manualVisibility();
+    const { layer, gl, map, clock } = drifting(visibility);
+    layer.render!(gl, FRAME);
+    expect(clock.pending).toBe(1);
+
+    visibility.set(false);
+    expect(clock.pending).toBe(0);
+
+    // A frame MapLibre draws for its own reasons while hidden asks for nothing.
+    layer.render!(gl, FRAME);
+    expect(clock.pending).toBe(0);
+    clock.fire();
+    expect(map.triggerRepaint).not.toHaveBeenCalled();
+
+    // Shown again: one frame to draw the mist, and that frame asks for the next.
+    visibility.set(true);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+    layer.render!(gl, FRAME);
+    expect(clock.pending).toBe(1);
+  });
+
+  it("never wakes the map from a timer that fires after the page hid unannounced", () => {
+    const visibility = manualVisibility();
+    const { layer, gl, map, clock } = drifting(visibility);
+    layer.render!(gl, FRAME);
+
+    visibility.set(false, { announce: false });
+    clock.fire();
+    expect(map.triggerRepaint).not.toHaveBeenCalled();
+    // The timer learned the page is hidden, so the chain stays stopped.
+    layer.render!(gl, FRAME);
+    expect(clock.pending).toBe(0);
+
+    visibility.set(true);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+  });
+
+  it("resumes the mist where it paused, not where the wall clock is", () => {
+    const visibility = manualVisibility();
+    const { layer, gl, clock } = drifting(visibility);
+
+    clock.advance(1_000);
+    visibility.set(false);
+    clock.advance(60_000);
+    layer.render!(gl, FRAME);
+    expect(gl.uniformValues.get("u_time")).toBeCloseTo(1, 5);
+
+    visibility.set(true);
+    clock.advance(500);
+    layer.render!(gl, FRAME);
+    expect(gl.uniformValues.get("u_time")).toBeCloseTo(1.5, 5);
+  });
+
+  it("waits for a page that was already hidden when the layer was added", () => {
+    const visibility = manualVisibility(false);
+    const { layer, gl, map, clock } = drifting(visibility);
+
+    layer.render!(gl, FRAME);
+    expect(clock.pending).toBe(0);
+
+    visibility.set(true);
+    expect(map.triggerRepaint).toHaveBeenCalledTimes(1);
+    layer.render!(gl, FRAME);
+    expect(clock.pending).toBe(1);
+  });
+
+  it("stops listening when removed, and still mist never listens at all", () => {
+    const visibility = manualVisibility();
+    const { layer, gl, map } = drifting(visibility);
+    expect(visibility.listeners).toBe(1);
+    layer.onRemove!(map, gl);
+    expect(visibility.listeners).toBe(0);
+
+    const stillVisibility = manualVisibility();
+    const still = createShadeLayer({
+      source: litSource([]),
+      store,
+      anchor: KYIV,
+      motion: "still",
+      visibility: stillVisibility,
+    });
+    still.onAdd!(fakeMap(), fakeGl());
+    expect(stillVisibility.listeners).toBe(0);
+  });
+});
+
+describe("document visibility", () => {
+  let state: DocumentVisibilityState = "visible";
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, "visibilityState");
+  });
+
+  function stubVisibility(): void {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => state,
+    });
+  }
+
+  it("follows the document's visibilitychange until unsubscribed", () => {
+    stubVisibility();
+    const visibility = documentVisibility();
+    const heard: boolean[] = [];
+    const stop = visibility.subscribe((visible) => heard.push(visible));
+
+    state = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(visibility.isVisible()).toBe(false);
+    state = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    stop();
+    state = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    expect(heard).toEqual([false, true]);
+  });
 });

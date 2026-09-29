@@ -50,6 +50,13 @@ export interface ShadeLayerOptions {
    * the whole map, and mist is slow: film's 24 fps is plenty.
    */
   readonly frameIntervalMs?: number;
+  /**
+   * Whether anyone can see the page. Drifting mist asks for no frame while it
+   * is hidden and resumes where it paused once it is shown. Defaults to the
+   * document's own visibility; a host with its own lifecycle (a mini app
+   * minimised inside its messenger) can say so here.
+   */
+  readonly visibility?: PageVisibility;
   /** Test seams for the drift's clock. */
   readonly now?: () => number;
   readonly schedule?: (callback: () => void, delayMs: number) => () => void;
@@ -122,6 +129,30 @@ const FOG_UNIFORMS = [
 ] as const;
 
 type FogUniform = (typeof FOG_UNIFORMS)[number];
+
+export interface PageVisibility {
+  isVisible(): boolean;
+  /** Hears every change; returns how to stop hearing it. */
+  subscribe(listener: (visible: boolean) => void): () => void;
+}
+
+/**
+ * The document's own visibility. Without a document — a worker, a test with
+ * no DOM — there is nothing to hide, so the page counts as visible.
+ */
+export function documentVisibility(): PageVisibility {
+  const page = globalThis.document as Document | undefined;
+  const isVisible = (): boolean => page?.visibilityState !== "hidden";
+  return {
+    isVisible,
+    subscribe(listener) {
+      if (page === undefined) return () => undefined;
+      const onChange = (): void => listener(isVisible());
+      page.addEventListener("visibilitychange", onChange);
+      return () => page.removeEventListener("visibilitychange", onChange);
+    },
+  };
+}
 
 function defaultSchedule(callback: () => void, delayMs: number): () => void {
   const handle = globalThis.setTimeout(callback, delayMs);
@@ -284,18 +315,65 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   let uniforms: Partial<Record<FogUniform, WebGLUniformLocation | null>> = {};
   let unsubscribeSource: (() => void) | undefined;
   let cancelDrift: (() => void) | undefined;
+  const visibility = options.visibility ?? documentVisibility();
+  let unsubscribeVisibility: (() => void) | undefined;
+  let visible = true;
+  /** When the page was hidden, while it is. */
+  let hiddenAt: number | undefined;
+  /** Time spent hidden, which the mist's clock does not count. */
+  let pausedMs = 0;
+
+  /** How far the mist has drifted: time it was seen, never time it was not. */
+  function driftSeconds(): number {
+    if (motion !== "drift") return 0;
+    const pausing = hiddenAt === undefined ? 0 : now() - hiddenAt;
+    return (now() - startedAt - pausedMs - pausing) / 1_000;
+  }
+
+  function cancelPendingDrift(): void {
+    cancelDrift?.();
+    cancelDrift = undefined;
+  }
+
+  /**
+   * A hidden page cancels the frame the mist already asked for and asks for
+   * none until it is shown again; being shown asks for the one frame that
+   * draws the mist where it paused, and that frame asks for the next.
+   */
+  function setVisible(next: boolean): void {
+    if (next === visible) return;
+    visible = next;
+    if (!next) {
+      hiddenAt = now();
+      cancelPendingDrift();
+      return;
+    }
+    if (hiddenAt !== undefined) pausedMs += now() - hiddenAt;
+    hiddenAt = undefined;
+    map?.triggerRepaint();
+  }
 
   /**
    * Drifting mist asks for its next frame once this one is drawn, at most
-   * every `frameIntervalMs`. A hidden page draws no frames, so the chain
-   * pauses with it and picks up again on the first frame it draws.
+   * every `frameIntervalMs`, and only while the page can be seen.
    */
   function scheduleDrift(): void {
-    if (motion !== "drift" || map === undefined || cancelDrift !== undefined) {
+    if (
+      motion !== "drift" ||
+      map === undefined ||
+      !visible ||
+      cancelDrift !== undefined
+    ) {
       return;
     }
     cancelDrift = schedule(() => {
       cancelDrift = undefined;
+      // A page can be hidden between asking and the timer firing without the
+      // change having reached us yet; the timer asks before it wakes the map.
+      if (!visibility.isVisible()) {
+        setVisible(false);
+        return;
+      }
       map?.triggerRepaint();
     }, frameIntervalMs);
   }
@@ -420,6 +498,11 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
 
     onAdd(mountedMap, gl) {
       map = mountedMap;
+      // Still mist never asks for a frame, so it has nothing to pause.
+      if (motion === "drift") {
+        setVisible(visibility.isVisible());
+        unsubscribeVisibility = visibility.subscribe(setVisible);
+      }
       rasterProgram = program(gl, RASTER_VERTEX_SHADER, RASTER_FRAGMENT_SHADER);
       shadeProgram = program(gl, FOG_VERTEX_SHADER, FOG_FRAGMENT_SHADER);
       cellBuffer = requireObject(gl.createBuffer(), "cell buffer");
@@ -618,10 +701,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       gl.bindTexture(gl.TEXTURE_2D, lightmap);
       gl.uniform1i(uniforms.u_lightmap ?? null, 0);
       gl.uniform1f(uniforms.u_region_m ?? null, regionM);
-      gl.uniform1f(
-        uniforms.u_time ?? null,
-        motion === "drift" ? (now() - startedAt) / 1_000 : 0,
-      );
+      gl.uniform1f(uniforms.u_time ?? null, driftSeconds());
       gl.uniform1f(uniforms.u_mpp ?? null, metresPerPixel);
       gl.uniform1f(uniforms.u_pixel_ratio ?? null, pixelRatio);
       gl.uniform2f(
@@ -684,8 +764,9 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       mountedMap.off("click", onMapClick);
       unsubscribeSource?.();
       unsubscribeSource = undefined;
-      cancelDrift?.();
-      cancelDrift = undefined;
+      unsubscribeVisibility?.();
+      unsubscribeVisibility = undefined;
+      cancelPendingDrift();
       map = undefined;
       pending.length = 0;
       if (rasterProgram !== undefined) gl.deleteProgram(rasterProgram);

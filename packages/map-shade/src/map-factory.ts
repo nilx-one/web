@@ -17,7 +17,7 @@ import {
   type FogZone,
 } from "./fog-palette";
 import { cellAtLngLat, type CellTap } from "./pick";
-import { createShadeLayer } from "./shade-layer";
+import { createShadeLayer, type PageVisibility } from "./shade-layer";
 
 export interface ShadeRuntime {
   readonly store: PresenceStore;
@@ -37,6 +37,11 @@ export interface ShadeMapFactoryOptions {
   readonly fogZones?: readonly FogZone[];
   /** Whether this person asked not to be moved; the mist then holds still. */
   readonly prefersReducedMotion?: () => boolean;
+  /**
+   * Whether anyone can see the page, for a host whose lifecycle the document
+   * does not report. Drifting mist asks for no frame while it is hidden.
+   */
+  readonly pageVisibility?: PageVisibility;
 }
 
 function defaultPrefersReducedMotion(): boolean {
@@ -88,6 +93,9 @@ export function createShadeMapFactory(
           ],
         zones,
         motion: stillness() ? "still" : "drift",
+        ...(options.pageVisibility === undefined
+          ? {}
+          : { visibility: options.pageVisibility }),
         ...(options.onCellTap === undefined
           ? {}
           : { onCellTap: options.onCellTap }),
