@@ -6,9 +6,11 @@ import type { AvaiaConfigurationState } from "@nilx-one/application";
 /**
  * The Dock presents two identities and which of them is at the wheel.
  *
- * The identity at the wheel sits on the left: activating it brings the world to
- * it. The other sits on the right: activating it hands the wheel over, when
- * that is possible at all. Nothing here writes shared-world state — the wheel
+ * `left` is the identity at the wheel: activating it brings the world to it.
+ * `right` is the other: activating it hands the wheel over, when that is
+ * possible at all. Those are roles, not places — on screen the Avaia always
+ * sits first and the Bond second, so a handover changes who drives, never
+ * where anyone sits. Nothing here writes shared-world state — the wheel
  * is presentation, and spectating is what an identity does when it is not
  * driving.
  */
@@ -45,6 +47,12 @@ export interface DockIdentityViewState {
   readonly intent: "focus" | "wheel" | "configure";
 }
 
+/** One place on the Dock, and whether its identity is the one driving. */
+export interface DockPlace {
+  readonly driving: boolean;
+  readonly identity: DockIdentityViewState;
+}
+
 export interface BondDockViewState {
   readonly wheel: DockSeat;
   /** At the wheel. Activating it focuses the world on this identity. */
@@ -59,6 +67,8 @@ export interface BondDockViewState {
   readonly preparesRuntime: boolean;
   /** What the Dock's action configures, which is whoever is driving. */
   readonly configure: DockConfigureAction;
+  /** Screen order, fixed whoever drives: the Avaia first, the Bond second. */
+  readonly places: readonly [DockPlace, DockPlace];
 }
 
 export interface BondDockInput {
@@ -188,12 +198,20 @@ export function createBondDockViewState(
     };
   };
 
+  const left = driving === "bond" ? bond("left") : avaia("left");
+  const right = driving === "bond" ? avaia("right") : bond("right");
+  const place = (seat: DockSeat): DockPlace =>
+    left.seat === seat
+      ? { driving: true, identity: left }
+      : { driving: false, identity: right };
+
   return {
     wheel: driving,
-    left: driving === "bond" ? bond("left") : avaia("left"),
-    right: driving === "bond" ? avaia("right") : bond("right"),
+    left,
+    right,
     preparesRuntime,
     configure,
+    places: [place("avaia"), place("bond")],
   };
 }
 

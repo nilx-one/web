@@ -31,6 +31,20 @@ describe("Dock seats", () => {
     expect(dock.right).toMatchObject({ seat: "avaia", role: "unavailable" });
   });
 
+  it("keeps the Avaia first and the Bond second whoever is driving", () => {
+    for (const wheel of ["bond", "avaia"] as const) {
+      const dock = createBondDockViewState({ ...base, wheel });
+      expect(dock.places.map((place) => place.identity.seat)).toEqual([
+        "avaia",
+        "bond",
+      ]);
+      expect(dock.places.map((place) => place.driving)).toEqual([
+        wheel === "avaia",
+        wheel === "bond",
+      ]);
+    }
+  });
+
   it("calls the Bond a spectator only when the Avaia is driving", () => {
     expect(createBondDockViewState({ ...base, wheel: "avaia" })).toMatchObject({
       left: { seat: "avaia", role: "driving" },

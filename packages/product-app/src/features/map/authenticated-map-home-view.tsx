@@ -10,7 +10,7 @@ import {
   type BondProviderType,
   type PubInfoAccessPort,
 } from "@nilx-one/application";
-import type { GeolocationCapability } from "@nilx-one/host-contract";
+import type { GeolocationCapability, HostPort } from "@nilx-one/host-contract";
 import {
   avatarPreviewUrl,
   mapDistanceMeters,
@@ -119,6 +119,8 @@ import {
   createBondDockViewState,
   openingWheel,
   type AvaiaAvailability,
+  type DockIdentityViewState,
+  type DockPlace,
   type DockSeat,
 } from "./bond-dock-view-model";
 import { landmarkKindLabel, landmarkLabel } from "./avaia-lines";
@@ -176,6 +178,8 @@ export interface AuthenticatedMapHomeViewProps {
    * API of its own, and the renderer never asks for a position at all.
    */
   readonly geolocation: GeolocationCapability;
+  /** Host feedback for a tap on the Dock; the host decides what it feels like. */
+  readonly feedback?: Pick<HostPort, "impact">;
   readonly runtime: RuntimeViewState;
   readonly safeArea: ShellSafeArea;
   /** The canonical route this surface is presenting. */
@@ -491,12 +495,51 @@ function ProviderMark({
   );
 }
 
+/**
+ * One identity's place on the Dock. Its colour follows who it is, its
+ * emphasis follows whether it is driving; where it sits never changes.
+ */
+function DockPlaceButton({
+  place: { driving, identity },
+  onActivate,
+}: {
+  readonly place: DockPlace;
+  readonly onActivate: (identity: DockIdentityViewState) => void;
+}) {
+  const { t } = useLocalization();
+  return (
+    <button
+      className={`bond-dock__bond bond-dock__bond--${identity.seat}${
+        driving ? " bond-dock__bond--active" : ""
+      }${driving || identity.actionable ? "" : " bond-dock__bond--unavailable"}`}
+      type="button"
+      disabled={!identity.actionable}
+      onClick={() => onActivate(identity)}
+      aria-label={translateFirst(t, identity.actionLabel, DOCK_ACTION_KEYS)}
+    >
+      <span className="bond-dock__glyph">
+        {translateIf(t, "dock.ai", identity.glyph)}
+      </span>
+      <strong>{identity.address}</strong>
+      <small>
+        {identity.seat === "bond" ? t("dock.you") : t("dock.ai")}
+        <i
+          className={`bond-dock__status-dot bond-dock__status-dot--${identity.tone}`}
+          aria-hidden="true"
+        />
+        {translateFirst(t, identity.role, DOCK_ROLE_KEYS)}
+      </small>
+    </button>
+  );
+}
+
 export function AuthenticatedMapHomeView({
   hostLabel,
   pubDress,
   avaiaPubDress,
   renderer,
   geolocation,
+  feedback,
   runtime,
   safeArea,
   section = "world",
@@ -1312,8 +1355,15 @@ export function AuthenticatedMapHomeView({
    * The pair has two meanings, one per side. The identity at the wheel brings
    * the world to it; the one spectating takes the wheel from it.
    */
-  function activateDockIdentity(seated: "left" | "right"): void {
-    switch ((seated === "left" ? dock.left : dock.right).intent) {
+  function activateDockIdentity(identity: DockIdentityViewState): void {
+    // A tap on the Dock is felt where the host can say so: Telegram's haptics,
+    // a vibration pulse, Safari's switch tick — or nothing at all.
+    try {
+      feedback?.impact("light");
+    } catch {
+      // Feedback is presentation; it never stands between a tap and its act.
+    }
+    switch (identity.intent) {
       case "focus":
         focusWorldOnWheel();
         return;
@@ -1630,68 +1680,20 @@ export function AuthenticatedMapHomeView({
                 </div>
                 <div className="bond-dock__scroll">
                   <div className="bond-dock__pair">
-                    <button
-                      className="bond-dock__bond bond-dock__bond--active"
-                      type="button"
-                      disabled={!dock.left.actionable}
-                      onClick={() => activateDockIdentity("left")}
-                      aria-label={translateFirst(
-                        t,
-                        dock.left.actionLabel,
-                        DOCK_ACTION_KEYS,
-                      )}
-                    >
-                      <span className="bond-dock__glyph">
-                        {translateIf(t, "dock.ai", dock.left.glyph)}
-                      </span>
-                      <strong>{dock.left.address}</strong>
-                      <small>
-                        {dock.left.seat === "bond"
-                          ? t("dock.you")
-                          : t("dock.ai")}
-                        <i
-                          className={`bond-dock__status-dot bond-dock__status-dot--${dock.left.tone}`}
-                          aria-hidden="true"
-                        />
-                        {translateFirst(t, dock.left.role, DOCK_ROLE_KEYS)}
-                      </small>
-                    </button>
+                    <DockPlaceButton
+                      place={dock.places[0]}
+                      onActivate={activateDockIdentity}
+                    />
                     <span
                       className="bond-dock__link"
                       aria-label={t("dock.noRelationship")}
                     >
                       —
                     </span>
-                    <button
-                      className={`bond-dock__bond${
-                        dock.right.actionable
-                          ? ""
-                          : " bond-dock__bond--unavailable"
-                      }`}
-                      type="button"
-                      disabled={!dock.right.actionable}
-                      onClick={() => activateDockIdentity("right")}
-                      aria-label={translateFirst(
-                        t,
-                        dock.right.actionLabel,
-                        DOCK_ACTION_KEYS,
-                      )}
-                    >
-                      <span className="bond-dock__glyph">
-                        {translateIf(t, "dock.ai", dock.right.glyph)}
-                      </span>
-                      <strong>{dock.right.address}</strong>
-                      <small>
-                        {dock.right.seat === "bond"
-                          ? t("dock.you")
-                          : t("dock.ai")}
-                        <i
-                          className={`bond-dock__status-dot bond-dock__status-dot--${dock.right.tone}`}
-                          aria-hidden="true"
-                        />
-                        {translateFirst(t, dock.right.role, DOCK_ROLE_KEYS)}
-                      </small>
-                    </button>
+                    <DockPlaceButton
+                      place={dock.places[1]}
+                      onActivate={activateDockIdentity}
+                    />
                   </div>
                 </div>
               </>

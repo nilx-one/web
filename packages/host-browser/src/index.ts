@@ -10,17 +10,24 @@ import {
 } from "@nilx-one/host-contract";
 
 import { createBrowserGeolocation } from "./geolocation";
+import { createBrowserHaptics, type ImpactStyle } from "./haptics";
 
 export {
   createBrowserGeolocation,
   type BrowserGeolocationEnvironment,
 } from "./geolocation";
+export {
+  createBrowserHaptics,
+  type BrowserHapticsEnvironment,
+} from "./haptics";
 
 export interface BrowserHostEnvironment {
   matchMedia(query: string): MediaQueryList;
   open(url: string, target: string, features: string): Window | null;
   /** Composed rather than constructed so a test can supply its own provider. */
   readonly geolocation?: GeolocationCapability;
+  /** Composed for the same reason; defaults to what this browser offers. */
+  readonly haptics?: (style: ImpactStyle) => void;
 }
 
 function assertExternalUrl(url: URL): void {
@@ -32,10 +39,12 @@ function assertExternalUrl(url: URL): void {
 class BrowserHost implements HostPort {
   private readonly colorScheme: MediaQueryList;
   public readonly geolocation: GeolocationCapability;
+  private readonly haptics: (style: ImpactStyle) => void;
 
   public constructor(private readonly environment: BrowserHostEnvironment) {
     this.colorScheme = environment.matchMedia("(prefers-color-scheme: dark)");
     this.geolocation = environment.geolocation ?? createBrowserGeolocation();
+    this.haptics = environment.haptics ?? createBrowserHaptics();
   }
 
   public getSnapshot(): HostSnapshot {
@@ -66,8 +75,8 @@ class BrowserHost implements HostPort {
     this.environment.open(url.href, "_blank", "noopener,noreferrer");
   }
 
-  public impact(_style: "light" | "medium" | "heavy"): void {
-    // Browser haptics are intentionally absent from the baseline contract.
+  public impact(style: ImpactStyle): void {
+    this.haptics(style);
   }
 }
 

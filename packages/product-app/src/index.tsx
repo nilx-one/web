@@ -1040,6 +1040,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         pubDress={viewModel.identity.pubDress}
         renderer={dependencies.mapRenderer}
         geolocation={dependencies.host.geolocation}
+        feedback={dependencies.host}
         runtime={viewModel.runtime}
         safeArea={viewModel.safeArea}
         section={section}
