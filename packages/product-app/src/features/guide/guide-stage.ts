@@ -36,6 +36,13 @@ export const GUIDE_ASIDE_METERS = 20;
 export const GUIDE_ASIDE_EXIT_METERS = 12;
 /** Turning back to the Bond, the short way round. */
 export const GUIDE_TURN_MS = 900;
+/**
+ * Once the Avaia is configured it joins them: it stands at the Bond's
+ * shoulder, and walks up from a few steps behind it.
+ */
+export const GUIDE_AVAIA_METERS = 1.3;
+export const GUIDE_AVAIA_ENTRY_METERS = 4;
+export const GUIDE_AVAIA_WALK_MS = 1_600;
 
 /** Long enough to read as walking up to someone rather than sliding in. */
 export const GUIDE_WALK_MS = 4_200;
@@ -51,7 +58,8 @@ export const GUIDE_IDLE_CLIP_MS = 8_000;
  */
 export const GUIDE_MAX_PITCH = 60;
 
-export type GuideShot = "establish" | "two-shot" | "dasha" | "you" | "reward";
+export type GuideShot =
+  "establish" | "two-shot" | "dasha" | "you" | "reward" | "together";
 
 export interface GuideStage {
   /**
@@ -67,6 +75,25 @@ export interface GuideStage {
   readonly dasha: MapPointSelection;
   /** Where she walks in from, and back to. */
   readonly entry: MapPointSelection;
+  /** Where the Bond's Avaia stands once it joins them: at the Bond's side. */
+  readonly avaia: MapPointSelection;
+  /** Where the Avaia walks up from: a few steps behind the two of them. */
+  readonly avaiaEntry: MapPointSelection;
+}
+
+function avaiaMarks(
+  you: MapPointSelection,
+  bearing: number,
+): Pick<GuideStage, "avaia" | "avaiaEntry"> {
+  const avaia = offsetPoint(you, (bearing + 90) % 360, GUIDE_AVAIA_METERS);
+  return {
+    avaia,
+    avaiaEntry: offsetPoint(
+      avaia,
+      (bearing + 180) % 360,
+      GUIDE_AVAIA_ENTRY_METERS,
+    ),
+  };
 }
 
 const METERS_PER_DEGREE_LATITUDE = 111_320;
@@ -109,6 +136,7 @@ export function guideStage(you: MapPointSelection): GuideStage {
     you: { longitude: you.longitude, latitude: you.latitude },
     dasha: offsetPoint(you, 0, GUIDE_STAND_METERS),
     entry: offsetPoint(you, GUIDE_ENTRY_BEARING, GUIDE_ENTRY_METERS),
+    ...avaiaMarks(you, 0),
   };
 }
 
@@ -127,6 +155,7 @@ export function guideAsideStage(
       bearing,
       GUIDE_ASIDE_METERS + GUIDE_ASIDE_EXIT_METERS,
     ),
+    ...avaiaMarks(you, bearing),
   };
 }
 
@@ -279,7 +308,9 @@ interface ShotFrame {
  * Shot, reverse shot. Whoever is speaking is looked at over the other's
  * shoulder, and a line said to both is framed from the side.
  */
-const SHOTS: Readonly<Record<Exclude<GuideShot, "establish">, ShotFrame>> = {
+const SHOTS: Readonly<
+  Record<Exclude<GuideShot, "establish" | "together">, ShotFrame>
+> = {
   "two-shot": { focus: 0.5, zoom: 21.2, pitch: 56, bearing: 96 },
   dasha: { focus: 0.7, zoom: 21.9, pitch: 60, bearing: 16 },
   you: { focus: 0.3, zoom: 21.9, pitch: 60, bearing: 196 },
@@ -290,15 +321,37 @@ const SHOTS: Readonly<Record<Exclude<GuideShot, "establish">, ShotFrame>> = {
  * The same coverage when she is a way off. Her close-ups look past her at
  * the place, so what is built there is what stands behind her.
  */
-const ASIDE_SHOTS: Readonly<Record<GuideShot, ShotFrame>> = {
-  establish: { focus: 0.86, zoom: 20.6, pitch: 58, bearing: 0 },
-  dasha: { focus: 0.95, zoom: 21.6, pitch: 60, bearing: 8 },
-  reward: { focus: 0.95, zoom: 21.3, pitch: 60, bearing: 352 },
-  you: { focus: 0.06, zoom: 21.6, pitch: 58, bearing: 196 },
-  "two-shot": { focus: 0.5, zoom: 19.6, pitch: 52, bearing: 96 },
-};
+const ASIDE_SHOTS: Readonly<Record<Exclude<GuideShot, "together">, ShotFrame>> =
+  {
+    establish: { focus: 0.86, zoom: 20.6, pitch: 58, bearing: 0 },
+    dasha: { focus: 0.95, zoom: 21.6, pitch: 60, bearing: 8 },
+    reward: { focus: 0.95, zoom: 21.3, pitch: 60, bearing: 352 },
+    you: { focus: 0.06, zoom: 21.6, pitch: 58, bearing: 196 },
+    "two-shot": { focus: 0.5, zoom: 19.6, pitch: 52, bearing: 96 },
+  };
+
+/**
+ * The three of them: the Bond and its Avaia side by side, looked at from
+ * her side — over her shoulder when she is close, past her when she is a way
+ * off — so both of them face the camera.
+ */
+const TOGETHER_SHOT = {
+  near: { focus: 0.3, zoom: 20.9, pitch: 54, bearing: 192 },
+  aside: { focus: 0.18, zoom: 20.4, pitch: 54, bearing: 188 },
+} as const;
 
 export function guideShotCamera(shot: GuideShot, stage: GuideStage): MapCamera {
+  if (shot === "together") {
+    const frame = TOGETHER_SHOT[stage.kind];
+    const pair = lerpPoint(stage.you, stage.avaia, 0.5);
+    const center = lerpPoint(pair, stage.dasha, frame.focus);
+    return {
+      center: [center.longitude, center.latitude],
+      zoom: frame.zoom,
+      pitch: Math.min(GUIDE_MAX_PITCH, frame.pitch),
+      bearing: (stage.bearing + frame.bearing) % 360,
+    };
+  }
   if (stage.kind === "aside") {
     const frame = ASIDE_SHOTS[shot];
     const center = lerpPoint(stage.you, stage.dasha, frame.focus);
@@ -452,7 +505,7 @@ export function shotIsClear(
 ): boolean {
   if (sightlines.walls.length === 0) return true;
   const eye = eyeOf(camera, sightlines.origin, viewportHeight);
-  for (const subject of [stage.you, stage.dasha]) {
+  for (const subject of [stage.you, stage.dasha, stage.avaia]) {
     const body = localOf(sightlines.origin, [
       subject.longitude,
       subject.latitude,

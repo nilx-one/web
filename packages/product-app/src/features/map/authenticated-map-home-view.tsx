@@ -152,6 +152,10 @@ import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 import { GuideCutsceneView } from "../guide/guide-cutscene-view";
 import {
+  GuideRewardToasts,
+  type GuideRewardToast,
+} from "../guide/guide-reward-toasts";
+import {
   guideIntroOwed,
   postponeGuideIntro,
   rememberGuideIntro,
@@ -773,12 +777,23 @@ export function AuthenticatedMapHomeView({
     renderer,
     anchor: observedPosition,
     bondModel: bondAvatar?.modelId as AvatarModelId | undefined,
+    ...(avaiaAvatar === undefined
+      ? {}
+      : {
+          avaia: {
+            model: avaiaAvatar.modelId as AvatarModelId,
+            appearance: avaiaAvatar.appearance,
+          },
+        }),
     bondName: pubDress,
     names: { avaia: avaiaLabel, bond: pubDress },
     reducedMotion,
     onEnd: (scene, outcome) => endGuideScene(scene, outcome),
   });
   const guideActive = guide.state !== undefined;
+  const [rewardToasts, setRewardToasts] = useState<readonly GuideRewardToast[]>(
+    [],
+  );
   const playGuide = guide.play;
   // She introduces herself to a Bond whose Avaia nobody has configured yet,
   // once the world is there to be filmed and nothing else is being asked.
@@ -2128,8 +2143,20 @@ export function AuthenticatedMapHomeView({
               reducedMotion={reducedMotion}
               onChoose={guide.choose}
               onAdvance={guide.advance}
+              onRewardFly={(toasts) =>
+                setRewardToasts((current) => [...current, ...toasts])
+              }
             />
           )}
+          <GuideRewardToasts
+            toasts={rewardToasts}
+            reducedMotion={reducedMotion}
+            onExpire={(key) =>
+              setRewardToasts((current) =>
+                current.filter((toast) => toast.key !== key),
+              )
+            }
+          />
           {achievementDialog === undefined ? null : (
             <AchievementDialog
               state={achievementDialog}

@@ -98,18 +98,29 @@ xSasha   Almost forgot — here, 0x0sky.
 вилетіло з голови — тримай_). What it paid lands beside the line, one entry
 at a time, the Bond's first and then its Avaia's: 20 Bond experience and
 level 1 for the Avaia, and, where this deployment can download an on-device
-model, that the next step waits in Settings. A Bond's gain is **blue** and an
-Avaia's **violet** (`--xp-bond`, `--xp-avaia`), each number counts up from
-nothing, and each subject's first entry goes off in a burst of confetti in its
-own colour. A person who asked for reduced motion finds her already facing
-them and reads the numbers whole, without the burst.
+model, that the next step waits in Settings. A Bond's gain is **cyan** — the
+colour of its frame in the Dock and of its `pub_dress` in the header — and an
+Avaia's **violet** (`--guide-xp-bond`, `--guide-xp-avaia`), each number counts
+up from nothing, and each subject's first entry goes off in a burst of
+confetti in its own colour. A person who asked for reduced motion finds her
+already facing them and reads the numbers whole, without the burst.
+
+Once the numbers have counted up, the entries leave the scene: they fly, on
+the curve the Dock moves its screens with, to the corner the Dock stands in,
+stacked just above it. There the top one stays 3 s, the next 3.5 s and the
+bottom one 4 s before each fades — whether the scene is still playing or not.
+A scene moved on sooner sends them on their way from where they were.
 
 This is the Avaia configured dialog, said by her. "Here" is how she says it,
 not what pays it: the save configured the Avaia and the achievement was
 priced before she turned round, so a scene skipped, cut short or never played
-pays exactly the same. Thanking her leads to one more line, and when she
-leaves — further off the way she was going — the Bond hands the wheel to its
-new Avaia: from here it is the two of them. Handing the wheel over this way
+pays exactly the same. Thanking her leads to one more line, said to the two
+of them: the Avaia walks up from a few steps behind and stands at the Bond's
+shoulder, and the shot is taken from her side with the Bond and its Avaia
+facing the camera — three on the world, both of them in frame. When she
+leaves — further off the way she was going — the camera stays close on the
+pair instead of going back to where it was, and the Bond hands the wheel to
+its new Avaia: from here it is the two of them. Handing the wheel over this way
 fetches nothing — a reply to her is not the gesture that asks a device to
 download a model.
 

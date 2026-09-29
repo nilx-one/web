@@ -7,7 +7,9 @@
 .app-shell[data-cutscene="true"] .app-shell__header,
 .app-shell[data-cutscene="true"] .app-shell__toasts,
 .app-shell[data-cutscene="true"] .app-shell__bottom,
-.app-shell[data-cutscene="true"] .app-shell__overlay > :not(.guide-cutscene) {
+.app-shell[data-cutscene="true"]
+  .app-shell__overlay
+  > :not(.guide-cutscene, .guide-reward-toasts) {
   opacity: 0;
   pointer-events: none;
   transition: opacity 420ms ease;
@@ -19,9 +21,10 @@
   --guide-ink: #f4efe6;
   --guide-ink-muted: rgba(244, 239, 230, 0.62);
   /* The scene is always filmed dark, so experience wears the bright shades:
-     the Bond's blue, its Avaia's violet. */
-  --guide-xp-bond: #6ea8ff;
-  --guide-xp-bond-deep: #2f6ff0;
+     the Bond's own cyan — the colour of its frame in the Dock — and its
+     Avaia's violet. */
+  --guide-xp-bond: #5fe3ee;
+  --guide-xp-bond-deep: #00bfd4;
   --guide-xp-avaia: #b794ff;
   --guide-xp-avaia-deep: #7b45f5;
 
@@ -273,6 +276,12 @@
   animation: guide-reward-in 700ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1.1) both;
 }
 
+/* Once they have flown to the corner, the scene keeps their place but not
+   their chips. */
+.guide-cutscene__rewards[data-flown="true"] .guide-xp__chip {
+  visibility: hidden;
+}
+
 @keyframes guide-reward-in {
   from {
     opacity: 0;
@@ -304,7 +313,7 @@
 .guide-xp {
   --xp: var(--guide-xp-bond);
   --xp-deep: var(--guide-xp-bond-deep);
-  --xp-ink: #e3edff;
+  --xp-ink: #e0fbfd;
   --xp-lands: 380ms;
 
   position: relative;
@@ -533,7 +542,54 @@
   .app-shell[data-cutscene="true"] .app-shell__header,
   .app-shell[data-cutscene="true"] .app-shell__toasts,
   .app-shell[data-cutscene="true"] .app-shell__bottom,
-  .app-shell[data-cutscene="true"] .app-shell__overlay > :not(.guide-cutscene) {
+  .app-shell[data-cutscene="true"]
+    .app-shell__overlay
+    > :not(.guide-cutscene, .guide-reward-toasts) {
     transition: none;
   }
+}
+
+/* What was paid, once it has left the scene: stacked in the corner the Dock
+   stands in, above it, over the letterbox while a scene still plays. */
+.guide-reward-toasts {
+  --guide-xp-bond: #5fe3ee;
+  --guide-xp-bond-deep: #00bfd4;
+  --guide-xp-avaia: #b794ff;
+  --guide-xp-avaia-deep: #7b45f5;
+
+  position: fixed;
+  z-index: 46;
+  bottom: calc(
+    var(--shell-bottom, 1rem) +
+      var(--shell-bottom-height, var(--shell-dock-reserve, 9rem)) +
+      var(--shell-gap, 0.75rem)
+  );
+  left: calc(var(--shell-inset, 1rem) + var(--safe-left, 0px));
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.guide-toast {
+  justify-content: flex-start;
+  transition: opacity 320ms ease;
+}
+
+.guide-toast .guide-xp__chip {
+  animation: none;
+  backdrop-filter: blur(12px);
+}
+
+.guide-toast .guide-xp__chip::after {
+  animation: none;
+}
+
+.guide-toast[data-fading="true"] {
+  opacity: 0;
 }

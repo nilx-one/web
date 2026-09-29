@@ -4,7 +4,7 @@
 import type { CSSProperties } from "react";
 
 /**
- * Whose experience a burst celebrates. The Bond's is blue and its Avaia's is
+ * Whose experience a burst celebrates. The Bond's is cyan and its Avaia's is
  * violet, here and wherever experience is shown, so the colour alone already
  * says who grew.
  */

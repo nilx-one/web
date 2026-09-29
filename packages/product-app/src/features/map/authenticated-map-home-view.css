@@ -140,9 +140,14 @@
   text-shadow: none;
 }
 
-.authenticated-map-home.authenticated-map-home .app-header__route,
-.authenticated-map-home.authenticated-map-home .app-header__identity {
+.authenticated-map-home.authenticated-map-home .app-header__route {
   color: var(--map-ink-muted);
+}
+
+/* The Bond's own address wears its own cyan: the colour of its frame in the
+   Dock and of what it earns. */
+.authenticated-map-home.authenticated-map-home .app-header__identity {
+  color: #78e8ef;
 }
 
 .authenticated-map-home.authenticated-map-home

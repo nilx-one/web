@@ -12,6 +12,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  GUIDE_AVAIA_METERS,
   GUIDE_ASIDE_EXIT_METERS,
   GUIDE_ASIDE_METERS,
   GUIDE_ENTRY_BEARING,
@@ -112,6 +113,34 @@ describe("where a scene with xSasha is staged", () => {
     );
     expect(pose.clipId).toBe("idle");
     expect(mapDistanceMeters(pose.point, stage.dasha)).toBeLessThan(0.01);
+  });
+
+  it("stands the Avaia at the Bond's shoulder and frames the two of them", () => {
+    for (const staged of [stage, guideAsideStage(KYIV, 135)]) {
+      expect(mapDistanceMeters(staged.you, staged.avaia)).toBeCloseTo(
+        GUIDE_AVAIA_METERS,
+        1,
+      );
+      // It walks up from behind the pair, towards her.
+      expect(
+        mapDistanceMeters(staged.avaiaEntry, staged.dasha),
+      ).toBeGreaterThan(mapDistanceMeters(staged.avaia, staged.dasha));
+      const camera = guideShotCamera("together", staged);
+      const center = {
+        longitude: camera.center[0],
+        latitude: camera.center[1],
+      };
+      // Centred near the pair, not on her, and looking at them from her side.
+      expect(mapDistanceMeters(center, staged.you)).toBeLessThan(
+        mapDistanceMeters(center, staged.dasha),
+      );
+      const facing =
+        ((camera.bearing - mapCompassBearing(staged.dasha, staged.you) + 540) %
+          360) -
+        180;
+      expect(Math.abs(facing)).toBeLessThan(30);
+      expect(camera.zoom).toBeGreaterThanOrEqual(MAP_BODY_HANDOVER_ZOOM);
+    }
   });
 
   it("is never the Bond's own body", () => {

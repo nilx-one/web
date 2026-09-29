@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useLocalization, type TranslationKey } from "../../shell/localization";
 import { ACHIEVEMENTS, type AchievementId } from "../progression/progression";
 import { GuideConfetti, type GuideXpSubject } from "./guide-confetti";
+import type { GuideRewardToast } from "./guide-reward-toasts";
 import type { GuideReply } from "./guide-script";
 import type { GuideCutsceneState } from "./use-guide-cutscene";
 import "./guide-cutscene.css";
@@ -20,6 +21,14 @@ export const GUIDE_XP_LANDS_MS: Readonly<Record<GuideXpSubject, number>> = {
 };
 /** How long a number takes to count up once its line has landed. */
 export const GUIDE_XP_COUNT_MS = 900;
+/**
+ * When what was paid leaves the scene for the corner: once the last number
+ * has counted up and been seen for a moment.
+ */
+export const GUIDE_XP_FLY_MS =
+  GUIDE_XP_LANDS_MS.avaia + GUIDE_XP_COUNT_MS + 800;
+
+type ChipRect = NonNullable<GuideRewardToast["from"]>;
 
 const TITLE_KEYS: Readonly<Record<AchievementId, TranslationKey>> = {
   "avaia-configured": "achievement.avaiaConfigured",
@@ -95,6 +104,7 @@ interface GuideXpLineProps {
   readonly burst: boolean;
   readonly salt: string;
   readonly animate: boolean;
+  chipRef(element: HTMLElement | null): void;
 }
 
 /** One line of what was paid, in its subject's colour. */
@@ -106,6 +116,7 @@ function GuideXpLine({
   burst,
   salt,
   animate,
+  chipRef,
 }: GuideXpLineProps) {
   const landsMs = GUIDE_XP_LANDS_MS[subject];
   const counted = useCountUp(
@@ -120,7 +131,7 @@ function GuideXpLine({
       data-kind={level ? "level" : "xp"}
     >
       <span className="visually-hidden">{label(value)}</span>
-      <span className="guide-xp__chip" aria-hidden="true">
+      <span ref={chipRef} className="guide-xp__chip" aria-hidden="true">
         {label(value === undefined ? undefined : counted)}
       </span>
       {animate && burst ? (
@@ -137,6 +148,8 @@ export interface GuideCutsceneViewProps {
   readonly reducedMotion: boolean;
   onChoose(reply: GuideReply): void;
   onAdvance(): void;
+  /** What was paid leaves the scene for the corner, as toasts. */
+  onRewardFly?(toasts: readonly GuideRewardToast[]): void;
 }
 
 /**
@@ -152,6 +165,7 @@ export function GuideCutsceneView({
   reducedMotion,
   onChoose,
   onAdvance,
+  onRewardFly,
 }: GuideCutsceneViewProps) {
   const { t } = useLocalization();
   const speakerId = useId();
@@ -261,6 +275,69 @@ export function GuideCutsceneView({
     }
   }
 
+  // Once it has landed and counted up, what was paid leaves the scene for
+  // the corner. A scene that moves on sooner sends it on its way from where
+  // it was last seen.
+  const chipsRef = useRef(new Map<string, HTMLElement>());
+  const rectsRef = useRef(new Map<string, ChipRect>());
+  const paidRef = useRef(paid);
+  const onRewardFlyRef = useRef(onRewardFly);
+  useEffect(() => {
+    paidRef.current = paid;
+    onRewardFlyRef.current = onRewardFly;
+  });
+  const [flown, setFlown] = useState<string | undefined>(undefined);
+  const rewardKey = reward?.achievement;
+  useEffect(() => {
+    if (rewardKey === undefined) return;
+    const started = globalThis.performance.now();
+    let done = false;
+    function measure(): void {
+      for (const [key, element] of chipsRef.current) {
+        if (!element.isConnected) continue;
+        const rect = element.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) continue;
+        rectsRef.current.set(key, {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+        });
+      }
+    }
+    function fly(): void {
+      if (done) return;
+      done = true;
+      const toasts = paidRef.current.map((line, index) => {
+        const from = rectsRef.current.get(line.key);
+        return {
+          key: `${String(rewardKey)}:${line.key}`,
+          subject: line.subject,
+          kind: line.level ? ("level" as const) : ("xp" as const),
+          text: line.label(line.value),
+          index,
+          ...(from === undefined ? {} : { from }),
+        };
+      });
+      onRewardFlyRef.current?.(toasts);
+    }
+    const landed = globalThis.setTimeout(
+      measure,
+      GUIDE_XP_LANDS_MS.avaia + GUIDE_XP_COUNT_MS,
+    );
+    const away = globalThis.setTimeout(() => {
+      measure();
+      setFlown(rewardKey);
+      fly();
+    }, GUIDE_XP_FLY_MS);
+    return () => {
+      globalThis.clearTimeout(landed);
+      globalThis.clearTimeout(away);
+      // A development double mount is not the scene moving on.
+      if (globalThis.performance.now() - started > 100) fly();
+    };
+  }, [rewardKey]);
+
   return (
     <div
       className="guide-cutscene"
@@ -286,7 +363,10 @@ export function GuideCutsceneView({
             <h2 className="guide-cutscene__reward-title" id={rewardId}>
               {t(TITLE_KEYS[reward.achievement])}
             </h2>
-            <ul className="guide-cutscene__rewards">
+            <ul
+              className="guide-cutscene__rewards"
+              data-flown={flown === reward.achievement ? "true" : undefined}
+            >
               {paid.map((line, index) => (
                 <GuideXpLine
                   key={line.key}
@@ -301,6 +381,10 @@ export function GuideCutsceneView({
                   }
                   salt={reward.achievement}
                   animate={!reducedMotion}
+                  chipRef={(element) => {
+                    if (element === null) chipsRef.current.delete(line.key);
+                    else chipsRef.current.set(line.key, element);
+                  }}
                 />
               ))}
             </ul>
