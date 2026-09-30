@@ -14,6 +14,12 @@ import {
 import { createDiscordProxyFetch } from "./proxy";
 
 export {
+  DISCORD_HANDOFF_AUTHORIZATION,
+  createDiscordHandoffHost,
+  readDiscordHandoff,
+  type DiscordHandoffEnvironment,
+} from "./handoff";
+export {
   DISCORD_PROXY_PREFIX,
   createDiscordProxyFetch,
   installDiscordProxyRouting,
@@ -22,6 +28,14 @@ export {
   type DiscordProxyLocation,
   type DiscordProxyScope,
 } from "./proxy";
+
+/**
+ * The Activity's own origin is Discord's proxy, so a password created inside it
+ * is filed under that proxy by the person's password manager. Password setup
+ * is handed to the product origin, which proves the same Discord account again.
+ */
+export const DISCORD_CREDENTIAL_HANDOFF_URL =
+  "https://nilx.one/auth?provider=discord&intent=handoff";
 
 type DiscordActivityBridge = Pick<IDiscordSDK, "ready"> & {
   commands: Pick<
@@ -58,6 +72,8 @@ export interface DiscordActivityBootstrapOptions {
   environment?: DiscordHostEnvironment;
   fetch?: typeof globalThis.fetch;
   sdkFactory?: (clientId: string) => DiscordActivityBridge;
+  /** Defaults to {@link DISCORD_CREDENTIAL_HANDOFF_URL}. */
+  credentialHandoff?: URL;
 }
 
 function assertExternalUrl(url: URL): void {
@@ -88,6 +104,7 @@ class DiscordHost implements HostPort {
   public constructor(
     private readonly bridge: DiscordActivityBridge,
     environment: DiscordHostEnvironment,
+    public readonly credentialHandoff: URL,
   ) {
     this.colorScheme = environment.matchMedia("(prefers-color-scheme: dark)");
     this.geolocation = environment.geolocation ?? UNSUPPORTED_GEOLOCATION;
@@ -130,8 +147,9 @@ class DiscordHost implements HostPort {
 export function createDiscordHost(
   bridge: DiscordActivityBridge,
   environment: DiscordHostEnvironment = window,
+  credentialHandoff: URL = new URL(DISCORD_CREDENTIAL_HANDOFF_URL),
 ): HostPort {
-  return new DiscordHost(bridge, environment);
+  return new DiscordHost(bridge, environment, credentialHandoff);
 }
 
 export async function bootstrapDiscordActivity(
@@ -187,7 +205,7 @@ export async function bootstrapDiscordActivity(
 
   return {
     authorization: `discord ${accessToken}`,
-    host: createDiscordHost(bridge, environment),
+    host: createDiscordHost(bridge, environment, options.credentialHandoff),
     fetch: fetcher,
   };
 }

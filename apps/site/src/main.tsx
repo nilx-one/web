@@ -12,6 +12,11 @@ import {
 } from "@nilx-one/host-browser";
 import { createBondLocationGeolocation } from "@nilx-one/host-contract";
 import {
+  DISCORD_HANDOFF_AUTHORIZATION,
+  createDiscordHandoffHost,
+  readDiscordHandoff,
+} from "@nilx-one/host-discord/handoff";
+import {
   createIdentityHttpAdapter,
   readBondLocationControl,
 } from "@nilx-one/identity-http";
@@ -98,6 +103,14 @@ function createLocalModelHost(): LocalModelHost {
   };
 }
 
+/** A stale or forged `?host=discord` must not follow the Web host around. */
+function forgetDiscordHandoffLanding(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("host")) return;
+  url.searchParams.delete("host");
+  window.history.replaceState(window.history.state, "", url);
+}
+
 const container = document.querySelector<HTMLElement>("#root");
 
 if (container === null) {
@@ -131,8 +144,16 @@ if (isPublicBondHostname(window.location.hostname)) {
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,
   });
+  // The Discord Activity sends a person here to create a password this origin
+  // owns. While the service still holds that hand-off, the page acts for the
+  // Discord account that sent them: a Discord host, not the Web one.
+  const discordHandoff =
+    new URLSearchParams(window.location.search).get("host") === "discord" &&
+    (await readDiscordHandoff(globalThis.fetch.bind(globalThis)));
+  if (!discordHandoff) forgetDiscordHandoffLanding();
   const identity = createIdentityHttpAdapter({
-    getAuthorization: () => undefined,
+    getAuthorization: () =>
+      discordHandoff ? DISCORD_HANDOFF_AUTHORIZATION : undefined,
   });
 
   // Presence is deliberately outside the error reporter: this private local
@@ -148,14 +169,18 @@ if (isPublicBondHostname(window.location.hostname)) {
   );
   // A manual location declared from Telegram is the Bond's location here too:
   // the browser is asked only while the Bond is live.
-  const host = createBrowserHost({
-    matchMedia: (query) => window.matchMedia(query),
-    open: (url, target, features) => window.open(url, target, features),
+  const hostEnvironment = {
+    matchMedia: (query: string) => window.matchMedia(query),
+    open: (url: string, target: string, features: string) =>
+      window.open(url, target, features),
     geolocation: createBondLocationGeolocation({
       device: browserGeolocation,
       readLocation: () => readBondLocationControl(),
     }),
-  });
+  };
+  const host = discordHandoff
+    ? createDiscordHandoffHost(hostEnvironment)
+    : createBrowserHost(hostEnvironment);
   const fog = createFogField(localPresence);
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
   const mapRenderer = createMapLibreRenderer({

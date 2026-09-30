@@ -278,6 +278,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const host = useHostSnapshot(dependencies.host);
+  const credentialHandoff = dependencies.host.credentialHandoff;
   const appearance = useAppearance();
   const browserHost = host.kind === "browser";
   const [selection, setSelection] = useState<PubDressSelection>({
@@ -1201,6 +1202,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       onResolvePubDress={resolvePubDressNow}
       onSelectionChange={changeSelection}
       onSubmit={submitIdentity}
+      {...(credentialHandoff === undefined
+        ? {}
+        : {
+            passwordHandoff: {
+              open: () => dependencies.host.openExternal(credentialHandoff),
+              returned: () => void refreshIdentityProjections(),
+            },
+          })}
     />
   );
 }

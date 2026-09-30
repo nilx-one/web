@@ -43,7 +43,41 @@ setup. An occupied address belonging to an unbound account is shown as unavailab
 never as permission to set a password. Attaching Discord to an independently
 created native Bond remains a separate dual-proof operation.
 
+## Hand-off to the product origin
+
+A password manager files a credential under the origin that shows the form.
+Inside the Activity that origin is Discord's proxy
+(`<application id>.discordsays.com`), so a password created there would be
+offered only there. The Activity therefore does not show the password form. Its
+host names a credential hand-off, and the setup step offers **Create on
+nilx.one** instead, which opens
+`https://nilx.one/auth?provider=discord&intent=handoff` through Discord's
+external-link command.
+
+That route runs the same browser Discord OAuth (PKCE, signed transaction) as
+browser sign-in. With the `handoff` intent, which only Discord accepts, the
+callback mints no session and links no provider. It sets a signed, HttpOnly
+`__Host-0x1_discord_handoff` cookie that carries the verified Discord subject for
+15 minutes, then lands on `/?host=discord`.
+
+The site confirms the hand-off with `GET /api/v1/auth/discord/handoff` before it
+mounts. While the hand-off holds, the page composes the **Discord host**, not the
+Web one: it shows "discord host", and it runs the same provider identity and
+password setup as the Activity. Its requests carry `Authorization:
+discord-handoff`. The cookie is the proof, and the header only opts a request
+in, so the ambient cookie never authenticates a request that did not ask. A
+stale or forged `?host=discord` falls back to the Web host and is dropped from the
+URL.
+
+The password is then created on `nilx.one`, and that is where the password
+manager saves it. After the recovery key is acknowledged, the service issues the
+usual native session on this origin. The Activity re-reads its provider identity
+through **Password created** and continues once `password_required` is false.
+
 ## Deployment
+
+Identity runtime contract **10** adds the `handoff` intent and the hand-off
+authorization. The Web and Discord targets require 10, and Telegram keeps 9.
 
 Identity runtime contract **3** provides the additive Discord setup endpoint.
 Only the Discord target requires contract 3; Telegram retains 2 and the browser

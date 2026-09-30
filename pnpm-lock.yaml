@@ -140,6 +140,9 @@ importers:
       '@nilx-one/host-contract':
         specifier: workspace:*
         version: link:../../packages/host-contract
+      '@nilx-one/host-discord':
+        specifier: workspace:*
+        version: link:../../packages/host-discord
       '@nilx-one/identity-http':
         specifier: workspace:*
         version: link:../../packages/identity-http

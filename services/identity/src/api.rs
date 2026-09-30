@@ -31,6 +31,10 @@ use subtle::ConstantTimeEq as _;
 
 const TELEGRAM_AUTH_SCHEME: &str = "tma ";
 const DISCORD_AUTH_SCHEME: &str = "discord ";
+/// Names the Discord proof a hand-off from the Activity left on this origin.
+/// The proof itself is the signed cookie; the header only opts a request in,
+/// so an ambient cookie never authenticates a request that did not ask.
+const DISCORD_HANDOFF_AUTHORIZATION: &str = "discord-handoff";
 const MAX_REQUEST_BYTES: usize = 8 * 1024;
 const SESSION_COOKIE: &str = "__Host-0x1_session";
 const REMEMBERED_BOND_COOKIE: &str = "__Host-0x1_bond";
@@ -1800,6 +1804,17 @@ async fn authenticate(
         return Ok(ProviderIdentity::discord(user_id));
     }
 
+    if authorization == DISCORD_HANDOFF_AUTHORIZATION {
+        let now = state
+            .clock
+            .now_unix_seconds()
+            .map_err(|_| AuthenticationFailure::Unavailable)?;
+        let subject =
+            crate::browser_web_auth::discord_handoff_subject(&state.secret_digester, headers, now)
+                .ok_or(AuthenticationFailure::Unauthorized)?;
+        return Ok(ProviderIdentity::discord(subject));
+    }
+
     Err(AuthenticationFailure::Unauthorized)
 }
 
@@ -3087,6 +3102,78 @@ mod tests {
             app.oneshot(sign_in).await.expect("response").status(),
             StatusCode::UNAUTHORIZED
         );
+    }
+
+    fn discord_handoff_password_request(cookie: Option<&str>, authorization: &str) -> Request<Body> {
+        let mut request = Request::post("/api/v1/auth/discord/password")
+            .header(AUTHORIZATION, authorization)
+            .header("content-type", "application/json")
+            .header("x-0x1-csrf", "1");
+        if let Some(cookie) = cookie {
+            request = request.header(COOKIE, cookie);
+        }
+        request
+            .body(Body::from(r#"{"password":"a deliberately long password"}"#))
+            .expect("request")
+    }
+
+    fn test_digester() -> crate::SecretDigester {
+        NativeAuthConfig::new(
+            "test-auth-secret-that-is-at-least-thirty-two-bytes",
+            "test-password-pepper-that-is-at-least-thirty-two-bytes",
+        )
+        .expect("valid native auth configuration")
+        .secret_digester()
+    }
+
+    #[tokio::test]
+    async fn discord_handoff_sets_the_password_of_the_activity_bond() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let now = StaticClock.now_unix_seconds().expect("clock");
+        let cookie =
+            crate::browser_web_auth::discord_handoff_cookie_for_test(&test_digester(), "42", now);
+        let setup = app
+            .oneshot(discord_handoff_password_request(
+                Some(&cookie),
+                super::DISCORD_HANDOFF_AUTHORIZATION,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(setup.status(), StatusCode::CREATED);
+        let body = json_body(setup).await;
+        assert_eq!(body["identity"]["pub_dress"], "0x0sky");
+    }
+
+    #[tokio::test]
+    async fn discord_handoff_needs_both_the_cookie_and_the_opt_in_header() {
+        let app = discord_app().await;
+        register_discord_fixture(&app).await;
+        let now = StaticClock.now_unix_seconds().expect("clock");
+        let digester = test_digester();
+        let cookie = crate::browser_web_auth::discord_handoff_cookie_for_test(&digester, "42", now);
+        let expired = crate::browser_web_auth::discord_handoff_cookie_for_test(
+            &digester,
+            "42",
+            now.saturating_sub(crate::browser_web_auth::DISCORD_HANDOFF_TTL_SECONDS),
+        );
+        for (cookie, authorization) in [
+            (None, super::DISCORD_HANDOFF_AUTHORIZATION),
+            (Some(format!("{cookie}x")), super::DISCORD_HANDOFF_AUTHORIZATION),
+            (Some(expired), super::DISCORD_HANDOFF_AUTHORIZATION),
+            (Some(cookie.clone()), "discord "),
+            (Some(cookie), "Bearer x"),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(discord_handoff_password_request(
+                    cookie.as_deref(),
+                    authorization,
+                ))
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
     }
 
     #[tokio::test]

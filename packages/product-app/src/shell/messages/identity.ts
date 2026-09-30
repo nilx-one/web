@@ -69,6 +69,10 @@ export const IDENTITY_EN = {
   "identity.password.mismatch": "Passwords don’t match.",
   "identity.password.saving": "Saving…",
   "identity.password.save": "Save password",
+  "identity.password.handoff":
+    "Your password manager files a password under the site that shows the form, and here that is Discord. Create it on nilx.one so it’s offered wherever you sign in.",
+  "identity.password.handoffOpen": "Create on nilx.one",
+  "identity.password.handoffDone": "Password created",
   "identity.status.idle": "Case-sensitive · 2–32 characters",
   "identity.status.invalidLength": "Incorrect — use 2–32 characters",
   "identity.status.invalidCharacter":
@@ -238,6 +242,10 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.password.mismatch": "Паролі не збігаються.",
   "identity.password.saving": "Зберігаємо…",
   "identity.password.save": "Зберегти пароль",
+  "identity.password.handoff":
+    "Менеджер паролів зберігає пароль для сайту, на якому відкрита форма, а тут це Discord. Створіть пароль на nilx.one, щоб його пропонувало скрізь, де ви входите.",
+  "identity.password.handoffOpen": "Створити на nilx.one",
+  "identity.password.handoffDone": "Пароль створено",
   "identity.status.idle": "З урахуванням регістру · 2–32 символи",
   "identity.status.invalidLength": "Неправильно — потрібно 2–32 символи",
   "identity.status.invalidCharacter":
