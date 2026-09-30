@@ -39,9 +39,13 @@ const OAUTH_TRANSACTION_COOKIE: &str = "__Host-0x1_oauth";
 const PENDING_PROVIDER_COOKIE: &str = "__Host-0x1_provider";
 const SESSION_COOKIE: &str = "__Host-0x1_session";
 const REMEMBERED_BOND_COOKIE: &str = "__Host-0x1_bond";
+const DISCORD_HANDOFF_COOKIE: &str = "__Host-0x1_discord_handoff";
 const CSRF_HEADER: &str = "x-0x1-csrf";
 const OAUTH_TRANSACTION_TTL_SECONDS: u64 = 10 * 60;
 const PENDING_PROVIDER_TTL_SECONDS: u64 = 15 * 60;
+pub(crate) const DISCORD_HANDOFF_TTL_SECONDS: u64 = 15 * 60;
+const DISCORD_HANDOFF_LANDING: &str = "/?host=discord";
+const DISCORD_HANDOFF_DOMAIN: &str = "browser-discord-handoff";
 
 #[derive(Clone, Debug)]
 pub struct OAuthClientCredentials {
@@ -128,6 +132,7 @@ pub fn router(
             "/api/v1/auth/browser/provider/context",
             get(read_provider_context),
         )
+        .route("/api/v1/auth/discord/handoff", get(read_discord_handoff))
         .route(
             "/api/v1/auth/browser/provider/link",
             post(link_pending_provider),
@@ -198,6 +203,11 @@ impl BrowserProvider {
 enum BrowserAuthIntent {
     SignIn,
     Connect,
+    /// A Discord Activity lives on Discord's proxy origin, so a password a
+    /// person creates there is filed under that origin by their password
+    /// manager. The Activity hands the person to this origin instead, and the
+    /// Discord proof it earns here stands in for the Activity's own.
+    Handoff,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -213,6 +223,15 @@ struct OAuthTransaction {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct PendingProvider {
     provider: BrowserProvider,
+    subject: String,
+    expires_at: u64,
+}
+
+/// Discord proof carried by a hand-off from the Activity. It is not a session:
+/// it only lets this origin present the same provider identity the Activity
+/// does, so the Activity's provider-password setup can run here.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct DiscordHandoff {
     subject: String,
     expires_at: u64,
 }
@@ -278,6 +297,7 @@ async fn start_browser_auth(
     let intent = match query.intent.as_deref() {
         None => BrowserAuthIntent::SignIn,
         Some("connect") => BrowserAuthIntent::Connect,
+        Some("handoff") if provider == BrowserProvider::Discord => BrowserAuthIntent::Handoff,
         Some(_) => {
             return no_store_error(
                 StatusCode::BAD_REQUEST,
@@ -302,7 +322,7 @@ async fn start_browser_auth(
         return service_unavailable();
     };
     let connect_pub_dress = match intent {
-        BrowserAuthIntent::SignIn => None,
+        BrowserAuthIntent::SignIn | BrowserAuthIntent::Handoff => None,
         BrowserAuthIntent::Connect => {
             let Some((identity, active)) = native_session_identity(&state, &headers, now).await
             else {
@@ -663,6 +683,10 @@ async fn finish_provider_callback(
         return callback_failure("provider_authentication_unavailable");
     };
 
+    if transaction.intent == BrowserAuthIntent::Handoff {
+        return finish_discord_handoff(state, provider, now);
+    }
+
     if transaction.intent == BrowserAuthIntent::Connect {
         let Some(target) = transaction.connect_pub_dress.as_deref() else {
             return callback_failure("provider_callback_invalid");
@@ -732,6 +756,93 @@ async fn finish_provider_callback(
             ),
         ],
     )
+}
+
+fn finish_discord_handoff(
+    state: &BrowserAuthState,
+    provider: ProviderIdentity,
+    now: u64,
+) -> Response {
+    if provider.provider != IdentityProvider::Discord {
+        return callback_failure("provider_callback_invalid");
+    }
+    let Some(value) = issue_discord_handoff(&state.cookie_signer, provider.subject, now) else {
+        return callback_failure("provider_authentication_unavailable");
+    };
+    redirect_with_cookies(
+        DISCORD_HANDOFF_LANDING,
+        [
+            clear_cookie(OAUTH_TRANSACTION_COOKIE),
+            clear_cookie(PENDING_PROVIDER_COOKIE),
+            secure_cookie(DISCORD_HANDOFF_COOKIE, &value, DISCORD_HANDOFF_TTL_SECONDS),
+        ],
+    )
+}
+
+fn issue_discord_handoff(signer: &SignedCookie, subject: String, now: u64) -> Option<String> {
+    signer.issue(
+        DISCORD_HANDOFF_DOMAIN,
+        &DiscordHandoff {
+            subject,
+            expires_at: now.saturating_add(DISCORD_HANDOFF_TTL_SECONDS),
+        },
+    )
+}
+
+/// A `Cookie` header value carrying a hand-off for `subject`, for tests that
+/// drive the provider API the way the hand-off page does.
+#[cfg(test)]
+pub(crate) fn discord_handoff_cookie_for_test(
+    digester: &SecretDigester,
+    subject: &str,
+    now: u64,
+) -> String {
+    let value = issue_discord_handoff(
+        &SignedCookie::new(digester.clone()),
+        subject.to_owned(),
+        now,
+    )
+    .expect("signed hand-off");
+    format!("{DISCORD_HANDOFF_COOKIE}={value}")
+}
+
+/// The Discord subject of a live hand-off cookie, if the request carries one.
+pub(crate) fn discord_handoff_subject(
+    digester: &SecretDigester,
+    headers: &HeaderMap,
+    now: u64,
+) -> Option<String> {
+    let value = read_cookie(headers, DISCORD_HANDOFF_COOKIE)?;
+    SignedCookie::new(digester.clone())
+        .verify::<DiscordHandoff>(DISCORD_HANDOFF_DOMAIN, &value)
+        .filter(|handoff| handoff.expires_at > now)
+        .map(|handoff| handoff.subject)
+}
+
+#[derive(Debug, Serialize)]
+struct DiscordHandoffResponse {
+    state: &'static str,
+}
+
+async fn read_discord_handoff(
+    State(state): State<BrowserAuthState>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(now) = now_unix_seconds() else {
+        return service_unavailable();
+    };
+    let digester = state.native_auth.secret_digester();
+    let active = discord_handoff_subject(&digester, &headers, now).is_some();
+    let mut response = no_store_json(
+        StatusCode::OK,
+        DiscordHandoffResponse {
+            state: if active { "active" } else { "none" },
+        },
+    );
+    if !active && read_cookie(&headers, DISCORD_HANDOFF_COOKIE).is_some() {
+        append_cookie(&mut response, clear_cookie(DISCORD_HANDOFF_COOKIE));
+    }
+    response
 }
 
 async fn native_session_identity(
@@ -1324,6 +1435,44 @@ mod tests {
                 .verify::<PendingProvider>("browser-pending-provider", &format!("{value}x"))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn discord_handoff_proves_its_subject_only_while_live() {
+        let digester = native_auth().secret_digester();
+        let cookie = super::discord_handoff_cookie_for_test(&digester, "42", 1_000);
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            axum::http::header::COOKIE,
+            cookie.parse().expect("cookie header"),
+        );
+        assert_eq!(
+            super::discord_handoff_subject(&digester, &headers, 1_000).as_deref(),
+            Some("42")
+        );
+        let expires_at = 1_000 + super::DISCORD_HANDOFF_TTL_SECONDS;
+        assert!(super::discord_handoff_subject(&digester, &headers, expires_at).is_none());
+
+        // A pending-provider cookie signed with the same secret is not a hand-off.
+        let signer = SignedCookie::new(digester.clone());
+        let pending = signer
+            .issue(
+                "browser-pending-provider",
+                &PendingProvider {
+                    provider: BrowserProvider::Discord,
+                    subject: "42".to_owned(),
+                    expires_at: expires_at + 1,
+                },
+            )
+            .expect("signed pending provider");
+        let mut forged = axum::http::HeaderMap::new();
+        forged.insert(
+            axum::http::header::COOKIE,
+            format!("__Host-0x1_discord_handoff={pending}")
+                .parse()
+                .expect("cookie header"),
+        );
+        assert!(super::discord_handoff_subject(&digester, &forged, 1_000).is_none());
     }
 
     #[test]

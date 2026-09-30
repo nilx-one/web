@@ -58,6 +58,14 @@ export interface HostPort {
    * platform geolocation API of its own.
    */
   readonly geolocation: GeolocationCapability;
+  /**
+   * Where a password should be created instead of here. A password manager
+   * files a credential under the origin that shows the form, so a host served
+   * from someone else's origin (a Discord Activity lives on Discord's proxy)
+   * names the product origin that should own it. Absent means this origin
+   * already does.
+   */
+  readonly credentialHandoff?: URL;
 }
 
 export function hasAuthenticatedHostSession(snapshot: HostSnapshot): boolean {

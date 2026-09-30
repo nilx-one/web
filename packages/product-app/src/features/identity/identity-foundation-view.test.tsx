@@ -613,3 +613,54 @@ describe("identity surface in Ukrainian", () => {
     ).toBeDisabled();
   });
 });
+
+describe("provider password hand-off", () => {
+  it("replaces the form with a hand-off to the origin that owns the password", () => {
+    const open = vi.fn();
+    const returned = vi.fn();
+    const onSubmit = vi.fn();
+
+    render(
+      <IdentityFoundationView
+        password=""
+        selection={{ discriminator: "0", slug: "sky" }}
+        viewModel={{
+          hostLabel: "discord host",
+          safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+          showProviderRow: false,
+          runtime: {
+            tone: "ready",
+            label: "Shared Core ready",
+            detail: "Contract 1 is available to the Web client.",
+          },
+          identity: {
+            kind: "provider-password",
+            pubDress: "0x0sky",
+            provider: "Discord",
+            busy: false,
+          },
+        }}
+        passwordHandoff={{ open, returned }}
+        onAcknowledgeRecovery={vi.fn()}
+        onCredentialAutofill={vi.fn()}
+        onForgetRemembered={vi.fn()}
+        onLogout={vi.fn()}
+        onPasswordChange={vi.fn()}
+        onResolvePubDress={vi.fn()}
+        onSelectionChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    // No password field exists here for a password manager to file under
+    // Discord's origin.
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(screen.getByText("0x0sky")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create on nilx.one" }));
+    expect(open).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Password created" }));
+    expect(returned).toHaveBeenCalledOnce();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});

@@ -3,7 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./handoff": "./src/handoff.ts"
+  },
   "dependencies": {
     "@discord/embedded-app-sdk": "^2.5.0",
     "@nilx-one/host-contract": "workspace:*"

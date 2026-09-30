@@ -119,3 +119,33 @@ export function ProviderPasswordForm({
     </form>
   );
 }
+
+/**
+ * Password setup on a host whose origin the product does not own. The form
+ * would work here, but the password manager would file the password under the
+ * host's origin, so setup is handed to the origin that should own it.
+ */
+export function ProviderPasswordHandoff({
+  pubDress,
+  onHandoff,
+  onReturn,
+}: {
+  pubDress: string;
+  onHandoff(): void;
+  onReturn(): void;
+}) {
+  const { t } = useLocalization();
+  return (
+    <div className="identity-form">
+      <p className="surface-kicker">pub_dress</p>
+      <p className="provider-password-username">{pubDress}</p>
+      <p className="password-note">{t("identity.password.handoff")}</p>
+      <button className="recovery-continue" type="button" onClick={onHandoff}>
+        {t("identity.password.handoffOpen")}
+      </button>
+      <button className="text-action" type="button" onClick={onReturn}>
+        {t("identity.password.handoffDone")}
+      </button>
+    </div>
+  );
+}

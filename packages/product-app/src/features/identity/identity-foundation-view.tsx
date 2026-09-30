@@ -27,7 +27,10 @@ import type {
   PubDressStatusViewState,
 } from "./identity-foundation-view-model";
 import { normalizePubDressCredentialInput } from "./pub-dress-credential-input";
-import { ProviderPasswordForm } from "./provider-password-form";
+import {
+  ProviderPasswordForm,
+  ProviderPasswordHandoff,
+} from "./provider-password-form";
 import { PubDressUrlField } from "./pub-dress-url-field";
 import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 import {
@@ -72,6 +75,14 @@ export interface IdentityFoundationViewProps {
   onCredentialAutofill(selection: PubDressSelection, password: string): void;
   onForgetRemembered(): void;
   onLogout(): void;
+  /**
+   * Present when password setup belongs to another origin than this host's;
+   * the setup step then hands off instead of showing the form.
+   */
+  passwordHandoff?: {
+    open(): void;
+    returned(): void;
+  };
   onPasswordChange(password: string): void;
   onResolvePubDress(): void;
   onSelectionChange(selection: PubDressSelection): void;
@@ -1186,6 +1197,7 @@ export function IdentityFoundationView({
   onResolvePubDress,
   onSelectionChange,
   onSubmit,
+  passwordHandoff,
 }: IdentityFoundationViewProps) {
   const { t } = useLocalization();
   return (
@@ -1221,7 +1233,14 @@ export function IdentityFoundationView({
                 </div>
               </>
             ) : null}
-            {viewModel.identity.kind === "provider-password" ? (
+            {viewModel.identity.kind === "provider-password" &&
+            passwordHandoff !== undefined ? (
+              <ProviderPasswordHandoff
+                pubDress={viewModel.identity.pubDress}
+                onHandoff={passwordHandoff.open}
+                onReturn={passwordHandoff.returned}
+              />
+            ) : viewModel.identity.kind === "provider-password" ? (
               <ProviderPasswordForm
                 key={viewModel.identity.pubDress}
                 pubDress={viewModel.identity.pubDress}

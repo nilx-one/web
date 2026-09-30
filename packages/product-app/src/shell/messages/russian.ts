@@ -304,6 +304,10 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.password.mismatch": "Пароли не совпадают.",
   "identity.password.saving": "Сохраняем…",
   "identity.password.save": "Сохранить пароль",
+  "identity.password.handoff":
+    "Менеджер паролей сохраняет пароль для сайта, на котором открыта форма, а здесь это Discord. Создайте пароль на nilx.one, чтобы его предлагало везде, где вы входите.",
+  "identity.password.handoffOpen": "Создать на nilx.one",
+  "identity.password.handoffDone": "Пароль создан",
   "identity.status.idle": "С учётом регистра · 2–32 символа",
   "identity.status.invalidLength": "Неверно — нужно 2–32 символа",
   "identity.status.invalidCharacter": "Неверно — этот символ не поддерживается",
