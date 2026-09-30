@@ -1,0 +1,66 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Deploy GitHub Discord Relay
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "tools/github-discord-relay/**"
+      - ".github/workflows/deploy-github-discord-relay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-github-discord-relay
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.TASKS_DISCORD_WEBHOOK_URL }}
+      GITHUB_WEBHOOK_SECRET: ${{ secrets.TASKS_WEBHOOK_SECRET }}
+      GITHUB_TOKEN: ${{ secrets.TASKS_GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: tools/github-discord-relay
+    steps:
+      - id: configured
+        name: Check relay secrets
+        working-directory: .
+        run: |
+          missing=""
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DISCORD_WEBHOOK_URL GITHUB_WEBHOOK_SECRET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice::relay not configured, skipping deploy (missing:$missing)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.configured.outputs.ready == 'true'
+        uses: actions/checkout@v4
+      - if: steps.configured.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - if: steps.configured.outputs.ready == 'true'
+        name: Deploy
+        run: npx --yes wrangler@4 deploy
+      - if: steps.configured.outputs.ready == 'true'
+        name: Upload secrets
+        run: |
+          umask 077
+          jq -n '{DISCORD_WEBHOOK_URL: env.DISCORD_WEBHOOK_URL, GITHUB_WEBHOOK_SECRET: env.GITHUB_WEBHOOK_SECRET}
+            + (if env.GITHUB_TOKEN != "" then {GITHUB_TOKEN: env.GITHUB_TOKEN} else {} end)' > "$RUNNER_TEMP/secrets.json"
+          npx --yes wrangler@4 secret bulk "$RUNNER_TEMP/secrets.json"
+          rm -f "$RUNNER_TEMP/secrets.json"

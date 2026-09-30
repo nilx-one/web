@@ -1,0 +1,10 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name = "nilxone-github-discord-relay"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+STATUS_FIELD = "Status"

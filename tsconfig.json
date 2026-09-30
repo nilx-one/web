@@ -28,6 +28,7 @@
     "apps/**/*.tsx",
     "packages/**/*.ts",
     "packages/**/*.tsx",
+    "tools/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.tsx",
     "eslint.config.js",
