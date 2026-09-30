@@ -17,17 +17,24 @@ mkdir -p services/identity/deploy
 
 commit() {
   printf '%s\n' "$1" >services/identity/deploy/contract.version
+  printf '%s\n' "$2" >services/identity/package
   git add -A
   git commit -q --allow-empty -m "$2"
   git rev-parse HEAD
 }
 
-# master: old(8) -> base(9) -> head(9); branch from base: diverged(9)
+# master: old(8) -> base(9) -> head(9); from base: diverged(9, changes identity) and
+# squashed (changes only non-identity files, like a squash-merged client branch)
 old="$(commit 8 old)"
 base="$(commit 9 base)"
 head="$(commit 9 head)"
 git checkout -q -b branch "$base"
 diverged="$(commit 9 diverged)"
+git checkout -q -b client "$base"
+echo client >client.txt
+git add -A
+git commit -q -m squashed
+squashed="$(git rev-parse HEAD)"
 git checkout -q master
 unknown=0123456789abcdef0123456789abcdef01234567
 
@@ -60,6 +67,7 @@ expect "package is older than the running one" false "$base" "$(image "$head")"
 expect "diverged package with sufficient running contract" refuse "$diverged" "$(image "$head")"
 expect "diverged package is forced" true "$diverged" "$(image "$head")" true
 expect "diverged package with insufficient running contract" true "$diverged" "$(image "$old")"
+expect "running package from a branch without identity changes" true "$head" "$(image "$squashed")"
 expect "no identity deployment exists" true "$head" ""
 expect "running package is not in the repository" refuse "$head" "$(image "$unknown")"
 expect "running image is foreign" refuse "$head" "ghcr.io/other/identity:latest"
