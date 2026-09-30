@@ -76,10 +76,32 @@ A Bond has exactly one location, whichever host it is set from. `GET /api/v1/loc
 - `POST /api/v1/identity/pub-info` accepts `{ "carry": { "bond_xp": 0, "avaia_xp": 0 }, "events": [{ "id": "xp:…", "earner": "bond", "amount": 30 }] }`. It requires the CSRF header and an active authenticated Bond. Carry only rises, to the greatest pre-sync total a device reports. An event id is an opaque `xp:` nonce; a repeat does not pay again, and an id that names a subject is refused. Carry is capped, and so is one event amount. The caps are abuse bounds on an untrusted number, not proof the award was earned. Idempotency and the rate limit are not that proof either.
 - `GET /api/v1/identity/public` nests the same totals under `pub_info.experience`, with the same `authority: "client"`, and nests the owned Avaia's `configuration_state`, so a public reader can derive the same levels the owner sees from the shared report. The per-device model-download achievement is not part of this projection. The public card says the standing is reported by this Bond.
 
+## Spoken lines
+
+A permitted Bond (`bond_speakers`) can say a short text aloud; Bonds within
+earshot hear it on the web and in a Telegram private chat. See
+[Spoken lines](../../docs/spoken-lines.md) for the contract.
+
+- `POST /api/v1/speech` ingests one line. It needs a `Bearer` service token (`SPEECH_INGEST_TOKEN`) and refuses any speaker without a `bond_speakers` row.
+- `GET /api/v1/speech/nearby` returns what the authenticated Bond can hear now.
+  It never returns a coordinate.
+
+`bond_speakers` is set out of band, like `bond_roles`. `0x0sky` and `0xfrSb` are
+carried over once when the table is created:
+
+```sql
+INSERT OR IGNORE INTO bond_speakers (pub_dress)
+SELECT pub_dress FROM identities WHERE identity_kind = 'human' AND pub_dress = '0xfrSb';
+```
+
+Optional runtime settings: `SPEECH_INGEST_TOKEN` (at least 32 bytes; without it
+the routes are not mounted) and `SPEECH_EARSHOT_METERS` (default `500`, at most
+`5000`).
+
 ## Secret boundary
 
-`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`, and
-`DISCORD_CLIENT_SECRET` are server-only runtime secrets. The native authentication
+`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`,
+`DISCORD_CLIENT_SECRET`, and `SPEECH_INGEST_TOKEN` are server-only runtime secrets. The native authentication
 secret and password pepper must be independent values of at least 32 bytes. None
 may be exposed through Vite, browser configuration, repository files, build
 output, Telegram Mini App JavaScript, or Discord Activity JavaScript.

@@ -5,6 +5,7 @@ import type {
   AvatarModel,
   AvatarModelResult,
   BondProviderConnections,
+  NearbySpeechAccessPort,
 } from "@nilx-one/application";
 import {
   createDeclaredGeolocation,
@@ -60,6 +61,7 @@ function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
 }
 
 interface ViewOverrides {
+  nearbySpeech?: NearbySpeechAccessPort;
   avaiaPubDress?: string;
   connectedProviders?: BondProviderConnections;
   providerDeepLinks?: readonly ConnectedProvider[];
@@ -84,6 +86,9 @@ interface ViewOverrides {
 function renderView(overrides: ViewOverrides = {}) {
   const optionalProps = {
     connectedProviders: overrides.connectedProviders ?? [],
+    ...(overrides.nearbySpeech === undefined
+      ? {}
+      : { nearbySpeech: overrides.nearbySpeech }),
     ...(overrides.providerDeepLinks === undefined
       ? {}
       : { providerDeepLinks: overrides.providerDeepLinks }),
@@ -159,6 +164,46 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   chooseLocale("auto");
+});
+
+describe("AuthenticatedMapHomeView spoken lines", () => {
+  function speaking(text: string, speaker = "0xfrSb"): NearbySpeechAccessPort {
+    return {
+      readNearbySpeech: async () => [
+        {
+          id: `line_${"a".repeat(64)}`,
+          speaker,
+          text,
+          spokenAt: Math.floor(Date.now() / 1000),
+        },
+      ],
+    };
+  }
+
+  it("says a heard line in the notice stack, under the speaker's name", async () => {
+    renderView({ nearbySpeech: speaking("привіт усім") });
+
+    const words = await screen.findByText("привіт усім");
+    const notice = words.closest("li, [role='status'], article, div");
+    expect(notice).not.toBeNull();
+    expect(within(notice as HTMLElement).getByText("0xfrSb")).toBeTruthy();
+  });
+
+  it("lets a person close a heard line, and it does not come back on the next poll", async () => {
+    renderView({ nearbySpeech: speaking("тихо") });
+
+    await screen.findByText("тихо");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss: 0xfrSb" }));
+    expect(screen.queryByText("тихо")).toBeNull();
+  });
+
+  it("has nothing to say when the host offers no speech", async () => {
+    renderView();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("привіт усім")).toBeNull();
+  });
 });
 
 describe("AuthenticatedMapHomeView", () => {

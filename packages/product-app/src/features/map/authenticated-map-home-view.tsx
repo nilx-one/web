@@ -8,6 +8,7 @@ import {
   type AvatarSelection,
   type BondProviderConnections,
   type BondProviderType,
+  type NearbySpeechAccessPort,
   type PubInfoAccessPort,
 } from "@nilx-one/application";
 import type { GeolocationCapability, HostPort } from "@nilx-one/host-contract";
@@ -150,6 +151,7 @@ import { useAvaiaWalk } from "./use-avaia-walk";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
+import { useNearbySpeech } from "./use-nearby-speech";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 import { GuideCutsceneView } from "../guide/guide-cutscene-view";
@@ -195,6 +197,11 @@ export interface AuthenticatedMapHomeViewProps {
    * capability — the device then keeps what it earned until one does.
    */
   readonly pubInfo?: PubInfoAccessPort;
+  /**
+   * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
+   * host's identity client has no such capability, which is a normal state.
+   */
+  readonly nearbySpeech?: NearbySpeechAccessPort;
   /**
    * The provider accounts this Bond carries. Account text never reaches this
    * surface as content: an attachment resolves where it opens, nothing more.
@@ -545,6 +552,7 @@ export function AuthenticatedMapHomeView({
   section = "world",
   localModel,
   pubInfo,
+  nearbySpeech,
   connectedProviders,
   providerDeepLinks = [],
   onDisconnectProvider,
@@ -692,11 +700,13 @@ export function AuthenticatedMapHomeView({
     translateCopy(t, mapViewModel.label),
     translateCopy(t, mapViewModel.detail),
   );
+  const speech = useNearbySpeech({ port: nearbySpeech });
   const statusToasts = [
     ...(statusToast === undefined || statusToast.id === dismissedStatus
       ? []
       : [statusToast]),
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
+    ...speech.toasts,
   ];
   const headerActions: readonly HeaderAction[] =
     onLogout === undefined
@@ -1629,6 +1639,10 @@ export function AuthenticatedMapHomeView({
           onDismiss={(id) => {
             if (avaiaSavedToast?.id === id) {
               setAvaiaSavedToast(undefined);
+              return;
+            }
+            if (speech.toasts.some((toast) => toast.id === id)) {
+              speech.dismiss(id);
               return;
             }
             setDismissedStatus(id);

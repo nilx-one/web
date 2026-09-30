@@ -26,6 +26,7 @@ import {
   UpdateAvaiaProfile,
   formatPubDress,
   hasAvaiaProfileAccess,
+  hasNearbySpeechAccess,
   hasPubInfoAccess,
   type BondProviderConnections,
   type BondProviderType,
@@ -1049,6 +1050,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           : { localModel: dependencies.localModel })}
         {...(hasPubInfoAccess(dependencies.identity)
           ? { pubInfo: dependencies.identity }
+          : {})}
+        {...(hasNearbySpeechAccess(dependencies.identity)
+          ? { nearbySpeech: dependencies.identity }
           : {})}
         {...(providerConnections === undefined
           ? {}
