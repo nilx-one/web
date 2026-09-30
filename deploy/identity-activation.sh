@@ -14,6 +14,9 @@
 # Prints "deploy=true|false" and "reason=..." lines. Exits 1, leaving production untouched, when
 # the package cannot satisfy the clients or when replacing the running identity would not be a
 # plain upgrade; the explicit `identity` target forces it.
+#
+# A running package built from a branch that was later squash-merged is not an ancestor of the
+# release. It is still a plain upgrade when the branch changed no identity input after it forked.
 
 set -Eeuo pipefail
 
@@ -34,6 +37,21 @@ contract_at() {
 
 is_ancestor() {
   git merge-base --is-ancestor "$1" "$2" 2>/dev/null
+}
+
+identity_inputs=(services/identity .github/workflows/package-identity-service.yml)
+
+# A package built from a pull request branch is absent from a branch-only clone; fetch it by id.
+ensure_commit() {
+  git cat-file -e "$1^{commit}" 2>/dev/null ||
+    git fetch -q --no-tags origin "$1" >/dev/null 2>&1
+}
+
+# True when $1 changed no identity input since it forked from $2's history.
+identity_unchanged_since_fork() {
+  local fork
+  fork="$(git merge-base "$1" "$2" 2>/dev/null)" || return 1
+  git diff --quiet "$fork" "$1" -- "${identity_inputs[@]}"
 }
 
 decide() {
@@ -65,6 +83,7 @@ fi
 
 [ "$active_sha" = "$package_sha" ] && decide false "identity package ${active_sha} is already active"
 
+ensure_commit "$active_sha" || true
 active_contract="$(contract_at "$active_sha")" ||
   refuse "Running identity package ${active_sha} is not readable in this repository."
 
@@ -78,6 +97,10 @@ fi
 
 if is_ancestor "$package_sha" "$active_sha"; then
   decide false "newer identity package ${active_sha} with contract ${active_contract} is already active"
+fi
+
+if identity_unchanged_since_fork "$active_sha" "$package_sha"; then
+  decide true "running identity package ${active_sha} changed no identity input since it forked; upgrading to ${package_sha}"
 fi
 
 refuse "Identity package ${package_sha} and running package ${active_sha} have diverged, and the running contract ${active_contract} already satisfies ${required}."
