@@ -289,6 +289,31 @@
   background: transparent;
   font: inherit;
   text-align: left;
+  /* A press is said by the glyph's border, never by a grey tap flash. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+/* Each identity wears its own colour: the Bond cyan, the Avaia violet — the
+   same violet its experience is counted in. */
+.bond-dock__bond--bond {
+  --seat-line: rgba(0, 191, 212, 0.52);
+  --seat-line-strong: var(--map-accent-spatial);
+  --seat-ink: #007f90;
+  --seat-ink-dark: #78e8ef;
+  --seat-glow: rgba(55, 215, 229, 0.18);
+  --seat-glow-soft: rgba(55, 215, 229, 0.07);
+}
+
+.bond-dock__bond--avaia {
+  --seat-line: rgba(155, 108, 250, 0.55);
+  --seat-line-strong: #9b6cfa;
+  --seat-ink: #6b3ae0;
+  --seat-ink-dark: #c9adff;
+  --seat-glow: rgba(155, 108, 250, 0.2);
+  --seat-glow-soft: rgba(155, 108, 250, 0.08);
 }
 
 .bond-dock__bond--active {
@@ -307,19 +332,33 @@
   min-width: 2.85rem;
   min-height: 2.85rem;
   padding: 0.42rem;
-  border: 1px solid rgba(0, 191, 212, 0.52);
+  border: 1px solid var(--seat-line, rgba(0, 191, 212, 0.52));
   border-radius: 0.9rem;
-  color: #007f90;
+  color: var(--seat-ink, #007f90);
   background: rgba(255, 255, 255, 0.48);
-  box-shadow: 0 0 1.25rem rgba(55, 215, 229, 0.08);
+  box-shadow: 0 0 1.25rem var(--seat-glow-soft, rgba(55, 215, 229, 0.08));
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
   font-size: 0.78rem;
   font-weight: 720;
+  transition:
+    border-color 120ms ease,
+    box-shadow 160ms ease,
+    transform 120ms ease;
 }
 
 .authenticated-map-home[data-theme="dark"] .bond-dock__glyph {
-  color: #78e8ef;
+  color: var(--seat-ink-dark, #78e8ef);
   background: rgba(8, 18, 21, 0.52);
+}
+
+/* Pressed: the border draws in and brightens, the tile gives a little. The
+   background stays exactly what it was. */
+.bond-dock__bond:not(:disabled):active .bond-dock__glyph {
+  border-color: var(--seat-line-strong);
+  box-shadow:
+    0 0 0 2px var(--seat-glow),
+    0 0 1.4rem var(--seat-glow);
+  transform: scale(0.95);
 }
 
 .bond-dock__bond--unavailable .bond-dock__glyph {
@@ -377,7 +416,7 @@
 
 .bond-dock__bond--active:hover strong,
 .bond-dock__bond--active:focus-visible strong {
-  color: #007f90;
+  color: var(--seat-ink);
 }
 
 .authenticated-map-home[data-theme="dark"]
@@ -386,11 +425,11 @@
 .authenticated-map-home[data-theme="dark"]
   .bond-dock__bond--active:focus-visible
   strong {
-  color: #78e8ef;
+  color: var(--seat-ink-dark);
 }
 
 .bond-dock__bond--active:focus-visible {
-  outline: 2px solid var(--map-accent-spatial);
+  outline: 2px solid var(--seat-line-strong);
   outline-offset: 5px;
   border-radius: 0.75rem;
 }
@@ -398,17 +437,17 @@
 .authenticated-map-home[data-focus-state="focused"]
   .bond-dock__bond--active
   .bond-dock__glyph {
-  border-color: var(--map-accent-spatial);
-  color: #007f90;
+  border-color: var(--seat-line-strong);
+  color: var(--seat-ink);
   box-shadow:
-    inset 0 0 1rem rgba(55, 215, 229, 0.07),
-    0 0 1.4rem rgba(55, 215, 229, 0.18);
+    inset 0 0 1rem var(--seat-glow-soft),
+    0 0 1.4rem var(--seat-glow);
 }
 
 .authenticated-map-home[data-theme="dark"][data-focus-state="focused"]
   .bond-dock__bond--active
   .bond-dock__glyph {
-  color: #78e8ef;
+  color: var(--seat-ink-dark);
 }
 
 /* Persistent Core status is deliberately quieter than both a toast and the
