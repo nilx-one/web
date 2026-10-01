@@ -218,7 +218,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "host.native": "нативный хост",
   "host.nativeUnavailable": "нативный хост недоступен",
   "dock.you": "Вы",
-  "dock.spectate": "наблюдает",
+  "dock.spectate": "наблюдаете",
   "dock.driving": "за рулём",
   "dock.ready": "готово",
   "dock.preparing": "готовится",

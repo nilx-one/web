@@ -498,7 +498,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "host.native": "нативний хост",
   "host.nativeUnavailable": "нативний хост недоступний",
   "dock.you": "Ви",
-  "dock.spectate": "спостерігає",
+  "dock.spectate": "спостерігаєте",
   "dock.driving": "за кермом",
   "dock.ready": "готово",
   "dock.preparing": "готується",

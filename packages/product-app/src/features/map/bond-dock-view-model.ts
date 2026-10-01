@@ -162,7 +162,8 @@ export function createBondDockViewState(
     address: input.pubDress,
     glyph: "0x0",
     // A Bond that is not driving is watching: that is what spectating means.
-    role: seated === "left" ? "You" : "spectate",
+    // "You" is already the line's subject, so the role never repeats it.
+    role: seated === "left" ? "driving" : "spectate",
     tone: "authenticated",
     actionable: seated === "left" ? input.focusable : true,
     actionLabel:

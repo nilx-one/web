@@ -221,8 +221,10 @@ describe("AuthenticatedMapHomeView", () => {
       screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("driving");
     expect(
-      screen.getByLabelText("No reciprocal relationship asserted"),
-    ).toHaveTextContent("—");
+      screen.getByRole("separator", {
+        name: "No reciprocal relationship asserted",
+      }),
+    ).toBeEmptyDOMElement();
     expect(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toHaveTextContent("spectate");
@@ -276,7 +278,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
     expect(
       screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
-    ).toHaveTextContent("You");
+    ).toHaveTextContent("driving");
 
     const handToAvaia = screen.getByRole("button", {
       name: "Hand the wheel to x0skai",
@@ -299,7 +301,7 @@ describe("AuthenticatedMapHomeView", () => {
 
     expect(
       screen.getByRole("button", { name: "Focus the world on 0x0sky" }),
-    ).toHaveTextContent("You");
+    ).toHaveTextContent("driving");
   });
 
   it("asks this host for a runtime as the Avaia takes the wheel", () => {

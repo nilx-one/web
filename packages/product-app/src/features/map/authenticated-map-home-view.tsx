@@ -1700,10 +1700,10 @@ export function AuthenticatedMapHomeView({
                     />
                     <span
                       className="bond-dock__link"
+                      role="separator"
+                      aria-orientation="vertical"
                       aria-label={t("dock.noRelationship")}
-                    >
-                      —
-                    </span>
+                    />
                     <DockPlaceButton
                       place={dock.places[1]}
                       onActivate={activateDockIdentity}
