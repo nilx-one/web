@@ -120,7 +120,7 @@ describe("frontend localization", () => {
     );
     expect(translateFirst(uk, "Edit", DOCK_ACTION_KEYS)).toBe("Edit");
     expect(translate("uk-UA", "dock.you")).toBe("Ви");
-    expect(translate("uk-UA", "dock.spectate")).toBe("спостерігає");
+    expect(translate("uk-UA", "dock.spectate")).toBe("спостерігаєте");
   });
 
   it("carries every filled-in placeholder, including repeated ones, into the translation", () => {

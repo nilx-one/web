@@ -25,7 +25,7 @@ describe("Dock seats", () => {
 
     expect(dock.left).toMatchObject({
       seat: "bond",
-      role: "You",
+      role: "driving",
       actionLabel: "Focus the world on 0x0sky",
     });
     expect(dock.right).toMatchObject({ seat: "avaia", role: "unavailable" });

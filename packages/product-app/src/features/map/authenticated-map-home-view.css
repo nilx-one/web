@@ -388,11 +388,13 @@
   font-weight: 520;
 }
 
+/* The two places sit side by side and claim nothing about each other. A dash
+   between two names reads as a minus or a typo; a hairline only separates. */
 .bond-dock__link {
   justify-self: center;
-  color: var(--map-ink-muted);
-  font-size: 1.3rem;
-  font-weight: 300;
+  width: 1px;
+  height: 2.2rem;
+  background: var(--map-line);
 }
 
 .bond-dock__status-dot {
@@ -414,14 +416,24 @@
   box-shadow: 0 0 0 0.22rem rgba(216, 162, 58, 0.12);
 }
 
-.bond-dock__bond--active:hover strong,
+/* Only a real pointer hovers. A touch screen keeps :hover on whatever was
+   tapped last, which would leave the driving name tinted after a tap. */
+@media (hover: hover) {
+  .bond-dock__bond--active:hover strong {
+    color: var(--seat-ink);
+  }
+
+  .authenticated-map-home[data-theme="dark"]
+    .bond-dock__bond--active:hover
+    strong {
+    color: var(--seat-ink-dark);
+  }
+}
+
 .bond-dock__bond--active:focus-visible strong {
   color: var(--seat-ink);
 }
 
-.authenticated-map-home[data-theme="dark"]
-  .bond-dock__bond--active:hover
-  strong,
 .authenticated-map-home[data-theme="dark"]
   .bond-dock__bond--active:focus-visible
   strong {
@@ -710,7 +722,7 @@
 }
 
 .authenticated-map-home[data-presentation="compact"] .bond-dock__link {
-  font-size: 1rem;
+  height: 1.8rem;
 }
 
 @media (max-height: 520px) {
