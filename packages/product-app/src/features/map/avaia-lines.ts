@@ -769,6 +769,12 @@ export function avaiaLines(
 }
 
 /** The line kind a refused tap is answered with. */
+export function blockedLineKind(
+  ground: Exclude<MapGround, "open">,
+): AvaiaLineKind {
+  return `blocked.${ground}`;
+}
+
 /**
  * The sound that goes with a line, when one does. The line is still the fact
  * and is still written; the cue only marks that it was said. A revealed cell
@@ -791,12 +797,6 @@ export function lineCue(kind: AvaiaLineKind): SoundCue | undefined {
     case "fog.revealed":
       return undefined;
   }
-}
-
-export function blockedLineKind(
-  ground: Exclude<MapGround, "open">,
-): AvaiaLineKind {
-  return `blocked.${ground}`;
 }
 
 /** A localized kind, for a landmark the archive does not name. */
