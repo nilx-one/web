@@ -232,6 +232,8 @@ const EN_MESSAGES = {
   "dock.preparing": "preparing",
   "dock.download": "download",
   "dock.unavailable": "unavailable",
+  "dock.inactive": "inactive",
+  "dock.error": "error",
   "dock.noRelationship": "No reciprocal relationship asserted",
   "dock.focusWorld": "Focus the world on {name}",
   "dock.takeWheel": "Take the wheel as {name}",
@@ -280,6 +282,8 @@ export const DOCK_ROLE_KEYS = [
   "dock.preparing",
   "dock.download",
   "dock.unavailable",
+  "dock.inactive",
+  "dock.error",
   "dock.unconfigured",
 ] as const satisfies readonly TranslationKey[];
 
@@ -504,6 +508,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.preparing": "готується",
   "dock.download": "завантажити",
   "dock.unavailable": "недоступно",
+  "dock.inactive": "неактивно",
+  "dock.error": "помилка",
   "dock.noRelationship": "Взаємний зв’язок не стверджується",
   "dock.focusWorld": "Сфокусувати світ на {name}",
   "dock.takeWheel": "Сісти за кермо як {name}",

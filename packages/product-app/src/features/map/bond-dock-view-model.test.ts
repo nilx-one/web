@@ -28,7 +28,7 @@ describe("Dock seats", () => {
       role: "driving",
       actionLabel: "Focus the world on 0x0sky",
     });
-    expect(dock.right).toMatchObject({ seat: "avaia", role: "unavailable" });
+    expect(dock.right).toMatchObject({ seat: "avaia", role: "inactive" });
   });
 
   it("keeps the Avaia first and the Bond second whoever is driving", () => {
@@ -63,7 +63,7 @@ describe("Dock seats", () => {
     expect(createBondDockViewState(base)).toMatchObject({
       preparesRuntime: false,
       right: {
-        role: "unavailable",
+        role: "inactive",
         tone: "idle",
         actionable: true,
         actionLabel: "Hand the wheel to x0skai",
@@ -194,7 +194,17 @@ describe("Avaia configuration on the Dock", () => {
         avaia: "unavailable",
         avaiaConfiguration: "configured",
       }).right,
-    ).toMatchObject({ role: "unavailable", tone: "idle" });
+    ).toMatchObject({ role: "inactive", tone: "idle" });
+  });
+
+  it("says error when the runtime failed", () => {
+    expect(
+      createBondDockViewState({
+        ...base,
+        avaia: "error",
+        avaiaConfiguration: "configured",
+      }).right,
+    ).toMatchObject({ role: "error", tone: "error", actionable: true });
   });
 });
 
@@ -238,6 +248,16 @@ describe("Avaia runtime availability", () => {
         artifact: "avaia-0.1.0",
       }),
     ).toBe("unavailable");
+  });
+
+  it("is an error once loading or running it failed", () => {
+    expect(
+      avaiaAvailability({
+        acceleratedGraphics: true,
+        artifact: "avaia-0.1.0",
+        failed: true,
+      }),
+    ).toBe("error");
   });
 
   it("moves from downloadable through preparing to ready", () => {

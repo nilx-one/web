@@ -224,6 +224,8 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.preparing": "готовится",
   "dock.download": "загрузить",
   "dock.unavailable": "недоступно",
+  "dock.inactive": "неактивно",
+  "dock.error": "ошибка",
   "dock.noRelationship": "Взаимная связь не утверждается",
   "dock.focusWorld": "Сфокусировать мир на {name}",
   "dock.takeWheel": "Сесть за руль как {name}",

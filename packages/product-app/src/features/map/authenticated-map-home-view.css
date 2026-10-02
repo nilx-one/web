@@ -412,6 +412,12 @@
   box-shadow: 0 0 0 0.22rem rgba(41, 155, 118, 0.1);
 }
 
+/* A runtime that failed to load or run says so, in the one alarming tone. */
+.bond-dock__status-dot--error {
+  background: #e0613a;
+  box-shadow: 0 0 0 0.22rem rgba(224, 97, 58, 0.14);
+}
+
 /* A runtime being fetched or warmed up is working, not yet present. */
 .bond-dock__status-dot--working {
   background: #d8a23a;
