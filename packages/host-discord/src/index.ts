@@ -3,12 +3,14 @@
 
 import { DiscordSDK, type IDiscordSDK } from "@discord/embedded-app-sdk";
 import {
+  SILENT_SOUND,
   UNSUPPORTED_GEOLOCATION,
   ZERO_SAFE_AREA,
   type GeolocationCapability,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
+  type SoundCapability,
 } from "@nilx-one/host-contract";
 
 import { createDiscordProxyFetch } from "./proxy";
@@ -55,6 +57,12 @@ export interface DiscordHostEnvironment {
    * Host restrictions then arrive as capability results, not special cases.
    */
   readonly geolocation?: GeolocationCapability;
+  /**
+   * Discord has no sound primitive of its own; the Activity's embedded
+   * browser plays Web Audio, so the composition root hands over the browser
+   * capability.
+   */
+  readonly sound?: SoundCapability;
 }
 
 export interface DiscordActivitySession {
@@ -100,6 +108,7 @@ function requireString(value: unknown, field: string): string {
 class DiscordHost implements HostPort {
   private readonly colorScheme: MediaQueryList;
   public readonly geolocation: GeolocationCapability;
+  public readonly sound: SoundCapability;
 
   public constructor(
     private readonly bridge: DiscordActivityBridge,
@@ -108,6 +117,7 @@ class DiscordHost implements HostPort {
   ) {
     this.colorScheme = environment.matchMedia("(prefers-color-scheme: dark)");
     this.geolocation = environment.geolocation ?? UNSUPPORTED_GEOLOCATION;
+    this.sound = environment.sound ?? SILENT_SOUND;
   }
 
   public getSnapshot(): HostSnapshot {

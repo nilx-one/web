@@ -5,7 +5,11 @@ import type {
   CoreRuntimePort,
   IdentityAccessPort,
 } from "@nilx-one/application";
-import type { GeolocationCapability, HostPort } from "@nilx-one/host-contract";
+import {
+  SILENT_SOUND,
+  type GeolocationCapability,
+  type HostPort,
+} from "@nilx-one/host-contract";
 import type { MapRenderer } from "@nilx-one/map-contract";
 import { ProductApp } from "@nilx-one/product-app";
 import {
@@ -44,6 +48,7 @@ function createHost(geolocation: GeolocationCapability): HostPort {
     openExternal: vi.fn(),
     impact: vi.fn(),
     geolocation,
+    sound: SILENT_SOUND,
   };
 }
 

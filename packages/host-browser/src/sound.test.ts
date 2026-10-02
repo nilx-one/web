@@ -1,0 +1,478 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+import { SOUND_CUES, type SoundAmbience } from "@nilx-one/host-contract";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { createBrowserSound } from "./sound";
+import { ambienceLevels, createAmbienceBed } from "./sound-ambience";
+import { CUE_MAX_SECONDS, CUE_RECIPES } from "./sound-recipes";
+
+/**
+ * Just enough of Web Audio to see what a recipe schedules: which nodes it
+ * made, what they are wired to, and what every parameter was told to do.
+ */
+class FakeParam {
+  public value: number;
+  public readonly calls: (readonly [string, ...number[]])[] = [];
+  public readonly inputs: FakeNode[] = [];
+
+  public constructor(value = 0) {
+    this.value = value;
+  }
+
+  private record(name: string, ...args: number[]): this {
+    for (const arg of args) {
+      if (!Number.isFinite(arg)) throw new RangeError(`${name}(${arg})`);
+    }
+    this.calls.push([name, ...args]);
+    return this;
+  }
+
+  public setValueAtTime(value: number, at: number): this {
+    return this.record("setValueAtTime", value, at);
+  }
+
+  public linearRampToValueAtTime(value: number, at: number): this {
+    return this.record("linearRampToValueAtTime", value, at);
+  }
+
+  public exponentialRampToValueAtTime(value: number, at: number): this {
+    // Web Audio refuses an exponential ramp to zero or through a sign change.
+    if (value <= 0) throw new RangeError(`exponential ramp to ${value}`);
+    return this.record("exponentialRampToValueAtTime", value, at);
+  }
+
+  public setTargetAtTime(value: number, at: number, constant: number): this {
+    return this.record("setTargetAtTime", value, at, constant);
+  }
+
+  public cancelScheduledValues(at: number): this {
+    return this.record("cancelScheduledValues", at);
+  }
+
+  public last(name: string): readonly number[] | undefined {
+    return this.calls
+      .filter((call) => call[0] === name)
+      .at(-1)
+      ?.slice(1) as number[] | undefined;
+  }
+}
+
+class FakeNode {
+  public readonly outputs: (FakeNode | FakeParam)[] = [];
+  public disconnected = false;
+
+  public constructor(
+    public readonly context: FakeAudioContext,
+    public readonly kind: string,
+  ) {
+    context.nodes.push(this);
+  }
+
+  public connect<T extends FakeNode | FakeParam>(target: T): T {
+    this.outputs.push(target);
+    if (target instanceof FakeParam) target.inputs.push(this);
+    return target;
+  }
+
+  public disconnect(): void {
+    this.disconnected = true;
+  }
+}
+
+class FakeSource extends FakeNode {
+  public started: number | undefined;
+  public stopped: number | undefined;
+  public loop = false;
+  public buffer: unknown = null;
+  public type = "sine";
+  public readonly frequency = new FakeParam(440);
+  public readonly detune = new FakeParam(0);
+
+  public start(at = 0): void {
+    if (this.started !== undefined) throw new Error("started twice");
+    this.started = at;
+  }
+
+  public stop(at = 0): void {
+    if (this.started === undefined) throw new Error("stopped before start");
+    this.stopped = at;
+  }
+}
+
+class FakeAudioContext {
+  public readonly nodes: FakeNode[] = [];
+  public readonly destination: FakeNode;
+  public readonly sampleRate = 8_000;
+  public currentTime = 1;
+  public state: AudioContextState;
+
+  public constructor(state: AudioContextState = "running") {
+    this.state = state;
+    this.destination = new FakeNode(this, "destination");
+  }
+
+  public resume = vi.fn(async () => {
+    this.state = "running";
+  });
+
+  public suspend = vi.fn(async () => {
+    this.state = "suspended";
+  });
+
+  public createGain() {
+    return Object.assign(new FakeNode(this, "gain"), {
+      gain: new FakeParam(1),
+    });
+  }
+
+  public createOscillator() {
+    return new FakeSource(this, "oscillator");
+  }
+
+  public createBufferSource() {
+    return new FakeSource(this, "buffer-source");
+  }
+
+  public createBiquadFilter() {
+    return Object.assign(new FakeNode(this, "filter"), {
+      type: "lowpass",
+      frequency: new FakeParam(350),
+      Q: new FakeParam(1),
+    });
+  }
+
+  public createStereoPanner() {
+    return Object.assign(new FakeNode(this, "panner"), {
+      pan: new FakeParam(0),
+    });
+  }
+
+  public createDynamicsCompressor() {
+    return Object.assign(new FakeNode(this, "compressor"), {
+      threshold: new FakeParam(),
+      knee: new FakeParam(),
+      ratio: new FakeParam(),
+      attack: new FakeParam(),
+      release: new FakeParam(),
+    });
+  }
+
+  public createBuffer(_channels: number, length: number, sampleRate: number) {
+    const data = new Float32Array(length);
+    return { length, sampleRate, getChannelData: () => data };
+  }
+
+  public sources(): FakeSource[] {
+    return this.nodes.filter((node) => node instanceof FakeSource);
+  }
+
+  /** Whether sound from `node` can reach the speakers. */
+  public reaches(
+    node: FakeNode | FakeParam,
+    seen = new Set<unknown>(),
+  ): boolean {
+    if (node === this.destination) return true;
+    if (seen.has(node)) return false;
+    seen.add(node);
+    const next = node instanceof FakeParam ? [] : node.outputs;
+    return next.some((target) => {
+      if (target instanceof FakeParam) {
+        // A parameter belongs to a node; find it and keep following.
+        const owner = this.nodes.find((candidate) =>
+          Object.values(candidate).includes(target),
+        );
+        return owner !== undefined && this.reaches(owner, seen);
+      }
+      return this.reaches(target, seen);
+    });
+  }
+}
+
+function asContext(fake: FakeAudioContext): AudioContext {
+  return fake as unknown as AudioContext;
+}
+
+function press(): void {
+  document.dispatchEvent(new Event("pointerdown"));
+}
+
+function setVisibility(state: DocumentVisibilityState): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => state,
+  });
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => state === "hidden",
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+const AMBIENCE: SoundAmbience = {
+  presence: 1,
+  water: 0.5,
+  city: 0.2,
+  clarity: 0.8,
+};
+
+describe("browser sound", () => {
+  let contexts: FakeAudioContext[];
+  let createContext: () => AudioContext;
+
+  beforeEach(() => {
+    contexts = [];
+    createContext = vi.fn(() => {
+      const context = new FakeAudioContext();
+      contexts.push(context);
+      return asContext(context);
+    });
+    setVisibility("visible");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is the silent capability where a browser has no Web Audio", () => {
+    const sound = createBrowserSound({ document });
+    expect(sound.supported).toBe(false);
+    expect(() => {
+      sound.setEnabled(true);
+      sound.play("tap");
+      sound.setAmbience(AMBIENCE);
+    }).not.toThrow();
+  });
+
+  it("opens no audio device while sound is off, gestures or not", () => {
+    const sound = createBrowserSound({ createContext, document });
+    press();
+    sound.play("tap");
+    sound.setAmbience(AMBIENCE);
+    expect(createContext).not.toHaveBeenCalled();
+  });
+
+  it("opens the device once sound is wanted and gestures resume it", async () => {
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    expect(createContext).toHaveBeenCalledOnce();
+
+    const context = contexts[0]!;
+    context.state = "suspended";
+    press();
+    await Promise.resolve();
+    expect(context.resume).toHaveBeenCalled();
+    expect(context.state).toBe("running");
+    press();
+    expect(createContext).toHaveBeenCalledOnce();
+  });
+
+  it("drops a cue it cannot play yet rather than queueing it", () => {
+    createContext = vi.fn(() => {
+      const context = new FakeAudioContext("suspended");
+      context.resume = vi.fn(() => new Promise<void>(() => undefined));
+      contexts.push(context);
+      return asContext(context);
+    });
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    const context = contexts[0]!;
+    const before = context.sources().length;
+    sound.play("achievement");
+    // Only the silent sample that unlocks iOS was played.
+    expect(context.sources().length).toBe(before);
+  });
+
+  it("schedules every cue as sources that reach the speakers and stop", () => {
+    for (const cue of SOUND_CUES) {
+      const context = new FakeAudioContext();
+      const output = context.createGain();
+      output.connect(context.destination);
+      CUE_RECIPES[cue]({
+        context: context as unknown as BaseAudioContext,
+        output: output as unknown as AudioNode,
+        at: context.currentTime,
+        random: () => 0.5,
+      });
+      const sources = context.sources();
+      expect(sources.length, cue).toBeGreaterThan(0);
+      for (const source of sources) {
+        expect(source.started, cue).toBeGreaterThanOrEqual(context.currentTime);
+        expect(source.stopped, cue).toBeDefined();
+        expect(source.stopped! - context.currentTime, cue).toBeLessThanOrEqual(
+          CUE_MAX_SECONDS,
+        );
+        expect(context.reaches(source), cue).toBe(true);
+      }
+    }
+  });
+
+  it("plays a cue through the mix once the device runs", () => {
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    const context = contexts[0]!;
+    const before = context.sources().length;
+    sound.play("walk");
+    const played = context.sources().slice(before);
+    expect(played.length).toBeGreaterThan(0);
+    expect(played.every((source) => context.reaches(source))).toBe(true);
+  });
+
+  it("hears a cue repeated faster than its own pace once", () => {
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    const context = contexts[0]!;
+    sound.play("step");
+    const once = context.sources().length;
+    context.currentTime += 0.05;
+    sound.play("step");
+    expect(context.sources().length).toBe(once);
+    context.currentTime += 0.2;
+    sound.play("step");
+    expect(context.sources().length).toBeGreaterThan(once);
+  });
+
+  it("declares Safari's audio session ambient, so it mixes and obeys the ringer", () => {
+    const audioSession = { type: "auto" };
+    const sound = createBrowserSound({ createContext, document, audioSession });
+    sound.setEnabled(true);
+    expect(audioSession.type).toBe("ambient");
+  });
+
+  it("suspends a hidden page and resumes it when it is shown again", () => {
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    const context = contexts[0]!;
+    setVisibility("hidden");
+    expect(context.suspend).toHaveBeenCalled();
+    setVisibility("visible");
+    expect(context.resume).toHaveBeenCalled();
+  });
+
+  it("fades out and suspends when sound is turned off", () => {
+    vi.useFakeTimers();
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    const context = contexts[0]!;
+    sound.setEnabled(false);
+    expect(context.suspend).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(250);
+    expect(context.suspend).toHaveBeenCalled();
+    const before = context.sources().length;
+    sound.play("tap");
+    expect(context.sources().length).toBe(before);
+  });
+
+  it("runs the bed only while wanted, and stops it after it fades", () => {
+    vi.useFakeTimers();
+    const sound = createBrowserSound({ createContext, document });
+    sound.setAmbience(AMBIENCE);
+    expect(createContext).not.toHaveBeenCalled();
+
+    sound.setEnabled(true);
+    const context = contexts[0]!;
+    const bed = context.sources().filter((source) => source.loop);
+    expect(bed).toHaveLength(1);
+    expect(context.reaches(bed[0]!)).toBe(true);
+
+    sound.setAmbience(null);
+    expect(bed[0]!.stopped).toBeUndefined();
+    vi.advanceTimersByTime(5_000);
+    expect(bed[0]!.stopped).toBeDefined();
+  });
+
+  it("keeps a bed that comes back before it was released", () => {
+    vi.useFakeTimers();
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    sound.setAmbience(AMBIENCE);
+    const context = contexts[0]!;
+    sound.setAmbience(null);
+    vi.advanceTimersByTime(1_000);
+    sound.setAmbience(AMBIENCE);
+    vi.advanceTimersByTime(10_000);
+    expect(context.sources().filter((source) => source.loop)).toHaveLength(1);
+    expect(context.sources().find((source) => source.loop)!.stopped).toBe(
+      undefined,
+    );
+  });
+
+  it("opens a new device when the browser closed the old one", () => {
+    const sound = createBrowserSound({ createContext, document });
+    sound.setEnabled(true);
+    contexts[0]!.state = "closed";
+    press();
+    expect(createContext).toHaveBeenCalledTimes(2);
+    const before = contexts[1]!.sources().length;
+    sound.play("tap");
+    expect(contexts[1]!.sources().length).toBeGreaterThan(before);
+  });
+
+  it("is a quiet no-op when the device refuses to open", () => {
+    const sound = createBrowserSound({
+      createContext: () => {
+        throw new Error("NotAllowedError");
+      },
+      document,
+    });
+    expect(() => {
+      sound.setEnabled(true);
+      press();
+      sound.play("tap");
+      sound.setAmbience(AMBIENCE);
+    }).not.toThrow();
+  });
+});
+
+describe("ambience bed", () => {
+  it("muffles fog and opens up on revealed ground", () => {
+    const fog = ambienceLevels({ ...AMBIENCE, clarity: 0 });
+    const clear = ambienceLevels({ ...AMBIENCE, clarity: 1 });
+    expect(fog.clarityHz).toBeCloseTo(280);
+    expect(clear.clarityHz).toBeCloseTo(7200);
+  });
+
+  it("lets streets and water take the place of wind rather than stack on it", () => {
+    const open = ambienceLevels({ ...AMBIENCE, water: 0, city: 0 });
+    const street = ambienceLevels({ ...AMBIENCE, water: 0, city: 1 });
+    const shore = ambienceLevels({ ...AMBIENCE, water: 1, city: 0 });
+    expect(street.wind).toBeLessThan(open.wind);
+    expect(shore.wind).toBeLessThan(open.wind);
+    expect(street.city).toBeGreaterThan(0);
+    expect(shore.water).toBeGreaterThan(0);
+    expect(open.city).toBe(0);
+    expect(open.water).toBe(0);
+  });
+
+  it("clamps what it is given", () => {
+    const levels = ambienceLevels({
+      presence: 3,
+      water: Number.NaN,
+      city: -1,
+      clarity: 2,
+    });
+    expect(levels.bed).toBe(1);
+    expect(levels.water).toBe(0);
+    expect(levels.city).toBe(0);
+    expect(levels.clarityHz).toBeCloseTo(7200);
+  });
+
+  it("follows a change smoothly instead of jumping", () => {
+    const context = new FakeAudioContext();
+    const bed = createAmbienceBed(
+      context as unknown as BaseAudioContext,
+      context.destination as unknown as AudioNode,
+      () => 0.5,
+    );
+    bed.set(AMBIENCE);
+    const filter = context.nodes.find(
+      (node) => node.kind === "filter" && context.reaches(node),
+    ) as unknown as { frequency: FakeParam } | undefined;
+    expect(filter?.frequency.last("setTargetAtTime")).toBeDefined();
+    bed.stop();
+    expect(
+      context.sources().every((source) => source.stopped !== undefined),
+    ).toBe(true);
+  });
+});

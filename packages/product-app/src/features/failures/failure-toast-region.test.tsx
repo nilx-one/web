@@ -105,6 +105,36 @@ describe("FailureNoticeProvider", () => {
     expect(screen.getByText("Request rejected")).toBeInTheDocument();
   });
 
+  it("marks a newly published failure with the host's failure cue", async () => {
+    const user = userEvent.setup();
+    const sound = {
+      supported: true,
+      play: vi.fn(() => {
+        throw new Error("no audio device");
+      }),
+      setEnabled: vi.fn(),
+      setAmbience: vi.fn(),
+    };
+    render(
+      <FailureNoticeProvider sound={sound}>
+        <Producer
+          report={{
+            code: "contract_rejected",
+            kind: "rejected",
+            retryable: false,
+          }}
+        />
+      </FailureNoticeProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Publish failure" }));
+
+    expect(sound.play).toHaveBeenCalledOnce();
+    expect(sound.play).toHaveBeenCalledWith("failure");
+    // A cue that fails is a cue not heard; the notice is still there.
+    expect(screen.getByText("Request rejected")).toBeInTheDocument();
+  });
+
   it("puts an unavailable report on screen with the retry the caller can honour", async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();

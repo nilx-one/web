@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  SILENT_SOUND,
   UNSUPPORTED_GEOLOCATION,
   ZERO_SAFE_AREA,
   type GeolocationCapability,
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
+  type SoundCapability,
 } from "@nilx-one/host-contract";
 
 /**
@@ -21,6 +23,7 @@ export interface DiscordHandoffEnvironment {
   matchMedia(query: string): MediaQueryList;
   open(url: string, target: string, features: string): Window | null;
   readonly geolocation?: GeolocationCapability;
+  readonly sound?: SoundCapability;
 }
 
 function assertExternalUrl(url: URL): void {
@@ -38,10 +41,12 @@ function assertExternalUrl(url: URL): void {
 class DiscordHandoffHost implements HostPort {
   private readonly colorScheme: MediaQueryList;
   public readonly geolocation: GeolocationCapability;
+  public readonly sound: SoundCapability;
 
   public constructor(private readonly environment: DiscordHandoffEnvironment) {
     this.colorScheme = environment.matchMedia("(prefers-color-scheme: dark)");
     this.geolocation = environment.geolocation ?? UNSUPPORTED_GEOLOCATION;
+    this.sound = environment.sound ?? SILENT_SOUND;
   }
 
   public getSnapshot(): HostSnapshot {

@@ -97,6 +97,7 @@ import {
   type ShellRoute,
   type ShellSection,
 } from "./shell/routes";
+import { useSoundPreferenceSync } from "./shell/sound-preference";
 import { ToastViewportProvider } from "./shell/toast-viewport";
 
 export {
@@ -1043,6 +1044,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         renderer={dependencies.mapRenderer}
         geolocation={dependencies.host.geolocation}
         feedback={dependencies.host}
+        sound={dependencies.host.sound}
         runtime={viewModel.runtime}
         safeArea={viewModel.safeArea}
         section={section}
@@ -1259,11 +1261,12 @@ export function ProductApp({
   useEffect(() => {
     host.ready();
   }, [host]);
+  useSoundPreferenceSync(host.sound);
 
   return (
     <QueryClientProvider client={queryClient}>
       <ToastViewportProvider>
-        <FailureNoticeProvider>
+        <FailureNoticeProvider sound={host.sound}>
           <RouterProvider router={router} />
         </FailureNoticeProvider>
       </ToastViewportProvider>

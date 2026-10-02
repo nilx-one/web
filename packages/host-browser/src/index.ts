@@ -7,10 +7,12 @@ import {
   type HostChangeListener,
   type HostPort,
   type HostSnapshot,
+  type SoundCapability,
 } from "@nilx-one/host-contract";
 
 import { createBrowserGeolocation } from "./geolocation";
 import { createBrowserHaptics, type ImpactStyle } from "./haptics";
+import { createBrowserSound } from "./sound";
 
 export {
   createBrowserGeolocation,
@@ -20,6 +22,7 @@ export {
   createBrowserHaptics,
   type BrowserHapticsEnvironment,
 } from "./haptics";
+export { createBrowserSound, type BrowserSoundEnvironment } from "./sound";
 
 export interface BrowserHostEnvironment {
   matchMedia(query: string): MediaQueryList;
@@ -28,6 +31,8 @@ export interface BrowserHostEnvironment {
   readonly geolocation?: GeolocationCapability;
   /** Composed for the same reason; defaults to what this browser offers. */
   readonly haptics?: (style: ImpactStyle) => void;
+  /** Composed for the same reason; defaults to what this browser offers. */
+  readonly sound?: SoundCapability;
 }
 
 function assertExternalUrl(url: URL): void {
@@ -40,11 +45,13 @@ class BrowserHost implements HostPort {
   private readonly colorScheme: MediaQueryList;
   public readonly geolocation: GeolocationCapability;
   private readonly haptics: (style: ImpactStyle) => void;
+  public readonly sound: SoundCapability;
 
   public constructor(private readonly environment: BrowserHostEnvironment) {
     this.colorScheme = environment.matchMedia("(prefers-color-scheme: dark)");
     this.geolocation = environment.geolocation ?? createBrowserGeolocation();
     this.haptics = environment.haptics ?? createBrowserHaptics();
+    this.sound = environment.sound ?? createBrowserSound();
   }
 
   public getSnapshot(): HostSnapshot {

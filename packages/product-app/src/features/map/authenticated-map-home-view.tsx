@@ -11,7 +11,11 @@ import {
   type NearbySpeechAccessPort,
   type PubInfoAccessPort,
 } from "@nilx-one/application";
-import type { GeolocationCapability, HostPort } from "@nilx-one/host-contract";
+import type {
+  GeolocationCapability,
+  HostPort,
+  SoundCapability,
+} from "@nilx-one/host-contract";
 import {
   avatarPreviewUrl,
   mapDistanceMeters,
@@ -36,6 +40,8 @@ import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
 import { LanguageSettings } from "../../shell/language-settings";
+import { useSoundCue, useSoundPreference } from "../../shell/sound-preference";
+import { SoundSettings } from "../../shell/sound-settings";
 import {
   DOCK_ACTION_KEYS,
   DOCK_ROLE_KEYS,
@@ -152,6 +158,7 @@ import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { useNearbySpeech } from "./use-nearby-speech";
+import { useWorldAmbience } from "./world-ambience";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 import { GuideCutsceneView } from "../guide/guide-cutscene-view";
@@ -182,6 +189,11 @@ export interface AuthenticatedMapHomeViewProps {
   readonly geolocation: GeolocationCapability;
   /** Host feedback for a tap on the Dock; the host decides what it feels like. */
   readonly feedback?: Pick<HostPort, "impact">;
+  /**
+   * The host's sound. What the world does is marked with a cue and, when the
+   * person asked for it, the world in view is heard under them.
+   */
+  readonly sound?: SoundCapability;
   readonly runtime: RuntimeViewState;
   readonly safeArea: ShellSafeArea;
   /** The canonical route this surface is presenting. */
@@ -547,6 +559,7 @@ export function AuthenticatedMapHomeView({
   renderer,
   geolocation,
   feedback,
+  sound,
   runtime,
   safeArea,
   section = "world",
@@ -700,7 +713,17 @@ export function AuthenticatedMapHomeView({
     translateCopy(t, mapViewModel.label),
     translateCopy(t, mapViewModel.detail),
   );
-  const speech = useNearbySpeech({ port: nearbySpeech });
+  const cue = useSoundCue(sound);
+  const soundPreference = useSoundPreference();
+  useWorldAmbience({
+    renderer,
+    sound,
+    enabled: soundPreference === "all" && mapStatus.kind === "ready",
+  });
+  const speech = useNearbySpeech({
+    port: nearbySpeech,
+    onHeard: () => cue("heard"),
+  });
   const statusToasts = [
     ...(statusToast === undefined || statusToast.id === dismissedStatus
       ? []
@@ -738,6 +761,7 @@ export function AuthenticatedMapHomeView({
       if (outcome === "busy") return "busy";
       return outcome === "offered" || outcome === "revealing";
     },
+    onCue: cue,
   });
   const [fogAnnouncement, setFogAnnouncement] = useState("");
   const fogReveal = useFogReveal({
@@ -747,6 +771,7 @@ export function AuthenticatedMapHomeView({
     owner: pubDress,
     onRevealed: (_cell, via) => {
       setFogAnnouncement(t("fog.announce.revealed"));
+      cue("reveal");
       updateProgression(pubDress, (current) =>
         queueExperience(current, {
           id: newExperienceEventId(),
@@ -1373,6 +1398,7 @@ export function AuthenticatedMapHomeView({
     } catch {
       // Feedback is presentation; it never stands between a tap and its act.
     }
+    cue("tap");
     switch (identity.intent) {
       case "focus":
         focusWorldOnWheel();
@@ -1474,6 +1500,7 @@ export function AuthenticatedMapHomeView({
     const next = updateProgression(pubDress, (progression) =>
       earnDeviceAchievement(progression, "avaia-model-downloaded"),
     );
+    cue("achievement");
     setAchievementDialog({
       achievement: "avaia-model-downloaded",
       before: progressionStanding(current, accountFacts),
@@ -1927,6 +1954,9 @@ export function AuthenticatedMapHomeView({
                           </label>
                         ))}
                       </fieldset>
+                      {sound === undefined ? null : (
+                        <SoundSettings sound={sound} />
+                      )}
                       <p className="interface-settings__note">
                         {t("settings.presentation")}
                       </p>
@@ -2159,9 +2189,10 @@ export function AuthenticatedMapHomeView({
               reducedMotion={reducedMotion}
               onChoose={guide.choose}
               onAdvance={guide.advance}
-              onRewardFly={(toasts) =>
-                setRewardToasts((current) => [...current, ...toasts])
-              }
+              onRewardFly={(toasts) => {
+                cue("achievement");
+                setRewardToasts((current) => [...current, ...toasts]);
+              }}
             />
           )}
           <GuideRewardToasts

@@ -159,6 +159,24 @@ describe("useNearbySpeech", () => {
     ]);
   });
 
+  it("says once per poll that something new was heard, and never for history", async () => {
+    const onHeard = vi.fn();
+    const port = portReturning([
+      line("a", NOW_SECONDS - 300),
+      line("b"),
+      line("c"),
+    ]);
+    renderHook(() => useNearbySpeech({ port, now: clock, onHeard }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(onHeard).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SPEECH_POLL_MS * 2);
+    });
+    expect(onHeard).toHaveBeenCalledOnce();
+  });
+
   it("does not replay history when the world opens", async () => {
     const port = portReturning([line("a", NOW_SECONDS - 300)]);
     const { result } = renderHook(() => useNearbySpeech({ port, now: clock }));

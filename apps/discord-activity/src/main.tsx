@@ -6,7 +6,10 @@ import {
   createCoreWasmClient,
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
-import { createBrowserGeolocation } from "@nilx-one/host-browser";
+import {
+  createBrowserGeolocation,
+  createBrowserSound,
+} from "@nilx-one/host-browser";
 import {
   bootstrapDiscordActivity,
   installDiscordProxyRouting,
@@ -88,6 +91,7 @@ async function main(): Promise<void> {
             ? { kind: "unavailable" }
             : readBondLocationControl(authenticated.current),
       }),
+      sound: createBrowserSound(),
     },
   });
   authenticated.current = {

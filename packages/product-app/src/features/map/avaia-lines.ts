@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { SoundCue } from "@nilx-one/host-contract";
 import type {
   AvatarModelId,
   MapGround,
@@ -768,6 +769,30 @@ export function avaiaLines(
 }
 
 /** The line kind a refused tap is answered with. */
+/**
+ * The sound that goes with a line, when one does. The line is still the fact
+ * and is still written; the cue only marks that it was said. A revealed cell
+ * has its own cue wherever the reveal came from, so its line adds none.
+ */
+export function lineCue(kind: AvaiaLineKind): SoundCue | undefined {
+  switch (kind) {
+    case "walk":
+    case "fog.reveal":
+      return "walk";
+    case "blocked.building":
+    case "blocked.water":
+    case "blocked.fog":
+    case "fog.busy":
+      return "refuse";
+    case "landmark.spotted":
+      return "spot";
+    case "landmark.studied":
+      return "study";
+    case "fog.revealed":
+      return undefined;
+  }
+}
+
 export function blockedLineKind(
   ground: Exclude<MapGround, "open">,
 ): AvaiaLineKind {

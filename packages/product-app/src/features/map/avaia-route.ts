@@ -158,7 +158,7 @@ function localPlane(origin: MapPointSelection): Plane {
   };
 }
 
-function insidePolygon(
+export function insidePolygon(
   point: readonly [number, number],
   rings: readonly Ring[],
 ): boolean {

@@ -9,6 +9,7 @@ import {
   avaiaLines,
   blockedLineKind,
   landmarkLabel,
+  lineCue,
   pickAvaiaLine,
   type AvaiaLineKind,
 } from "./avaia-lines";
@@ -118,5 +119,18 @@ describe("what an Avaia says to itself", () => {
     expect(blockedLineKind("building")).toBe("blocked.building");
     expect(blockedLineKind("water")).toBe("blocked.water");
     expect(blockedLineKind("fog")).toBe("blocked.fog");
+  });
+
+  it("marks what it says with a cue, and leaves a reveal to its own", () => {
+    expect(lineCue("walk")).toBe("walk");
+    expect(lineCue("fog.reveal")).toBe("walk");
+    for (const ground of ["building", "water", "fog"] as const) {
+      expect(lineCue(blockedLineKind(ground))).toBe("refuse");
+    }
+    expect(lineCue("fog.busy")).toBe("refuse");
+    expect(lineCue("landmark.spotted")).toBe("spot");
+    expect(lineCue("landmark.studied")).toBe("study");
+    // The reveal is heard wherever it came from, so its line adds nothing.
+    expect(lineCue("fog.revealed")).toBeUndefined();
   });
 });

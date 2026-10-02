@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { GeolocationCapability } from "./geolocation";
+import type { SoundCapability } from "./sound";
 
 export * from "./geolocation";
+export * from "./sound";
 
 export type HostKind = "browser" | "telegram" | "discord" | "native";
 export type HostTheme = "dark" | "light";
@@ -58,6 +60,12 @@ export interface HostPort {
    * platform geolocation API of its own.
    */
   readonly geolocation: GeolocationCapability;
+  /**
+   * Sound is a host capability for the same reason haptics are: the product
+   * names the moment, the host decides what it sounds like. A host with no
+   * sound composes `SILENT_SOUND`.
+   */
+  readonly sound: SoundCapability;
   /**
    * Where a password should be created instead of here. A password manager
    * files a credential under the origin that shows the form, so a host served
