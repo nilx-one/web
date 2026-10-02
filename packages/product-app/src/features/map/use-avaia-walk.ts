@@ -127,6 +127,11 @@ export interface AvaiaWalkInput {
    * it walks. Whether anything is heard is the host's and the person's.
    */
   readonly onCue?: (cue: SoundCue) => void;
+  /** Told every line the Avaia says, so it can be said aloud as well. */
+  readonly onLine?: (line: {
+    readonly kind: AvaiaLineKind;
+    readonly text: string;
+  }) => void;
 }
 
 export interface AvaiaWalkState {
@@ -173,6 +178,7 @@ export function useAvaiaWalk({
   reducedMotion,
   onFogTap,
   onCue,
+  onLine,
 }: AvaiaWalkInput): AvaiaWalkState {
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
   const [study, setStudy] = useState<AvaiaStudy | undefined>(undefined);
@@ -222,6 +228,7 @@ export function useAvaiaWalk({
     owner,
     onFogTap,
     onCue,
+    onLine,
   });
   useEffect(() => {
     latest.current = {
@@ -237,6 +244,7 @@ export function useAvaiaWalk({
       owner,
       onFogTap,
       onCue,
+      onLine,
     };
   });
 
@@ -256,6 +264,7 @@ export function useAvaiaWalk({
       setSpeech({ id: speechCount.current, text });
       const cue = lineCue(kind);
       if (cue !== undefined) latest.current.onCue?.(cue);
+      latest.current.onLine?.({ kind, text });
     },
     [],
   );

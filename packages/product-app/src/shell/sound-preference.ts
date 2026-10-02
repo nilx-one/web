@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { SoundCapability, SoundCue } from "@nilx-one/host-contract";
+import type {
+  SoundCapability,
+  SoundCue,
+  SoundVoiceLine,
+} from "@nilx-one/host-contract";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 /**
@@ -67,6 +71,39 @@ export function useSoundPreference(): SoundPreference {
 }
 
 /**
+ * Whether the Avaia says its lines aloud, when this device sounds at all. It
+ * is kept apart from the cues: a person may want the clicks and chimes and
+ * not a voice, or the other way round. On until someone says otherwise.
+ */
+export const VOICE_STORAGE_KEY = "nilx-one.interface.voice";
+
+let unstoredVoice: boolean | undefined;
+
+export function readVoicePreference(): boolean {
+  try {
+    const stored = window.localStorage.getItem(VOICE_STORAGE_KEY);
+    if (stored === "on") return true;
+    if (stored === "off") return false;
+  } catch {
+    // Storage is optional; the session keeps whatever was chosen in it.
+  }
+  return unstoredVoice ?? true;
+}
+
+export function chooseVoicePreference(on: boolean): void {
+  try {
+    window.localStorage.setItem(VOICE_STORAGE_KEY, on ? "on" : "off");
+  } catch {
+    unstoredVoice = on;
+  }
+  for (const listener of listeners) listener();
+}
+
+export function useVoicePreference(): boolean {
+  return useSyncExternalStore(subscribe, readVoicePreference, () => true);
+}
+
+/**
  * Keeps the host's sound in step with the person's choice. Mounted once, at
  * the root, so every surface — sign-in included — hears the same answer.
  */
@@ -95,6 +132,22 @@ export function useSoundCue(
         sound?.play(cue);
       } catch {
         // Best-effort presentation; an unheard cue changes nothing.
+      }
+    },
+    [sound],
+  );
+}
+
+/** The same, for a recorded line: never throws, never waits. */
+export function useSoundVoice(
+  sound: SoundCapability | undefined,
+): (line: SoundVoiceLine) => void {
+  return useCallback(
+    (line: SoundVoiceLine) => {
+      try {
+        sound?.speak(line);
+      } catch {
+        // A line not heard is still written on the card.
       }
     },
     [sound],

@@ -1,0 +1,34 @@
+{
+  "version": "0.1.0",
+  "takes": 3,
+  "locales": {
+    "en": {
+      "model": "kokoro-en-v0_19",
+      "judge": "en",
+      "studies": {
+        "sky-study": { "speaker": "am_michael", "speed": 0.95 },
+        "dasha-study": { "speaker": "af_bella", "speed": 1.0 },
+        "kai-study": { "speaker": "bm_lewis", "speed": 0.95 },
+        "dasha-v2-study": { "speaker": "bf_emma", "speed": 1.0 }
+      }
+    },
+    "uk-UA": {
+      "model": "vits-piper-uk_UA-ukrainian_tts-medium",
+      "judge": "uk",
+      "studies": {
+        "sky-study": { "speaker": "mykyta", "length": 1.05, "noise": 0.6 },
+        "dasha-study": { "speaker": "tetiana", "length": 0.95, "noise": 0.7 },
+        "kai-study": {
+          "speaker": "mykyta",
+          "length": 1.1,
+          "noise": 0.33,
+          "pitch": -1.5
+        },
+        "dasha-v2-study": { "speaker": "lada", "length": 1.0, "noise": 0.667 }
+      }
+    }
+  },
+  "unvoiced": {
+    "ru-RU": "No Russian voice we could find has a license that allows this product: the Piper voices are fine-tuned from the non-commercial lessac dataset, carry CC BY-NC-SA, or state no license at all."
+  }
+}

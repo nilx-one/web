@@ -7,8 +7,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   chooseSoundPreference,
+  chooseVoicePreference,
   readSoundPreference,
+  readVoicePreference,
   SOUND_STORAGE_KEY,
+  VOICE_STORAGE_KEY,
   useSoundCue,
   useSoundPreferenceSync,
 } from "./sound-preference";
@@ -19,6 +22,7 @@ function soundDouble() {
     play: vi.fn(),
     setEnabled: vi.fn(),
     setAmbience: vi.fn(),
+    speak: vi.fn(),
   } satisfies SoundCapability;
 }
 
@@ -40,6 +44,13 @@ describe("how much this device sounds", () => {
   it("ignores a stored value it does not know", () => {
     window.localStorage.setItem(SOUND_STORAGE_KEY, "loud");
     expect(readSoundPreference()).toBe("cues");
+  });
+
+  it("lets the Avaia speak until someone says otherwise, and remembers", () => {
+    expect(readVoicePreference()).toBe(true);
+    chooseVoicePreference(false);
+    expect(readVoicePreference()).toBe(false);
+    expect(window.localStorage.getItem(VOICE_STORAGE_KEY)).toBe("off");
   });
 
   it("keeps the host in step with the choice", () => {

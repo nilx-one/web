@@ -84,7 +84,8 @@ These are not carried:
 - **how much this device sounds** (`nilx-one.interface.sound`) — off, effects,
   or effects and the world in view. Unlike language or appearance it does not
   follow a Bond: another device has its own speakers and stands somewhere else
-  ([Sound](sound.md));
+  ([Sound](sound.md)), and whether the Avaia says its lines aloud
+  (`nilx-one.interface.voice`, [Avaia's voice](avaia-voice.md));
 - **which wipe this device has applied** (`nilx-one.wipe-epoch`) — the marker
   that makes a full local wipe run once per browser. It says nothing about who
   the person is;

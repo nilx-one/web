@@ -1,0 +1,42 @@
+{
+  "kokoro-en-v0_19": {
+    "engine": "kokoro",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-en-v0_19.tar.bz2",
+    "sha256": "912804855a04745fa77a30be545b3f9a5d15c4d66db00b88cbcd4921df605ac7",
+    "directory": "kokoro-en-v0_19",
+    "sampleRate": 24000,
+    "speakers": [
+      "af",
+      "af_bella",
+      "af_nicole",
+      "af_sarah",
+      "af_sky",
+      "am_adam",
+      "am_michael",
+      "bf_emma",
+      "bf_isabella",
+      "bm_george",
+      "bm_lewis"
+    ],
+    "license": "Apache-2.0",
+    "credit": "Kokoro-82M v0.19 by hexgrad, converted to ONNX by k2-fsa/sherpa-onnx. Speaker order from sherpa-onnx scripts/kokoro/v0.19/generate_voices_bin.py."
+  },
+  "vits-piper-uk_UA-ukrainian_tts-medium": {
+    "engine": "piper-text",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-uk_UA-ukrainian_tts-medium.tar.bz2",
+    "sha256": "92be6ff21ebb1cbcc0c71121a6437db8d060cee5785287aaa6a19a2548f59c03",
+    "directory": "vits-piper-uk_UA-ukrainian_tts-medium",
+    "onnx": "uk_UA-ukrainian_tts-medium.onnx",
+    "sampleRate": 22050,
+    "license": "Piper model card: trained from scratch on a CC0 dataset (NabuCasa/voice-datasets)",
+    "credit": "Piper voice uk_UA-ukrainian_tts (medium), speakers lada, mykyta and tetiana from the Open Source Ukrainian TTS datasets by Yehor Smoliakov."
+  },
+  "sherpa-onnx-whisper-turbo": {
+    "engine": "whisper",
+    "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-turbo.tar.bz2",
+    "sha256": "b11acbbcd660b44a8e0df33724feb5aaa709cf65668f2823d59f656312544f22",
+    "directory": "sherpa-onnx-whisper-turbo",
+    "license": "MIT (OpenAI Whisper large-v3-turbo)",
+    "credit": "Listens to every take and keeps the one it understood best. It judges; nothing it produces is shipped."
+  }
+}
