@@ -118,6 +118,23 @@
   box-shadow: 0 0 0.9rem rgba(157, 108, 255, 0.9);
 }
 
+/* The host is live for as long as the page is: a slow, faint breath says so. */
+@media (prefers-reduced-motion: no-preference) {
+  .app-header__host > i {
+    animation: app-header-host-pulse 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes app-header-host-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
 .app-header__settings,
 .app-header__overflow-trigger {
   display: grid;

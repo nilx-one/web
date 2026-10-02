@@ -36,8 +36,11 @@ export interface DockIdentityViewState {
   readonly glyph: string;
   /** The relationship this identity has to the world right now. */
   readonly role: string;
-  /** Presentation tone for the status dot. */
-  readonly tone: "authenticated" | "ready" | "working" | "idle";
+  /**
+   * Presentation tone for the status dot. It follows the role: driving is the
+   * one live tone, and what is only watching or cannot run stays quiet.
+   */
+  readonly tone: "driving" | "ready" | "working" | "idle";
   readonly actionable: boolean;
   readonly actionLabel: string;
   /**
@@ -164,7 +167,7 @@ export function createBondDockViewState(
     // A Bond that is not driving is watching: that is what spectating means.
     // "You" is already the line's subject, so the role never repeats it.
     role: seated === "left" ? "driving" : "spectate",
-    tone: "authenticated",
+    tone: seated === "left" ? "driving" : "idle",
     actionable: seated === "left" ? input.focusable : true,
     actionLabel:
       seated === "left"
@@ -174,20 +177,19 @@ export function createBondDockViewState(
   });
 
   const avaia = (seated: "left" | "right"): DockIdentityViewState => {
-    const setUp =
-      seated === "right" && input.avaiaConfiguration === "unconfigured";
+    const unconfigured = input.avaiaConfiguration === "unconfigured";
+    const setUp = seated === "right" && unconfigured;
+    const drives = seated === "left" && !unconfigured;
     return {
       seat: "avaia",
       address: avaiaAddress,
       glyph: "AI",
-      role:
-        seated === "left" && input.avaiaConfiguration !== "unconfigured"
-          ? "driving"
-          : avaiaRole(input.avaiaConfiguration, input.avaia),
-      // Driving is about the wheel; the status dot is about the runtime. An
-      // Avaia can be the identity the world is showing while its runtime is
-      // not up, and the dot must not claim otherwise.
-      tone: avaiaTone(input.avaia),
+      role: drives
+        ? "driving"
+        : avaiaRole(input.avaiaConfiguration, input.avaia),
+      // The dot reads with the word beside it: driving is live, and an Avaia
+      // nobody has configured is quiet whatever this device could run.
+      tone: drives ? "driving" : unconfigured ? "idle" : avaiaTone(input.avaia),
       actionable: seated === "left" ? input.focusable : true,
       actionLabel:
         seated === "left"

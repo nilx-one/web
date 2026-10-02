@@ -182,8 +182,9 @@ describe("Avaia configuration on the Dock", () => {
       avaiaConfiguration: "unconfigured",
     });
 
-    // The role is what the owner stored; the dot is what this device can run.
-    expect(dock.right).toMatchObject({ role: "unconfigured", tone: "ready" });
+    // The role is what the owner stored, and the dot reads with it: nothing
+    // to run yet, whatever this device could run.
+    expect(dock.right).toMatchObject({ role: "unconfigured", tone: "idle" });
   });
 
   it("stays configured on a device that can run nothing", () => {

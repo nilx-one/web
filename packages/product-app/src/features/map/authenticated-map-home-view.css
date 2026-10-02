@@ -160,8 +160,10 @@
 }
 
 .authenticated-map-home.authenticated-map-home .app-header__host > i {
+  --pulse-ring: rgba(55, 215, 229, 0.12);
+  --pulse-ring-wide: rgba(55, 215, 229, 0.03);
   background: var(--map-accent-spatial);
-  box-shadow: 0 0 0 0.28rem rgba(55, 215, 229, 0.12);
+  box-shadow: 0 0 0 0.28rem var(--pulse-ring);
 }
 
 .authenticated-map-home.authenticated-map-home .app-header__settings,
@@ -404,7 +406,7 @@
   background: rgba(95, 118, 123, 0.38);
 }
 
-.bond-dock__status-dot--authenticated,
+.bond-dock__status-dot--driving,
 .bond-dock__status-dot--ready {
   background: var(--map-positive);
   box-shadow: 0 0 0 0.22rem rgba(41, 155, 118, 0.1);
@@ -743,10 +745,33 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  /* Whoever drives breathes, barely: alive, not asking for attention. */
+  .bond-dock__status-dot--driving {
+    animation: status-dot-pulse 2.8s ease-in-out infinite;
+    --pulse-ring: rgba(41, 155, 118, 0.1);
+    --pulse-ring-wide: rgba(41, 155, 118, 0.02);
+  }
+
+  .authenticated-map-home.authenticated-map-home .app-header__host > i {
+    animation: status-dot-pulse 2.8s ease-in-out infinite;
+  }
+
   .authenticated-map-home[data-focus-state="locating"]
     .bond-dock__bond--active
     .bond-dock__glyph {
     animation: authenticated-bond-locate 1s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes status-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0.22rem var(--pulse-ring);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 0.42rem var(--pulse-ring-wide);
+    opacity: 0.72;
   }
 }
 
