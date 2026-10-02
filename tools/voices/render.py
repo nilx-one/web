@@ -272,7 +272,8 @@ class PiperTextVoice:
     Its sherpa-onnx bundle declares an espeak front end the model was never
     trained on, so the network is run directly, the way Piper itself feeds a
     `phoneme_type: text` voice: decomposed lowercase characters, each followed
-    by padding, between the begin and end symbols.
+    by padding, after the begin symbol and its own padding, then the end
+    symbol.
     """
 
     def __init__(self, directory, spec):
@@ -288,7 +289,9 @@ class PiperTextVoice:
         self.rate = self.config["audio"]["sample_rate"]
 
     def tokens(self, text):
-        ids = list(self.ids["^"])
+        # piper-phonemize pads after the begin symbol too; without it the
+        # voice swallows a line's first sound.
+        ids = list(self.ids["^"]) + self.ids["_"]
         for char in unicodedata.normalize("NFD", text.lower()):
             if char in self.ids:
                 ids += self.ids[char] + self.ids["_"]
@@ -423,7 +426,13 @@ def main():
             }
             print(f"[{number}/{len(lines)}] {key} cer={best['error']:.2f} "
                   f"take={best['take']} heard={best['heard']!r}", flush=True)
+            # Written after every line, so an interrupted render keeps its work.
+            write_manifest(manifest_path, manifest, voices, models)
 
+    write_manifest(manifest_path, manifest, voices, models)
+
+
+def write_manifest(path, manifest, voices, models):
     manifest["version"] = voices["version"]
     manifest["voices"] = {
         locale: {study: {"model": spec["model"], **settings}
@@ -435,9 +444,9 @@ def main():
                "sha256": spec["sha256"]}
         for name, spec in models.items()}
     manifest["lines"] = dict(sorted(manifest["lines"].items()))
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8")
 
 
 if __name__ == "__main__":
