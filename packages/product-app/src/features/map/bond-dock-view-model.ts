@@ -17,7 +17,7 @@ import type { AvaiaConfigurationState } from "@nilx-one/application";
 
 /** What this device can do about the Avaia runtime right now. */
 export type AvaiaAvailability =
-  "ready" | "preparing" | "downloadable" | "unavailable";
+  "ready" | "preparing" | "downloadable" | "unavailable" | "error";
 
 export type DockSeat = "bond" | "avaia";
 
@@ -36,8 +36,11 @@ export interface DockIdentityViewState {
   readonly glyph: string;
   /** The relationship this identity has to the world right now. */
   readonly role: string;
-  /** Presentation tone for the status dot. */
-  readonly tone: "authenticated" | "ready" | "working" | "idle";
+  /**
+   * Presentation tone for the status dot. It follows the role: driving is the
+   * one live tone, and what is only watching or cannot run stays quiet.
+   */
+  readonly tone: "driving" | "ready" | "working" | "idle" | "error";
   readonly actionable: boolean;
   readonly actionLabel: string;
   /**
@@ -101,8 +104,13 @@ function avaiaRole(
       return "preparing";
     case "downloadable":
       return "download";
+    // A device that runs no model leaves the Avaia resting, not out of reach:
+    // the wheel can still be handed to it. "unavailable" is kept for a card
+    // that truly cannot be chosen.
     case "unavailable":
-      return "unavailable";
+      return "inactive";
+    case "error":
+      return "error";
   }
 }
 
@@ -117,6 +125,8 @@ function avaiaTone(
     case "downloadable":
     case "unavailable":
       return "idle";
+    case "error":
+      return "error";
   }
 }
 
@@ -129,6 +139,17 @@ export function openingWheel(
   configuration: AvaiaConfigurationState | undefined,
 ): DockSeat {
   return configuration === "unconfigured" ? "bond" : "avaia";
+}
+
+/**
+ * An identity that is not driving and cannot be chosen is what "unavailable"
+ * means on the Dock; a broken runtime still says "error" first.
+ */
+function unavailableUnlessChoosable(
+  identity: DockIdentityViewState,
+): DockIdentityViewState {
+  if (identity.actionable || identity.tone === "error") return identity;
+  return { ...identity, role: "unavailable", tone: "idle" };
 }
 
 export function createBondDockViewState(
@@ -164,7 +185,7 @@ export function createBondDockViewState(
     // A Bond that is not driving is watching: that is what spectating means.
     // "You" is already the line's subject, so the role never repeats it.
     role: seated === "left" ? "driving" : "spectate",
-    tone: "authenticated",
+    tone: seated === "left" ? "driving" : "idle",
     actionable: seated === "left" ? input.focusable : true,
     actionLabel:
       seated === "left"
@@ -174,20 +195,19 @@ export function createBondDockViewState(
   });
 
   const avaia = (seated: "left" | "right"): DockIdentityViewState => {
-    const setUp =
-      seated === "right" && input.avaiaConfiguration === "unconfigured";
+    const unconfigured = input.avaiaConfiguration === "unconfigured";
+    const setUp = seated === "right" && unconfigured;
+    const drives = seated === "left" && !unconfigured;
     return {
       seat: "avaia",
       address: avaiaAddress,
       glyph: "AI",
-      role:
-        seated === "left" && input.avaiaConfiguration !== "unconfigured"
-          ? "driving"
-          : avaiaRole(input.avaiaConfiguration, input.avaia),
-      // Driving is about the wheel; the status dot is about the runtime. An
-      // Avaia can be the identity the world is showing while its runtime is
-      // not up, and the dot must not claim otherwise.
-      tone: avaiaTone(input.avaia),
+      role: drives
+        ? "driving"
+        : avaiaRole(input.avaiaConfiguration, input.avaia),
+      // The dot reads with the word beside it: driving is live, and an Avaia
+      // nobody has configured is quiet whatever this device could run.
+      tone: drives ? "driving" : unconfigured ? "idle" : avaiaTone(input.avaia),
       actionable: seated === "left" ? input.focusable : true,
       actionLabel:
         seated === "left"
@@ -200,7 +220,9 @@ export function createBondDockViewState(
   };
 
   const left = driving === "bond" ? bond("left") : avaia("left");
-  const right = driving === "bond" ? avaia("right") : bond("right");
+  const right = unavailableUnlessChoosable(
+    driving === "bond" ? avaia("right") : bond("right"),
+  );
   const place = (seat: DockSeat): DockPlace =>
     left.seat === seat
       ? { driving: true, identity: left }
@@ -225,6 +247,8 @@ export interface AvaiaRuntimeEnvironment {
   readonly loaded?: boolean;
   /** Whether it is being fetched or warmed up right now. */
   readonly preparing?: boolean;
+  /** Whether loading or running it failed, e.g. a WebLLM engine error. */
+  readonly failed?: boolean;
 }
 
 /**
@@ -235,6 +259,7 @@ export interface AvaiaRuntimeEnvironment {
 export function avaiaAvailability(
   environment: AvaiaRuntimeEnvironment,
 ): AvaiaAvailability {
+  if (environment.failed === true) return "error";
   if (environment.artifact === undefined || !environment.acceleratedGraphics) {
     return "unavailable";
   }
