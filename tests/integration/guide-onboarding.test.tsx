@@ -203,9 +203,12 @@ describe("xSasha, the first time a Bond opens the world", () => {
       ARRIVAL_WAIT,
     );
     // She is on the world itself, beside the Bond, never its twin: the
-    // Bond wears Sky, so she is drawn as Dasha 2.0.
-    expect(renderer.avatars?.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "guide", modelId: "dasha-v2-study" }),
+    // Bond wears Sky, so she is drawn as Dasha 2.0. Her body is drawn on the
+    // next animation frame, which can land after the dialog on a busy runner.
+    await waitFor(() =>
+      expect(renderer.avatars?.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "guide", modelId: "dasha-v2-study" }),
+      ),
     );
     // The camera is the scene's: it is staged close in, not left where it was.
     await waitFor(() =>
