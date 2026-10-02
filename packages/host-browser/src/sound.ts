@@ -16,9 +16,10 @@ import { CUE_RECIPES } from "./sound-recipes";
  * Sound in a browser, through Web Audio.
  *
  * A browser opens audio only from inside a gesture, so the device is opened
- * lazily: never while sound is off, and otherwise on the first press, key or
- * touch after it is wanted. Until then every cue is dropped rather than
- * queued. Where Safari exposes an audio session it is declared `ambient`:
+ * from one and from nothing else: never while sound is off, never while a
+ * page mounts or a stored preference is read back, and otherwise on the
+ * first press, key or touch after sound is wanted. Until then every cue is
+ * dropped rather than queued. Where Safari exposes an audio session it is declared `ambient`:
  * cues mix with whatever the person is already listening to and respect the
  * ringer switch, the way a game's sound effects should. A hidden page is
  * suspended. Everything else is a quiet no-op: sound is presentation and
@@ -66,7 +67,19 @@ const VOICE_DUCK = 0.35;
 /** Decoded lines kept, most recently said last. */
 const VOICE_CACHE_SIZE = 48;
 
-const GESTURES = ["pointerdown", "pointerup", "touchend", "keydown"] as const;
+/**
+ * Events that carry a user gesture. They are heard in the bubble phase, after
+ * the page's own handlers, so a press that turns sound on is also the press
+ * that opens the device.
+ */
+const GESTURES = [
+  "pointerdown",
+  "pointerup",
+  "touchend",
+  "keydown",
+  "click",
+  "change",
+] as const;
 
 interface WebAudioWindow {
   readonly AudioContext?: new () => AudioContext;
@@ -123,13 +136,15 @@ class BrowserSound implements SoundCapability {
     this.random = environment.random ?? Math.random;
     const doc = environment.document;
     if (doc !== undefined) {
-      const wake = (): void => this.wake();
+      const unlock = (): void => this.wake(true);
       for (const gesture of GESTURES) {
-        doc.addEventListener(gesture, wake, { capture: true, passive: true });
+        doc.addEventListener(gesture, unlock, { passive: true });
       }
       doc.addEventListener("visibilitychange", () => {
+        // Coming back resumes a device a gesture already opened; it never
+        // opens one.
         if (doc.visibilityState === "hidden") this.suspend();
-        else this.wake();
+        else this.wake(false);
       });
     }
   }
@@ -138,8 +153,9 @@ class BrowserSound implements SoundCapability {
     if (this.enabled === enabled) return;
     this.enabled = enabled;
     if (enabled) {
-      // Turning sound on is itself a gesture, so this is the moment to open.
-      this.wake();
+      // Wanting sound is recorded, not acted on: this is also what a mount
+      // and a stored preference call, and neither is a gesture. The next
+      // gesture opens or resumes the device.
       this.mix?.master.gain.setTargetAtTime(
         MASTER_LEVEL,
         this.mix.context.currentTime,
@@ -284,8 +300,11 @@ class BrowserSound implements SoundCapability {
     }
   }
 
-  /** Opens or resumes the device if sound is wanted. Safe to call anytime. */
-  private wake(): void {
+  /**
+   * Resumes the device if sound is wanted, and opens it only when `fromGesture`
+   * says a gesture is being handled right now.
+   */
+  private wake(fromGesture: boolean): void {
     if (!this.enabled) return;
     if (
       this.environment.document?.visibilityState === "hidden" ||
@@ -302,6 +321,7 @@ class BrowserSound implements SoundCapability {
         this.clips.clear();
         this.mix = undefined;
       }
+      if (this.mix === undefined && !fromGesture) return;
       const mix = this.mix ?? this.open();
       if (mix.context.state !== "running") {
         void mix.context.resume().then(

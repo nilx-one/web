@@ -85,10 +85,13 @@ show the choice.
 
 ## Browsers
 
-- **Gesture first.** A browser opens audio only from a gesture. No audio
-  device is opened while sound is off; otherwise it opens on the first press,
-  key or touch after sound is wanted, and the Settings choice is itself that
-  gesture. A cue that cannot play yet is dropped, not queued: a sound late is
+- **Gesture first.** A browser opens audio only from a gesture, and so does
+  this adapter. `setEnabled(true)` only records that sound is wanted: it is
+  what a page mount and a stored preference call, and neither is a gesture.
+  The device opens on the first press, key or touch after that, heard after
+  the page's own handlers, so the Settings choice is itself that gesture.
+  Returning to a hidden tab resumes a device already opened and never opens
+  one. A cue that cannot play yet is dropped, not queued: a sound late is
   a sound about something else. Older iOS releases also play one silent
   sample inside the gesture.
 - **Ambient session.** Where Safari exposes `navigator.audioSession`, it is
