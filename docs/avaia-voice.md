@@ -81,7 +81,14 @@ in ONNX Runtime.
 6. **Judging.** Each line is synthesised up to three times. Whisper turbo
    transcribes every take, and the take with the lowest character error rate
    against the spoken text is kept. Kokoro takes vary the pace, and only
-   downward: hurried, it swallows a sentence's last word.
+   downward: hurried, it swallows a sentence's last word. Whisper misjudges
+   short clips two opposite ways. One that ends right on its last word is
+   often heard cut short, and the same clip padded with silence is sometimes
+   heard twice over. So every take is heard both ways and the closer reading
+   counts, and an echo the line itself does not have is not held against
+   it. `--retry-above 0.1 --takes 8` renders the weakest lines again. In
+   0.1.0, 185 of 208 clips are heard word for word and none is worse than
+   14%; what remains is mostly the judge ("Avaia" heard as "Avea").
 7. **Encoding** to `deploy/web/voices/<version>/<locale>/<study>/<kind>.<n>.mp3`,
    with `manifest.json` recording, per clip, the line, what the voice was
    asked to say, what the judge heard, its error rate, and its SHA-256.
@@ -89,6 +96,8 @@ in ONNX Runtime.
 ```sh
 sh tools/voices/build.sh                                  # every line
 sh tools/voices/build.sh --only uk-UA/kai-study/walk.7    # one line again
+python tools/voices/render.py --rejudge                   # listen again
+python tools/voices/render.py --retry-above 0.1 --takes 8 # redo the weakest
 python tools/voices/render.py --dry-run                   # what would be said
 ```
 
