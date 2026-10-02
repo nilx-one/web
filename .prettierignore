@@ -5,3 +5,4 @@ pnpm-lock.yaml
 LICENSE
 
 deploy/web/avatars/
+deploy/web/voices/

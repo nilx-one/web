@@ -55,6 +55,15 @@ class Judging(unittest.TestCase):
         self.assertEqual(render.character_error_rate(
             "Three at once is my limit.", "3 at once is my limit."), 0.0)
 
+    def test_an_echo_of_a_short_line_is_the_judge_not_the_voice(self):
+        self.assertEqual(render.character_error_rate(
+            "Door not found.", "Door not found. Door not found"), 0.0)
+        # A line that repeats itself keeps its repeat.
+        self.assertEqual(render.character_error_rate(
+            "Going, going.", "Going, going."), 0.0)
+        self.assertGreater(render.character_error_rate(
+            "Going, going.", "Going."), 0.3)
+
     def test_a_missing_word_costs_its_letters(self):
         error = render.character_error_rate(
             "I don't go where you haven't been.",

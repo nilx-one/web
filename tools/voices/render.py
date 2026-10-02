@@ -45,6 +45,9 @@ TAIL_SECONDS = 0.25
 SILENCE_SHARE = 0.005
 FADE_SECONDS = 0.008
 MP3_BITRATE = "48k"
+# Silence the judge hears around a take; not part of the clip.
+JUDGE_LEAD_SECONDS = 0.3
+JUDGE_TAIL_SECONDS = 0.6
 
 
 def load_json(name):
@@ -120,9 +123,30 @@ def comparable(text, language="en"):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def without_repeats(text):
+    """Drops a phrase heard twice in a row: Whisper's echo on a short clip."""
+    words = text.split()
+    changed = True
+    while changed:
+        changed = False
+        for size in range(len(words) // 2, 0, -1):
+            for start in range(len(words) - 2 * size + 1):
+                if words[start:start + size] == words[start + size:start + 2 * size]:
+                    del words[start + size:start + 2 * size]
+                    changed = True
+                    break
+            if changed:
+                break
+    return " ".join(words)
+
+
 def character_error_rate(reference, heard, language="en"):
     """Edit distance between the two, per character of the reference."""
-    a, b = comparable(reference, language), comparable(heard, language)
+    a = comparable(reference, language)
+    b = comparable(heard, language)
+    # A repeat the line itself does not have is the judge's echo, not the voice.
+    if without_repeats(a) == a:
+        b = without_repeats(b)
     if not a:
         return 0.0 if not b else 1.0
     previous = list(range(len(b) + 1))
@@ -178,6 +202,13 @@ def write_wav(path, samples, rate, np):
         out.setsampwidth(2)
         out.setframerate(rate)
         out.writeframes(pcm.tobytes())
+
+
+def decode_mp3(path, workdir, np):
+    decoded = workdir / "decoded.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(path), "-ac", "1",
+                    str(decoded)], check=True)
+    return read_wav(decoded, np)
 
 
 def read_wav(path, np):
@@ -320,6 +351,25 @@ class WhisperJudge:
         self.sherpa = sherpa_onnx
         self.recognizers = {}
 
+    def judge(self, samples, rate, language, said):
+        """What was heard, and how far it is from what was said.
+
+        Whisper misjudges short clips two opposite ways: one that ends right
+        on its last word is often cut short, and the same clip with silence
+        after it is sometimes heard twice over. It listens both ways, and the
+        closer reading counts.
+        """
+        import numpy as np
+        samples = np.asarray(samples, dtype=np.float32)
+        padded = np.concatenate([
+            np.zeros(int(rate * JUDGE_LEAD_SECONDS), dtype=np.float32),
+            samples,
+            np.zeros(int(rate * JUDGE_TAIL_SECONDS), dtype=np.float32)])
+        readings = [self.hear(take, rate, language) for take in (samples, padded)]
+        scored = [(character_error_rate(said, heard, language), heard)
+                  for heard in readings]
+        return min(scored)
+
     def hear(self, samples, rate, language):
         if language not in self.recognizers:
             self.recognizers[language] = (
@@ -357,6 +407,12 @@ def main():
     parser.add_argument("--takes", type=int, help="takes per line")
     parser.add_argument("--dry-run", action="store_true",
                         help="print the spoken text and render nothing")
+    parser.add_argument("--rejudge", action="store_true",
+                        help="listen to the clips already rendered again and "
+                             "update what the manifest says was heard")
+    parser.add_argument("--retry-above", type=float, metavar="CER",
+                        help="render again only the lines the manifest says "
+                             "were heard worse than this")
     args = parser.parse_args()
 
     voices = load_json("voices.json")
@@ -370,6 +426,10 @@ def main():
     lines = export_lines()
     if args.only:
         lines = [line for line in lines if clip_key(line) in args.only]
+    if args.retry_above is not None:
+        lines = [line for line in lines
+                 if manifest["lines"].get(clip_key(line), {}).get(
+                     "characterErrorRate", 1.0) > args.retry_above]
     for line in lines:
         spoken = spoken_text(line["text"], line["locale"], pronunciation)
         if line["locale"] == "uk-UA":
@@ -389,6 +449,23 @@ def main():
 
     with tempfile.TemporaryDirectory() as scratch:
         workdir = Path(scratch)
+        if args.rejudge:
+            for number, line in enumerate(lines, 1):
+                key = clip_key(line)
+                entry = manifest["lines"].get(key)
+                clip = output / f"{key}.mp3"
+                if entry is None or not clip.exists():
+                    continue
+                judged = voices["locales"][line["locale"]]["judge"]
+                samples, rate = decode_mp3(clip, workdir, np)
+                error, entry["heard"] = judge.judge(samples, rate, judged,
+                                                    entry["spoken"])
+                entry["characterErrorRate"] = round(error, 3)
+                print(f"[{number}/{len(lines)}] {key} "
+                      f"cer={entry['characterErrorRate']:.2f} "
+                      f"heard={entry['heard']!r}", flush=True)
+            write_manifest(manifest_path, manifest, voices, models)
+            return
         for number, line in enumerate(lines, 1):
             locale = voices["locales"][line["locale"]]
             settings = locale["studies"][line["study"]]
@@ -404,9 +481,8 @@ def main():
                 samples, rate = voice.say(line["spoken"], settings, take)
                 samples = shift_pitch(finish(samples, rate, np), rate,
                                       settings.get("pitch", 0), np, workdir)
-                heard = judge.hear(samples, rate, locale["judge"])
-                error = character_error_rate(line["spoken"], heard,
-                                             locale["judge"])
+                error, heard = judge.judge(samples, rate, locale["judge"],
+                                           line["spoken"])
                 if best is None or error < best["error"]:
                     best = {"samples": samples, "rate": rate, "heard": heard,
                             "error": error, "take": take}

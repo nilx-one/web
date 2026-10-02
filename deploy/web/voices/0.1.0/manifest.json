@@ -1,0 +1,1740 @@
+{
+  "lines": {
+    "en/dasha-study/blocked.building.0": {
+      "text": "That's somebody's house!",
+      "spoken": "That's somebody's house!",
+      "heard": "That's somebody's house.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.2,
+      "sha256": "42341ee92de297d914d1f9fa2470965297c38ae1cd450edaa9e332fd07ebf451"
+    },
+    "en/dasha-study/blocked.building.1": {
+      "text": "Walls. Not my style.",
+      "spoken": "Walls. Not my style.",
+      "heard": "Walls, not my style",
+      "characterErrorRate": 0.0,
+      "seconds": 1.77,
+      "sha256": "688d08fdc528e2ac99fd68f631d41faa151d821d9efc73d89cbb6b662bf12078"
+    },
+    "en/dasha-study/blocked.building.2": {
+      "text": "I can't go through that, silly.",
+      "spoken": "I can't go through that, silly.",
+      "heard": "I can't go through that, silly.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.62,
+      "sha256": "40e3c068afdfb0b76e871e5741b054de93c4e52d79a6174ee88a2c8c862b1092"
+    },
+    "en/dasha-study/blocked.fog.0": {
+      "text": "It's all grey there. Show me first?",
+      "spoken": "It's all grey there. Show me first?",
+      "heard": "It's all gray there. Show me first.",
+      "characterErrorRate": 0.031,
+      "seconds": 1.96,
+      "sha256": "ccf60b8ee6360def5eab2d009c745622c8ef22570e699bbc64d0e1aa19e405e5"
+    },
+    "en/dasha-study/blocked.fog.1": {
+      "text": "I don't go where you haven't been.",
+      "spoken": "I don't go where you haven't been.",
+      "heard": "I don't go where you haven't been",
+      "characterErrorRate": 0.0,
+      "seconds": 1.52,
+      "sha256": "a4289d6647c58cfad8edc36737ab9194f0fcfd37bede763e6bc425482f4e26b6"
+    },
+    "en/dasha-study/blocked.fog.2": {
+      "text": "Too foggy. You first!",
+      "spoken": "Too foggy. You first!",
+      "heard": "Too foggy, you first.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.76,
+      "sha256": "6d372be376139b34f2f8a6ce1466f75b7dcdd97a218e903eef55be4a0dac5902"
+    },
+    "en/dasha-study/blocked.water.0": {
+      "text": "I didn't bring a swimsuit.",
+      "spoken": "I didn't bring a swimsuit.",
+      "heard": "I didn't bring a swimsuit",
+      "characterErrorRate": 0.0,
+      "seconds": 1.32,
+      "sha256": "d92cd0059ebe332cadc93917968422258f70ca9b96364a91d6074bf10cfd8e21"
+    },
+    "en/dasha-study/blocked.water.1": {
+      "text": "Water! No, thanks.",
+      "spoken": "Water! No, thanks.",
+      "heard": "Water, no thanks.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.55,
+      "sha256": "d46b450fef27e779b8a055f8dc754b0d420139b30326100890baa7d3f269d5de"
+    },
+    "en/dasha-study/blocked.water.2": {
+      "text": "My shoes say no.",
+      "spoken": "My shoes say no.",
+      "heard": "my shoes say no",
+      "characterErrorRate": 0.0,
+      "seconds": 1.13,
+      "sha256": "fa5c6f17735dc9af2317519d3117f9069af5a648708b0b3663a2272fb1bad5b6"
+    },
+    "en/dasha-study/fog.busy.0": {
+      "text": "I'm doing three already!",
+      "spoken": "I'm doing three already!",
+      "heard": "I'm doing three already.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.28,
+      "sha256": "6d755e3b64e473d3e6b6c1cbc033590cfe2d8ca098f32d10f7efa713e9b2e8d6"
+    },
+    "en/dasha-study/fog.busy.1": {
+      "text": "One sec, three is plenty.",
+      "spoken": "One sec, three is plenty.",
+      "heard": "1 sec 3 is plenty",
+      "characterErrorRate": 0.0,
+      "seconds": 1.79,
+      "sha256": "2c23e86877a49f47d6dc0ab7c3bad83d04cef8fd1d4f513335f4c01eb09ebd30"
+    },
+    "en/dasha-study/fog.busy.2": {
+      "text": "Too many! Let me finish these first.",
+      "spoken": "Too many! Let me finish these first.",
+      "heard": "Too many. Let me finish these first.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.2,
+      "sha256": "41fd3fc69fe8e5baf7e715347a636b8bd3c0e45ba8257995d8c18c3e6a2c1e05"
+    },
+    "en/dasha-study/fog.reveal.0": {
+      "text": "Ooh, a mystery patch! Going in.",
+      "spoken": "Ooh, a mystery patch! Going in.",
+      "heard": "Ooh, a mystery patch. Going in.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.2,
+      "sha256": "26fe1c686a1246c14d59c1f100a401c984e409f97142a10b4c4dfaa2056507f4"
+    },
+    "en/dasha-study/fog.reveal.1": {
+      "text": "Let me clear that up for you!",
+      "spoken": "Let me clear that up for you!",
+      "heard": "Let me clear that up for you.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.49,
+      "sha256": "ec6e46e7873439a42deda3edba9e97a35317ee1c137033a8a8e4aaf5a4b45757"
+    },
+    "en/dasha-study/fog.reveal.2": {
+      "text": "Into the grey I go!",
+      "spoken": "Into the grey I go!",
+      "heard": "Into the grey I go.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.17,
+      "sha256": "95ec571635ba30f35a2699a0c3413edca2e481c2581d78238899f394e2c625c7"
+    },
+    "en/dasha-study/fog.revealed.0": {
+      "text": "Ta-da! It's all visible now.",
+      "spoken": "Ta-da! It's all visible now.",
+      "heard": "Ta-da! It's all visible now!",
+      "characterErrorRate": 0.0,
+      "seconds": 1.98,
+      "sha256": "5699f9cebc6eba126b2c4da3bc3b6ea1353156f1cc044f2d10c954f953061c34"
+    },
+    "en/dasha-study/fog.revealed.1": {
+      "text": "Look, no more fog there!",
+      "spoken": "Look, no more fog there!",
+      "heard": "Look, no more fog there.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.53,
+      "sha256": "43cb0fb07ce596cb4bae4ea8346c4a3f493bf6afc26e0d78d3c77cfb45550f73"
+    },
+    "en/dasha-study/fog.revealed.2": {
+      "text": "Cleared it. Pretty, isn't it?",
+      "spoken": "Cleared it. Pretty, isn't it?",
+      "heard": "Cleared it. Pretty, isn't it?",
+      "characterErrorRate": 0.0,
+      "seconds": 1.78,
+      "sha256": "01d69d4836053d1625a1fe455f77aa5f23c6e753c27b33e52ac0494998fceaee"
+    },
+    "en/dasha-study/walk.0": {
+      "text": "Ooh, I'll go there!",
+      "spoken": "Ooh, I'll go there!",
+      "heard": "Ooh, I'll go there",
+      "characterErrorRate": 0.0,
+      "seconds": 1.01,
+      "sha256": "8a7be1e1a6f443d38dc627e94f864b3c4093e67ab59d4e244e06ce7920fbdbd6"
+    },
+    "en/dasha-study/walk.1": {
+      "text": "Let's take a little walk.",
+      "spoken": "Let's take a little walk.",
+      "heard": "Let's take a little walk.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.34,
+      "sha256": "c93ab9ca2db85101a6032dcdeb66899a90d04a148baed1bfce8dc42b96254359"
+    },
+    "en/dasha-study/walk.2": {
+      "text": "What's over there? Going to find out.",
+      "spoken": "What's over there? Going to find out.",
+      "heard": "What's over there? Going to find out.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.99,
+      "sha256": "2537cc0b42de38a30327d3a570bbcf913fa9f26ee4cc3e18f89ddce8631714ba"
+    },
+    "en/dasha-study/walk.3": {
+      "text": "A stroll it is!",
+      "spoken": "A stroll it is!",
+      "heard": "A stroll it is.",
+      "characterErrorRate": 0.0,
+      "seconds": 0.97,
+      "sha256": "eaaf2f0c4f9bd0430a82b22a24fba9a443d62016b74a2366ba116239a3da52a0"
+    },
+    "en/dasha-study/walk.4": {
+      "text": "Right, I'm off.",
+      "spoken": "Right, I'm off.",
+      "heard": "Right I'm off",
+      "characterErrorRate": 0.0,
+      "seconds": 0.91,
+      "sha256": "5fe7c98edc77046fc75a7f99c723e4a59a9952e8967f8ff1224ba924e2cc0462"
+    },
+    "en/dasha-study/walk.5": {
+      "text": "That looks nice. Coming!",
+      "spoken": "That looks nice. Coming!",
+      "heard": "That looks nice. Coming.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.63,
+      "sha256": "b31c8a3a80c15dce12f75eae103e88b856b52ecd04c0684d8011963d1f06a0db"
+    },
+    "en/dasha-study/walk.6": {
+      "text": "Just a peek, I promise.",
+      "spoken": "Just a peek, I promise.",
+      "heard": "Just a peek, I promise.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.44,
+      "sha256": "0c5a800a21b79d2b5991f7f2b80471895d49a0991ffb2bc893cc795c97ffa1a4"
+    },
+    "en/dasha-study/walk.7": {
+      "text": "Going, going…",
+      "spoken": "Going, going.",
+      "heard": "Going going.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.0,
+      "sha256": "c426f4a353cd3c36376ba42346646ba855ac9c783172ec18d382dec151e1fe4a"
+    },
+    "en/dasha-v2-study/blocked.building.0": {
+      "text": "Not through a wall, darling.",
+      "spoken": "Not through a wall, darling.",
+      "heard": "Not through a wall dialing.",
+      "characterErrorRate": 0.077,
+      "seconds": 1.67,
+      "sha256": "1c2bc8d4c5e9d06daf6976ae2a89a827cc035485408251119622c795744510c0"
+    },
+    "en/dasha-v2-study/blocked.building.1": {
+      "text": "That door isn't my size.",
+      "spoken": "That door isn't my size.",
+      "heard": "That door isn't my size.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.6,
+      "sha256": "0b49ce88f72a4e8aed634614f51e4993f0b5bb9e487e69093aebceb17dabc6ae"
+    },
+    "en/dasha-v2-study/blocked.building.2": {
+      "text": "That's a building. I'd ruin the look.",
+      "spoken": "That's a building. I'd ruin the look.",
+      "heard": "That's a building. I'd ruin the look.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.35,
+      "sha256": "fc807b443513eb55a73a80acbfd8f829e1c24e8cf794ca3003a1a422e14435ec"
+    },
+    "en/dasha-v2-study/blocked.fog.0": {
+      "text": "Grey isn't my colour. Reveal it first.",
+      "spoken": "Grey isn't my colour. Reveal it first.",
+      "heard": "Gray isn't my color reveal it first",
+      "characterErrorRate": 0.057,
+      "seconds": 2.58,
+      "sha256": "eb96b947fd0f86ef31e49bdb9d424cb788d8445336369d7ba56a6ada30278359"
+    },
+    "en/dasha-v2-study/blocked.fog.1": {
+      "text": "I don't do unmapped.",
+      "spoken": "I don't do unmapped.",
+      "heard": "I don't do unmapped.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.37,
+      "sha256": "6bd127248e225a2a8b338c2a16b5059d5ad49be821920a5c4e8b4c84056d8ded"
+    },
+    "en/dasha-v2-study/blocked.fog.2": {
+      "text": "You scout, I'll follow.",
+      "spoken": "You scout, I'll follow.",
+      "heard": "You scout, I'll follow.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.6,
+      "sha256": "e7ee59edf56e119503dc3127426e6fa5101cd8dd1e3c5b0621d96b8a2246e175"
+    },
+    "en/dasha-v2-study/blocked.water.0": {
+      "text": "Not in these shoes.",
+      "spoken": "Not in these shoes.",
+      "heard": "Not in these shoes.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.41,
+      "sha256": "1ee1bbcb5ada5db4d6d069b45bef6f66eef78a446763817d302094471e619d96"
+    },
+    "en/dasha-v2-study/blocked.water.1": {
+      "text": "Water ruins fabric.",
+      "spoken": "Water ruins fabric.",
+      "heard": "Water ruins fabric.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.54,
+      "sha256": "d1f7d7734d9d4cb39fa1987022653b567e74f1c037d23c0d2b7ef354cd7f0071"
+    },
+    "en/dasha-v2-study/blocked.water.2": {
+      "text": "No swim today, thanks.",
+      "spoken": "No swim today, thanks.",
+      "heard": "No swim today, thanks.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.8,
+      "sha256": "46b958feebb6ae1c399f0afd941f68152aaab984f2e4961cb9e33ee694b6639b"
+    },
+    "en/dasha-v2-study/fog.busy.0": {
+      "text": "Three at once, darling. That's the limit.",
+      "spoken": "Three at once, darling. That's the limit.",
+      "heard": "three at once darling that's the limit",
+      "characterErrorRate": 0.0,
+      "seconds": 2.7,
+      "sha256": "5b10c1cea8f6805e40096a3ce9e9ea211aba29df2749d515faa01ac9538c897f"
+    },
+    "en/dasha-v2-study/fog.busy.1": {
+      "text": "Already styling three. Wait.",
+      "spoken": "Already styling three. Wait.",
+      "heard": "Already styling 3. Waiter.",
+      "characterErrorRate": 0.077,
+      "seconds": 2.59,
+      "sha256": "f686ca4c02175c7c14e78a5da249e3b38413a2a89ded22f116543eef7378ea0c"
+    },
+    "en/dasha-v2-study/fog.busy.2": {
+      "text": "Three's my maximum. Patience.",
+      "spoken": "Three's my maximum. Patience.",
+      "heard": "Three's my maximum patience",
+      "characterErrorRate": 0.0,
+      "seconds": 2.52,
+      "sha256": "b6e7d4a52fe255145c2281fde3ff9e594b56aa784c249bd4efbf420af5712253"
+    },
+    "en/dasha-v2-study/fog.reveal.0": {
+      "text": "Let's give that patch a makeover.",
+      "spoken": "Let's give that patch a makeover.",
+      "heard": "Let's give that patch a makeover.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.95,
+      "sha256": "048d8e78765e3f9b38f76e045762e416a7612220f776702d8e1c5b9eb4f92a27"
+    },
+    "en/dasha-v2-study/fog.reveal.1": {
+      "text": "Grey is so last season. Clearing it.",
+      "spoken": "Grey is so last season. Clearing it.",
+      "heard": "Grey is so last season, clearing it.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.0,
+      "sha256": "47d9ca19eb2c86545d26ba9434b207ca9dc0e2ba6d0b1f2685dceacea992958a"
+    },
+    "en/dasha-v2-study/fog.reveal.2": {
+      "text": "Going to reveal that look.",
+      "spoken": "Going to reveal that look.",
+      "heard": "Going to reveal that look.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.55,
+      "sha256": "b4fdebdb3b08ba91ca705610168fb8a2b79e5b5268e825247def85e61597c7ee"
+    },
+    "en/dasha-v2-study/fog.revealed.0": {
+      "text": "Revealed. Much better.",
+      "spoken": "Revealed. Much better.",
+      "heard": "Revealed. Much better.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.97,
+      "sha256": "9ecaa7591edc96d23975a569efea468e37f5c7bc303465cf98af740a51c3302c"
+    },
+    "en/dasha-v2-study/fog.revealed.1": {
+      "text": "There. Fog is out of fashion.",
+      "spoken": "There. Fog is out of fashion.",
+      "heard": "There! Fog is out of fashion.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.49,
+      "sha256": "17e3f71d75b53aada037293099ce3eee68626eab21e12dee071ed2397d91997c"
+    },
+    "en/dasha-v2-study/fog.revealed.2": {
+      "text": "All clear, and it suits the map.",
+      "spoken": "All clear, and it suits the map.",
+      "heard": "All clear and it suits the map.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.95,
+      "sha256": "c5240b957de8df9e197079d3ed691919287d4bb588446bd84ee4b1cffbf7a315"
+    },
+    "en/dasha-v2-study/walk.0": {
+      "text": "New look, new route.",
+      "spoken": "New look, new route.",
+      "heard": "New look, new route.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.58,
+      "sha256": "d50aa8e67349d8ecf9643cea1c0d8abab63620e7106f77e08b9e8656d592363e"
+    },
+    "en/dasha-v2-study/walk.1": {
+      "text": "This outfit deserves a walk.",
+      "spoken": "This outfit deserves a walk.",
+      "heard": "This outfit deserves a walk.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.81,
+      "sha256": "3e812259bfa815592bcebbc79af9687308b00a27c4f7f3bdba321e9bbbe7ed9d"
+    },
+    "en/dasha-v2-study/walk.2": {
+      "text": "The runway's that way.",
+      "spoken": "The runway's that way.",
+      "heard": "The runway's that way.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.47,
+      "sha256": "18e6ce986b206443ff0daab52c927261e67e94eb070cdd1e3917c7790a1efc1a"
+    },
+    "en/dasha-v2-study/walk.3": {
+      "text": "Let's go. Version two walks faster.",
+      "spoken": "Let's go. Version two walks faster.",
+      "heard": "Let's go. Version 2 walks faster.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.89,
+      "sha256": "a92761f078c4c14f2bf2bd10eee23140cafc0c059937b0e5008cc2e4fb10facf"
+    },
+    "en/dasha-v2-study/walk.4": {
+      "text": "I'll be over there, looking fabulous.",
+      "spoken": "I'll be over there, looking fabulous.",
+      "heard": "I'll be over there looking fabulous.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.14,
+      "sha256": "9b2d4170745c3d8cbb045b73eeca867a8d12255c5cbc1e7600e884074f320d8c"
+    },
+    "en/dasha-v2-study/walk.5": {
+      "text": "A little stroll to show off the fit.",
+      "spoken": "A little stroll to show off the fit.",
+      "heard": "A little stroll to show off the fit.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.15,
+      "sha256": "7c8c6f938fb6cc118eed3dacdfa5a535ea4bd9ca005b3072bfe1eabea486d37e"
+    },
+    "en/dasha-v2-study/walk.6": {
+      "text": "Updating my location…",
+      "spoken": "Updating my location.",
+      "heard": "Updating my location.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.6,
+      "sha256": "12c31f4bc3a6cde2a7115b98d5a81793e6c2acd4adcdf1fae502bef63cfe2c5e"
+    },
+    "en/dasha-v2-study/walk.7": {
+      "text": "Coming through, in style.",
+      "spoken": "Coming through, in style.",
+      "heard": "coming through in style",
+      "characterErrorRate": 0.0,
+      "seconds": 1.49,
+      "sha256": "a5290f393ab3677dcb91136e83ecae16bee212a029d38834be55669281322818"
+    },
+    "en/kai-study/blocked.building.0": {
+      "text": "Bold of you to assume I phase through walls.",
+      "spoken": "Bold of you to assume I phase through walls.",
+      "heard": "Bold of you to assume I phase through walls.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.62,
+      "sha256": "0edabbc863d9cd12978a4eb07dcb169016b4d26f43693b3accbd70d8edf33158"
+    },
+    "en/kai-study/blocked.building.1": {
+      "text": "That's architecture. I respect it.",
+      "spoken": "That's architecture. I respect it.",
+      "heard": "That's architecture. I respect it.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.4,
+      "sha256": "6236171ae92447905e6877689d212d496d31579bc3894b0b7f2e721ea0edd193"
+    },
+    "en/kai-study/blocked.building.2": {
+      "text": "Door not found.",
+      "spoken": "Door not found.",
+      "heard": "Door not found. Door not found",
+      "characterErrorRate": 0.0,
+      "seconds": 1.24,
+      "sha256": "e8a4c245f9627bc9d2c11d61dbc61ac28536f6258f0500bb61a1857e96c0523f"
+    },
+    "en/kai-study/blocked.fog.0": {
+      "text": "Unrevealed territory. Pass.",
+      "spoken": "Unrevealed territory. Pass.",
+      "heard": "Unrevealed territory. Pass.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.22,
+      "sha256": "539ca34f212874c5cc7ac910f03eaf4a2a1f74d980259d8683011303f0394b19"
+    },
+    "en/kai-study/blocked.fog.1": {
+      "text": "Fog of war. Classic.",
+      "spoken": "Fog of war. Classic.",
+      "heard": "Fog of War. Classic.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.86,
+      "sha256": "b7a6b068339db60afc3cf26688c222d702b157ad9ce9c30e1fd1b7fbf731c9b6"
+    },
+    "en/kai-study/blocked.fog.2": {
+      "text": "Reveal it first, then we'll talk.",
+      "spoken": "Reveal it first, then we'll talk.",
+      "heard": "Reveal it first, then we'll talk",
+      "characterErrorRate": 0.0,
+      "seconds": 1.81,
+      "sha256": "28bc6dae1db47767fb6a84c854c43daf2720cd88cee387aff7760e69d1b76839"
+    },
+    "en/kai-study/blocked.water.0": {
+      "text": "I'm many things. A boat isn't one.",
+      "spoken": "I'm many things. A boat isn't one.",
+      "heard": "I'm many things. A boat isn't one.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.65,
+      "sha256": "fbaece7720b3967120f551de1f4fc010020455c98a2e854cafe6913b53dcbb49"
+    },
+    "en/kai-study/blocked.water.1": {
+      "text": "Water. Hard pass.",
+      "spoken": "Water. Hard pass.",
+      "heard": "water hard pass",
+      "characterErrorRate": 0.0,
+      "seconds": 1.78,
+      "sha256": "5ef7a673fa43a810f2642f3b633c474efdb1198a920a5604043d217529ecd4e3"
+    },
+    "en/kai-study/blocked.water.2": {
+      "text": "Swimming isn't in my clips.",
+      "spoken": "Swimming isn't in my clips.",
+      "heard": "swimming isn't in my clips",
+      "characterErrorRate": 0.0,
+      "seconds": 1.84,
+      "sha256": "f5c852ae0eaae17c7fe74303f70be7f63e59d5f750c469219b8279678a83226b"
+    },
+    "en/kai-study/fog.busy.0": {
+      "text": "Three in progress. I'm not a cluster.",
+      "spoken": "Three in progress. I'm not a cluster.",
+      "heard": "Three in progress. I'm not a cluster.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.63,
+      "sha256": "e86958c3d18cd27564f5cdbd85c1a0d49f8499887a0be5a957e2377d1c98e0e2"
+    },
+    "en/kai-study/fog.busy.1": {
+      "text": "Queue's full. Three max.",
+      "spoken": "Queue's full. Three max.",
+      "heard": "Queues full, 3 max.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.29,
+      "sha256": "91a9574276c1e52d43c1f698e65d6b98036e0e3d1316b7c1ac6880adb45191f9"
+    },
+    "en/kai-study/fog.busy.2": {
+      "text": "Parallelism limit reached: three.",
+      "spoken": "Parallelism limit reached: three.",
+      "heard": "Parallelism limit reached 3.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.0,
+      "sha256": "36ea6a1a61a3797de36854ddc2177baff547fd6a452681691ed5151c2b292696"
+    },
+    "en/kai-study/fog.reveal.0": {
+      "text": "Deploying one (1) fog remover.",
+      "spoken": "Deploying one fog remover.",
+      "heard": "deploying one Fog remover.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.8,
+      "sha256": "708219da32a575444b1b504f8e49ec4e93d99c3ac96234362318fcd7725185dd"
+    },
+    "en/kai-study/fog.reveal.1": {
+      "text": "Fine. Revealing the unrevealed.",
+      "spoken": "Fine. Revealing the unrevealed.",
+      "heard": "Fine, revealing the unrevealed.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.33,
+      "sha256": "059f4791dc57f5c6ef65cf5bbf37ac41ad358e8ad7eac0e0d746f241dfd5e80f"
+    },
+    "en/kai-study/fog.reveal.2": {
+      "text": "Going to make that less grey.",
+      "spoken": "Going to make that less grey.",
+      "heard": "Going to make that less grey.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.6,
+      "sha256": "effdbde401d1c716f946361287034878e95b078c4d05d6b7b515d0440e237c33"
+    },
+    "en/kai-study/fog.revealed.0": {
+      "text": "Fog: removed. You're welcome.",
+      "spoken": "Fog: removed. You're welcome.",
+      "heard": "Fog removed. You're welcome.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.18,
+      "sha256": "b471f9139641b266afd527f0a53342711adc33b823b267e6c6b1ec0f6fdb95d8"
+    },
+    "en/kai-study/fog.revealed.1": {
+      "text": "Revealed. It was a map all along.",
+      "spoken": "Revealed. It was a map all along.",
+      "heard": "revealed it was a map all along",
+      "characterErrorRate": 0.0,
+      "seconds": 2.18,
+      "sha256": "96ed70a2d3965e3ce1c64de1aa086c43fc27d252f6076987d6235f0d1a0fc21f"
+    },
+    "en/kai-study/fog.revealed.2": {
+      "text": "Done. Territory unlocked.",
+      "spoken": "Done. Territory unlocked.",
+      "heard": "done territory unlocked",
+      "characterErrorRate": 0.0,
+      "seconds": 2.14,
+      "sha256": "13229b224dc63216b5e86aa33f1472747231b311ce67537f78ce697760701961"
+    },
+    "en/kai-study/walk.0": {
+      "text": "Sure, why not. Going.",
+      "spoken": "Sure, why not. Going.",
+      "heard": "sure why not going",
+      "characterErrorRate": 0.0,
+      "seconds": 2.05,
+      "sha256": "9cf70b0c5c1b211dcb37dcf740cd8265ac3191f401cf05d930a7d4e523523272"
+    },
+    "en/kai-study/walk.1": {
+      "text": "The map says there's a there there.",
+      "spoken": "The map says there's a there there.",
+      "heard": "The map says there's a there there.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.92,
+      "sha256": "715b6375c16071ab82430b6e586bf334b287c73b48929c46bba40afac83cd607"
+    },
+    "en/kai-study/walk.2": {
+      "text": "Plot twist: I'm walking.",
+      "spoken": "Plot twist: I'm walking.",
+      "heard": "Plot twist, I'm walking.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.57,
+      "sha256": "5cf0c04033fa8de23ba46a7fe4f05d3c396720af38db8dfedac91c86eac4d1fd"
+    },
+    "en/kai-study/walk.3": {
+      "text": "Off to be somewhere else, briefly.",
+      "spoken": "Off to be somewhere else, briefly.",
+      "heard": "Off to be somewhere else briefly.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.76,
+      "sha256": "e79eaf6d42e2569d5b02d97b31619ca1f54d1723266d53db99a0b5080fed3b6d"
+    },
+    "en/kai-study/walk.4": {
+      "text": "Walking. Very advanced technology.",
+      "spoken": "Walking. Very advanced technology.",
+      "heard": "Walking, very advanced technology.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.62,
+      "sha256": "f7f0f6633f2780dbfa4d5819d0c1deeb509e2cb00ae97cef287a3bfc6201aeb0"
+    },
+    "en/kai-study/walk.5": {
+      "text": "Onward, in the loosest sense.",
+      "spoken": "Onward, in the loosest sense.",
+      "heard": "onward in the loosest sense",
+      "characterErrorRate": 0.0,
+      "seconds": 1.73,
+      "sha256": "82cf5f706e34d41fc0ea273358eb2595a597a5edba05f2012cb9e49d146d3010"
+    },
+    "en/kai-study/walk.6": {
+      "text": "Fine, I'll go look. For science.",
+      "spoken": "Fine, I'll go look. For science.",
+      "heard": "Fine, I'll go look for science.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.17,
+      "sha256": "b989eebed51ce4103be3134676f1fd2def728c25ffaba1cc878e047b3f2d5be1"
+    },
+    "en/kai-study/walk.7": {
+      "text": "Relocating one (1) Avaia.",
+      "spoken": "Relocating one Avaia.",
+      "heard": "relocating one Avea.",
+      "characterErrorRate": 0.1,
+      "seconds": 1.99,
+      "sha256": "b06b468cced73a6ef2a010a2174b40ed6c1302fbd30398d5d5fcef9ef9d0bb12"
+    },
+    "en/sky-study/blocked.building.0": {
+      "text": "That's a wall, not a path.",
+      "spoken": "That's a wall, not a path.",
+      "heard": "That's a wall, not a path.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.7,
+      "sha256": "d8857313ec61a148ca8ec05215279e0fb4f81cfa559f1af30e0a49da930765a3"
+    },
+    "en/sky-study/blocked.building.1": {
+      "text": "Even the sky goes around buildings.",
+      "spoken": "Even the sky goes around buildings.",
+      "heard": "Even the sky goes around buildings.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.35,
+      "sha256": "abf923e86b11289891066361a79c5fdb3d03895c2b66236920dd2c514426f860"
+    },
+    "en/sky-study/blocked.building.2": {
+      "text": "I don't walk through houses.",
+      "spoken": "I don't walk through houses.",
+      "heard": "I don't walk through houses.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.63,
+      "sha256": "80c96b0d3c7c13fd65db0325ae2709e7c7708e001aba42af25f5012332c2b2d2"
+    },
+    "en/sky-study/blocked.fog.0": {
+      "text": "Fog. Not until you've been there.",
+      "spoken": "Fog. Not until you've been there.",
+      "heard": "Fog, not until you've been there.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.35,
+      "sha256": "8ef5f62ffb4962ab10b3311c6816e68c4885c65a4869bf9bb08302515a3f69e9"
+    },
+    "en/sky-study/blocked.fog.1": {
+      "text": "I can't see that far yet.",
+      "spoken": "I can't see that far yet.",
+      "heard": "I can't see that far yet.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.61,
+      "sha256": "17a663a27405c29c15d0bf23831b139f5229a3307675d196dc214a14e857fe6e"
+    },
+    "en/sky-study/blocked.fog.2": {
+      "text": "You go first. Then I'll follow.",
+      "spoken": "You go first. Then I'll follow.",
+      "heard": "You go first, then I'll follow.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.23,
+      "sha256": "ec35760f72c80fbc801df85c3818ae4920ea41dbfdf5a099fca44249bc481514"
+    },
+    "en/sky-study/blocked.water.0": {
+      "text": "Not without a boat.",
+      "spoken": "Not without a boat.",
+      "heard": "Not without a boat.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.29,
+      "sha256": "78c8ecb9fc78ae6cde1f1cd01a890b22e168028323a645231dffa409e30d676f"
+    },
+    "en/sky-study/blocked.water.1": {
+      "text": "Water. I'll pass.",
+      "spoken": "Water. I'll pass.",
+      "heard": "Water, I'll pass.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.79,
+      "sha256": "d4f34c35b2caaaac843867c881878b050f7eb078c163af1e20d7f7723e074f9b"
+    },
+    "en/sky-study/blocked.water.2": {
+      "text": "Too wet for a walk.",
+      "spoken": "Too wet for a walk.",
+      "heard": "Too wet for a walk.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.41,
+      "sha256": "bb19fc07c1abef8eb50331aae9f1bf314cc9c29b0f000f9aacd8800e4626ec7d"
+    },
+    "en/sky-study/fog.busy.0": {
+      "text": "Three at once is my limit.",
+      "spoken": "Three at once is my limit.",
+      "heard": "3 at once is my limit.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.74,
+      "sha256": "3f8c879c1149b9628d163f80669945cd306db459bfa442ded94eb0384d8ef47f"
+    },
+    "en/sky-study/fog.busy.1": {
+      "text": "I'm already clearing three.",
+      "spoken": "I'm already clearing three.",
+      "heard": "I'm already clearing 3.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.54,
+      "sha256": "20b7c42d6326a1ee211fa5ea2417479cece0994bbcef3301fb6a44c9467a65ad"
+    },
+    "en/sky-study/fog.busy.2": {
+      "text": "Hands full. Wait for one to clear.",
+      "spoken": "Hands full. Wait for one to clear.",
+      "heard": "hands full wait for one to clear",
+      "characterErrorRate": 0.0,
+      "seconds": 2.4,
+      "sha256": "906e7fb0c6f417b6bbfb09d16aa33b50ce634e9e47e36845d96061e4443365ea"
+    },
+    "en/sky-study/fog.reveal.0": {
+      "text": "Into the fog. I'll chart it.",
+      "spoken": "Into the fog. I'll chart it.",
+      "heard": "Into the fog. I'll chart it.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.05,
+      "sha256": "7594cae614a10d5e37c7840aa7e3846202b7f2ecd29c0c0276e648e6ae92fdf5"
+    },
+    "en/sky-study/fog.reveal.1": {
+      "text": "Clearing that patch. Give me a few minutes.",
+      "spoken": "Clearing that patch. Give me a few minutes.",
+      "heard": "clearing that patch give me a few minutes",
+      "characterErrorRate": 0.0,
+      "seconds": 2.63,
+      "sha256": "7b31737008a9ab87ffd45d6c21f4f5986b2e0da8b0b83539351846e3c81e38a5"
+    },
+    "en/sky-study/fog.reveal.2": {
+      "text": "Heading in. The map will fill.",
+      "spoken": "Heading in. The map will fill.",
+      "heard": "heading in the map will fill",
+      "characterErrorRate": 0.0,
+      "seconds": 2.2,
+      "sha256": "229049d2380e65d2d18705838a2ebf189944c9f38033b84b7457a0646349b3eb"
+    },
+    "en/sky-study/fog.revealed.0": {
+      "text": "Charted. The fog's gone there.",
+      "spoken": "Charted. The fog's gone there.",
+      "heard": "charted the fog's gone there",
+      "characterErrorRate": 0.0,
+      "seconds": 2.12,
+      "sha256": "76c8f3c1de46374b270e6017346a3b6e5f4b1f9560fe5ba5727a3b15e2e45b40"
+    },
+    "en/sky-study/fog.revealed.1": {
+      "text": "Clear skies over that patch now.",
+      "spoken": "Clear skies over that patch now.",
+      "heard": "Clear skies over that patch now.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.08,
+      "sha256": "dc2478134e6a7eda199e0cbdb1b3e3e0b0d7cfdd09e5db40ba679e6a20cc4f57"
+    },
+    "en/sky-study/fog.revealed.2": {
+      "text": "Done. One more piece of the map.",
+      "spoken": "Done. One more piece of the map.",
+      "heard": "Done. One more piece of the map.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.28,
+      "sha256": "f9224c8f42e2033f5444a9959d2aa55d9d7bdd44f30212b993f59deec487e836"
+    },
+    "en/sky-study/walk.0": {
+      "text": "Right. That way.",
+      "spoken": "Right. That way.",
+      "heard": "right that way",
+      "characterErrorRate": 0.0,
+      "seconds": 1.76,
+      "sha256": "ec5df07e51ddda66765285ed63ab113530e96309f9f0069881a7d7d5b7aacb6c"
+    },
+    "en/sky-study/walk.1": {
+      "text": "Let's see what the wind says over there.",
+      "spoken": "Let's see what the wind says over there.",
+      "heard": "Let's see what the wind says over there.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.27,
+      "sha256": "51116154ab1cf5e925690fed6abc7f409a44f9b8764ca4b32a16871aadb72ff5"
+    },
+    "en/sky-study/walk.2": {
+      "text": "Heading out. Clear skies on this route.",
+      "spoken": "Heading out. Clear skies on this route.",
+      "heard": "heading out clear skies on this route",
+      "characterErrorRate": 0.0,
+      "seconds": 2.46,
+      "sha256": "84fac7b3964651b7e3459796a545b7325d029741126b862f65edd62d0588d14e"
+    },
+    "en/sky-study/walk.3": {
+      "text": "A short flight, on foot.",
+      "spoken": "A short flight, on foot.",
+      "heard": "A short flight on foot.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.54,
+      "sha256": "54dae49fbe7570f71666bc04486062f00d7efd8c4d8f343e7922b4f28fde0487"
+    },
+    "en/sky-study/walk.4": {
+      "text": "Plotting a course.",
+      "spoken": "Plotting a course.",
+      "heard": "plotting a course",
+      "characterErrorRate": 0.0,
+      "seconds": 1.11,
+      "sha256": "fb8fd1842c1a62e7348206685961375fcdaf3ece4e945950a564db6ffad31229"
+    },
+    "en/sky-study/walk.5": {
+      "text": "I'll take a look over there.",
+      "spoken": "I'll take a look over there.",
+      "heard": "I'll take a look over there.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.36,
+      "sha256": "a1d4762ee8883a2a8419c0fe4a110f5f965646a9ec4d9f5f99717dbb057808b3"
+    },
+    "en/sky-study/walk.6": {
+      "text": "On my way. The horizon can wait.",
+      "spoken": "On my way. The horizon can wait.",
+      "heard": "on my way the horizon can wait",
+      "characterErrorRate": 0.0,
+      "seconds": 2.54,
+      "sha256": "dce9de13044bc9cd486eaeac569f7d5edbd28dd14ced245a0d0578bae4d499db"
+    },
+    "en/sky-study/walk.7": {
+      "text": "Good spot. Going.",
+      "spoken": "Good spot. Going.",
+      "heard": "Good spot. Going.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.73,
+      "sha256": "ec275428849d7d47c2d3012facbe78d48a1cb3b8cfe1f4887791934656e684fc"
+    },
+    "uk-UA/dasha-study/blocked.building.0": {
+      "text": "Це ж чийсь дім!",
+      "spoken": "Це ж чийсь дім!",
+      "heard": "Це ж чысь дім.",
+      "characterErrorRate": 0.143,
+      "seconds": 1.03,
+      "sha256": "6c54390a4e75bab0bf28f9953f4574d23f4f3d97a5b92a098dd8df737b67960e"
+    },
+    "uk-UA/dasha-study/blocked.building.1": {
+      "text": "Стіни — не мій стиль.",
+      "spoken": "сті́ни — не мій стиль.",
+      "heard": "Сіни не мій стиль.",
+      "characterErrorRate": 0.056,
+      "seconds": 1.57,
+      "sha256": "c9b7614e938ed84a256e44aa905c9ab2fb8582ffc4ea76eef7941313431ebe36"
+    },
+    "uk-UA/dasha-study/blocked.building.2": {
+      "text": "Крізь це не пройду, ну.",
+      "spoken": "Крізь це не пройду́, ну.",
+      "heard": "Кріст це не пройду ну.",
+      "characterErrorRate": 0.095,
+      "seconds": 1.5,
+      "sha256": "e11f657e5c80079d0f5a3de602bb82bbc9809bc0f646cd5084a3ae3d5b249391"
+    },
+    "uk-UA/dasha-study/blocked.fog.0": {
+      "text": "Там усе сіре. Покажеш спершу?",
+      "spoken": "Там усе́ сі́ре. Пока́жеш спе́ршу?",
+      "heard": "Там усе сіре. Покажеш спершу.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.94,
+      "sha256": "e60c6ccfdeb0c959654615eff313745ae3387c4d0b494c37def307ce476eb535"
+    },
+    "uk-UA/dasha-study/blocked.fog.1": {
+      "text": "Туди, де ще не ступала твоя нога, я не ходжу.",
+      "spoken": "Туди́, де ще не ступа́ла твоя́ нога́, я не ходжу́.",
+      "heard": "Туди деще не ступала твоя нога. Я не ходжу.",
+      "characterErrorRate": 0.024,
+      "seconds": 3.67,
+      "sha256": "d76f516fa79e763f1a8df79edffaaca8a43c60cac9b9ef0e25a14f3dd691823e"
+    },
+    "uk-UA/dasha-study/blocked.fog.2": {
+      "text": "Затуманено. Спершу ти!",
+      "spoken": "Затума́нено. Спе́ршу ти!",
+      "heard": "Затуманено. Спершу ти.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.43,
+      "sha256": "771cd9ae3640ca7677aa50b4d6507a33c07b380c6c96419a5c9fc9bf490421f3"
+    },
+    "uk-UA/dasha-study/blocked.water.0": {
+      "text": "Я не взяла купальник.",
+      "spoken": "Я не взя́ла купа́льник.",
+      "heard": "Я не взяла купальник.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.62,
+      "sha256": "d5c8549b1e33c31b23876cb3af2c274e9e1a93edfdcf0ae5bf0cb3e0759543e3"
+    },
+    "uk-UA/dasha-study/blocked.water.1": {
+      "text": "Вода! Ні, дякую.",
+      "spoken": "Вода́! Ні, дя́кую.",
+      "heard": "Вода. Ні, дякую.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.89,
+      "sha256": "d04641d15a49a3f49259b9992cbaa9e41b97b1a6df43f5ced3834fd9695c2766"
+    },
+    "uk-UA/dasha-study/blocked.water.2": {
+      "text": "Мої черевики кажуть «ні».",
+      "spoken": "Мої́ череви́ки ка́жуть ні.",
+      "heard": "Мої черевики кажуть ні.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.64,
+      "sha256": "864a62d903655520ce38b0a274a4f95a0ef51d3d1ce085ee3b7f2873a54ff3e3"
+    },
+    "uk-UA/dasha-study/fog.busy.0": {
+      "text": "Я вже роблю три!",
+      "spoken": "Я вже роблю́ три!",
+      "heard": "Я вже роблю три.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.34,
+      "sha256": "473368a45bcb1a004f1cce69ab8233829e5b49338bcf10c39ae0b50fb0ac9186"
+    },
+    "uk-UA/dasha-study/fog.busy.1": {
+      "text": "Секунду, трьох досить.",
+      "spoken": "Секу́нду, трьох до́сить.",
+      "heard": "Секунду трьох досить",
+      "characterErrorRate": 0.0,
+      "seconds": 1.6,
+      "sha256": "02e8df98bda545a2fe97b739ee77ae78e676576062652316e1c8ba2458165cdf"
+    },
+    "uk-UA/dasha-study/fog.busy.2": {
+      "text": "Забагато! Спершу закінчу ці.",
+      "spoken": "Забага́то! Спе́ршу закі́нчу ці.",
+      "heard": "Забагато. Спершу закінчу ці",
+      "characterErrorRate": 0.0,
+      "seconds": 2.62,
+      "sha256": "3f44f3fa7e99b0cdfcb2d8c332fb5136db98e7fead529feb5e69a424b3d40f1f"
+    },
+    "uk-UA/dasha-study/fog.reveal.0": {
+      "text": "Ой, таємнича ділянка! Іду.",
+      "spoken": "Ой, таємни́ча діля́нка! іду́.",
+      "heard": "Ой, таємнича ділянка, іду.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.39,
+      "sha256": "cdc08bb509aed9a9c3ff84b001dacc5f7fc016f866b4494e39029ab827859aff"
+    },
+    "uk-UA/dasha-study/fog.reveal.1": {
+      "text": "Зараз я її розчищу!",
+      "spoken": "за́раз я її́ розчи́щу!",
+      "heard": "зараз я її розчищу",
+      "characterErrorRate": 0.0,
+      "seconds": 2.04,
+      "sha256": "4b73764b9a4c42baefcffb10215b23ecf776e509384adc031a385867de2a3db1"
+    },
+    "uk-UA/dasha-study/fog.reveal.2": {
+      "text": "Пірнаю в сірість!",
+      "spoken": "Пірна́ю в сі́рість!",
+      "heard": "Пернаю в сирість",
+      "characterErrorRate": 0.125,
+      "seconds": 1.37,
+      "sha256": "0a780f3015b2868ca417251a72c255e346b6f199eed8a9d702ee14c7ae6c82a2"
+    },
+    "uk-UA/dasha-study/fog.revealed.0": {
+      "text": "Та-дам! Тепер усе видно.",
+      "spoken": "Та-дам! Тепе́р усе́ ви́дно.",
+      "heard": "Тадам! Тепер усе видно!",
+      "characterErrorRate": 0.045,
+      "seconds": 2.0,
+      "sha256": "0e107341d219b5ad6271947d606d7424d3ad78654ea31618713b98509a544f32"
+    },
+    "uk-UA/dasha-study/fog.revealed.1": {
+      "text": "Дивись, там більше нема туману!",
+      "spoken": "Диви́сь, там бі́льше нема́ тума́ну!",
+      "heard": "«Дивись, там більше нема туману!»",
+      "characterErrorRate": 0.0,
+      "seconds": 2.51,
+      "sha256": "3d537e1d057c63b03a607a77c6d4ceece492c359a85ddedd171678fdd3ee7350"
+    },
+    "uk-UA/dasha-study/fog.revealed.2": {
+      "text": "Розчистила. Гарно ж?",
+      "spoken": "Розчи́стила. Га́рно ж?",
+      "heard": "Розчистила. Гарно ж.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.01,
+      "sha256": "80b2021d06cb79b0236173dabb63af1063ec199ddbfcb60511eb0ccbbcb737b5"
+    },
+    "uk-UA/dasha-study/walk.0": {
+      "text": "Ой, піду туди!",
+      "spoken": "Ой, піду́ туди́!",
+      "heard": "Ой, піду туди",
+      "characterErrorRate": 0.0,
+      "seconds": 1.18,
+      "sha256": "2d0a64e02523906b3ccb199dc1701a70a47c6f7698d41866351b13092a5e0665"
+    },
+    "uk-UA/dasha-study/walk.1": {
+      "text": "Прогуляюся трішки.",
+      "spoken": "Прогуля́юся трі́шки.",
+      "heard": "Прогуляюся трішки",
+      "characterErrorRate": 0.0,
+      "seconds": 1.46,
+      "sha256": "00da7c174781d0d29e7486d8d8d0ade322c8cb2d94dd61f33c8211c4e962940e"
+    },
+    "uk-UA/dasha-study/walk.2": {
+      "text": "А що там? Зараз дізнаюся.",
+      "spoken": "А що там? за́раз дізна́юся.",
+      "heard": "А що там? Зараз дізнаюся.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.66,
+      "sha256": "a3145cfa0edc8663712990f5d9ba27013a734b1446b2388cb81aa80510f8d7cb"
+    },
+    "uk-UA/dasha-study/walk.3": {
+      "text": "Отже, прогулянка!",
+      "spoken": "О́тже, прогу́лянка!",
+      "heard": "Отже, прогулянка.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.49,
+      "sha256": "23faa79fd1d2eb2e689b1c225b3f48a248a3ba34cbc24c545d85c0dbbbcc147f"
+    },
+    "uk-UA/dasha-study/walk.4": {
+      "text": "Все, я пішла.",
+      "spoken": "Все, я пішла́.",
+      "heard": "Все, я пішла.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.38,
+      "sha256": "e227376c107a412cf7b84650aeff23ae97018061e68c23ec73d85e5a8c16d2aa"
+    },
+    "uk-UA/dasha-study/walk.5": {
+      "text": "Там гарно. Біжу!",
+      "spoken": "Там га́рно. біжу́!",
+      "heard": "Там гарно біжу.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.47,
+      "sha256": "dc6d57ac3516adf5c873032929cdf0d1146def5a62ee6ddb0dc639daa86219e8"
+    },
+    "uk-UA/dasha-study/walk.6": {
+      "text": "Лише одним оком, чесно.",
+      "spoken": "Лише́ одни́м о́ком, че́сно.",
+      "heard": "Лише одним оком чесно.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.96,
+      "sha256": "294a20a9a6fea885415f83421a02a2071f501d902cf0d7c883a120af598ad496"
+    },
+    "uk-UA/dasha-study/walk.7": {
+      "text": "Іду-іду…",
+      "spoken": "іду́-іду́.",
+      "heard": "Іду, іду",
+      "characterErrorRate": 0.0,
+      "seconds": 0.94,
+      "sha256": "f75bc5b1a51cf622f0cb1f7b1b1165578170ed5536155557ff4583de652e7568"
+    },
+    "uk-UA/dasha-v2-study/blocked.building.0": {
+      "text": "Не крізь стіну, любий.",
+      "spoken": "Не крізь стіну́, лю́бий.",
+      "heard": "Не крізь стіну, любий.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.53,
+      "sha256": "3aee03c16b91b7a1426c0e58adae6074464bbe368b569155801dc77a2025807c"
+    },
+    "uk-UA/dasha-v2-study/blocked.building.1": {
+      "text": "Ці двері не мого розміру.",
+      "spoken": "Ці две́рі не мого́ ро́зміру.",
+      "heard": "Ці двері немого розміру.",
+      "characterErrorRate": 0.042,
+      "seconds": 1.49,
+      "sha256": "3eba6a23a5662315558efc19598ad9c9bae55ee2f927de26d18914ee73959924"
+    },
+    "uk-UA/dasha-v2-study/blocked.building.2": {
+      "text": "Це будівля. Зіпсую образ.",
+      "spoken": "Це буді́вля. зіпсу́ю о́браз.",
+      "heard": "Це будівля. Зіпсую образ.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.1,
+      "sha256": "69b009cf5c7c6fb449c5a619b434be8f1ce97c5d230bcb41b19953a0e566aed8"
+    },
+    "uk-UA/dasha-v2-study/blocked.fog.0": {
+      "text": "Сірий — не мій колір. Спершу відкрий.",
+      "spoken": "Сі́рий — не мій ко́лір. Спе́ршу відкри́й.",
+      "heard": "Цірий не мій колір, спершу відкрий.",
+      "characterErrorRate": 0.03,
+      "seconds": 2.65,
+      "sha256": "6424d7ebb1f9a1b404679a7b176eef20a0bb34db6c4838ced00a40c2e1d67c98"
+    },
+    "uk-UA/dasha-v2-study/blocked.fog.1": {
+      "text": "Незнане — не для мене.",
+      "spoken": "Незна́не — не для мене́.",
+      "heard": "Назнане, не для мене.",
+      "characterErrorRate": 0.053,
+      "seconds": 1.74,
+      "sha256": "4f275f0f3606845762bb3b19f0a9bbfc7bdc336790bf096f04a2216972413028"
+    },
+    "uk-UA/dasha-v2-study/blocked.fog.2": {
+      "text": "Ти розвідай, я — слідом.",
+      "spoken": "Ти розві́дай, я — слі́дом.",
+      "heard": "Ти розвідай, я слідом.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.76,
+      "sha256": "2ec20b4906cf25688000ac881b4833ab289bb4459d7fd26bf2faeb2e6c170345"
+    },
+    "uk-UA/dasha-v2-study/blocked.water.0": {
+      "text": "Не в цих черевиках.",
+      "spoken": "Не в цих череви́ках.",
+      "heard": "Не в цих черевиках.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.27,
+      "sha256": "33645c51224abfeb842ee6510402bc59128809e283ec04a63871c0b3a2954e22"
+    },
+    "uk-UA/dasha-v2-study/blocked.water.1": {
+      "text": "Вода псує тканину.",
+      "spoken": "Вода́ псує́ ткани́ну.",
+      "heard": "Вода псує тканину",
+      "characterErrorRate": 0.0,
+      "seconds": 1.47,
+      "sha256": "8672d2025536c1a3b01755c03ae46a28c5d7222f24714cc7d4f1a27fe115ebda"
+    },
+    "uk-UA/dasha-v2-study/blocked.water.2": {
+      "text": "Сьогодні без запливу.",
+      "spoken": "Сього́дні без запли́ву.",
+      "heard": "Сьогодні без запливу",
+      "characterErrorRate": 0.0,
+      "seconds": 1.38,
+      "sha256": "470c4c899e8777263b2ca0497d8924f0f4f6b5670c5f96cf9469bd4c2b026bed"
+    },
+    "uk-UA/dasha-v2-study/fog.busy.0": {
+      "text": "Три одночасно, любчику. Це межа.",
+      "spoken": "Три одноча́сно, лю́бчику. Це межа́.",
+      "heard": "Три одночасно лючику. Це межа.",
+      "characterErrorRate": 0.034,
+      "seconds": 2.49,
+      "sha256": "932a913d1c8fe7e0553cb4172ca2e6fb38ec3143ff914162c1de0a6e5ad726a3"
+    },
+    "uk-UA/dasha-v2-study/fog.busy.1": {
+      "text": "Я вже стилізую три. Зачекай.",
+      "spoken": "Я вже стилізу́ю три. Зачека́й.",
+      "heard": "Я вже стилізую три, зачекай.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.12,
+      "sha256": "765265fa77aed80b9414e4c3283a2790a7cbd962b561a090a0444edbb3dd54c1"
+    },
+    "uk-UA/dasha-v2-study/fog.busy.2": {
+      "text": "Три — мій максимум. Терпіння.",
+      "spoken": "Три — мій ма́ксимум. Терпі́ння.",
+      "heard": "Тривмій максимум терпіння.",
+      "characterErrorRate": 0.04,
+      "seconds": 2.16,
+      "sha256": "c9e9bb9204a3b3cf4d269a479442ef5906d1217e65fb560c431911644dff121b"
+    },
+    "uk-UA/dasha-v2-study/fog.reveal.0": {
+      "text": "Зробимо цій ділянці макіяж.",
+      "spoken": "Зро́бимо цій діля́нці макія́ж.",
+      "heard": "Зробимо цій ділянці макіяж.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.04,
+      "sha256": "a0801c3093234bb102e2fa9f9ccc2d6f2181a1da5d4fc2e8f8d71f5a102323cb"
+    },
+    "uk-UA/dasha-v2-study/fog.reveal.1": {
+      "text": "Сірий — це минулий сезон. Розчищаю.",
+      "spoken": "Сі́рий — це мину́лий сезо́н. Розчища́ю.",
+      "heard": "Цірий – це минулий сезон, розчищаю.",
+      "characterErrorRate": 0.032,
+      "seconds": 2.44,
+      "sha256": "d0d353e24384891fb32c102b54b5b2285784bbbf3d054bc50a091b2513194f67"
+    },
+    "uk-UA/dasha-v2-study/fog.reveal.2": {
+      "text": "Іду відкривати цей образ.",
+      "spoken": "іду́ відкрива́ти цей о́браз.",
+      "heard": "Іду відкривати цей образ.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.88,
+      "sha256": "b06c632696ed84ea714489a2246cea62e4848ccc03842d752a8e8fa0c730f2c9"
+    },
+    "uk-UA/dasha-v2-study/fog.revealed.0": {
+      "text": "Відкрила. Так значно краще.",
+      "spoken": "Відкри́ла. Так зна́чно кра́ще.",
+      "heard": "Відкрила. Так значно краще.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.28,
+      "sha256": "66363c258481cdfa53ce7d6bd9c00a065bb48bc90c21172f83e88ddc36d3f3ca"
+    },
+    "uk-UA/dasha-v2-study/fog.revealed.1": {
+      "text": "Ось. Туман вийшов з моди.",
+      "spoken": "Ось. Тума́н ви́йшов з мо́ди.",
+      "heard": "Ось туман вийшов з моди.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.78,
+      "sha256": "f420801793255b22a890d9de7d03874b938eb1c10471ee294cc96b9f03c85a79"
+    },
+    "uk-UA/dasha-v2-study/fog.revealed.2": {
+      "text": "Усе чисто — і мапі личить.",
+      "spoken": "усе́ чи́сто — і ма́пі ли́чить.",
+      "heard": "Усе чисто і мапі личить.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.96,
+      "sha256": "fd79c7a5efc80d4b463f51412c9dd976416fcb688a10aa241a64b926f196f53c"
+    },
+    "uk-UA/dasha-v2-study/walk.0": {
+      "text": "Новий образ — новий маршрут.",
+      "spoken": "нови́й о́браз — нови́й маршру́т.",
+      "heard": "Новий образ, новий маршрут.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.01,
+      "sha256": "72893c05cba0dd06bfd29bf759860d5cbd587751273c50a7f3ec7865f2b0db35"
+    },
+    "uk-UA/dasha-v2-study/walk.1": {
+      "text": "Це вбрання заслуговує на прогулянку.",
+      "spoken": "Це вбра́ння заслуго́вує на прогу́лянку.",
+      "heard": "Це вбрання заслуговує на прогулянку.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.43,
+      "sha256": "ee9670dbaed0ea97008fc6e1d007d334c11e6c67e9a55a1a4acf99cbf4856d82"
+    },
+    "uk-UA/dasha-v2-study/walk.2": {
+      "text": "Подіум — там.",
+      "spoken": "По́діум — там.",
+      "heard": "Підіум там",
+      "characterErrorRate": 0.1,
+      "seconds": 0.96,
+      "sha256": "44698be9d7fb5ae8261c6bfeee4f89a4880c296dadfb32e1e36f4e69cdbf570d"
+    },
+    "uk-UA/dasha-v2-study/walk.3": {
+      "text": "Ходімо. Друга версія ходить швидше.",
+      "spoken": "Ході́мо. Дру́га ве́рсія хо́дить шви́дше.",
+      "heard": "Ходімо, друга версія ходить швидше.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.35,
+      "sha256": "2d9d6a315848eba01e4b7e37bbf769ff9dcd7b2f9b3f264c330a495f9012667a"
+    },
+    "uk-UA/dasha-v2-study/walk.4": {
+      "text": "Буду там, виглядатиму неймовірно.",
+      "spoken": "Бу́ду там, вигляда́тиму неймові́рно.",
+      "heard": "Буду там, виглядатиму неймовірно.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.37,
+      "sha256": "828eb292641a996d4a18a6ee3a40253ad52118f8ae9e19bd165eaa3b3d583d36"
+    },
+    "uk-UA/dasha-v2-study/walk.5": {
+      "text": "Коротка прогулянка — показати образ.",
+      "spoken": "Коро́тка прогу́лянка — показа́ти о́браз.",
+      "heard": "Коротка прогулянка. Показати образ.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.65,
+      "sha256": "ebdc7d390ebabf99f32b1974a3cda2c98bef00b9e4b3e0a5a5e00889239f9ee7"
+    },
+    "uk-UA/dasha-v2-study/walk.6": {
+      "text": "Оновлюю свою локацію…",
+      "spoken": "оновлю́ю свою́ лока́цію.",
+      "heard": "Оновлюю свою локацію.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.68,
+      "sha256": "bf25ebff37858fce1aaf0fc0a5093d14971dbb39e6a3cf1297872635b88a8b26"
+    },
+    "uk-UA/dasha-v2-study/walk.7": {
+      "text": "Дайте дорогу, я стильно.",
+      "spoken": "Да́йте доро́гу, я сти́льно.",
+      "heard": "Дайте дорогу, я стильна.",
+      "characterErrorRate": 0.045,
+      "seconds": 1.86,
+      "sha256": "3985f383ee48a6edef93f76979c9a5af50a508ab09b936cb25e2d3b862e64fb5"
+    },
+    "uk-UA/kai-study/blocked.building.0": {
+      "text": "Сміливо думати, що я ходжу крізь стіни.",
+      "spoken": "смі́ливо ду́мати, що я ходжу́ крізь сті́ни.",
+      "heard": "Сміливо думати, що я ходжу крізь стіни.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.72,
+      "sha256": "0b8ccb474f1372a1986f9362429179ce69e6f56b87af69295c0fbae9746bca92"
+    },
+    "uk-UA/kai-study/blocked.building.1": {
+      "text": "Це архітектура. Я її поважаю.",
+      "spoken": "Це архітекту́ра. Я її́ поважа́ю.",
+      "heard": "Це архітектура. Я її поважаю.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.77,
+      "sha256": "8b335e7888f5b9d95e7c64902c2bc4578dea83222976441e31a9108df4b02853"
+    },
+    "uk-UA/kai-study/blocked.building.2": {
+      "text": "Двері не знайдено.",
+      "spoken": "Две́рі не зна́йдено.",
+      "heard": "Двері не знайдено.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.99,
+      "sha256": "66ccec904629118b819b47d8f1080578af5641650692981d0de04f751983de36"
+    },
+    "uk-UA/kai-study/blocked.fog.0": {
+      "text": "Невідкрита територія. Пас.",
+      "spoken": "Невідкри́та терито́рія. Пас.",
+      "heard": "Невідкрита територія. ПАС.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.96,
+      "sha256": "3de2c161c5aff13f3a512f704d7f56668676488d1a1f549cf169081f58e2370d"
+    },
+    "uk-UA/kai-study/blocked.fog.1": {
+      "text": "Туман війни. Класика.",
+      "spoken": "Тума́н війни́. Кла́сика.",
+      "heard": "Туман війни класика.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.15,
+      "sha256": "ae6d14ed2f57da7b8035cc85b170fd04c4832767c5fdb967b10841bc176ede2e"
+    },
+    "uk-UA/kai-study/blocked.fog.2": {
+      "text": "Спершу відкрий, тоді поговоримо.",
+      "spoken": "Спе́ршу відкри́й, тоді́ погово́римо.",
+      "heard": "Спершу відкрий, тоді поговоримо.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.13,
+      "sha256": "27640da9841deff10bda81aa3c6896ff20faf33fdea4270014e37a11baa396b8"
+    },
+    "uk-UA/kai-study/blocked.water.0": {
+      "text": "Я багато чого вмію. Бути човном — ні.",
+      "spoken": "Я бага́то чого́ вмі́ю. бу́ти човно́м — ні.",
+      "heard": "Я багато чого вмію, бути човном, ні.",
+      "characterErrorRate": 0.0,
+      "seconds": 4.09,
+      "sha256": "4cb584af15d1191461d27c450c72615fd7e75fd796666a32b1f65486a893f0b5"
+    },
+    "uk-UA/kai-study/blocked.water.1": {
+      "text": "Вода. Рішуче ні.",
+      "spoken": "Вода́. Рішу́че ні.",
+      "heard": "Вода рішучені.",
+      "characterErrorRate": 0.071,
+      "seconds": 2.36,
+      "sha256": "64222abd8609d6086d8eb10ee11b2e04db95294beb9dbd2895dc8adbe0e4fca1"
+    },
+    "uk-UA/kai-study/blocked.water.2": {
+      "text": "Плавання немає в моїх анімаціях.",
+      "spoken": "Пла́вання нема́є в мої́х аніма́ціях.",
+      "heard": "Плавання немає в моїх анімаціях.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.59,
+      "sha256": "b8f6a68ec265730b5aa82d664b3c6d2bbb24b08159457bd28f6b8960ad17530b"
+    },
+    "uk-UA/kai-study/fog.busy.0": {
+      "text": "Три в процесі. Я не кластер.",
+      "spoken": "Три в проце́сі. Я не кла́стер.",
+      "heard": "Три в процесі, я не кластер.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.01,
+      "sha256": "04d36fe7fbcaa4b552c67ae9a16b9d98a9a84a67f5b4d2dc3538b4e92930e01e"
+    },
+    "uk-UA/kai-study/fog.busy.1": {
+      "text": "Черга повна. Максимум три.",
+      "spoken": "че́рга по́вна. Ма́ксимум три.",
+      "heard": "Черга повна, максимум три.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.9,
+      "sha256": "17ed942ce9e4128c1abb62c2534dbe1979e47da1f072a7f4557274b52bac0612"
+    },
+    "uk-UA/kai-study/fog.busy.2": {
+      "text": "Ліміт паралельності: три.",
+      "spoken": "Лімі́т парале́льності: три.",
+      "heard": "Ліміт паралельності 3.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.45,
+      "sha256": "db50d838c00b6062196752a32d633044a384d2256ad009f5d804308c51d5215b"
+    },
+    "uk-UA/kai-study/fog.reveal.0": {
+      "text": "Запускаю один (1) туманоприбирач.",
+      "spoken": "Запуска́ю оди́н туманоприбира́ч.",
+      "heard": "Запускаю один туманоприбирач.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.94,
+      "sha256": "2fbf19ae9a68d32788c43679eed751504da2adccc15297890d5287636fb48a1d"
+    },
+    "uk-UA/kai-study/fog.reveal.1": {
+      "text": "Гаразд. Відкриваю невідкрите.",
+      "spoken": "Гара́зд. Відкрива́ю невідкри́те.",
+      "heard": "Гаразд, відкриваю не відкрите.",
+      "characterErrorRate": 0.037,
+      "seconds": 3.04,
+      "sha256": "e75503398c96475f78960af1a03818cb4613d3a8822f381ec4c4e87b51396758"
+    },
+    "uk-UA/kai-study/fog.reveal.2": {
+      "text": "Зроблю це менш сірим.",
+      "spoken": "Зроблю́ це менш сі́рим.",
+      "heard": "Зроблю це менш сірим.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.19,
+      "sha256": "0fdf40024ca3c53074ce7da4b629aadf7a6d45df3bdcff742cd80f7edf1dd757"
+    },
+    "uk-UA/kai-study/fog.revealed.0": {
+      "text": "Туман: видалено. Прошу.",
+      "spoken": "Тума́н: ви́далено. прошу́.",
+      "heard": "Туман видалено. Прошу.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.39,
+      "sha256": "eb05b3804ff35630ac7e8825f53bb64d253740992cd0b32cd46715b8cd3c8a60"
+    },
+    "uk-UA/kai-study/fog.revealed.1": {
+      "text": "Відкрито. Весь час це була мапа.",
+      "spoken": "Відкри́то. Весь час це була́ ма́па.",
+      "heard": "Відкрито, весь час це була мапа.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.38,
+      "sha256": "a5ee3f92f559ce26e03f6544e484df2f6a34bbff7c45464649ba532c17c79c78"
+    },
+    "uk-UA/kai-study/fog.revealed.2": {
+      "text": "Готово. Територію розблоковано.",
+      "spoken": "Гото́во. Терито́рію розблоко́вано.",
+      "heard": "Готово. Територію розблоковано.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.31,
+      "sha256": "71a49911a6b283319756f2435f8d85f3002a86fc1cd39de78d39cf3dcd205f59"
+    },
+    "uk-UA/kai-study/walk.0": {
+      "text": "Та чому б і ні. Іду.",
+      "spoken": "Та чому́ б і ні. іду́.",
+      "heard": "Та чому б і не іду?",
+      "characterErrorRate": 0.056,
+      "seconds": 2.38,
+      "sha256": "3980e6e187ade73a7326cc5a3353183bd307b12ad697e8e835b118214e2aeeb6"
+    },
+    "uk-UA/kai-study/walk.1": {
+      "text": "Карта каже, що там щось є.",
+      "spoken": "Ка́рта ка́же, що там щось є.",
+      "heard": "Карта каже, що там щось є.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.89,
+      "sha256": "eab5749367fd7487f999399843a4d40f9ac3b7e12c66fb83dd349c7ba912ea11"
+    },
+    "uk-UA/kai-study/walk.2": {
+      "text": "Несподіваний поворот: я йду.",
+      "spoken": "Несподі́ваний поворо́т: я йду.",
+      "heard": "Несподіваний поворот я йду.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.44,
+      "sha256": "d67b79c68f44f63adaa0cb04dda32cb3ebe662973ab7438ea647c2f3a6129d60"
+    },
+    "uk-UA/kai-study/walk.3": {
+      "text": "Ненадовго буду деінде.",
+      "spoken": "Ненадо́вго бу́ду деі́нде.",
+      "heard": "Ненадовго буду деінде.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.5,
+      "sha256": "97af7fe3428c273b7b03d4b3dcf6648ac6235443466f2a0316237d5d6c6390c6"
+    },
+    "uk-UA/kai-study/walk.4": {
+      "text": "Ходьба. Дуже передова технологія.",
+      "spoken": "Ходьба́. Ду́же передова́ техноло́гія.",
+      "heard": "Ходьба – дуже передова технологія.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.07,
+      "sha256": "a3ee763b939511ee400a0ac818e205c89a939d9c54fdee1934122481ff47812e"
+    },
+    "uk-UA/kai-study/walk.5": {
+      "text": "Вперед, у найширшому сенсі.",
+      "spoken": "Впере́д, у найши́ршому се́нсі.",
+      "heard": "Вперед у найширшому сенсі.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.94,
+      "sha256": "8ef75fd59dace465a8264224721c1015aae7254a2a5a0f426711d366bd8fc948"
+    },
+    "uk-UA/kai-study/walk.6": {
+      "text": "Гаразд, гляну. Заради науки.",
+      "spoken": "Гара́зд, гля́ну. Зара́ди нау́ки.",
+      "heard": "Гаразд гляну заради науки.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.51,
+      "sha256": "c3934b2611bdfaf64c108961e74d751e21c7c3fa116cbeaad70429e553e9fced"
+    },
+    "uk-UA/kai-study/walk.7": {
+      "text": "Переміщую одну (1) Avaia.",
+      "spoken": "переміщу́ю одну́ ава́я.",
+      "heard": "Переміщую одну авая.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.77,
+      "sha256": "0e911dbbf6f8dc564579415c0abe9edf5b78a45333283fb3909673e7543de296"
+    },
+    "uk-UA/sky-study/blocked.building.0": {
+      "text": "Це стіна, а не стежка.",
+      "spoken": "Це стіна́, а не сте́жка.",
+      "heard": "Це стіна, а не стежка.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.24,
+      "sha256": "73e6dd9df03632975e970c779319deca4feefec7bb9de964bc0057bfcf8d7ed6"
+    },
+    "uk-UA/sky-study/blocked.building.1": {
+      "text": "Навіть небо оминає будинки.",
+      "spoken": "На́віть не́бо омина́є буди́нки.",
+      "heard": "Навіть небо оминає будинки.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.71,
+      "sha256": "f5769556c6ed4e3be49a3ce24891578ecd047583c4f85fd702fba521c28792ee"
+    },
+    "uk-UA/sky-study/blocked.building.2": {
+      "text": "Крізь будинки я не ходжу.",
+      "spoken": "Крізь буди́нки я не ходжу́.",
+      "heard": "Крізь будинки я не ходжу.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.26,
+      "sha256": "5756047fcf23a75ed554df27aef0f5507cccba2b93334d00b5aeab88aeb77551"
+    },
+    "uk-UA/sky-study/blocked.fog.0": {
+      "text": "Туман. Спершу там маєш побувати ти.",
+      "spoken": "Тума́н. Спе́ршу там ма́єш побува́ти ти.",
+      "heard": "Туман. Спершу там маєш побувати ти.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.69,
+      "sha256": "960733904f53863eb8f4d97e3d7ba038403873ed59c01bde42a127d0a341319d"
+    },
+    "uk-UA/sky-study/blocked.fog.1": {
+      "text": "Так далеко я ще не бачу.",
+      "spoken": "Так дале́ко я ще не ба́чу.",
+      "heard": "Так далеко я ще не бачу.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.31,
+      "sha256": "289e2f85e5a2e582dd5d43bfd6fd2462b0f9233ee320e904e78421e931727e18"
+    },
+    "uk-UA/sky-study/blocked.fog.2": {
+      "text": "Спершу ти. Тоді я.",
+      "spoken": "Спе́ршу ти. Тоді́ я.",
+      "heard": "Спершу ти, тоді я.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.39,
+      "sha256": "9881f70ce29f5c17929448867cef033c00892e64c5b8364f55bec62137d368b1"
+    },
+    "uk-UA/sky-study/blocked.water.0": {
+      "text": "Без човна — ні.",
+      "spoken": "Без човна́ — ні.",
+      "heard": "Без човна ні.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.97,
+      "sha256": "58b7893938861ea9e6286e2caf7c12f070cd2a34bcd9d69b46bfaf1b8c7e3eb3"
+    },
+    "uk-UA/sky-study/blocked.water.1": {
+      "text": "Вода. Пропущу.",
+      "spoken": "Вода́. Пропущу́.",
+      "heard": "Вода пропущу.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.73,
+      "sha256": "5cc1904fbb3c876863d3e494c0ca9787e1c92287f9c00e8703def0b1418a3374"
+    },
+    "uk-UA/sky-study/blocked.water.2": {
+      "text": "Для прогулянки мокрувато.",
+      "spoken": "Для прогу́лянки мокрува́то.",
+      "heard": "Для прогулянки мокрувато.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.56,
+      "sha256": "1fb56fdc14b6ed2193dcafcb554775f95fe01b8f01f6aab83cbd4693d542ddc6"
+    },
+    "uk-UA/sky-study/fog.busy.0": {
+      "text": "Три одночасно — моя межа.",
+      "spoken": "Три одноча́сно — моя́ межа́.",
+      "heard": "Три одночасно моя межа.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.52,
+      "sha256": "69841082e25da5be10ca1e3dede65f64129777b32328bcbcb2a169c9e925b7b7"
+    },
+    "uk-UA/sky-study/fog.busy.1": {
+      "text": "Я вже розчищаю три.",
+      "spoken": "Я вже розчища́ю три.",
+      "heard": "Я вже розчищаю, Тре.",
+      "characterErrorRate": 0.056,
+      "seconds": 2.22,
+      "sha256": "2cd83b845bda0f5558135d028232b43dc62d91f6225886e230fda25897f5cc1f"
+    },
+    "uk-UA/sky-study/fog.busy.2": {
+      "text": "Руки зайняті. Зачекай, поки одна відкриється.",
+      "spoken": "ру́ки за́йняті. Зачека́й, по́ки одна́ відкри́ється.",
+      "heard": "Руки зайняті. Зачекай, поки одна відкриється.",
+      "characterErrorRate": 0.0,
+      "seconds": 4.83,
+      "sha256": "5cd7e481947dfca500eb14086f0310a164b496f4f7c910f603e99595599f3d07"
+    },
+    "uk-UA/sky-study/fog.reveal.0": {
+      "text": "У туман. Нанесу на карту.",
+      "spoken": "У тума́н. Нанесу́ на ка́рту.",
+      "heard": "У туман нанесу на карту.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.87,
+      "sha256": "13c2782645f70a4b07a8eadc4c621515455f83f21601cdb7bc1c229fe97936eb"
+    },
+    "uk-UA/sky-study/fog.reveal.1": {
+      "text": "Розчищу цю ділянку. Дай кілька хвилин.",
+      "spoken": "Розчи́щу цю діля́нку. Дай кі́лька хвили́н.",
+      "heard": "Розчищу цю ділянку, дай кілька хвилин.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.87,
+      "sha256": "5d7108baf26bd9fbf756248f75617cd62936558afc4023b2959a86d3eb7ece9b"
+    },
+    "uk-UA/sky-study/fog.reveal.2": {
+      "text": "Заходжу. Мапа заповниться.",
+      "spoken": "захо́джу. Ма́па запо́вниться.",
+      "heard": "Заходжу, мапа заповниться.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.03,
+      "sha256": "ea109b6a7db0ecbe33d9a66a96234e6496c2d05781359f221ddbee600346f8da"
+    },
+    "uk-UA/sky-study/fog.revealed.0": {
+      "text": "Наніс на карту. Туману там більше нема.",
+      "spoken": "Нані́с на ка́рту. Тума́ну там бі́льше нема́.",
+      "heard": "Наніс на карту, туману там більше нема.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.87,
+      "sha256": "fafbe6f7ec61c4c39f59768aafd27af4cc39b3a02b4d3cf1d1c378e9bb691fbd"
+    },
+    "uk-UA/sky-study/fog.revealed.1": {
+      "text": "Над тією ділянкою тепер ясно.",
+      "spoken": "Над тіє́ю діля́нкою тепе́р я́сно.",
+      "heard": "Над тією ділянкою тепер ясно.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.94,
+      "sha256": "ef96726994f0f866d89f7747bb700001131a5f6a2eae4d088901eef7c5edd1bf"
+    },
+    "uk-UA/sky-study/fog.revealed.2": {
+      "text": "Готово. Ще один шматок мапи.",
+      "spoken": "Гото́во. Ще оди́н шмато́к ма́пи.",
+      "heard": "Готово ще один шматок мапи.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.1,
+      "sha256": "48d85d19c54bf7196c198c74b49f6247b2b12a136bbaddadccea04793cecf5fd"
+    },
+    "uk-UA/sky-study/walk.0": {
+      "text": "Гаразд. Туди.",
+      "spoken": "Гара́зд. Туди́.",
+      "heard": "Гаразд туди.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.75,
+      "sha256": "0e1a01455112b9cd5e6c47cc6e8c270cb7e1d796ddf114fabd45148958b233c8"
+    },
+    "uk-UA/sky-study/walk.1": {
+      "text": "Подивлюся, що там каже вітер.",
+      "spoken": "Подивлю́ся, що там ка́же ві́тер.",
+      "heard": "Подивлюся, що там каже вітер.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.59,
+      "sha256": "995c99107d4fd255fc788143fc72f467dfe5575776393505766135a92c9cf2e6"
+    },
+    "uk-UA/sky-study/walk.2": {
+      "text": "Вирушаю. На цьому маршруті ясно.",
+      "spoken": "Вируша́ю. На цьому маршру́ті я́сно.",
+      "heard": "Вирушаю, на цьому маршруті ясно.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.63,
+      "sha256": "c1a6d7b59fea0d38e63b8ea1f9e86e12721aa45ea19894c9ba3ec041003331b7"
+    },
+    "uk-UA/sky-study/walk.3": {
+      "text": "Короткий політ, тільки пішки.",
+      "spoken": "Коро́ткий полі́т, ті́льки пі́шки.",
+      "heard": "Короткий політ, тільки пішки.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.9,
+      "sha256": "d96758145f8b3fc1f6609d0fe426a7955000146e93543ed6d925d95df615e02a"
+    },
+    "uk-UA/sky-study/walk.4": {
+      "text": "Прокладаю курс.",
+      "spoken": "Проклада́ю курс.",
+      "heard": "Прокладаю курс.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.56,
+      "sha256": "e03fd1821342baf832126f312f8ada1c632d2574bca12e67ada96a6328c6c0f5"
+    },
+    "uk-UA/sky-study/walk.5": {
+      "text": "Гляну, що там.",
+      "spoken": "Гля́ну, що там.",
+      "heard": "Гляну, що там.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.71,
+      "sha256": "4cc6d7fcc734fe03d4734c3635bd663c45e37572cca6cd51932b5de6e2fb052c"
+    },
+    "uk-UA/sky-study/walk.6": {
+      "text": "Іду. Горизонт почекає.",
+      "spoken": "іду́. Горизо́нт почека́є.",
+      "heard": "Іду, горизонт почекає.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.6,
+      "sha256": "17f36ecae6632a0ce374e5ff53f88dd1608ed9c0a21d5477e4b7673a4823597e"
+    },
+    "uk-UA/sky-study/walk.7": {
+      "text": "Добре місце. Рушаю.",
+      "spoken": "До́бре мі́сце. Руша́ю.",
+      "heard": "Добре місце, рушаю.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.67,
+      "sha256": "d44acd6c526e42a8e2492f0511156eca261669667bd9f4b2f34a525c8af94976"
+    }
+  },
+  "version": "0.1.0",
+  "voices": {
+    "en": {
+      "sky-study": {
+        "model": "kokoro-en-v0_19",
+        "speaker": "am_michael",
+        "speed": 0.95
+      },
+      "dasha-study": {
+        "model": "kokoro-en-v0_19",
+        "speaker": "af_bella",
+        "speed": 1.0
+      },
+      "kai-study": {
+        "model": "kokoro-en-v0_19",
+        "speaker": "bm_lewis",
+        "speed": 0.95
+      },
+      "dasha-v2-study": {
+        "model": "kokoro-en-v0_19",
+        "speaker": "bf_emma",
+        "speed": 1.0
+      }
+    },
+    "uk-UA": {
+      "sky-study": {
+        "model": "vits-piper-uk_UA-ukrainian_tts-medium",
+        "speaker": "mykyta",
+        "length": 1.05,
+        "noise": 0.6
+      },
+      "dasha-study": {
+        "model": "vits-piper-uk_UA-ukrainian_tts-medium",
+        "speaker": "tetiana",
+        "length": 0.95,
+        "noise": 0.7
+      },
+      "kai-study": {
+        "model": "vits-piper-uk_UA-ukrainian_tts-medium",
+        "speaker": "mykyta",
+        "length": 1.1,
+        "noise": 0.33,
+        "pitch": -1.5
+      },
+      "dasha-v2-study": {
+        "model": "vits-piper-uk_UA-ukrainian_tts-medium",
+        "speaker": "lada",
+        "length": 1.0,
+        "noise": 0.667
+      }
+    }
+  },
+  "unvoiced": {
+    "ru-RU": "No Russian voice we could find has a license that allows this product: the Piper voices are fine-tuned from the non-commercial lessac dataset, carry CC BY-NC-SA, or state no license at all."
+  },
+  "models": {
+    "kokoro-en-v0_19": {
+      "license": "Apache-2.0",
+      "credit": "Kokoro-82M v0.19 by hexgrad, converted to ONNX by k2-fsa/sherpa-onnx. Speaker order from sherpa-onnx scripts/kokoro/v0.19/generate_voices_bin.py.",
+      "sha256": "912804855a04745fa77a30be545b3f9a5d15c4d66db00b88cbcd4921df605ac7"
+    },
+    "vits-piper-uk_UA-ukrainian_tts-medium": {
+      "license": "Piper model card: trained from scratch on a CC0 dataset (NabuCasa/voice-datasets)",
+      "credit": "Piper voice uk_UA-ukrainian_tts (medium), speakers lada, mykyta and tetiana from the Open Source Ukrainian TTS datasets by Yehor Smoliakov.",
+      "sha256": "92be6ff21ebb1cbcc0c71121a6437db8d060cee5785287aaa6a19a2548f59c03"
+    },
+    "sherpa-onnx-whisper-turbo": {
+      "license": "MIT (OpenAI Whisper large-v3-turbo)",
+      "credit": "Listens to every take and keeps the one it understood best. It judges; nothing it produces is shipped.",
+      "sha256": "b11acbbcd660b44a8e0df33724feb5aaa709cf65668f2823d59f656312544f22"
+    }
+  }
+}
