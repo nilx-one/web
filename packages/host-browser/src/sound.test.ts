@@ -253,11 +253,40 @@ describe("browser sound", () => {
     expect(createContext).not.toHaveBeenCalled();
   });
 
-  it("opens the device once sound is wanted and gestures resume it", async () => {
+  it("opens nothing when sound is merely wanted, as on mount or reload", () => {
+    const sound = createBrowserSound({ createContext, document });
+    // What a mount does with the default or a stored preference.
+    sound.setEnabled(true);
+    sound.play("tap");
+    sound.setAmbience(AMBIENCE);
+    expect(createContext).not.toHaveBeenCalled();
+    // Coming back to the tab is not a gesture either.
+    setVisibility("hidden");
+    setVisibility("visible");
+    expect(createContext).not.toHaveBeenCalled();
+
+    press();
+    expect(createContext).toHaveBeenCalledOnce();
+  });
+
+  it("opens the device on the very press that turns sound on", () => {
+    const sound = createBrowserSound({ createContext, document });
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.addEventListener("change", () => sound.setEnabled(true));
+    document.body.append(toggle);
+    try {
+      toggle.click();
+    } finally {
+      toggle.remove();
+    }
+    expect(createContext).toHaveBeenCalledOnce();
+  });
+
+  it("resumes a suspended device on a gesture, and never opens a second", async () => {
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
-    expect(createContext).toHaveBeenCalledOnce();
-
+    press();
     const context = contexts[0]!;
     context.state = "suspended";
     press();
@@ -277,6 +306,7 @@ describe("browser sound", () => {
     });
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
+    press();
     const context = contexts[0]!;
     const before = context.sources().length;
     sound.play("achievement");
@@ -311,6 +341,7 @@ describe("browser sound", () => {
   it("plays a cue through the mix once the device runs", () => {
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
+    press();
     const context = contexts[0]!;
     const before = context.sources().length;
     sound.play("walk");
@@ -322,6 +353,7 @@ describe("browser sound", () => {
   it("hears a cue repeated faster than its own pace once", () => {
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
+    press();
     const context = contexts[0]!;
     sound.play("step");
     const once = context.sources().length;
@@ -337,12 +369,14 @@ describe("browser sound", () => {
     const audioSession = { type: "auto" };
     const sound = createBrowserSound({ createContext, document, audioSession });
     sound.setEnabled(true);
+    press();
     expect(audioSession.type).toBe("ambient");
   });
 
   it("suspends a hidden page and resumes it when it is shown again", () => {
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
+    press();
     const context = contexts[0]!;
     setVisibility("hidden");
     expect(context.suspend).toHaveBeenCalled();
@@ -354,6 +388,7 @@ describe("browser sound", () => {
     vi.useFakeTimers();
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
+    press();
     const context = contexts[0]!;
     sound.setEnabled(false);
     expect(context.suspend).not.toHaveBeenCalled();
@@ -371,6 +406,7 @@ describe("browser sound", () => {
     expect(createContext).not.toHaveBeenCalled();
 
     sound.setEnabled(true);
+    press();
     const context = contexts[0]!;
     const bed = context.sources().filter((source) => source.loop);
     expect(bed).toHaveLength(1);
@@ -386,6 +422,7 @@ describe("browser sound", () => {
     vi.useFakeTimers();
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
+    press();
     sound.setAmbience(AMBIENCE);
     const context = contexts[0]!;
     sound.setAmbience(null);
@@ -401,6 +438,7 @@ describe("browser sound", () => {
   it("opens a new device when the browser closed the old one", () => {
     const sound = createBrowserSound({ createContext, document });
     sound.setEnabled(true);
+    press();
     contexts[0]!.state = "closed";
     press();
     expect(createContext).toHaveBeenCalledTimes(2);
@@ -418,6 +456,7 @@ describe("browser sound", () => {
     });
     expect(() => {
       sound.setEnabled(true);
+      press();
       press();
       sound.play("tap");
       sound.setAmbience(AMBIENCE);
