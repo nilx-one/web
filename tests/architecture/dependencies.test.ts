@@ -148,6 +148,34 @@ describe("Clean Architecture boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps Web Audio behind the host sound capability", () => {
+    const violations: string[] = [];
+
+    for (const scope of ["apps", "packages"] as const) {
+      for (const file of sourceFiles(join(ROOT, scope))) {
+        const normalized = relative(ROOT, file);
+
+        // The browser adapter is the one place that opens an audio device;
+        // every other surface names a cue and lets the host decide.
+        if (normalized.startsWith("packages/host-browser/")) {
+          continue;
+        }
+
+        const source = readFileSync(file, "utf8");
+
+        if (
+          /\bAudioContext\b|webkitAudioContext|audioSession|new Audio\(/.test(
+            source,
+          )
+        ) {
+          violations.push(normalized);
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
   it("never lets the map renderer ask for a device position", () => {
     const violations: string[] = [];
 

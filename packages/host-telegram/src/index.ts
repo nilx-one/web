@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  SILENT_SOUND,
   UNSUPPORTED_GEOLOCATION,
   ZERO_SAFE_AREA,
   type GeolocationCapability,
@@ -11,6 +12,7 @@ import {
   type HostPort,
   type HostSnapshot,
   type SafeAreaInsets,
+  type SoundCapability,
 } from "@nilx-one/host-contract";
 
 export interface TelegramHostComposition {
@@ -22,6 +24,11 @@ export interface TelegramHostComposition {
   readonly geolocation?: GeolocationCapability;
   readonly enableLiveLocation?: boolean;
   readonly onLiveLocation?: (position: ObservedGeolocation) => void;
+  /**
+   * Telegram has no sound primitive of its own; its embedded browser plays
+   * Web Audio, so the composition root hands over the browser capability.
+   */
+  readonly sound?: SoundCapability;
 }
 
 export interface TelegramWebAppUser {
@@ -160,6 +167,7 @@ class TelegramHost implements HostPort {
   public constructor(
     private readonly bridge: TelegramWebAppBridge | undefined,
     public readonly geolocation: GeolocationCapability,
+    public readonly sound: SoundCapability,
   ) {}
 
   public getSnapshot(): HostSnapshot {
@@ -334,5 +342,6 @@ export function createTelegramHost(
       (bridge === undefined || composition.enableLiveLocation !== true
         ? UNSUPPORTED_GEOLOCATION
         : createTelegramGeolocation(bridge, composition.onLiveLocation)),
+    composition.sound ?? SILENT_SOUND,
   );
 }

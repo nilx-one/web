@@ -5,6 +5,7 @@ import {
   createCoreWasmClient,
   loadGeneratedCoreWasmBindings,
 } from "@nilx-one/core-wasm";
+import { createBrowserSound } from "@nilx-one/host-browser";
 import {
   createTelegramHost,
   resolveTelegramWebApp,
@@ -78,6 +79,8 @@ async function bootstrap(): Promise<void> {
   );
   // A manual Bond location stands the Bond at the declared point: the host
   // answers that point, marked declared, and never asks the device at all.
+  // Telegram has no sound of its own; its embedded browser plays Web Audio.
+  const sound = createBrowserSound();
   const host = createTelegramHost(
     telegramBridge,
     locationControl.kind === "live"
@@ -86,10 +89,14 @@ async function bootstrap(): Promise<void> {
           onLiveLocation: createTelegramLiveLocationSink(
             telegramBridge?.initData ?? "",
           ),
+          sound,
         }
       : locationControl.kind === "manual"
-        ? { geolocation: createDeclaredGeolocation(locationControl.position) }
-        : {},
+        ? {
+            geolocation: createDeclaredGeolocation(locationControl.position),
+            sound,
+          }
+        : { sound },
   );
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,

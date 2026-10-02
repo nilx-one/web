@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { SoundCue } from "@nilx-one/host-contract";
 import {
   mapCompassBearing,
   mapDistanceMeters,
@@ -23,6 +24,7 @@ import {
 import type { ProductLocale } from "../../shell/localization";
 import {
   blockedLineKind,
+  lineCue,
   pickAvaiaLine,
   type AvaiaLineKind,
 } from "./avaia-lines";
@@ -67,6 +69,12 @@ export const FIRST_LOOK_MS = 1_500;
 
 /** How long an Avaia stands idle before curiosity moves it again. */
 export const IDLE_CURIOSITY_MS = 15_000;
+
+/**
+ * One footfall in this many milliseconds: the `walk` clip loops at 1.2 s and
+ * lands both feet in that time.
+ */
+export const STEP_MS = 600;
 
 /**
  * The ground right around the person is theirs to send a body onto even
@@ -114,6 +122,11 @@ export interface AvaiaWalkInput {
    * own; `"busy"` means the Avaia is already revealing all it can and says so.
    */
   readonly onFogTap?: (tap: MapPointSelection) => boolean | "busy";
+  /**
+   * Marks what the Avaia does with a sound: a line it says, a footfall while
+   * it walks. Whether anything is heard is the host's and the person's.
+   */
+  readonly onCue?: (cue: SoundCue) => void;
 }
 
 export interface AvaiaWalkState {
@@ -159,6 +172,7 @@ export function useAvaiaWalk({
   zoom,
   reducedMotion,
   onFogTap,
+  onCue,
 }: AvaiaWalkInput): AvaiaWalkState {
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
   const [study, setStudy] = useState<AvaiaStudy | undefined>(undefined);
@@ -207,6 +221,7 @@ export function useAvaiaWalk({
     avaiaAddress,
     owner,
     onFogTap,
+    onCue,
   });
   useEffect(() => {
     latest.current = {
@@ -221,6 +236,7 @@ export function useAvaiaWalk({
       avaiaAddress,
       owner,
       onFogTap,
+      onCue,
     };
   });
 
@@ -238,6 +254,8 @@ export function useAvaiaWalk({
       lastLine.current = text;
       speechCount.current += 1;
       setSpeech({ id: speechCount.current, text });
+      const cue = lineCue(kind);
+      if (cue !== undefined) latest.current.onCue?.(cue);
     },
     [],
   );
@@ -368,6 +386,27 @@ export function useAvaiaWalk({
       setRest({ point: walk.to, bearingDeg: walk.arrivalBearingDeg });
     }, remaining);
     return () => globalThis.clearTimeout(arrived);
+  }, [walk]);
+
+  // A walking body is heard walking. A walk with no duration — reduced
+  // motion, which arrives without walking — makes no footfall at all.
+  useEffect(() => {
+    if (walk === undefined || walk.durationMs <= 0) return;
+    const steps = globalThis.setInterval(() => {
+      latest.current.onCue?.("step");
+    }, STEP_MS);
+    const remaining = Math.max(
+      0,
+      walk.startedMs + walk.durationMs - globalThis.performance.now(),
+    );
+    const stops = globalThis.setTimeout(
+      () => globalThis.clearInterval(steps),
+      remaining,
+    );
+    return () => {
+      globalThis.clearInterval(steps);
+      globalThis.clearTimeout(stops);
+    };
   }, [walk]);
 
   // Looking a landmark over takes a moment; then it goes in the notebook and

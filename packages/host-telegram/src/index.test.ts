@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { UNSUPPORTED_GEOLOCATION } from "@nilx-one/host-contract";
+import { SILENT_SOUND, UNSUPPORTED_GEOLOCATION } from "@nilx-one/host-contract";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -151,6 +151,22 @@ describe("TelegramHost geolocation", () => {
     expect(createTelegramHost(createBridge()).geolocation).toBe(
       UNSUPPORTED_GEOLOCATION,
     );
+  });
+});
+
+describe("TelegramHost sound", () => {
+  it("plays through the composed embedded-browser capability", () => {
+    const sound = {
+      supported: true,
+      setEnabled: vi.fn(),
+      play: vi.fn(),
+      setAmbience: vi.fn(),
+    };
+    expect(createTelegramHost(createBridge(), { sound }).sound).toBe(sound);
+  });
+
+  it("is silent when the composition provides no capability", () => {
+    expect(createTelegramHost(createBridge()).sound).toBe(SILENT_SOUND);
   });
 });
 

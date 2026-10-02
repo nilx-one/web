@@ -9,6 +9,7 @@ import {
 import {
   createBrowserGeolocation,
   createBrowserHost,
+  createBrowserSound,
 } from "@nilx-one/host-browser";
 import { createBondLocationGeolocation } from "@nilx-one/host-contract";
 import {
@@ -177,6 +178,7 @@ if (isPublicBondHostname(window.location.hostname)) {
       device: browserGeolocation,
       readLocation: () => readBondLocationControl(),
     }),
+    sound: createBrowserSound(),
   };
   const host = discordHandoff
     ? createDiscordHandoffHost(hostEnvironment)

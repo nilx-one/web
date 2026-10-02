@@ -10,6 +10,7 @@ import type {
 import {
   createDeclaredGeolocation,
   type GeolocationCapability,
+  type SoundCapability,
 } from "@nilx-one/host-contract";
 import {
   avatarPreviewUrl,
@@ -62,6 +63,7 @@ function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
 
 interface ViewOverrides {
   nearbySpeech?: NearbySpeechAccessPort;
+  sound?: SoundCapability;
   avaiaPubDress?: string;
   connectedProviders?: BondProviderConnections;
   providerDeepLinks?: readonly ConnectedProvider[];
@@ -89,6 +91,7 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.nearbySpeech === undefined
       ? {}
       : { nearbySpeech: overrides.nearbySpeech }),
+    ...(overrides.sound === undefined ? {} : { sound: overrides.sound }),
     ...(overrides.providerDeepLinks === undefined
       ? {}
       : { providerDeepLinks: overrides.providerDeepLinks }),
@@ -144,6 +147,15 @@ function renderView(overrides: ViewOverrides = {}) {
       {...optionalProps}
     />,
   );
+}
+
+function soundDouble() {
+  return {
+    supported: true,
+    play: vi.fn<SoundCapability["play"]>(),
+    setEnabled: vi.fn<SoundCapability["setEnabled"]>(),
+    setAmbience: vi.fn<SoundCapability["setAmbience"]>(),
+  } satisfies SoundCapability;
 }
 
 function dock(container: HTMLElement): HTMLElement {
@@ -983,6 +995,49 @@ describe("AuthenticatedMapHomeView", () => {
     );
   });
 
+  it("offers sound on the settings route and keeps the choice on this device", () => {
+    const sound = soundDouble();
+    renderView({ section: "settings", sound });
+
+    expect(screen.getByRole("group", { name: "Sound" })).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: /^Effects\s?A short/ }),
+    ).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: /Effects and world/ }));
+
+    expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
+    // The choice is the gesture a browser opens audio from, so the host is
+    // told at once and the person hears what they turned on.
+    expect(sound.setEnabled).toHaveBeenCalledWith(true);
+    expect(sound.play).toHaveBeenCalledWith("tap");
+  });
+
+  it("offers no sound choice on a host that cannot make one", () => {
+    renderView({
+      section: "settings",
+      sound: { ...soundDouble(), supported: false },
+    });
+    expect(screen.queryByRole("group", { name: "Sound" })).toBeNull();
+  });
+
+  it("hears the world in view only once the person asks for it", async () => {
+    const sound = soundDouble();
+    renderView({ sound });
+    await act(async () => undefined);
+    expect(sound.setAmbience).not.toHaveBeenCalledWith(
+      expect.objectContaining({ presence: expect.any(Number) }),
+    );
+
+    window.localStorage.setItem("nilx-one.interface.sound", "all");
+    cleanup();
+    renderView({ sound });
+    await act(async () => undefined);
+    expect(sound.setAmbience).toHaveBeenCalledWith(
+      expect.objectContaining({ presence: expect.any(Number) }),
+    );
+  });
+
   it("resolves the appearance before the renderer paints its first style", () => {
     window.localStorage.setItem("nilx-one.interface.appearance", "dark");
     const mapRenderer = renderer();
@@ -1270,13 +1325,14 @@ describe("AuthenticatedMapHomeView", () => {
       latitude: here.latitude,
     };
 
-    async function renderWorld() {
+    async function renderWorld(overrides: ViewOverrides = {}) {
       vi.useFakeTimers();
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
       renderView({
         mapRenderer,
         geolocation: createGeolocationDouble({ position: here }),
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+        ...overrides,
       });
       await vi.waitFor(() =>
         expect(
@@ -1369,6 +1425,36 @@ describe("AuthenticatedMapHomeView", () => {
           }
         ).tapGround({ ...there, ground }),
       );
+
+    it("is heard setting off and walking, and silent once it arrives", async () => {
+      const sound = soundDouble();
+      const mapRenderer = await renderWorld({ sound });
+      sound.play.mockClear();
+
+      tap(mapRenderer);
+      expect(sound.play).toHaveBeenCalledWith("walk");
+
+      act(() => vi.advanceTimersByTime(1_300));
+      const steps = () =>
+        sound.play.mock.calls.filter(([cue]) => cue === "step").length;
+      expect(steps()).toBeGreaterThanOrEqual(2);
+
+      act(() => vi.advanceTimersByTime(60_000));
+      const arrived = steps();
+      act(() => vi.advanceTimersByTime(5_000));
+      expect(steps()).toBe(arrived);
+    });
+
+    it("is heard refusing ground it cannot walk onto", async () => {
+      const sound = soundDouble();
+      const mapRenderer = await renderWorld({ sound });
+      sound.play.mockClear();
+
+      tap(mapRenderer, "water");
+
+      expect(sound.play).toHaveBeenCalledWith("refuse");
+      expect(sound.play).not.toHaveBeenCalledWith("walk");
+    });
 
     it("walks around a building that stands between it and where it was sent", async () => {
       const mapRenderer = await renderWorld();

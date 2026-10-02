@@ -64,6 +64,7 @@ Every client host provides capabilities through `host-contract`:
 - lifecycle events;
 - back navigation;
 - haptics;
+- sound (see [Sound](sound.md));
 - external links and sharing;
 - device geolocation.
 

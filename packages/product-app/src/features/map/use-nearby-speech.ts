@@ -62,6 +62,8 @@ export interface NearbySpeechOptions {
   readonly now?: () => number;
   readonly pollMs?: number;
   readonly shownMs?: number;
+  /** Told once per poll that admitted anything, after it is shown. */
+  readonly onHeard?: () => void;
 }
 
 export interface NearbySpeech {
@@ -82,6 +84,10 @@ export function useNearbySpeech(options: NearbySpeechOptions): NearbySpeech {
   const pollMs = options.pollMs ?? SPEECH_POLL_MS;
   const shownMs = options.shownMs ?? SPEECH_SHOWN_MS;
   const nowRef = useRef(options.now ?? (() => Date.now()));
+  const onHeardRef = useRef(options.onHeard);
+  useEffect(() => {
+    onHeardRef.current = options.onHeard;
+  });
   const seen = useRef(new Set<string>());
   const [shown, setShown] = useState<readonly SpokenLineView[]>([]);
 
@@ -107,6 +113,7 @@ export function useNearbySpeech(options: NearbySpeechOptions): NearbySpeech {
           );
           if (admitted.length > 0) {
             setShown((lines) => [...lines, ...admitted]);
+            onHeardRef.current?.();
             for (const line of admitted) {
               const fade = globalThis.setTimeout(() => {
                 timers.delete(fade);

@@ -8,6 +8,7 @@ import type {
   IdentityAccessPort,
 } from "@nilx-one/application";
 import {
+  SILENT_SOUND,
   UNSUPPORTED_GEOLOCATION,
   type HostPort,
 } from "@nilx-one/host-contract";
@@ -49,6 +50,7 @@ function createHost(): HostPort {
     openExternal: vi.fn(),
     impact: vi.fn(),
     geolocation: UNSUPPORTED_GEOLOCATION,
+    sound: SILENT_SOUND,
   };
 }
 

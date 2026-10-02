@@ -8,12 +8,13 @@ import {
   type FailureNoticeCopy,
   type FailureReport,
 } from "@nilx-one/application";
-import type { HostPort } from "@nilx-one/host-contract";
+import type { HostPort, SoundCapability } from "@nilx-one/host-contract";
 import { ToastRegion, type ToastRegionItem } from "@nilx-one/ui";
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -22,6 +23,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { useLocalization, type Translate } from "../../shell/localization";
+import { useSoundCue } from "../../shell/sound-preference";
 import { useToastViewportNode } from "../../shell/toast-viewport";
 
 export interface PublishFailureOptions {
@@ -124,6 +126,8 @@ function toToastItem(
 
 export interface FailureNoticeProviderProps {
   readonly children: ReactNode;
+  /** The host's sound; a failure is marked with a cue as well as a notice. */
+  readonly sound?: SoundCapability;
 }
 
 /**
@@ -133,10 +137,17 @@ export interface FailureNoticeProviderProps {
  */
 export function FailureNoticeProvider({
   children,
+  sound,
 }: FailureNoticeProviderProps) {
   const { t } = useLocalization();
   const [presented, setPresented] = useState<readonly PresentedFailure[]>([]);
   const sequence = useRef(0);
+  // Read through a ref so `publish` keeps one identity for its whole life.
+  const cue = useSoundCue(sound);
+  const cueRef = useRef(cue);
+  useEffect(() => {
+    cueRef.current = cue;
+  });
 
   const publish = useCallback<PublishFailure>((report, options = {}) => {
     sequence.current += 1;
@@ -148,6 +159,7 @@ export function FailureNoticeProvider({
       // Host effects are best-effort presentation. A failed haptic/vibration
       // must never hide, delay, or otherwise alter the failure event itself.
     }
+    cueRef.current("failure");
 
     setPresented((current) => [
       ...current,

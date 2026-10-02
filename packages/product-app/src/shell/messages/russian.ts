@@ -202,6 +202,13 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.depth.threeDDetail": "Поднимать здания при приближении",
   "settings.depth.twoD": "2D",
   "settings.depth.twoDDetail": "Оставлять здания контурами",
+  "settings.sound.legend": "Звук",
+  "settings.sound.off": "Выключен",
+  "settings.sound.offDetail": "Это устройство молчит",
+  "settings.sound.cues": "Эффекты",
+  "settings.sound.cuesDetail": "Короткий звук на то, что произошло",
+  "settings.sound.all": "Эффекты и мир",
+  "settings.sound.allDetail": "Добавить ветер, воду и улицы в кадре",
   "settings.presentation":
     "Это локальное состояние отображения интерфейса. Оно не меняет состояние Bond, BondChain или общего Core.",
   "settings.localModel.bytes": "{size} МБ",

@@ -51,6 +51,19 @@ describe("BrowserHost", () => {
     });
   });
 
+  it("has no sound where the browser has no Web Audio, and keeps a composed one", () => {
+    const { environment } = createEnvironment(false);
+    expect(createBrowserHost(environment).sound.supported).toBe(false);
+
+    const sound = {
+      supported: true,
+      setEnabled: vi.fn(),
+      play: vi.fn(),
+      setAmbience: vi.fn(),
+    };
+    expect(createBrowserHost({ ...environment, sound }).sound).toBe(sound);
+  });
+
   it("publishes theme changes without leaking matchMedia into the product", () => {
     const { environment, dispatchTheme } = createEnvironment(false);
     const host = createBrowserHost(environment);

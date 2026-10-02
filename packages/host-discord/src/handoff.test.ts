@@ -69,6 +69,20 @@ describe("Discord credential hand-off", () => {
     expect(() => host.openExternal(new URL("javascript:alert(1)"))).toThrow();
   });
 
+  it("plays through the composed browser sound, and is silent without one", () => {
+    const sound = {
+      supported: true,
+      setEnabled: vi.fn(),
+      play: vi.fn(),
+      setAmbience: vi.fn(),
+    };
+    const environment = { matchMedia: () => mediaQueryList(), open: vi.fn() };
+    expect(createDiscordHandoffHost({ ...environment, sound }).sound).toBe(
+      sound,
+    );
+    expect(createDiscordHandoffHost(environment).sound.supported).toBe(false);
+  });
+
   it("accepts a hand-off only when the service confirms it", async () => {
     const answer = (status: number, body: unknown) =>
       vi

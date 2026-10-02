@@ -177,6 +177,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "Which on-device model this device runs. Another device has its own memory, GPU and eligibility, so the choice means nothing there.",
   },
   {
+    id: "interface.sound",
+    placement: "device",
+    mobility: "resident",
+    medium: "local-storage",
+    key: "nilx-one.interface.sound",
+    perOwner: false,
+    what: "Whether this device plays sound: off, effects, or effects and the world in view. Another device has its own speakers and stands somewhere else, so the choice means nothing there.",
+  },
+  {
     id: "wipe.epoch",
     placement: "device",
     mobility: "resident",
