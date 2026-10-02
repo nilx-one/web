@@ -161,6 +161,7 @@ describe("TelegramHost sound", () => {
       setEnabled: vi.fn(),
       play: vi.fn(),
       setAmbience: vi.fn(),
+      speak: vi.fn(),
     };
     expect(createTelegramHost(createBridge(), { sound }).sound).toBe(sound);
   });

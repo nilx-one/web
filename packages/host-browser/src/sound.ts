@@ -6,6 +6,7 @@ import {
   type SoundAmbience,
   type SoundCapability,
   type SoundCue,
+  type SoundVoiceLine,
 } from "@nilx-one/host-contract";
 
 import { createAmbienceBed, type AmbienceBed } from "./sound-ambience";
@@ -22,6 +23,10 @@ import { CUE_RECIPES } from "./sound-recipes";
  * ringer switch, the way a game's sound effects should. A hidden page is
  * suspended. Everything else is a quiet no-op: sound is presentation and
  * never a requirement.
+ *
+ * Recorded lines are fetched from the product's own origin, decoded once and
+ * kept, and said one at a time on their own bus, with the bed dipped under
+ * them.
  */
 export interface BrowserSoundEnvironment {
   /** Opens the audio device. Absent where this browser has no Web Audio. */
@@ -31,6 +36,10 @@ export interface BrowserSoundEnvironment {
   /** Safari's audio session, where this browser has one. */
   readonly audioSession?: { type: string };
   readonly random?: () => number;
+  /** Fetches a recorded line. Read at call time, so a host's routing applies. */
+  readonly fetch?: (url: string) => Promise<Response>;
+  /** A clock in milliseconds, for telling a late line from a timely one. */
+  readonly now?: () => number;
 }
 
 /** The overall level every cue and the bed are mixed down to. */
@@ -45,6 +54,17 @@ const BED_RELEASE_MS = 4_000;
 
 /** How long turning sound off takes to fade before the device is suspended. */
 const FADE_OUT_MS = 200;
+
+/** A line not ready this long after it was asked for is about something else. */
+const VOICE_LATE_MS = 2_500;
+/** A breath between the cue a line comes with and the voice saying it. */
+const VOICE_LEAD_SECONDS = 0.12;
+/** Recorded lines are levelled ahead of time; this sits them over the cues. */
+const VOICE_LEVEL = 0.9;
+/** How far the bed dips while a voice speaks. */
+const VOICE_DUCK = 0.35;
+/** Decoded lines kept, most recently said last. */
+const VOICE_CACHE_SIZE = 48;
 
 const GESTURES = ["pointerdown", "pointerup", "touchend", "keydown"] as const;
 
@@ -72,7 +92,13 @@ interface Mix {
   readonly context: AudioContext;
   readonly master: GainNode;
   readonly cues: AudioNode;
-  readonly ambience: AudioNode;
+  readonly ambience: GainNode;
+  readonly voice: AudioNode;
+}
+
+interface Speaking {
+  readonly source: AudioBufferSourceNode;
+  readonly gain: GainNode;
 }
 
 class BrowserSound implements SoundCapability {
@@ -84,6 +110,10 @@ class BrowserSound implements SoundCapability {
   private bedRelease: ReturnType<typeof setTimeout> | undefined;
   private readonly lastPlayed = new Map<SoundCue, number>();
   private readonly random: () => number;
+  private readonly clips = new Map<string, Promise<AudioBuffer>>();
+  private speaking: Speaking | undefined;
+  /** Which request to speak is the latest; only that one may be heard. */
+  private speech = 0;
 
   public constructor(
     private readonly environment: BrowserSoundEnvironment & {
@@ -117,6 +147,8 @@ class BrowserSound implements SoundCapability {
       );
       return;
     }
+    this.speech += 1;
+    this.hush();
     const mix = this.mix;
     if (mix === undefined) return;
     // Faded rather than cut, so turning sound off does not end on a click.
@@ -162,6 +194,96 @@ class BrowserSound implements SoundCapability {
     this.applyAmbience();
   }
 
+  public speak(line: SoundVoiceLine): void {
+    if (!this.enabled) return;
+    const mix = this.mix;
+    if (mix === undefined || mix.context.state !== "running") return;
+    this.speech += 1;
+    const request = this.speech;
+    const now = this.environment.now ?? (() => performance.now());
+    const askedAt = now();
+    this.clip(mix.context, line.url).then(
+      (buffer) => {
+        if (
+          request !== this.speech ||
+          !this.enabled ||
+          this.mix !== mix ||
+          mix.context.state !== "running" ||
+          now() - askedAt > VOICE_LATE_MS
+        ) {
+          return;
+        }
+        this.say(mix, buffer);
+      },
+      () => undefined,
+    );
+  }
+
+  /** A recorded line, decoded once for this device and kept for a while. */
+  private clip(context: AudioContext, url: string): Promise<AudioBuffer> {
+    const kept = this.clips.get(url);
+    if (kept !== undefined) {
+      this.clips.delete(url);
+      this.clips.set(url, kept);
+      return kept;
+    }
+    const fetchClip =
+      this.environment.fetch ?? ((target: string) => globalThis.fetch(target));
+    const pending = fetchClip(url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then((bytes) => context.decodeAudioData(bytes));
+    // A line that could not be fetched is asked for again next time.
+    pending.catch(() => {
+      if (this.clips.get(url) === pending) this.clips.delete(url);
+    });
+    this.clips.set(url, pending);
+    while (this.clips.size > VOICE_CACHE_SIZE) {
+      const oldest = this.clips.keys().next();
+      if (oldest.done === true) break;
+      this.clips.delete(oldest.value);
+    }
+    return pending;
+  }
+
+  private say(mix: Mix, buffer: AudioBuffer): void {
+    try {
+      this.hush();
+      const context = mix.context;
+      const at = context.currentTime + VOICE_LEAD_SECONDS;
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      const gain = context.createGain();
+      gain.gain.value = VOICE_LEVEL;
+      source.connect(gain).connect(mix.voice);
+      source.start(at);
+      this.speaking = { source, gain };
+      // The bed steps back for the voice and returns once it has spoken.
+      const bed = mix.ambience.gain;
+      bed.cancelScheduledValues(context.currentTime);
+      bed.setTargetAtTime(VOICE_DUCK, context.currentTime, 0.08);
+      bed.setTargetAtTime(1, at + buffer.duration, 0.3);
+    } catch {
+      // A line that cannot be said is still written on the card.
+    }
+  }
+
+  /** Stops whatever is being said, quickly but without a click. */
+  private hush(): void {
+    const speaking = this.speaking;
+    const context = this.mix?.context;
+    this.speaking = undefined;
+    if (speaking === undefined || context === undefined) return;
+    try {
+      speaking.gain.gain.setTargetAtTime(0, context.currentTime, 0.02);
+      speaking.source.stop(context.currentTime + 0.1);
+    } catch {
+      // Already finished; nothing left to stop.
+    }
+  }
+
   /** Opens or resumes the device if sound is wanted. Safe to call anytime. */
   private wake(): void {
     if (!this.enabled) return;
@@ -175,6 +297,9 @@ class BrowserSound implements SoundCapability {
       // A closed device never resumes; the next gesture opens a new one.
       if (this.mix?.context.state === "closed") {
         this.bed = undefined;
+        this.speaking = undefined;
+        // Decoded audio belongs to the device that decoded it.
+        this.clips.clear();
         this.mix = undefined;
       }
       const mix = this.mix ?? this.open();
@@ -214,7 +339,9 @@ class BrowserSound implements SoundCapability {
     cues.connect(master);
     const ambience = context.createGain();
     ambience.connect(master);
-    const mix = { context, master, cues, ambience };
+    const voice = context.createGain();
+    voice.connect(master);
+    const mix = { context, master, cues, ambience, voice };
     this.mix = mix;
     return mix;
   }

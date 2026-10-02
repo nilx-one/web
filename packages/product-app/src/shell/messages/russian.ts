@@ -209,6 +209,9 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.sound.cuesDetail": "Короткий звук на то, что произошло",
   "settings.sound.all": "Эффекты и мир",
   "settings.sound.allDetail": "Добавить ветер, воду и улицы в кадре",
+  "settings.sound.voice": "Голос Avaia",
+  "settings.sound.voiceDetail":
+    "Произносит свои реплики вслух. Пока только на английском и украинском",
   "settings.presentation":
     "Это локальное состояние отображения интерфейса. Оно не меняет состояние Bond, BondChain или общего Core.",
   "settings.localModel.bytes": "{size} МБ",

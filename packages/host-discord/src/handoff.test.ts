@@ -75,6 +75,7 @@ describe("Discord credential hand-off", () => {
       setEnabled: vi.fn(),
       play: vi.fn(),
       setAmbience: vi.fn(),
+      speak: vi.fn(),
     };
     const environment = { matchMedia: () => mediaQueryList(), open: vi.fn() };
     expect(createDiscordHandoffHost({ ...environment, sound }).sound).toBe(

@@ -72,6 +72,16 @@ export interface SoundAmbience {
   readonly clarity: number;
 }
 
+/**
+ * A line a character says aloud, recorded ahead of time. The written line is
+ * still the fact: a voice only says it, and a line that cannot be heard is
+ * still read.
+ */
+export interface SoundVoiceLine {
+  /** Where the recording is, on the product's own origin. */
+  readonly url: string;
+}
+
 export interface SoundCapability {
   /** Whether this host can make any sound at all. */
   readonly supported: boolean;
@@ -89,6 +99,12 @@ export interface SoundCapability {
   play(cue: SoundCue): void;
   /** The bed under the cues. `null` fades it out. */
   setAmbience(ambience: SoundAmbience | null): void;
+  /**
+   * Says a recorded line. One voice says one thing at a time, so a new line
+   * cuts off the one before it, and the bed dips while it speaks. A line that
+   * cannot be fetched or decoded soon enough is dropped, like a late cue.
+   */
+  speak(line: SoundVoiceLine): void;
 }
 
 /** The canonical answer of a host that has no sound. */
@@ -97,4 +113,5 @@ export const SILENT_SOUND: SoundCapability = Object.freeze({
   setEnabled: () => undefined,
   play: () => undefined,
   setAmbience: () => undefined,
+  speak: () => undefined,
 });

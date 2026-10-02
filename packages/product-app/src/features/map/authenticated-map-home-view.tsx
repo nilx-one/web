@@ -40,7 +40,12 @@ import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
 import { LanguageSettings } from "../../shell/language-settings";
-import { useSoundCue, useSoundPreference } from "../../shell/sound-preference";
+import {
+  useSoundCue,
+  useSoundPreference,
+  useSoundVoice,
+  useVoicePreference,
+} from "../../shell/sound-preference";
 import { SoundSettings } from "../../shell/sound-settings";
 import {
   DOCK_ACTION_KEYS,
@@ -158,6 +163,7 @@ import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { useNearbySpeech } from "./use-nearby-speech";
+import { avaiaVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
@@ -714,7 +720,9 @@ export function AuthenticatedMapHomeView({
     translateCopy(t, mapViewModel.detail),
   );
   const cue = useSoundCue(sound);
+  const speak = useSoundVoice(sound);
   const soundPreference = useSoundPreference();
+  const voicePreference = useVoicePreference();
   useWorldAmbience({
     renderer,
     sound,
@@ -762,6 +770,13 @@ export function AuthenticatedMapHomeView({
       return outcome === "offered" || outcome === "revealing";
     },
     onCue: cue,
+    // The line is on the card either way; a recording only says it aloud.
+    onLine: (line) => {
+      if (soundPreference === "off" || !voicePreference) return;
+      if (avaiaVoice === undefined) return;
+      const url = avaiaVoiceUrl({ locale, model: avaiaVoice, ...line });
+      if (url !== undefined) speak({ url });
+    },
   });
   const [fogAnnouncement, setFogAnnouncement] = useState("");
   const fogReveal = useFogReveal({

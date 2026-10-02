@@ -103,9 +103,9 @@ show the choice.
 - **Recorded or generated signature sounds.** A cue could be backed by a
   sample generated offline and curated into the repository; the capability
   already hides how a cue is made. No sample exists yet.
-- **The Avaia's voice.** Lines are deterministic and finite, so they can be
-  rendered offline per study and locale. Lines a [local model](local-models.md)
-  rephrases need speech on the device. That is the next step, not this one.
+- **Speech on the device.** The Avaia's fixed lines are recorded
+  ([Avaia's voice](avaia-voice.md)). Lines about a landmark, and lines a
+  [local model](local-models.md) rephrases, need speech in the browser.
 - **Spatial cues.** A landmark or a nearby Bond could be panned by bearing
   from the camera.
 

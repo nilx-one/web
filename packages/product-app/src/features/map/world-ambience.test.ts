@@ -75,6 +75,7 @@ function soundDouble() {
     play: vi.fn(),
     setEnabled: vi.fn(),
     setAmbience: vi.fn(),
+    speak: vi.fn(),
   } satisfies SoundCapability;
 }
 

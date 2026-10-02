@@ -186,6 +186,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "Whether this device plays sound: off, effects, or effects and the world in view. Another device has its own speakers and stands somewhere else, so the choice means nothing there.",
   },
   {
+    id: "interface.voice",
+    placement: "device",
+    mobility: "resident",
+    medium: "local-storage",
+    key: "nilx-one.interface.voice",
+    perOwner: false,
+    what: "Whether the Avaia says its lines aloud on this device. Like sound itself, it is about these speakers and this room.",
+  },
+  {
     id: "wipe.epoch",
     placement: "device",
     mobility: "resident",

@@ -8,3 +8,5 @@ __pycache__/
 deploy/web/avatars/
 deploy/web/monuments/
 services/identity/target/
+
+tools/voices/.cache/

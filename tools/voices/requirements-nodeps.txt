@@ -1,0 +1,3 @@
+# Installed with --no-deps: its stanza backend would pull in PyTorch, and the
+# dictionary it ships is all the voices need (see docs/avaia-voice.md).
+ukrainian-word-stress==2.1.0

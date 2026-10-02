@@ -6,7 +6,9 @@ import type { SoundCapability } from "@nilx-one/host-contract";
 import { useLocalization, type TranslationKey } from "./localization";
 import {
   chooseSoundPreference,
+  chooseVoicePreference,
   useSoundPreference,
+  useVoicePreference,
   type SoundPreference,
 } from "./sound-preference";
 
@@ -31,6 +33,7 @@ export interface SoundSettingsProps {
 export function SoundSettings({ sound }: SoundSettingsProps) {
   const { t } = useLocalization();
   const preference = useSoundPreference();
+  const voice = useVoicePreference();
   if (!sound.supported) return null;
 
   function choose(next: SoundPreference): void {
@@ -65,6 +68,19 @@ export function SoundSettings({ sound }: SoundSettingsProps) {
           />
         </label>
       ))}
+      <label className="interface-settings__option">
+        <span>
+          <strong>{t("settings.sound.voice")}</strong>
+          <small>{t("settings.sound.voiceDetail")}</small>
+        </span>
+        <input
+          type="checkbox"
+          name="voice"
+          checked={voice && preference !== "off"}
+          disabled={preference === "off"}
+          onChange={(event) => chooseVoicePreference(event.target.checked)}
+        />
+      </label>
     </fieldset>
   );
 }

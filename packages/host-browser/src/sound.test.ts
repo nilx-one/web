@@ -159,6 +159,13 @@ class FakeAudioContext {
     });
   }
 
+  public decodeAudioData = vi.fn(async (bytes: ArrayBuffer) => ({
+    duration: bytes.byteLength / 100,
+    length: bytes.byteLength,
+    sampleRate: this.sampleRate,
+    getChannelData: () => new Float32Array(bytes.byteLength),
+  }));
+
   public createBuffer(_channels: number, length: number, sampleRate: number) {
     const data = new Float32Array(length);
     return { length, sampleRate, getChannelData: () => data };
@@ -474,5 +481,162 @@ describe("ambience bed", () => {
     expect(
       context.sources().every((source) => source.stopped !== undefined),
     ).toBe(true);
+  });
+});
+
+describe("a recorded line", () => {
+  let context: FakeAudioContext;
+  let clock: number;
+  let fetchClip: ReturnType<typeof vi.fn>;
+
+  function respond(bytes = 150, ok = true): Promise<Response> {
+    return Promise.resolve({
+      ok,
+      status: ok ? 200 : 404,
+      arrayBuffer: async () => new ArrayBuffer(bytes),
+    } as Response);
+  }
+
+  function voiced() {
+    const sound = createBrowserSound({
+      createContext: () => asContext(context),
+      document,
+      fetch: fetchClip as unknown as (url: string) => Promise<Response>,
+      now: () => clock,
+    });
+    sound.setEnabled(true);
+    return sound;
+  }
+
+  // Fetching, reading and decoding are each a promise; a macrotask outlasts them.
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  const voices = () =>
+    context
+      .sources()
+      .filter(
+        (source) => source.kind === "buffer-source" && source.buffer !== null,
+      )
+      .filter(
+        (source) => (source.buffer as { duration: number }).duration > 0.01,
+      );
+
+  beforeEach(() => {
+    context = new FakeAudioContext();
+    clock = 0;
+    fetchClip = vi.fn(() => respond());
+    setVisibility("visible");
+  });
+
+  it("is fetched, decoded and said through the mix", async () => {
+    const sound = voiced();
+    sound.speak({ url: "/voices/0.1.0/en/sky-study/walk.0.mp3" });
+    await settle();
+    expect(fetchClip).toHaveBeenCalledWith(
+      "/voices/0.1.0/en/sky-study/walk.0.mp3",
+    );
+    const [line] = voices();
+    expect(line).toBeDefined();
+    expect(line!.started).toBeGreaterThan(context.currentTime);
+    expect(context.reaches(line!)).toBe(true);
+  });
+
+  it("is decoded once and said again from what was kept", async () => {
+    const sound = voiced();
+    sound.speak({ url: "/a.mp3" });
+    await settle();
+    sound.speak({ url: "/a.mp3" });
+    await settle();
+    expect(fetchClip).toHaveBeenCalledOnce();
+    expect(context.decodeAudioData).toHaveBeenCalledOnce();
+    expect(voices()).toHaveLength(2);
+  });
+
+  it("cuts off the line before it: one voice says one thing at a time", async () => {
+    const sound = voiced();
+    sound.speak({ url: "/a.mp3" });
+    await settle();
+    sound.speak({ url: "/b.mp3" });
+    await settle();
+    const [first, second] = voices();
+    expect(first!.stopped).toBeDefined();
+    expect(second!.stopped).toBeUndefined();
+  });
+
+  it("is said only if it is still the latest thing asked for", async () => {
+    let release: (value: Response) => void = () => undefined;
+    fetchClip = vi.fn((url: string) =>
+      url === "/slow.mp3"
+        ? new Promise<Response>((resolve) => {
+            release = resolve;
+          })
+        : respond(),
+    );
+    const sound = voiced();
+    sound.speak({ url: "/slow.mp3" });
+    sound.speak({ url: "/fast.mp3" });
+    await settle();
+    release(await respond(300));
+    await settle();
+    expect(
+      voices().map(
+        (source) => (source.buffer as { duration: number }).duration,
+      ),
+    ).toEqual([1.5]);
+  });
+
+  it("is dropped when it arrives too late to be about this moment", async () => {
+    let release: (value: Response) => void = () => undefined;
+    fetchClip = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const sound = voiced();
+    sound.speak({ url: "/late.mp3" });
+    clock = 3_000;
+    release(await respond());
+    await settle();
+    expect(voices()).toHaveLength(0);
+  });
+
+  it("is asked for again after a failed fetch, and the failure is silent", async () => {
+    fetchClip = vi.fn(() => respond(150, false));
+    const sound = voiced();
+    sound.speak({ url: "/missing.mp3" });
+    await settle();
+    sound.speak({ url: "/missing.mp3" });
+    await settle();
+    expect(fetchClip).toHaveBeenCalledTimes(2);
+    expect(voices()).toHaveLength(0);
+  });
+
+  it("dips the bed while it speaks and lets it back up afterwards", async () => {
+    const sound = voiced();
+    sound.speak({ url: "/a.mp3" });
+    await settle();
+    const ambienceBus = context.nodes.find(
+      (node) =>
+        node.kind === "gain" &&
+        (node as unknown as { gain: FakeParam }).gain.calls.some(
+          (call) => call[0] === "setTargetAtTime" && call[1] === 0.35,
+        ),
+    ) as unknown as { gain: FakeParam } | undefined;
+    expect(ambienceBus).toBeDefined();
+    expect(ambienceBus!.gain.last("setTargetAtTime")?.[0]).toBe(1);
+  });
+
+  it("says nothing while sound is off", async () => {
+    const sound = createBrowserSound({
+      createContext: () => asContext(context),
+      document,
+      fetch: fetchClip as unknown as (url: string) => Promise<Response>,
+    });
+    sound.speak({ url: "/a.mp3" });
+    await settle();
+    expect(fetchClip).not.toHaveBeenCalled();
   });
 });

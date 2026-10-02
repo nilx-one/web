@@ -60,6 +60,7 @@ describe("BrowserHost", () => {
       setEnabled: vi.fn(),
       play: vi.fn(),
       setAmbience: vi.fn(),
+      speak: vi.fn(),
     };
     expect(createBrowserHost({ ...environment, sound }).sound).toBe(sound);
   });

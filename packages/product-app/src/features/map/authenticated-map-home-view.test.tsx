@@ -49,6 +49,7 @@ import type { ShellRoute, ShellSection } from "../../shell/routes";
 import type { AvaiaAvailability } from "./bond-dock-view-model";
 import { avaiaStudy } from "./avatar-presence";
 import { avaiaLines } from "./avaia-lines";
+import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
 import { rememberWorld } from "./world-memory";
@@ -155,6 +156,7 @@ function soundDouble() {
     play: vi.fn<SoundCapability["play"]>(),
     setEnabled: vi.fn<SoundCapability["setEnabled"]>(),
     setAmbience: vi.fn<SoundCapability["setAmbience"]>(),
+    speak: vi.fn<SoundCapability["speak"]>(),
   } satisfies SoundCapability;
 }
 
@@ -1007,6 +1009,10 @@ describe("AuthenticatedMapHomeView", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Effects and world/ }));
 
     expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
+    const voiceToggle = screen.getByRole("checkbox", { name: /Avaia's voice/ });
+    expect(voiceToggle).toBeChecked();
+    fireEvent.click(voiceToggle);
+    expect(window.localStorage.getItem("nilx-one.interface.voice")).toBe("off");
     // The choice is the gesture a browser opens audio from, so the host is
     // told at once and the person hears what they turned on.
     expect(sound.setEnabled).toHaveBeenCalledWith(true);
@@ -1443,6 +1449,36 @@ describe("AuthenticatedMapHomeView", () => {
       const arrived = steps();
       act(() => vi.advanceTimersByTime(5_000));
       expect(steps()).toBe(arrived);
+    });
+
+    it("says its line aloud when that line was recorded", async () => {
+      const sound = soundDouble();
+      const mapRenderer = await renderWorld({ sound });
+
+      tap(mapRenderer);
+
+      const said = lastLabel(mapRenderer)?.speech;
+      expect(said).toBeDefined();
+      const url = avaiaVoiceUrl({
+        locale: "en",
+        model: voice,
+        kind: "walk",
+        text: said!,
+      });
+      expect(url).toMatch(/^\/voices\/.+\/en\/.+\/walk\.\d\.mp3$/);
+      expect(sound.speak).toHaveBeenCalledWith({ url });
+    });
+
+    it("keeps its voice to itself once the person turned it off", async () => {
+      window.localStorage.setItem("nilx-one.interface.voice", "off");
+      const sound = soundDouble();
+      const mapRenderer = await renderWorld({ sound });
+
+      tap(mapRenderer);
+
+      expect(lastLabel(mapRenderer)?.speech).toBeDefined();
+      expect(sound.play).toHaveBeenCalledWith("walk");
+      expect(sound.speak).not.toHaveBeenCalled();
     });
 
     it("is heard refusing ground it cannot walk onto", async () => {

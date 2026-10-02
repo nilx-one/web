@@ -114,6 +114,7 @@ describe("FailureNoticeProvider", () => {
       }),
       setEnabled: vi.fn(),
       setAmbience: vi.fn(),
+      speak: vi.fn(),
     };
     render(
       <FailureNoticeProvider sound={sound}>
