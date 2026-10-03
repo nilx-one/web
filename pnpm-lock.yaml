@@ -376,6 +376,8 @@ importers:
         specifier: ^19.2.8
         version: 19.2.8
 
+  packages/walk-graph: {}
+
 packages:
 
   '@adobe/css-tools@4.5.0':
