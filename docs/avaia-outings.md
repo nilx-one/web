@@ -101,36 +101,36 @@ avaia **за можливістю йде пішохідною лінією** (д
 
 це об'єкти, заради яких має сенс змінити маршрут:
 
-| тип | OSM tags | роль |
-|---|---|---|
-| оглядовий майданчик | `tourism=viewpoint` | сильна міська/природна ціль |
-| природний заповідник | `leisure=nature_reserve` | велика природна ціль |
-| пляж | `natural=beach` | природна ціль |
-| вершина / пагорб | `natural=peak`, `natural=hill` | outdoor target |
-| замок | `historic=castle` | історична ціль |
-| фортеця | `historic=fort` | історична ціль |
-| археологічна пам'ятка | `historic=archaeological_site` | історична ціль |
-| історичні руїни | `historic=ruins` | історична ціль |
-| історична будівля | `historic=building` | історична ціль, якщо має достатню значущість |
-| музей | `tourism=museum` | культурна ціль |
-| театр / культурний центр | `amenity=theatre`, `amenity=arts_centre` | культурна ціль |
+| тип                      | OSM tags                                 | роль                                         |
+| ------------------------ | ---------------------------------------- | -------------------------------------------- |
+| оглядовий майданчик      | `tourism=viewpoint`                      | сильна міська/природна ціль                  |
+| природний заповідник     | `leisure=nature_reserve`                 | велика природна ціль                         |
+| пляж                     | `natural=beach`                          | природна ціль                                |
+| вершина / пагорб         | `natural=peak`, `natural=hill`           | outdoor target                               |
+| замок                    | `historic=castle`                        | історична ціль                               |
+| фортеця                  | `historic=fort`                          | історична ціль                               |
+| археологічна пам'ятка    | `historic=archaeological_site`           | історична ціль                               |
+| історичні руїни          | `historic=ruins`                         | історична ціль                               |
+| історична будівля        | `historic=building`                      | історична ціль, якщо має достатню значущість |
+| музей                    | `tourism=museum`                         | культурна ціль                               |
+| театр / культурний центр | `amenity=theatre`, `amenity=arts_centre` | культурна ціль                               |
 
 #### landmarks уздовж маршруту
 
 це об'єкти, які можуть бути причиною невеликого відхилення, але не обов'язково всієї прогулянки:
 
-| тип | OSM tags | роль |
-|---|---|---|
-| публічний витвір мистецтва | `tourism=artwork` | скульптура, mural, інсталяція |
-| фонтан | `amenity=fountain` | міський landmark |
-| вежа | `man_made=tower` | вертикальний landmark |
-| міст | `man_made=bridge` | landmark маршруту; особливо історичний/знаковий |
-| джерело | `natural=spring` | природний micro-landmark |
-| скеля | `natural=rock` | природний landmark |
-| оглядова точка | `tourism=viewpoint` | landmark із підвищеним пріоритетом |
-| придорожня каплиця | `historic=wayside_shrine` | малий історичний landmark |
-| придорожній хрест | `historic=wayside_cross`, `man_made=cross` | малий історичний landmark |
-| інформаційна точка | `tourism=information` | місце для ознайомлення |
+| тип                        | OSM tags                                   | роль                                            |
+| -------------------------- | ------------------------------------------ | ----------------------------------------------- |
+| публічний витвір мистецтва | `tourism=artwork`                          | скульптура, mural, інсталяція                   |
+| фонтан                     | `amenity=fountain`                         | міський landmark                                |
+| вежа                       | `man_made=tower`                           | вертикальний landmark                           |
+| міст                       | `man_made=bridge`                          | landmark маршруту; особливо історичний/знаковий |
+| джерело                    | `natural=spring`                           | природний micro-landmark                        |
+| скеля                      | `natural=rock`                             | природний landmark                              |
+| оглядова точка             | `tourism=viewpoint`                        | landmark із підвищеним пріоритетом              |
+| придорожня каплиця         | `historic=wayside_shrine`                  | малий історичний landmark                       |
+| придорожній хрест          | `historic=wayside_cross`, `man_made=cross` | малий історичний landmark                       |
+| інформаційна точка         | `tourism=information`                      | місце для ознайомлення                          |
 
 #### малі outdoor landmarks
 
