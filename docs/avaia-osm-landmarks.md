@@ -141,12 +141,12 @@ The thresholds are starting values. They are set after looking at the real distr
 
 A polygon is one landmark, but a walk needs somewhere to arrive. The anchor is never a centroid, because a lake's centroid is in the water.
 
-| Feature                  | Arrival                                                                                                        |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| point                    | nearest walking-graph node within 30 m, else a grass connector of at most 30 m, else the object is rejected    |
-| `park`, `nature_reserve` | any graph node inside the polygon or within 30 m of its boundary; wandering inside uses the graph nodes inside |
-| `lake`, `beach`          | the graph node nearest the shore within 30 m, never into the water                                             |
-| lines such as rivers     | not a target; only the shore rules above apply                                                                 |
+| Feature                  | Arrival                                                                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| point                    | nearest walking-graph node within 30 m, else a grass connector of at most 30 m, else the object is rejected                      |
+| `park`, `nature_reserve` | the cheapest-to-reach graph node inside the polygon or within 30 m of its boundary; wandering inside uses the graph nodes inside |
+| `lake`, `beach`          | the cheapest-to-reach graph node outside the polygon and within 30 m of its shore, never into the water                          |
+| lines such as rivers     | not a target; only the shore rules above apply                                                                                   |
 
 The 30 m figure is the one in [Avaia walks on its own](avaia-outings.md) §0.2.
 

@@ -1,0 +1,365 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+import {
+  distanceM,
+  edgeCost,
+  projectOnSegment,
+  reachFrom,
+  snapToGraph,
+  SNAP_DISTANCE_M,
+  type CanEnter,
+  type LonLat,
+  type WalkGraph,
+} from "@nilx-one/walk-graph";
+
+/**
+ * Where an Avaia may go for a walk (docs/avaia-outings.md §1, #301).
+ *
+ * The menu is built by code, from targets the landmark mapper already
+ * normalized (docs/avaia-osm-landmarks.md): only the `walk_target` group, only
+ * named, and only where the walking graph reaches over open ground within the
+ * walk's budget. A target is arrived at, never aimed at its centroid. The model
+ * sees the menu as closed labels and picks an index; the rule picks when there
+ * is no model or its pick is invalid. Finds are never targets.
+ *
+ * All of it is presentation: nothing here is observed, persisted or sent.
+ */
+
+/** The `walk_target` group, in mapping-table order. */
+export const WALK_TARGET_KINDS = [
+  "park",
+  "lake",
+  "nature_reserve",
+  "viewpoint",
+  "beach",
+  "peak",
+  "castle",
+  "fort",
+  "archaeological_site",
+  "ruins",
+  "historic_building",
+  "museum",
+  "major_monument",
+] as const;
+
+export type WalkTargetKind = (typeof WALK_TARGET_KINDS)[number];
+
+/** Areas wandered in: arrived at from inside or near the edge. */
+const WANDER_AREAS: ReadonlySet<WalkTargetKind> = new Set([
+  "park",
+  "nature_reserve",
+]);
+
+/** Areas walked up to: arrived at on the shore, never inside. */
+const SHORE_AREAS: ReadonlySet<WalkTargetKind> = new Set(["lake", "beach"]);
+
+/** Outer ring first, holes after, `[longitude, latitude]`. */
+export type AreaRings = readonly (readonly LonLat[])[];
+
+export type TargetGeometry =
+  | { readonly type: "point"; readonly point: LonLat }
+  | { readonly type: "area"; readonly polygons: readonly AreaRings[] };
+
+/** One normalized landmark offered as a possible target. */
+export interface OutingCandidate {
+  /** Stable for the same feature; stays in code, never shown to the model. */
+  readonly id: string;
+  readonly kind: string;
+  readonly name?: string | undefined;
+  readonly geometry: TargetGeometry;
+}
+
+export interface OutingTarget {
+  readonly id: string;
+  readonly kind: WalkTargetKind;
+  readonly name: string;
+  /** Where the walk arrives: on the walking graph, on open ground. */
+  readonly anchor: LonLat;
+  /** Metres along the cheapest way there. */
+  readonly meters: number;
+}
+
+export type OutingOption =
+  | { readonly kind: "stay" }
+  | { readonly kind: "wander" }
+  | { readonly kind: "target"; readonly target: OutingTarget };
+
+export interface OutingMenu {
+  readonly options: readonly OutingOption[];
+}
+
+/** How far an anchor may lie from what it stands for. */
+export const ANCHOR_REACH_METERS = SNAP_DISTANCE_M;
+
+/** Most targets one menu offers: with stay and wander, at most six options. */
+export const MENU_TARGETS = 4;
+
+/** A target this close is "near" to the model; anything further is "far". */
+export const NEAR_METERS = 1_000;
+
+export interface OutingMenuInput {
+  readonly candidates: readonly OutingCandidate[];
+  readonly graph: WalkGraph;
+  /** Where the Avaia stands. */
+  readonly from: LonLat;
+  /** Ground the Avaia may walk on (R1); omitted, all ground is open. */
+  readonly open?: CanEnter | undefined;
+  /** The longest walk to a target, in metres. */
+  readonly budgetMeters: number;
+  /** Targets left out this time, such as one just visited. */
+  readonly exclude?: ReadonlySet<string> | undefined;
+}
+
+/**
+ * The menu for one decision: stay, then up to `MENU_TARGETS` reachable
+ * targets, then wander if there is a graph to wander on. Targets are taken
+ * nearest first, one per kind before a second of any kind, so the menu is a
+ * choice and not four parks. Equal input gives an equal menu, whatever order
+ * the candidates arrive in.
+ */
+export function outingMenu(input: OutingMenuInput): OutingMenu {
+  const { graph, open, budgetMeters } = input;
+  const start = snapToGraph(graph, input.from, open ? { canEnter: open } : {});
+  if (start === null) return { options: [{ kind: "stay" }] };
+  const reach = reachFrom(graph, start, open ? { canEnter: open } : {});
+
+  const targets: OutingTarget[] = [];
+  for (const candidate of input.candidates) {
+    if (!isWalkTargetKind(candidate.kind)) continue;
+    const name = candidate.name?.trim();
+    if (name === undefined || name.length === 0) continue;
+    if (input.exclude?.has(candidate.id)) continue;
+    const arrival = arrive(candidate.kind, candidate.geometry, graph, open, {
+      cost: reach.cost,
+      lengthM: reach.lengthM,
+      start,
+    });
+    if (arrival === undefined || arrival.meters > budgetMeters) continue;
+    targets.push({ id: candidate.id, kind: candidate.kind, name, ...arrival });
+  }
+
+  targets.sort(
+    (a, b) => a.meters - b.meters || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  const chosen: OutingTarget[] = [];
+  const kinds = new Set<WalkTargetKind>();
+  for (const target of targets) {
+    if (chosen.length === MENU_TARGETS) break;
+    if (kinds.has(target.kind)) continue;
+    kinds.add(target.kind);
+    chosen.push(target);
+  }
+  for (const target of targets) {
+    if (chosen.length === MENU_TARGETS) break;
+    if (!chosen.includes(target)) chosen.push(target);
+  }
+  chosen.sort(
+    (a, b) => a.meters - b.meters || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+
+  return {
+    options: [
+      { kind: "stay" },
+      ...chosen.map((target) => ({ kind: "target" as const, target })),
+      { kind: "wander" },
+    ],
+  };
+}
+
+/**
+ * The rule that decides without a model: the nearest target, or wander when
+ * there is none, or stay when there is nowhere to walk. The drive (#302)
+ * weighs these against restlessness, energy and the hour.
+ */
+export function chooseByRule(menu: OutingMenu): OutingOption {
+  return (
+    menu.options.find((option) => option.kind === "target") ??
+    menu.options.find((option) => option.kind === "wander") ??
+    menu.options[0] ?? { kind: "stay" }
+  );
+}
+
+/** One menu option as the model sees it: a closed label and how far, no more. */
+export type ModelOption =
+  | { readonly index: number; readonly label: "stay" | "wander" }
+  | {
+      readonly index: number;
+      readonly label: WalkTargetKind;
+      readonly reach: "near" | "far";
+    };
+
+/**
+ * The menu without coordinates, names or ids: what a local model may read.
+ * A landmark's name stays in the interface, never in the decision.
+ */
+export function menuForModel(menu: OutingMenu): readonly ModelOption[] {
+  return menu.options.map((option, index) =>
+    option.kind === "target"
+      ? {
+          index,
+          label: option.target.kind,
+          reach: option.target.meters <= NEAR_METERS ? "near" : "far",
+        }
+      : { index, label: option.kind },
+  );
+}
+
+/** The model's pick, or the rule's when the pick is not an index on the menu. */
+export function chooseByModel(menu: OutingMenu, pick: unknown): OutingOption {
+  if (
+    typeof pick === "number" &&
+    Number.isInteger(pick) &&
+    pick >= 0 &&
+    pick < menu.options.length
+  ) {
+    return menu.options[pick]!;
+  }
+  return chooseByRule(menu);
+}
+
+export function isWalkTargetKind(kind: string): kind is WalkTargetKind {
+  return (WALK_TARGET_KINDS as readonly string[]).includes(kind);
+}
+
+interface Reached {
+  readonly cost: Float64Array;
+  readonly lengthM: Float64Array;
+  readonly start: NonNullable<ReturnType<typeof snapToGraph>>;
+}
+
+/**
+ * Where a walk to this target arrives, and how far it is, or `undefined`
+ * when the graph does not reach it over open ground.
+ *
+ * - a point: the nearest place on the graph within 30 m of it;
+ * - a park or reserve: the cheapest node inside it or within 30 m of its edge;
+ * - a lake or beach: the cheapest node outside it within 30 m of its shore.
+ */
+function arrive(
+  kind: WalkTargetKind,
+  geometry: TargetGeometry,
+  graph: WalkGraph,
+  open: CanEnter | undefined,
+  reached: Reached,
+): { readonly anchor: LonLat; readonly meters: number } | undefined {
+  if (geometry.type === "point") {
+    const at = snapToGraph(graph, geometry.point, {
+      maxDistanceM: ANCHOR_REACH_METERS,
+      ...(open ? { canEnter: open } : {}),
+    });
+    if (at === null) return undefined;
+    const edge = graph.edges[at.edge]!;
+    const whole = edgeCost(edge);
+    const ways = [
+      {
+        cost: reached.cost[edge.a]! + whole * at.t,
+        meters: reached.lengthM[edge.a]! + edge.lengthM * at.t,
+      },
+      {
+        cost: reached.cost[edge.b]! + whole * (1 - at.t),
+        meters: reached.lengthM[edge.b]! + edge.lengthM * (1 - at.t),
+      },
+    ];
+    if (reached.start.edge === at.edge) {
+      const fraction = Math.abs(reached.start.t - at.t);
+      ways.push({ cost: whole * fraction, meters: edge.lengthM * fraction });
+    }
+    const way = ways.reduce((a, b) => (b.cost < a.cost ? b : a));
+    const meters = way.meters;
+    return Number.isFinite(meters) ? { anchor: at.point, meters } : undefined;
+  }
+
+  const inside = WANDER_AREAS.has(kind);
+  const shore = SHORE_AREAS.has(kind);
+  if (!inside && !shore) return undefined;
+  let best: { node: number; cost: number } | undefined;
+  for (const rings of geometry.polygons) {
+    const box = paddedBox(rings[0] ?? [], ANCHOR_REACH_METERS);
+    graph.nodes.forEach((node, index) => {
+      const cost = reached.cost[index]!;
+      if (!Number.isFinite(cost)) return;
+      if (best !== undefined && cost >= best.cost) return;
+      if (!inBox(node, box)) return;
+      const within = insideRings(node, rings);
+      const near = edgeDistance(node, rings) <= ANCHOR_REACH_METERS;
+      const fits = inside ? within || near : !within && near;
+      if (fits) best = { node: index, cost };
+    });
+  }
+  if (best === undefined) return undefined;
+  return {
+    anchor: graph.nodes[best.node]!,
+    meters: reached.lengthM[best.node]!,
+  };
+}
+
+interface Box {
+  readonly west: number;
+  readonly south: number;
+  readonly east: number;
+  readonly north: number;
+}
+
+function paddedBox(ring: readonly LonLat[], meters: number): Box {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const [longitude, latitude] of ring) {
+    west = Math.min(west, longitude);
+    east = Math.max(east, longitude);
+    south = Math.min(south, latitude);
+    north = Math.max(north, latitude);
+  }
+  const padLat = meters / 111_000;
+  const padLon =
+    padLat / Math.max(0.01, Math.cos((((south + north) / 2) * Math.PI) / 180));
+  return {
+    west: west - padLon,
+    east: east + padLon,
+    south: south - padLat,
+    north: north + padLat,
+  };
+}
+
+function inBox([longitude, latitude]: LonLat, box: Box): boolean {
+  return (
+    longitude >= box.west &&
+    longitude <= box.east &&
+    latitude >= box.south &&
+    latitude <= box.north
+  );
+}
+
+/** Even-odd over every ring: a hole is outside. */
+function insideRings([x, y]: LonLat, rings: AreaRings): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!;
+      const [xj, yj] = ring[j]!;
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+
+function edgeDistance(point: LonLat, rings: AreaRings): number {
+  let nearest = Infinity;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const a = ring[j]!;
+      const b = ring[i]!;
+      nearest = Math.min(
+        nearest,
+        a[0] === b[0] && a[1] === b[1]
+          ? distanceM(point, a)
+          : projectOnSegment(point, a, b).distanceM,
+      );
+    }
+  }
+  return nearest;
+}

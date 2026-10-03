@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWalkGraph,
   distanceM,
+  reachFrom,
   routeOnGraph,
   snapToGraph,
   surfaceOf,
@@ -259,5 +260,38 @@ describe("routeOnGraph", () => {
     const walk = route(block(40), at(50, 2), at(150, 2));
     expect(walk?.points[0]).toEqual(position(block(40), at(50, 2)).point);
     expect(walk?.points.at(-1)).toEqual(position(block(40), at(150, 2)).point);
+  });
+});
+
+describe("reachFrom", () => {
+  const graph = buildWalkGraph([
+    road("minor_road", "residential", [at(0, 0), at(200, 0)]),
+    road("path", "footway", [at(0, 0), at(0, 40), at(200, 40), at(200, 0)]),
+    road("path", "footway", [at(300, 0), at(400, 0)]),
+  ]);
+  const start = position(graph, at(0, 0));
+
+  it("agrees with routeOnGraph for every node", () => {
+    const reach = reachFrom(graph, start);
+    graph.nodes.forEach((node, index) => {
+      const walk = routeOnGraph(graph, start, position(graph, node));
+      if (walk === null) {
+        expect(reach.cost[index]).toBe(Infinity);
+      } else {
+        expect(reach.cost[index]).toBeCloseTo(walk.cost, 6);
+        expect(reach.lengthM[index]).toBeCloseTo(walk.lengthM, 6);
+      }
+    });
+  });
+
+  it("leaves nodes past the cost limit, or behind a gate, unreached", () => {
+    const far = nodeAt(graph, at(200, 0));
+    expect(reachFrom(graph, start, { maxCost: 100 }).cost[far]).toBe(Infinity);
+    const corner = at(0, 40);
+    const gated = reachFrom(graph, start, {
+      canEnter: (point) => distanceM(point, corner) > 1,
+    });
+    expect(gated.cost[nodeAt(graph, corner)]).toBe(Infinity);
+    expect(gated.cost[far]).toBeCloseTo(300, 0);
   });
 });
