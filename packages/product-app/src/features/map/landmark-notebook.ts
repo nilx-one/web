@@ -166,6 +166,8 @@ export function nextLandmarkToStudy(
   by: string,
   from: MapPointSelection,
   reachMeters = CURIOSITY_REACH_METERS,
+  /** Ground the Avaia may walk on; a landmark standing in the fog waits. */
+  open: (point: MapPointSelection) => boolean = () => true,
 ): MapLandmark | undefined {
   const done = new Set(
     notebook.studied
@@ -176,7 +178,7 @@ export function nextLandmarkToStudy(
   for (const { landmark } of notebook.noticed) {
     if (done.has(landmark.id)) continue;
     const distance = mapDistanceMeters(from, landmark);
-    if (distance > reachMeters) continue;
+    if (distance > reachMeters || !open(landmark)) continue;
     if (best === undefined || distance < best.distance) {
       best = { landmark, distance };
     }
