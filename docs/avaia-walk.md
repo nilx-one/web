@@ -31,8 +31,24 @@ device counts as open even before its cell lights, because the person is
 standing on it.
 
 Open ground starts a walk. Anything else is refused, and the Avaia says why.
-Stage 1 walks in a straight line; there is no route graph, so a path can cross
-a building footprint when only the start and the destination were checked.
+
+### The way there
+
+A walk keeps to paths first. The renderer answers `roadsWithin` from the
+`roads` tiles already loaded, and `@nilx-one/walk-graph` turns them into a
+pedestrian graph weighted by surface: footways cheapest, then tracks, streets,
+and major roads; highways are only crossed. The body steps onto the nearest
+line within 30 m, follows the cheapest way along it, and steps off for the last
+stretch. Open ground in between is planned around the buildings and water
+`obstaclesWithin` reports, and costs four times a footway metre.
+
+Who chose where to go decides how much grass is allowed. A tap may cross the
+grass the whole way when that costs less than the paths. Curiosity keeps to
+the paths and cuts across only for a real shortcut: at least 35 % shorter and
+no longer than 60 m. With no line within reach, or no tiles loaded, either one
+crosses open ground as before. A new tap mid-walk plans again from where the
+body is. The fog is not consulted along the way, only at the destination (see
+[Avaia walks on its own](avaia-outings.md), R1).
 
 ### Pace
 
@@ -184,8 +200,9 @@ where its owner is. Nothing walks in the background.
   rule, not a decision. Routing the choice through `DecisionMenu` and the
   loaded model is the next step, and the candidates would stay what they are
   here: landmarks the person already passed.
-- **Routes.** Walks are straight lines between checked endpoints. The plan for
-  paths, outings and chance finds is [Avaia walks on its own](avaia-outings.md).
+- **Outings and finds.** Walks go where they are sent or to a noticed
+  landmark. Outings of its own, preloading the tiles they need, and chance
+  finds are planned in [Avaia walks on its own](avaia-outings.md).
 - **The raw presence journal.** A tap now belongs to the Avaia, so the hosts
   no longer open the phase-1 journal panel on a lit cell. The panel itself
   (`createRawJournalPresenter`) and the shade layer's `onCellTap` stay in

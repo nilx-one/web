@@ -318,6 +318,19 @@ export interface MapObstacle {
   readonly heights?: readonly number[];
 }
 
+/**
+ * One line of the basemap's road network, as the archive carries it: `kind`
+ * and `kindDetail` are the `roads` layer's own attributes, read verbatim, and
+ * each line is `[longitude, latitude]` pairs. A street crossing several tiles
+ * arrives once per tile, clipped at each; whoever walks it joins the pieces.
+ */
+export interface MapRoad {
+  readonly kind: string;
+  readonly kindDetail?: string;
+  readonly isBridge?: boolean;
+  readonly lines: readonly (readonly (readonly [number, number])[])[];
+}
+
 /** A geographic box, west to east and south to north. */
 export interface MapBounds {
   readonly west: number;
@@ -467,6 +480,12 @@ export interface MapRenderer {
    * on a renderer that cannot answer at all.
    */
   obstaclesWithin?(bounds: MapBounds): readonly MapObstacle[];
+  /**
+   * The roads and paths the basemap carries that touch a box, for walking
+   * along. Tiles already loaded only, like `obstaclesWithin`: ground the map
+   * has not loaded has no paths, and a walk there crosses open ground.
+   */
+  roadsWithin?(bounds: MapBounds): readonly MapRoad[];
   /**
    * The fog this renderer draws, when its composition draws one. Absent means
    * there is no fog: nothing is offered to reveal and no tap is `fog`.

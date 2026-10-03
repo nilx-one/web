@@ -29,8 +29,10 @@ const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
     "@nilx-one/host-contract",
     "@nilx-one/map-contract",
     "@nilx-one/ui",
+    "@nilx-one/walk-graph",
   ],
   ui: [],
+  "walk-graph": [],
 };
 
 function sourceFiles(directory: string): string[] {
