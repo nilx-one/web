@@ -3,6 +3,8 @@
 
 import type { AvatarModelId } from "@nilx-one/map-contract";
 
+import type { GuideVoice } from "../guide/guide-script";
+
 import type { ProductLocale } from "../../shell/localization";
 import { avaiaLines, type AvaiaLineKind } from "./avaia-lines";
 
@@ -62,3 +64,24 @@ export function avaiaVoiceUrl(line: AvaiaVoicedLine): string | undefined {
   if (index < 0) return undefined;
   return avaiaVoicePath(line.locale, line.model, line.kind, index);
 }
+
+/**
+ * Where one of xSasha's lines can be heard, when it can. Her lines are
+ * recorded once per voice she can speak in (the gender of the study she is
+ * drawn in), and a line that carries a name is recorded without it.
+ */
+export function guideVoiceUrl(line: {
+  readonly locale: ProductLocale;
+  readonly voice: GuideVoice;
+  readonly key: string;
+}): string | undefined {
+  if (!VOICED_LOCALES.includes(line.locale)) return undefined;
+  if (!GUIDE_VOICES.includes(line.voice)) return undefined;
+  return `/voices/${AVAIA_VOICE_VERSION}/${line.locale}/xsasha-${line.voice}/${line.key}.mp3`;
+}
+
+/**
+ * The voices xSasha is recorded in: the genders of the studies `guideModel`
+ * draws her in. Kai, who would speak in the neutral, is never her study.
+ */
+export const GUIDE_VOICES: readonly GuideVoice[] = ["feminine", "masculine"];

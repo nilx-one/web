@@ -217,9 +217,14 @@ const EN_MESSAGES = {
   "settings.sound.cuesDetail": "A short sound for what just happened",
   "settings.sound.all": "Effects and world",
   "settings.sound.allDetail": "Add the wind, water and streets in view",
-  "settings.sound.voice": "Avaia's voice",
-  "settings.sound.voiceDetail":
-    "Says its lines aloud, in English and Ukrainian",
+  "settings.voice.legend": "Character voices",
+  "settings.voice.off": "Off",
+  "settings.voice.offDetail": "Nobody speaks aloud",
+  "settings.voice.cutscenes": "Cutscenes",
+  "settings.voice.cutscenesDetail":
+    "Other characters speak in cutscenes, like xSasha. Your own replies stay silent",
+  "settings.voice.all": "Everything",
+  "settings.voice.allDetail": "The Avaia also says its lines as it walks",
   "settings.presentation":
     "This is local interface presentation state. It does not change Bond, BondChain, or shared Core state.",
   "settings.localModel.bytes": "{size} MB",
@@ -503,9 +508,14 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.sound.cuesDetail": "Короткий звук на те, що сталося",
   "settings.sound.all": "Ефекти й світ",
   "settings.sound.allDetail": "Додати вітер, воду й вулиці в кадрі",
-  "settings.sound.voice": "Голос Avaia",
-  "settings.sound.voiceDetail":
-    "Вимовляє свої репліки вголос: англійською та українською",
+  "settings.voice.legend": "Голоси персонажів",
+  "settings.voice.off": "Вимкнено",
+  "settings.voice.offDetail": "Ніхто не говорить уголос",
+  "settings.voice.cutscenes": "Катсцени",
+  "settings.voice.cutscenesDetail":
+    "У катсценах говорять інші персонажі, як-от xSasha. Твої відповіді лишаються беззвучними",
+  "settings.voice.all": "Усе",
+  "settings.voice.allDetail": "Avaia ще й промовляє свої репліки на ходу",
   "settings.presentation":
     "Це локальний стан показу інтерфейсу. Він не змінює стан Bond, BondChain чи спільного Core.",
   "settings.localModel.bytes": "{size} МБ",

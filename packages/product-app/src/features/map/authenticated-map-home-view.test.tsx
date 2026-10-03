@@ -1009,14 +1009,28 @@ describe("AuthenticatedMapHomeView", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Effects and world/ }));
 
     expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
-    const voiceToggle = screen.getByRole("checkbox", { name: /Avaia's voice/ });
-    expect(voiceToggle).toBeChecked();
-    fireEvent.click(voiceToggle);
-    expect(window.localStorage.getItem("nilx-one.interface.voice")).toBe("off");
+    // Character voices default to cutscenes: the middle of three stops.
+    const voices = screen.getByRole("slider", { name: /Character voices/ });
+    expect(voices).toHaveValue("1");
+    expect(voices).toHaveAttribute("aria-valuetext", "Cutscenes");
+    fireEvent.change(voices, { target: { value: "2" } });
+    expect(window.localStorage.getItem("nilx-one.interface.voice")).toBe("all");
+    expect(voices).toHaveAttribute("aria-valuetext", "Everything");
     // The choice is the gesture a browser opens audio from, so the host is
     // told at once and the person hears what they turned on.
     expect(sound.setEnabled).toHaveBeenCalledWith(true);
     expect(sound.play).toHaveBeenCalledWith("tap");
+  });
+
+  it("rests character voices at off, and waits, while sound itself is off", () => {
+    window.localStorage.setItem("nilx-one.interface.sound", "off");
+    window.localStorage.setItem("nilx-one.interface.voice", "all");
+    renderView({ section: "settings", sound: soundDouble() });
+    const voices = screen.getByRole("slider", { name: /Character voices/ });
+    expect(voices).toBeDisabled();
+    expect(voices).toHaveValue("0");
+    // The stored choice is kept for when sound comes back.
+    expect(window.localStorage.getItem("nilx-one.interface.voice")).toBe("all");
   });
 
   it("offers no sound choice on a host that cannot make one", () => {
@@ -1451,7 +1465,8 @@ describe("AuthenticatedMapHomeView", () => {
       expect(steps()).toBe(arrived);
     });
 
-    it("says its line aloud when that line was recorded", async () => {
+    it("says its walking line aloud only when every character speaks", async () => {
+      window.localStorage.setItem("nilx-one.interface.voice", "all");
       const sound = soundDouble();
       const mapRenderer = await renderWorld({ sound });
 
@@ -1469,17 +1484,20 @@ describe("AuthenticatedMapHomeView", () => {
       expect(sound.speak).toHaveBeenCalledWith({ url });
     });
 
-    it("keeps its voice to itself once the person turned it off", async () => {
-      window.localStorage.setItem("nilx-one.interface.voice", "off");
-      const sound = soundDouble();
-      const mapRenderer = await renderWorld({ sound });
+    it.each(["off", "cutscenes"])(
+      "keeps its walking lines to itself when voices are at %s",
+      async (level) => {
+        window.localStorage.setItem("nilx-one.interface.voice", level);
+        const sound = soundDouble();
+        const mapRenderer = await renderWorld({ sound });
 
-      tap(mapRenderer);
+        tap(mapRenderer);
 
-      expect(lastLabel(mapRenderer)?.speech).toBeDefined();
-      expect(sound.play).toHaveBeenCalledWith("walk");
-      expect(sound.speak).not.toHaveBeenCalled();
-    });
+        expect(lastLabel(mapRenderer)?.speech).toBeDefined();
+        expect(sound.play).toHaveBeenCalledWith("walk");
+        expect(sound.speak).not.toHaveBeenCalled();
+      },
+    );
 
     it("is heard refusing ground it cannot walk onto", async () => {
       const sound = soundDouble();

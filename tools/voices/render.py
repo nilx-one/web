@@ -397,7 +397,17 @@ def export_lines():
 
 
 def clip_key(line):
+    if line["character"] == "xsasha":
+        return f"{line['locale']}/xsasha-{line['voice']}/{line['key']}"
     return f"{line['locale']}/{line['study']}/{line['kind']}.{line['index']}"
+
+
+def voice_settings(locale, line):
+    """How this line's character speaks: an Avaia by its study, xSasha by
+    the gender of the study she is drawn in."""
+    if line["character"] == "xsasha":
+        return locale["xsasha"][line["voice"]]
+    return locale["studies"][line["study"]]
 
 
 def main():
@@ -418,6 +428,10 @@ def main():
     voices = load_json("voices.json")
     models = load_json("models.json")
     pronunciation = load_json("pronunciation.json")
+    # A line whose text carries a name the moment fills in (a Bond's address,
+    # an Avaia's) is said in a wording without it: the card shows the name,
+    # the voice does not spell out an address.
+    spoken_overrides = load_json("spoken.json")
     output = ROOT / "deploy" / "web" / "voices" / voices["version"]
     manifest_path = output / "manifest.json"
     manifest = (json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -431,7 +445,12 @@ def main():
                  if manifest["lines"].get(clip_key(line), {}).get(
                      "characterErrorRate", 1.0) > args.retry_above]
     for line in lines:
-        spoken = spoken_text(line["text"], line["locale"], pronunciation)
+        written = spoken_overrides.get(line["locale"], {}).get(
+            line.get("key", ""), line["text"])
+        if "{" in written:
+            raise SystemExit(f"{clip_key(line)}: a name placeholder needs a "
+                             "spoken wording in spoken.json")
+        spoken = spoken_text(written, line["locale"], pronunciation)
         if line["locale"] == "uk-UA":
             spoken = stressed(spoken)
         line["spoken"] = spoken
@@ -468,7 +487,7 @@ def main():
             return
         for number, line in enumerate(lines, 1):
             locale = voices["locales"][line["locale"]]
-            settings = locale["studies"][line["study"]]
+            settings = voice_settings(locale, line)
             model_name = locale["model"]
             if model_name not in loaded:
                 spec = models[model_name]
@@ -511,8 +530,12 @@ def main():
 def write_manifest(path, manifest, voices, models):
     manifest["version"] = voices["version"]
     manifest["voices"] = {
-        locale: {study: {"model": spec["model"], **settings}
-                 for study, settings in spec["studies"].items()}
+        locale: {
+            **{study: {"model": spec["model"], **settings}
+               for study, settings in spec["studies"].items()},
+            **{f"xsasha-{gender}": {"model": spec["model"], **settings}
+               for gender, settings in spec.get("xsasha", {}).items()},
+        }
         for locale, spec in voices["locales"].items()}
     manifest["unvoiced"] = voices["unvoiced"]
     manifest["models"] = {

@@ -107,7 +107,7 @@ show the choice.
   sample generated offline and curated into the repository; the capability
   already hides how a cue is made. No sample exists yet.
 - **Speech on the device.** The Avaia's fixed lines are recorded
-  ([Avaia's voice](avaia-voice.md)). Lines about a landmark, and lines a
+  ([Character voices](avaia-voice.md)). Lines about a landmark, and lines a
   [local model](local-models.md) rephrases, need speech in the browser.
 - **Spatial cues.** A landmark or a nearby Bond could be panned by bearing
   from the camera.

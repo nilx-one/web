@@ -65,8 +65,8 @@ gender of whoever is speaking:
 | Kai       | wry, self-aware, deadpan            | no gendered forms |
 | Dasha 2.0 | the upgraded one, looks and outfits | feminine          |
 
-The fixed lines are also heard: each study says them aloud in a recorded voice
-of its own, in English and Ukrainian ([Avaia's voice](avaia-voice.md)). Lines
+The fixed lines can also be heard, when Character voices is at Everything:
+each study says them aloud in a recorded voice of its own, in English and Ukrainian ([Character voices](avaia-voice.md)). Lines
 about a landmark carry its name and stay written only.
 
 A line is never the one said just before it when another is available.
