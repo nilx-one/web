@@ -8,12 +8,23 @@ import { join, relative, resolve } from "node:path";
 import { AVATAR_MODEL_IDS } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
+import { guideModel } from "../../packages/product-app/src/features/guide/guide-stage";
+import {
+  GUIDE_NODES,
+  studyVoice,
+} from "../../packages/product-app/src/features/guide/guide-script";
 import { avaiaLines } from "../../packages/product-app/src/features/map/avaia-lines";
+import {
+  GUIDE_EN,
+  GUIDE_UK,
+} from "../../packages/product-app/src/shell/messages/guide";
 import {
   AVAIA_VOICE_VERSION,
   VOICED_KINDS,
   VOICED_LOCALES,
   avaiaVoicePath,
+  GUIDE_VOICES,
+  guideVoiceUrl,
 } from "../../packages/product-app/src/features/map/avaia-voice";
 
 interface VoiceManifest {
@@ -49,10 +60,13 @@ describe("recorded Avaia lines", () => {
     expect(manifest.version).toBe(AVAIA_VOICE_VERSION);
   });
 
-  it("give every study a voice in every voiced locale", () => {
+  it("give every study, and xSasha, a voice in every voiced locale", () => {
     for (const locale of VOICED_LOCALES) {
       expect(Object.keys(manifest.voices[locale] ?? {}).sort()).toEqual(
-        [...AVATAR_MODEL_IDS].sort(),
+        [
+          ...AVATAR_MODEL_IDS,
+          ...GUIDE_VOICES.map((voice) => `xsasha-${voice}`),
+        ].sort(),
       );
     }
   });
@@ -70,10 +84,51 @@ describe("recorded Avaia lines", () => {
         }
       }
     }
+    // xSasha's lines, in every voice she can be drawn in.
+    const catalogs: Record<string, Record<string, string>> = {
+      en: GUIDE_EN,
+      "uk-UA": GUIDE_UK,
+    };
+    for (const locale of VOICED_LOCALES) {
+      for (const voice of GUIDE_VOICES) {
+        for (const node of Object.values(GUIDE_NODES)) {
+          for (const wording of node.line) {
+            const key = typeof wording === "string" ? wording : wording[voice];
+            expected[`${locale}/xsasha-${voice}/${key}`] =
+              catalogs[locale]![key]!;
+          }
+        }
+      }
+    }
     const recorded = Object.fromEntries(
       Object.entries(manifest.lines).map(([key, line]) => [key, line.text]),
     );
     expect(recorded).toEqual(expected);
+  });
+
+  it("record xSasha in every voice she can be drawn in", () => {
+    const drawn = new Set(
+      [...AVATAR_MODEL_IDS, undefined].map((bond) =>
+        studyVoice(guideModel(bond)),
+      ),
+    );
+    expect([...drawn].sort()).toEqual([...GUIDE_VOICES].sort());
+    expect(
+      guideVoiceUrl({
+        locale: "uk-UA",
+        voice: "masculine",
+        key: "guide.intro.farewell.0",
+      }),
+    ).toBe(
+      `/voices/${AVAIA_VOICE_VERSION}/uk-UA/xsasha-masculine/guide.intro.farewell.0.mp3`,
+    );
+  });
+
+  it("never spell out a name the moment fills in", () => {
+    const named = Object.entries(manifest.lines).filter(([, line]) =>
+      (line as { spoken?: string }).spoken?.includes("{"),
+    );
+    expect(named).toEqual([]);
   });
 
   it("serve one file per recorded line, as the manifest describes it", () => {

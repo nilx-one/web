@@ -832,6 +832,198 @@
       "seconds": 1.73,
       "sha256": "ec275428849d7d47c2d3012facbe78d48a1cb3b8cfe1f4887791934656e684fc"
     },
+    "en/xsasha-feminine/guide.intro.farewell.0": {
+      "text": "Fine. I’ll drop by again.",
+      "spoken": "Fine. I'll drop by again.",
+      "heard": "Fine. I'll drop by again.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.14,
+      "sha256": "c829a05728a2d59efac9f7ba6830c2e9a70f3cff16cfe37c522afedcc696eedc"
+    },
+    "en/xsasha-feminine/guide.intro.farewell.1": {
+      "text": "Okay. I’ll be around.",
+      "spoken": "Okay. I'll be around.",
+      "heard": "Okay, I'll be around.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.85,
+      "sha256": "3d0becb0941cd7b8a26ac5ca169d2220ad864c22772d3395fbf0551170b0f96d"
+    },
+    "en/xsasha-feminine/guide.intro.greeting.0.feminine": {
+      "text": "Hi, bunny. The two of us are going to have fun — but I’m busy right now. Go create your Avaia.",
+      "spoken": "Hi, bunny. The two of us are going to have fun — but I'm busy right now. Go create your Avaia.",
+      "heard": "Hi Bunny! The two of us are going to have fun, but I'm busy right now. Go create your Avea.",
+      "characterErrorRate": 0.023,
+      "seconds": 5.72,
+      "sha256": "ca44403346e0eba98437f068e27cdeeb072929c3c29b6d4d20098254fd94032e"
+    },
+    "en/xsasha-feminine/guide.intro.greeting.1.feminine": {
+      "text": "Hey, bunny. It’ll be fun with the two of us, I promise. Only I’m tied up right now — create your Avaia first.",
+      "spoken": "Hey, bunny. It'll be fun with the two of us, I promise. Only I'm tied up right now — create your Avaia first.",
+      "heard": "Hey, bunny. It'll be fun with the two of us, I promise. Only I'm tied up right now. Create your AVEA first.",
+      "characterErrorRate": 0.02,
+      "seconds": 6.84,
+      "sha256": "5c1ad6ad1a0ad2b62d3b8dd9e1556872ca887ab8206e707edf76870a62f34597"
+    },
+    "en/xsasha-feminine/guide.intro.greeting.2.feminine": {
+      "text": "There you are, bunny. We’ll have a good time, you and me. But I’m busy for now — make yourself an Avaia.",
+      "spoken": "There you are, bunny. We'll have a good time, you and me. But I'm busy for now — make yourself an Avaia.",
+      "heard": "There you are, bunny. We'll have a good time, you and me. But I'm busy for now. Make yourself an Avea.",
+      "characterErrorRate": 0.021,
+      "seconds": 5.84,
+      "sha256": "e4b50236d306f529aa78b2b85c77c4cd3525a68d4eda05458e8939b7e5477ace"
+    },
+    "en/xsasha-feminine/guide.intro.howTo.0": {
+      "text": "Then you already know the way. Down in the Dock sits your Avaia, {avaia}, still unconfigured. Tap it and press Create — it already knows its name.",
+      "spoken": "Then you already know the way. Down in the Dock sits your Avaia, still unconfigured. Tap it and press Create — it already knows its name.",
+      "heard": "Then you already know the way. Down in the dock sits your Avea, still unconfigured. Tap it and press Create. It already knows its name.",
+      "characterErrorRate": 0.015,
+      "seconds": 7.94,
+      "sha256": "ef25d2c16149efe3be691071314aa414303b9f43083a7d7d041e7973fcb51236"
+    },
+    "en/xsasha-feminine/guide.intro.howTo.1": {
+      "text": "Then this will feel familiar. Your Avaia, {avaia}, is waiting in the Dock below. Tap its card, then Create. The name is already its own.",
+      "spoken": "Then this will feel familiar. Your Avaia is waiting in the Dock below. Tap its card, then Create. The name is already its own.",
+      "heard": "Then this will feel familiar. Your AVEA is waiting in the dock below. Tap its card, then create. The name is already its own.",
+      "characterErrorRate": 0.017,
+      "seconds": 7.99,
+      "sha256": "770e92e581802d3c340747e32a13592189b44aebc721aa960e2c86751d796e07"
+    },
+    "en/xsasha-feminine/guide.reward.almostForgot.0.feminine": {
+      "text": "Almost forgot — here, {bond}.",
+      "spoken": "Almost forgot — here.",
+      "heard": "Almost forgot here.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.48,
+      "sha256": "6c710b21adac5753092e2371baac764ba05a9e7e91550520b15a999ad5f30a4d"
+    },
+    "en/xsasha-feminine/guide.reward.almostForgot.1.feminine": {
+      "text": "Oh, I nearly left without giving you this. Here, {bond}.",
+      "spoken": "Oh, I nearly left without giving you this. Here.",
+      "heard": "Oh, I nearly left without giving you this. Here.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.19,
+      "sha256": "758cae6408c5e645eb249e759f2f2e62b536c06057361d9a7c1e8553d1416bff"
+    },
+    "en/xsasha-feminine/guide.reward.almostForgot.2": {
+      "text": "Wait. This is yours, {bond}.",
+      "spoken": "Wait. This is yours.",
+      "heard": "Wait, this is yours.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.84,
+      "sha256": "9ce24d5240d9c76f9e93bde8337c00a4eb51e8ec57ae829f1adac665e947af49"
+    },
+    "en/xsasha-feminine/guide.reward.together.0": {
+      "text": "And now it’s the two of you. I’ll be near.",
+      "spoken": "And now it's the two of you. I'll be near.",
+      "heard": "And now it's the two of you. I'll be near.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.52,
+      "sha256": "893b0adb94bba2d0132e0139e6932028958afc05d08498e5acf37142374e3626"
+    },
+    "en/xsasha-feminine/guide.reward.together.1": {
+      "text": "Now go — you and {avaia}. I’ll find you.",
+      "spoken": "Now go, the two of you. I'll find you.",
+      "heard": "Now go, the two of you. I'll find you.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.66,
+      "sha256": "0b15ba006ab9c1c954694f1dbe65d54ce43594ead8f99e7319407dc0b790e735"
+    },
+    "en/xsasha-masculine/guide.intro.farewell.0": {
+      "text": "Fine. I’ll drop by again.",
+      "spoken": "Fine. I'll drop by again.",
+      "heard": "Fine, I'll drop by again.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.05,
+      "sha256": "910ad3ddc7093d1cdc2679e0c26fb1ba1407a51a8ba4837008d68a3ea8dceaa7"
+    },
+    "en/xsasha-masculine/guide.intro.farewell.1": {
+      "text": "Okay. I’ll be around.",
+      "spoken": "Okay. I'll be around.",
+      "heard": "Okay, I'll be around.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.82,
+      "sha256": "55a6a0c90ded3ef97b8b2e1ff8744d4a043bebb9a0a334ea85f40af952ce437a"
+    },
+    "en/xsasha-masculine/guide.intro.greeting.0.masculine": {
+      "text": "Hi, bunny. The two of us are going to have fun — but I’m busy right now. Go create your Avaia.",
+      "spoken": "Hi, bunny. The two of us are going to have fun — but I'm busy right now. Go create your Avaia.",
+      "heard": "Hi, Bunny. The two of us are going to have fun, but I'm busy right now. Go create your Avea.",
+      "characterErrorRate": 0.023,
+      "seconds": 5.53,
+      "sha256": "dd76eddae71b2c4f75994a5d179583e63e13919b58a55d6138c54d7bf3e91b28"
+    },
+    "en/xsasha-masculine/guide.intro.greeting.1.masculine": {
+      "text": "Hey, bunny. It’ll be fun with the two of us, I promise. Only I’m tied up right now — create your Avaia first.",
+      "spoken": "Hey, bunny. It'll be fun with the two of us, I promise. Only I'm tied up right now — create your Avaia first.",
+      "heard": "Hey bunnies, it'll be fun with the two of us, I promise. Only I'm tied up right now. Create your Avea first.",
+      "characterErrorRate": 0.05,
+      "seconds": 6.12,
+      "sha256": "e2a9c2159cfb7a87efaac0b67f6fc7bc6f2fa5daf78c1d35d25895e5d5abbc52"
+    },
+    "en/xsasha-masculine/guide.intro.greeting.2.masculine": {
+      "text": "There you are, bunny. We’ll have a good time, you and me. But I’m busy for now — make yourself an Avaia.",
+      "spoken": "There you are, bunny. We'll have a good time, you and me. But I'm busy for now — make yourself an Avaia.",
+      "heard": "There you are, bunny. We'll have a good time, you and me. But I'm busy for now. Make yourself an Avea.",
+      "characterErrorRate": 0.021,
+      "seconds": 5.22,
+      "sha256": "5287e7ad3eaf54e22899bac87f324fd1ca632c3ef41aa26aab49dc181311514a"
+    },
+    "en/xsasha-masculine/guide.intro.howTo.0": {
+      "text": "Then you already know the way. Down in the Dock sits your Avaia, {avaia}, still unconfigured. Tap it and press Create — it already knows its name.",
+      "spoken": "Then you already know the way. Down in the Dock sits your Avaia, still unconfigured. Tap it and press Create — it already knows its name.",
+      "heard": "Then you already know the way. Down in the dock sits your Avea still unconfigured. Tap it and press create. It already knows its name.",
+      "characterErrorRate": 0.015,
+      "seconds": 7.03,
+      "sha256": "7e849cb2d06f25da2538c4814f88f45d13bc7fd32ef98007ac2c0d2929ff22ff"
+    },
+    "en/xsasha-masculine/guide.intro.howTo.1": {
+      "text": "Then this will feel familiar. Your Avaia, {avaia}, is waiting in the Dock below. Tap its card, then Create. The name is already its own.",
+      "spoken": "Then this will feel familiar. Your Avaia is waiting in the Dock below. Tap its card, then Create. The name is already its own.",
+      "heard": "Then this will feel familiar. Your Avea is waiting in the dock below. Tap its card then create. The name is already its own.",
+      "characterErrorRate": 0.017,
+      "seconds": 7.14,
+      "sha256": "1df32bd0b7fa2924343f1902a3c4ee6a68a11da3d709b44f9de3626dd9419b61"
+    },
+    "en/xsasha-masculine/guide.reward.almostForgot.0.masculine": {
+      "text": "Almost forgot — here, {bond}.",
+      "spoken": "Almost forgot — here.",
+      "heard": "Almost forgot here.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.36,
+      "sha256": "2821c8aaa8d4a76359e338e3fa213045344712454c9834a6050ac9120c054619"
+    },
+    "en/xsasha-masculine/guide.reward.almostForgot.1.masculine": {
+      "text": "Oh, I nearly left without giving you this. Here, {bond}.",
+      "spoken": "Oh, I nearly left without giving you this. Here.",
+      "heard": "Oh, I nearly left without giving you this. Here.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.9,
+      "sha256": "7977a82ecbd0e2dc6598abc17b9c1e63aef72c710ddff0f1fd007d6cf355b99f"
+    },
+    "en/xsasha-masculine/guide.reward.almostForgot.2": {
+      "text": "Wait. This is yours, {bond}.",
+      "spoken": "Wait. This is yours.",
+      "heard": "Wait, this is yours.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.75,
+      "sha256": "82400f8442401c504a14982ce85530a0373decab24654e248131580a7b53122a"
+    },
+    "en/xsasha-masculine/guide.reward.together.0": {
+      "text": "And now it’s the two of you. I’ll be near.",
+      "spoken": "And now it's the two of you. I'll be near.",
+      "heard": "And now it's the two of you. I'll be near.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.47,
+      "sha256": "a8e6252f362dc4a254ef9fdfe81c03d6773d743243b6c3f7a4a8fef778047068"
+    },
+    "en/xsasha-masculine/guide.reward.together.1": {
+      "text": "Now go — you and {avaia}. I’ll find you.",
+      "spoken": "Now go, the two of you. I'll find you.",
+      "heard": "Now go, the two of you. I'll find you.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.37,
+      "sha256": "51ac68b3c5789eeceba07de9ebd1672b3f6c02810201f4e02ff91512f3a05a5e"
+    },
     "uk-UA/dasha-study/blocked.building.0": {
       "text": "Це ж чийсь дім!",
       "spoken": "Це ж чийсь дім!",
@@ -1663,6 +1855,198 @@
       "characterErrorRate": 0.0,
       "seconds": 2.67,
       "sha256": "d44acd6c526e42a8e2492f0511156eca261669667bd9f4b2f34a525c8af94976"
+    },
+    "uk-UA/xsasha-feminine/guide.intro.farewell.0": {
+      "text": "Добре. Я ще зазирну.",
+      "spoken": "До́бре. Я ще зазирну́.",
+      "heard": "Добре, я ще зазирну.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.47,
+      "sha256": "426cc576695e23bad9e1e1a3af65ce8853ed4a329561adabf8a8b936bab01f92"
+    },
+    "uk-UA/xsasha-feminine/guide.intro.farewell.1": {
+      "text": "Гаразд. Я буду поруч.",
+      "spoken": "Гара́зд. Я бу́ду по́руч.",
+      "heard": "Гаразд, я буду поруч.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.58,
+      "sha256": "2e7a90e1cc532f1d90da9b0100005b6b46ccabcaaa171fbf0513245c71536107"
+    },
+    "uk-UA/xsasha-feminine/guide.intro.greeting.0.feminine": {
+      "text": "Привіт, зайчик. Нам удвох буде прікольно, проте наразі я зайнята — створи свою Avaia.",
+      "spoken": "Приві́т, за́йчик. Нам удво́х бу́де прі́кольно, проте́ нара́зі я за́йнята — створи́ свою́ ава́я.",
+      "heard": "Привіт, зайчик. Нам удвох буде прикольно. Проте наразі я зайнята. Створи свою авая.",
+      "characterErrorRate": 0.013,
+      "seconds": 5.76,
+      "sha256": "3991e7b0c993efee634cc7f1946c663e416c8d6dcff0f88fcd419807a866af55"
+    },
+    "uk-UA/xsasha-feminine/guide.intro.greeting.1.feminine": {
+      "text": "О, зайчик, привіт. Нам з тобою буде прікольно, обіцяю. Але зараз я зайнята — спершу створи свою Avaia.",
+      "spoken": "О, за́йчик, приві́т. Нам з тобо́ю бу́де прі́кольно, обіця́ю. Але́ за́раз я за́йнята — спе́ршу створи́ свою́ ава́я.",
+      "heard": "О, зайчик, привіт, нам з тобою буде прикольно, обіцяю. Але зараз я зайнята, спершу створи свою авая.",
+      "characterErrorRate": 0.011,
+      "seconds": 6.84,
+      "sha256": "1699f831f83831cc01f047c35a0c90c4c1ae914aec934c40d9776be1a926b4de"
+    },
+    "uk-UA/xsasha-feminine/guide.intro.greeting.2.feminine": {
+      "text": "Ось і ти, зайчик. Удвох нам буде прікольно. Тільки поки я зайнята — створи собі Avaia.",
+      "spoken": "Ось і ти, за́йчик. Удво́х нам бу́де прі́кольно. Ті́льки по́ки я за́йнята — створи́ собі́ ава́я.",
+      "heard": "Ось і ти, зайчик, удвох нам буде прикольно. Тільки поки я зайнята, створи собі авая.",
+      "characterErrorRate": 0.013,
+      "seconds": 5.8,
+      "sha256": "ed8fb9d6a56d9536e6f8bcba7933008a5899b6cc317a69d15eeb3f5047b74911"
+    },
+    "uk-UA/xsasha-feminine/guide.intro.howTo.0": {
+      "text": "Тоді ти знаєш дорогу. Внизу, у Dock, чекає твоя Avaia — {avaia}, поки unconfigured. Торкнись її й натисни «Створити». Ім’я вона вже знає.",
+      "spoken": "Тоді́ ти зна́єш доро́гу. Внизу́, у до́ку, чека́є твоя́ ава́я, по́ки неналашто́вана. Торкни́сь її́ й нати́сни Створи́ти. Ім'я́ вона́ вже зна́є.",
+      "heard": "Тоді ти знаєш дорогу внизу, у доку чекає твоя авая, поки не налаштована. Торкнись її, натисни створити, ім'я вона вже знає.",
+      "characterErrorRate": 0.026,
+      "seconds": 8.78,
+      "sha256": "8f85fcd5a9e0ed803a1d972eb70af849f2c50f7bc9aa3572a0e051b5213bc844"
+    },
+    "uk-UA/xsasha-feminine/guide.intro.howTo.1": {
+      "text": "Тоді тобі це знайоме. Твоя Avaia, {avaia}, — внизу, у Dock. Торкнись картки, потім «Створити». Своє ім’я вона вже має.",
+      "spoken": "Тоді́ тобі́ це знайо́ме. Твоя́ ава́я — внизу́, у до́ку. Торкни́сь ка́ртки, по́тім Створи́ти. Своє́ ім'я́ вона́ вже ма́є.",
+      "heard": "Тоді тобі це знайоме, твоя аває. Внизу у доку торкнись картки, потім створити. Своє ім'я вона вже має.",
+      "characterErrorRate": 0.01,
+      "seconds": 7.63,
+      "sha256": "69f6fc41ea66ee6206f4bd6e14bd293ee663c53fd9ae866098abeb9c7c9e3279"
+    },
+    "uk-UA/xsasha-feminine/guide.reward.almostForgot.0.feminine": {
+      "text": "Ледь не забула — тримай, {bond}.",
+      "spoken": "Ледь не забу́ла — трима́й.",
+      "heard": "Ледь не забула, тримай.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.63,
+      "sha256": "406518fe0e0cbaaf11c2841dad2f2286bc1ab25721824b7b3526f17d960423c8"
+    },
+    "uk-UA/xsasha-feminine/guide.reward.almostForgot.1.feminine": {
+      "text": "Ой, мало не пішла просто так. Тримай, {bond}.",
+      "spoken": "Ой, ма́ло не пішла́ про́сто так. Трима́й.",
+      "heard": "Ой, мало не пішла просто так, тримай.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.47,
+      "sha256": "6329442c1c22cd3ee20937e8b564666078a02bd3c39945189279fdaa83ea23d2"
+    },
+    "uk-UA/xsasha-feminine/guide.reward.almostForgot.2": {
+      "text": "Стій. Це твоє, {bond}.",
+      "spoken": "Стій. Це твоє́.",
+      "heard": "Стій, це твоє.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.26,
+      "sha256": "2fd88aa9d43b594f447255fbdc7e9145c0b236777256fe12b58693d3138049f7"
+    },
+    "uk-UA/xsasha-feminine/guide.reward.together.0": {
+      "text": "А тепер — ви удвох. Я поруч.",
+      "spoken": "А тепе́р — ви удво́х. Я по́руч.",
+      "heard": "А тепер ви удвох, я поруч.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.21,
+      "sha256": "2b7316c37701e44f3fc92a907ae9ce37156da166d73f3ad73c4359998f4130e3"
+    },
+    "uk-UA/xsasha-feminine/guide.reward.together.1": {
+      "text": "Тепер ідіть — ти і {avaia}. Я вас знайду.",
+      "spoken": "Тепе́р іді́ть ра́зом. Я вас знайду́.",
+      "heard": "Тепер ідіть разом, я вас знайду.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.14,
+      "sha256": "8929fe014d9ec3cc9d2e19c1b5d926204b81c4934a8d32c84c67803f892d2688"
+    },
+    "uk-UA/xsasha-masculine/guide.intro.farewell.0": {
+      "text": "Добре. Я ще зазирну.",
+      "spoken": "До́бре. Я ще зазирну́.",
+      "heard": "Добре, я ще зазирну.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.36,
+      "sha256": "6e8d0ccff885be47fd3fefd27b75deeacf56faba4db714db932a159c9f81a7dd"
+    },
+    "uk-UA/xsasha-masculine/guide.intro.farewell.1": {
+      "text": "Гаразд. Я буду поруч.",
+      "spoken": "Гара́зд. Я бу́ду по́руч.",
+      "heard": "Гаразд, я буду поруч.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.32,
+      "sha256": "bb0819642c6a3251a6c290283cfda1778eb644c9de629fb611bcb4eb175e1673"
+    },
+    "uk-UA/xsasha-masculine/guide.intro.greeting.0.masculine": {
+      "text": "Привіт, зайчик. Нам удвох буде прікольно, проте наразі я зайнятий — створи свою Avaia.",
+      "spoken": "Приві́т, за́йчик. Нам удво́х бу́де прі́кольно, проте́ нара́зі я за́йнятий — створи́ свою́ ава́я.",
+      "heard": "Привіт, зайчик. Нам удвох буде прикольно. Проте наразі я зайнятий. Створи свою авая.",
+      "characterErrorRate": 0.013,
+      "seconds": 8.23,
+      "sha256": "bdf758836e23776dd67b8cdddd2acc728fb37bc6e3bd657284c137ec183b0be2"
+    },
+    "uk-UA/xsasha-masculine/guide.intro.greeting.1.masculine": {
+      "text": "О, зайчик, привіт. Нам з тобою буде прікольно, обіцяю. Але зараз я зайнятий — спершу створи свою Avaia.",
+      "spoken": "О, за́йчик, приві́т. Нам з тобо́ю бу́де прі́кольно, обіця́ю. Але́ за́раз я за́йнятий — спе́ршу створи́ свою́ ава́я.",
+      "heard": "О, зайчик, привіт, нам з тобою буде прикольно, обіцяю. Але зараз я зайнятий, спершу створи свою авая.",
+      "characterErrorRate": 0.011,
+      "seconds": 9.87,
+      "sha256": "9d030d310d221f33c3e1acd74ee06c71bbe7de4f5299fc248796e1c0e9cc445d"
+    },
+    "uk-UA/xsasha-masculine/guide.intro.greeting.2.masculine": {
+      "text": "Ось і ти, зайчик. Удвох нам буде прікольно. Тільки поки я зайнятий — створи собі Avaia.",
+      "spoken": "Ось і ти, за́йчик. Удво́х нам бу́де прі́кольно. Ті́льки по́ки я за́йнятий — створи́ собі́ ава́я.",
+      "heard": "Ось і ти, зайчик, удвох нам буде прикольно. Тільки поки я зайнятий, створи собі авая.",
+      "characterErrorRate": 0.013,
+      "seconds": 8.17,
+      "sha256": "87920af923d2f32229f451d17bd0b946fa29a34e6ab51c7254bb62d2acfb2364"
+    },
+    "uk-UA/xsasha-masculine/guide.intro.howTo.0": {
+      "text": "Тоді ти знаєш дорогу. Внизу, у Dock, чекає твоя Avaia — {avaia}, поки unconfigured. Торкнись її й натисни «Створити». Ім’я вона вже знає.",
+      "spoken": "Тоді́ ти зна́єш доро́гу. Внизу́, у до́ку, чека́є твоя́ ава́я, по́ки неналашто́вана. Торкни́сь її́ й нати́сни Створи́ти. Ім'я́ вона́ вже зна́є.",
+      "heard": "Тоді ти знаєш дорогу, внизу, у доку, чекає твоя авая, поки не налаштована. Торкнись її й натисни створити, ім'я вона вже знає.",
+      "characterErrorRate": 0.009,
+      "seconds": 11.92,
+      "sha256": "d128cb99f8ab3e7b6605d27276d1aeae6fff40cd96fbeedb72da5edf85b67f74"
+    },
+    "uk-UA/xsasha-masculine/guide.intro.howTo.1": {
+      "text": "Тоді тобі це знайоме. Твоя Avaia, {avaia}, — внизу, у Dock. Торкнись картки, потім «Створити». Своє ім’я вона вже має.",
+      "spoken": "Тоді́ тобі́ це знайо́ме. Твоя́ ава́я — внизу́, у до́ку. Торкни́сь ка́ртки, по́тім Створи́ти. Своє́ ім'я́ вона́ вже ма́є.",
+      "heard": "Тоді тобі це знайоме, твоя авая, внизу, у доку. Торкнись картки, потім створити, своє ім'я вона вже має.",
+      "characterErrorRate": 0.0,
+      "seconds": 11.02,
+      "sha256": "ee8a2115a52ea95b33b278faf2e21cedd07e6b0ac791bb0f1327d703e3766f14"
+    },
+    "uk-UA/xsasha-masculine/guide.reward.almostForgot.0.masculine": {
+      "text": "Ледь не забув — тримай, {bond}.",
+      "spoken": "Ледь не забу́в — трима́й.",
+      "heard": "Ледь не забув, тримай.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.17,
+      "sha256": "2a678a08a0fabe0dd031c8711f5edd42537516847274faafdfd50c6d310245eb"
+    },
+    "uk-UA/xsasha-masculine/guide.reward.almostForgot.1.masculine": {
+      "text": "Ой, мало не пішов просто так. Тримай, {bond}.",
+      "spoken": "Ой, ма́ло не пішо́в про́сто так. Трима́й.",
+      "heard": "Ой, мало не пішов просто так, тримай.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.54,
+      "sha256": "2b6405f8bf50cd9337c33a393f03f7e9a4ec768133548da7c3f58f577965f4b4"
+    },
+    "uk-UA/xsasha-masculine/guide.reward.almostForgot.2": {
+      "text": "Стій. Це твоє, {bond}.",
+      "spoken": "Стій. Це твоє́.",
+      "heard": "Стій, це твоє.",
+      "characterErrorRate": 0.0,
+      "seconds": 1.81,
+      "sha256": "3cb535470b725df87c726531181f6306324ddb9b2274a48157df2c342987fb16"
+    },
+    "uk-UA/xsasha-masculine/guide.reward.together.0": {
+      "text": "А тепер — ви удвох. Я поруч.",
+      "spoken": "А тепе́р — ви удво́х. Я по́руч.",
+      "heard": "А тепер ви удвох, я поруч.",
+      "characterErrorRate": 0.0,
+      "seconds": 2.74,
+      "sha256": "8984c82f778eee4ec4d60b86ddb79ab5d906da9bdf3fcaf2e80f099d2b46e8b4"
+    },
+    "uk-UA/xsasha-masculine/guide.reward.together.1": {
+      "text": "Тепер ідіть — ти і {avaia}. Я вас знайду.",
+      "spoken": "Тепе́р іді́ть ра́зом. Я вас знайду́.",
+      "heard": "Тепер ідіть разом, я вас знайду.",
+      "characterErrorRate": 0.0,
+      "seconds": 3.21,
+      "sha256": "b76f9786747baf2b5e9d64629ffbf446c68ee14cbc4ebd32a53981af2d928ee6"
     }
   },
   "version": "0.1.0",
@@ -1686,6 +2070,16 @@
       "dasha-v2-study": {
         "model": "kokoro-en-v0_19",
         "speaker": "bf_emma",
+        "speed": 1.0
+      },
+      "xsasha-feminine": {
+        "model": "kokoro-en-v0_19",
+        "speaker": "af_sarah",
+        "speed": 1.0
+      },
+      "xsasha-masculine": {
+        "model": "kokoro-en-v0_19",
+        "speaker": "am_adam",
         "speed": 1.0
       }
     },
@@ -1714,6 +2108,20 @@
         "speaker": "lada",
         "length": 1.0,
         "noise": 0.667
+      },
+      "xsasha-feminine": {
+        "model": "vits-piper-uk_UA-ukrainian_tts-medium",
+        "speaker": "lada",
+        "length": 0.98,
+        "noise": 0.7,
+        "pitch": 1.5
+      },
+      "xsasha-masculine": {
+        "model": "vits-piper-uk_UA-ukrainian_tts-medium",
+        "speaker": "mykyta",
+        "length": 0.98,
+        "noise": 0.7,
+        "pitch": 2.0
       }
     }
   },
