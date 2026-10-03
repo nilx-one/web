@@ -23,6 +23,11 @@ export interface RememberedPoint extends MapPointSelection {
 export interface WorldMemory {
   readonly bond?: MapPointSelection;
   readonly avaia?: RememberedPoint;
+  /**
+   * When the Avaia last decided on an outing, wall-clock milliseconds, so a
+   * reload does not send it out again before the interval is up.
+   */
+  readonly lastOutingAt?: number;
 }
 
 export interface WorldMemoryStorage {
@@ -86,9 +91,15 @@ export function readWorldMemory(
     if (!isRecord(parsed)) return EMPTY;
     const bond = parsePoint(parsed.bond);
     const avaia = parseRemembered(parsed.avaia);
+    const lastOutingAt =
+      typeof parsed.lastOutingAt === "number" &&
+      Number.isFinite(parsed.lastOutingAt)
+        ? parsed.lastOutingAt
+        : undefined;
     return {
       ...(bond === undefined ? {} : { bond }),
       ...(avaia === undefined ? {} : { avaia }),
+      ...(lastOutingAt === undefined ? {} : { lastOutingAt }),
     };
   } catch {
     return EMPTY;
@@ -101,13 +112,18 @@ export function readWorldMemory(
  */
 export function rememberWorld(
   owner: string,
-  change: { bond?: MapPointSelection; avaia?: RememberedPoint | undefined },
+  change: {
+    bond?: MapPointSelection;
+    avaia?: RememberedPoint | undefined;
+    lastOutingAt?: number;
+  },
   storage: WorldMemoryStorage | undefined = defaultStorage(),
 ): void {
   try {
-    const { bond, avaia } = readWorldMemory(owner, storage);
+    const { bond, avaia, lastOutingAt } = readWorldMemory(owner, storage);
     const nextBond = change.bond ?? bond;
     const nextAvaia = "avaia" in change ? change.avaia : avaia;
+    const nextOuting = change.lastOutingAt ?? lastOutingAt;
     const next: WorldMemory = {
       ...(nextBond === undefined
         ? {}
@@ -126,6 +142,7 @@ export function rememberWorld(
               bearingDeg: nextAvaia.bearingDeg,
             },
           }),
+      ...(nextOuting === undefined ? {} : { lastOutingAt: nextOuting }),
     };
     storage?.setItem(STORAGE_PREFIX + owner, JSON.stringify(next));
   } catch {
