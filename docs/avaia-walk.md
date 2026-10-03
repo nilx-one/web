@@ -184,7 +184,8 @@ where its owner is. Nothing walks in the background.
   rule, not a decision. Routing the choice through `DecisionMenu` and the
   loaded model is the next step, and the candidates would stay what they are
   here: landmarks the person already passed.
-- **Routes.** Walks are straight lines between checked endpoints.
+- **Routes.** Walks are straight lines between checked endpoints. The plan for
+  paths, outings and chance finds is [Avaia walks on its own](avaia-outings.md).
 - **The raw presence journal.** A tap now belongs to the Avaia, so the hosts
   no longer open the phase-1 journal panel on a lit cell. The panel itself
   (`createRawJournalPresenter`) and the shade layer's `onCellTap` stay in
