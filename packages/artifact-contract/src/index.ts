@@ -270,3 +270,14 @@ function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+export {
+  AVAIA_PICKUP_MAX_TIER,
+  awardsFor,
+  canPickUp,
+  FIND_SEEN_EXPERIENCE,
+  type FindAward,
+  type FindEarner,
+  type FindEvent,
+  type FindEventKind,
+} from "./experience";
