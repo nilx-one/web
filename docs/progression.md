@@ -26,6 +26,22 @@ pays more than a passing notice. How a zone opens and how a landmark gets
 noticed or studied are [Avaia walks the world](avaia-walk.md)'s own; this file
 only prices what already happens there.
 
+Chance finds, once they are wired into walking, pay the same way: whoever did
+it. The rules live in `awardsFor` (`artifact-contract`); see
+[Avaia walks on its own](avaia-outings.md) §3.4.
+
+| Action                      | Who earns it                   |     Reward |
+| --------------------------- | ------------------------------ | ---------: |
+| A find seen, first sighting | the Avaia or the Bond, who saw |         10 |
+| A find picked up            | whoever picked it up           | 10 to 1000 |
+
+The Avaia sees what it walks past, on its own or sent by a tap; the Bond sees
+what this device walks past. The Avaia picks up tiers 1 to 3 itself and leaves
+tiers 4 to 6 as leads, which pay the Bond when the person walks there and picks
+them up. Each find pays its sighting once and its pick-up once. Until the
+claim registry (R3) exists, "once" holds per device: the find journal is
+device-local, so it is still the owner's report, like everything here.
+
 ## Achievements
 
 An achievement pays once. Where "once" is counted depends on what it is about:
