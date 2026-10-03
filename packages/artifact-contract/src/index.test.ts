@@ -244,6 +244,72 @@ describe("segments", () => {
     expect(segmentsAlong([at(300, 0), at(0, 0)])).toEqual([...there].reverse());
   });
 
+  // The grid as the package cuts it, to place points by cell.
+  const ROW = SEGMENT_METERS / 111_195;
+  const COLUMN = ROW * 1.5698;
+  const BASE_ROW = 312_346;
+  const BASE_COLUMN = 298_243;
+  const cellPoint = (x: number, y: number): LonLat => [
+    (BASE_COLUMN + x) * COLUMN - 180,
+    (BASE_ROW + y) * ROW - 90,
+  ];
+  const cellId = (x: number, y: number) =>
+    segment(BASE_ROW + y, BASE_COLUMN + x);
+
+  it("enters a cell the walk only clips at a corner", () => {
+    // Crosses the row edge at x = 0.99: one hundredth of a cell, half a
+    // metre, inside cell (0, 1), between any eight samples a cell.
+    const from = cellPoint(0.5, 0.755);
+    const to = cellPoint(1.5, 1.255);
+    expect(segmentsAlong([from, to])).toEqual([
+      cellId(0, 0),
+      cellId(0, 1),
+      cellId(1, 1),
+    ]);
+  });
+
+  it("steps diagonally through an exact corner", () => {
+    expect(segmentsAlong([cellPoint(0.5, 0.5), cellPoint(1.5, 1.5)])).toEqual([
+      cellId(0, 0),
+      cellId(1, 1),
+    ]);
+  });
+
+  it("enters every cell a leg passes through, each next to the last", () => {
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed / 2_147_483_648;
+    };
+    const jumps: string[] = [];
+    const missed: string[] = [];
+    for (let leg = 0; leg < 300; leg++) {
+      const from = cellPoint(random() * 6, random() * 6);
+      const to = cellPoint(random() * 6, random() * 6);
+      const cells = segmentsAlong([from, to]);
+      const parsed = cells.map((id) => id.split(":").slice(1).map(Number));
+      for (let i = 1; i < parsed.length; i++) {
+        const [r0 = 0, c0 = 0] = parsed[i - 1]!;
+        const [r1 = 0, c1 = 0] = parsed[i]!;
+        if (Math.abs(r1 - r0) > 1 || Math.abs(c1 - c0) > 1) {
+          jumps.push(`${cells[i - 1]} → ${cells[i]}`);
+        }
+      }
+      // Dense sampling only ever finds cells the exact walk also entered.
+      const entered = new Set(cells);
+      for (let s = 0; s <= 1000; s++) {
+        const t = s / 1000;
+        const cell = segmentAt([
+          from[0] + (to[0] - from[0]) * t,
+          from[1] + (to[1] - from[1]) * t,
+        ]);
+        if (!entered.has(cell)) missed.push(cell);
+      }
+    }
+    expect(jumps).toEqual([]);
+    expect(missed).toEqual([]);
+  });
+
   it("is nothing for an empty walk and one segment for standing still", () => {
     expect(segmentsAlong([])).toEqual([]);
     expect(segmentsAlong([at(5, 5)])).toEqual([segmentAt(at(5, 5))]);

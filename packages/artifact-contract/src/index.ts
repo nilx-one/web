@@ -86,17 +86,21 @@ const EPOCH_ORIGIN_MS = Date.UTC(1970, 0, 5);
 const ROW_DEGREES = SEGMENT_METERS / 111_195;
 const COLUMN_DEGREES = ROW_DEGREES * 1.5698;
 
-/** Samples taken per grid cell crossed when following a path. */
-const SAMPLES_PER_CELL = 8;
-
 export function epochOf(nowMs: number): EpochId {
   return `e${Math.floor((nowMs - EPOCH_ORIGIN_MS) / EPOCH_MS)}`;
 }
 
-export function segmentAt([longitude, latitude]: LonLat): SegmentId {
-  const row = Math.floor((latitude + 90) / ROW_DEGREES);
-  const column = Math.floor((longitude + 180) / COLUMN_DEGREES);
-  return `seg:${row}:${column}`;
+/** A point in grid units: whole numbers are cell edges. */
+function gridOf([longitude, latitude]: LonLat): readonly [
+  x: number,
+  y: number,
+] {
+  return [(longitude + 180) / COLUMN_DEGREES, (latitude + 90) / ROW_DEGREES];
+}
+
+export function segmentAt(point: LonLat): SegmentId {
+  const [x, y] = gridOf(point);
+  return `seg:${Math.floor(y)}:${Math.floor(x)}`;
 }
 
 /**
@@ -106,26 +110,66 @@ export function segmentAt([longitude, latitude]: LonLat): SegmentId {
  */
 export function segmentsAlong(path: readonly LonLat[]): SegmentId[] {
   const seen = new Set<SegmentId>();
-  const add = (point: LonLat) => seen.add(segmentAt(point));
   const first = path[0];
   if (first === undefined) return [];
-  add(first);
+  seen.add(segmentAt(first));
   for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1]!;
-    const b = path[i]!;
-    const cells = Math.max(
-      Math.abs(b[1] - a[1]) / ROW_DEGREES,
-      Math.abs(b[0] - a[0]) / COLUMN_DEGREES,
-    );
-    const steps = Math.max(1, Math.ceil(cells * SAMPLES_PER_CELL));
-    for (let s = 1; s <= steps; s++) {
-      add([
-        a[0] + ((b[0] - a[0]) * s) / steps,
-        a[1] + ((b[1] - a[1]) * s) / steps,
-      ]);
+    for (const segment of cellsCrossed(path[i - 1]!, path[i]!)) {
+      seen.add(segment);
     }
   }
   return [...seen];
+}
+
+/**
+ * Every cell a straight leg passes through, in order: an exact grid walk
+ * (Amanatides and Woo), stepping from cell to cell at each grid line the leg
+ * crosses, so a cell clipped for a fraction of a metre is still entered. A leg
+ * through a corner exactly steps diagonally: the two cells beside the corner
+ * are only touched at a point, not entered. Arithmetic only, so every engine
+ * walks the same cells.
+ */
+function cellsCrossed(a: LonLat, b: LonLat): SegmentId[] {
+  const [ax, ay] = gridOf(a);
+  const [bx, by] = gridOf(b);
+  let column = Math.floor(ax);
+  let row = Math.floor(ay);
+  const lastColumn = Math.floor(bx);
+  const lastRow = Math.floor(by);
+  const dx = bx - ax;
+  const dy = by - ay;
+  const stepX = Math.sign(dx);
+  const stepY = Math.sign(dy);
+  // How far along the leg, 0 to 1, the next column and row edge are crossed,
+  // and how far apart successive edges are.
+  const deltaX = dx === 0 ? Infinity : Math.abs(1 / dx);
+  const deltaY = dy === 0 ? Infinity : Math.abs(1 / dy);
+  let nextX =
+    dx > 0 ? (column + 1 - ax) / dx : dx < 0 ? (column - ax) / dx : Infinity;
+  let nextY =
+    dy > 0 ? (row + 1 - ay) / dy : dy < 0 ? (row - ay) / dy : Infinity;
+
+  const cells: SegmentId[] = [`seg:${row}:${column}`];
+  const steps = Math.abs(lastColumn - column) + Math.abs(lastRow - row);
+  for (let step = 0; step < steps; step++) {
+    if (column === lastColumn && row === lastRow) break;
+    if (nextX < nextY) {
+      column += stepX;
+      nextX += deltaX;
+    } else if (nextY < nextX) {
+      row += stepY;
+      nextY += deltaY;
+    } else {
+      column += stepX;
+      row += stepY;
+      nextX += deltaX;
+      nextY += deltaY;
+    }
+    cells.push(`seg:${row}:${column}`);
+  }
+  // Rounding can never leave the leg's own end out.
+  cells.push(`seg:${lastRow}:${lastColumn}`);
+  return cells;
 }
 
 export interface FindRoll {
