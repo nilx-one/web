@@ -28,7 +28,7 @@ import {
   pickAvaiaLine,
   type AvaiaLineKind,
 } from "./avaia-lines";
-import { planWalk, type WalkChooser } from "./avaia-path";
+import { openGround, planWalk, type WalkChooser } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
   approachPoint,
@@ -51,6 +51,7 @@ import {
   updateNotebook,
   NOTICE_ACCURACY_METERS,
   NOTICE_RADIUS_METERS,
+  CURIOSITY_REACH_METERS,
   type LandmarkNotebook,
 } from "./landmark-notebook";
 import {
@@ -300,7 +301,7 @@ export function useAvaiaWalk({
       nowMs: number,
       chooser: WalkChooser,
       landmark?: MapLandmark,
-    ): "walking" | "nowhere" | MapObstacle["kind"] => {
+    ): "walking" | "nowhere" | MapObstacle["kind"] | "fog" => {
       const from = currentPoint(nowMs);
       if (from === undefined) return "nowhere";
       const bounds = routeBounds(from, to);
@@ -310,6 +311,12 @@ export function useAvaiaWalk({
         roads: renderer.roadsWithin?.(bounds) ?? [],
         obstacles: renderer.obstaclesWithin?.(bounds) ?? [],
         chooser,
+        open: openGround({
+          fog: renderer.fog,
+          device: latest.current.observed,
+          body: from,
+          nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
+        }),
       });
       if (route.kind === "blocked") return route.by;
       const next = startWalk({
@@ -560,7 +567,19 @@ export function useAvaiaWalk({
         const from = currentPoint(nowMs);
         if (from === undefined) return;
         const { owner: book, avaiaAddress: by } = latest.current;
-        const landmark = nextLandmarkToStudy(notebookSnapshot(book), by, from);
+        const open = openGround({
+          fog: renderer.fog,
+          device: latest.current.observed,
+          body: from,
+          nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
+        });
+        const landmark = nextLandmarkToStudy(
+          notebookSnapshot(book),
+          by,
+          from,
+          CURIOSITY_REACH_METERS,
+          open,
+        );
         if (landmark === undefined) return;
         if (
           goTo(approachPoint(from, landmark), nowMs, "own", landmark) ===
@@ -572,7 +591,7 @@ export function useAvaiaWalk({
       acted ? IDLE_CURIOSITY_MS : FIRST_LOOK_MS,
     );
     return () => globalThis.clearTimeout(wander);
-  }, [acted, currentPoint, goTo, idle, notebook, say]);
+  }, [acted, currentPoint, goTo, idle, notebook, renderer, say]);
 
   const stance = useCallback(
     (nowMs: number): BodyStance | undefined => {

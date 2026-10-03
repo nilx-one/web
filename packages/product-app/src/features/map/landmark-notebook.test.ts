@@ -53,6 +53,16 @@ describe("the landmark notebook", () => {
 
     const studied = studyLandmark(notebook, near, "x0skai", 2);
     expect(nextLandmarkToStudy(studied, "x0skai", from)?.id).toBe("poi:far");
+    // A landmark standing in the fog waits until its ground is open.
+    expect(
+      nextLandmarkToStudy(
+        notebook,
+        "x0skai",
+        from,
+        undefined,
+        (point) => point.longitude !== near.longitude,
+      )?.id,
+    ).toBe("poi:far");
     // Another Avaia has its own notes.
     expect(nextLandmarkToStudy(studied, "0other", from)?.id).toBe("poi:near");
 
