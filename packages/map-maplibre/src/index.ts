@@ -24,6 +24,7 @@ import {
   type MapLandmark,
   mapDistanceMeters,
   type MapObstacle,
+  type MapRoad,
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapPinnedLandmark,
@@ -142,6 +143,9 @@ export const BUILDING_DEFAULT_HEIGHT_METERS = 7;
 
 /** The style layers whose paint means "this is water". */
 export const WATER_LAYER_IDS: readonly string[] = ["water"];
+
+/** The archive's road network source layer: what a body walks along. */
+export const ROAD_SOURCE_LAYER = "roads";
 
 /** The archive's point-of-interest source layer. */
 export const POI_SOURCE_LAYER = "pois";
@@ -1269,6 +1273,41 @@ export function createMapLibreRenderer(
       collect("building", BUILDING_LAYER_IDS);
       collect("water", WATER_LAYER_IDS);
       return obstacles;
+    },
+
+    roadsWithin(bounds) {
+      if (map === undefined) return [];
+      const sourceId = map.getLayer(ROAD_SOURCE_LAYER)?.source ?? "basemap";
+      if (map.getSource(sourceId) === undefined) return [];
+      const roads: MapRoad[] = [];
+      for (const feature of map.querySourceFeatures(sourceId, {
+        sourceLayer: ROAD_SOURCE_LAYER,
+      })) {
+        const kind = feature.properties?.["kind"];
+        if (typeof kind !== "string") continue;
+        const geometry = feature.geometry as {
+          readonly type: string;
+          readonly coordinates: unknown;
+        };
+        const lines = (
+          geometry.type === "LineString"
+            ? [geometry.coordinates as [number, number][]]
+            : geometry.type === "MultiLineString"
+              ? (geometry.coordinates as [number, number][][])
+              : []
+        ).filter((line) => line.length >= 2 && ringTouches(line, bounds));
+        if (lines.length === 0) continue;
+        const detail = feature.properties?.["kind_detail"];
+        roads.push({
+          kind,
+          ...(typeof detail === "string" ? { kindDetail: detail } : {}),
+          ...(feature.properties?.["is_bridge"] === true
+            ? { isBridge: true }
+            : {}),
+          lines,
+        });
+      }
+      return roads;
     },
 
     subscribeLandmarksChanged(listener) {
