@@ -11,6 +11,7 @@ import {
   SILENT_SOUND,
   UNSUPPORTED_GEOLOCATION,
   type HostPort,
+  type SoundCapability,
 } from "@nilx-one/host-contract";
 import { ProductApp } from "@nilx-one/product-app";
 import {
@@ -36,7 +37,7 @@ const ARRIVAL_WAIT = { timeout: 4_000 };
 
 type User = ReturnType<typeof userEvent.setup>;
 
-function createHost(): HostPort {
+function createHost(sound: SoundCapability = SILENT_SOUND): HostPort {
   return {
     getSnapshot: () => ({
       kind: "browser",
@@ -50,7 +51,7 @@ function createHost(): HostPort {
     openExternal: vi.fn(),
     impact: vi.fn(),
     geolocation: UNSUPPORTED_GEOLOCATION,
-    sound: SILENT_SOUND,
+    sound,
   };
 }
 
@@ -171,11 +172,12 @@ async function untilGone(user: User): Promise<void> {
 function renderWorld(
   renderer = createMapRendererDouble({ kind: "ready" }),
   identity: IdentityAccessPort = createIdentity(),
+  sound?: SoundCapability,
 ) {
   const { container } = render(
     <ProductApp
       core={readyCore}
-      host={createHost()}
+      host={createHost(sound)}
       mapRenderer={renderer}
       identity={identity}
     />,
@@ -191,6 +193,61 @@ describe("xSasha, the first time a Bond opens the world", () => {
   afterEach(() => {
     cleanup();
     window.history.replaceState({}, "", "/");
+  });
+
+  it("says her lines aloud, and never the Bond's own replies", async () => {
+    const user = userEvent.setup();
+    const sound = {
+      supported: true,
+      setEnabled: vi.fn(),
+      play: vi.fn(),
+      setAmbience: vi.fn(),
+      speak: vi.fn<SoundCapability["speak"]>(),
+    };
+    renderWorld(undefined, undefined, sound);
+
+    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
+    const replies = await untilReplies(user);
+    // The Bond wears Sky, so she is Dasha 2.0 and speaks in the feminine.
+    await waitFor(() =>
+      expect(sound.speak).toHaveBeenCalledWith({
+        url: expect.stringMatching(
+          /^\/voices\/0\.1\.0\/en\/xsasha-feminine\/guide\.intro\.greeting\.\d\.feminine\.mp3$/,
+        ),
+      }),
+    );
+
+    await user.click(replies[0] as HTMLElement);
+    await untilReplies(user);
+    await waitFor(() =>
+      expect(sound.speak).toHaveBeenCalledWith({
+        url: expect.stringMatching(
+          /\/xsasha-feminine\/guide\.intro\.howTo\.\d\.mp3$/,
+        ),
+      }),
+    );
+    // Every line heard is one of hers: a reply the Bond chose is only read.
+    for (const [line] of sound.speak.mock.calls) {
+      expect(line.url).toMatch(/\/xsasha-feminine\/guide\.(intro|reward)\./);
+    }
+    expect(sound.speak).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps her quiet when character voices are off", async () => {
+    window.localStorage.setItem("nilx-one.interface.voice", "off");
+    const user = userEvent.setup();
+    const sound = {
+      supported: true,
+      setEnabled: vi.fn(),
+      play: vi.fn(),
+      setAmbience: vi.fn(),
+      speak: vi.fn<SoundCapability["speak"]>(),
+    };
+    renderWorld(undefined, undefined, sound);
+
+    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
+    await untilReplies(user);
+    expect(sound.speak).not.toHaveBeenCalled();
   });
 
   it("walks up, asks for an Avaia, and opens its setup when asked how", async () => {

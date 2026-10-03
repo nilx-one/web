@@ -10,6 +10,7 @@ import {
   useSoundPreference,
   useVoicePreference,
   type SoundPreference,
+  type VoicePreference,
 } from "./sound-preference";
 
 const OPTIONS: readonly (readonly [
@@ -20,6 +21,17 @@ const OPTIONS: readonly (readonly [
   ["off", "settings.sound.off", "settings.sound.offDetail"],
   ["cues", "settings.sound.cues", "settings.sound.cuesDetail"],
   ["all", "settings.sound.all", "settings.sound.allDetail"],
+];
+
+/** The voice slider's stops, quietest first. */
+const VOICE_LEVELS: readonly (readonly [
+  VoicePreference,
+  TranslationKey,
+  TranslationKey,
+])[] = [
+  ["off", "settings.voice.off", "settings.voice.offDetail"],
+  ["cutscenes", "settings.voice.cutscenes", "settings.voice.cutscenesDetail"],
+  ["all", "settings.voice.all", "settings.voice.allDetail"],
 ];
 
 export interface SoundSettingsProps {
@@ -33,7 +45,6 @@ export interface SoundSettingsProps {
 export function SoundSettings({ sound }: SoundSettingsProps) {
   const { t } = useLocalization();
   const preference = useSoundPreference();
-  const voice = useVoicePreference();
   if (!sound.supported) return null;
 
   function choose(next: SoundPreference): void {
@@ -68,19 +79,51 @@ export function SoundSettings({ sound }: SoundSettingsProps) {
           />
         </label>
       ))}
-      <label className="interface-settings__option">
-        <span>
-          <strong>{t("settings.sound.voice")}</strong>
-          <small>{t("settings.sound.voiceDetail")}</small>
-        </span>
-        <input
-          type="checkbox"
-          name="voice"
-          checked={voice && preference !== "off"}
-          disabled={preference === "off"}
-          onChange={(event) => chooseVoicePreference(event.target.checked)}
-        />
-      </label>
+      <VoiceSlider muted={preference === "off"} />
     </fieldset>
+  );
+}
+
+/**
+ * Which characters speak aloud, as one slider of three stops. With sound off
+ * nobody can be heard, so the slider rests at its first stop and waits.
+ */
+function VoiceSlider({ muted }: { readonly muted: boolean }) {
+  const { t } = useLocalization();
+  const voice = useVoicePreference();
+  const level = muted
+    ? 0
+    : VOICE_LEVELS.findIndex(([preference]) => preference === voice);
+  const [, label, detail] = VOICE_LEVELS[level] ?? VOICE_LEVELS[0]!;
+
+  return (
+    <div className="interface-settings__slider" data-muted={muted}>
+      <label htmlFor="voice-level">
+        <strong>{t("settings.voice.legend")}</strong>
+        <small>{t(detail)}</small>
+      </label>
+      <input
+        id="voice-level"
+        type="range"
+        name="voice"
+        min={0}
+        max={VOICE_LEVELS.length - 1}
+        step={1}
+        value={level}
+        disabled={muted}
+        aria-valuetext={t(label)}
+        onChange={(event) => {
+          const next = VOICE_LEVELS[Number(event.target.value)];
+          if (next !== undefined) chooseVoicePreference(next[0]);
+        }}
+      />
+      <span className="interface-settings__slider-stops" aria-hidden="true">
+        {VOICE_LEVELS.map(([preference, stop], index) => (
+          <span key={preference} data-current={index === level}>
+            {t(stop)}
+          </span>
+        ))}
+      </span>
+    </div>
   );
 }

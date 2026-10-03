@@ -1,12 +1,32 @@
-# Avaia's voice
+# Character voices
 
-An Avaia says its lines aloud. Every fixed line in `avaia-lines.ts` was
-rendered ahead of time, in the voice of the study that says it, and the client
-plays the recording when the line is said. The written line stays the fact: it
+The characters speak aloud. xSasha says her lines in a cutscene, and an Avaia
+can say its own as it walks. Every fixed line was rendered ahead of time, in
+the voice of whoever says it, and the client plays the recording when the line
+is said. The written line stays the fact: it
 is on the card and in the live region whether or not anything is heard. This is
 stage 1. Lines nobody can write down in advance (a landmark's name, a line a
 [local model](local-models.md) rephrases) need speech on the device. That is
 stage 2.
+
+## Who is heard, and when
+
+Settings has **Character voices** under Sound: one slider of three stops,
+stored on this device (`nilx-one.interface.voice`).
+
+| Stop                   | Heard                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| Off                    | nobody                                                                               |
+| Cutscenes, the default | characters other than the person, in a cutscene: xSasha, and whoever joins her later |
+| Everything             | also the Avaia's own lines as it walks                                               |
+
+A person's own words are never voiced: the replies they choose in a cutscene
+stay written only. The product does not put a voice in anyone's mouth, and
+people rarely like hearing a voice that is supposed to be theirs. With sound
+itself off the slider rests at Off and waits; the stored choice comes back with
+sound. An Avaia's walking lines are the loudest stop because the person is
+driving it; when the Bond drives and an Avaia speaks in a cutscene, it will be
+heard at Cutscenes like any other character.
 
 ## Who speaks how
 
@@ -17,7 +37,17 @@ stage 2.
 | Kai       | `bm_lewis`       | `mykyta`, flat and slow, 1.5 semitones down |
 | Dasha 2.0 | `bf_emma`        | `lada`                                      |
 
-The table is `tools/voices/voices.json`. Kai's Ukrainian voice is the same
+xSasha speaks in the gender of the study she is drawn in, which mirrors the
+Bond's (`guideModel`): feminine as either Dasha, masculine as Sky. She is never
+drawn as Kai, so her neutral wordings are not recorded. Her voices are her own
+settings, not an Avaia's:
+
+| xSasha drawn as  | English (Kokoro) | Ukrainian (Piper `ukrainian_tts`) |
+| ---------------- | ---------------- | --------------------------------- |
+| Dasha, Dasha 2.0 | `af_sarah`       | `lada`, 1.5 semitones up          |
+| Sky              | `am_adam`        | `mykyta`, 2 semitones up          |
+
+The tables are `tools/voices/voices.json`. Kai's Ukrainian voice is the same
 speaker as Sky's, told to keep its intonation flat (a low noise scale) and
 pitched down without moving its formants: deadpan, and still Kai's. Sky and Kai
 are masculine-sounding in both languages, which matches the grammar their
@@ -26,8 +56,14 @@ Ukrainian lines already use.
 ## What is recorded, and what is not
 
 - **Recorded:** the 26 fixed lines of every study (walking, the three refusals,
-  and the fog lines), in English and Ukrainian: 208 clips, about 2 s each,
-  mono MP3 at 48 kbit/s.
+  and the fog lines), and xSasha's 12 lines in each of her two voices, in
+  English and Ukrainian: 256 clips, a few seconds each, mono MP3 at 48 kbit/s.
+- **Said without the name:** six of xSasha's lines carry a name the moment
+  fills in (`{bond}`, `{avaia}`). The card shows it; the voice says a wording
+  without it (`tools/voices/spoken.json`), because an address like `0x0sky`
+  is not something to spell out. "Almost forgot — here, 0x0sky." is heard as
+  "Almost forgot — here." The render refuses a line that still carries a
+  placeholder.
 - **Not recorded:** lines about a landmark. They carry its name, which only the
   moment knows. They stay text until stage 2.
 - **Not recorded: Russian.** No Russian voice we could find has a license that
@@ -121,8 +157,10 @@ bytes under an old path.
   after the cue that comes with the line, on its own bus, with the world's bed
   dipped under it. One voice says one thing at a time: a new line cuts off the
   one before it. A clip not ready within 2.5 s is dropped, like a late cue.
-- Settings has **Avaia's voice** under Sound. It is on by default whenever
-  sound is, and is stored on this device (`nilx-one.interface.voice`).
+- `guideVoiceUrl` finds one of xSasha's lines by its catalogue key and the
+  voice she said it in. The world view says it when the line opens, once; a
+  reply never reaches `speak`.
+- **Character voices** in Settings decides who is heard (see above).
 - Caddy serves `/voices/*` with immutable caching. The image copies
   `deploy/web/voices`.
 

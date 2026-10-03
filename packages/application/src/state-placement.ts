@@ -192,7 +192,7 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     medium: "local-storage",
     key: "nilx-one.interface.voice",
     perOwner: false,
-    what: "Whether the Avaia says its lines aloud on this device. Like sound itself, it is about these speakers and this room.",
+    what: "Which characters speak aloud on this device: nobody, others in cutscenes, or the Avaia as well. Like sound itself, it is about these speakers and this room.",
   },
   {
     id: "wipe.epoch",

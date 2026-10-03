@@ -46,11 +46,18 @@ describe("how much this device sounds", () => {
     expect(readSoundPreference()).toBe("cues");
   });
 
-  it("lets the Avaia speak until someone says otherwise, and remembers", () => {
-    expect(readVoicePreference()).toBe(true);
-    chooseVoicePreference(false);
-    expect(readVoicePreference()).toBe(false);
+  it("voices cutscenes until someone says otherwise, and remembers", () => {
+    expect(readVoicePreference()).toBe("cutscenes");
+    chooseVoicePreference("off");
+    expect(readVoicePreference()).toBe("off");
     expect(window.localStorage.getItem(VOICE_STORAGE_KEY)).toBe("off");
+    chooseVoicePreference("all");
+    expect(readVoicePreference()).toBe("all");
+  });
+
+  it("reads an unknown stored voice level as the default", () => {
+    window.localStorage.setItem(VOICE_STORAGE_KEY, "on");
+    expect(readVoicePreference()).toBe("cutscenes");
   });
 
   it("keeps the host in step with the choice", () => {

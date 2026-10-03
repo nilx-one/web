@@ -163,7 +163,7 @@ import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { useNearbySpeech } from "./use-nearby-speech";
-import { avaiaVoiceUrl } from "./avaia-voice";
+import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
@@ -771,8 +771,9 @@ export function AuthenticatedMapHomeView({
     },
     onCue: cue,
     // The line is on the card either way; a recording only says it aloud.
+    // Its own walking lines are the loudest level: the person is driving it.
     onLine: (line) => {
-      if (soundPreference === "off" || !voicePreference) return;
+      if (soundPreference === "off" || voicePreference !== "all") return;
       if (avaiaVoice === undefined) return;
       const url = avaiaVoiceUrl({ locale, model: avaiaVoice, ...line });
       if (url !== undefined) speak({ url });
@@ -884,6 +885,34 @@ export function AuthenticatedMapHomeView({
     onEnd: (scene, outcome) => endGuideScene(scene, outcome),
   });
   const guideActive = guide.state !== undefined;
+  // In a cutscene the characters who are not the person speak: xSasha says
+  // her line when it opens. The person's own replies are never voiced.
+  const guideBeat = guide.state?.beat;
+  const guideLineKey = guide.state?.line.key;
+  const guideLineVoice = guide.state?.line.voice;
+  // Read when a line opens, so a change of preference mid-line does not say
+  // the same line again.
+  const cutsceneVoice = useRef({
+    soundPreference,
+    voicePreference,
+    locale,
+    speak,
+  });
+  useEffect(() => {
+    cutsceneVoice.current = { soundPreference, voicePreference, locale, speak };
+  });
+  useEffect(() => {
+    if (guideBeat !== "line" || guideLineKey === undefined) return;
+    if (guideLineVoice === undefined) return;
+    const now = cutsceneVoice.current;
+    if (now.soundPreference === "off" || now.voicePreference === "off") return;
+    const url = guideVoiceUrl({
+      locale: now.locale,
+      voice: guideLineVoice,
+      key: guideLineKey,
+    });
+    if (url !== undefined) now.speak({ url });
+  }, [guideBeat, guideLineKey, guideLineVoice]);
   const [rewardToasts, setRewardToasts] = useState<readonly GuideRewardToast[]>(
     [],
   );

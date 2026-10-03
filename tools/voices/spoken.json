@@ -1,0 +1,22 @@
+{
+  "en": {
+    "guide.intro.howTo.0": "Then you already know the way. Down in the Dock sits your Avaia, still unconfigured. Tap it and press Create — it already knows its name.",
+    "guide.intro.howTo.1": "Then this will feel familiar. Your Avaia is waiting in the Dock below. Tap its card, then Create. The name is already its own.",
+    "guide.reward.almostForgot.0.feminine": "Almost forgot — here.",
+    "guide.reward.almostForgot.0.masculine": "Almost forgot — here.",
+    "guide.reward.almostForgot.1.feminine": "Oh, I nearly left without giving you this. Here.",
+    "guide.reward.almostForgot.1.masculine": "Oh, I nearly left without giving you this. Here.",
+    "guide.reward.almostForgot.2": "Wait. This is yours.",
+    "guide.reward.together.1": "Now go, the two of you. I’ll find you."
+  },
+  "uk-UA": {
+    "guide.intro.howTo.0": "Тоді ти знаєш дорогу. Внизу, у доку, чекає твоя Avaia, поки неналаштована. Торкнись її й натисни «Створити». Ім’я вона вже знає.",
+    "guide.intro.howTo.1": "Тоді тобі це знайоме. Твоя Avaia — внизу, у доку. Торкнись картки, потім «Створити». Своє ім’я вона вже має.",
+    "guide.reward.almostForgot.0.feminine": "Ледь не забула — тримай.",
+    "guide.reward.almostForgot.0.masculine": "Ледь не забув — тримай.",
+    "guide.reward.almostForgot.1.feminine": "Ой, мало не пішла просто так. Тримай.",
+    "guide.reward.almostForgot.1.masculine": "Ой, мало не пішов просто так. Тримай.",
+    "guide.reward.almostForgot.2": "Стій. Це твоє.",
+    "guide.reward.together.1": "Тепер ідіть разом. Я вас знайду."
+  }
+}

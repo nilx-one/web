@@ -13,6 +13,10 @@ import { URL } from "node:url";
 
 const { avaiaLines } =
   await import("../../packages/product-app/src/features/map/avaia-lines.ts");
+const { GUIDE_NODES } =
+  await import("../../packages/product-app/src/features/guide/guide-script.ts");
+const catalogs =
+  await import("../../packages/product-app/src/shell/messages/guide.ts");
 
 // Lines about a landmark carry its name, which only the moment knows; they
 // are not rendered ahead of time.
@@ -35,8 +39,31 @@ for (const [locale, voice] of Object.entries(voices.locales)) {
   for (const study of Object.keys(voice.studies)) {
     for (const kind of FIXED_KINDS) {
       avaiaLines(locale, study, kind).forEach((text, index) => {
-        lines.push({ locale, study, kind, index, text });
+        lines.push({ locale, character: "avaia", study, kind, index, text });
       });
+    }
+  }
+}
+
+// xSasha's lines, in the voice of every gender she can be drawn in. A
+// wording the language marks for gender is rendered only in its own voice;
+// an unmarked one in each. The Bond's replies are never voiced.
+const GUIDE_CATALOGS = { en: catalogs.GUIDE_EN, "uk-UA": catalogs.GUIDE_UK };
+for (const [locale, voice] of Object.entries(voices.locales)) {
+  const catalog = GUIDE_CATALOGS[locale];
+  if (catalog === undefined || voice.xsasha === undefined) continue;
+  for (const gender of Object.keys(voice.xsasha)) {
+    for (const node of Object.values(GUIDE_NODES)) {
+      for (const wording of node.line) {
+        const key = typeof wording === "string" ? wording : wording[gender];
+        lines.push({
+          locale,
+          character: "xsasha",
+          voice: gender,
+          key,
+          text: catalog[key],
+        });
+      }
     }
   }
 }
