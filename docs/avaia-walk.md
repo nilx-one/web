@@ -47,8 +47,16 @@ grass the whole way when that costs less than the paths. Curiosity keeps to
 the paths and cuts across only for a real shortcut: at least 35 % shorter and
 no longer than 60 m. With no line within reach, or no tiles loaded, either one
 crosses open ground as before. A new tap mid-walk plans again from where the
-body is. The fog is not consulted along the way, only at the destination (see
-[Avaia walks on its own](avaia-outings.md), R1).
+body is.
+
+An Avaia walks on open ground only: revealed cells, the Bond's own cell and
+the ground within 50 m of this device, and the cell the body stands in, so it
+can always walk out. The graph does not enter a node in the fog, and a planned
+walk is checked every 10 m, so a long edge or a step across the grass cannot
+cut a corner of a fogged cell. When every way there passes through the fog,
+the walk is refused as `fog`, with the same line as a tap into it. Curiosity
+passes over landmarks that stand in the fog. Opening the fog stays the
+reveal's job, below ([Avaia walks on its own](avaia-outings.md), R1).
 
 ### Pace
 
