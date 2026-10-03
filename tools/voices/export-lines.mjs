@@ -15,9 +15,8 @@ const { avaiaLines } =
   await import("../../packages/product-app/src/features/map/avaia-lines.ts");
 const { GUIDE_NODES } =
   await import("../../packages/product-app/src/features/guide/guide-script.ts");
-const catalogs = await import(
-  "../../packages/product-app/src/shell/messages/guide.ts"
-);
+const catalogs =
+  await import("../../packages/product-app/src/shell/messages/guide.ts");
 
 // Lines about a landmark carry its name, which only the moment knows; they
 // are not rendered ahead of time.
