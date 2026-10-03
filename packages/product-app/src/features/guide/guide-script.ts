@@ -216,6 +216,10 @@ export interface GuideLineViewState {
   readonly node: GuideNodeId;
   readonly speaker: string;
   readonly text: string;
+  /** The catalogue key the line was said from: which wording, in which voice. */
+  readonly key: TranslationKey;
+  /** The voice she said it in, which is the gender of the study she wears. */
+  readonly voice: GuideVoice;
   readonly reward: boolean;
   readonly choices: readonly GuideChoiceViewState[];
 }
@@ -247,10 +251,13 @@ export function createGuideLineState(
 ): GuideLineViewState {
   const script = GUIDE_NODES[node];
   const wording = pickVariant(script.line, seed, `line:${node}`);
+  const key = voiced(wording, voice);
   return {
     node,
     speaker: t("guide.speaker"),
-    text: fill(t(voiced(wording, voice)), names),
+    text: fill(t(key), names),
+    key,
+    voice,
     reward: script.reward === true,
     choices: script.choices.map((choice) => ({
       reply: choice.reply,

@@ -71,36 +71,55 @@ export function useSoundPreference(): SoundPreference {
 }
 
 /**
- * Whether the Avaia says its lines aloud, when this device sounds at all. It
- * is kept apart from the cues: a person may want the clicks and chimes and
- * not a voice, or the other way round. On until someone says otherwise.
+ * Which characters speak aloud, when this device sounds at all. It is kept
+ * apart from the cues: a person may want the clicks and chimes and not a
+ * voice, or the other way round.
+ *
+ * - `off` — nobody speaks aloud;
+ * - `cutscenes` — characters other than the person speak in a cutscene:
+ *   xSasha, and whoever joins her later. The default;
+ * - `all` — the Avaia also says its own lines as it walks.
+ *
+ * A person's own words — the replies they choose — are never voiced: the
+ * product does not put a voice in anyone's mouth.
  */
+export type VoicePreference = "off" | "cutscenes" | "all";
+
 export const VOICE_STORAGE_KEY = "nilx-one.interface.voice";
 
-let unstoredVoice: boolean | undefined;
+export const DEFAULT_VOICE_PREFERENCE: VoicePreference = "cutscenes";
 
-export function readVoicePreference(): boolean {
+let unstoredVoice: VoicePreference | undefined;
+
+function isVoicePreference(value: unknown): value is VoicePreference {
+  return value === "off" || value === "cutscenes" || value === "all";
+}
+
+export function readVoicePreference(): VoicePreference {
   try {
     const stored = window.localStorage.getItem(VOICE_STORAGE_KEY);
-    if (stored === "on") return true;
-    if (stored === "off") return false;
+    if (isVoicePreference(stored)) return stored;
   } catch {
     // Storage is optional; the session keeps whatever was chosen in it.
   }
-  return unstoredVoice ?? true;
+  return unstoredVoice ?? DEFAULT_VOICE_PREFERENCE;
 }
 
-export function chooseVoicePreference(on: boolean): void {
+export function chooseVoicePreference(preference: VoicePreference): void {
   try {
-    window.localStorage.setItem(VOICE_STORAGE_KEY, on ? "on" : "off");
+    window.localStorage.setItem(VOICE_STORAGE_KEY, preference);
   } catch {
-    unstoredVoice = on;
+    unstoredVoice = preference;
   }
   for (const listener of listeners) listener();
 }
 
-export function useVoicePreference(): boolean {
-  return useSyncExternalStore(subscribe, readVoicePreference, () => true);
+export function useVoicePreference(): VoicePreference {
+  return useSyncExternalStore(
+    subscribe,
+    readVoicePreference,
+    () => DEFAULT_VOICE_PREFERENCE,
+  );
 }
 
 /**

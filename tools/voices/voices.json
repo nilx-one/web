@@ -6,25 +6,73 @@
       "model": "kokoro-en-v0_19",
       "judge": "en",
       "studies": {
-        "sky-study": { "speaker": "am_michael", "speed": 0.95 },
-        "dasha-study": { "speaker": "af_bella", "speed": 1.0 },
-        "kai-study": { "speaker": "bm_lewis", "speed": 0.95 },
-        "dasha-v2-study": { "speaker": "bf_emma", "speed": 1.0 }
+        "sky-study": {
+          "speaker": "am_michael",
+          "speed": 0.95
+        },
+        "dasha-study": {
+          "speaker": "af_bella",
+          "speed": 1.0
+        },
+        "kai-study": {
+          "speaker": "bm_lewis",
+          "speed": 0.95
+        },
+        "dasha-v2-study": {
+          "speaker": "bf_emma",
+          "speed": 1.0
+        }
+      },
+      "xsasha": {
+        "feminine": {
+          "speaker": "af_sarah",
+          "speed": 1.0
+        },
+        "masculine": {
+          "speaker": "am_adam",
+          "speed": 1.0
+        }
       }
     },
     "uk-UA": {
       "model": "vits-piper-uk_UA-ukrainian_tts-medium",
       "judge": "uk",
       "studies": {
-        "sky-study": { "speaker": "mykyta", "length": 1.05, "noise": 0.6 },
-        "dasha-study": { "speaker": "tetiana", "length": 0.95, "noise": 0.7 },
+        "sky-study": {
+          "speaker": "mykyta",
+          "length": 1.05,
+          "noise": 0.6
+        },
+        "dasha-study": {
+          "speaker": "tetiana",
+          "length": 0.95,
+          "noise": 0.7
+        },
         "kai-study": {
           "speaker": "mykyta",
           "length": 1.1,
           "noise": 0.33,
           "pitch": -1.5
         },
-        "dasha-v2-study": { "speaker": "lada", "length": 1.0, "noise": 0.667 }
+        "dasha-v2-study": {
+          "speaker": "lada",
+          "length": 1.0,
+          "noise": 0.667
+        }
+      },
+      "xsasha": {
+        "feminine": {
+          "speaker": "lada",
+          "length": 0.98,
+          "noise": 0.7,
+          "pitch": 1.5
+        },
+        "masculine": {
+          "speaker": "mykyta",
+          "length": 0.98,
+          "noise": 0.7,
+          "pitch": 2.0
+        }
       }
     }
   },
