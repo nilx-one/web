@@ -9,6 +9,16 @@ The service is an adapter, not protocol authority. Canonical `pub_dress` validat
 
 Provider accounts are namespaced as `(provider, provider_subject)`. Telegram and Discord IDs therefore never collide merely because their numeric values happen to match. The storage model also permits multiple provider bindings to point at one identity when an explicit account-linking flow is introduced; this PR does not invent such a link without proof from both sides.
 
+## Ecosystem role
+
+This service is the identity authority of the aiaiaiai ecosystem: 0x1, Prism
+and every client rely on it for who a person is, and no other service writes
+people, provider bindings, credentials or sessions. The full design, including
+the stable `subject_id`, signed tokens, SQLite with continuous off-site
+replication and the migration phases, is
+[ECO-0001: Shared identity and connected providers](https://github.com/aiaiaiai-org/.github/blob/main/ecosystem/identity/DESIGN.md).
+It and its machine-readable version are maintained only there.
+
 ## Native Web API
 
 - `POST /api/v1/identity/resolve` resolves an exact public `pub_dress` candidate.
