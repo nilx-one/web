@@ -155,6 +155,24 @@ describe("outingMenu", () => {
     expect(targetIds(menu(candidates, { open: fog }))).toEqual(["near"]);
   });
 
+  it("bounds the search by the budget without losing a dear but short way", () => {
+    // Only a major road leads there: 900 m that cost three times as much.
+    const road = buildWalkGraph([
+      {
+        kind: "major_road",
+        kindDetail: "primary",
+        lines: [[at(0, 0), at(2000, 0)]],
+      },
+    ]);
+    const candidates = [
+      point("within", "museum", 900, 5),
+      point("beyond", "castle", 1100, 5),
+    ];
+    expect(
+      targetIds(menu(candidates, { graph: road, budgetMeters: 1_000 })),
+    ).toEqual(["within"]);
+  });
+
   it("arrives at a park from inside or near its edge, not its centroid", () => {
     const park = area("park", "park", square(150, 100, 450, 400));
     const built = menu([park]);

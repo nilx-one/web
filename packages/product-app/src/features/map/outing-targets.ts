@@ -8,6 +8,7 @@ import {
   reachFrom,
   snapToGraph,
   SNAP_DISTANCE_M,
+  SURFACE_WEIGHT,
   type CanEnter,
   type LonLat,
   type WalkGraph,
@@ -92,6 +93,8 @@ export interface OutingMenu {
 /** How far an anchor may lie from what it stands for. */
 export const ANCHOR_REACH_METERS = SNAP_DISTANCE_M;
 
+const MAX_SURFACE_WEIGHT = Math.max(...Object.values(SURFACE_WEIGHT));
+
 /** Most targets one menu offers: with stay and wander, at most six options. */
 export const MENU_TARGETS = 4;
 
@@ -122,7 +125,12 @@ export function outingMenu(input: OutingMenuInput): OutingMenu {
   const { graph, open, budgetMeters } = input;
   const start = snapToGraph(graph, input.from, open ? { canEnter: open } : {});
   if (start === null) return { options: [{ kind: "stay" }] };
-  const reach = reachFrom(graph, start, open ? { canEnter: open } : {});
+  // Nothing whose cheapest way is within the budget in metres costs more than
+  // the budget on the dearest surface, so the pass stops there.
+  const reach = reachFrom(graph, start, {
+    maxCost: budgetMeters * MAX_SURFACE_WEIGHT,
+    ...(open ? { canEnter: open } : {}),
+  });
 
   const targets: OutingTarget[] = [];
   for (const candidate of input.candidates) {
