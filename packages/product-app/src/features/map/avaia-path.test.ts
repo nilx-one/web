@@ -3,13 +3,15 @@
 
 import {
   mapDistanceMeters,
+  type MapFogCell,
+  type MapFogField,
   type MapObstacle,
   type MapPointSelection,
   type MapRoad,
 } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
-import { planWalk, type WalkChooser } from "./avaia-path";
+import { openGround, planWalk, type WalkChooser } from "./avaia-path";
 import { planRoute } from "./avaia-route";
 
 const origin = { longitude: 30.5234, latitude: 50.4501 };
@@ -174,5 +176,123 @@ describe("planWalk", () => {
     expect(walk(at(0, 5), at(100, 60), roads, "own")).toEqual(
       walk(at(0, 5), at(100, 60), roads, "own"),
     );
+  });
+});
+
+/**
+ * A fog cut into 100 m squares, `x:y` by the square's south-west corner in
+ * metres from the origin. Only the listed squares are revealed.
+ */
+function squareFog(revealed: readonly string[], active = true): MapFogField {
+  const idAt = (point: MapPointSelection) => {
+    const x = (point.longitude - origin.longitude) * metersPerDegreeLng;
+    const y = (point.latitude - origin.latitude) * metersPerDegreeLat;
+    return `${Math.floor(x / 100) * 100}:${Math.floor(y / 100) * 100}`;
+  };
+  const open = new Set(revealed);
+  return {
+    isActive: () => active,
+    cellAt: (point): MapFogCell => ({
+      id: idAt(point),
+      center: point,
+      boundary: [],
+    }),
+    isRevealed: (id) => open.has(id),
+    frontier: () => [],
+    reveal: () => undefined,
+    subscribe: () => () => undefined,
+  };
+}
+
+describe("openGround", () => {
+  const fog = squareFog(["0:0"]);
+  const ground = (device?: MapPointSelection) =>
+    openGround({ fog, device, body: at(450, 50), nearDeviceMeters: 50 })!;
+
+  it("opens revealed cells and the cell the body stands in, nothing else", () => {
+    const open = ground();
+    expect(open(at(50, 50))).toBe(true);
+    expect(open(at(420, 20))).toBe(true);
+    expect(open(at(250, 50))).toBe(false);
+  });
+
+  it("opens the Bond's own cell and the ground right around it", () => {
+    const open = ground(at(680, 50));
+    expect(open(at(610, 90))).toBe(true);
+    // The next cell over, but within 50 m of the Bond.
+    expect(open(at(720, 50))).toBe(true);
+    expect(open(at(780, 50))).toBe(false);
+  });
+
+  it("is no gate at all while no fog is drawn", () => {
+    expect(
+      openGround({
+        fog: squareFog([], false),
+        device: undefined,
+        body: at(0, 0),
+        nearDeviceMeters: 50,
+      }),
+    ).toBeUndefined();
+    expect(
+      openGround({
+        fog: undefined,
+        device: undefined,
+        body: at(0, 0),
+        nearDeviceMeters: 50,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("planWalk on open ground only", () => {
+  // Revealed: a U of squares round an unrevealed one at 100:0.
+  const fog = squareFog(["0:0", "0:100", "100:100", "200:100", "200:0"]);
+  const open = (body: MapPointSelection) =>
+    openGround({ fog, device: undefined, body, nearDeviceMeters: 50 });
+
+  it("does not cut across the fog, even for a tap", () => {
+    const from = at(50, 50);
+    const to = at(250, 50);
+    const loop = footway([50, 50], [50, 150], [250, 150], [250, 50]);
+    const path = routeOf(
+      planWalk({
+        from,
+        to,
+        roads: [loop],
+        obstacles: [],
+        chooser: "tap",
+        open: open(from),
+      }),
+    );
+    expect(meters(path)).toBeCloseTo(400, 0);
+  });
+
+  it("is refused as fog when every way there goes through it", () => {
+    const from = at(50, 50);
+    expect(
+      planWalk({
+        from,
+        to: at(250, 50),
+        roads: [footway([50, 50], [250, 50])],
+        obstacles: [],
+        chooser: "tap",
+        open: open(from),
+      }),
+    ).toEqual({ kind: "blocked", by: "fog" });
+  });
+
+  it("walks out of the fog it already stands in", () => {
+    const from = at(150, 50);
+    const path = routeOf(
+      planWalk({
+        from,
+        to: at(150, 150),
+        roads: [],
+        obstacles: [],
+        chooser: "tap",
+        open: open(from),
+      }),
+    );
+    expect(meters(path)).toBeCloseTo(100, 0);
   });
 });
