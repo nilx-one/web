@@ -63,7 +63,9 @@ The renderer itself reads a little more, outside any style, for
 [Avaia walks the world](avaia-walk.md): a tap on the ground is classified by
 querying the painted `buildings`, `buildings-flat` and `water` layers, and
 `landmarksNear` reads `kind`, `name` and every other attribute of `pois`
-features from tiles already loaded. `LANDMARK_KINDS`
+features from tiles already loaded. `roadsWithin` reads `kind`, `kind_detail`
+and `is_bridge` of `roads` features, also from tiles already loaded, to build
+the pedestrian graph a walk follows. `LANDMARK_KINDS`
 (`packages/map-maplibre/src/landmark-kinds.json`) follows the Protomaps schema
 the archive is built from. The declaration above names fields, not the values
 they take, so `inspect-basemap.sh` ends by reading the `pois` tiles themselves

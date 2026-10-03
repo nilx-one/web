@@ -1029,6 +1029,104 @@ describe("obstacles the basemap draws", () => {
   });
 });
 
+describe("roads the basemap carries", () => {
+  const bounds = { west: 30.52, south: 50.44, east: 30.53, north: 50.46 };
+
+  it("answers the roads layer's lines inside the box, attributes verbatim", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    const querySourceFeatures = vi.fn(() => [
+      {
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [30.521, 50.45],
+            [30.522, 50.45],
+          ],
+        },
+        properties: { kind: "path", kind_detail: "footway" },
+      },
+      {
+        geometry: {
+          type: "MultiLineString",
+          coordinates: [
+            [
+              [30.523, 50.45],
+              [30.524, 50.45],
+            ],
+            // A piece of the same feature far outside the box is left out.
+            [
+              [31.5, 51.5],
+              [31.6, 51.5],
+            ],
+          ],
+        },
+        properties: { kind: "minor_road", is_bridge: true },
+      },
+      // Outside the box altogether.
+      {
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [31.5, 51.5],
+            [31.6, 51.5],
+          ],
+        },
+        properties: { kind: "path" },
+      },
+      // No kind, nothing to say how it is walked.
+      {
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [30.521, 50.451],
+            [30.522, 50.451],
+          ],
+        },
+        properties: {},
+      },
+    ]);
+    Object.assign(fakeMap, { querySourceFeatures });
+    const renderer = readyRenderer(fakeMap);
+
+    const roads = renderer.roadsWithin?.(bounds);
+
+    expect(querySourceFeatures).toHaveBeenCalledWith("basemap", {
+      sourceLayer: "roads",
+    });
+    expect(roads).toEqual([
+      {
+        kind: "path",
+        kindDetail: "footway",
+        lines: [
+          [
+            [30.521, 50.45],
+            [30.522, 50.45],
+          ],
+        ],
+      },
+      {
+        kind: "minor_road",
+        isBridge: true,
+        lines: [
+          [
+            [30.523, 50.45],
+            [30.524, 50.45],
+          ],
+        ],
+      },
+    ]);
+  });
+
+  it("answers nothing before a map is mounted", () => {
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) =>
+        makeFakeMap() as unknown as MapLibreMap,
+    });
+    expect(renderer.roadsWithin?.(bounds)).toEqual([]);
+  });
+});
+
 describe("a card that talks", () => {
   it("opens beneath the title, stands over the body, and stays at close range", () => {
     const fakeMap = makeFakeMap();

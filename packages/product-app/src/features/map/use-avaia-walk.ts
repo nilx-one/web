@@ -28,7 +28,8 @@ import {
   pickAvaiaLine,
   type AvaiaLineKind,
 } from "./avaia-lines";
-import { planRoute, routeBounds } from "./avaia-route";
+import { planWalk, type WalkChooser } from "./avaia-path";
+import { routeBounds } from "./avaia-route";
 import {
   approachPoint,
   startWalk,
@@ -287,20 +288,29 @@ export function useAvaiaWalk({
   );
 
   /**
-   * Sends the body to `to` around whatever buildings and water the map has
-   * loaded between here and there. Answers whether it set off, or what stood
-   * in the way when no way round was found.
+   * Sends the body to `to` along the paths the map has loaded between here and
+   * there, and around its buildings and water where it crosses open ground.
+   * `chooser` is who picked `to`: the owner may send it across the grass, the
+   * Avaia keeps to the paths. Answers whether it set off, or what stood in the
+   * way when no way round was found.
    */
   const goTo = useCallback(
     (
       to: MapPointSelection,
       nowMs: number,
+      chooser: WalkChooser,
       landmark?: MapLandmark,
     ): "walking" | "nowhere" | MapObstacle["kind"] => {
       const from = currentPoint(nowMs);
       if (from === undefined) return "nowhere";
-      const obstacles = renderer.obstaclesWithin?.(routeBounds(from, to)) ?? [];
-      const route = planRoute(from, to, obstacles);
+      const bounds = routeBounds(from, to);
+      const route = planWalk({
+        from,
+        to,
+        roads: renderer.roadsWithin?.(bounds) ?? [],
+        obstacles: renderer.obstaclesWithin?.(bounds) ?? [],
+        chooser,
+      });
       if (route.kind === "blocked") return route.by;
       const next = startWalk({
         from,
@@ -359,6 +369,7 @@ export function useAvaiaWalk({
       const went = goTo(
         { longitude: tap.longitude, latitude: tap.latitude },
         nowMs,
+        "tap",
       );
       if (went === "walking") {
         say("walk");
@@ -552,7 +563,8 @@ export function useAvaiaWalk({
         const landmark = nextLandmarkToStudy(notebookSnapshot(book), by, from);
         if (landmark === undefined) return;
         if (
-          goTo(approachPoint(from, landmark), nowMs, landmark) === "walking"
+          goTo(approachPoint(from, landmark), nowMs, "own", landmark) ===
+          "walking"
         ) {
           say("landmark.spotted", landmark);
         }
@@ -582,7 +594,7 @@ export function useAvaiaWalk({
 
   const walkTo = useCallback(
     (point: MapPointSelection): boolean =>
-      goTo(point, globalThis.performance.now()) === "walking",
+      goTo(point, globalThis.performance.now(), "tap") === "walking",
     [goTo],
   );
 
