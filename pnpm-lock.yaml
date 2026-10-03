@@ -221,6 +221,8 @@ importers:
 
   packages/application: {}
 
+  packages/artifact-contract: {}
+
   packages/core-wasm:
     dependencies:
       '@nilx-one/application':

@@ -11,6 +11,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   application: [],
+  "artifact-contract": [],
   "core-wasm": ["@nilx-one/application"],
   graphics: [],
   "identity-http": ["@nilx-one/application"],

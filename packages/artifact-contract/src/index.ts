@@ -1,0 +1,228 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+/**
+ * Chance finds: what an Avaia may come across while it walks, rolled where it
+ * walks rather than placed on the map (docs/avaia-outings.md §3).
+ *
+ * A find is a deterministic function of a route segment, a week, and the pack
+ * that names finds. The same segment in the same week with the same pack
+ * always rolls the same find or the same nothing, on every device, which is
+ * the whole anti-farming rule: walking a street twice in a week pays once.
+ *
+ * Zero dependency, and nothing here is a record: a roll is not written to the
+ * BondChain, not sent anywhere, and carries no coordinates. Who is paid the
+ * experience is the caller's to decide (R2).
+ */
+
+/** A geographic point, longitude first. */
+export type LonLat = readonly [longitude: number, latitude: number];
+
+export type Tier = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** A cell of the fixed segment grid: row and column, opaque to everyone else. */
+export type SegmentId = `seg:${number}:${number}`;
+
+/** A week, counted from the first Monday of 1970, UTC. */
+export type EpochId = `e${number}`;
+
+export type PackVersion = number;
+
+/** Which of a segment's finds this is. One find per segment today, so `0`. */
+export type Slot = number;
+
+export type ArtifactId = `art:${SegmentId}:${EpochId}:${PackVersion}:${Slot}`;
+
+/** One tier: what a find of it pays and how often one turns up. */
+export interface TierRate {
+  readonly tier: Tier;
+  readonly experience: number;
+  /** Expected finds of this tier per kilometre walked. */
+  readonly perKm: number;
+}
+
+/**
+ * The rarity table. Starting values, tuned on live walking; any change to a
+ * number here changes which segments roll what, so it raises `version`.
+ * About one find every 2 km and 30 experience a kilometre in all; tier 6
+ * once in 100 km.
+ */
+export const ROLL_TABLE = {
+  version: 1,
+  tiers: [
+    { tier: 1, experience: 10, perKm: 0.25 },
+    { tier: 2, experience: 25, perKm: 0.12 },
+    { tier: 3, experience: 60, perKm: 0.06 },
+    { tier: 4, experience: 150, perKm: 0.03 },
+    { tier: 5, experience: 400, perKm: 0.018 },
+    { tier: 6, experience: 1000, perKm: 0.01 },
+  ],
+} as const satisfies {
+  readonly version: number;
+  readonly tiers: readonly TierRate[];
+};
+
+/** The side of a segment cell, and the length of walk one roll stands for. */
+export const SEGMENT_METERS = 50;
+
+/** A find lies at most this far to either side of the walk that rolled it. */
+export const FIND_OFFSET_METERS = 25;
+
+/** A find shows only once the Avaia is this close to it. */
+export const PERCEPTION_METERS = 15;
+
+/** How long an epoch lasts: a week. */
+export const EPOCH_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** The first Monday of 1970, 00:00 UTC, where epoch 0 starts. */
+const EPOCH_ORIGIN_MS = Date.UTC(1970, 0, 5);
+
+/**
+ * The segment grid, in degrees. It is fixed in degrees and not in metres so
+ * that every device cuts it identically: no trigonometry, which engines are
+ * free to round differently. Columns are scaled for Kyiv's latitude, where
+ * the archive is, so cells there are about 50 m square.
+ */
+const ROW_DEGREES = SEGMENT_METERS / 111_195;
+const COLUMN_DEGREES = ROW_DEGREES * 1.5698;
+
+/** Samples taken per grid cell crossed when following a path. */
+const SAMPLES_PER_CELL = 8;
+
+export function epochOf(nowMs: number): EpochId {
+  return `e${Math.floor((nowMs - EPOCH_ORIGIN_MS) / EPOCH_MS)}`;
+}
+
+export function segmentAt([longitude, latitude]: LonLat): SegmentId {
+  const row = Math.floor((latitude + 90) / ROW_DEGREES);
+  const column = Math.floor((longitude + 180) / COLUMN_DEGREES);
+  return `seg:${row}:${column}`;
+}
+
+/**
+ * The segments a walk passes through, in the order it first enters each. A
+ * tap-sent walk and one the Avaia chose go through the same function, so the
+ * owner pointing is no way round the rarity.
+ */
+export function segmentsAlong(path: readonly LonLat[]): SegmentId[] {
+  const seen = new Set<SegmentId>();
+  const add = (point: LonLat) => seen.add(segmentAt(point));
+  const first = path[0];
+  if (first === undefined) return [];
+  add(first);
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]!;
+    const b = path[i]!;
+    const cells = Math.max(
+      Math.abs(b[1] - a[1]) / ROW_DEGREES,
+      Math.abs(b[0] - a[0]) / COLUMN_DEGREES,
+    );
+    const steps = Math.max(1, Math.ceil(cells * SAMPLES_PER_CELL));
+    for (let s = 1; s <= steps; s++) {
+      add([
+        a[0] + ((b[0] - a[0]) * s) / steps,
+        a[1] + ((b[1] - a[1]) * s) / steps,
+      ]);
+    }
+  }
+  return [...seen];
+}
+
+export interface FindRoll {
+  readonly artifactId: ArtifactId;
+  readonly segment: SegmentId;
+  readonly epoch: EpochId;
+  readonly packVersion: PackVersion;
+  readonly slot: Slot;
+  readonly tier: Tier;
+  readonly experience: number;
+  /**
+   * Where along the walk through the segment the find lies, 0 to 1, and how
+   * far to the side, -1 to 1 of `FIND_OFFSET_METERS`. Relative, never a
+   * coordinate: the caller lays it on the walk it is drawing.
+   */
+  readonly placement: { readonly along: number; readonly across: number };
+}
+
+export interface RollInput {
+  /** The pack that names finds. Part of the seed, so a new pack rolls anew. */
+  readonly packId: string;
+  readonly packVersion: PackVersion;
+  readonly epoch: EpochId;
+  readonly segment: SegmentId;
+}
+
+/**
+ * What a segment holds this epoch, or `null` for nothing. One uniform draw
+ * decides the tier against the table, rarest first, so each tier's chance is
+ * exactly its rate times one segment's length.
+ */
+export function rollSegment(input: RollInput): FindRoll | null {
+  const { packId, packVersion, epoch, segment } = input;
+  if (packId.length === 0 || packId.includes(":")) {
+    throw new RangeError(`pack id must be non-empty and free of ":"`);
+  }
+  if (!Number.isSafeInteger(packVersion) || packVersion < 1) {
+    throw new RangeError(`pack version must be a positive integer`);
+  }
+  const random = mulberry32(
+    xmur3(`${packId}:${packVersion}:${epoch}:${segment}`)(),
+  );
+  const draw = random();
+  const km = SEGMENT_METERS / 1000;
+  let threshold = 0;
+  for (let i = ROLL_TABLE.tiers.length - 1; i >= 0; i--) {
+    const rate: TierRate = ROLL_TABLE.tiers[i]!;
+    threshold += rate.perKm * km;
+    if (draw < threshold) {
+      const slot = 0;
+      return {
+        artifactId: `art:${segment}:${epoch}:${packVersion}:${slot}`,
+        segment,
+        epoch,
+        packVersion,
+        slot,
+        tier: rate.tier,
+        experience: rate.experience,
+        placement: { along: random(), across: random() * 2 - 1 },
+      };
+    }
+  }
+  return null;
+}
+
+/** Every find a walk rolls, in the order it passes the segments. */
+export function rollAlong(
+  path: readonly LonLat[],
+  roll: Omit<RollInput, "segment">,
+): FindRoll[] {
+  return segmentsAlong(path).flatMap((segment) => {
+    const found = rollSegment({ ...roll, segment });
+    return found === null ? [] : [found];
+  });
+}
+
+/** String hash to a 32-bit seed. Not cryptographic: there is nothing to guard. */
+function xmur3(text: string): () => number {
+  let h = 1779033703 ^ text.length;
+  for (let i = 0; i < text.length; i++) {
+    h = Math.imul(h ^ text.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+
+/** A small seeded generator, uniform in [0, 1). */
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
