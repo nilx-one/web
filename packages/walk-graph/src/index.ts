@@ -21,11 +21,13 @@ export {
   type WalkGraph,
 } from "./graph";
 export {
+  reachFrom,
   routeOnGraph,
   SNAP_DISTANCE_M,
   snapToGraph,
   type CanEnter,
   type GraphPosition,
+  type Reach,
   type RouteOptions,
   type SnapOptions,
   type WalkRoute,

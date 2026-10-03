@@ -176,6 +176,68 @@ export function routeOnGraph(
   };
 }
 
+/** How far every node is from one graph position. */
+export interface Reach {
+  /** Surface-weighted cost to each node; `Infinity` where it cannot be reached. */
+  readonly cost: Float64Array;
+  /** Metres walked to each node along the cheapest way; `Infinity` likewise. */
+  readonly lengthM: Float64Array;
+}
+
+/**
+ * The cheapest way from one position to every node at once: one Dijkstra
+ * instead of one per destination, for choosing among many. Nodes costing more
+ * than `maxCost` are left unreached, which also bounds the work.
+ */
+export function reachFrom(
+  graph: WalkGraph,
+  from: GraphPosition,
+  options: RouteOptions & { readonly maxCost?: number } = {},
+): Reach {
+  const n = graph.nodes.length;
+  const cost = new Float64Array(n).fill(Infinity);
+  const lengthM = new Float64Array(n).fill(Infinity);
+  const startEdge = graph.edges[from.edge];
+  if (startEdge === undefined) return { cost, lengthM };
+  const maxCost = options.maxCost ?? Infinity;
+  const enterable = (node: number) => {
+    const point = graph.nodes[node];
+    return (
+      point !== undefined &&
+      (options.canEnter === undefined || options.canEnter(point))
+    );
+  };
+  const done = new Uint8Array(n);
+  const heap = new MinHeap();
+  const startCost = edgeCost(startEdge);
+  for (const [node, fraction] of [
+    [startEdge.a, from.t],
+    [startEdge.b, 1 - from.t],
+  ] as const) {
+    const c = startCost * fraction;
+    if (!enterable(node) || c > maxCost || c >= cost[node]!) continue;
+    cost[node] = c;
+    lengthM[node] = startEdge.lengthM * fraction;
+    heap.push(c, node);
+  }
+  for (let top = heap.pop(); top !== null; top = heap.pop()) {
+    const [c, node] = top;
+    if (done[node] || c > cost[node]!) continue;
+    done[node] = 1;
+    for (const index of graph.adjacency[node] ?? []) {
+      const edge = graph.edges[index]!;
+      const next = edge.a === node ? edge.b : edge.a;
+      if (done[next] || !enterable(next)) continue;
+      const nextCost = c + edgeCost(edge);
+      if (nextCost > maxCost || nextCost >= cost[next]!) continue;
+      cost[next] = nextCost;
+      lengthM[next] = lengthM[node]! + edge.lengthM;
+      heap.push(nextCost, next);
+    }
+  }
+  return { cost, lengthM };
+}
+
 /** Binary heap on (cost, node), the node index breaking ties. */
 class MinHeap {
   private readonly items: [number, number][] = [];
