@@ -115,8 +115,8 @@ Local-first. Eligible, not transported.
 - **opened cells** — fog reveals (`nilx-one.fog.reveals.v1.<owner>`) and the
   landmark notebook (`nilx-one.avaia.landmarks.v1.<owner>`;
   [Avaia walks the world](avaia-walk.md));
-- **position** — where the Bond and its Avaia were last seen
-  (`nilx-one.world-memory.v1.<owner>`), and the artificial presentation
+- **position** — where the Bond and its Avaia were last seen, and when the
+  Avaia last went out on its own (`nilx-one.world-memory.v1.<owner>`), and the artificial presentation
   positions an owner declared for counterparts
   (`nilx-one.bond-location-overrides.v1:<owner>`). A remembered position is
   not a `Bond.location`;

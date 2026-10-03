@@ -28,12 +28,20 @@ import {
   pickAvaiaLine,
   type AvaiaLineKind,
 } from "./avaia-lines";
-import { openGround, planWalk, type WalkChooser } from "./avaia-path";
+import {
+  buildWalkGraph,
+  reachFrom,
+  snapToGraph,
+  type LonLat,
+} from "@nilx-one/walk-graph";
+
+import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
   approachPoint,
   startWalk,
   studyStance,
+  STUDY_CLIP_MS,
   walkPosition,
   walkStance,
   STUDY_MS,
@@ -61,6 +69,22 @@ import {
   XP_LANDMARK_NOTICED_MANUALLY,
   XP_LANDMARK_STUDIED_BY_AVAIA,
 } from "../progression/progression";
+import {
+  chooseOuting,
+  initialDrive,
+  nextOutingAt,
+  outingBudgetMeters,
+  POINT_B_STAND_MS,
+  recentlyVisited,
+  stepDrive,
+  VISIT_MS,
+  WANDER_MAX_METERS,
+  wanderPoint,
+  wanderSeed,
+  type DriveEvent,
+  type WalkPurpose,
+} from "./outing-drive";
+import { outingMenu, type OutingCandidate } from "./outing-targets";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 
 /** How long a line stays on the card before it closes again. */
@@ -134,6 +158,32 @@ export interface AvaiaWalkInput {
     readonly kind: AvaiaLineKind;
     readonly text: string;
   }) => void;
+  /**
+   * Normalized walk targets the drive may take the Avaia out to. Until the
+   * landmark mapper supplies them an outing can only wander or go home.
+   */
+  readonly outingCandidates?: readonly OutingCandidate[];
+}
+
+/** Standing somewhere and looking around: at a tapped point B, or a target. */
+interface Pause {
+  readonly at: MapPointSelection;
+  readonly bearingDeg: number;
+  readonly startedMs: number;
+  readonly durationMs: number;
+}
+
+/** How far around the Avaia the roads are read for planning an outing. */
+function boundsAround(point: MapPointSelection, meters: number) {
+  const dLat = (meters / 6_371_008.8) * (180 / Math.PI);
+  const dLng =
+    dLat / Math.max(0.01, Math.cos((point.latitude * Math.PI) / 180));
+  return {
+    west: point.longitude - dLng,
+    east: point.longitude + dLng,
+    south: point.latitude - dLat,
+    north: point.latitude + dLat,
+  };
 }
 
 export interface AvaiaWalkState {
@@ -181,9 +231,35 @@ export function useAvaiaWalk({
   onFogTap,
   onCue,
   onLine,
+  outingCandidates,
 }: AvaiaWalkInput): AvaiaWalkState {
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
   const [study, setStudy] = useState<AvaiaStudy | undefined>(undefined);
+  const [pause, setPause] = useState<Pause | undefined>(undefined);
+  // The drive's own state, and a version that changes with it so effects that
+  // read it run again. What a walk under way is for, for when it arrives.
+  const [firstDrive] = useState(() =>
+    initialDrive(Date.now(), readWorldMemory(owner).lastOutingAt ?? null),
+  );
+  const drive = useRef(firstDrive);
+  const [driveVersion, setDriveVersion] = useState(0);
+  const walkPurpose = useRef<WalkPurpose>("tap");
+  const dispatch = useCallback(
+    (event: DriveEvent) => {
+      const before = drive.current;
+      const after = stepDrive(before, event);
+      if (after === before) return;
+      drive.current = after;
+      if (
+        after.lastOutingAt !== null &&
+        after.lastOutingAt !== before.lastOutingAt
+      ) {
+        rememberWorld(owner, { lastOutingAt: after.lastOutingAt });
+      }
+      setDriveVersion((version) => version + 1);
+    },
+    [owner],
+  );
   // A world opened again finds its Avaia where it was left, not back at its
   // owner's feet: where it stood, or where it was headed when the page went.
   const [rest, setRest] = useState<Rest | undefined>(() => {
@@ -231,6 +307,7 @@ export function useAvaiaWalk({
     onFogTap,
     onCue,
     onLine,
+    outingCandidates,
   });
   useEffect(() => {
     latest.current = {
@@ -247,6 +324,7 @@ export function useAvaiaWalk({
       onFogTap,
       onCue,
       onLine,
+      outingCandidates,
     };
   });
 
@@ -291,17 +369,22 @@ export function useAvaiaWalk({
   /**
    * Sends the body to `to` along the paths the map has loaded between here and
    * there, and around its buildings and water where it crosses open ground.
-   * `chooser` is who picked `to`: the owner may send it across the grass, the
-   * Avaia keeps to the paths. Answers whether it set off, or what stood in the
-   * way when no way round was found.
+   * `purpose` says who picked `to`: a tap is the owner, who may send it across
+   * the grass; everything else is the Avaia's drive, which keeps to the paths.
+   * Answers whether it set off, or what stood in the way when no way round was
+   * found. Setting off is reported to the drive.
    */
   const goTo = useCallback(
     (
       to: MapPointSelection,
       nowMs: number,
-      chooser: WalkChooser,
-      landmark?: MapLandmark,
+      how: {
+        readonly purpose: WalkPurpose;
+        readonly targetId?: string;
+        readonly landmark?: MapLandmark;
+      },
     ): "walking" | "nowhere" | MapObstacle["kind"] | "fog" => {
+      const { purpose, targetId, landmark } = how;
       const from = currentPoint(nowMs);
       if (from === undefined) return "nowhere";
       const bounds = routeBounds(from, to);
@@ -310,7 +393,7 @@ export function useAvaiaWalk({
         to,
         roads: renderer.roadsWithin?.(bounds) ?? [],
         obstacles: renderer.obstaclesWithin?.(bounds) ?? [],
-        chooser,
+        chooser: purpose === "tap" ? "tap" : "own",
         open: openGround({
           fog: renderer.fog,
           device: latest.current.observed,
@@ -328,12 +411,24 @@ export function useAvaiaWalk({
         landmark,
       });
       setStudy(undefined);
+      setPause(undefined);
       setActed(true);
+      walkPurpose.current = purpose;
+      dispatch(
+        purpose === "tap"
+          ? { type: "tap", at: Date.now() }
+          : {
+              type: "set_off",
+              at: Date.now(),
+              purpose,
+              ...(targetId === undefined ? {} : { targetId }),
+            },
+      );
       // Reduced motion still goes where it was sent; it just arrives.
       setWalk(latest.current.reducedMotion ? { ...next, durationMs: 0 } : next);
       return "walking";
     },
-    [currentPoint, renderer],
+    [currentPoint, dispatch, renderer],
   );
 
   // A tap on the world is the owner pointing. Open ground is a walk; anything
@@ -376,7 +471,7 @@ export function useAvaiaWalk({
       const went = goTo(
         { longitude: tap.longitude, latitude: tap.latitude },
         nowMs,
-        "tap",
+        { purpose: "tap" },
       );
       if (went === "walking") {
         say("walk");
@@ -390,7 +485,8 @@ export function useAvaiaWalk({
   }, [active, goTo, renderer, say]);
 
   // A walk ends on its own. Arriving at a landmark turns into looking at it;
-  // arriving anywhere else is simply standing there.
+  // arriving at a tapped point B or an outing's target is standing there a
+  // while, looking around; arriving anywhere else is simply standing there.
   useEffect(() => {
     if (walk === undefined) return;
     const remaining = Math.max(
@@ -399,7 +495,13 @@ export function useAvaiaWalk({
     );
     const arrived = globalThis.setTimeout(() => {
       const nowMs = globalThis.performance.now();
+      const purpose = walkPurpose.current;
       setWalk(undefined);
+      dispatch({
+        type: "arrived",
+        at: Date.now(),
+        meters: walk.along[walk.along.length - 1] ?? 0,
+      });
       if (walk.landmark !== undefined) {
         setStudy({
           landmark: walk.landmark,
@@ -411,9 +513,39 @@ export function useAvaiaWalk({
         return;
       }
       setRest({ point: walk.to, bearingDeg: walk.arrivalBearingDeg });
+      if (purpose === "tap" || purpose === "outing") {
+        setPause({
+          at: walk.to,
+          bearingDeg: walk.arrivalBearingDeg,
+          startedMs: nowMs,
+          durationMs: purpose === "tap" ? POINT_B_STAND_MS : VISIT_MS,
+        });
+      }
     }, remaining);
     return () => globalThis.clearTimeout(arrived);
-  }, [walk]);
+  }, [dispatch, walk]);
+
+  // A stand ends on its own too, and the Avaia carries on from where it
+  // stands: from point B, not from home.
+  useEffect(() => {
+    if (pause === undefined) return;
+    const remaining = Math.max(
+      0,
+      pause.startedMs + pause.durationMs - globalThis.performance.now(),
+    );
+    const done = globalThis.setTimeout(() => {
+      setPause(undefined);
+      const { activity } = drive.current;
+      dispatch({
+        type: "tick",
+        at:
+          activity.kind === "standing"
+            ? Math.max(Date.now(), activity.until)
+            : Date.now(),
+      });
+    }, remaining);
+    return () => globalThis.clearTimeout(done);
+  }, [dispatch, pause]);
 
   // A walking body is heard walking. A walk with no duration — reduced
   // motion, which arrives without walking — makes no footfall at all.
@@ -558,7 +690,8 @@ export function useAvaiaWalk({
   // Curiosity: an idle Avaia at the wheel goes to see the nearest thing its
   // owner walked past and it has not studied. It looks around first when it
   // has just arrived, and waits longer once it has been doing things.
-  const idle = active && walk === undefined && study === undefined;
+  const idle =
+    active && walk === undefined && study === undefined && pause === undefined;
   useEffect(() => {
     if (!idle) return;
     const wander = globalThis.setTimeout(
@@ -582,8 +715,10 @@ export function useAvaiaWalk({
         );
         if (landmark === undefined) return;
         if (
-          goTo(approachPoint(from, landmark), nowMs, "own", landmark) ===
-          "walking"
+          goTo(approachPoint(from, landmark), nowMs, {
+            purpose: "curiosity",
+            landmark,
+          }) === "walking"
         ) {
           say("landmark.spotted", landmark);
         }
@@ -593,31 +728,129 @@ export function useAvaiaWalk({
     return () => globalThis.clearTimeout(wander);
   }, [acted, currentPoint, goTo, idle, notebook, renderer, say]);
 
+  // The drive: an idle Avaia, restless enough and rested since its last
+  // outing, goes out on its own. The menu and the pick are code's; with no
+  // targets yet it wanders a short way along the paths, or goes home tired.
+  useEffect(() => {
+    if (!idle) return;
+    const when = nextOutingAt(drive.current);
+    if (when === null) return;
+    const outing = globalThis.setTimeout(
+      () => {
+        const nowMs = globalThis.performance.now();
+        const wall = Date.now();
+        const from = currentPoint(nowMs);
+        if (from === undefined) return;
+        const state = drive.current;
+        const budget = outingBudgetMeters(state);
+        const graph = buildWalkGraph(
+          renderer.roadsWithin?.(boundsAround(from, budget)) ?? [],
+        );
+        const open = openGround({
+          fog: renderer.fog,
+          device: latest.current.observed,
+          body: from,
+          nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
+        });
+        const canEnter =
+          open === undefined
+            ? undefined
+            : ([longitude, latitude]: readonly [number, number]) =>
+                open({ longitude, latitude });
+        const at: LonLat = [from.longitude, from.latitude];
+        const menu = outingMenu({
+          candidates: latest.current.outingCandidates ?? [],
+          graph,
+          from: at,
+          open: canEnter,
+          budgetMeters: budget,
+          exclude: recentlyVisited(state, wall),
+        });
+        const device = latest.current.observed;
+        const choice = chooseOuting(state, menu, {
+          at,
+          home:
+            device === undefined
+              ? undefined
+              : [device.longitude, device.latitude],
+          hour: new Date(wall).getHours(),
+        });
+        const point = ([longitude, latitude]: LonLat) => ({
+          longitude,
+          latitude,
+        });
+        let went = false;
+        if (choice.kind === "target") {
+          went =
+            goTo(point(choice.target.anchor), nowMs, {
+              purpose: "outing",
+              targetId: choice.target.id,
+            }) === "walking";
+        } else if (choice.kind === "home" && device !== undefined) {
+          went = goTo(device, nowMs, { purpose: "home" }) === "walking";
+        } else if (choice.kind === "wander") {
+          const start = snapToGraph(graph, at, canEnter ? { canEnter } : {});
+          const there =
+            start === null
+              ? undefined
+              : wanderPoint(
+                  graph,
+                  reachFrom(graph, start, {
+                    maxCost: WANDER_MAX_METERS * 3,
+                    ...(canEnter ? { canEnter } : {}),
+                  }),
+                  wanderSeed(wall),
+                );
+          went =
+            there !== undefined &&
+            goTo(point(there), nowMs, { purpose: "wander" }) === "walking";
+        }
+        if (went) say("walk");
+        else dispatch({ type: "stayed", at: wall });
+      },
+      Math.max(0, when - Date.now()),
+    );
+    return () => globalThis.clearTimeout(outing);
+  }, [currentPoint, dispatch, driveVersion, goTo, idle, renderer, say]);
+
   const stance = useCallback(
     (nowMs: number): BodyStance | undefined => {
       if (walk !== undefined) return walkStance(walk, nowMs);
       if (study !== undefined) return studyStance(study, nowMs);
+      if (pause !== undefined) {
+        const since = Math.max(0, nowMs - pause.startedMs);
+        return {
+          point: pause.at,
+          bearingDeg: pause.bearingDeg,
+          clipId: "turn_in_place",
+          clipPhase: (since % STUDY_CLIP_MS) / STUDY_CLIP_MS,
+        };
+      }
       return rest;
     },
-    [rest, study, walk],
+    [pause, rest, study, walk],
   );
 
   const reset = useCallback(() => {
+    dispatch({ type: "stopped", at: Date.now() });
     setWalk(undefined);
     setStudy(undefined);
+    setPause(undefined);
     setRest(undefined);
     setSpeech(undefined);
     setActed(false);
     lastLine.current = undefined;
-  }, []);
+  }, [dispatch]);
 
   const walkTo = useCallback(
     (point: MapPointSelection): boolean =>
-      goTo(point, globalThis.performance.now(), "tap") === "walking",
+      goTo(point, globalThis.performance.now(), { purpose: "tap" }) ===
+      "walking",
     [goTo],
   );
 
-  const moving = walk !== undefined || study !== undefined;
+  const moving =
+    walk !== undefined || study !== undefined || pause !== undefined;
   // One object per change that matters, so the world redraws a body when the
   // Avaia does something and not whenever the surface around it re-renders.
   return useMemo(
