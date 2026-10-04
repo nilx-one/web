@@ -58,6 +58,23 @@ the walk is refused as `fog`, with the same line as a tap into it. Curiosity
 passes over landmarks that stand in the fog. Opening the fog stays the
 reveal's job, below ([Avaia walks on its own](avaia-outings.md), R1).
 
+Arriving where a tap sent it, the Avaia stands there looking around
+(`turn_in_place`) for 20 seconds, then carries on from that point B: it does
+not walk back home. A tap during the stand walks on from where it stands.
+
+### Going out on its own
+
+An Avaia left idle at the wheel gets restless after ten minutes and goes out,
+never more than once in four hours. The drive (`outing-drive.ts`) decides
+where, in code: a target from the outing menu, looked around for 30 seconds on
+arrival; a short wander of 150 to 400 m along the paths; home, to the device,
+when its energy (5 km on a full charge) runs low; or staying put. In the
+evening and at night it only takes a near target or a wander. Until the
+landmark mapper supplies targets, an outing is a wander or a walk home. When
+it last went out is kept with where it stands, so a reload does not send it out
+again early. A tap always outranks the drive, and nothing walks while the page
+is closed. See [Avaia walks on its own](avaia-outings.md) §2.
+
 ### Pace
 
 A body is drawn at one apparent size at every scale, so the pace is measured
