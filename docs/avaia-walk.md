@@ -35,7 +35,8 @@ Open ground starts a walk. Anything else is refused, and the Avaia says why.
 ### The way there
 
 A walk keeps to paths first. The renderer answers `roadsWithin` from the
-`roads` tiles already loaded, and `@nilx-one/walk-graph` turns them into a
+`roads` tiles already loaded, and from those an outing read ahead
+([map data](map-data.md)), and `@nilx-one/walk-graph` turns them into a
 pedestrian graph weighted by surface: footways cheapest, then tracks, streets,
 and major roads; highways are only crossed. The body steps onto the nearest
 line within 30 m, follows the cheapest way along it, and steps off for the last
@@ -70,7 +71,9 @@ where, in code: a target from the outing menu, looked around for 30 seconds on
 arrival; a short wander of 150 to 400 m along the paths; home, to the device,
 when its energy (5 km on a full charge) runs low; or staying put. In the
 evening and at night it only takes a near target or a wander. Until the
-landmark mapper supplies targets, an outing is a wander or a walk home. When
+landmark mapper supplies targets, an outing is a wander or a walk home. Before
+it plans, it reads the road tiles of its area ahead, so the paths past the edge
+of the screen are known; it gives the outing up if a tap comes meanwhile. When
 it last went out is kept with where it stands, so a reload does not send it out
 again early. A tap always outranks the drive, and nothing walks while the page
 is closed. See [Avaia walks on its own](avaia-outings.md) §2.

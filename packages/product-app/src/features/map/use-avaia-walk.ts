@@ -173,6 +173,29 @@ interface Pause {
   readonly durationMs: number;
 }
 
+/**
+ * Whether any of nine points spread over a tile's box is open ground: a tile
+ * that is all fog has nothing an outing could walk on.
+ */
+function touchesOpen(
+  tile: { west: number; east: number; south: number; north: number },
+  open: (point: MapPointSelection) => boolean,
+): boolean {
+  for (const fx of [0, 0.5, 1]) {
+    for (const fy of [0, 0.5, 1]) {
+      if (
+        open({
+          longitude: tile.west + (tile.east - tile.west) * fx,
+          latitude: tile.south + (tile.north - tile.south) * fy,
+        })
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /** How far around the Avaia the roads are read for planning an outing. */
 function boundsAround(point: MapPointSelection, meters: number) {
   const dLat = (meters / 6_371_008.8) * (180 / Math.PI);
@@ -735,23 +758,32 @@ export function useAvaiaWalk({
     if (!idle) return;
     const when = nextOutingAt(drive.current);
     if (when === null) return;
-    const outing = globalThis.setTimeout(
-      () => {
+    // Set when the Avaia gets busy while the outing is still reading ahead.
+    let cancelled = false;
+    const goOut = async () => {
+      const from = currentPoint(globalThis.performance.now());
+      if (from === undefined) return;
+      const state = drive.current;
+      const budget = outingBudgetMeters(state);
+      const area = boundsAround(from, budget);
+      const open = openGround({
+        fog: renderer.fog,
+        device: latest.current.observed,
+        body: from,
+        nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
+      });
+      // The view holds only what is on screen; an outing reads the road tiles
+      // of its whole area ahead, but not a tile with no open ground in it.
+      await renderer.preloadRoads?.call(
+        renderer,
+        area,
+        open === undefined ? undefined : (tile) => touchesOpen(tile, open),
+      );
+      if (cancelled) return;
+      {
         const nowMs = globalThis.performance.now();
         const wall = Date.now();
-        const from = currentPoint(nowMs);
-        if (from === undefined) return;
-        const state = drive.current;
-        const budget = outingBudgetMeters(state);
-        const graph = buildWalkGraph(
-          renderer.roadsWithin?.(boundsAround(from, budget)) ?? [],
-        );
-        const open = openGround({
-          fog: renderer.fog,
-          device: latest.current.observed,
-          body: from,
-          nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
-        });
+        const graph = buildWalkGraph(renderer.roadsWithin?.(area) ?? []);
         const canEnter =
           open === undefined
             ? undefined
@@ -807,10 +839,16 @@ export function useAvaiaWalk({
         }
         if (went) say("walk");
         else dispatch({ type: "stayed", at: wall });
-      },
+      }
+    };
+    const outing = globalThis.setTimeout(
+      () => void goOut(),
       Math.max(0, when - Date.now()),
     );
-    return () => globalThis.clearTimeout(outing);
+    return () => {
+      cancelled = true;
+      globalThis.clearTimeout(outing);
+    };
   }, [currentPoint, dispatch, driveVersion, goTo, idle, renderer, say]);
 
   const stance = useCallback(

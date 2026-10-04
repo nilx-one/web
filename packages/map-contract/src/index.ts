@@ -331,6 +331,20 @@ export interface MapRoad {
   readonly lines: readonly (readonly (readonly [number, number])[])[];
 }
 
+/**
+ * What one `preloadRoads` did, so a caller can see what it cost: the tiles
+ * the box touched, those turned down as somewhere a walk cannot go, those left
+ * over the cap, and of the rest how many were already held, fetched, or failed.
+ */
+export interface MapRoadPreload {
+  readonly covering: number;
+  readonly refused: number;
+  readonly skipped: number;
+  readonly cached: number;
+  readonly fetched: number;
+  readonly failed: number;
+}
+
 /** A geographic box, west to east and south to north. */
 export interface MapBounds {
   readonly west: number;
@@ -486,6 +500,17 @@ export interface MapRenderer {
    * has not loaded has no paths, and a walk there crosses open ground.
    */
   roadsWithin?(bounds: MapBounds): readonly MapRoad[];
+  /**
+   * Reads the `roads` of the tiles covering a box ahead of a walk, from the
+   * same archive the map draws, so `roadsWithin` answers past the view. It is
+   * the one place the renderer fetches tiles the view did not ask for: one
+   * zoom, a fixed cap on tiles fetched and held, the oldest dropped first.
+   * `accept` turns down a tile's box before it is fetched.
+   */
+  preloadRoads?(
+    bounds: MapBounds,
+    accept?: (tile: MapBounds) => boolean,
+  ): Promise<MapRoadPreload>;
   /**
    * The fog this renderer draws, when its composition draws one. Absent means
    * there is no fog: nothing is offered to reveal and no tap is `fog`.
