@@ -48,7 +48,7 @@ export interface RoadTileCache {
     bounds: MapBounds,
     accept?: (tile: MapBounds) => boolean,
   ): Promise<MapRoadPreload>;
-  /** Roads held in tiles touching `bounds`, lines outside it left out. */
+  /** Roads held in tiles touching `bounds`, clipped to the requested bounds. */
   roadsWithin(bounds: MapBounds): MapRoad[];
   /** How many tiles are held now. */
   readonly size: number;
@@ -147,7 +147,9 @@ export function createRoadTileCache({
         ];
         if (!overlaps(tileBounds({ z, x, y }), bounds)) continue;
         for (const road of roads) {
-          const lines = road.lines.filter((line) => lineTouches(line, bounds));
+          const lines = road.lines.flatMap((line) =>
+            clipLineToBounds(line, bounds),
+          );
           if (lines.length > 0) found.push({ ...road, lines });
         }
       }
@@ -218,21 +220,78 @@ function overlaps(a: MapBounds, b: MapBounds): boolean {
   );
 }
 
-function lineTouches(
-  line: readonly (readonly [number, number])[],
-  bounds: MapBounds,
-): boolean {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-  for (const [longitude, latitude] of line) {
-    west = Math.min(west, longitude);
-    east = Math.max(east, longitude);
-    south = Math.min(south, latitude);
-    north = Math.max(north, latitude);
+type LinePoint = readonly [number, number];
+type RoadLine = readonly LinePoint[];
+
+/** Clips a polyline to `bounds`, splitting it when it leaves and re-enters. */
+function clipLineToBounds(line: RoadLine, bounds: MapBounds): RoadLine[] {
+  if (line.length < 2) return [];
+
+  const clipped: RoadLine[] = [];
+  let current: LinePoint[] = [];
+
+  for (let index = 1; index < line.length; index += 1) {
+    const segment = clipSegmentToBounds(line[index - 1]!, line[index]!, bounds);
+    if (segment === undefined) {
+      if (current.length >= 2) clipped.push(current);
+      current = [];
+      continue;
+    }
+
+    const [start, end] = segment;
+    if (current.length === 0) {
+      current = [start, end];
+      continue;
+    }
+
+    const last = current[current.length - 1]!;
+    if (last[0] === start[0] && last[1] === start[1]) {
+      current.push(end);
+    } else {
+      if (current.length >= 2) clipped.push(current);
+      current = [start, end];
+    }
   }
-  return overlaps({ west, south, east, north }, bounds);
+
+  if (current.length >= 2) clipped.push(current);
+  return clipped;
+}
+
+/** Liang-Barsky clipping for one line segment against a longitude/latitude box. */
+function clipSegmentToBounds(
+  start: LinePoint,
+  end: LinePoint,
+  bounds: MapBounds,
+): [LinePoint, LinePoint] | undefined {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  let t0 = 0;
+  let t1 = 1;
+
+  const clip = (p: number, q: number): boolean => {
+    if (p === 0) return q >= 0;
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+    return true;
+  };
+
+  if (
+    !clip(-dx, start[0] - bounds.west) ||
+    !clip(dx, bounds.east - start[0]) ||
+    !clip(-dy, start[1] - bounds.south) ||
+    !clip(dy, bounds.north - start[1])
+  ) {
+    return undefined;
+  }
+
+  const pointAt = (t: number): LinePoint => [start[0] + dx * t, start[1] + dy * t];
+  return [pointAt(t0), pointAt(t1)];
 }
 
 /**
