@@ -126,6 +126,8 @@ An object that matches several rows is assigned **one** kind:
 
 Two source objects collapse into one landmark when they have the same normalized kind **and** either one polygon contains the other's point or they lie within 50 m, **and** their names match after normalization or at least one has no name. The survivor is chosen deterministically: polygon over point, then named over unnamed, then the smallest stable source id. Source ids are used inside the mapper only and never leave it.
 
+`major_monument` and `small_monument` count as one kind here. Significance is decided per source object, so one monument read twice, once with a heritage attribute and once without, would otherwise come out as two landmarks. Between them the major one survives, ahead of the rules above.
+
 ## Significance
 
 "Significant" must be computable from archive attributes alone and identical on every device. The rule is fixed per kind in the mapping table:
@@ -217,6 +219,10 @@ Before enabling a new mapping:
 - verify that unnamed `walk_target` candidates are rejected.
 
 This keeps OSM extensibility separate from the stable 0x1 landmark vocabulary.
+
+## Implemented
+
+`landmark-normalize.ts` in `product-app` takes the mapper's candidates (the rows each archive object matched, its name, geometry and the attributes significance reads) and applies this document: one kind per object by group and table order, the significance rules, geometry and type checks, and deduplication. The mapping table, its version (`1.0`) and the thresholds (`parkMinAreaM2` 10 000, `majorMonumentMinFootprintM2` 100, `duplicateWithinMeters` 50) are constants, and a golden test pins the output. Landmarks come out with an id derived from the kind and a point of the feature, rounded to about a metre; source ids never leave it. `outingCandidates` passes the `walk_target` group on to the outing menu. The mapper that produces the candidates from the archive is #306.
 
 ## Open items
 
