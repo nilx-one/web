@@ -492,7 +492,7 @@ export function keepCommittedAward(
   });
 }
 
-async function rebased(
+export async function rebasePendingAwards(
   historyKey: CryptoKey,
   chain: string,
   parent: Commitment | null,
@@ -570,7 +570,7 @@ export function dropCommittedAward(
       const first = snapshot.pending[0];
       if (first === undefined || first.id !== id) return undefined;
       const rest = snapshot.pending.slice(1);
-      const next = await rebased(historyKey, meta.chain, meta.head, rest);
+      const next = await rebasePendingAwards(historyKey, meta.chain, meta.head, rest);
       await writeRebase(
         database,
         owner,
@@ -615,7 +615,7 @@ export function rebaseCommittedAwards(
         notify(owner);
         return;
       }
-      const next = await rebased(
+      const next = await rebasePendingAwards(
         historyKey,
         meta.chain,
         head,
