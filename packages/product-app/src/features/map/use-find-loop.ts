@@ -181,7 +181,7 @@ export function useFindLoop({
       });
       void (async () => {
         for (const roll of rolls) await recordFind(owner, roll, "avaia");
-      })();
+      })().catch(() => undefined);
     },
     [owner],
   );
@@ -222,7 +222,7 @@ export function useFindLoop({
       epoch,
       segment,
     });
-    if (roll !== null) void recordFind(owner, roll, "bond");
+    if (roll !== null) void recordFind(owner, roll, "bond").catch(() => undefined);
   }, [bondDriving, deviceLatitude, deviceLongitude, owner]);
 
   return { leads, completedAvaiaWalk };
