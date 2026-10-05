@@ -9,13 +9,12 @@
  * and calling it server state would invent an authority the identity contract
  * has not given it.
  *
- * - `server` — an identity-service table. The `pub_dress`, the server-side
- *   records a sign-in needs, the named study stored as
- *   `identities.avatar_model`, and `bond_pub_info`. Residence here means the
- *   bytes are in the service. For the identity records that is service
- *   authority. `bond_pub_info` is the exception: it holds the owner's
- *   cosmetic activity totals, labeled `authority: "client"` on the wire.
- *   Storing that report is not an attestation that the play happened.
+ * - `server` — an identity-service table. The `pub_dress`, authorization
+ *   records, named avatar study, reported experience, committed-award chain
+ *   bookkeeping, and rare-find claims live here. Residence here does not make
+ *   every field protocol truth: experience is still labeled
+ *   `authority: "client"`, while a rare claim is authoritative only for who
+ *   won that find. Neither is BondChain or Relationship evidence.
  * - `device` — resident on this device. It does not travel: the on-device
  *   model and its download, the journal key, work in flight, an outfit the
  *   identity contract has no field for, and the `__Host-` cookies whose
@@ -29,9 +28,10 @@
  *
  * `mobility` says what that eligibility is. `transport` is an interface
  * preference or a play record a Bond may one day find on its other device.
- * `sealed-transport` is a different class: BondChain copies and the presence
- * journal, which already have their own lifecycle and move only under it.
- * They are not the same kind of thing as a chosen language.
+ * `sealed-transport` is a different class: BondChain copies, the presence
+ * journal, and the committed award/find journal each have their own lifecycle
+ * and move only under it. They are not the same kind of thing as a chosen
+ * language.
  *
  * The architecture test reads this table against real `setItem` call sites,
  * so a key the client writes and nobody placed fails the build.
@@ -42,8 +42,8 @@ export type StatePlacement = "server" | "device" | "synchronizable";
  * `resident` stays where `placement` puts it.
  * `transport` may follow a Bond between its own devices; it is not synced
  * state.
- * `sealed-transport` is transport eligibility under the `.bnd` or presence
- * journal lifecycle only.
+ * `sealed-transport` is transport eligibility under the record's own
+ * cryptographic lifecycle only; it never means ordinary account sync.
  */
 export type StateMobility = "resident" | "transport" | "sealed-transport";
 
@@ -116,9 +116,27 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     placement: "server",
     mobility: "resident",
     medium: "identity-service",
-    key: "bond_pub_info",
+    key: "bond_pub_info, bond_experience_events",
     perOwner: false,
-    what: "Activity totals (bond_xp, avaia_xp), legacy opaque event ids, and the R3 committed-award result. The wire still labels the standing authority: client: the service prices bounded award kinds and arbitrates rare claims, but it does not prove physical play.",
+    what: "Activity totals plus the opaque ids/commitments already paid. The wire labels the standing authority: client; pricing a bounded award is not proof that physical play happened.",
+  },
+  {
+    id: "experience.committedChains",
+    placement: "server",
+    mobility: "resident",
+    medium: "identity-service",
+    key: "experience_chains, experience_kind_counts",
+    perOwner: false,
+    what: "Per-device commitment heads and per-kind weekly counts used to make committed experience ordered, idempotent and bounded. They are progression bookkeeping, not BondChain.",
+  },
+  {
+    id: "finds.claims",
+    placement: "server",
+    mobility: "resident",
+    medium: "identity-service",
+    key: "find_claims",
+    perOwner: false,
+    what: "The epoch/tier and winning Bond for rare tier 4–6 artifact hashes. This table is authoritative only for first-claim ownership of that find and never creates Relationship state.",
   },
 
   // ─── device: resident, never transported ───────────────────────────────
