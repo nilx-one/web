@@ -5,7 +5,11 @@ import type {
   CommittedAward,
   CommittedAwardAccessPort,
 } from "@nilx-one/application";
-import { isClaimed, type ArtifactId, type FindLead } from "@nilx-one/artifact-contract";
+import {
+  isClaimed,
+  type ArtifactId,
+  type FindLead,
+} from "@nilx-one/artifact-contract";
 import { useEffect, useRef } from "react";
 
 import { resolvePickUp } from "./claims";
@@ -200,9 +204,10 @@ export function flushCommittedAwards(
             continue;
           case "drop":
             if (answer.outcome.kind === "behind") {
-              await rebaseCommittedAwards(owner, answer.outcome.head as
-                | `xp:${string}`
-                | null);
+              await rebaseCommittedAwards(
+                owner,
+                answer.outcome.head as `xp:${string}` | null,
+              );
             } else {
               const reason =
                 answer.outcome.kind === "capped"
