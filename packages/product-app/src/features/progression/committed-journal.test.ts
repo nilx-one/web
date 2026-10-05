@@ -3,7 +3,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { importHistoryKey, type AwardRecord, type Commitment } from "./commitment";
+import {
+  importHistoryKey,
+  type AwardRecord,
+  type Commitment,
+} from "./commitment";
 import {
   rebasePendingAwards,
   recordedFindEvents,
