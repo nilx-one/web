@@ -159,6 +159,11 @@ export interface AvaiaWalkInput {
     readonly text: string;
   }) => void;
   /**
+   * A route is evidence for chance finds only once the body actually reaches
+   * its end. Interrupted/replanned routes never report their unwalked tail.
+   */
+  readonly onWalkCompleted?: (walk: AvaiaWalk) => void;
+  /**
    * Normalized walk targets the drive may take the Avaia out to. Until the
    * landmark mapper supplies them an outing can only wander or go home.
    */
@@ -254,6 +259,7 @@ export function useAvaiaWalk({
   onFogTap,
   onCue,
   onLine,
+  onWalkCompleted,
   outingCandidates,
 }: AvaiaWalkInput): AvaiaWalkState {
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
@@ -330,6 +336,7 @@ export function useAvaiaWalk({
     onFogTap,
     onCue,
     onLine,
+    onWalkCompleted,
     outingCandidates,
   });
   useEffect(() => {
@@ -347,6 +354,7 @@ export function useAvaiaWalk({
       onFogTap,
       onCue,
       onLine,
+      onWalkCompleted,
       outingCandidates,
     };
   });
@@ -519,6 +527,7 @@ export function useAvaiaWalk({
     const arrived = globalThis.setTimeout(() => {
       const nowMs = globalThis.performance.now();
       const purpose = walkPurpose.current;
+      latest.current.onWalkCompleted?.(walk);
       setWalk(undefined);
       dispatch({
         type: "arrived",
