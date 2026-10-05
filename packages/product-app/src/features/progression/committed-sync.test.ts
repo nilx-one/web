@@ -124,7 +124,7 @@ function access(
 ): CommittedAwardAccessPort {
   return {
     commitAwards: vi.fn(commit),
-    readClaims: vi.fn(async () => ({ kind: "read", epoch: 2961, claims: [] })),
+    readClaims: async () => ({ kind: "read", epoch: 2961, claims: [] }),
   };
 }
 
