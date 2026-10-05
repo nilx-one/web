@@ -197,9 +197,7 @@ export interface FindRoll {
  * FIND_OFFSET_METERS, so no coordinate has to be created or persisted merely
  * to decide whether the find was actually seen.
  */
-export function isFindPerceptible(
-  roll: Pick<FindRoll, "placement">,
-): boolean {
+export function isFindPerceptible(roll: Pick<FindRoll, "placement">): boolean {
   return (
     Math.abs(roll.placement.across) * FIND_OFFSET_METERS <= PERCEPTION_METERS
   );

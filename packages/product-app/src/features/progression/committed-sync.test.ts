@@ -35,7 +35,10 @@ import {
   type CommittedJournalSnapshot,
   type PendingCommittedAward,
 } from "./committed-journal";
-import { flushCommittedAwards, type CommittedWorldEvent } from "./committed-sync";
+import {
+  flushCommittedAwards,
+  type CommittedWorldEvent,
+} from "./committed-sync";
 import { progressionSnapshot, type Progression } from "./progression";
 
 const READY_PROGRESSION: Progression = {
@@ -116,9 +119,7 @@ function answered(
 }
 
 function access(
-  commit: (
-    awards: readonly CommittedAward[],
-  ) => Promise<CommitAwardsResult>,
+  commit: (awards: readonly CommittedAward[]) => Promise<CommitAwardsResult>,
 ): CommittedAwardAccessPort {
   return {
     commitAwards: vi.fn(commit),
@@ -361,15 +362,12 @@ describe("flushCommittedAwards", () => {
   });
 
   it("drops invalid and capped awards instead of inventing success", async () => {
-    const invalid = award(
-      id("h"),
-      {
-        kind: "zone_walked",
-        earner: "bond",
-        subject: "cell:invalid",
-        at: 7000,
-      },
-    );
+    const invalid = award(id("h"), {
+      kind: "zone_walked",
+      earner: "bond",
+      subject: "cell:invalid",
+      at: 7000,
+    });
     pending = [invalid];
     const invalidPort = access(async () => ({
       kind: "rejected",
@@ -394,15 +392,12 @@ describe("flushCommittedAwards", () => {
         return first;
       },
     );
-    const capped = award(
-      id("i"),
-      {
-        kind: "zone_walked",
-        earner: "bond",
-        subject: "cell:capped",
-        at: 8000,
-      },
-    );
+    const capped = award(id("i"), {
+      kind: "zone_walked",
+      earner: "bond",
+      subject: "cell:capped",
+      at: 8000,
+    });
     pending = [capped];
     const cappedPort = access(async (sent) =>
       answered(sent, { kind: "capped" }),

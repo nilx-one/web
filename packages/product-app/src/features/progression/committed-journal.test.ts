@@ -48,12 +48,7 @@ describe("rebasePendingAwards", () => {
       },
     ];
 
-    const rebased = await rebasePendingAwards(
-      key,
-      chain,
-      serverHead,
-      pending,
-    );
+    const rebased = await rebasePendingAwards(key, chain, serverHead, pending);
 
     expect(rebased).toHaveLength(2);
     expect(rebased[0]?.parent).toBe(serverHead);
