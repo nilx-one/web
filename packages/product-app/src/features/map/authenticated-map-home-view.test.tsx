@@ -544,6 +544,53 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getAllByRole("heading", { name: "0x0sky" })).toHaveLength(1);
   });
 
+  it("lets the header say the section a person has scrolled into, and the screen above the first", () => {
+    const { container } = renderView({ section: "settings" });
+    const scroll = container.querySelector<HTMLElement>(".bond-dock__scroll");
+    const headerTitle = container.querySelector(".bond-dock__detail-header h2");
+    expect(scroll).not.toBeNull();
+    const at = (element: Element, top: number, bottom: number) => {
+      element.getBoundingClientRect = () =>
+        ({ top, bottom, height: bottom - top }) as DOMRect;
+    };
+    const legend = (name: string) => {
+      const found = [
+        ...(scroll as HTMLElement).querySelectorAll("legend"),
+      ].find((element) => element.textContent === name);
+      expect(found).toBeDefined();
+      return found as HTMLElement;
+    };
+    const scrollTo = (top: number) => {
+      Object.defineProperty(scroll, "scrollTop", {
+        configurable: true,
+        value: top,
+      });
+      fireEvent.scroll(scroll as HTMLElement);
+    };
+    at(scroll as HTMLElement, 100, 600);
+
+    // The large title has gone, the first section's has not: the screen.
+    at(legend("Language"), 120, 140);
+    scrollTo(40);
+    expect(headerTitle).toHaveTextContent(/^Settings$/);
+
+    // Its title gone up under the header, the section takes over saying it…
+    at(legend("Language"), 40, 60);
+    at(legend("Appearance"), 200, 220);
+    scrollTo(160);
+    expect(headerTitle).toHaveTextContent(/^Language$/);
+
+    // …and the last one gone up is the one being read.
+    at(legend("Appearance"), 60, 80);
+    scrollTo(320);
+    expect(headerTitle).toHaveTextContent(/^Appearance$/);
+
+    // Back at the top, the screen's own name is the large title again.
+    scrollTo(0);
+    expect(headerTitle).toHaveAttribute("aria-hidden", "true");
+    expect(headerTitle).toHaveTextContent(/^Settings$/);
+  });
+
   it("opens the Providers screen from add, with a connect route each", () => {
     renderView({ section: "identity" });
 

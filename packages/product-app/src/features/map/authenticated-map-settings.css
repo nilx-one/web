@@ -117,6 +117,28 @@
   transform: none;
 }
 
+/* The section a person scrolls into rises into the small title from below,
+   the way its own heading just went up past it. */
+.bond-dock__detail-header-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: bond-dock-header-title-in 0.18s ease;
+}
+
+@keyframes bond-dock-header-title-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bond-dock__detail-header-title {
+    animation: none;
+  }
+}
+
 /* The screen's own name, said once at the top of what it names — the large
    title the header's small one takes over from the moment it scrolls away. */
 .bond-dock__detail-large-title {
