@@ -416,7 +416,8 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "avaia.finds.title": "Рідкісні знахідки",
   "avaia.finds.empty": "Активних слідів немає.",
   "avaia.finds.leadTitle": "Знахідка рівня {tier}",
-  "avaia.finds.leadDetail": "Помічена цього тижня · заберіть кермо й дійдіть туди.",
+  "avaia.finds.leadDetail":
+    "Помічена цього тижня · заберіть кермо й дійдіть туди.",
   "avaia.finds.note":
     "Сліди лишаються на цьому пристрої. Рідкісне підбирання ділиться лише як claim, ніколи не як BondChain.",
   "find.toast.rare.title": "Помічено рідкісну знахідку",
