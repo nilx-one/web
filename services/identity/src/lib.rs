@@ -10,6 +10,7 @@ pub mod api {
 pub mod browser_web_auth;
 pub mod credentials;
 pub mod discord_oauth;
+pub mod finds;
 pub mod github_evidence;
 pub mod location_control;
 pub mod provider_link;
