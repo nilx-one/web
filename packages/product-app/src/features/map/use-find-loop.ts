@@ -180,8 +180,11 @@ export function useFindLoop({
       }
     };
 
-    void check();
-    const interval = globalThis.setInterval(() => void check(), 60_000);
+    void check().catch(() => undefined);
+    const interval = globalThis.setInterval(
+      () => void check().catch(() => undefined),
+      60_000,
+    );
     return () => {
       cancelled = true;
       globalThis.clearInterval(interval);
@@ -249,7 +252,9 @@ export function useFindLoop({
       epoch,
       segment,
     });
-    if (roll !== null) void recordFind(owner, roll, "bond").catch(() => undefined);
+    if (roll !== null) {
+      void recordFind(owner, roll, "bond").catch(() => undefined);
+    }
   }, [bondDriving, deviceAccuracy, deviceLatitude, deviceLongitude, owner]);
 
   return { leads, completedAvaiaWalk };
