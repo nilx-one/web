@@ -27,6 +27,7 @@ import {
   formatPubDress,
   hasAvaiaProfileAccess,
   hasNearbySpeechAccess,
+  hasCommittedAwardAccess,
   hasPubInfoAccess,
   type BondProviderConnections,
   type BondProviderType,
@@ -1053,6 +1054,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           : { localModel: dependencies.localModel })}
         {...(hasPubInfoAccess(dependencies.identity)
           ? { pubInfo: dependencies.identity }
+          : {})}
+        {...(hasCommittedAwardAccess(dependencies.identity)
+          ? { committedAwards: dependencies.identity }
           : {})}
         {...(hasNearbySpeechAccess(dependencies.identity)
           ? { nearbySpeech: dependencies.identity }
