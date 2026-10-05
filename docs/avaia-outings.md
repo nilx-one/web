@@ -25,11 +25,11 @@ Kept from phase 1:
 
 Changed:
 
-| Was                                   | Becomes                                         | Why                                                          |
-| ------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
-| the Avaia walks only on lit cells     | **kept** (R1 decided, see below)                | a target behind the fog is a reason to open it, not cross it |
-| finds are local only, with no server  | local for tiers 1–3, shared (claim) for 4–6     | "someone got there first" is impossible without shared state |
-| the Avaia walks on a fake `WorldPort` | it walks on a pedestrian graph built from tiles | without a route, an outing cuts through buildings            |
+| Was                                   | Becomes                                                     | Why                                                                                        |
+| ------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| the Avaia walks only on lit cells     | **kept** (R1 decided, see below)                            | a target behind the fog is a reason to open it, not cross it                               |
+| finds are local only, with no server  | local, except a claim for tiers 4–6 and the experience (R3) | a rare find is one for the whole city; a server-held number cannot be edited on the device |
+| the Avaia walks on a fake `WorldPort` | it walks on a pedestrian graph built from tiles             | without a route, an outing cuts through buildings                                          |
 
 ## §0 How the Avaia walks: paths by default, grass when needed
 
@@ -368,8 +368,7 @@ The vocabulary, validator and template narrator from phase 1 are taken unchanged
 - The Avaia sees a tier 4–6 find and **does not pick it up**. It keeps a **lead**: the segment, the epoch and the tier, without exact coordinates.
 - The person sees the lead, takes the wheel, physically walks to the segment and picks the find up. The pick-up experience goes to the Bond (R2).
 - **R2, decided: whoever does it gets the experience.** Seeing a find pays 10 experience to whoever saw it first: the Avaia if it was walking on its own or sent by a tap, the Bond if this device walked past. Picking it up pays the tier's experience (10–1000) to whoever picked it up. The Avaia picks up tiers 1–3 itself and leaves tiers 4–6 as leads for the person. Each find pays for being seen and for being picked up exactly once, so repeating an event or the journal does not multiply experience. Picking up a find nobody has seen yet counts as seeing it too. The rules are `awardsFor` and `canPickUp` in `artifact-contract`.
-- Tiers 4–6 need a **claim**: the first to pick up an `artifactId` wins, and the server confirms it. Otherwise "someone else got there first" is impossible. Tiers 1–3 stay local and personal and need no server.
-- Experience in [progression](progression.md) is `authority: client` today. For tiers with a claim the server has to confirm the pick-up, otherwise 1000 points can simply be drawn. This is open decision R3.
+- Tiers 4–6 are **claimed**: the first Bond to pick up a find keeps it, and anyone after gets "oh crap!". Tiers 1–3 stay personal: every Bond picks up its own. See "R3: experience on the server, history on the device".
 - Leads, like finds, do not become `bch` and are not written to the presence journal.
 - **How a lead lives** (`leads.ts` in `artifact-contract`, #305):
   - only a find the Avaia sees and may not pick up (tiers 4–6) becomes a lead; one it may pick up never does;
@@ -400,7 +399,7 @@ export interface FindRecord {
 ```
 
 - The new `avaia-finds` database **is added to `world-wipe.ts`**, which today deletes only `nilx-presence`. Otherwise "wipe the world" leaves the finds orphaned.
-- `state-placement.ts`: finds and leads are per device and are not synced, until the claim decides otherwise.
+- `state-placement.ts`: finds and leads are `sealed-transport`: they stay on the device and travel only device to device, directly (R3). They never reach the service.
 
 ## §5 Narrative and surface
 
@@ -428,14 +427,97 @@ What this means for the code:
 - **Reading tiles ahead** (§0.5, #312) is limited to open ground and its edge: an outing does not need tiles behind the fog.
 - **The fog reveal** does not change. If the cell's edge cannot be reached over open ground, the Avaia stays put and the reveal runs on its timer, as today.
 
+## R3: experience on the server, history on the device
+
+Decision: **the server holds the experience of the Bond and of its Avaia, a commitment to the history that earned it, and a claim on every rare find picked up. The history itself (finds, leads, opened cells, the notebook) stays on the device, travels only device to device, and never reaches the server.**
+
+The model is a commit and its sha. The record of an award is the commit: it is kept on the device. The server keeps the sha and the number. A rare find is the one exception that is shared: which find it was and who picked it up.
+
+### What the server holds
+
+- per Bond, the two totals (Bond and Avaia), as today in `bond_pub_info`;
+- per award, its commitment, the earner, the kind, the tier for a pick-up, and the amount the server priced it at. The commitment is the award's id, so it replaces today's random `xp:` nonce;
+- per device chain, the head: the last commitment it accepted and the chain's length;
+- per claimed find (tiers 4–6), its `artifactSha`, its epoch and tier, and the Bond that picked it up.
+
+### On the wire
+
+An award is sent as its commitment, its `parent`, its chain, its kind and its earner, and for a pick-up its tier. **It never carries an amount.** The server prices it from its own table (`awardAmount`: a sighting is 10, a pick-up is its tier's amount, a zone or a study is its `progression` price) and refuses a kind the earner cannot earn, such as an Avaia picking up tier 4. A claimed pick-up also carries its `artifactId` (see the claim below).
+
+The amount is not part of the award record either. The record holds what happened (kind, earner, tier, subject, time), and the amount is a function of it, so repricing the table never breaks a chain's replay.
+
+### The commitment
+
+- `commitment = HMAC-SHA-256(historyKey, parent ‖ canonical award record)`, written as `xp:` and 43 base64url characters.
+- The award record is the local one: the kind, the earner, the tier for a pick-up, what earned it (a cell, a landmark, an `artifactId`) and when. It never leaves the device. The commitment does, with the fields the server prices by (on the wire, above).
+- `historyKey` is a Bond's key that the server never sees. Without it the commitment is useless to the server: a plain hash of a find would not be, because every `artifactId` of an epoch is enumerable and a dictionary over the city grid would give the place back.
+- `parent` is the previous commitment of the same device chain. A device keeps its own chain, so two devices playing at once never fork one chain, and the Bond's history is the union of its device chains.
+- The server accepts an award only on top of its chain's head (`parent` equals the head, fast-forward only). A repeat of an accepted commitment is idempotent and pays nothing.
+
+### Order: the server first, then the device
+
+Earning experience is an intent to keep what earned it. The order is fixed:
+
+1. **Intent.** The device builds the award record, computes its commitment and keeps both as pending: sealed on the device, outside the history, never shown as kept.
+2. **Commit.** It sends the commitment and what the server prices by (on the wire, above). No amount, and no record.
+3. **Keep.** Only after the server accepted it does the device write the record into the history (a find into the finds journal, a sighting, a pick-up) and move its chain head.
+
+- The server refuses (a cap reached, a head that moved on): the pending record is dropped. It never enters the history, and there is no experience without a record or a record without experience.
+- No network: the record waits as pending and is offered again, under the same commitment, so a retry is idempotent. A pending pick-up is not yet a find kept.
+- The server accepted but the device lost the record before writing it (it crashed, it was wiped): the experience stands, and the history is short by one. The device's audit sees a head it cannot replay to and says so; it does not invent the missing record.
+
+### What this protects, and what it does not
+
+- **Protected:** the number. Editing a total, a level or a queued amount on the device (memory, storage, a debugger) changes nothing, because the device shows the totals the server answered (an award not yet accepted shows as pending) and no amount is ever sent: the server prices each award itself. A device cannot rewrite or drop history it already committed without its own audit showing it: replaying the local history must reproduce the head the server holds.
+- **Not protected, and accepted:** a rebuilt client can still invent awards that follow the rules. A tier 1–3 pick-up or a sighting names no find on the wire, so the server cannot check that it was rolled. A claimed pick-up names a real find (below), but nothing proves the Bond walked to it. The server bounds both with per-kind caps per Bond and epoch (a week cannot hold more tier 6 pick-ups than a week of walking rolls). It is a bound, not proof of play, and not presence evidence; the published standing is still this Bond's report.
+- The server learns how many awards of each kind a Bond earned, and when it published them. Where, it learns only from a claim (below).
+
+### The claim: one rare find, one Bond
+
+A find belongs to the artifact, not to the person: the roll is a public function of the pack, the epoch and the segment, so every client generates the same find on the same segment, and nothing has to be shared to see it. What is shared is who got it.
+
+1. **Generate.** Every client rolls the same find from the same segment and epoch (§3.3a). Its `artifactSha` is `SHA-256("nilx-one.artifact.v1:" ‖ artifactId)`, public by design: anyone can compute it.
+2. **Pick up.** The Bond picks the find up (tiers 4–6 are the person's, §3.4). The device sends one request: the `artifactId` and the pick-up award (on the wire, above).
+3. **Check.** The server rolls the find itself from the `artifactId`, with the same `rollSegment` and pack (a port with the same golden test). The roll must give a find of the tier the award names, and the epoch must be the current one, or the one before during the first day of a week. The server derives the `artifactSha` and the amount; the client supplies neither.
+4. **Claim.** In one transaction the server writes the claim and accepts the award, or does neither. The first Bond wins. Only after that does the device keep the find (the order above).
+5. **Oh crap!** A pick-up of the same find by another Bond is refused as `taken`. Its pending record is dropped and the Avaia says "oh crap! someone got there first". A second device of the same Bond gets `already yours` instead: the find was paid once.
+
+Leads hear about it without naming themselves. A device asks for the claimed set of the current epoch by bucket: the first byte of each lead's `artifactSha`, so a question names 1/256 of the week's claims, never a lead. The answer is every claim in those buckets: the `artifactSha`, and whether this Bond is the one that claimed it, never who else. The device matches its leads locally. A lead another Bond claimed closes with "oh crap!"; one this Bond claimed on another device closes quietly. A lead whose epoch ended with nobody picking it up closes quietly: the world rolled anew.
+
+What a claim costs, said plainly, to two readers:
+
+- **The server** learns that this Bond picked up the find on this segment during this epoch. That is a place tied to a Bond, and only a claim reveals it.
+- **Every other client** can learn that someone picked up the rare find on this segment this week. An `artifactSha` is not secret: every `artifactId` of a week is enumerable, so a dictionary turns a claimed set back into segments. The set names no Bond and no time, but in a place where only one person plays, "someone" is that person. This disclosure is accepted, not hidden: any representation a client can match its own leads against, a client can also match a dictionary against.
+
+Both are bounded:
+
+- only tiers 4–6 are claimed, about one find per 17 km walked; tiers 1–3 are never sent;
+- the claim holds the epoch, not a time; the device, the walk and the rest of the history stay on the device;
+- the claimed set a Bond reads names no other Bond, and is answered per bucket, for the current epoch only, under the rate limit, so it is not a feed of the city;
+- a claim is deleted once its epoch is two epochs old: the find no longer exists, and the award it paid stands on its own commitment.
+
+### Syncing between devices: directly only
+
+- The history and `historyKey` travel only device to device, directly: in a native app, over AirDrop, Bluetooth LE or the local network, without the internet. The service is not even a blind relay for them.
+- The web host and the Telegram and Discord hosts need the internet to run, so they have no direct transport yet. Each of them keeps its own history; its awards still reach the server's totals through its own chain. An encrypted file export is the fallback for moving a web history by hand.
+- A history that arrives is checked against the server's heads: every chain it carries must replay to a head the server holds. A history that does not replay is not adopted.
+
+### What this means for the code
+
+- `progression.ts`: an award's id becomes its commitment (`xp:` + HMAC), with `parent` and `kind`. A pending award holds its record until the server accepts it; only then is the record written to its journal and the chain head moved.
+- `services/identity`: the event log gains `chain`, `parent`, `kind`, `tier`; a head per `(owner, chain)`; the price table and per-kind caps per epoch. The request has no amount. Totals stay where they are.
+- `historyKey` is generated on the device and placed as `sealed-transport`: it leaves a device only wrapped for another device of the same Bond, over the direct transport, and never reaches the service.
+- `services/identity`: a port of `rollSegment` with the same golden test; the claim table; `POST` a pick-up (roll check, claim and award in one transaction); `GET` the claimed set of the current epoch by bucket (#304).
+- Leads: match the claimed set locally and close with "oh crap!"; a lead whose epoch ended closes quietly.
+
 ## Open decisions
 
-| №   | Question                                                           | My option                                                                                                          |
-| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| R1  | where the Avaia may walk: open ground only (fog) or the whole city | **decided:** open ground only. The person opens cells bordering open ground by tapping. See "R1: open ground only" |
-| R2  | who earns a find's experience: the Avaia or the Bond               | **decided:** whoever saw it gets 10, whoever picked it up gets the tier's experience. See §3.4                     |
-| R3  | is the server ready for a claim registry for tiers 4–6             | if not, "someone got there first" is postponed, and the rest works locally                                         |
-| R4  | sources for parks, lakes, churches                                 | extend `LANDMARK_KINDS` for pois, read `landuse`/`water` separately. Checked against the archive                   |
+| №   | Question                                                           | My option                                                                                                                      |
+| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| R1  | where the Avaia may walk: open ground only (fog) or the whole city | **decided:** open ground only. The person opens cells bordering open ground by tapping. See "R1: open ground only"             |
+| R2  | who earns a find's experience: the Avaia or the Bond               | **decided:** whoever saw it gets 10, whoever picked it up gets the tier's experience. See §3.4                                 |
+| R3  | what the server holds: a claim registry, experience, or nothing    | **decided:** experience with a commitment, and a claim on tiers 4–6. See "R3: experience on the server, history on the device" |
+| R4  | sources for parks, lakes, churches                                 | extend `LANDMARK_KINDS` for pois, read `landuse`/`water` separately. Checked against the archive                               |
 
 ## Order of work
 
@@ -446,11 +528,11 @@ Each step builds on the one before.
 2. **City targets** (§1): more kinds, unreachable ones filtered out.
 3. **Point B** (§0.4): tap, a 20 s stand, back to autonomy from B. First with straight walking, then with the router.
 4. **The drive without a model** (§2): the utility rule, lines, the interval.
-5. **Finds, locally** (§3, §4): the pack, segments, tiers 1–6 as experience without a claim, anti-farm through epochs, the journal, the `world-wipe` entry.
+5. **Finds, locally** (§3, §4): the pack, segments, tiers 1–6, anti-farm through epochs, the journal, the `world-wipe` entry.
 6. **The model in `DecisionMenu`** (§2.2) and the narrator (§5), behind a flag.
-7. **Claims and leads** (§3.4), once R2 and R3 are decided.
+7. **Leads, claims and committed experience** (§3.4, R3): leads, the claim for tiers 4–6, "oh crap!", and experience the server holds against a commitment.
 
-After step 5 the feature works completely without a model and without a server. The model and the claim come last, as add-ons.
+After step 5 the feature works completely without a model. The model and the committed experience come last, as add-ons.
 
 ## Acceptance
 
