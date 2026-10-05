@@ -242,6 +242,10 @@ A target with no route (more than 30 m from the graph and unreachable across the
 - The "park, lake, church" axis is not fixed. Order, length and number of stops are decided by the drive within its distance budget.
 - "Studying" a target keeps today's landmark mechanics: what the Avaia learns is exactly what the archive declares for the object.
 
+### 1.2a Already built: normalization
+
+`landmark-normalize.ts` in `product-app` turns the mapper's candidates into landmarks by the rules in [Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md): one kind per object, significance (a named walk target, a park of at least 1 ha, a historic building only with an explicit historic attribute, major versus small monuments), malformed geometry rejected, and duplicates collapsed. Its output feeds the outing menu through `outingCandidates`. The mapper itself is #306.
+
 ### 1.3 Already built: the outing menu
 
 `outing-targets.ts` in `product-app` is a pure function, `outingMenu`. Its input is normalized candidates from the mapper (#306, not ready yet), the graph, the Avaia's position, open ground (R1) and a budget in metres.

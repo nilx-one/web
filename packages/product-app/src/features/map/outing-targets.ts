@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { MapObstacle } from "@nilx-one/map-contract";
+import { LANDMARK_GROUPS, type NormalizedLandmark } from "./landmark-normalize";
 import {
   distanceM,
   edgeCost,
@@ -29,21 +30,7 @@ import {
  */
 
 /** The `walk_target` group, in mapping-table order. */
-export const WALK_TARGET_KINDS = [
-  "park",
-  "lake",
-  "nature_reserve",
-  "viewpoint",
-  "beach",
-  "peak",
-  "castle",
-  "fort",
-  "archaeological_site",
-  "ruins",
-  "historic_building",
-  "museum",
-  "major_monument",
-] as const;
+export const WALK_TARGET_KINDS = LANDMARK_GROUPS.walk_target;
 
 export type WalkTargetKind = (typeof WALK_TARGET_KINDS)[number];
 
@@ -403,4 +390,25 @@ function edgeDistance(point: LonLat, rings: AreaRings): number {
     }
   }
   return nearest;
+}
+
+/**
+ * The walk targets among normalized landmarks, as the menu takes them. A line
+ * is never a target, and nothing but the `walk_target` group is.
+ */
+export function outingCandidates(
+  landmarks: readonly NormalizedLandmark[],
+): OutingCandidate[] {
+  return landmarks.flatMap((landmark): OutingCandidate[] =>
+    landmark.group !== "walk_target" || landmark.geometry.type === "line"
+      ? []
+      : [
+          {
+            id: landmark.id,
+            kind: landmark.kind,
+            name: landmark.name,
+            geometry: landmark.geometry,
+          },
+        ],
+  );
 }
