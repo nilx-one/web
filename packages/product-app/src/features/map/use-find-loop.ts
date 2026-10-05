@@ -33,6 +33,7 @@ import {
   queueWorldAwards,
   useCommittedAwardSync,
   type CommittedWorldEvent,
+  type QueueWorldAward,
 } from "../progression/committed-sync";
 
 /** Ignore fixes too imprecise to establish entry into a 50 m find segment. */
@@ -40,6 +41,31 @@ export const FIND_OBSERVATION_ACCURACY_METERS = 50;
 
 function awardKind(kind: "seen" | "picked_up"): "find_seen" | "find_picked_up" {
   return kind === "seen" ? "find_seen" : "find_picked_up";
+}
+
+/**
+ * The committed intents one observed find creates. Pure so the R2 split
+ * (Avaia keeps common finds, rare finds become leads for the Bond) is the same
+ * seam the runtime and contract tests exercise.
+ */
+export function worldAwardsForFind(
+  roll: FindRoll,
+  by: FindEarner,
+  recorded: readonly Parameters<typeof awardsFor>[2],
+  at: number,
+): QueueWorldAward[] {
+  const eventKind =
+    by === "avaia" && !canPickUp(roll, "avaia") ? "seen" : "picked_up";
+  return awardsFor(roll, { kind: eventKind, by }, recorded).map((award) => ({
+    record: {
+      kind: awardKind(award.kind),
+      earner: award.earner,
+      ...(award.kind === "picked_up" ? { tier: roll.tier } : {}),
+      subject: roll.artifactId,
+      at,
+    },
+    find: roll,
+  }));
 }
 
 /**
@@ -53,26 +79,14 @@ async function recordFind(
   by: FindEarner,
 ): Promise<void> {
   const snapshot = await readCommittedJournal(owner);
-  const recorded = recordedFindEvents(snapshot);
-  const eventKind =
-    by === "avaia" && !canPickUp(roll, "avaia") ? "seen" : "picked_up";
-  const awards = awardsFor(roll, { kind: eventKind, by }, recorded);
-  if (awards.length === 0) return;
-  const at = Date.now();
-
-  await queueWorldAwards(
-    owner,
-    awards.map((award) => ({
-      record: {
-        kind: awardKind(award.kind),
-        earner: award.earner,
-        ...(award.kind === "picked_up" ? { tier: roll.tier } : {}),
-        subject: roll.artifactId,
-        at,
-      },
-      find: roll,
-    })),
+  const awards = worldAwardsForFind(
+    roll,
+    by,
+    recordedFindEvents(snapshot),
+    Date.now(),
   );
+  if (awards.length === 0) return;
+  await queueWorldAwards(owner, awards);
 }
 
 export interface FindLoopState {
