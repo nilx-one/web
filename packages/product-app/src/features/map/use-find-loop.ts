@@ -117,8 +117,7 @@ export function useFindLoop({
   readonly bondDriving: boolean;
   /** Firsthand observation only; never a declared/manual position. */
   readonly device:
-    | (MapPointSelection & { readonly accuracyMeters: number })
-    | undefined;
+    (MapPointSelection & { readonly accuracyMeters: number }) | undefined;
   readonly onEvent?: (event: CommittedWorldEvent) => void;
 }): FindLoopState {
   const [leads, setLeads] = useState<readonly FindLead[]>([]);

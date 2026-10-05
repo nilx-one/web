@@ -8,8 +8,12 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/format-helper.yml"
+      - "docs/state-placement.md"
+      - "packages/artifact-contract/src/index.ts"
       - "packages/product-app/src/features/map/use-find-loop.ts"
+      - "packages/product-app/src/features/progression/committed-journal.test.ts"
       - "packages/product-app/src/features/progression/committed-journal.ts"
+      - "packages/product-app/src/features/progression/committed-sync.test.ts"
       - "packages/product-app/src/features/progression/committed-sync.ts"
       - "packages/product-app/src/shell/localization.ts"
 
@@ -31,10 +35,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Format files
         run: |
-          pnpm exec prettier --write             packages/product-app/src/features/map/use-find-loop.ts             packages/product-app/src/features/progression/committed-journal.ts             packages/product-app/src/features/progression/committed-sync.ts             packages/product-app/src/shell/localization.ts
+          pnpm exec prettier --write \
+            docs/state-placement.md \
+            packages/artifact-contract/src/index.ts \
+            packages/product-app/src/features/map/use-find-loop.ts \
+            packages/product-app/src/features/progression/committed-journal.test.ts \
+            packages/product-app/src/features/progression/committed-journal.ts \
+            packages/product-app/src/features/progression/committed-sync.test.ts \
+            packages/product-app/src/features/progression/committed-sync.ts \
+            packages/product-app/src/shell/localization.ts
       - name: Print formatted files
         run: |
-          for file in             packages/product-app/src/features/map/use-find-loop.ts             packages/product-app/src/features/progression/committed-journal.ts             packages/product-app/src/features/progression/committed-sync.ts             packages/product-app/src/shell/localization.ts; do
+          for file in \
+            docs/state-placement.md \
+            packages/artifact-contract/src/index.ts \
+            packages/product-app/src/features/map/use-find-loop.ts \
+            packages/product-app/src/features/progression/committed-journal.test.ts \
+            packages/product-app/src/features/progression/committed-journal.ts \
+            packages/product-app/src/features/progression/committed-sync.test.ts \
+            packages/product-app/src/features/progression/committed-sync.ts \
+            packages/product-app/src/shell/localization.ts; do
             echo "::group::FORMATTED:$file"
             base64 -w0 "$file"
             echo

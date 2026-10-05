@@ -477,9 +477,7 @@ export function leadChangeForKeptAward(
     award.record.kind === "find_seen" &&
     award.find !== undefined &&
     isClaimed(award.find.tier) &&
-    !snapshot.leads.some(
-      (lead) => lead.artifactId === award.find?.artifactId,
-    )
+    !snapshot.leads.some((lead) => lead.artifactId === award.find?.artifactId)
   ) {
     return {
       kind: "note",
@@ -494,9 +492,7 @@ export function leadChangeForKeptAward(
   }
   if (
     award.record.kind === "find_picked_up" &&
-    snapshot.leads.some(
-      (lead) => lead.artifactId === award.record.subject,
-    )
+    snapshot.leads.some((lead) => lead.artifactId === award.record.subject)
   ) {
     return {
       kind: "close",

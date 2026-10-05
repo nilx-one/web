@@ -5,10 +5,7 @@ import type {
   CommittedAward,
   CommittedAwardAccessPort,
 } from "@nilx-one/application";
-import {
-  isClaimed,
-  type ArtifactId,
-} from "@nilx-one/artifact-contract";
+import { isClaimed, type ArtifactId } from "@nilx-one/artifact-contract";
 import { useEffect, useRef } from "react";
 
 import { resolvePickUp } from "./claims";
