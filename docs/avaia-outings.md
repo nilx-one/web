@@ -448,6 +448,18 @@ The model is a commit and its sha. The record of an award is the commit: it is k
 - `parent` is the previous commitment of the same device chain. A device keeps its own chain, so two devices playing at once never fork one chain, and the Bond's history is the union of its device chains.
 - The server accepts an award only on top of its chain's head (`parent` equals the head, fast-forward only). A repeat of an accepted commitment is idempotent and pays nothing.
 
+### Order: the server first, then the device
+
+Earning experience is an intent to keep what earned it. The order is fixed:
+
+1. **Intent.** The device builds the award record, computes its commitment and keeps both as pending: sealed on the device, outside the history, never shown as kept.
+2. **Commit.** It sends only the commitment, the kind and the amount. Nothing else.
+3. **Keep.** Only after the server accepted it does the device write the record into the history (a find into the finds journal, a sighting, a pick-up) and move its chain head.
+
+- The server refuses (a cap reached, a head that moved on): the pending record is dropped. It never enters the history, and there is no experience without a record or a record without experience.
+- No network: the record waits as pending and is offered again, under the same commitment, so a retry is idempotent. A pending pick-up is not yet a find kept.
+- The server accepted but the device lost the record before writing it (it crashed, it was wiped): the experience stands, and the history is short by one. The device's audit sees a head it cannot replay to and says so; it does not invent the missing record.
+
 ### What this protects, and what it does not
 
 - **Protected:** the number. Editing a total, a level or a queued amount on the device (memory, storage, a debugger) changes nothing, because the device shows the totals the server answered (an award not yet accepted shows as pending) and the server prices each award by its kind (a sighting is 10, a pick-up is its tier's amount, a zone or a study is its `progression` price). A device cannot rewrite or drop history it already committed without its own audit showing it: replaying the local history must reproduce the head the server holds.
@@ -466,7 +478,7 @@ A lead lives until its epoch ends (§3.4). When the epoch turns and the find was
 
 ### What this means for the code
 
-- `progression.ts`: an award's id becomes its commitment (`xp:` + HMAC), with `parent` and `kind`. The local copy keeps the chain head it last saw acknowledged.
+- `progression.ts`: an award's id becomes its commitment (`xp:` + HMAC), with `parent` and `kind`. A pending award holds its record until the server accepts it; only then is the record written to its journal and the chain head moved.
 - `services/identity`: the event log gains `chain`, `parent`, `kind`; a head per `(owner, chain)`; per-kind amounts and per-epoch caps. Totals stay where they are.
 - `historyKey` is generated on the device and placed as `sealed-transport`: it leaves a device only wrapped for another device of the same Bond, over the direct transport, and never reaches the service.
 - No claim registry (#304 closed). Leads close with "oh crap!" at the epoch turn.
