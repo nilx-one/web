@@ -34,9 +34,9 @@ import {
   type CommittedWorldEvent,
 } from "../progression/committed-sync";
 
-function awardKind(kind: "seen" | "picked_up"):
-  | "find_seen"
-  | "find_picked_up" {
+function awardKind(
+  kind: "seen" | "picked_up",
+): "find_seen" | "find_picked_up" {
   return kind === "seen" ? "find_seen" : "find_picked_up";
 }
 
@@ -196,7 +196,11 @@ export function useFindLoop({
   const deviceLongitude = device?.longitude;
   const deviceLatitude = device?.latitude;
   useEffect(() => {
-    if (!bondDriving || deviceLongitude === undefined || deviceLatitude === undefined) {
+    if (
+      !bondDriving ||
+      deviceLongitude === undefined ||
+      deviceLatitude === undefined
+    ) {
       previousBondSegment.current =
         deviceLongitude === undefined || deviceLatitude === undefined
           ? undefined
