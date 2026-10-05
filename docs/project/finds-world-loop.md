@@ -134,3 +134,7 @@ existing workflow provides a meaningful pre-merge validation.
 
 One task, one branch, one PR. Keep the PR draft until the implementation and full
 CI are green. Merge remains a separate, explicitly authorized action.
+---
+
+© 2026 aiaiaiai · aiaiaiai.org  
+SPDX-License-Identifier: MPL-2.0
