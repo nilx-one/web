@@ -709,6 +709,238 @@ describe("pub_info experience transport", () => {
   });
 });
 
+describe("committed awards and claims transport", () => {
+  const mine = `xp:${"a".repeat(43)}`;
+  const rare = `xp:${"b".repeat(43)}`;
+  const sha = `ab${"0".repeat(62)}`;
+
+  it("commits awards without an amount and reads each outcome", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        experience: { authority: "client", bond_xp: 430, avaia_xp: 0 },
+        results: [
+          { id: mine, outcome: "accepted" },
+          { id: rare, outcome: "taken" },
+        ],
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma proof",
+    });
+
+    await expect(
+      adapter.commitAwards([
+        {
+          id: mine,
+          parent: null,
+          chain: "ch:phone123",
+          kind: "zone_walked",
+          earner: "bond",
+        },
+        {
+          id: rare,
+          parent: mine,
+          chain: "ch:phone123",
+          kind: "find_picked_up",
+          earner: "bond",
+          tier: 5,
+          artifactId: "art:seg:312346:298243:e2961:1:0",
+        },
+      ]),
+    ).resolves.toEqual({
+      kind: "committed",
+      experience: { bondXp: 430, avaiaXp: 0 },
+      results: [
+        { id: mine, outcome: { kind: "accepted" } },
+        { id: rare, outcome: { kind: "taken" } },
+      ],
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/v1/identity/pub-info/awards", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        authorization: "tma proof",
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({
+        awards: [
+          {
+            id: mine,
+            parent: null,
+            chain: "ch:phone123",
+            kind: "zone_walked",
+            earner: "bond",
+          },
+          {
+            id: rare,
+            parent: mine,
+            chain: "ch:phone123",
+            kind: "find_picked_up",
+            earner: "bond",
+            tier: 5,
+            artifact_id: "art:seg:312346:298243:e2961:1:0",
+          },
+        ],
+      }),
+    });
+  });
+
+  it("reads every outcome the service writes", async () => {
+    const outcomes = [
+      ["accepted", { kind: "accepted" }],
+      ["duplicate", { kind: "duplicate" }],
+      ["behind", { kind: "behind", head: rare }],
+      ["capped", { kind: "capped" }],
+      ["already_yours", { kind: "already-yours" }],
+      ["taken", { kind: "taken" }],
+      ["too_many_chains", { kind: "too-many-chains" }],
+    ] as const;
+    const award = {
+      id: mine,
+      parent: null,
+      chain: "ch:phone123",
+      kind: "find_seen",
+      earner: "bond",
+    } as const;
+    for (const [wire, outcome] of outcomes) {
+      const adapter = createIdentityHttpAdapter({
+        fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+          response(200, {
+            experience: { authority: "client", bond_xp: 0, avaia_xp: 0 },
+            results: [
+              {
+                id: mine,
+                outcome: wire,
+                ...(wire === "behind" ? { head: rare } : {}),
+              },
+            ],
+          }),
+        ),
+        getAuthorization: () => undefined,
+      });
+      const result = await adapter.commitAwards([award]);
+      expect(result).toEqual({
+        kind: "committed",
+        experience: { bondXp: 0, avaiaXp: 0 },
+        results: [{ id: mine, outcome }],
+      });
+    }
+  });
+
+  it("answers deterministically when the service cannot", async () => {
+    const award = {
+      id: mine,
+      parent: null,
+      chain: "ch:phone123",
+      kind: "find_seen",
+      earner: "bond",
+    } as const;
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockRejectedValueOnce(new TypeError("offline"))
+      .mockResolvedValueOnce(
+        response(422, { error: { code: "invalid_awards", message: "" } }),
+      )
+      .mockResolvedValueOnce(
+        response(429, { error: { code: "rate_limited", message: "" } }),
+      )
+      .mockResolvedValueOnce(response(503, {}))
+      // An answer that does not line up with what was sent.
+      .mockResolvedValueOnce(
+        response(200, {
+          experience: { authority: "client", bond_xp: 0, avaia_xp: 0 },
+          results: [{ id: rare, outcome: "accepted" }],
+        }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.commitAwards([award])).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+    await expect(adapter.commitAwards([award])).resolves.toEqual({
+      kind: "rejected",
+      reason: "invalid",
+    });
+    await expect(adapter.commitAwards([award])).resolves.toEqual({
+      kind: "rejected",
+      reason: "rate-limited",
+    });
+    await expect(adapter.commitAwards([award])).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+    await expect(adapter.commitAwards([award])).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+  });
+
+  it("reads the claimed set by bucket", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        response(200, { epoch: 2961, claims: [{ sha, yours: true }] }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readClaims(["cd", "ab", "ab"])).resolves.toEqual({
+      kind: "read",
+      epoch: 2961,
+      claims: [{ sha, yours: true }],
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/identity/finds/claims?buckets=ab,cd",
+      {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {},
+      },
+    );
+  });
+
+  it("asks nothing for buckets the service would refuse", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    const tooMany = Array.from({ length: 17 }, (_, index) =>
+      index.toString(16).padStart(2, "0"),
+    );
+
+    for (const buckets of [[], ["AB"], ["abc"], tooMany]) {
+      await expect(adapter.readClaims(buckets)).resolves.toEqual({
+        kind: "rejected",
+        reason: "invalid",
+      });
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt a claim outside the buckets asked", async () => {
+    const adapter = createIdentityHttpAdapter({
+      fetch: vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValue(
+          response(200, { epoch: 2961, claims: [{ sha, yours: false }] }),
+        ),
+      getAuthorization: () => undefined,
+    });
+
+    await expect(adapter.readClaims(["cd"])).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+  });
+});
+
 describe("Browser provider connection transport", () => {
   it("reads canonical provider bindings from the authenticated service", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(

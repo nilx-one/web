@@ -427,6 +427,65 @@ mod award_tests {
     }
 
     #[tokio::test]
+    async fn concurrent_pick_ups_of_one_find_pay_exactly_one_of_them() {
+        // A file, not memory: only a pool of several connections can race.
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let url = format!("sqlite://{}", directory.path().join("identity.sqlite").display());
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        let sky: PubDress = "0x0sky".parse().expect("owner");
+        let other: PubDress = "0xfrSb".parse().expect("other");
+        for (bond, id) in [(&sky, 7), (&other, 8)] {
+            repository
+                .register(bond, &ProviderIdentity::telegram(id), 100)
+                .await
+                .expect("registration");
+        }
+
+        for round in 0..8_u8 {
+            let sha = format!("{round:02x}").repeat(32);
+            let award = |device: &str| {
+                pick_up(
+                    &format!("xp:{device}{round}"),
+                    &format!("ch:{device}{round}"),
+                    &sha,
+                )
+            };
+            let (phone, laptop, theirs) = (award("phone"), award("laptop"), award("theirs"));
+            let (phone, laptop, theirs) = tokio::join!(
+                repository.commit_awards(&sky, std::slice::from_ref(&phone), EPOCH, 200),
+                repository.commit_awards(&sky, std::slice::from_ref(&laptop), EPOCH, 200),
+                repository.commit_awards(&other, std::slice::from_ref(&theirs), EPOCH, 200),
+            );
+            let phone = phone.expect("phone").1[0].clone();
+            let laptop = laptop.expect("laptop").1[0].clone();
+            let theirs = theirs.expect("theirs").1[0].clone();
+            let outcomes = [&phone, &laptop, &theirs];
+            assert_eq!(
+                outcomes.iter().filter(|o| ***o == AwardOutcome::Accepted).count(),
+                1,
+                "round {round}: {outcomes:?}"
+            );
+            if theirs == AwardOutcome::Accepted {
+                assert_eq!([&phone, &laptop], [&AwardOutcome::Taken; 2]);
+            } else {
+                assert_eq!(theirs, AwardOutcome::Taken);
+                assert!(outcomes.contains(&&AwardOutcome::AlreadyYours));
+            }
+            let claims = repository
+                .read_claims(&sky, EPOCH, &[round])
+                .await
+                .expect("claims");
+            assert_eq!(claims.len(), 1);
+            assert_eq!(claims[0].yours, theirs != AwardOutcome::Accepted);
+        }
+
+        // Each round paid one pick-up, to whoever won it.
+        let paid = repository.read_pub_info(&sky).await.expect("read").bond_xp
+            + repository.read_pub_info(&other).await.expect("read").bond_xp;
+        assert_eq!(paid, 8 * 400);
+    }
+
+    #[tokio::test]
     async fn the_claimed_set_is_read_per_bucket_and_names_no_other_bond() {
         let (repository, sky, other) = repository().await;
         let mine = format!("ab{}", "0".repeat(62));
