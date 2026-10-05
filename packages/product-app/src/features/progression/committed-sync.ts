@@ -175,7 +175,7 @@ export function flushCommittedAwards(
 
       if (award.record.kind === "find_picked_up") {
         const resolution = resolvePickUp(result, award.id);
-        switch (resolution.kind) {
+        switch (resolution) {
           case "keep": {
             const kept = await keepCommittedAward(owner, award.id);
             if (kept !== undefined) await afterKeep(owner, kept, onEvent);
