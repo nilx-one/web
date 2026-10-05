@@ -79,7 +79,17 @@ export {
   type SpokenLineView,
 } from "./nearby-speech";
 export {
+  hasCommittedAwardAccess,
   hasPubInfoAccess,
+  MAX_CLAIM_BUCKETS,
+  type AwardKind,
+  type AwardOutcome,
+  type AwardResult,
+  type ClaimedFindView,
+  type ClaimsReadResult,
+  type CommitAwardsResult,
+  type CommittedAward,
+  type CommittedAwardAccessPort,
   type ExperienceEarner,
   type ExperienceEvent,
   type ExperiencePublication,

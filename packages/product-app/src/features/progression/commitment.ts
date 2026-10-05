@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AwardKind } from "@nilx-one/application";
 import {
   AVAIA_PICKUP_MAX_TIER,
   FIND_SEEN_EXPERIENCE,
@@ -32,14 +33,7 @@ import {
  * or cut shows.
  */
 
-/** What an award is for. The server prices each kind; it never takes an amount. */
-export type AwardKind =
-  | "zone_revealed"
-  | "zone_walked"
-  | "landmark_studied"
-  | "landmark_noticed"
-  | "find_seen"
-  | "find_picked_up";
+export type { AwardKind };
 
 /** One award, as this device's history records it. Never sent. */
 export interface AwardRecord {

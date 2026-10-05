@@ -36,11 +36,20 @@ import {
   type PubDressResolutionResult,
   type PubDressSelection,
   type ExperiencePublication,
+  type AwardOutcome,
+  type AwardResult,
+  type ClaimedFindView,
+  type ClaimsReadResult,
+  type CommitAwardsResult,
+  type CommittedAward,
+  type CommittedAwardAccessPort,
+  MAX_CLAIM_BUCKETS,
   type NearbySpeechAccessPort,
   type PubInfoAccessPort,
   type SpokenLineView,
   type PubInfoExperience,
   type PubInfoExperienceResult,
+  type PubInfoRejection,
 } from "@nilx-one/application";
 
 export * from "./bond-location-control";
@@ -185,6 +194,7 @@ class IdentityHttpAdapter
     IdentityAccessPort,
     AvaiaProfileAccessPort,
     PubInfoAccessPort,
+    CommittedAwardAccessPort,
     NearbySpeechAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
@@ -1056,6 +1066,89 @@ class IdentityHttpAdapter
     );
   }
 
+  public async commitAwards(
+    awards: readonly CommittedAward[],
+  ): Promise<CommitAwardsResult> {
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch("/api/v1/identity/pub-info/awards", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({
+          awards: awards.map((award) => ({
+            id: award.id,
+            parent: award.parent,
+            chain: award.chain,
+            kind: award.kind,
+            earner: award.earner,
+            ...(award.tier === undefined ? {} : { tier: award.tier }),
+            ...(award.artifactId === undefined
+              ? {}
+              : { artifact_id: award.artifactId }),
+          })),
+        }),
+      });
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const experience = parsePubInfoExperience(body);
+      const results = parseAwardResults(body, awards);
+      if (experience !== undefined && results !== undefined) {
+        return { kind: "committed", experience, results };
+      }
+      return { kind: "service-unavailable" };
+    }
+    return pubInfoRefusal(body);
+  }
+
+  public async readClaims(
+    buckets: readonly string[],
+  ): Promise<ClaimsReadResult> {
+    const asked = [...new Set(buckets)].sort();
+    // The service refuses these too; asking would only spend the limit.
+    if (
+      asked.length === 0 ||
+      asked.length > MAX_CLAIM_BUCKETS ||
+      !asked.every((bucket) => CLAIM_BUCKET.test(bucket))
+    ) {
+      return { kind: "rejected", reason: "invalid" };
+    }
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch(
+        `/api/v1/identity/finds/claims?buckets=${asked.join(",")}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: {
+            ...(authorization === undefined ? {} : { authorization }),
+          },
+        },
+      );
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const read = parseClaims(body, asked);
+      return read === undefined
+        ? { kind: "service-unavailable" }
+        : { kind: "read", ...read };
+    }
+    return pubInfoRefusal(body);
+  }
+
   private authorization(): string | undefined {
     const authorization = this.options.getAuthorization();
     return authorization === undefined || authorization.length === 0
@@ -1080,20 +1173,98 @@ function isExperienceTotal(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-function parsePubInfoResult(
-  response: Response,
+const CLAIM_BUCKET = /^[0-9a-f]{2}$/;
+const ARTIFACT_SHA = /^[0-9a-f]{64}$/;
+const COMMITMENT = /^xp:[A-Za-z0-9_-]{43}$/;
+
+/**
+ * One outcome per award sent, in the order sent and under the same ids. An
+ * answer that does not line up with the request is not adopted.
+ */
+function parseAwardResults(
   body: unknown,
-): PubInfoExperienceResult {
-  if (response.ok) {
-    const experience = parsePubInfoExperience(body);
-    if (experience !== undefined) return { kind: "published", experience };
+  awards: readonly CommittedAward[],
+): AwardResult[] | undefined {
+  if (!isRecord(body) || !Array.isArray(body.results)) return undefined;
+  if (body.results.length !== awards.length) return undefined;
+  const results: AwardResult[] = [];
+  for (const [index, entry] of body.results.entries()) {
+    const id = awards[index]?.id;
+    if (!isRecord(entry) || id === undefined || entry.id !== id)
+      return undefined;
+    const outcome = parseAwardOutcome(entry);
+    if (outcome === undefined) return undefined;
+    results.push({ id, outcome });
   }
+  return results;
+}
+
+function parseAwardOutcome(
+  entry: Record<string, unknown>,
+): AwardOutcome | undefined {
+  switch (entry.outcome) {
+    case "accepted":
+      return { kind: "accepted" };
+    case "duplicate":
+      return { kind: "duplicate" };
+    case "behind": {
+      const head = entry.head ?? null;
+      if (head !== null && !(typeof head === "string" && COMMITMENT.test(head)))
+        return undefined;
+      return { kind: "behind", head };
+    }
+    case "capped":
+      return { kind: "capped" };
+    case "already_yours":
+      return { kind: "already-yours" };
+    case "taken":
+      return { kind: "taken" };
+    case "too_many_chains":
+      return { kind: "too-many-chains" };
+    default:
+      return undefined;
+  }
+}
+
+/** The claims answered, each in a bucket that was asked for. */
+function parseClaims(
+  body: unknown,
+  asked: readonly string[],
+): { epoch: number; claims: ClaimedFindView[] } | undefined {
+  if (!isRecord(body) || !Array.isArray(body.claims)) return undefined;
+  const epoch = body.epoch;
+  if (typeof epoch !== "number" || !Number.isSafeInteger(epoch) || epoch < 0)
+    return undefined;
+  const buckets = new Set(asked);
+  const claims: ClaimedFindView[] = [];
+  for (const entry of body.claims) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.sha !== "string" ||
+      !ARTIFACT_SHA.test(entry.sha) ||
+      !buckets.has(entry.sha.slice(0, 2)) ||
+      typeof entry.yours !== "boolean"
+    ) {
+      return undefined;
+    }
+    claims.push({ sha: entry.sha, yours: entry.yours });
+  }
+  return { epoch, claims };
+}
+
+function pubInfoRefusal(
+  body: unknown,
+):
+  | { kind: "rejected"; reason: PubInfoRejection }
+  | { kind: "service-unavailable" } {
   switch (parseErrorCode(body)) {
     case "provider_authentication_required":
       return { kind: "rejected", reason: "authentication-required" };
     case "session_inactive":
       return { kind: "rejected", reason: "inactive" };
     case "invalid_pub_info":
+    case "invalid_awards":
+    case "invalid_buckets":
       return { kind: "rejected", reason: "invalid" };
     case "rate_limited":
       return { kind: "rejected", reason: "rate-limited" };
@@ -1102,11 +1273,23 @@ function parsePubInfoResult(
   }
 }
 
+function parsePubInfoResult(
+  response: Response,
+  body: unknown,
+): PubInfoExperienceResult {
+  if (response.ok) {
+    const experience = parsePubInfoExperience(body);
+    if (experience !== undefined) return { kind: "published", experience };
+  }
+  return pubInfoRefusal(body);
+}
+
 export function createIdentityHttpAdapter(
   options: IdentityHttpAdapterOptions,
 ): IdentityAccessPort &
   AvaiaProfileAccessPort &
   PubInfoAccessPort &
+  CommittedAwardAccessPort &
   NearbySpeechAccessPort {
   return new IdentityHttpAdapter(options);
 }
