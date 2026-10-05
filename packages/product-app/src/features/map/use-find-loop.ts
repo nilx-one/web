@@ -34,9 +34,7 @@ import {
   type CommittedWorldEvent,
 } from "../progression/committed-sync";
 
-function awardKind(
-  kind: "seen" | "picked_up",
-): "find_seen" | "find_picked_up" {
+function awardKind(kind: "seen" | "picked_up"): "find_seen" | "find_picked_up" {
   return kind === "seen" ? "find_seen" : "find_picked_up";
 }
 
