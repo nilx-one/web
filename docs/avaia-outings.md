@@ -367,6 +367,13 @@ The vocabulary, validator and template narrator from phase 1 are taken unchanged
 - Tiers 4–6 need a **claim**: the first to pick up an `artifactId` wins, and the server confirms it. Otherwise "someone else got there first" is impossible. Tiers 1–3 stay local and personal and need no server.
 - Experience in [progression](progression.md) is `authority: client` today. For tiers with a claim the server has to confirm the pick-up, otherwise 1000 points can simply be drawn. This is open decision R3.
 - Leads, like finds, do not become `bch` and are not written to the presence journal.
+- **How a lead lives** (`leads.ts` in `artifact-contract`, #305):
+  - only a find the Avaia sees and may not pick up (tiers 4–6) becomes a lead; one it may pick up never does;
+  - a lead keeps the minimum: the `artifactId`, its segment, epoch and tier, and when it was seen. No coordinates, no names;
+  - seeing the same find again is no new lead: the first sighting stands;
+  - a lead lives until its epoch ends, because next week the segment rolls anew and the find is gone;
+  - picking the find up closes the lead;
+  - at most 12 leads are kept; past that, the oldest sighting goes first.
 
 ## §4 The finds journal
 
