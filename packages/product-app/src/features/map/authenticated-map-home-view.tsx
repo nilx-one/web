@@ -137,6 +137,7 @@ import {
 } from "./bond-dock-view-model";
 import { landmarkKindLabel, landmarkLabel } from "./avaia-lines";
 import { studiedBy } from "./landmark-notebook";
+import { placeLandmark } from "./place-affinity";
 import {
   ACHIEVEMENTS,
   earnDeviceAchievement,
@@ -2097,6 +2098,43 @@ export function AuthenticatedMapHomeView({
                             onOpen={() => openAvatarEditor("avaia")}
                           />
                         </>
+                      )}
+                      {avaiaWalk.favourites.length === 0 ? null : (
+                        <section
+                          className="avaia-notebook"
+                          aria-labelledby="avaia-favourites-title"
+                        >
+                          <span
+                            className="interface-settings__eyebrow"
+                            id="avaia-favourites-title"
+                          >
+                            {t("avaia.favourites.title")}
+                          </span>
+                          <ul className="avaia-notebook__list">
+                            {avaiaWalk.favourites.map((place) => (
+                              <li key={place.id}>
+                                <strong>
+                                  {place.lovedAt === undefined ? "" : "♥ "}
+                                  {landmarkLabel(locale, placeLandmark(place))}
+                                </strong>
+                                <small>
+                                  {[
+                                    locale === "en"
+                                      ? place.kind
+                                      : landmarkKindLabel(locale, place.kind),
+                                    ...(place.lovedAt === undefined
+                                      ? []
+                                      : [t("avaia.favourites.loved")]),
+                                    t("avaia.favourites.visits").replace(
+                                      "{count}",
+                                      String(place.visits),
+                                    ),
+                                  ].join(" · ")}
+                                </small>
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
                       )}
                       <section
                         className="avaia-notebook"

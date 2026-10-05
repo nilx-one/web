@@ -13,7 +13,13 @@ import {
   NEAR_METERS,
   type OutingMenu,
   type OutingOption,
+  type OutingTarget,
 } from "./outing-targets";
+import {
+  outingAppeal,
+  returnAfterMs,
+  type PlaceAffinity,
+} from "./place-affinity";
 
 /**
  * The Avaia's drive: when it goes out on its own, how far, and where to
@@ -99,8 +105,16 @@ export type DriveEvent =
     }
   /** The drive was asked and chose to stay. */
   | { readonly type: "stayed"; readonly at: number }
-  /** The walk under way arrived, `meters` after it set off. */
-  | { readonly type: "arrived"; readonly at: number; readonly meters: number }
+  /**
+   * The walk under way arrived, `meters` after it set off. A visit lasts
+   * `stayMs` when the place says how long, `VISIT_MS` otherwise.
+   */
+  | {
+      readonly type: "arrived";
+      readonly at: number;
+      readonly meters: number;
+      readonly stayMs?: number;
+    }
   /**
    * Whatever the Avaia was doing ended early: a walk that did not arrive, or a
    * stand cut short because it left the wheel.
@@ -184,7 +198,7 @@ export function stepDrive(state: DriveState, event: DriveEvent): DriveState {
             activity: {
               kind: "standing",
               reason: "visit",
-              until: event.at + VISIT_MS,
+              until: event.at + (event.stayMs ?? VISIT_MS),
             },
             visited:
               activity.targetId === undefined
@@ -244,14 +258,29 @@ export function outingBudgetMeters(state: DriveState): number {
   );
 }
 
-/** Targets visited too recently to go back to. */
+/**
+ * Targets visited too recently to go back to. A week for most; with the
+ * Avaia's feelings at hand, a day for a place it loves and three for a
+ * favourite, and what it remembers visiting counts as well as this page's.
+ */
 export function recentlyVisited(
   state: DriveState,
   now: number,
+  affinity?: PlaceAffinity,
 ): ReadonlySet<string> {
+  const last = new Map(Object.entries(state.visited));
+  for (const place of affinity?.places ?? []) {
+    last.set(place.id, Math.max(last.get(place.id) ?? -Infinity, place.lastAt));
+  }
   return new Set(
-    Object.entries(state.visited)
-      .filter(([, at]) => now - at < REVISIT_MS)
+    [...last]
+      .filter(
+        ([id, at]) =>
+          now - at <
+          (affinity === undefined
+            ? REVISIT_MS
+            : returnAfterMs(affinity, id, now, REVISIT_MS)),
+      )
       .map(([id]) => id),
   );
 }
@@ -264,6 +293,10 @@ export type OutingChoice = OutingOption | { readonly kind: "home" };
  * - tired and away from home: go home;
  * - evening and night (20:00 to 07:00 local): only a near target, else wander;
  * - otherwise the nearest target (the menu's rule), else wander, else stay.
+ *
+ * With the Avaia's feelings at hand, "nearest" becomes "most wanted": a place
+ * it longs for, or a new one its temperament leans toward, wins over one a
+ * little closer. Distance still counts against it.
  */
 export function chooseOuting(
   state: DriveState,
@@ -272,6 +305,9 @@ export function chooseOuting(
     readonly at: LonLat;
     readonly home: LonLat | undefined;
     readonly hour: number;
+    readonly affinity?: PlaceAffinity | undefined;
+    /** Wall-clock milliseconds, for how feelings stand now. */
+    readonly now?: number | undefined;
   },
 ): OutingChoice {
   if (
@@ -282,19 +318,51 @@ export function chooseOuting(
     return { kind: "home" };
   }
   const evening = context.hour >= 20 || context.hour < 7;
+  const targets = menu.options.flatMap((option) =>
+    option.kind === "target" &&
+    (!evening || option.target.meters <= NEAR_METERS)
+      ? [option.target]
+      : [],
+  );
+  const { affinity } = context;
+  if (affinity !== undefined && targets.length > 0) {
+    const now = context.now ?? Date.now();
+    const wanted = mostWanted(
+      targets,
+      affinity,
+      now,
+      outingBudgetMeters(state),
+    );
+    return { kind: "target", target: wanted };
+  }
   if (evening) {
-    const near = menu.options.find(
-      (option) =>
-        option.kind === "target" && option.target.meters <= NEAR_METERS,
-    );
-    return (
-      near ??
-      menu.options.find((option) => option.kind === "wander") ?? {
-        kind: "stay",
-      }
-    );
+    const near = targets[0];
+    return near !== undefined
+      ? { kind: "target", target: near }
+      : (menu.options.find((option) => option.kind === "wander") ?? {
+          kind: "stay",
+        });
   }
   return chooseByRule(menu);
+}
+
+/** The target that appeals most; the nearer one when two appeal the same. */
+function mostWanted(
+  targets: readonly OutingTarget[],
+  affinity: PlaceAffinity,
+  now: number,
+  maxMeters: number,
+): OutingTarget {
+  let best = targets[0]!;
+  let bestAppeal = outingAppeal(affinity, best, now, maxMeters);
+  for (const target of targets.slice(1)) {
+    const appeal = outingAppeal(affinity, target, now, maxMeters);
+    if (appeal > bestAppeal) {
+      best = target;
+      bestAppeal = appeal;
+    }
+  }
+  return best;
 }
 
 /**

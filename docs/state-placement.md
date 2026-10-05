@@ -119,7 +119,9 @@ Local-first. Eligible, not transported.
   shared totals are `bond_pub_info`, above, not this copy;
 - **opened cells** — fog reveals (`nilx-one.fog.reveals.v1.<owner>`) and the
   landmark notebook (`nilx-one.avaia.landmarks.v1.<owner>`;
-  [Avaia walks the world](avaia-walk.md));
+  [Avaia walks the world](avaia-walk.md)), and the places the Avaia grew
+  fond of (`nilx-one.avaia.affinity.v1.<owner>`; same page, "Favourite
+  places");
 - **position** — where the Bond and its Avaia were last seen, and when the
   Avaia last went out on its own (`nilx-one.world-memory.v1.<owner>`), and the artificial presentation
   positions an owner declared for counterparts

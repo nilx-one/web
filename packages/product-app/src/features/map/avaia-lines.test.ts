@@ -21,6 +21,8 @@ const KINDS: readonly AvaiaLineKind[] = [
   "blocked.fog",
   "landmark.spotted",
   "landmark.studied",
+  "landmark.loved",
+  "landmark.longing",
   "fog.reveal",
   "fog.revealed",
   "fog.busy",
@@ -57,7 +59,12 @@ describe("what an Avaia says to itself", () => {
   it("names the landmark in every line about one", () => {
     for (const locale of SUPPORTED_LOCALES) {
       for (const model of AVATAR_MODEL_IDS) {
-        for (const kind of ["landmark.spotted", "landmark.studied"] as const) {
+        for (const kind of [
+          "landmark.spotted",
+          "landmark.studied",
+          "landmark.loved",
+          "landmark.longing",
+        ] as const) {
           for (const line of avaiaLines(locale, model, kind)) {
             expect(line).toContain("{landmark}");
           }

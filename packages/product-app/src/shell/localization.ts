@@ -106,6 +106,9 @@ const EN_MESSAGES = {
   "header.attention": "A next step is waiting in Settings",
   "settings.localModel.reward":
     "Pays once on this device: +{bond} Bond and +{avaia} Avaia experience.",
+  "avaia.favourites.title": "Favourite places",
+  "avaia.favourites.loved": "Loved",
+  "avaia.favourites.visits": "Visits: {count}",
   "avaia.notebook.title": "Landmarks studied",
   "avaia.notebook.empty":
     "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
@@ -396,6 +399,9 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "header.attention": "У налаштуваннях чекає наступний крок",
   "settings.localModel.reward":
     "Один раз на цьому пристрої: +{bond} досвіду Bond і +{avaia} досвіду Avaia.",
+  "avaia.favourites.title": "Улюблені місця",
+  "avaia.favourites.loved": "Закохана",
+  "avaia.favourites.visits": "Візитів: {count}",
   "avaia.notebook.title": "Вивчені пам’ятки",
   "avaia.notebook.empty":
     "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",

@@ -84,7 +84,25 @@ import {
   type DriveEvent,
   type WalkPurpose,
 } from "./outing-drive";
-import { outingMenu, type OutingCandidate } from "./outing-targets";
+import {
+  outingMenu,
+  type OutingCandidate,
+  type OutingTarget,
+} from "./outing-targets";
+import {
+  affinitySnapshot,
+  emptyAffinity,
+  favourites,
+  lingerMs,
+  placeLandmark,
+  placeToReturnTo,
+  recordVisit,
+  subscribeAffinities,
+  updateAffinity,
+  type FondPlace,
+  type PlaceAffinity,
+  type VisitedPlace,
+} from "./place-affinity";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 
 /** How long a line stays on the card before it closes again. */
@@ -171,6 +189,49 @@ interface Pause {
   readonly bearingDeg: number;
   readonly startedMs: number;
   readonly durationMs: number;
+  /** The outing target being visited, felt once the visit is over. */
+  readonly visiting?: OutingTarget;
+}
+
+/** An outing target as a landmark a line can name. */
+function targetLandmark(target: OutingTarget): MapLandmark {
+  return {
+    id: target.id,
+    kind: target.kind,
+    name: target.name,
+    longitude: target.anchor[0],
+    latitude: target.anchor[1],
+    facts: {},
+  };
+}
+
+/**
+ * A dear place as the landmark a walk goes back to: the notebook's own entry
+ * when it has one, with what the archive declared, or the place as remembered.
+ */
+function rememberedLandmark(
+  notebook: LandmarkNotebook,
+  place: FondPlace,
+): MapLandmark {
+  return (
+    notebook.studied.find((entry) => entry.landmark.id === place.id)
+      ?.landmark ?? placeLandmark(place)
+  );
+}
+
+/** Whether an outing goes back somewhere dear rather than somewhere new. */
+function wantsBack(affinity: PlaceAffinity, id: string): boolean {
+  return favourites(affinity, Date.now()).some((place) => place.id === id);
+}
+
+function visitedPlace(landmark: MapLandmark): VisitedPlace {
+  return {
+    id: landmark.id,
+    kind: landmark.kind,
+    name: landmark.name,
+    longitude: landmark.longitude,
+    latitude: landmark.latitude,
+  };
 }
 
 /**
@@ -220,6 +281,8 @@ export interface AvaiaWalkState {
   readonly moving: boolean;
   readonly speech: AvaiaSpeech | undefined;
   readonly notebook: LandmarkNotebook;
+  /** The places this Avaia grew fond of, loved ones first. */
+  readonly favourites: readonly FondPlace[];
   /** Back to the device, silent and still: what taking the wheel starts from. */
   reset(): void;
   /**
@@ -267,6 +330,9 @@ export function useAvaiaWalk({
   const drive = useRef(firstDrive);
   const [driveVersion, setDriveVersion] = useState(0);
   const walkPurpose = useRef<WalkPurpose>("tap");
+  // The outing target a walk under way is headed for, so arriving knows what
+  // it is visiting.
+  const walkTarget = useRef<OutingTarget | undefined>(undefined);
   const dispatch = useCallback(
     (event: DriveEvent) => {
       const before = drive.current;
@@ -305,6 +371,11 @@ export function useAvaiaWalk({
     subscribeNotebooks,
     () => notebookSnapshot(owner),
     () => EMPTY_NOTEBOOK,
+  );
+  const affinity = useSyncExternalStore(
+    subscribeAffinities,
+    () => affinitySnapshot(owner, avaiaAddress),
+    () => emptyAffinity(avaiaAddress),
   );
   const speechCount = useRef(0);
   const lastLine = useRef<string | undefined>(undefined);
@@ -372,6 +443,31 @@ export function useAvaiaWalk({
     [],
   );
 
+  /**
+   * A visit over: how it felt goes into the Avaia's record of places, and the
+   * visit after which a place is loved is said out loud. True when it was.
+   */
+  const feel = useCallback(
+    (landmark: MapLandmark): boolean => {
+      const { owner: book, avaiaAddress: by } = latest.current;
+      const at = Date.now();
+      let fell = false;
+      updateAffinity(book, by, (current) => {
+        const visit = recordVisit(
+          current,
+          visitedPlace(landmark),
+          at,
+          new Date(at).getHours(),
+        );
+        fell = visit.fellInLove;
+        return visit.affinity;
+      });
+      if (fell) say("landmark.loved", landmark);
+      return fell;
+    },
+    [say],
+  );
+
   /** Where the body is at this instant, whatever it is doing. */
   const currentPoint = useCallback(
     (nowMs: number): MapPointSelection | undefined => {
@@ -404,10 +500,12 @@ export function useAvaiaWalk({
       how: {
         readonly purpose: WalkPurpose;
         readonly targetId?: string;
+        readonly target?: OutingTarget;
         readonly landmark?: MapLandmark;
       },
     ): "walking" | "nowhere" | MapObstacle["kind"] | "fog" => {
-      const { purpose, targetId, landmark } = how;
+      const { purpose, target, landmark } = how;
+      const targetId = how.targetId ?? target?.id;
       const from = currentPoint(nowMs);
       if (from === undefined) return "nowhere";
       const bounds = routeBounds(from, to);
@@ -437,6 +535,7 @@ export function useAvaiaWalk({
       setPause(undefined);
       setActed(true);
       walkPurpose.current = purpose;
+      walkTarget.current = target;
       dispatch(
         purpose === "tap"
           ? { type: "tap", at: Date.now() }
@@ -519,11 +618,27 @@ export function useAvaiaWalk({
     const arrived = globalThis.setTimeout(() => {
       const nowMs = globalThis.performance.now();
       const purpose = walkPurpose.current;
+      const visiting = purpose === "outing" ? walkTarget.current : undefined;
+      const wall = Date.now();
+      // A dear place is lingered in: rested in, gazed from or studied for
+      // longer the fonder the Avaia is of it.
+      const stayMs =
+        visiting === undefined
+          ? undefined
+          : lingerMs(
+              affinitySnapshot(
+                latest.current.owner,
+                latest.current.avaiaAddress,
+              ),
+              visiting,
+              wall,
+            );
       setWalk(undefined);
       dispatch({
         type: "arrived",
-        at: Date.now(),
+        at: wall,
         meters: walk.along[walk.along.length - 1] ?? 0,
+        ...(stayMs === undefined ? {} : { stayMs }),
       });
       if (walk.landmark !== undefined) {
         setStudy({
@@ -541,7 +656,9 @@ export function useAvaiaWalk({
           at: walk.to,
           bearingDeg: walk.arrivalBearingDeg,
           startedMs: nowMs,
-          durationMs: purpose === "tap" ? POINT_B_STAND_MS : VISIT_MS,
+          durationMs:
+            purpose === "tap" ? POINT_B_STAND_MS : (stayMs ?? VISIT_MS),
+          ...(visiting === undefined ? {} : { visiting }),
         });
       }
     }, remaining);
@@ -558,6 +675,7 @@ export function useAvaiaWalk({
     );
     const done = globalThis.setTimeout(() => {
       setPause(undefined);
+      if (pause.visiting !== undefined) feel(targetLandmark(pause.visiting));
       const { activity } = drive.current;
       dispatch({
         type: "tick",
@@ -568,7 +686,7 @@ export function useAvaiaWalk({
       });
     }, remaining);
     return () => globalThis.clearTimeout(done);
-  }, [dispatch, pause]);
+  }, [dispatch, feel, pause]);
 
   // A walking body is heard walking. A walk with no duration — reduced
   // motion, which arrives without walking — makes no footfall at all.
@@ -601,22 +719,31 @@ export function useAvaiaWalk({
     );
     const done = globalThis.setTimeout(() => {
       const { owner: book, avaiaAddress: by } = latest.current;
+      // Going back to a place already studied is a visit, not a lesson: it
+      // pays nothing and says nothing, unless that is when it is loved.
+      const before = notebookSnapshot(book).studied.some(
+        (entry) => entry.landmark.id === study.landmark.id && entry.by === by,
+      );
       updateNotebook(book, (current) =>
         studyLandmark(current, study.landmark, by, Date.now()),
       );
-      updateProgression(book, (current) =>
-        queueExperience(current, {
-          id: newExperienceEventId(),
-          earner: "avaia",
-          amount: XP_LANDMARK_STUDIED_BY_AVAIA,
-        }),
-      );
+      if (!before) {
+        updateProgression(book, (current) =>
+          queueExperience(current, {
+            id: newExperienceEventId(),
+            earner: "avaia",
+            amount: XP_LANDMARK_STUDIED_BY_AVAIA,
+          }),
+        );
+      }
       setStudy(undefined);
       setRest({ point: study.at, bearingDeg: study.bearingDeg });
-      say("landmark.studied", study.landmark);
+      if (!feel(study.landmark) && !before) {
+        say("landmark.studied", study.landmark);
+      }
     }, remaining);
     return () => globalThis.clearTimeout(done);
-  }, [say, study]);
+  }, [feel, say, study]);
 
   // Where the body will be once what it is doing ends is what this device
   // keeps, so a page dropped mid-walk comes back with the Avaia arrived.
@@ -729,13 +856,28 @@ export function useAvaiaWalk({
           body: from,
           nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
         });
-        const landmark = nextLandmarkToStudy(
-          notebookSnapshot(book),
+        const known = notebookSnapshot(book);
+        const fresh = nextLandmarkToStudy(
+          known,
           by,
           from,
           CURIOSITY_REACH_METERS,
           open,
         );
+        // Nothing new to see: a place it misses draws it back instead.
+        const dear =
+          fresh === undefined
+            ? placeToReturnTo(
+                affinitySnapshot(book, by),
+                from,
+                CURIOSITY_REACH_METERS,
+                Date.now(),
+                open,
+              )
+            : undefined;
+        const landmark =
+          fresh ??
+          (dear === undefined ? undefined : rememberedLandmark(known, dear));
         if (landmark === undefined) return;
         if (
           goTo(approachPoint(from, landmark), nowMs, {
@@ -743,13 +885,16 @@ export function useAvaiaWalk({
             landmark,
           }) === "walking"
         ) {
-          say("landmark.spotted", landmark);
+          say(
+            fresh === undefined ? "landmark.longing" : "landmark.spotted",
+            landmark,
+          );
         }
       },
       acted ? IDLE_CURIOSITY_MS : FIRST_LOOK_MS,
     );
     return () => globalThis.clearTimeout(wander);
-  }, [acted, currentPoint, goTo, idle, notebook, renderer, say]);
+  }, [acted, affinity, currentPoint, goTo, idle, notebook, renderer, say]);
 
   // The drive: an idle Avaia, restless enough and rested since its last
   // outing, goes out on its own. The menu and the pick are code's; with no
@@ -796,7 +941,11 @@ export function useAvaiaWalk({
           from: at,
           open: canEnter,
           budgetMeters: budget,
-          exclude: recentlyVisited(state, wall),
+          exclude: recentlyVisited(
+            state,
+            wall,
+            affinitySnapshot(latest.current.owner, latest.current.avaiaAddress),
+          ),
           obstacles: renderer.obstaclesWithin?.(area) ?? [],
         });
         const device = latest.current.observed;
@@ -807,6 +956,11 @@ export function useAvaiaWalk({
               ? undefined
               : [device.longitude, device.latitude],
           hour: new Date(wall).getHours(),
+          affinity: affinitySnapshot(
+            latest.current.owner,
+            latest.current.avaiaAddress,
+          ),
+          now: wall,
         });
         const point = ([longitude, latitude]: LonLat) => ({
           longitude,
@@ -817,7 +971,7 @@ export function useAvaiaWalk({
           went =
             goTo(point(choice.target.anchor), nowMs, {
               purpose: "outing",
-              targetId: choice.target.id,
+              target: choice.target,
             }) === "walking";
         } else if (choice.kind === "home" && device !== undefined) {
           went = goTo(device, nowMs, { purpose: "home" }) === "walking";
@@ -838,8 +992,16 @@ export function useAvaiaWalk({
             there !== undefined &&
             goTo(point(there), nowMs, { purpose: "wander" }) === "walking";
         }
-        if (went) say("walk");
-        else dispatch({ type: "stayed", at: wall });
+        if (!went) dispatch({ type: "stayed", at: wall });
+        else if (
+          choice.kind === "target" &&
+          wantsBack(
+            affinitySnapshot(latest.current.owner, latest.current.avaiaAddress),
+            choice.target.id,
+          )
+        ) {
+          say("landmark.longing", targetLandmark(choice.target));
+        } else say("walk");
       }
     };
     const outing = globalThis.setTimeout(
@@ -890,6 +1052,19 @@ export function useAvaiaWalk({
 
   const moving =
     walk !== undefined || study !== undefined || pause !== undefined;
+  // As of the latest visit: a render reads no clock, and a feeling fades over
+  // weeks, not between two renders.
+  const fond = useMemo(
+    () =>
+      favourites(
+        affinity,
+        affinity.places.reduce(
+          (latest, place) => Math.max(latest, place.lastAt),
+          0,
+        ),
+      ),
+    [affinity],
+  );
   // One object per change that matters, so the world redraws a body when the
   // Avaia does something and not whenever the surface around it re-renders.
   return useMemo(
@@ -898,10 +1073,11 @@ export function useAvaiaWalk({
       moving,
       speech,
       notebook,
+      favourites: fond,
       reset,
       walkTo,
       announce: say,
     }),
-    [moving, notebook, reset, say, speech, stance, walkTo],
+    [fond, moving, notebook, reset, say, speech, stance, walkTo],
   );
 }
