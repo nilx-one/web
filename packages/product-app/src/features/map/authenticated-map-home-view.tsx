@@ -883,7 +883,7 @@ export function AuthenticatedMapHomeView({
       void queueCommittedAward(pubDress, {
         kind: via === "avaia" ? "zone_revealed" : "zone_walked",
         earner: via === "avaia" ? "avaia" : "bond",
-        subject: String(_cell),
+        subject: _cell.id,
         at: Date.now(),
       }).catch(() => undefined);
       if (via === "avaia" && wheel === "avaia" && handover === undefined) {
