@@ -102,7 +102,14 @@ export const LOVE_AT = 0.62;
 /** Love is not at first sight: a place is loved only once it was come back to. */
 export const LOVE_VISITS = 3;
 
-/** How far each visit moves fondness toward what that visit was like. */
+/**
+ * What a first visit leaves, as a share of how it went: a first impression.
+ * Enough that a place enjoyed at 0.67 or more is a favourite at once, and so
+ * worth coming back to; a lukewarm one is only known.
+ */
+export const FIRST_IMPRESSION = 0.6;
+
+/** How far each later visit moves fondness toward what that visit was like. */
 export const FONDNESS_LEARNING = 0.4;
 
 /** How far each visit moves taste for that family of places. */
@@ -304,9 +311,10 @@ export interface Visit {
 }
 
 /**
- * One visit, felt. Fondness moves from what it was, faded, toward how much
- * this visit was enjoyed; taste for the family moves a little the same way.
- * The place is loved the first time it is dear enough after enough visits.
+ * One visit, felt. A first visit leaves a first impression; each later one
+ * moves fondness from what it was, faded, toward how much it was enjoyed.
+ * Taste for the family moves a little the same way. The place is loved the
+ * first time it is dear enough after enough visits.
  */
 export function recordVisit(
   affinity: PlaceAffinity,
@@ -316,8 +324,12 @@ export function recordVisit(
 ): Visit {
   const before = findPlace(affinity, visited.id);
   const felt = enjoyment(affinity, visited, hour);
-  const was = before === undefined ? 0 : fondnessAt(before, at);
-  const fondness = clamp01(was + (felt - was) * FONDNESS_LEARNING);
+  const was = before === undefined ? undefined : fondnessAt(before, at);
+  const fondness = clamp01(
+    was === undefined
+      ? felt * FIRST_IMPRESSION
+      : was + (felt - was) * FONDNESS_LEARNING,
+  );
   const visits = (before?.visits ?? 0) + 1;
   const fellInLove =
     before?.lovedAt === undefined &&
@@ -561,16 +573,20 @@ export function writeAffinity(
   }
 }
 
-// One record per Bond for the whole page, read from storage once, the same
-// way the landmark notebook is: a visit that ends is not a render.
+// One record per Bond and Avaia for the whole page, read from storage once,
+// the same way the landmark notebook is: a visit that ends is not a render.
 const affinities = new Map<string, PlaceAffinity>();
 const affinityListeners = new Set<() => void>();
 
+function cacheKey(owner: string, by: string): string {
+  return `${owner}\u0000${by}`;
+}
+
 export function affinitySnapshot(owner: string, by: string): PlaceAffinity {
-  const cached = affinities.get(owner);
-  if (cached?.by === by) return cached;
+  const cached = affinities.get(cacheKey(owner, by));
+  if (cached !== undefined) return cached;
   const read = readAffinity(owner, by);
-  affinities.set(owner, read);
+  affinities.set(cacheKey(owner, by), read);
   return read;
 }
 
@@ -582,7 +598,7 @@ export function updateAffinity(
   const current = affinitySnapshot(owner, by);
   const next = change(current);
   if (next === current) return;
-  affinities.set(owner, next);
+  affinities.set(cacheKey(owner, by), next);
   writeAffinity(owner, next);
   for (const listener of [...affinityListeners]) listener();
 }

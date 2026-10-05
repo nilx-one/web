@@ -98,7 +98,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.reward":
     "Один раз на этом устройстве: +{bond} опыта Bond и +{avaia} опыта Avaia.",
   "avaia.favourites.title": "Любимые места",
-  "avaia.favourites.loved": "Влюблена",
+  "avaia.favourites.loved": "Любимое место",
   "avaia.favourites.visits": "Визитов: {count}",
   "avaia.notebook.title": "Изученные достопримечательности",
   "avaia.notebook.empty":

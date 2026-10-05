@@ -181,18 +181,24 @@ How much one visit was enjoyed, 0 to 1, comes from four things:
 Temperament and chemistry are drawn from the Avaia's address, so they never
 have to travel: the same Avaia feels the same about the same place anywhere.
 
-- **Fondness** moves 40 % of the way from what it was toward each visit's
-  enjoyment, and halves over 30 days left alone.
+- **Fondness** starts as a first impression, 60 % of how the first visit
+  went, so a place enjoyed at 0.67 or more is a favourite at once and worth
+  coming back to, and a duller one is only known. Each later visit moves it
+  40 % of the way from what it was toward that visit's enjoyment. It halves
+  over 30 days left alone.
 - **Love** happens once: on the first visit, from the third on, that leaves
   fondness at 0.62 or more. Only a place the Avaia really enjoys gets there;
   a lukewarm one never does, however often it is visited. A loved place
   fades no lower than 0.5, and the moment is said aloud (`landmark.loved`).
 - **Longing** is fondness grown back over two days away. An idle Avaia with
-  nothing new to study goes back to the place it longs for most, if that
-  longing reaches 0.35, the place is within 3 km on open ground, and it has
-  been away long enough: a day from a loved place, three from a favourite
-  (fondness 0.4 or more). It says so first (`landmark.longing`). Going back
-  pays no experience again and needs no new study line.
+  nothing new to study goes back to the notebook landmark it longs for most,
+  if that longing reaches 0.35, the landmark is within 3 km on open ground,
+  and it has been away long enough: about a day from a loved place, three
+  days from a favourite (fondness 0.4 or more). It never goes back on its own
+  to a place that is only known. It says so first (`landmark.longing`).
+  Going back pays no experience again and needs no new study line. A place
+  an outing found, such as a park, is the drive's to go back to, not
+  curiosity's: it is never written into the notebook as studied.
 - **Outings** weigh the same feelings. A place it longs for, or a new one its
   temperament leans toward, wins over one a little closer; distance takes
   off up to a quarter. Night still keeps it to near targets, and a tired

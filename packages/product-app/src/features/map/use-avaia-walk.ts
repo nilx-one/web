@@ -94,7 +94,6 @@ import {
   emptyAffinity,
   favourites,
   lingerMs,
-  placeLandmark,
   placeToReturnTo,
   recordVisit,
   subscribeAffinities,
@@ -206,17 +205,18 @@ function targetLandmark(target: OutingTarget): MapLandmark {
 }
 
 /**
- * A dear place as the landmark a walk goes back to: the notebook's own entry
- * when it has one, with what the archive declared, or the place as remembered.
+ * What the notebook holds, noticed or studied, by id: the only places
+ * curiosity goes back to. A park an outing found is the drive's to go back
+ * to, not the notebook's to study, and it never pays for a study.
  */
-function rememberedLandmark(
+function notebookLandmarks(
   notebook: LandmarkNotebook,
-  place: FondPlace,
-): MapLandmark {
-  return (
-    notebook.studied.find((entry) => entry.landmark.id === place.id)
-      ?.landmark ?? placeLandmark(place)
-  );
+): ReadonlyMap<string, MapLandmark> {
+  const landmarks = new Map<string, MapLandmark>();
+  for (const { landmark } of [...notebook.noticed, ...notebook.studied]) {
+    landmarks.set(landmark.id, landmark);
+  }
+  return landmarks;
 }
 
 /** Whether an outing goes back somewhere dear rather than somewhere new. */
@@ -372,10 +372,11 @@ export function useAvaiaWalk({
     () => notebookSnapshot(owner),
     () => EMPTY_NOTEBOOK,
   );
+  const noAffinity = useMemo(() => emptyAffinity(avaiaAddress), [avaiaAddress]);
   const affinity = useSyncExternalStore(
     subscribeAffinities,
     () => affinitySnapshot(owner, avaiaAddress),
-    () => emptyAffinity(avaiaAddress),
+    () => noAffinity,
   );
   const speechCount = useRef(0);
   const lastLine = useRef<string | undefined>(undefined);
@@ -864,11 +865,16 @@ export function useAvaiaWalk({
           CURIOSITY_REACH_METERS,
           open,
         );
-        // Nothing new to see: a place it misses draws it back instead.
+        // Nothing new to see: a landmark it misses draws it back instead.
+        const inBook = notebookLandmarks(known);
+        const mine = affinitySnapshot(book, by);
         const dear =
           fresh === undefined
             ? placeToReturnTo(
-                affinitySnapshot(book, by),
+                {
+                  ...mine,
+                  places: mine.places.filter((place) => inBook.has(place.id)),
+                },
                 from,
                 CURIOSITY_REACH_METERS,
                 Date.now(),
@@ -876,8 +882,7 @@ export function useAvaiaWalk({
               )
             : undefined;
         const landmark =
-          fresh ??
-          (dear === undefined ? undefined : rememberedLandmark(known, dear));
+          fresh ?? (dear === undefined ? undefined : inBook.get(dear.id));
         if (landmark === undefined) return;
         if (
           goTo(approachPoint(from, landmark), nowMs, {

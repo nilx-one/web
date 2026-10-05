@@ -83,7 +83,7 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
     ],
     "landmark.longing": [
       "Back to {landmark}. Course set.",
-      "{landmark} is calling. Heading over.",
+      "{landmark}, again. Heading over.",
       "I know the way to {landmark}.",
     ],
     "fog.reveal": [
@@ -342,7 +342,7 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
     ],
     "landmark.longing": [
       "Курс — {landmark}. Повертаюся.",
-      "{landmark} кличе. Іду.",
+      "Знову туди: {landmark}. Іду.",
       "Дорогу знаю: {landmark}.",
     ],
     "fog.reveal": [
@@ -464,7 +464,7 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark} — готово. Воно було дуже… тут.",
     ],
     "landmark.loved": [
-      "Гаразд. {landmark} мені подобається. Нікому ні слова.",
+      "Гаразд. Мені тут подобається: {landmark}. Нікому ні слова.",
       "{landmark}: підвищення з «річ» до «моя річ».",
       "Схоже, тепер є улюблене місце: {landmark}.",
     ],
@@ -601,7 +601,7 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
     ],
     "landmark.longing": [
       "Курс — {landmark}. Возвращаюсь.",
-      "{landmark} зовёт. Иду.",
+      "Снова туда: {landmark}. Иду.",
       "Дорогу знаю: {landmark}.",
     ],
     "fog.reveal": [
@@ -723,7 +723,7 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark} — готово. Оно было очень… здесь.",
     ],
     "landmark.loved": [
-      "Ладно. {landmark} мне нравится. Никому ни слова.",
+      "Ладно. Мне здесь нравится: {landmark}. Никому ни слова.",
       "{landmark}: повышение с «вещь» до «моя вещь».",
       "Похоже, теперь есть любимое место: {landmark}.",
     ],

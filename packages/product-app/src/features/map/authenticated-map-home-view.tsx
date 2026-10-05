@@ -2114,7 +2114,9 @@ export function AuthenticatedMapHomeView({
                             {avaiaWalk.favourites.map((place) => (
                               <li key={place.id}>
                                 <strong>
-                                  {place.lovedAt === undefined ? "" : "♥ "}
+                                  {place.lovedAt === undefined ? null : (
+                                    <span aria-hidden="true">♥ </span>
+                                  )}
                                   {landmarkLabel(locale, placeLandmark(place))}
                                 </strong>
                                 <small>

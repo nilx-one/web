@@ -400,7 +400,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "settings.localModel.reward":
     "Один раз на цьому пристрої: +{bond} досвіду Bond і +{avaia} досвіду Avaia.",
   "avaia.favourites.title": "Улюблені місця",
-  "avaia.favourites.loved": "Закохана",
+  "avaia.favourites.loved": "Кохане місце",
   "avaia.favourites.visits": "Візитів: {count}",
   "avaia.notebook.title": "Вивчені пам’ятки",
   "avaia.notebook.empty":

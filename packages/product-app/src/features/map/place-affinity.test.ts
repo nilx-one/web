@@ -238,6 +238,73 @@ describe("going back", () => {
   });
 });
 
+describe("on its own", () => {
+  const here = { longitude: 30.52, latitude: 50.45 };
+
+  /**
+   * Lets the Avaia go back by itself for `days`, checking every six hours,
+   * after one first visit: the curiosity loop, with nobody forcing a visit.
+   */
+  function liveOn(visited: VisitedPlace, days: number) {
+    let affinity = recordVisit(
+      emptyAffinity(AVAIA),
+      visited,
+      T0,
+      NOON,
+    ).affinity;
+    const visits = [T0];
+    let lovedAt: number | undefined;
+    for (let at = T0; at <= T0 + days * DAY; at += DAY / 4) {
+      if (placeToReturnTo(affinity, here, 3_000, at)?.id !== visited.id)
+        continue;
+      const visit = recordVisit(affinity, visited, at, NOON);
+      affinity = visit.affinity;
+      visits.push(at);
+      if (visit.fellInLove) lovedAt = at;
+    }
+    return { affinity, visits, lovedAt };
+  }
+
+  it("wants to come back after one visit it enjoyed, not after a dull one", () => {
+    const liked = parkWhere((felt) => felt >= 0.75);
+    const once = recordVisit(emptyAffinity(AVAIA), place(liked), T0, NOON);
+    expect(feelingFor(once.affinity, liked, T0)).toBe("fond");
+    expect(
+      placeToReturnTo(once.affinity, here, 3_000, T0 + FOND_RETURN_MS)?.id,
+    ).toBe(liked);
+
+    const dull = parkWhere((felt) => felt <= 0.6, "museum");
+    const meh = recordVisit(
+      emptyAffinity(AVAIA),
+      place(dull, "museum"),
+      T0,
+      NOON,
+    );
+    expect(feelingFor(meh.affinity, dull, T0)).toBe("known");
+  });
+
+  it("falls in love through its own returns alone", () => {
+    const id = parkWhere((felt) => felt >= 0.8);
+    const { affinity, visits, lovedAt } = liveOn(place(id), 30);
+
+    expect(lovedAt).toBeDefined();
+    expect(visits.indexOf(lovedAt!) + 1).toBeGreaterThanOrEqual(LOVE_VISITS);
+    expect(feelingFor(affinity, id, T0 + 30 * DAY)).toBe("loved");
+    for (let index = 1; index < visits.length; index++) {
+      expect(visits[index]! - visits[index - 1]!).toBeGreaterThanOrEqual(
+        LOVED_RETURN_MS,
+      );
+    }
+  });
+
+  it("never goes back to, or falls for, a place it found dull", () => {
+    const id = parkWhere((felt) => felt <= 0.6, "museum");
+    const { visits, lovedAt } = liveOn(place(id, "museum"), 60);
+    expect(visits).toEqual([T0]);
+    expect(lovedAt).toBeUndefined();
+  });
+});
+
 describe("memory", () => {
   it("keeps loved places when it forgets past the limit", () => {
     const id = parkWhere((felt) => felt >= 0.8);
