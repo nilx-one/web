@@ -9,8 +9,10 @@ import {
   type Commitment,
 } from "./commitment";
 import {
+  leadChangeForKeptAward,
   rebasePendingAwards,
   recordedFindEvents,
+  type CommittedJournalSnapshot,
   type PendingCommittedAward,
 } from "./committed-journal";
 
@@ -85,5 +87,95 @@ describe("recordedFindEvents", () => {
       { artifactId, kind: "seen", by: "bond" },
       { artifactId, kind: "picked_up", by: "bond" },
     ]);
+  });
+});
+
+describe("leadChangeForKeptAward", () => {
+  const rareFind = {
+    artifactId: "art:seg:312346:298243:e2961:1:0",
+    segment: "seg:312346:298243",
+    epoch: "e2961",
+    packVersion: 1,
+    slot: 0,
+    tier: 5,
+    experience: 400,
+    placement: { along: 0.5, across: 0.2 },
+  } as const;
+  const commonFind = { ...rareFind, tier: 2, experience: 25 } as const;
+
+  const snapshot = (
+    leads: CommittedJournalSnapshot["leads"] = [],
+  ): Pick<CommittedJournalSnapshot, "leads"> => ({ leads });
+
+  it("notes a rare lead in the same keep transaction", () => {
+    const seen: PendingCommittedAward = {
+      id: commitment("l"),
+      parent: null,
+      chain: "ch:phone123",
+      record: {
+        kind: "find_seen",
+        earner: "avaia",
+        subject: rareFind.artifactId,
+        at: 2000,
+      },
+      find: rareFind,
+    };
+
+    expect(leadChangeForKeptAward(snapshot(), seen)).toEqual({
+      kind: "note",
+      lead: {
+        artifactId: rareFind.artifactId,
+        segment: rareFind.segment,
+        epoch: rareFind.epoch,
+        tier: 5,
+        seenAt: 2000,
+      },
+    });
+  });
+
+  it("does not turn a common sighting into a lead", () => {
+    const seen: PendingCommittedAward = {
+      id: commitment("m"),
+      parent: null,
+      chain: "ch:phone123",
+      record: {
+        kind: "find_seen",
+        earner: "avaia",
+        subject: commonFind.artifactId,
+        at: 2000,
+      },
+      find: commonFind,
+    };
+
+    expect(leadChangeForKeptAward(snapshot(), seen)).toBeUndefined();
+  });
+
+  it("closes an existing lead with the accepted pickup", () => {
+    const lead = {
+      artifactId: rareFind.artifactId,
+      segment: rareFind.segment,
+      epoch: rareFind.epoch,
+      tier: 5,
+      seenAt: 1000,
+    } as const;
+    const pickup: PendingCommittedAward = {
+      id: commitment("n"),
+      parent: null,
+      chain: "ch:phone123",
+      record: {
+        kind: "find_picked_up",
+        earner: "bond",
+        tier: 5,
+        subject: rareFind.artifactId,
+        at: 3000,
+      },
+      find: rareFind,
+    };
+
+    expect(leadChangeForKeptAward(snapshot([lead]), pickup)).toEqual({
+      kind: "close",
+      artifactId: rareFind.artifactId,
+    });
+    expect(leadChangeForKeptAward(snapshot(), pickup)).toBeUndefined();
   });
 });

@@ -8,7 +8,6 @@ import type {
 import {
   isClaimed,
   type ArtifactId,
-  type FindLead,
 } from "@nilx-one/artifact-contract";
 import { useEffect, useRef } from "react";
 
@@ -17,7 +16,6 @@ import {
   closeCommittedLead,
   dropCommittedAward,
   keepCommittedAward,
-  noteCommittedLead,
   queueCommittedAward,
   readCommittedJournal,
   rebaseCommittedAwards,
@@ -92,32 +90,10 @@ function keptEvent(
   };
 }
 
-async function afterKeep(
-  owner: string,
+function afterKeep(
   award: PendingCommittedAward,
   onEvent: ((event: CommittedWorldEvent) => void) | undefined,
-): Promise<void> {
-  if (
-    award.record.kind === "find_seen" &&
-    award.find !== undefined &&
-    isClaimed(award.find.tier)
-  ) {
-    const lead: FindLead = {
-      artifactId: award.find.artifactId,
-      segment: award.find.segment,
-      epoch: award.find.epoch,
-      tier: award.find.tier,
-      seenAt: award.record.at,
-    };
-    await noteCommittedLead(owner, lead);
-  }
-  if (award.record.kind === "find_picked_up") {
-    await closeCommittedLead(
-      owner,
-      award.record.subject as ArtifactId,
-      "picked-up",
-    );
-  }
+): void {
   const event = keptEvent(award);
   if (event !== undefined) onEvent?.(event);
 }
@@ -178,7 +154,7 @@ export function flushCommittedAwards(
         switch (resolution) {
           case "keep": {
             const kept = await keepCommittedAward(owner, award.id);
-            if (kept !== undefined) await afterKeep(owner, kept, onEvent);
+            if (kept !== undefined) afterKeep(kept, onEvent);
             continue;
           }
           case "close-quietly":
@@ -233,7 +209,7 @@ export function flushCommittedAwards(
         case "accepted":
         case "duplicate": {
           const kept = await keepCommittedAward(owner, award.id);
-          if (kept !== undefined) await afterKeep(owner, kept, onEvent);
+          if (kept !== undefined) afterKeep(kept, onEvent);
           break;
         }
         case "behind":

@@ -13,7 +13,6 @@ vi.mock("./committed-journal", () => ({
   closeCommittedLead: vi.fn(),
   dropCommittedAward: vi.fn(),
   keepCommittedAward: vi.fn(),
-  noteCommittedLead: vi.fn(),
   queueCommittedAward: vi.fn(),
   readCommittedJournal: vi.fn(),
   rebaseCommittedAwards: vi.fn(),
@@ -31,7 +30,6 @@ import {
   closeCommittedLead,
   dropCommittedAward,
   keepCommittedAward,
-  noteCommittedLead,
   readCommittedJournal,
   rebaseCommittedAwards,
   type CommittedJournalSnapshot,
@@ -165,7 +163,6 @@ beforeEach(() => {
     pending = [];
   });
   vi.mocked(closeCommittedLead).mockResolvedValue(undefined);
-  vi.mocked(noteCommittedLead).mockResolvedValue(undefined);
 });
 
 describe("flushCommittedAwards", () => {
@@ -220,7 +217,7 @@ describe("flushCommittedAwards", () => {
     expect(pending).toEqual([]);
   });
 
-  it("keeps a rare sighting as a lead only after the service accepts it", async () => {
+  it("keeps a rare sighting only after the service accepts it", async () => {
     const seen = award(
       id("c"),
       {
@@ -236,13 +233,8 @@ describe("flushCommittedAwards", () => {
 
     await flushCommittedAwards("0x0sky", port);
 
-    expect(noteCommittedLead).toHaveBeenCalledWith("0x0sky", {
-      artifactId: rareFind.artifactId,
-      segment: rareFind.segment,
-      epoch: rareFind.epoch,
-      tier: 5,
-      seenAt: 2000,
-    });
+    expect(keepCommittedAward).toHaveBeenCalledWith("0x0sky", seen.id);
+    expect(pending).toEqual([]);
   });
 
   it("sends the artifact id only for a rare claimed pick-up and closes its lead", async () => {
@@ -267,12 +259,8 @@ describe("flushCommittedAwards", () => {
       tier: 5,
       artifactId: rareFind.artifactId,
     });
-    expect(closeCommittedLead).toHaveBeenCalledWith(
-      "0x0sky",
-      rareFind.artifactId,
-      "picked-up",
-    );
     expect(keepCommittedAward).toHaveBeenCalledWith("0x0sky", pickup.id);
+    expect(closeCommittedLead).not.toHaveBeenCalled();
   });
 
   it("drops a taken claim, closes the lead, and emits the deterministic loss", async () => {
