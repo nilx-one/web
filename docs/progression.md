@@ -38,9 +38,9 @@ it. The rules live in `awardsFor` (`artifact-contract`); see
 The Avaia sees what it walks past, on its own or sent by a tap; the Bond sees
 what this device walks past. The Avaia picks up tiers 1 to 3 itself and leaves
 tiers 4 to 6 as leads, which pay the Bond when the person walks there and picks
-them up. Each find pays its sighting once and its pick-up once. Until the
-claim registry (R3) exists, "once" holds per device: the find journal is
-device-local, so it is still the owner's report, like everything here.
+them up. Each find pays its sighting once and its pick-up once. "Once" holds
+per history: the find journal stays on the device, and the server sees only
+each award's commitment (below), never the find.
 
 ## Achievements
 
@@ -96,6 +96,18 @@ totals under `pub_info.experience`. A carry total is capped, and so is one
 event; the caps bound an untrusted number. They are not proof the award was
 earned, and neither is an idempotent id or the rate limit. The public card
 says the standing is reported by this Bond.
+
+**Committed experience** (decided as R3 in
+[Avaia walks on its own](avaia-outings.md), not built yet). The totals are the
+only number a device shows; it never computes a standing of its own. Each
+award's id becomes its commitment, `xp:` and an HMAC of the local award record
+and the previous commitment, under a Bond key the server never sees. The
+server keeps the commitments, a head per device chain (fast-forward only), and
+prices each award by its kind instead of taking an amount. The record behind a
+commitment — which find, which cell, which landmark — stays on the device.
+This stops editing the number on the device; it does not stop a rebuilt client
+from inventing awards that follow the rules, so the standing stays this Bond's
+report, bounded by per-kind caps.
 
 A device still remembers what it has not managed to publish yet, under
 `nilx-one.progression.v3.<owner>`, the same way fog reveals

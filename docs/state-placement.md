@@ -31,6 +31,11 @@ eligibility so it cannot be read as one layer:
   kind of record as a chosen language, and this table does not give them a
   second one. Eligibility means they may move only under that lifecycle,
   still sealed, device to device, the service at most a blind relay.
+  The finds journal, its leads and the key behind committed experience
+  (R3 in [Avaia walks on its own](avaia-outings.md)) are stricter still: they
+  move only directly, device to device without the service, not even as a
+  blind relay. Until a host has a direct transport (a native app over AirDrop,
+  Bluetooth LE or the local network), they stay where they are.
 
 ## Server
 
