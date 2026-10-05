@@ -56,6 +56,8 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/pub-info",
             get(read_pub_info).post(publish_pub_info),
         )
+        .route("/api/v1/identity/pub-info/awards", post(commit_awards))
+        .route("/api/v1/identity/finds/claims", get(read_claims))
         .layer(DefaultBodyLimit::max(PUB_INFO_MAX_BYTES))
         .with_state(state)
 }
@@ -475,6 +477,200 @@ mod pub_info_api_tests {
         let read_body = json(read).await;
         assert_eq!(read_body["experience"]["authority"], "client");
         assert_eq!(read_body["experience"]["bond_xp"], 60);
+    }
+
+    /// Two Bonds on one service, each with its own Telegram sign-in.
+    async fn two_bonds() -> (axum::Router, String, String) {
+        let database_url = test_database_url();
+        let repository = IdentityRepository::connect(&database_url)
+            .await
+            .expect("repository");
+        for (user_id, owner) in [(8820, "0x0sky"), (8821, "0xfrSb")] {
+            let owner: PubDress = owner.parse().expect("owner pub_dress");
+            repository
+                .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
+                .await
+                .expect("registration");
+        }
+        let provider_links = crate::ProviderLinkRepository::connect(&database_url)
+            .await
+            .expect("provider links");
+        let app = pub_info_router_with_clock(
+            repository,
+            provider_links,
+            TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
+            None,
+            NativeAuthConfig::new(
+                "test-auth-secret-that-is-at-least-thirty-two-bytes",
+                "test-password-pepper-that-is-at-least-thirty-two-bytes",
+            )
+            .expect("valid native auth configuration"),
+            Arc::new(StaticClock),
+        );
+        (app, signed_init_data(8820), signed_init_data(8821))
+    }
+
+    /// A rare find the service's own pack rolls this week, and its tier.
+    fn rare_find() -> (String, u8) {
+        let epoch = crate::finds::epoch_of(i64::try_from(NOW * 1000).expect("ms"));
+        (0..100_000)
+            .find_map(|row| {
+                crate::finds::roll_segment(crate::finds::FIND_PACK_ID, 1, epoch, 312_000 + row, 298_243)
+                    .expect("roll")
+                    .filter(|roll| roll.tier >= crate::finds::CLAIMED_MIN_TIER)
+            })
+            .map(|roll| (roll.artifact_id, roll.tier))
+            .expect("a rare find within reach")
+    }
+
+    fn commitment(seed: &str) -> String {
+        let mac = Hmac::<Sha256>::new_from_slice(b"history-key")
+            .expect("valid key")
+            .chain_update(seed.as_bytes())
+            .finalize()
+            .into_bytes();
+        format!(
+            "xp:{}",
+            base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, mac)
+        )
+    }
+
+    /// Posts awards as a Bond: by its Telegram sign-in the first time, by the
+    /// session cookie that sign-in set after that.
+    async fn post_awards(
+        app: &axum::Router,
+        auth: &str,
+        session: &mut Option<String>,
+        body: &Value,
+    ) -> axum::response::Response {
+        let request = Request::post("/api/v1/identity/pub-info/awards");
+        let request = match session {
+            Some(cookie) => request.header(COOKIE, cookie.as_str()),
+            None => request.header(AUTHORIZATION, format!("tma {auth}")),
+        };
+        let response = app
+            .clone()
+            .oneshot(
+                request
+                    .header("content-type", "application/json")
+                    .header("x-0x1-csrf", "1")
+                    .body(Body::from(body.to_string()))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        // A body the extractor refuses never reaches sign-in, so it sets no
+        // cookie; the next request signs in again.
+        if session.is_none() && response.headers().contains_key(SET_COOKIE) {
+            *session = Some(session_cookie(&response));
+        }
+        response
+    }
+
+    #[tokio::test]
+    async fn committed_awards_are_priced_by_the_service_and_rare_finds_claimed_once() {
+        let (app, sky, other) = two_bonds().await;
+        let (mut sky_session, mut other_session) = (None, None);
+        let (artifact_id, tier) = rare_find();
+        let walked = commitment("walked");
+        let picked = commitment("picked");
+
+        let first = post_awards(
+            &app,
+            &sky,
+            &mut sky_session,
+            &serde_json::json!({ "awards": [
+                { "id": walked, "chain": "ch:phone-01", "kind": "zone_walked", "earner": "bond" },
+                { "id": picked, "parent": walked, "chain": "ch:phone-01", "kind": "find_picked_up",
+                  "earner": "bond", "tier": tier, "artifact_id": artifact_id },
+            ]}),
+        )
+        .await;
+        assert_eq!(first.status(), StatusCode::OK);
+        let cookie = sky_session.clone().expect("a session");
+        let body = json(first).await;
+        let paid = 30 + [150, 400, 1000][usize::from(tier - 4)];
+        assert_eq!(body["experience"]["authority"], "client");
+        assert_eq!(body["experience"]["bond_xp"], paid);
+        assert_eq!(body["results"][0]["outcome"], "accepted");
+        assert_eq!(body["results"][1]["outcome"], "accepted");
+
+        let theirs = post_awards(
+            &app,
+            &other,
+            &mut other_session,
+            &serde_json::json!({ "awards": [
+                { "id": commitment("theirs"), "chain": "ch:their-phone", "kind": "find_picked_up",
+                  "earner": "bond", "tier": tier, "artifact_id": artifact_id },
+            ]}),
+        )
+        .await;
+        let theirs = json(theirs).await;
+        assert_eq!(theirs["results"][0]["outcome"], "taken");
+        assert_eq!(theirs["experience"]["bond_xp"], 0);
+
+        let stale = post_awards(
+            &app,
+            &sky,
+            &mut sky_session,
+            &serde_json::json!({ "awards": [
+                { "id": commitment("stale"), "parent": walked, "chain": "ch:phone-01",
+                  "kind": "find_seen", "earner": "avaia" },
+            ]}),
+        )
+        .await;
+        let stale = json(stale).await;
+        assert_eq!(stale["results"][0]["outcome"], "behind");
+        assert_eq!(stale["results"][0]["head"], picked);
+
+        let sha = crate::finds::artifact_sha(&artifact_id);
+        let claims = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/v1/identity/finds/claims?buckets={},00", &sha[..2]))
+                    .header(COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(claims.status(), StatusCode::OK);
+        let claims = json(claims).await;
+        assert_eq!(claims["claims"], serde_json::json!([{ "sha": sha, "yours": true }]));
+    }
+
+    #[tokio::test]
+    async fn an_award_that_names_an_amount_a_place_or_a_made_up_find_is_refused() {
+        let (app, sky, _) = two_bonds().await;
+        let mut session = None;
+        let (artifact_id, tier) = rare_find();
+        let id = commitment("one");
+        for award in [
+            // An amount is never taken.
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "zone_walked", "earner": "bond", "amount": 30 }),
+            // An opaque nonce is not a commitment.
+            serde_json::json!({ "id": "xp:1", "chain": "ch:phone-01", "kind": "zone_walked", "earner": "bond" }),
+            // An Avaia cannot walk a zone open, nor pick up a rare find.
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "zone_walked", "earner": "avaia" }),
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "find_picked_up", "earner": "avaia",
+                                "tier": tier, "artifact_id": artifact_id }),
+            // A rare pick-up names its find; a common one names none.
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "find_picked_up", "earner": "bond", "tier": tier }),
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "find_picked_up", "earner": "bond",
+                                "tier": 1, "artifact_id": artifact_id }),
+            // A find of another tier, or one that is not there.
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "find_picked_up", "earner": "bond",
+                                "tier": if tier == 6 { 5 } else { 6 }, "artifact_id": artifact_id }),
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "find_picked_up", "earner": "bond",
+                                "tier": tier, "artifact_id": "art:seg:1:1:e1:1:0" }),
+            // A tier where none belongs.
+            serde_json::json!({ "id": id, "chain": "ch:phone-01", "kind": "find_seen", "earner": "bond", "tier": 2 }),
+        ] {
+            let response =
+                post_awards(&app, &sky, &mut session, &serde_json::json!({ "awards": [award] }))
+                    .await;
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{award}");
+        }
     }
 
     #[tokio::test]
