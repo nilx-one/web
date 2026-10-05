@@ -1,174 +1,174 @@
-# avaia ходить сама: прогулянки та випадкові знахідки
+# Avaia walks on its own: outings and chance finds
 
-план імплементації, версія 2. замінює `avaia_finds — phase 1`, у якому ходьба була службовою, а знахідки головними. тут навпаки: **спершу avaia вміє гуляти містом, а вже потім, дорогою, знаходить речі.** зараз її ходьба описана в [Avaia walks the world](avaia-walk.md): це рух по тапу прямою лінією плюс curiosity до наявних landmarks. цей документ додає до нього самостійні виходи, маршрути й знахідки.
+Implementation plan, version 2. It replaces `avaia_finds — phase 1`, in which walking only served the finds and the finds came first. Here it is the other way round: **first the Avaia learns to walk around the city, and only then, along the way, does it find things.** Its walking today is described in [Avaia walks the world](avaia-walk.md): moving on a tap and curiosity about landmarks already noticed. This document adds outings of its own, routes and finds.
 
-статус: **план**. реалізовано пішохідний граф і роутер (§0.6) та ходьбу доріжками до точки B (§0.7), решта ще ні. значення в таблицях — стартові, їх тюнять на живому ходінні.
+Status: **plan**, partly built. The walking graph and router (§0.6), walking along paths (§0.7), the outing menu (§1.3), the drive (§2.4), the find rolls (§3.3a) and reading road tiles ahead (§0.5) are implemented, and R1 and R2 are decided; the rest is not yet. The values in the tables are starting values, tuned on live walking.
 
-## мета
+## Goal
 
-- avaia сама вирішує «піду погуляю» і фізично виходить із дому в місто, а не лише показує рядок про це.
-- гуляє парками, берегами озер, повз церкви й пам'ятники. це **цілі прогулянки**.
-- дорогою «випадково» натрапляє на дрібні речі. це **знахідки**, вони другорядні. на мапі їх немає, вони з'являються, коли avaia підходить близько.
-- людина може в будь-який момент вказати точку B. avaia йде туди, стоїть, а потім продовжує гуляти сама.
+- The Avaia decides on its own "I'll go for a walk" and actually leaves home for the city, rather than just showing a line about it.
+- It walks through parks, along lake shores, past churches and monuments. These are **outing targets**.
+- Along the way it "happens" upon small things. These are **finds**, and they are secondary. They are not on the map; they appear when the Avaia comes close.
+- The person can point at a point B at any moment. The Avaia goes there, stands, and then carries on walking by itself.
 
-## інваріанти
+## Invariants
 
-з phase 1 лишаються:
+Kept from phase 1:
 
-- avaia не пише `bch`. жодна знахідка, прогулянка чи рядок не стають записом ланцюга.
-- у моделі немає write-інструментів. пише лише рушій.
-- модель не бачить lat/lon, `pub_dress`, `private_id`, id клітин і сегментів. вона бачить лише мітки з замкненого словника.
-- чату немає: людина діє тапом.
-- інференс локальний, ваги лежать на `nilx.one`, телеметрії немає.
-- у паку знахідок немає брендів, імен і адрес реальних людей чи бізнесів. усі назви вигадані або узагальнені.
-- ходьба не рухає камеру. [Camera coordination](camera-coordination.md) віддає камеру людині після будь-якого жесту, і прогулянка цього не змінює.
+- The Avaia does not write `bch`. No find, outing or line becomes a chain record.
+- The model has no write tools. Only the engine writes.
+- The model does not see lat/lon, `pub_dress`, `private_id`, or cell and segment ids. It sees only labels from a closed vocabulary.
+- There is no chat: the person acts by tapping.
+- Inference is local, the weights are served from `nilx.one`, and there is no telemetry.
+- The finds pack has no brands, and no names or addresses of real people or businesses. Every name is invented or generic.
+- Walking does not move the camera. [Camera coordination](camera-coordination.md) hands the camera to the person after any gesture, and an outing does not change that.
 
-змінюються:
+Changed:
 
-| було                                     | стає                                            | чому                                                            |
-| ---------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------- |
-| avaia ходить лише по засвічених клітинах | **лишається** (Р1 вирішено, див. нижче)         | ціль за туманом — привід його відкрити, а не пройти крізь нього |
-| знахідки лише локальні, без сервера      | локальні для тирів 1–3, спільні (claim) для 4–6 | «хтось встиг швидше» неможливий без спільного стану             |
-| avaia ходить по фейковому `WorldPort`    | ходить по пішохідному графу з тайлів            | без маршруту прогулянка перетинає будівлі                       |
+| Was                                   | Becomes                                         | Why                                                          |
+| ------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| the Avaia walks only on lit cells     | **kept** (R1 decided, see below)                | a target behind the fog is a reason to open it, not cross it |
+| finds are local only, with no server  | local for tiers 1–3, shared (claim) for 4–6     | "someone got there first" is impossible without shared state |
+| the Avaia walks on a fake `WorldPort` | it walks on a pedestrian graph built from tiles | without a route, an outing cuts through buildings            |
 
-## §0 як avaia ходить: доріжки за замовчуванням, трава за потреби
+## §0 How the Avaia walks: paths by default, grass when needed
 
-це основа всього. решта розділів спирається на неї.
+This is the foundation of everything. The other sections build on it.
 
-### 0.1 правило
+### 0.1 The rule
 
-avaia **за можливістю йде пішохідною лінією** (доріжка, тропа, пішохідна вулиця). трава не заборонена. це дозволений, але дорожчий вибір. якщо пішохідної лінії поряд немає, avaia ходить травою.
+The Avaia **keeps to a pedestrian line whenever it can** (a footway, a trail, a pedestrian street). Grass is not forbidden. It is an allowed but dearer choice. With no pedestrian line nearby, the Avaia walks on the grass.
 
-### 0.2 коли вона сходить із доріжки
+### 0.2 When it steps off the path
 
-рівно чотири випадки:
+Exactly four cases:
 
-| причина               | умова                                                                           | межа                                                               |
-| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| **немає лінії**       | від цілі до найближчого вузла графа більше за 30 м, або вузла немає             | ідемо до цілі найкоротшим прохідним шляхом                         |
-| **артефакт на траві** | avaia помітила знахідку в радіусі сприйняття (15 м)                             | відхід від доріжки до 25 м убік, потім повернення на ту саму лінію |
-| **так зручніше**      | трав'яний зріз скорочує маршрут щонайменше на 35 % і має довжину не більше 60 м | лише коли зрізання між двома вузлами графа                         |
-| **людина натиснула**  | тап на точку B                                                                  | куди завгодно прохідно, див. §0.4                                  |
+| Reason                   | Condition                                                                           | Limit                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **no line**              | the nearest graph node is more than 30 m from the target, or there is none          | walk to the target by the shortest passable way                        |
+| **an artifact on grass** | the Avaia noticed a find within its perception radius (15 m)                        | leave the path by up to 25 m to the side, then return to the same line |
+| **it is easier**         | a cut across the grass shortens the route by at least 35 % and is at most 60 m long | only for a cut between two graph nodes                                 |
+| **the person tapped**    | a tap on a point B                                                                  | anywhere passable, see §0.4                                            |
 
-### 0.3 вага ребер
+### 0.3 Edge weights
 
-маршрутизатор — це чиста функція над графом, а не стан. вага — вартість одного метра:
+The router is a pure function over the graph, not state. The weight is the cost of one metre:
 
-| поверхня                       | вага                   |
-| ------------------------------ | ---------------------- |
-| pedestrian, footway, path      | 1.0                    |
-| track, парковий проїзд         | 1.3                    |
-| вулиця з тротуаром             | 1.5                    |
-| проїжджа частина без тротуара  | 3.0                    |
-| трава (зріз між вузлами)       | 4.0                    |
-| магістраль                     | лише на перехресті     |
-| сходи, мости                   | дозволені, вага окрема |
-| будівля, вода, туман (див. Р1) | непрохідно             |
+| Surface                        | Weight                       |
+| ------------------------------ | ---------------------------- |
+| pedestrian, footway, path      | 1.0                          |
+| track, park service road       | 1.3                          |
+| street with a sidewalk         | 1.5                          |
+| carriageway without a sidewalk | 3.0                          |
+| grass (a cut between nodes)    | 4.0                          |
+| arterial road                  | only at a crossing           |
+| steps, bridges                 | allowed, weighted separately |
+| building, water, fog (see R1)  | impassable                   |
 
-трава дорога, тому без причини avaia на неї не піде, а чотири причини з 0.2 — це та сама вага, перебита локальним виграшем (артефакт, скорочення) або вимкнена вручну (тап).
+Grass is dear, so the Avaia does not go onto it without a reason, and the four reasons in 0.2 are that same weight, outweighed by a local gain (an artifact, a shortcut) or switched off by hand (a tap).
 
-### 0.4 точка B: тап людини
+### 0.4 Point B: the person's tap
 
-- тап по прохідному ґрунту ставить avaia ціль B. вона йде туди найдешевшим шляхом, і трава дозволена на всьому шляху, бо рішення людини.
-- прийшовши, avaia **стоїть** приблизно 20 с (`turn_in_place`, оглядається), а потім **повертається до автономного режиму з точки B**, а не додому. чи йти додому, вирішує драйв (§2).
-- новий тап під час ходьби чи стояння підхоплює рух із того місця, де avaia зараз. це збігається з нинішнім правилом [Avaia walks the world](avaia-walk.md).
-- тап на будівлю, воду чи туман відхиляється так само, як сьогодні (`building`, `water`, `fog`), із тією самою фразою відмови.
-- під час ручної ходьби знахідки кидаються так само, як у автономній (§3). ручна ходьба не обходить правила рідкісності.
+- A tap on passable ground gives the Avaia a target B. It goes there by the cheapest way, and grass is allowed the whole way, because the person decided.
+- On arrival the Avaia **stands** for about 20 s (`turn_in_place`, looking around), and then **returns to autonomy from point B**, not from home. Whether to go home is the drive's decision (§2).
+- A new tap while walking or standing picks the movement up from wherever the Avaia is now. This matches the current rule in [Avaia walks the world](avaia-walk.md).
+- A tap on a building, water or fog is refused the same way as today (`building`, `water`, `fog`), with the same refusal line.
+- During a walk the person sent it on, finds are rolled the same way as on its own (§3). Manual walking does not get round the rarity rules.
 
-### 0.5 що це вимагає від інфраструктури
+### 0.5 What this needs from the infrastructure
 
-- **пішохідний граф** з шару `roads` тайлів. пакет `walk-graph` (чиста функція, zero-dep, тести на фіксованих фрагментах тайлів). вузли, ребра, ваги з 0.3, snap точки до найближчого вузла.
-- **розрив на межах тайлів.** `landmarksNear` читає лише вже завантажене. для радіуса прогулянки в кілька км потрібно заздалегідь підвантажувати тайли з власного хоста. це мережеві запити, і їх треба прописати в `map-data.md`, бо там зараз стверджено, що рендерер їх не робить.
-- **якість даних.** парковий шар доріжок може бути неповним, а тротуари вздовж вулиць зазвичай не окремі лінії: на вулицях avaia йде по осі. перевірка на реальному архіві міста: частка парків, у яких доріжки зв'язані з вулицею. якщо вона мала, парк стає ціллю «дійти до краю», а не «гуляти всередині».
-- **tap-to-walk** теж може користуватися роутером, і прямі лінії крізь будівлі зникнуть. це окремий крок після §0, щоб не роздувати його.
+- **A pedestrian graph** from the tiles' `roads` layer. A `walk-graph` package (a pure function, zero dependencies, tests on fixed tile fragments). Nodes, edges, the weights from 0.3, snapping a point to the nearest node.
+- **Tile boundaries.** `landmarksNear` reads only what is already loaded. For an outing radius of a few km, the renderer reads tiles ahead from our own host (`preloadRoads`, #312). Before an outing it reads the `roads` layer at z14 within the outing's budget. That is at most 32 tiles, and the oldest are dropped first. Tiles with no open ground are not fetched. These network requests are described in [map data](map-data.md) ("Reading roads ahead").
+- **Data quality.** The park path layer may be incomplete, and sidewalks along streets are usually not separate lines: on streets the Avaia walks along the centre line. A check on the city's real archive: the share of parks whose paths connect to a street. If it is small, a park becomes a target to "walk up to the edge of" rather than "walk around inside".
+- **Tap-to-walk** can use the router too, and straight lines through buildings will go away. This is a separate step after §0, to keep §0 small.
 
-### 0.6 що вже є: пакет `walk-graph`
+### 0.6 Already built: the `walk-graph` package
 
-`packages/walk-graph` — чиста функція без залежностей. він не читає тайли сам: на вхід приходять `roads`-фічі (`kind`, `kind_detail`, `is_bridge`, лінії), уже прочитані з завантажених тайлів. адаптер рендерера й підвантаження тайлів — наступні кроки (#300, #312).
+`packages/walk-graph` is a pure function with no dependencies. It does not read tiles itself: its input is `roads` features (`kind`, `kind_detail`, `is_bridge`, lines) already read from loaded tiles. The renderer adapter and reading tiles ahead are the next steps (#300, #312).
 
-- `buildWalkGraph`: вузли, ребра, довжини, поверхні. однакові фічі в будь-якому порядку дають той самий граф, разом із нумерацією.
-- **межі тайлів.** лінія, обрізана буфером двох тайлів, зшивається: вільний кінець у межах 1 м від іншої лінії зливається з її вузлом або ділить її відрізок. справжній глухий кут далі за 1 м лишається глухим.
-- **поверхні.** архів не несе тротуарів, тож таблиця з 0.3 наближається так: `path` (footway, path, pedestrian) — 1.0, track/cycleway — 1.3, сходи — 2.0, minor/medium road — 1.5 «вулиця», major road — 3.0 «проїжджа частина», `highway` уздовж не ходять, лише перетинають у спільному вузлі. залізниця й пороми не ходяться. мости лишаються з вагою своєї поверхні й позначкою `bridge`.
-- `snapToGraph`: найближча точка **на ребрі** (не лише на вузлі) у межах 30 м, інакше «лінії немає».
-- `routeOnGraph`: Дейкстра за зваженими метрами. детермінований, нічия — за індексом вузла. `canEnter` відсікає вузли, куди не можна (туман за Р1), перевіряється по вузлах, не вздовж ребер.
-- трав'яні з'єднувачі (вага `GRASS_WEIGHT`, 4.0) граф не будує: їх малює той, хто викликає роутер (#300).
-- координати й індекси не виходять за межі маршрутизації. модель їх не бачить.
+- `buildWalkGraph`: nodes, edges, lengths, surfaces. The same features in any order give the same graph, numbering included.
+- **Tile boundaries.** A line clipped by the buffers of two tiles is stitched back together: a loose end within 1 m of another line merges with its node or splits its segment. A real dead end farther than 1 m stays a dead end.
+- **Surfaces.** The archive carries no sidewalks, so the table in 0.3 is approximated: `path` (footway, path, pedestrian) 1.0, track/cycleway 1.3, steps 2.0, minor/medium road 1.5 "street", major road 3.0 "carriageway". A `highway` is never walked along, only crossed at a shared node. Rail and ferries are not walked. Bridges keep the weight of their surface and a `bridge` flag.
+- `snapToGraph`: the nearest point **on an edge** (not only on a node) within 30 m, otherwise "no line".
+- `routeOnGraph`: Dijkstra over weighted metres. Deterministic, ties broken by node index. `canEnter` cuts off nodes that may not be entered (fog under R1); it is checked per node, not along edges.
+- The graph does not build grass connectors (weight `GRASS_WEIGHT`, 4.0): whoever calls the router draws them (#300).
+- Coordinates and indices do not leave routing. The model does not see them.
 
-### 0.7 що вже є: ходьба доріжками
+### 0.7 Already built: walking along paths
 
-рендерер віддає `roadsWithin(bounds)` із уже завантажених тайлів, а `planWalk` у `product-app` складає шлях: трава до найближчої лінії (у межах 30 м), граф, трава до цілі. трав'яні відрізки обходять будівлі й воду тим самим `planRoute`, що й раніше.
+The renderer answers `roadsWithin(bounds)` from tiles already loaded, and `planWalk` in `product-app` puts the way together: grass to the nearest line (within 30 m), the graph, grass to the target. Grass legs go around buildings and water with the same `planRoute` as before.
 
-- **тап людини** (`tap`): трава дозволена на всьому шляху, тож береться дешевше з двох — доріжками чи навпростець за `GRASS_WEIGHT`.
-- **avaia сама** (`own`, curiosity): лишається на доріжках і зрізає травою лише тоді, коли зріз коротший щонайменше на 35 % і не довший за 60 м. зріз рахується для всього шляху, а не між двома вузлами.
-- лінії в межах 30 м немає або тайлів ще немає — avaia йде навпростець, як і раніше.
-- туман уздовж шляху перевіряється за Р1: див. «Р1: лише по відкритому».
-- випадок «артефакт на траві» з'явиться разом зі знахідками (§3).
+- **The person's tap** (`tap`): grass is allowed the whole way, so the cheaper of the two is taken: along the paths or straight across at `GRASS_WEIGHT`.
+- **The Avaia on its own** (`own`, curiosity): it keeps to the paths and cuts across the grass only when the cut is at least 35 % shorter and no longer than 60 m. The cut is counted for the whole way, not between two nodes.
+- With no line within 30 m, or no tiles yet, the Avaia goes straight across, as before.
+- Fog along the way is checked under R1: see "R1: open ground only".
+- The "artifact on grass" case arrives with the finds (§3).
 
-## §1 цілі прогулянок
+## §1 Outing targets
 
-цілі — це **те, що є на мапі**: парки, озера, церкви, пам'ятники. знахідки з §3 цілями не є.
+Targets are **what is on the map**: parks, lakes, churches, monuments. Finds from §3 are not targets.
 
-| вид                               | джерело                           | що відсутнє зараз                |
-| --------------------------------- | --------------------------------- | -------------------------------- |
-| пам'ятник, меморіал, музей, руїни | `pois`, `LANDMARK_KINDS`          | вже є                            |
-| церква, місце культу              | `pois` (kind перевірити в архіві) | немає в `LANDMARK_KINDS`         |
-| парк, сад                         | `pois` або `landuse` (перевірити) | немає                            |
-| озеро, ставок, набережна          | `water` (полігон)                 | немає, landmarks зараз лише pois |
+| Kind                              | Source                                 | Missing today                          |
+| --------------------------------- | -------------------------------------- | -------------------------------------- |
+| monument, memorial, museum, ruins | `pois`, `LANDMARK_KINDS`               | already there                          |
+| church, place of worship          | `pois` (check the kind in the archive) | not in `LANDMARK_KINDS`                |
+| park, garden                      | `pois` or `landuse` (to check)         | missing                                |
+| lake, pond, embankment            | `water` (polygon)                      | missing; landmarks are only pois today |
 
-### 1.1 додаткові OSM landmarks
+### 1.1 More OSM landmarks
 
-> канонічний словник kinds і груп живе в [Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md). якщо списки нижче розходяться з ним, діє він. розбіжності на цей момент: `ruins` і `historic_building` там у `walk_target`, `information` у `micro_interest`, замість `wayside_shrine` і `wayside_cross` стоять `shrine` і `cross`, додано `bench`. і застосунок читає шари Protomaps-архіву, а не сирі OSM-теги, тож стовпці з тегами нижче означають походження, а не поля для читання.
+> The canonical vocabulary of kinds and groups lives in [Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md). Where the lists below differ from it, it wins. The differences at the moment: there `ruins` and `historic_building` are in `walk_target` and `information` is in `micro_interest`, `shrine` and `cross` stand in place of `wayside_shrine` and `wayside_cross`, and `bench` is added. The application also reads the Protomaps archive's layers, not raw OSM tags, so the tag columns below mean where a kind comes from, not fields to read.
 
-чотири базові класи не мають бути повним словником. джерелом залишається OpenStreetMap, але сирі OSM tags нормалізуються у невеликий закритий словник `landmark_kind`. це дозволяє додавати нові типи без того, щоб модель бачила відкритий набір тегів.
+The four base classes are not meant to be the full vocabulary. OpenStreetMap stays the source, but raw OSM tags are normalized into a small closed `landmark_kind` vocabulary. That lets new types be added without the model ever seeing an open set of tags.
 
-#### цілі прогулянки
+#### Outing targets
 
-це об'єкти, заради яких має сенс змінити маршрут:
+Objects worth changing the route for:
 
-| тип                      | OSM tags                                 | роль                                         |
-| ------------------------ | ---------------------------------------- | -------------------------------------------- |
-| оглядовий майданчик      | `tourism=viewpoint`                      | сильна міська/природна ціль                  |
-| природний заповідник     | `leisure=nature_reserve`                 | велика природна ціль                         |
-| пляж                     | `natural=beach`                          | природна ціль                                |
-| вершина / пагорб         | `natural=peak`, `natural=hill`           | outdoor target                               |
-| замок                    | `historic=castle`                        | історична ціль                               |
-| фортеця                  | `historic=fort`                          | історична ціль                               |
-| археологічна пам'ятка    | `historic=archaeological_site`           | історична ціль                               |
-| історичні руїни          | `historic=ruins`                         | історична ціль                               |
-| історична будівля        | `historic=building`                      | історична ціль, якщо має достатню значущість |
-| музей                    | `tourism=museum`                         | культурна ціль                               |
-| театр / культурний центр | `amenity=theatre`, `amenity=arts_centre` | культурна ціль                               |
+| Type                  | OSM tags                                 | Role                                       |
+| --------------------- | ---------------------------------------- | ------------------------------------------ |
+| viewpoint             | `tourism=viewpoint`                      | a strong urban or natural target           |
+| nature reserve        | `leisure=nature_reserve`                 | a large natural target                     |
+| beach                 | `natural=beach`                          | a natural target                           |
+| peak / hill           | `natural=peak`, `natural=hill`           | an outdoor target                          |
+| castle                | `historic=castle`                        | a historic target                          |
+| fort                  | `historic=fort`                          | a historic target                          |
+| archaeological site   | `historic=archaeological_site`           | a historic target                          |
+| historic ruins        | `historic=ruins`                         | a historic target                          |
+| historic building     | `historic=building`                      | a historic target, when significant enough |
+| museum                | `tourism=museum`                         | a cultural target                          |
+| theatre / arts centre | `amenity=theatre`, `amenity=arts_centre` | a cultural target                          |
 
-#### landmarks уздовж маршруту
+#### Landmarks along the route
 
-це об'єкти, які можуть бути причиною невеликого відхилення, але не обов'язково всієї прогулянки:
+Objects that can justify a small deviation, but not necessarily a whole outing:
 
-| тип                        | OSM tags                                   | роль                                            |
-| -------------------------- | ------------------------------------------ | ----------------------------------------------- |
-| публічний витвір мистецтва | `tourism=artwork`                          | скульптура, mural, інсталяція                   |
-| фонтан                     | `amenity=fountain`                         | міський landmark                                |
-| вежа                       | `man_made=tower`                           | вертикальний landmark                           |
-| міст                       | `man_made=bridge`                          | landmark маршруту; особливо історичний/знаковий |
-| джерело                    | `natural=spring`                           | природний micro-landmark                        |
-| скеля                      | `natural=rock`                             | природний landmark                              |
-| оглядова точка             | `tourism=viewpoint`                        | landmark із підвищеним пріоритетом              |
-| придорожня каплиця         | `historic=wayside_shrine`                  | малий історичний landmark                       |
-| придорожній хрест          | `historic=wayside_cross`, `man_made=cross` | малий історичний landmark                       |
-| інформаційна точка         | `tourism=information`                      | місце для ознайомлення                          |
+| Type              | OSM tags                                   | Role                                                  |
+| ----------------- | ------------------------------------------ | ----------------------------------------------------- |
+| public artwork    | `tourism=artwork`                          | sculpture, mural, installation                        |
+| fountain          | `amenity=fountain`                         | an urban landmark                                     |
+| tower             | `man_made=tower`                           | a vertical landmark                                   |
+| bridge            | `man_made=bridge`                          | a route landmark, especially a historic or iconic one |
+| spring            | `natural=spring`                           | a natural micro-landmark                              |
+| rock              | `natural=rock`                             | a natural landmark                                    |
+| viewpoint         | `tourism=viewpoint`                        | a landmark with raised priority                       |
+| wayside shrine    | `historic=wayside_shrine`                  | a small historic landmark                             |
+| wayside cross     | `historic=wayside_cross`, `man_made=cross` | a small historic landmark                             |
+| information point | `tourism=information`                      | a place to read about the area                        |
 
-#### малі outdoor landmarks
+#### Small outdoor landmarks
 
-вони не повинні автоматично ставати цілями драйву, але можуть бути частиною локального інтересу маршруту:
+They should not become drive targets automatically, but they can be part of a route's local interest:
 
-- `tourism=picnic_site` — місце для пікніка;
-- `tourism=camp_site` — кемпінг;
-- `leisure=bird_hide` — місце спостереження за птахами;
-- `man_made=cairn` — кам'яний landmark/позначка;
-- `natural=tree` — окреме дерево лише за додатковою ознакою значущості.
+- `tourism=picnic_site` — a picnic spot;
+- `tourism=camp_site` — a campsite;
+- `leisure=bird_hide` — a bird-watching hide;
+- `man_made=cairn` — a stone landmark or marker;
+- `natural=tree` — a single tree, only with an extra sign of significance.
 
-#### нормалізація
+#### Normalization
 
-не кожен OSM object стає landmark. рекомендований pipeline:
+Not every OSM object becomes a landmark. The recommended pipeline:
 
 ```text
 OSM object
@@ -179,7 +179,7 @@ OSM object
   → walk target OR route landmark OR micro interest
 ```
 
-рекомендовані закриті групи:
+Recommended closed groups:
 
 ```text
 walk_target
@@ -216,161 +216,161 @@ micro_interest
   cairn
 ```
 
-`landmark_kind` — семантичний шар 0x1, а не копія OSM taxonomy. один OSM object може мати кілька tags, але для Avaia має бути один нормалізований тип із визначеним пріоритетом.
+`landmark_kind` is a 0x1 semantic layer, not a copy of the OSM taxonomy. One OSM object may carry several tags, but for the Avaia it has one normalized type with a defined precedence.
 
-- `walk_target` може потрапляти у `DecisionMenu` як ціль прогулянки.
-- `route_landmark` може викликати локальне відхилення маршруту в межах правил §0.2.
-- `micro_interest` не стає самостійною ціллю без додаткової логіки.
-- звичайні магазини, кафе, банки, офіси та інші повсякденні POI не стають landmarks лише через наявність у OSM. це окремий шар міської інфраструктури.
-- `building=*` сам по собі не є landmark. історичність або інша значущість має бути явно підтверджена тегами/даними архіву.
+- A `walk_target` may enter the `DecisionMenu` as an outing target.
+- A `route_landmark` may cause a local route deviation within the rules of §0.2.
+- A `micro_interest` does not become a target of its own without extra logic.
+- Ordinary shops, cafes, banks, offices and other everyday POIs do not become landmarks just by being in OSM. They are a separate layer of city infrastructure.
+- `building=*` alone is not a landmark. Being historic, or any other significance, has to be stated explicitly by the archive's tags or data.
 
-кожен новий kind додається лише після перевірки, що відповідний tag реально присутній у використовуваному архіві OSM. `inspect-basemap.sh` має показувати фактичні kinds/tags, а не припущення про них.
+Each new kind is added only after checking that the tag really occurs in the OSM archive in use. `inspect-basemap.sh` has to show the actual kinds and tags, not assumptions about them.
 
-### 1.2 фільтрація OSM даних
+### 1.2 Filtering OSM data
 
-OSM є джерелом геометрії та семантики, але не визначає сам по собі, що Avaia повинна відвідувати. перед потраплянням у `DecisionMenu` об'єкт проходить:
+OSM is the source of geometry and semantics, but it does not by itself decide what the Avaia should visit. Before reaching the `DecisionMenu`, an object goes through:
 
 1. tag mapping → `landmark_kind`;
-2. перевірку geometry/type;
-3. перевірку доступності для пішохода;
-4. перевірку зв'язку з walk graph;
-5. перевірку значущості для відповідної групи.
+2. a geometry/type check;
+3. a pedestrian accessibility check;
+4. a check that it connects to the walk graph;
+5. a significance check for its group.
 
-ціль без маршруту (>30 м до графа й травою не дістатися) **не пропонується драйву**. полігони `water`, будівлі та інші непрохідні об'єкти не перетворюються на точки ходьби лише через те, що вони мають цікавий tag.
+A target with no route (more than 30 m from the graph and unreachable across the grass) **is not offered to the drive**. `water` polygons, buildings and other impassable objects do not turn into walking points just because they carry an interesting tag.
 
-- кожну ціль додають лише після перевірки, що вона є в реальному архіві. для цього є `inspect-basemap.sh`, який і так падає, коли жодного kind немає.
-- вісь «парк, озеро, церква» не фіксована. порядок, довжина й кількість зупинок вирішуються драйвом з урахуванням бюджету кілометрів.
-- «вивчення» цілі зберігає нинішню механіку landmarks: те, що avaia дізнається, — це рівно те, що архів оголошує для об'єкта.
+- Each target is added only after checking that it is in the real archive. `inspect-basemap.sh` is there for that, and it already fails when no kind occurs at all.
+- The "park, lake, church" axis is not fixed. Order, length and number of stops are decided by the drive within its distance budget.
+- "Studying" a target keeps today's landmark mechanics: what the Avaia learns is exactly what the archive declares for the object.
 
-### 1.3 що вже є: меню цілей
+### 1.3 Already built: the outing menu
 
-`outing-targets.ts` у `product-app` — чиста функція `outingMenu`. на вхід вона бере нормалізованих кандидатів від мапера (#306, ще не готовий), граф, позицію avaia, відкриту землю (Р1) і бюджет метрів.
+`outing-targets.ts` in `product-app` is a pure function, `outingMenu`. Its input is normalized candidates from the mapper (#306, not ready yet), the graph, the Avaia's position, open ground (R1) and a budget in metres.
 
-- у меню потрапляє лише група `walk_target` із [мапінгу](avaia-osm-landmarks.md), і лише названі цілі. церква за канонічним словником — `route_landmark`, тож ціллю прогулянки вона не стає. знахідки ціллю не бувають ніколи.
-- прибуття — не центроїд, а якір за правилами мапінгу. для точки це найближче місце на графі в межах 30 м. для парку чи заповідника — найдешевший вузол усередині або в межах 30 м від межі. для озера чи пляжу — найдешевший вузол поза полігоном у межах 30 м від берега.
-- ціль, до якої граф не доходить по відкритому або яка далі за бюджет, у меню не потрапляє. відстані до всіх вузлів рахує один прохід `reachFrom` у `walk-graph`. прохід зупиняється на бюджеті × найбільша вага поверхні (3.0): дорожче за це не коштує жоден вузол, до якого шлях коротший за бюджет.
-- меню складається з «лишитись», до 4 цілей і «блукати поруч». цілі йдуть від найближчої, і спершу береться по одній кожного виду, а вже потім друга будь-якого. той самий вхід у будь-якому порядку дає те саме меню.
-- **без моделі** `chooseByRule` обирає найближчу ціль, якщо цілей немає — блукати, а якщо немає й графа — лишитись. ваги драйву (втома, непосидючість, час доби) додає #302.
-- **з моделлю** вона бачить лише `menuForModel`: індекс, закритий ярлик (`stay`, `wander` або вид цілі) і `near`/`far` (до 1 км чи далі). координат, назв та id модель не бачить. `chooseByModel` приймає лише індекс із меню, а все інше віддає правилу.
+- Only the `walk_target` group from the [mapping](avaia-osm-landmarks.md) enters the menu, and only named targets. A church is a `route_landmark` in the canonical vocabulary, so it does not become an outing target. Finds are never targets.
+- Arrival is not a centroid but an anchor, by the mapping's rules. For a point, the nearest place on the graph within 30 m. For a park or a reserve, the cheapest node inside it or within 30 m of its edge. For a lake or a beach, the cheapest node outside the polygon and within 30 m of the shore.
+- A target the graph does not reach over open ground, or one beyond the budget, stays off the menu. One `reachFrom` pass in `walk-graph` prices every node. The pass stops at the budget × the dearest surface weight (3.0): no node whose way is shorter than the budget costs more than that.
+- The menu is "stay", up to 4 targets, and "wander nearby". Targets go nearest first, one of each kind before a second of any. The same input in any order gives the same menu.
+- **Without a model**, `chooseByRule` picks the nearest target, wanders when there are no targets, and stays when there is no graph either. The drive's weights (tiredness, restlessness, time of day) come with #302.
+- **With a model**, it sees only `menuForModel`: an index, a closed label (`stay`, `wander` or a target kind) and `near`/`far` (up to 1 km, or farther). It sees no coordinates, names or ids. `chooseByModel` takes only an index on the menu and hands anything else to the rule.
 
-## §2 драйв: «піду погуляю»
+## §2 The drive: "I'll go for a walk"
 
-що саме робить avaia, вирішує **код**. модель лише говорить і, за прапором, вибирає з готового меню.
+What the Avaia actually does is decided by **code**. The model only talks and, behind a flag, picks from a ready-made menu.
 
-### 2.1 стан
+### 2.1 State
 
-- `restlessness` росте, поки avaia стоїть. скидається прогулянкою.
-- `curiosity` росте, поки є невідвідані цілі поблизу. спадає після відвідування.
-- `energy` витрачається на кілометри й відновлюється вдома.
-- час доби й пора впливають на вагу вибору (вдень парк, ввечері коротка прогулянка).
-- «вдома» означає клітину, де avaia стоїть у спокої, поки нікуди не йде: за замовчуванням клітину з найдовшими візитами людини у журналі, а коли її немає, останню спостережену позицію. це локальне обчислення, воно не залишає пристрій.
+- `restlessness` grows while the Avaia stands still. An outing resets it.
+- `curiosity` grows while there are unvisited targets nearby. It drops after a visit.
+- `energy` is spent on kilometres and restored at home.
+- Time of day and season weigh the choice (a park by day, a short walk in the evening).
+- "Home" is the cell where the Avaia rests while it is not going anywhere: by default the cell with the person's longest visits in the journal, and without one, the last observed position. This is computed locally and never leaves the device.
 
-### 2.2 рішення
+### 2.2 The decision
 
 ```text
-код рахує меню: [лишитись, парк A, озеро B, церква C, блукати поруч] з вагами
+code computes the menu: [stay, park A, lake B, church C, wander nearby] with weights
         │
-        ├─ без моделі:   утилітарне правило вибирає найвищу вагу
-        └─ з моделлю:    DecisionMenu, модель вибирає з меню, не з відкритого простору
-                          (невалідний вибір → правило)
+        ├─ without a model:  a utility rule picks the highest weight
+        └─ with a model:     DecisionMenu, the model picks from the menu, not from open space
+                             (an invalid pick → the rule)
 ```
 
-- модель не складає маршрут і не бачить координат. вона вибирає один пункт зі списку, який уже відфільтрований за §1.
-- 0.6b, яка вибирає з 4–6 готових варіантів, реалістична. 0.6b, яка будувала б маршрут, ні.
-- без моделі avaia ходить так само, лише без «характеру» у виборі. це відповідає принципу phase 1: модель надбудова, а не залежність.
-- фраза «піду погуляю» й подібні — це шаблон за голосом студії (`avaia-lines.ts`). згенерований моделлю рядок лишається текстом і не озвучується: озвучення належить лише записаним фіксованим рядкам ([Character voices](avaia-voice.md)).
+- The model does not build a route and does not see coordinates. It picks one item from a list already filtered by §1.
+- A 0.6b model that picks from 4–6 ready options is realistic. A 0.6b model that builds a route is not.
+- Without a model the Avaia walks just the same, only without "character" in its choices. This follows the phase 1 principle: the model is an add-on, not a dependency.
+- "I'll go for a walk" and similar lines are templates in the study's voice (`avaia-lines.ts`). A line the model generates stays text and is not voiced: voicing belongs only to the recorded fixed lines ([Character voices](avaia-voice.md)).
 
-### 2.3 коли запускається
+### 2.3 When it starts
 
-- автономна ходьба вмикається, коли avaia «за кермом» і нічого не робить (так само як сьогодні curiosity), не частіше за `AVAIA_OUTING_INTERVAL_MS` (старт: 4 год).
-- тап завжди має пріоритет над драйвом.
-- **поки сторінка закрита, avaia не ходить.** це зберігає нинішнє «Nothing walks in the background». варіант на потім: при відкритті проганяти детермінований маршрут і показувати підсумок («вона вже вийшла й повернулася»), як це робить fog reveal на настінному годиннику. не входить у цей план.
-- ходьба щоразу починається з поточного місця avaia. якщо вона прийшла в точку B, наступний вихід починається звідти.
+- Autonomous walking switches on when the Avaia is "at the wheel" and doing nothing (just as curiosity does today), no more often than `AVAIA_OUTING_INTERVAL_MS` (starting value: 4 h).
+- A tap always takes priority over the drive.
+- **While the page is closed, the Avaia does not walk.** This keeps today's "Nothing walks in the background". An option for later: on opening, run a deterministic route and show the outcome ("it already went out and came back"), the way the fog reveal does on the wall clock. Not part of this plan.
+- Each walk starts from where the Avaia is now. If it went to a point B, the next outing starts from there.
 
-### 2.4 що вже є: драйв
+### 2.4 Already built: the drive
 
-`outing-drive.ts` у `product-app` — чистий детермінований автомат станів. хук ходьби передає йому події й питає, що робити далі.
+`outing-drive.ts` in `product-app` is a pure, deterministic state machine. The walk hook feeds it events and asks what to do next.
 
-- **стани:** `idle`, `walking` (мета: `tap`, `curiosity`, `outing`, `wander`, `home`) і `standing` (`point_b` або `visit`).
-- **переходи:**
-  - тап у будь-якому стані починає ходу туди з того місця, де avaia зараз;
-  - хода драйву стартує лише з `idle` і ніколи не перебиває ходу, стояння в B чи огляд;
-  - прибуття в B — стояння 20 с, потім `idle` у B, додому avaia не йде;
-  - прибуття до цілі — огляд 30 с і позначка «відвідано»;
-  - прибуття додому — повна енергія;
-  - хода, що не дійшла, або стояння, перерване тим, що avaia віддала кермо, переходить в `idle` там, де вона стоїть.
-- **коли виходити:** `restlessness` росте 10 хв простою, і вихід не частіше ніж раз на 4 год (`nextOutingAt`). час останнього виходу зберігається у `world-memory`, тож перезавантаження не скидає інтервал.
-- **енергія:** 0.2 на кілометр, тобто повного заряду вистачає на 5 км. бюджет виходу — туди й назад на те, що лишилось, але не далі за 3 км.
-- **вибір** (`chooseOuting`): втомлена й далеко від дому — додому. ввечері й уночі (20:00–07:00) — лише ціль до 1 км або блукати. вдень — найближча ціль, інакше блукати, інакше лишитись. ціль, відвідана менш як тиждень тому, у меню не потрапляє.
-- **блукати:** вузол графа за 150–400 м стежками, по відкритому. обирається детерміновано за вікном виходу.
-- **дім** поки що — остання спостережена позиція пристрою. клітина з найдовшими візитами з журналу прийде окремо.
-- **фрази:** для виходу avaia бере наявний рядок `walk`. окремих «піду погуляю» ще немає, бо їх треба записати голосом.
-- поки мапер (#306) не дає кандидатів, вихід — це лише «блукати» або «додому».
+- **States:** `idle`, `walking` (purpose: `tap`, `curiosity`, `outing`, `wander`, `home`) and `standing` (`point_b` or `visit`).
+- **Transitions:**
+  - a tap, in any state, starts a walk there from wherever the Avaia is;
+  - a drive walk starts only from `idle` and never cuts short a walk, a stand at B or a visit;
+  - arriving at B is a 20 s stand, then `idle` at B; the Avaia does not go home;
+  - arriving at a target is a 30 s look around and a "visited" mark;
+  - arriving home restores full energy;
+  - a walk that did not arrive, or a stand cut short because the Avaia left the wheel, becomes `idle` where it stands.
+- **When to go out:** `restlessness` builds over 10 min of idling, and an outing comes no more often than once in 4 h (`nextOutingAt`). The time of the last outing is kept in `world-memory`, so a reload does not reset the interval.
+- **Energy:** 0.2 per kilometre, so a full charge lasts 5 km. An outing's budget is a there-and-back on what is left, but never beyond 3 km.
+- **Choice** (`chooseOuting`): tired and far from home, go home. In the evening and at night (20:00–07:00), only a target within 1 km, or wander. By day, the nearest target, otherwise wander, otherwise stay. A target visited less than a week ago stays off the menu.
+- **Wandering:** a graph node 150–400 m away along the paths, over open ground. It is picked deterministically per outing window.
+- **Home** is, for now, the device's last observed position. The cell with the longest visits from the journal comes separately.
+- **Lines:** for an outing the Avaia uses the existing `walk` line. There are no "I'll go for a walk" lines yet, because they need to be recorded.
+- Until the mapper (#306) supplies candidates, an outing is only "wander" or "home".
 
-## §3 знахідки
+## §3 Finds
 
-### 3.1 що це
+### 3.1 What a find is
 
-знахідка — детермінована функція від **сегмента маршруту** й епохи, а не від клітини. клітина res 9 має ~350 м, і «підійшла близько» там не працює.
+A find is a deterministic function of a **route segment** and an epoch, not of a cell. A res 9 cell is ~350 m across, and "came close" does not work there.
 
-- сегмент — ~50 м ребра графа.
-- сід: `xmur3(pack.id + ':' + pack.version + ':' + epoch + ':' + segmentId)`, далі `mulberry32`. хеш некриптографічний, бо захищати нічого.
-- `epoch` змінюється раз на тиждень. інакше вулицю біля дому можна «розв'язати» назавжди.
-- кандидат лежить у межах до 25 м убік від ребра, тож частина знахідок опиняється на траві й виправдовує сход із доріжки (§0.2).
-- знахідка не позначається на мапі. вона з'являється, коли avaia підходить на 15 м.
-- **детермінізм дає природний антифарм:** вдруге пройшовши той самий сегмент у тій самій епосі, avaia нічого нового не отримає. планувальник (§2) дає невеликий бонус сегментам, де давно не ходила, і це само по собі робить прогулянки різноманітнішими.
+- A segment is ~50 m of a graph edge.
+- Seed: `xmur3(pack.id + ':' + pack.version + ':' + epoch + ':' + segmentId)`, then `mulberry32`. The hash is not cryptographic, because there is nothing to protect.
+- `epoch` changes once a week. Otherwise the street by home could be "solved" for good.
+- A candidate lies up to 25 m to the side of the edge, so some finds end up on the grass and justify stepping off the path (§0.2).
+- A find is not marked on the map. It appears when the Avaia comes within 15 m.
+- **Determinism is a natural anti-farm:** walking the same segment a second time in the same epoch, the Avaia gets nothing new. The planner (§2) gives a small bonus to segments it has not walked for a while, and that alone makes outings more varied.
 
-### 3.2 тири й досвід
+### 3.2 Tiers and experience
 
-досвід 10–1000. дистанція — та, яку пройшла avaia по графу. тир 6 випадає **раз на 100 км**.
+Experience 10–1000. Distance is what the Avaia walked along the graph. Tier 6 drops **once in 100 km**.
 
-| тир | досвід | на км | раз на     | приклад                   |
-| --- | ------ | ----- | ---------- | ------------------------- |
-| 1   | 10     | 0.25  | 4 км       | викинута касета, платівка |
-| 2   | 25     | 0.12  | 8 км       | старий магнітофон         |
-| 3   | 60     | 0.06  | 17 км      |                           |
-| 4   | 150    | 0.03  | 33 км      |                           |
-| 5   | 400    | 0.018 | 55 км      |                           |
-| 6   | 1000   | 0.01  | **100 км** | щось справді ексклюзивне  |
+| Tier | Experience | Per km | Once in    | Example                          |
+| ---- | ---------- | ------ | ---------- | -------------------------------- |
+| 1    | 10         | 0.25   | 4 km       | a thrown-away cassette, a record |
+| 2    | 25         | 0.12   | 8 km       | an old tape recorder             |
+| 3    | 60         | 0.06   | 17 km      |                                  |
+| 4    | 150        | 0.03   | 33 km      |                                  |
+| 5    | 400        | 0.018  | 55 km      |                                  |
+| 6    | 1000       | 0.01   | **100 km** | something truly exclusive        |
 
-разом приблизно одна знахідка на 2 км і ~30 досвіду на км. сума ймовірностей тирів ділиться на рівні, кожен із яких має свій пул архетипів у паку. тир 6 не недосяжний: avaia може натрапити на нього й першого дня, просто малоймовірно.
+Altogether about one find per 2 km and ~30 experience per km. The tiers' combined probability is split into levels, each with its own pool of archetypes in the pack. Tier 6 is not out of reach: the Avaia can come across one on its first day, it is just unlikely.
 
-### 3.3 пак, словник, розміщення
+### 3.3 Pack, vocabulary, placement
 
-механіка з phase 1 лишається: замкнений `VOCABULARY`, архетипи з вагами, `pick` за словником, golden-тест. змінюється одиниця розміщення (сегмент замість клітини) і додається поле `tier` в архетип. пакет `artifact-contract` додає:
+The phase 1 mechanics stay: a closed `VOCABULARY`, weighted archetypes, `pick` by vocabulary, a golden test. What changes is the unit of placement (a segment instead of a cell), and archetypes gain a `tier` field. The `artifact-contract` package adds:
 
 ```ts
 export type Tier = 1 | 2 | 3 | 4 | 5 | 6;
 export type ArtifactId = `art:${SegmentId}:${EpochId}:${PackVersion}:${Slot}`;
 ```
 
-словник, валідатор і шаблонний наратор з phase 1 беруться без змін. пак лишається вигаданим і безбрендовим.
+The vocabulary, validator and template narrator from phase 1 are taken unchanged. The pack stays invented and brand-free.
 
-### 3.3a що вже є: кидки (`artifact-contract`)
+### 3.3a Already built: rolls (`artifact-contract`)
 
-`packages/artifact-contract` — чиста функція без залежностей: `rollSegment`, `rollAlong`, `segmentsAlong`, `epochOf`, таблиця `ROLL_TABLE` (версія 1, тири й частоти з 3.2).
+`packages/artifact-contract` is a pure function with no dependencies: `rollSegment`, `rollAlong`, `segmentsAlong`, `epochOf`, and the `ROLL_TABLE` (version 1, the tiers and rates from 3.2).
 
-- **сегмент — клітина фіксованої сітки ~50 м, а не ребро графа.** ребра залежать від того, які тайли завантажені: обрізання буфером додає вузли, і той самий шматок вулиці на різних пристроях різався б по-різному. сітка задана в градусах без тригонометрії, тож кожен пристрій ріже її однаково. стовпці масштабовані під широту Києва.
-- один рівномірний кидок на сегмент, від найрідкіснішого тиру: шанс тиру = його частота × 0.05 км. одна знахідка на сегмент, `Slot` = 0.
-- `epochOf` перемикається в понеділок о 00:00 UTC.
-- знахідка не має координат: `placement` — це частка вздовж ходи крізь сегмент і відступ убік у частках від 25 м. на хід її кладе той, хто малює.
-- `segmentsAlong` обходить сітку точно (Amanatides–Woo): кожна клітинка, крізь яку проходить хода, хоч на пів метра біля кута, отримує свій кидок. крізь точний кут хода йде по діагоналі, а сусідні клітинки, яких вона лише торкається в точці, не рахуються.
-- тап і автономна ходьба проходять крізь той самий `segmentsAlong`, тож ручна ходьба рідкісність не обходить.
-- зміна таблиці, сітки чи сіда змінює golden-тест і мусить підняти `ROLL_TABLE.version`.
-- пак (архетипи, назви), запис у журнал і хто отримує досвід (Р2) сюди не входять.
+- **A segment is a cell of a fixed ~50 m grid, not a graph edge.** Edges depend on which tiles are loaded: buffer clipping adds nodes, and the same stretch of street would be cut differently on different devices. The grid is defined in degrees without trigonometry, so every device cuts it the same way. Columns are scaled for Kyiv's latitude.
+- One uniform draw per segment, from the rarest tier down: a tier's chance = its rate × 0.05 km. One find per segment, `Slot` = 0.
+- `epochOf` turns over on Monday at 00:00 UTC.
+- A find has no coordinates: `placement` is a fraction along the walk through the segment and an offset to the side in fractions of 25 m. Whoever draws the walk lays it on the walk.
+- `segmentsAlong` walks the grid exactly (Amanatides–Woo): every cell a walk passes through, even for half a metre near a corner, gets its roll. Through an exact corner the walk steps diagonally, and the neighbouring cells it only touches at a point are not counted.
+- A tap walk and an autonomous walk go through the same `segmentsAlong`, so manual walking does not get round the rarity.
+- Changing the table, the grid or the seed changes the golden test and must raise `ROLL_TABLE.version`.
+- The pack (archetypes, names), writing to the journal, and who earns the experience (R2) are not part of this.
 
-### 3.4 «побачила, але не підняла»
+### 3.4 "Saw it, but didn't pick it up"
 
-- avaia бачить знахідку тиру 4–6 і **не піднімає** її. вона зберігає **лід**: сегмент, епоху, тир, без точних координат.
-- людина бачить лід, бере кермо, фізично йде до сегмента й піднімає знахідку. досвід за підняття отримує Bond (Р2).
-- **Р2, вирішено: хто зробив, тому й досвід.** побачити знахідку — 10 досвіду тому, хто побачив першим: avaia, якщо вона йшла сама чи за тапом, Bond, якщо повз пройшов цей пристрій. підняти — досвід тиру (10–1000) тому, хто підняв. avaia сама піднімає тири 1–3, тири 4–6 лишає лідом для людини. кожна знахідка платить за побачення й за підняття рівно один раз, тож повтор події чи журналу досвіду не множить. підняття знахідки, яку ще ніхто не бачив, — це й побачення теж. правила — `awardsFor` і `canPickUp` в `artifact-contract`.
-- для тирів 4–6 потрібен **claim**: перший, хто підняв `artifactId`, виграє, і сервер це підтверджує. інакше «хтось інший встиг першим» неможливий. тири 1–3 лишаються локальними й особистими, і сервера не потребують.
-- досвід у [progression](progression.md) сьогодні `authority: client`. для тирів із claim сервер має підтверджувати факт підняття, інакше 1000 одиниць можна просто намалювати. це відкрите рішення Р3.
-- ліди, як і знахідки, не стають `bch` і не пишуться в журнал присутності.
+- The Avaia sees a tier 4–6 find and **does not pick it up**. It keeps a **lead**: the segment, the epoch and the tier, without exact coordinates.
+- The person sees the lead, takes the wheel, physically walks to the segment and picks the find up. The pick-up experience goes to the Bond (R2).
+- **R2, decided: whoever does it gets the experience.** Seeing a find pays 10 experience to whoever saw it first: the Avaia if it was walking on its own or sent by a tap, the Bond if this device walked past. Picking it up pays the tier's experience (10–1000) to whoever picked it up. The Avaia picks up tiers 1–3 itself and leaves tiers 4–6 as leads for the person. Each find pays for being seen and for being picked up exactly once, so repeating an event or the journal does not multiply experience. Picking up a find nobody has seen yet counts as seeing it too. The rules are `awardsFor` and `canPickUp` in `artifact-contract`.
+- Tiers 4–6 need a **claim**: the first to pick up an `artifactId` wins, and the server confirms it. Otherwise "someone else got there first" is impossible. Tiers 1–3 stay local and personal and need no server.
+- Experience in [progression](progression.md) is `authority: client` today. For tiers with a claim the server has to confirm the pick-up, otherwise 1000 points can simply be drawn. This is open decision R3.
+- Leads, like finds, do not become `bch` and are not written to the presence journal.
 
-## §4 журнал знахідок
+## §4 The finds journal
 
-зберігається з phase 1: append-only сховище `avaia-finds`, AES-GCM-256 з non-extractable ключем, `resolveJournalKey`, запис після завершеного факту, зведення на читанні (`foldFinds`). змінюється `FindRecord`:
+Kept from phase 1: an append-only `avaia-finds` store, AES-GCM-256 with a non-extractable key, `resolveJournalKey`, a write after the fact is complete, folding on read (`foldFinds`). `FindRecord` changes:
 
 ```ts
 export interface FindRecord {
@@ -381,82 +381,82 @@ export interface FindRecord {
   readonly tier: Tier;
   readonly archetype: string;
   readonly noun: { readonly lemma: string; readonly gender: Gender };
-  readonly properties: readonly ArtifactProperty[]; // знімок, не посилання
+  readonly properties: readonly ArtifactProperty[]; // a snapshot, not a reference
   readonly packVersion: number;
   readonly foundAt: number;
-  readonly pickedUp: boolean; // false для ліда
+  readonly pickedUp: boolean; // false for a lead
 }
 ```
 
-- нова база `avaia-finds` **додається до `world-wipe.ts`**, який зараз видаляє лише `nilx-presence`. інакше «стерти світ» лишає знахідки сиротами.
-- `state-placement.ts`: знахідки й ліди пристроєві, не синхронізуються, поки claim не вирішить інакше.
+- The new `avaia-finds` database **is added to `world-wipe.ts`**, which today deletes only `nilx-presence`. Otherwise "wipe the world" leaves the finds orphaned.
+- `state-placement.ts`: finds and leads are per device and are not synced, until the claim decides otherwise.
 
-## §5 наратив і поверхня
+## §5 Narrative and surface
 
-- наративний шар **розширює наявні** `narration-contract`, `narration-templates` і `narration-webllm` (каталог моделей, mirror, `faithfulness`). контракт додає новий вид evidence поруч із `"visit"`. нового `avaia-narrate` і прямого `@mlc-ai/web-llm` не потрібно.
-- рядки прогулянок («піду погуляю», «зайду в парк») і знахідок («знайшла кришечку») беруться з голосу студії. шаблон — еталон, модель лише перефразовує, а валідатор відкидає рядок, у якому є властивість, якої знахідка не має.
-- **поверхня:** тап по землі нині належить avaia, а панель сирого журналу більше не відкривається. «avaia бачила» не окремий блок під візитами, а рядок на її картці. список знахідок і ліди з'являються в екрані avaia в Dock поруч із «Landmarks studied».
+- The narrative layer **extends the existing** `narration-contract`, `narration-templates` and `narration-webllm` (the model catalogue, mirror, `faithfulness`). The contract adds a new kind of evidence next to `"visit"`. No new `avaia-narrate` and no direct `@mlc-ai/web-llm` are needed.
+- Outing lines ("I'll go for a walk", "I'll drop into the park") and find lines ("found a bottle cap") come from the study's voice. The template is the reference: the model only rephrases, and the validator rejects a line that names a property the find does not have.
+- **Surface:** a tap on the ground now belongs to the Avaia, and the raw journal panel no longer opens. "The Avaia saw" is not a separate block under the visits but a line on its card. The list of finds and the leads appear on the Avaia's screen in the Dock, next to "Landmarks studied".
 
-## Р1: лише по відкритому
+## R1: open ground only
 
-рішення: **avaia ходить лише по відкритій землі. туман відкриває людина: тапом по клітинці, що межує з відкритим.** це вже чинна механіка fog reveal ([Avaia walks the world](avaia-walk.md), «Revealing the fog»): позначені пунктиром клітинки на межі відкритого, питання «відкрити?», avaia підходить до краю клітинки з відкритого боку й відкриває її. сама avaia туман не відкриває й крізь нього не ходить.
+Decision: **the Avaia walks only on open ground. The person opens the fog, by tapping a cell that borders open ground.** This is the existing fog reveal mechanic ([Avaia walks the world](avaia-walk.md), "Revealing the fog"): cells at the edge of open ground are marked with a dashed outline, the question "open it?" is asked, and the Avaia walks up to the cell's edge from the open side and opens it. The Avaia neither opens fog by itself nor walks through it.
 
-відкрита земля:
+Open ground:
 
-- клітинки, відкриті журналом присутності або fog reveal;
-- клітинка, де стоїть Bond, і земля в межах 50 м від пристрою (Bond ніколи не в тумані);
-- клітинка, де avaia стоїть зараз: щоб вона завжди могла вийти з того місця, де є.
+- cells opened by the presence journal or by a fog reveal;
+- the cell the Bond stands in, and the ground within 50 m of the device (a Bond is never in the fog);
+- the cell the Avaia stands in now, so it can always walk out of where it is.
 
-поки туман не намальовано (журнал вантажиться або не завантажився), відкрито все, як і сьогодні.
+While no fog is drawn (the journal is loading or failed to load), everything is open, as today.
 
-що це означає для коду:
+What this means for the code:
 
-- **маршрут** (`planWalk`): граф не заходить у вузли в тумані, а готовий шлях перевіряється кожні 10 м, бо довге ребро або відрізок травою може зрізати кут туманної клітинки. якщо кожен шлях іде крізь туман, хода відхиляється як `fog` тією самою фразою, що й тап у туман.
-- **curiosity** пропускає landmarks, що стоять у тумані: вони чекають, поки їхню землю відкриють.
-- **цілі прогулянок** (§1, #301): у меню драйву потрапляють лише цілі, до яких є шлях по відкритому. парк за туманом — це не ціль, а причина показати людині, яку клітинку відкрити.
-- **підвантаження тайлів** (§0.5, #312) обмежене відкритою землею та її межею: тайли за туманом прогулянці не потрібні.
-- **fog reveal** не змінюється. якщо до краю клітинки не можна дійти по відкритому, avaia лишається на місці, а відкриття йде за таймером, як і сьогодні.
+- **Route** (`planWalk`): the graph does not enter nodes in the fog, and a planned way is checked every 10 m, because a long edge or a grass leg can cut the corner of a fogged cell. If every way passes through fog, the walk is refused as `fog`, with the same line as a tap into the fog.
+- **Curiosity** passes over landmarks standing in the fog: they wait until their ground is opened.
+- **Outing targets** (§1, #301): only targets with a way over open ground enter the drive's menu. A park behind the fog is not a target but a reason to show the person which cell to open.
+- **Reading tiles ahead** (§0.5, #312) is limited to open ground and its edge: an outing does not need tiles behind the fog.
+- **The fog reveal** does not change. If the cell's edge cannot be reached over open ground, the Avaia stays put and the reveal runs on its timer, as today.
 
-## відкриті рішення
+## Open decisions
 
-| №   | питання                                                             | мій варіант                                                                                                          |
-| --- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Р1  | де avaia може ходити: лише по відкритому (туман) чи по всьому місту | **вирішено:** лише по відкритому. сусідні з відкритим клітинки людина відкриває тапом. див. «Р1: лише по відкритому» |
-| Р2  | досвід за знахідку отримує avaia чи Bond                            | **вирішено:** хто побачив — 10, хто підняв — досвід тиру. див. §3.4                                                  |
-| Р3  | чи готовий сервер до claim-реєстру для тирів 4–6                    | якщо ні, «хтось встиг швидше» відкладається, а решта працює локально                                                 |
-| Р4  | джерела парків, озер, церков                                        | розширити `LANDMARK_KINDS` для pois, `landuse`/`water` читати окремо. перевіряється на архіві                        |
+| №   | Question                                                           | My option                                                                                                          |
+| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| R1  | where the Avaia may walk: open ground only (fog) or the whole city | **decided:** open ground only. The person opens cells bordering open ground by tapping. See "R1: open ground only" |
+| R2  | who earns a find's experience: the Avaia or the Bond               | **decided:** whoever saw it gets 10, whoever picked it up gets the tier's experience. See §3.4                     |
+| R3  | is the server ready for a claim registry for tiers 4–6             | if not, "someone got there first" is postponed, and the rest works locally                                         |
+| R4  | sources for parks, lakes, churches                                 | extend `LANDMARK_KINDS` for pois, read `landuse`/`water` separately. Checked against the archive                   |
 
-## порядок робіт
+## Order of work
 
-кожен крок спирається на попередній.
+Each step builds on the one before.
 
-0. **пішохідний граф і роутер** (`walk-graph`): вузли, ваги з §0.3, snap, тести на фіксованих фрагментах тайлів. найменш ризикований крок: чиста функція.
-1. **передбачення тайлів** і перевірка якості доріжок на архіві (§0.5).
-2. **цілі міста** (§1): розширення kinds, відсів недосяжних.
-3. **точка B** (§0.4): тап, стояння 20 с, повернення до автономії з B. спершу з прямою ходьбою, потім з роутером.
-4. **драйв без моделі** (§2): утилітарне правило, фрази, інтервал.
-5. **знахідки локально** (§3, §4): пак, сегменти, тири 1–6 як досвід без claim, антифарм через епохи, журнал, запис у `world-wipe`.
-6. **модель у `DecisionMenu`** (§2.2) і наратор (§5), за прапором.
-7. **claim і ліди** (§3.4), коли вирішені Р2 і Р3.
+0. **Pedestrian graph and router** (`walk-graph`): nodes, the weights from §0.3, snapping, tests on fixed tile fragments. The least risky step: a pure function.
+1. **Reading tiles ahead** and checking path quality on the archive (§0.5).
+2. **City targets** (§1): more kinds, unreachable ones filtered out.
+3. **Point B** (§0.4): tap, a 20 s stand, back to autonomy from B. First with straight walking, then with the router.
+4. **The drive without a model** (§2): the utility rule, lines, the interval.
+5. **Finds, locally** (§3, §4): the pack, segments, tiers 1–6 as experience without a claim, anti-farm through epochs, the journal, the `world-wipe` entry.
+6. **The model in `DecisionMenu`** (§2.2) and the narrator (§5), behind a flag.
+7. **Claims and leads** (§3.4), once R2 and R3 are decided.
 
-після кроку 5 фіча працює повністю без моделі й без сервера. модель і claim приходять останніми, як надбудови.
+After step 5 the feature works completely without a model and without a server. The model and the claim come last, as add-ons.
 
-## приймання
+## Acceptance
 
-- [ ] маршрутизатор: однакові вхід і граф дають однаковий шлях. шлях не перетинає будівлі й воду. м'яка вага на фіксованих фрагментах дає очікувані маршрути (доріжка проти трави).
-- [ ] avaia виходить на траву лише у випадках із §0.2: немає лінії, артефакт, скорочення, тап. на тестових тайлах кожен випадок має окремий тест.
-- [ ] тап по точці B: avaia приходить, стоїть, повертається в автономію з B. повторний тап підхоплює рух.
-- [ ] на 10k сегментів частка знахідок тиру 6 близька до 1 на 100 км (допуск ±30 %). golden-знімок паку закомічений, зміна без підняття версії валить тест.
-- [ ] прогулянка без жодного запиту, крім тайлів і (при першому завантаженні) ваг з `nilx.one`. усі запити тайлів перелічені в `map-data.md`.
-- [ ] прапор моделі вимкнений за замовчуванням. частка відмов валідатора записана щонайменше на 50 рядках. вище 30 % модель не додає нічого понад шаблон.
-- [ ] «стерти світ» видаляє `avaia-finds`.
+- [ ] Router: the same input and graph give the same way. The way does not cross buildings or water. Soft weights on fixed fragments give the expected routes (path versus grass).
+- [ ] The Avaia steps onto grass only in the cases of §0.2: no line, an artifact, a shortcut, a tap. Each case has its own test on test tiles.
+- [ ] A tap on a point B: the Avaia arrives, stands, and returns to autonomy from B. A second tap picks the movement up.
+- [ ] Over 10k segments the share of tier 6 finds is close to 1 per 100 km (±30 % tolerance). The pack's golden snapshot is committed, and a change without a version bump fails the test.
+- [ ] An outing makes no requests other than tiles and (on first load) the weights from `nilx.one`. Every tile request is listed in `map-data.md`.
+- [ ] The model flag is off by default. The validator's rejection rate is recorded over at least 50 lines. Above 30 %, the model adds nothing beyond the template.
+- [ ] "Wipe the world" deletes `avaia-finds`.
 
-## не входить
+## Not included
 
-- **анімація й камера під час виходу.** прогулянка не рухає камеру. якщо потрібен слідкуючий режим, це окреме рішення в [Camera coordination](camera-coordination.md).
-- **джерело `catalog`** (віртуальні полиці в магазинах) і **`slot-phys`** (потребує REG-ATTEST).
-- **перенесення між пристроями.** знахідки й ліди не переживають зміну пристрою.
-- **ходьба при закритій сторінці.** тільки через детерміновану «дограшку» при відкритті, окремо.
-- **qwen3 1.7b.** після webgpu-проби на mobile safari.
-- **bond / interaction.** знахідки avaia ніколи не стають `bch`.
-- **training-сигнал** з прогулянок.
+- **Animation and the camera during an outing.** An outing does not move the camera. If a follow mode is needed, that is a separate decision in [Camera coordination](camera-coordination.md).
+- **The `catalog` source** (virtual shelves in shops) and **`slot-phys`** (needs REG-ATTEST).
+- **Moving between devices.** Finds and leads do not survive a change of device.
+- **Walking while the page is closed.** Only through a deterministic "catch-up" on opening, separately.
+- **qwen3 1.7b.** After the WebGPU trial on mobile Safari.
+- **Bond / interaction.** The Avaia's finds never become `bch`.
+- **A training signal** from outings.

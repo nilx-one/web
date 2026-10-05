@@ -1125,6 +1125,37 @@ describe("roads the basemap carries", () => {
     });
     expect(renderer.roadsWithin?.(bounds)).toEqual([]);
   });
+
+  it("adds the roads read ahead for a walk, from the archive only", async () => {
+    const fetchRoadTile = vi.fn(async () => [
+      {
+        kind: "path",
+        kindDetail: "footway",
+        lines: [
+          [
+            [30.522, 50.45],
+            [30.523, 50.45],
+          ] as [number, number][],
+        ],
+      },
+    ]);
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) =>
+        makeFakeMap() as unknown as MapLibreMap,
+      fetchRoadTile,
+    });
+
+    const preload = await renderer.preloadRoads?.(bounds);
+    expect(preload?.fetched).toBeGreaterThan(0);
+    expect(fetchRoadTile).toHaveBeenCalledTimes(preload!.fetched);
+    for (const [tile] of fetchRoadTile.mock.calls as unknown as [
+      { z: number },
+    ][]) {
+      expect(tile.z).toBe(14);
+    }
+    // Read ahead, answered even before a map is mounted.
+    expect(renderer.roadsWithin?.(bounds)?.length).toBe(preload!.fetched);
+  });
 });
 
 describe("a card that talks", () => {

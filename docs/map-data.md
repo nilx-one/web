@@ -64,8 +64,9 @@ The renderer itself reads a little more, outside any style, for
 querying the painted `buildings`, `buildings-flat` and `water` layers, and
 `landmarksNear` reads `kind`, `name` and every other attribute of `pois`
 features from tiles already loaded. `roadsWithin` reads `kind`, `kind_detail`
-and `is_bridge` of `roads` features, also from tiles already loaded, to build
-the pedestrian graph a walk follows. `LANDMARK_KINDS`
+and `is_bridge` of `roads` features, from tiles already loaded and from the
+road tiles read ahead (below), to build the pedestrian graph a walk follows.
+`LANDMARK_KINDS`
 (`packages/map-maplibre/src/landmark-kinds.json`) follows the Protomaps schema
 the archive is built from. The declaration above names fields, not the values
 they take, so `inspect-basemap.sh` ends by reading the `pois` tiles themselves
@@ -76,6 +77,32 @@ also be run on its own with any Node:
 ```sh
 node deploy/web/landmark-kinds.mjs /srv/nilx-one/map/basemap.pmtiles
 ```
+
+### Reading roads ahead
+
+This is the one place the client fetches map data the view did not ask for.
+An Avaia going out on its own ([Avaia walks the world](avaia-walk.md)) walks
+up to 2.5 km from where it stands, well past the tiles on screen, so before it
+plans the outing the renderer's `preloadRoads` reads the `roads` layer of the
+tiles covering that area:
+
+- from the same self-hosted `basemap.pmtiles` the map draws, by HTTP range
+  requests to that one file; nothing else is requested and nothing leaves the
+  origin;
+- at one zoom, 14, and only the `roads` layer of each tile is decoded;
+- nearest the outing's centre first, at most 32 tiles per outing, and the
+  cache never holds more than 32: the oldest is dropped first. A walk of 2.5 km each way
+  needs 16 to 25;
+- not a tile with no open ground in it: the Avaia walks only where the fog is
+  lifted, so a tile that is all fog is never fetched;
+- at most once per outing, and outings come at most once in four hours. A tile
+  already held is not fetched again; one that failed is tried at the next.
+
+Each preload answers what it did (`covering`, `refused`, `skipped`, `cached`,
+`fetched`, `failed`), so what it cost is observable. What it reads stays on the
+device, feeds the walking graph only, and never reaches a model: the decision
+menu carries closed labels, not roads. `landmarksNear` still reads only the
+tiles the view has loaded.
 
 Elements the reference imagery shows but the archive does not support are
 omitted rather than invented. In particular, individual street trees are not

@@ -57,6 +57,13 @@ import {
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Protocol } from "pmtiles";
 
+import {
+  createRoadTileCache,
+  pmtilesRoadTiles,
+  ROAD_SOURCE_LAYER,
+  type FetchRoadTile,
+} from "./road-tiles";
+
 import type { AvatarCustomLayer } from "./avatar-layer";
 import type { MonumentCustomLayer } from "./monument-layer";
 import {
@@ -122,6 +129,11 @@ export {
   pinnedLandmarkLabelZoom,
 } from "./pinned-landmarks";
 export {
+  MAX_ROAD_TILES,
+  ROAD_SOURCE_LAYER,
+  ROAD_TILE_ZOOM,
+} from "./road-tiles";
+export {
   OBSERVED_POSITION_LABEL_CLASS,
   createObservedPositionLabelElement,
 } from "./observed-position-label";
@@ -143,9 +155,6 @@ export const BUILDING_DEFAULT_HEIGHT_METERS = 7;
 
 /** The style layers whose paint means "this is water". */
 export const WATER_LAYER_IDS: readonly string[] = ["water"];
-
-/** The archive's road network source layer: what a body walks along. */
-export const ROAD_SOURCE_LAYER = "roads";
 
 /** The archive's point-of-interest source layer. */
 export const POI_SOURCE_LAYER = "pois";
@@ -233,6 +242,11 @@ export interface MapLibreRendererOptions {
    * taps from this instead.
    */
   readonly fog?: MapFogField;
+  /**
+   * Where `preloadRoads` reads road tiles from. Defaults to the self-hosted
+   * basemap archive at `MAP_BASEMAP_URL`; nothing else is ever fetched.
+   */
+  readonly fetchRoadTile?: FetchRoadTile;
 }
 
 function createMapLibreLabelMarker(
@@ -339,6 +353,18 @@ export function createMapLibreRenderer(
     options.createLabelMarker ?? createMapLibreLabelMarker;
   const createSelectionMarker =
     options.createSelectionMarker ?? createMapLibreSelectionMarker;
+  // The archive is opened on the first road tile asked for, not before.
+  let archiveRoads: FetchRoadTile | undefined;
+  const roadTiles = createRoadTileCache({
+    fetchTile:
+      options.fetchRoadTile ??
+      ((tile) => {
+        archiveRoads ??= pmtilesRoadTiles(
+          new URL(MAP_BASEMAP_URL, globalThis.location.href).href,
+        );
+        return archiveRoads(tile);
+      }),
+  });
   let appearance = options.initialAppearance ?? DEFAULT_MAP_APPEARANCE;
   let dimension = options.initialDimension ?? DEFAULT_MAP_DIMENSION;
   let status: MapRendererStatus = { kind: "unmounted" };
@@ -1276,10 +1302,13 @@ export function createMapLibreRenderer(
     },
 
     roadsWithin(bounds) {
-      if (map === undefined) return [];
+      // What the view has loaded, and what was read ahead for a walk. A street
+      // in both arrives twice; the walking graph joins the copies.
+      const preloaded = roadTiles.roadsWithin(bounds);
+      if (map === undefined) return preloaded;
       const sourceId = map.getLayer(ROAD_SOURCE_LAYER)?.source ?? "basemap";
-      if (map.getSource(sourceId) === undefined) return [];
-      const roads: MapRoad[] = [];
+      if (map.getSource(sourceId) === undefined) return preloaded;
+      const roads: MapRoad[] = [...preloaded];
       for (const feature of map.querySourceFeatures(sourceId, {
         sourceLayer: ROAD_SOURCE_LAYER,
       })) {
@@ -1308,6 +1337,10 @@ export function createMapLibreRenderer(
         });
       }
       return roads;
+    },
+
+    preloadRoads(bounds, accept) {
+      return roadTiles.preload(bounds, accept);
     },
 
     subscribeLandmarksChanged(listener) {
