@@ -8,7 +8,7 @@ import { worldAwardsForFind } from "./use-find-loop";
 
 function find(tier: Tier): FindRoll {
   return {
-    artifactId: `art:seg:312346:298243:e2961:1:0`,
+    artifactId: "art:seg:312346:298243:e2961:1:0",
     segment: "seg:312346:298243",
     epoch: "e2961",
     packVersion: 1,
