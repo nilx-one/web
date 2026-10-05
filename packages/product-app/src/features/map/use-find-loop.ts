@@ -193,20 +193,22 @@ export function useFindLoop({
   // that segment's find. This deliberately does not interpolate a GPS jump
   // into invented walked segments.
   const previousBondSegment = useRef<string | undefined>(undefined);
+  const deviceLongitude = device?.longitude;
+  const deviceLatitude = device?.latitude;
   useEffect(() => {
-    if (!bondDriving || device === undefined) {
+    if (!bondDriving || deviceLongitude === undefined || deviceLatitude === undefined) {
       previousBondSegment.current =
-        device === undefined
+        deviceLongitude === undefined || deviceLatitude === undefined
           ? undefined
           : `${epochOf(Date.now())}:${segmentAt([
-              device.longitude,
-              device.latitude,
+              deviceLongitude,
+              deviceLatitude,
             ])}`;
       return;
     }
 
     const epoch = epochOf(Date.now());
-    const segment = segmentAt([device.longitude, device.latitude]);
+    const segment = segmentAt([deviceLongitude, deviceLatitude]);
     const key = `${epoch}:${segment}`;
     const previous = previousBondSegment.current;
     previousBondSegment.current = key;
@@ -219,7 +221,7 @@ export function useFindLoop({
       segment,
     });
     if (roll !== null) void recordFind(owner, roll, "bond");
-  }, [bondDriving, device?.latitude, device?.longitude, owner]);
+  }, [bondDriving, deviceLatitude, deviceLongitude, owner]);
 
   return { leads, completedAvaiaWalk };
 }
