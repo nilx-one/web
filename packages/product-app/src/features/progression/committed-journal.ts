@@ -54,7 +54,7 @@ export interface PendingCommittedAward {
   readonly find?: FindRoll;
 }
 
-export interface KeptCommittedAward extends PendingCommittedAward {}
+export type KeptCommittedAward = PendingCommittedAward;
 
 export interface CommittedJournalSnapshot {
   readonly chain: string;
