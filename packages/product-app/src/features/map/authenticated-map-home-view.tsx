@@ -326,6 +326,36 @@ const AT_DEVICE_METERS = 5;
  */
 const DETAIL_TITLE_COLLAPSE_PX = 24;
 
+/**
+ * What names a section of a Dock screen: a fieldset's legend, or the eyebrow
+ * a section opens with. A field's own eyebrow label names a field, not a
+ * section, and a legend nested in another fieldset names part of a section;
+ * neither takes over the header.
+ */
+const DOCK_SECTION_TITLE_SELECTOR =
+  "legend, .interface-settings__eyebrow:not(label)";
+
+/**
+ * The last section title the body has carried up past the top of its
+ * scroller, or nothing while the screen is still above its first section.
+ * A title that has no box of its own (not laid out) has passed nowhere.
+ */
+function passedSectionTitle(scroller: HTMLElement): string | undefined {
+  const top = scroller.getBoundingClientRect().top;
+  let passed: string | undefined;
+  for (const title of scroller.querySelectorAll<HTMLElement>(
+    DOCK_SECTION_TITLE_SELECTOR,
+  )) {
+    if (title.parentElement?.parentElement?.closest("fieldset")) continue;
+    const box = title.getBoundingClientRect();
+    if (box.height === 0) continue;
+    if (box.bottom >= top) break;
+    const text = title.textContent?.trim();
+    if (text) passed = text;
+  }
+  return passed;
+}
+
 /** Long enough to read "saved", short enough not to linger over the world. */
 const AVAIA_SAVED_TOAST_MS = 4_000;
 
@@ -600,6 +630,12 @@ export function AuthenticatedMapHomeView({
   // view, at which point the fixed header's small title takes over saying
   // it. The two are one name in two states, never both said at once.
   const [detailTitleCollapsed, setDetailTitleCollapsed] = useState(false);
+  // Further down, the header's small title follows the body: it says the
+  // section a person is reading — the last one whose own title has gone up
+  // under the header — and goes back to the screen's name above the first.
+  const [dockSectionTitle, setDockSectionTitle] = useState<string | undefined>(
+    undefined,
+  );
   const appearance = useAppearance();
   const [mapStatus, setMapStatus] = useState<MapRendererStatus>(() =>
     renderer.getStatus(),
@@ -849,6 +885,7 @@ export function AuthenticatedMapHomeView({
   if (detailScreenKey !== renderedDetailScreenKey.current) {
     renderedDetailScreenKey.current = detailScreenKey;
     if (detailTitleCollapsed) setDetailTitleCollapsed(false);
+    if (dockSectionTitle !== undefined) setDockSectionTitle(undefined);
   }
   useEffect(() => {
     // The header stays put. Only the body under it scrolls, and a screen
@@ -1658,11 +1695,18 @@ export function AuthenticatedMapHomeView({
     return section === "world" ? "Bond" : detailTitle();
   }
 
+  /** The header's small title: the section being read, else the screen. */
+  function dockHeaderTitle(): string {
+    return dockSectionTitle ?? detailTitle();
+  }
+
   function handleDockScroll(event: UIEvent<HTMLElement>): void {
-    const collapsed = event.currentTarget.scrollTop > DETAIL_TITLE_COLLAPSE_PX;
+    const scroller = event.currentTarget;
+    const collapsed = scroller.scrollTop > DETAIL_TITLE_COLLAPSE_PX;
     setDetailTitleCollapsed((current) =>
       current === collapsed ? current : collapsed,
     );
+    setDockSectionTitle(collapsed ? passedSectionTitle(scroller) : undefined);
   }
 
   return (
@@ -1800,7 +1844,16 @@ export function AuthenticatedMapHomeView({
                     <span className="interface-settings__eyebrow">
                       {detailEyebrow()}
                     </span>
-                    <h2 aria-hidden={!detailTitleCollapsed}>{detailTitle()}</h2>
+                    <h2 aria-hidden={!detailTitleCollapsed}>
+                      {/* Keyed by what it says, so a new section's name
+                        arrives rather than being swapped in place. */}
+                      <span
+                        className="bond-dock__detail-header-title"
+                        key={dockHeaderTitle()}
+                      >
+                        {dockHeaderTitle()}
+                      </span>
+                    </h2>
                   </div>
                 </div>
                 <div className="bond-dock__scroll" onScroll={handleDockScroll}>
