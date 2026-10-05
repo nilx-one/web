@@ -244,6 +244,43 @@ pub fn award_amount(kind: AwardKind, earner: Earner, tier: Option<u8>) -> Option
     }
 }
 
+/// The pack the service rolls claimed finds with. A claim cannot choose its
+/// pack: if it could, any segment could be made to roll a rare find. It has
+/// to equal the pack id the client rolls with once finds ship.
+pub const FIND_PACK_ID: &str = "nilx-one.finds";
+
+/// How long into a new week a pick-up of last week's find is still taken:
+/// one that was pending offline when the week turned.
+pub const CLAIM_GRACE_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// The most awards of one kind (and, for a pick-up, one tier) a Bond may have
+/// accepted in a week. A bound on a client inventing awards that follow the
+/// rules, set at two to three times what the most a person and an Avaia can
+/// walk in a week (some 150 km and 210 km) rolls. Not proof of play.
+pub fn weekly_cap(kind: AwardKind, tier: Option<u8>) -> u32 {
+    match (kind, tier) {
+        (AwardKind::ZoneRevealed | AwardKind::ZoneWalked, _) => 2_000,
+        (AwardKind::LandmarkStudied, _) => 300,
+        (AwardKind::LandmarkNoticed, _) => 500,
+        (AwardKind::FindSeen, _) => 400,
+        (AwardKind::FindPickedUp, Some(1)) => 200,
+        (AwardKind::FindPickedUp, Some(2)) => 100,
+        (AwardKind::FindPickedUp, Some(3)) => 50,
+        (AwardKind::FindPickedUp, Some(4)) => 15,
+        (AwardKind::FindPickedUp, Some(5)) => 10,
+        (AwardKind::FindPickedUp, Some(6)) => 6,
+        (AwardKind::FindPickedUp, _) => 0,
+    }
+}
+
+/// Whether a pick-up of a find rolled in `find_epoch` may still be claimed at
+/// `now_ms`: this week's, or last week's during the grace.
+pub fn claimable_epoch(find_epoch: i64, now_ms: i64) -> bool {
+    let current = epoch_of(now_ms);
+    find_epoch == current
+        || (find_epoch == current - 1 && epoch_of(now_ms - CLAIM_GRACE_MS) == find_epoch)
+}
+
 /// `xmur3` in `artifact-contract`: a string to a 32-bit seed. It hashes UTF-16
 /// code units, as `charCodeAt` does.
 fn xmur3(text: &str) -> u32 {
@@ -449,6 +486,26 @@ mod tests {
         assert_eq!(award_amount(FindPickedUp, Bond, None), None);
         assert_eq!(award_amount(FindPickedUp, Bond, Some(7)), None);
         assert_eq!(award_amount(ZoneWalked, Bond, Some(2)), None);
+    }
+
+    #[test]
+    fn takes_last_weeks_find_only_on_the_first_day() {
+        let monday = 1_791_158_400_000;
+        assert!(claimable_epoch(2961, monday));
+        assert!(claimable_epoch(2960, monday));
+        assert!(claimable_epoch(2960, monday + CLAIM_GRACE_MS - 1));
+        assert!(!claimable_epoch(2960, monday + CLAIM_GRACE_MS));
+        assert!(!claimable_epoch(2962, monday));
+        assert!(!claimable_epoch(2959, monday));
+    }
+
+    #[test]
+    fn caps_rare_pick_ups_tighter_than_common_ones() {
+        let caps: Vec<u32> = (1..=6)
+            .map(|tier| weekly_cap(AwardKind::FindPickedUp, Some(tier)))
+            .collect();
+        assert!(caps.windows(2).all(|pair| pair[0] > pair[1]));
+        assert_eq!(weekly_cap(AwardKind::FindPickedUp, None), 0);
     }
 
     #[test]

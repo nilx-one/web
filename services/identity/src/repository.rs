@@ -214,6 +214,9 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0017_bond_pub_info.sql"))
             .execute(&self.pool)
             .await?;
+        sqlx::raw_sql(include_str!("../migrations/0020_committed_experience.sql"))
+            .execute(&self.pool)
+            .await?;
         self.migrate_avaia_prefix().await?;
         self.migrate_bond_roles().await?;
         if !self.has_native_sessions_column("active").await? {
