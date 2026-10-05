@@ -194,7 +194,8 @@ have to travel: the same Avaia feels the same about the same place anywhere.
   nothing new to study goes back to the notebook landmark it longs for most,
   if that longing reaches 0.35, the landmark is within 3 km on open ground,
   and it has been away long enough: about a day from a loved place, three
-  days from a favourite (fondness 0.4 or more). It never goes back on its own
+  days from a favourite (a place its last visit left at fondness 0.4 or
+  more, even if it has faded a little since). It never goes back on its own
   to a place that is only known. It says so first (`landmark.longing`).
   Going back pays no experience again and needs no new study line. A place
   an outing found, such as a park, is the drive's to go back to, not
@@ -217,7 +218,9 @@ never training signal. It is transport-eligible, not synced state (see
 [State placement](state-placement.md)). It asserts nothing about presence,
 attendance or any Bond: it is about where a body this device draws liked to
 stand. The Dock lists the favourites on the Avaia's own screen ("Favourite
-places"), loved ones first.
+places"), loved ones first, read at the time the world opens or the last
+visit ended; a favourite left alone fades out of the list when its time
+comes, while the page is open too.
 
 ## Revealing the fog
 

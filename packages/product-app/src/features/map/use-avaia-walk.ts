@@ -94,6 +94,7 @@ import {
   emptyAffinity,
   favourites,
   lingerMs,
+  nextFavouriteChange,
   placeToReturnTo,
   recordVisit,
   subscribeAffinities,
@@ -103,6 +104,9 @@ import {
   type VisitedPlace,
 } from "./place-affinity";
 import { readWorldMemory, rememberWorld } from "./world-memory";
+
+/** The longest delay a timer keeps; a later one is set again when it fires. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /** How long a line stays on the card before it closes again. */
 export const SPEECH_MS = 10_000;
@@ -378,6 +382,10 @@ export function useAvaiaWalk({
     () => affinitySnapshot(owner, avaiaAddress),
     () => noAffinity,
   );
+  // The time the favourites are read at. A render reads no clock, so it is
+  // set when the world opens, when a visit is felt, and when the next place
+  // fades out of the favourites.
+  const [clock, setClock] = useState(() => Date.now());
   const speechCount = useRef(0);
   const lastLine = useRef<string | undefined>(undefined);
 
@@ -463,6 +471,7 @@ export function useAvaiaWalk({
         fell = visit.fellInLove;
         return visit.affinity;
       });
+      setClock(at);
       if (fell) say("landmark.loved", landmark);
       return fell;
     },
@@ -1057,19 +1066,18 @@ export function useAvaiaWalk({
 
   const moving =
     walk !== undefined || study !== undefined || pause !== undefined;
-  // As of the latest visit: a render reads no clock, and a feeling fades over
-  // weeks, not between two renders.
-  const fond = useMemo(
-    () =>
-      favourites(
-        affinity,
-        affinity.places.reduce(
-          (latest, place) => Math.max(latest, place.lastAt),
-          0,
-        ),
-      ),
-    [affinity],
-  );
+  const fond = useMemo(() => favourites(affinity, clock), [affinity, clock]);
+  // A favourite left alone long enough fades out of the list while the page
+  // is open, not only on the next reload.
+  useEffect(() => {
+    const due = nextFavouriteChange(affinity, clock);
+    if (due === undefined) return;
+    const fades = globalThis.setTimeout(
+      () => setClock(Date.now()),
+      Math.min(MAX_TIMER_MS, Math.max(0, due + 1 - Date.now())),
+    );
+    return () => globalThis.clearTimeout(fades);
+  }, [affinity, clock]);
   // One object per change that matters, so the world redraws a body when the
   // Avaia does something and not whenever the surface around it re-renders.
   return useMemo(

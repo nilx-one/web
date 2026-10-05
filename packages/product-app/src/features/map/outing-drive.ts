@@ -279,7 +279,7 @@ export function recentlyVisited(
           now - at <
           (affinity === undefined
             ? REVISIT_MS
-            : returnAfterMs(affinity, id, now, REVISIT_MS)),
+            : returnAfterMs(affinity, id, REVISIT_MS)),
       )
       .map(([id]) => id),
   );

@@ -271,17 +271,21 @@ export function findPlace(
 /**
  * How long after a visit a place may be gone back to: a day for one it
  * loves, three for a favourite, `fallbackMs` for anything else.
+ *
+ * The class is the one the last visit left, not what it has faded to since:
+ * a favourite by a hair would otherwise drop out of its own waiting window
+ * just as it ended, and never be gone back to. Fading still counts where it
+ * should, in how much the place is longed for.
  */
 export function returnAfterMs(
   affinity: PlaceAffinity,
   id: string,
-  now: number,
   fallbackMs: number,
 ): number {
   const place = findPlace(affinity, id);
   if (place === undefined) return fallbackMs;
   if (isLoved(place)) return LOVED_RETURN_MS;
-  return fondnessAt(place, now) >= FOND_AT ? FOND_RETURN_MS : fallbackMs;
+  return place.fondness >= FOND_AT ? FOND_RETURN_MS : fallbackMs;
 }
 
 /** How long a visit lasts: by what is done there, and up to twice that where it is dear. */
@@ -400,6 +404,26 @@ export function favourites(
 }
 
 /**
+ * When the favourites next change by themselves, after `now`: the moment the
+ * first place that is a favourite now fades below `FOND_AT`. Loved places
+ * never fade out, so with only those, or none, nothing is due.
+ */
+export function nextFavouriteChange(
+  affinity: PlaceAffinity,
+  now: number,
+): number | undefined {
+  let next: number | undefined;
+  for (const place of affinity.places) {
+    if (isLoved(place) || fondnessAt(place, now) < FOND_AT) continue;
+    const fades =
+      place.lastAt +
+      FONDNESS_HALF_LIFE_MS * Math.log2(place.fondness / FOND_AT);
+    if (next === undefined || fades < next) next = fades;
+  }
+  return next;
+}
+
+/**
  * The dear place an idle Avaia most wants to go back to, within reach and on
  * open ground, if any longs enough and its return window has passed.
  */
@@ -412,7 +436,7 @@ export function placeToReturnTo(
 ): FondPlace | undefined {
   let best: { place: FondPlace; want: number } | undefined;
   for (const place of affinity.places) {
-    if (now - place.lastAt < returnAfterMs(affinity, place.id, now, Infinity)) {
+    if (now - place.lastAt < returnAfterMs(affinity, place.id, Infinity)) {
       continue;
     }
     const want = longing(place, now);

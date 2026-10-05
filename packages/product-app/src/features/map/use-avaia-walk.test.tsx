@@ -20,6 +20,13 @@ import {
   WANDER_MAX_METERS,
   WANDER_MIN_METERS,
 } from "./outing-drive";
+import {
+  FOND_AT,
+  FONDNESS_HALF_LIFE_MS,
+  forgetAffinityCache,
+  writeAffinity,
+  type FondPlace,
+} from "./place-affinity";
 import { useAvaiaWalk, type AvaiaWalkInput } from "./use-avaia-walk";
 import { readWorldMemory } from "./world-memory";
 
@@ -96,6 +103,7 @@ beforeEach(() => {
   });
   vi.setSystemTime(new Date(2026, 9, 3, 13, 0, 0));
   window.localStorage.clear();
+  forgetAffinityCache();
 });
 
 afterEach(() => {
@@ -322,5 +330,54 @@ describe("an outing reading ahead", () => {
     };
     expect(accept?.(box(0))).toBe(true);
     expect(accept?.(box(2_000))).toBe(false);
+  });
+});
+
+describe("the favourites on the Avaia's screen", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const HOUR = 60 * 60 * 1000;
+  const fond = (id: string, fields: Partial<FondPlace>): FondPlace => ({
+    id,
+    kind: "monument",
+    longitude: ORIGIN.longitude,
+    latitude: ORIGIN.latitude,
+    fondness: 0.5,
+    visits: 2,
+    firstAt: Date.now() - 50 * DAY,
+    lastAt: Date.now(),
+    ...fields,
+  });
+  const keep = (...places: FondPlace[]) =>
+    writeAffinity("0x0sky", { by: "avaia:test", places, taste: {} });
+
+  it("reads them at the time the world opens, however long ago the visits were", () => {
+    keep(
+      fond("faded", { lastAt: Date.now() - 40 * DAY }),
+      fond("loved", {
+        fondness: 0.7,
+        visits: 4,
+        lastAt: Date.now() - 40 * DAY,
+        lovedAt: Date.now() - 41 * DAY,
+      }),
+    );
+    const { result } = render(walkRenderer().renderer);
+    expect(result.current.favourites.map((place) => place.id)).toEqual([
+      "loved",
+    ]);
+  });
+
+  it("lets a favourite fade out while the page stays open", async () => {
+    keep(
+      fond("fading", {
+        fondness: FOND_AT * 2 ** (HOUR / FONDNESS_HALF_LIFE_MS),
+      }),
+    );
+    const { result } = render(walkRenderer().renderer);
+    expect(result.current.favourites.map((place) => place.id)).toEqual([
+      "fading",
+    ]);
+
+    await advance(HOUR + 1_000);
+    expect(result.current.favourites).toEqual([]);
   });
 });

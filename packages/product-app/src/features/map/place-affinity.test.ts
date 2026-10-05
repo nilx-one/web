@@ -9,6 +9,7 @@ import {
   enjoyment,
   favourites,
   feelingFor,
+  FOND_AT,
   FOND_RETURN_MS,
   FONDNESS_HALF_LIFE_MS,
   fondnessAt,
@@ -19,6 +20,7 @@ import {
   LOVE_VISITS,
   LOVED_FLOOR,
   LOVED_RETURN_MS,
+  nextFavouriteChange,
   outingAppeal,
   placeActivity,
   placeFamily,
@@ -203,10 +205,8 @@ describe("going back", () => {
   });
 
   it("may return to a loved place after a day, a favourite after three", () => {
-    expect(returnAfterMs(affinity, id, lastAt, 7 * DAY)).toBe(LOVED_RETURN_MS);
-    expect(returnAfterMs(affinity, "park:unknown", lastAt, 7 * DAY)).toBe(
-      7 * DAY,
-    );
+    expect(returnAfterMs(affinity, id, 7 * DAY)).toBe(LOVED_RETURN_MS);
+    expect(returnAfterMs(affinity, "park:unknown", 7 * DAY)).toBe(7 * DAY);
     expect(FOND_RETURN_MS).toBeLessThan(7 * DAY);
   });
 
@@ -283,6 +283,23 @@ describe("on its own", () => {
     expect(feelingFor(meh.affinity, dull, T0)).toBe("known");
   });
 
+  /**
+   * The threshold case: a first impression just over the favourite line has
+   * faded under it by the time its three-day wait is over. It is still the
+   * favourite that visit made it, so it is still gone back to.
+   */
+  it("goes back to a favourite by a hair once its wait is over", () => {
+    const id = parkWhere((felt) => felt >= 0.67 && felt < 0.7);
+    const once = recordVisit(emptyAffinity(AVAIA), place(id), T0, NOON);
+    const after = T0 + FOND_RETURN_MS;
+    expect(once.place.fondness).toBeGreaterThanOrEqual(FOND_AT);
+    expect(fondnessAt(once.place, after)).toBeLessThan(FOND_AT);
+
+    expect(returnAfterMs(once.affinity, id, 7 * DAY)).toBe(FOND_RETURN_MS);
+    expect(placeToReturnTo(once.affinity, here, 3_000, after)?.id).toBe(id);
+    expect(liveOn(place(id), 7).visits.length).toBeGreaterThan(1);
+  });
+
   it("falls in love through its own returns alone", () => {
     const id = parkWhere((felt) => felt >= 0.8);
     const { affinity, visits, lovedAt } = liveOn(place(id), 30);
@@ -302,6 +319,26 @@ describe("on its own", () => {
     const { visits, lovedAt } = liveOn(place(id, "museum"), 60);
     expect(visits).toEqual([T0]);
     expect(lovedAt).toBeUndefined();
+  });
+});
+
+describe("the favourites over time", () => {
+  it("lets a favourite fade out when its time comes, and never a loved place", () => {
+    const liked = parkWhere((felt) => felt >= 0.7 && felt < 0.75);
+    const id = parkWhere((felt) => felt >= 0.8);
+    let { affinity } = visitDaily(emptyAffinity(AVAIA), place(id), 6);
+    affinity = recordVisit(affinity, place(liked), T0 + 6 * DAY, NOON).affinity;
+    const now = T0 + 6 * DAY;
+
+    const due = nextFavouriteChange(affinity, now);
+    expect(due).toBeDefined();
+    expect(favourites(affinity, due! - 1).map((entry) => entry.id)).toContain(
+      liked,
+    );
+    expect(favourites(affinity, due! + 1).map((entry) => entry.id)).toEqual([
+      id,
+    ]);
+    expect(nextFavouriteChange(affinity, due! + 1)).toBeUndefined();
   });
 });
 
