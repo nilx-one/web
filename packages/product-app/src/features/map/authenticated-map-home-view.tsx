@@ -150,7 +150,7 @@ import {
   type LevelStanding,
 } from "../progression/progression";
 import { usePubInfoSync } from "../progression/use-pub-info-sync";
-import { queueCommittedAward } from "../progression/committed-journal";
+import { earnActivity } from "../progression/committed-sync";
 import {
   AchievementDialog,
   type AchievementDialogState,
@@ -860,7 +860,7 @@ export function AuthenticatedMapHomeView({
     onCue: cue,
     onWalkCompleted: findLoop.completedAvaiaWalk,
     onAward: (record) => {
-      void queueCommittedAward(pubDress, record).catch(() => undefined);
+      void earnActivity(pubDress, record, committedAwards !== undefined);
     },
     // The line is on the card either way; a recording only says it aloud.
     // Its own walking lines are the loudest level: the person is driving it.
@@ -877,15 +877,19 @@ export function AuthenticatedMapHomeView({
     bondPoint: observedPosition,
     observed: deviceObservation,
     owner: pubDress,
-    onRevealed: (_cell, via) => {
+    onRevealed: (cell, via) => {
       setFogAnnouncement(t("fog.announce.revealed"));
       cue("reveal");
-      void queueCommittedAward(pubDress, {
-        kind: via === "avaia" ? "zone_revealed" : "zone_walked",
-        earner: via === "avaia" ? "avaia" : "bond",
-        subject: _cell.id,
-        at: Date.now(),
-      }).catch(() => undefined);
+      void earnActivity(
+        pubDress,
+        {
+          kind: via === "avaia" ? "zone_revealed" : "zone_walked",
+          earner: via === "avaia" ? "avaia" : "bond",
+          subject: cell.id,
+          at: Date.now(),
+        },
+        committedAwards !== undefined,
+      );
       if (via === "avaia" && wheel === "avaia" && handover === undefined) {
         avaiaWalk.announce("fog.revealed");
       }

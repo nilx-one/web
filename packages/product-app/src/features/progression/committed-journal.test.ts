@@ -48,12 +48,7 @@ describe("rebasePendingAwards", () => {
       },
     ];
 
-    const rebased = await rebasePendingAwards(
-      key,
-      chain,
-      serverHead,
-      pending,
-    );
+    const rebased = await rebasePendingAwards(key, chain, serverHead, pending);
 
     expect(rebased).toHaveLength(2);
     expect(rebased[0]?.parent).toBe(serverHead);
@@ -83,9 +78,40 @@ describe("recordedFindEvents", () => {
       },
     };
 
-    expect(recordedFindEvents({ history: [pickup] })).toEqual([
+    expect(recordedFindEvents({ history: [pickup], pending: [] })).toEqual([
       { artifactId, kind: "seen", by: "bond" },
       { artifactId, kind: "picked_up", by: "bond" },
+    ]);
+  });
+
+  it("counts awards still pending, so an offline find is not earned twice", () => {
+    const artifactId = "art:seg:312346:298243:e2961:1:0" as const;
+    const award = (
+      id: string,
+      kind: "find_seen" | "find_picked_up",
+    ): PendingCommittedAward => ({
+      id: commitment(id),
+      parent: null,
+      chain: "ch:phone123",
+      record: {
+        kind,
+        earner: "avaia",
+        ...(kind === "find_picked_up" ? { tier: 2 } : {}),
+        subject: artifactId,
+        at: 1000,
+      },
+    });
+
+    // The Avaia saw and picked up a tier 2 find while offline; nothing is kept
+    // yet. A Bond driving through the same segment must find it recorded.
+    expect(
+      recordedFindEvents({
+        history: [],
+        pending: [award("s", "find_seen"), award("p", "find_picked_up")],
+      }),
+    ).toEqual([
+      { artifactId, kind: "seen", by: "avaia" },
+      { artifactId, kind: "picked_up", by: "avaia" },
     ]);
   });
 });

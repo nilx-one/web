@@ -20,8 +20,17 @@ vi.mock("./committed-journal", () => ({
 }));
 
 vi.mock("./progression", () => ({
+  XP_LANDMARK_NOTICED_MANUALLY: 20,
+  XP_LANDMARK_STUDIED_BY_AVAIA: 45,
+  XP_ZONE_REVEALED_BY_AVAIA: 10,
+  XP_ZONE_REVEALED_MANUALLY: 30,
+  newExperienceEventId: vi.fn(() => "xp:legacy"),
   notePublishedExperience: vi.fn((progression: unknown) => progression),
   progressionSnapshot: vi.fn(),
+  queueExperience: vi.fn((progression: unknown, event: unknown) => ({
+    progression,
+    event,
+  })),
   subscribeProgression: vi.fn(() => () => undefined),
   updateProgression: vi.fn(),
 }));
@@ -30,13 +39,23 @@ import {
   closeCommittedLead,
   dropCommittedAward,
   keepCommittedAward,
+  queueCommittedAward,
   readCommittedJournal,
   rebaseCommittedAwards,
   type CommittedJournalSnapshot,
   type PendingCommittedAward,
 } from "./committed-journal";
-import { flushCommittedAwards, type CommittedWorldEvent } from "./committed-sync";
-import { progressionSnapshot, type Progression } from "./progression";
+import {
+  earnActivity,
+  flushCommittedAwards,
+  type CommittedWorldEvent,
+} from "./committed-sync";
+import {
+  progressionSnapshot,
+  queueExperience,
+  updateProgression,
+  type Progression,
+} from "./progression";
 
 const READY_PROGRESSION: Progression = {
   bondXp: 0,
@@ -116,9 +135,7 @@ function answered(
 }
 
 function access(
-  commit: (
-    awards: readonly CommittedAward[],
-  ) => Promise<CommitAwardsResult>,
+  commit: (awards: readonly CommittedAward[]) => Promise<CommitAwardsResult>,
 ): CommittedAwardAccessPort {
   return {
     commitAwards: vi.fn(commit),
@@ -361,15 +378,12 @@ describe("flushCommittedAwards", () => {
   });
 
   it("drops invalid and capped awards instead of inventing success", async () => {
-    const invalid = award(
-      id("h"),
-      {
-        kind: "zone_walked",
-        earner: "bond",
-        subject: "cell:invalid",
-        at: 7000,
-      },
-    );
+    const invalid = award(id("h"), {
+      kind: "zone_walked",
+      earner: "bond",
+      subject: "cell:invalid",
+      at: 7000,
+    });
     pending = [invalid];
     const invalidPort = access(async () => ({
       kind: "rejected",
@@ -394,15 +408,12 @@ describe("flushCommittedAwards", () => {
         return first;
       },
     );
-    const capped = award(
-      id("i"),
-      {
-        kind: "zone_walked",
-        earner: "bond",
-        subject: "cell:capped",
-        at: 8000,
-      },
-    );
+    const capped = award(id("i"), {
+      kind: "zone_walked",
+      earner: "bond",
+      subject: "cell:capped",
+      at: 8000,
+    });
     pending = [capped];
     const cappedPort = access(async (sent) =>
       answered(sent, { kind: "capped" }),
@@ -461,5 +472,58 @@ describe("flushCommittedAwards", () => {
 
     expect(port.commitAwards).not.toHaveBeenCalled();
     expect(pending[0]?.id).toBe(seen.id);
+  });
+});
+
+describe("earnActivity", () => {
+  const zone = {
+    kind: "zone_walked",
+    earner: "bond",
+    subject: "cell:1",
+    at: 1_000,
+  } as const;
+
+  beforeEach(() => {
+    vi.mocked(queueCommittedAward).mockReset();
+    vi.mocked(updateProgression).mockReset();
+    vi.mocked(queueExperience).mockClear();
+  });
+
+  it("commits the award when the host and the device can", async () => {
+    vi.mocked(queueCommittedAward).mockResolvedValue(undefined);
+
+    await earnActivity("0x0sky", zone, true);
+
+    expect(queueCommittedAward).toHaveBeenCalledWith("0x0sky", zone);
+    expect(updateProgression).not.toHaveBeenCalled();
+  });
+
+  it("publishes the legacy way on a host without committed awards", async () => {
+    await earnActivity("0x0sky", zone, false);
+
+    expect(queueCommittedAward).not.toHaveBeenCalled();
+    expect(updateProgression).toHaveBeenCalledTimes(1);
+    vi.mocked(updateProgression).mock.calls[0]![1](READY_PROGRESSION);
+    expect(queueExperience).toHaveBeenCalledWith(READY_PROGRESSION, {
+      id: "xp:legacy",
+      earner: "bond",
+      amount: 30,
+    });
+  });
+
+  it("does not lose the award when this device cannot keep a history", async () => {
+    vi.mocked(queueCommittedAward).mockRejectedValue(
+      new Error("Committed history requires IndexedDB"),
+    );
+
+    await earnActivity("0x0sky", zone, true);
+
+    expect(updateProgression).toHaveBeenCalledTimes(1);
+    vi.mocked(updateProgression).mock.calls[0]![1](READY_PROGRESSION);
+    expect(queueExperience).toHaveBeenCalledWith(READY_PROGRESSION, {
+      id: "xp:legacy",
+      earner: "bond",
+      amount: 30,
+    });
   });
 });

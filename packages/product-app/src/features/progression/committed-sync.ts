@@ -20,8 +20,10 @@ import {
   type PendingCommittedAward,
 } from "./committed-journal";
 import {
+  newExperienceEventId,
   notePublishedExperience,
   progressionSnapshot,
+  queueExperience,
   subscribeProgression,
   updateProgression,
 } from "./progression";
@@ -250,6 +252,39 @@ export async function queueWorldAwards(
   for (const award of awards) {
     await queueCommittedAward(owner, award.record, award.find);
   }
+}
+
+/**
+ * Earns one zone or landmark award. It goes through committed awards when
+ * the host has them (`committed`) and this device can keep a committed
+ * history. Otherwise it becomes a legacy `pub_info` event, priced by the
+ * same table: a host whose identity client predates committed awards, or a
+ * browser without IndexedDB or Web Crypto, still publishes what was earned
+ * instead of stranding or losing it. Finds never come here: they need the
+ * committed path, for the claim.
+ */
+export async function earnActivity(
+  owner: string,
+  record: AwardRecord,
+  committed: boolean,
+): Promise<void> {
+  if (committed) {
+    try {
+      await queueCommittedAward(owner, record);
+      return;
+    } catch {
+      // No committed history on this device: publish it the legacy way.
+    }
+  }
+  const amount = awardAmount(record);
+  if (amount === null) return;
+  updateProgression(owner, (current) =>
+    queueExperience(current, {
+      id: newExperienceEventId(),
+      earner: record.earner,
+      amount,
+    }),
+  );
 }
 
 /**

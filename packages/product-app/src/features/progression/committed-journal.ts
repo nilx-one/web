@@ -362,10 +362,19 @@ export async function readCommittedJournal(
   }
 }
 
+function isFindAward(record: AwardRecord): boolean {
+  return record.kind === "find_seen" || record.kind === "find_picked_up";
+}
+
+/**
+ * Whether two records are the same fact. A find is seen once and picked up
+ * once, whoever does it (`awardsFor`): the Avaia's sighting and the Bond's
+ * are one fact, so the earner does not tell them apart.
+ */
 function sameAward(left: AwardRecord, right: AwardRecord): boolean {
   return (
     left.kind === right.kind &&
-    left.earner === right.earner &&
+    (isFindAward(left) || left.earner === right.earner) &&
     left.tier === right.tier &&
     left.subject === right.subject
   );
@@ -760,15 +769,21 @@ export async function pruneCommittedLeads(
   }
 }
 
-/** Find facts that the server accepted and this device therefore kept. */
+/**
+ * Find facts this device already holds: kept by the server, or pending its
+ * answer. A pending sighting or pick-up counts, or an offline Avaia and the
+ * Bond after it could each queue the same find and both be paid. A pending
+ * award the server later drops leaves this list, and the find can be earned
+ * again.
+ */
 export function recordedFindEvents(
-  snapshot: Pick<CommittedJournalSnapshot, "history">,
+  snapshot: Pick<CommittedJournalSnapshot, "history" | "pending">,
 ): FindEvent[] {
   const events: FindEvent[] = [];
   const seen = new Set<ArtifactId>();
   const picked = new Set<ArtifactId>();
 
-  for (const award of snapshot.history) {
+  for (const award of [...snapshot.history, ...snapshot.pending]) {
     const { record } = award;
     if (record.kind !== "find_seen" && record.kind !== "find_picked_up") {
       continue;

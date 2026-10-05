@@ -132,39 +132,44 @@ export function useFindLoop({
     onEvent: (event) => latestEvent.current?.(event),
   });
 
-  const refreshLeads = useCallback(async () => {
-    const epoch = epochOf(Date.now());
-    await pruneCommittedLeads(owner, epoch);
-    const snapshot = await readCommittedJournal(owner);
-    setLeads(currentCommittedLeads(snapshot, epoch));
-  }, [owner]);
-
   useEffect(() => {
     let cancelled = false;
-    const refresh = () => {
-      void refreshLeads().catch(() => undefined);
+    const refresh = async () => {
+      const epoch = epochOf(Date.now());
+      await pruneCommittedLeads(owner, epoch);
+      const snapshot = await readCommittedJournal(owner);
+      if (!cancelled) setLeads(currentCommittedLeads(snapshot, epoch));
     };
-    void refreshLeads()
-      .then(() => {
-        if (cancelled) return;
-      })
-      .catch(() => undefined);
-    const unsubscribe = subscribeCommittedJournal(owner, refresh);
+    const run = () => {
+      void refresh().catch(() => undefined);
+    };
+    run();
+    const unsubscribe = subscribeCommittedJournal(owner, run);
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, [owner, refreshLeads]);
+  }, [owner]);
 
   // While there are live rare leads, ask only for their sha buckets. Matching
   // remains local. A remote claim closes the lead; whose Bond it was is never
   // returned or inferred.
+  //
+  // Every journal write reads the leads anew, as a new array. The check is
+  // keyed on which leads are open, not on that array, so a burst of writes
+  // (a flush of queued awards, say) does not read the claims once per write
+  // instead of once a minute.
+  const openLeads = useRef(leads);
   useEffect(() => {
-    if (port === undefined || leads.length === 0) return;
+    openLeads.current = leads;
+  }, [leads]);
+  const leadKey = leads.map((lead) => lead.artifactId).join(",");
+  useEffect(() => {
+    if (port === undefined || leadKey === "") return;
     let cancelled = false;
 
     const check = async () => {
-      const closed = await claimedLeads(port, leads);
+      const closed = await claimedLeads(port, openLeads.current);
       if (cancelled || closed === undefined) return;
       for (const lead of closed.yours) {
         await closeCommittedLead(owner, lead.artifactId, "already-yours");
@@ -188,10 +193,15 @@ export function useFindLoop({
       cancelled = true;
       globalThis.clearInterval(interval);
     };
-  }, [leads, owner, port]);
+  }, [leadKey, owner, port]);
+
+  // Finds are earned only through committed awards: without the port a find
+  // could never be paid, nor a rare one claimed, so none is rolled at all.
+  const finding = port !== undefined;
 
   const completedAvaiaWalk = useCallback(
     (walk: AvaiaWalk): void => {
+      if (!finding) return;
       const epoch = epochOf(Date.now());
       const path = walk.path.map(
         (point) => [point.longitude, point.latitude] as const,
@@ -207,7 +217,7 @@ export function useFindLoop({
         }
       })().catch(() => undefined);
     },
-    [owner],
+    [finding, owner],
   );
 
   // A location fix itself is not a walk. Remember the segment first, then
@@ -219,6 +229,7 @@ export function useFindLoop({
   const deviceLatitude = device?.latitude;
   const deviceAccuracy = device?.accuracyMeters;
   useEffect(() => {
+    if (!finding) return;
     if (!bondDriving) {
       previousBondSegment.current =
         deviceLongitude === undefined || deviceLatitude === undefined
@@ -254,7 +265,14 @@ export function useFindLoop({
     if (roll !== null) {
       void recordFind(owner, roll, "bond").catch(() => undefined);
     }
-  }, [bondDriving, deviceAccuracy, deviceLatitude, deviceLongitude, owner]);
+  }, [
+    bondDriving,
+    deviceAccuracy,
+    deviceLatitude,
+    deviceLongitude,
+    finding,
+    owner,
+  ]);
 
   return { leads, completedAvaiaWalk };
 }

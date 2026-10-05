@@ -34,6 +34,8 @@ describe("State placement", () => {
       "identity.authorization",
       "identity.avatarModel",
       "pubInfo.experience",
+      "experience.committedChains",
+      "finds.claims",
     ]);
     for (const record of placedStateAt("server")) {
       expect(record.medium).toBe("identity-service");
@@ -98,7 +100,13 @@ describe("State placement", () => {
     const sealed = STATE_PLACEMENT.filter(
       (record) => record.mobility === "sealed-transport",
     ).map((record) => record.id);
-    expect(sealed).toEqual(["presence.journal", "bond.chain"]);
+    expect(sealed).toEqual([
+      "presence.journal",
+      "finds.events",
+      "finds.historyKey",
+      "finds.chainMeta",
+      "bond.chain",
+    ]);
   });
 
   it("does not grant transport to a record that lives where it stays", () => {
