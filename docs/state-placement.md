@@ -11,7 +11,7 @@ client writes and nobody placed fails the build.
 
 | Placement          | The bytes live                                                                                                                               | Mobility                                                                                                                                                                       |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **server**         | in the identity service: the `pub_dress`, the server-side sign-in records, the named study in `identities.avatar_model`, and `bond_pub_info` | resident. The bytes are in the service. Identity records are service authority. `bond_pub_info` is an owner assertion labeled `authority: client`, not an attestation of play. |
+| **server**         | in the identity service: identity/sign-in records, reported experience, committed-award chain bookkeeping, and rare-find claims | resident. Residence does not make every field protocol truth: experience remains `authority: client`; a rare claim is authoritative only for first-claim ownership of that find. |
 | **device**         | on this device: the on-device model and its download, the journal key, work in flight, an outfit, the `__Host-` cookies                      | resident. It does not travel, because it would mean nothing on another device, or because no contract holds it.                                                                |
 | **synchronizable** | on this device, today                                                                                                                        | transport eligibility. Not a third store.                                                                                                                                      |
 
@@ -39,7 +39,8 @@ eligibility so it cannot be read as one layer:
 
 ## Server
 
-The identity service keeps three things about a Bond's identity:
+The identity service keeps identity state plus the bounded service-side state
+needed by committed experience and rare claims:
 
 - **`pub_dress`** — the Bond's address, its owned Avaia's address, and the
   public label folded from it ([Public Bond address](pub-dress-url.md)).
@@ -57,15 +58,20 @@ it is a declared, shared fact under the location contract in
 [Bond Dock](bond-dock.md) — not the device's observed position, and not the
 position placed below.
 
-`bond_pub_info` is service residence of a different kind. It holds the
-activity totals a Bond reports for itself and its Avaia (`bond_xp`,
-`avaia_xp`), plus the opaque event ids that keep a retry from paying twice.
-The service stores the report and answers it, including on the public Bond,
-with `authority: "client"` on every experience object. That label is written
-by the service; a client cannot choose it. Caps on a carry total and on one
-event are abuse bounds on an untrusted number. They are not proof the award
-was earned, and neither is idempotency. This row is where the bytes live. It
-is not authority over the play.
+`bond_pub_info` and `bond_experience_events` hold the activity totals a Bond
+reports for itself and its Avaia plus the opaque legacy ids / R3 commitments
+already paid. The service answers the standing, including on the public Bond,
+with `authority: "client"`: server pricing, caps and idempotency bound the
+report, but do not attest that physical play happened.
+
+R3 adds two more kinds of service residence:
+
+- `experience_chains` and `experience_kind_counts` hold per-device heads and
+  weekly bounded counts. They make committed awards ordered/idempotent; they
+  are progression bookkeeping, not BondChain;
+- `find_claims` holds only a rare tier 4–6 artifact hash, epoch, tier and the
+  winning Bond. It is authoritative for “who got this find first”, and for
+  nothing about consent, reciprocity, Interaction or Relationship.
 
 ## Device — resident
 
@@ -112,11 +118,12 @@ Local-first. Eligible, not transported.
 
 **What a Bond earned and remembered by playing**
 
-- **progress** — this device's unsent activity awards and the device-only
+- **legacy progress** — pre-R3 carry/pending activity plus the device-only
   model-download achievement (`nilx-one.progression.v3.<owner>`;
   [Progression](progression.md)). Older keys (`nilx-one.progression.v2` and
-  `nilx-one.progression.v1`) are read once as carry and never written. The
-  shared totals are `bond_pub_info`, above, not this copy;
+  `nilx-one.progression.v1`) are read once as carry and never written. New
+  world awards use the sealed committed journal below; the shared totals are
+  `bond_pub_info`, above, not either local copy;
 - **opened cells** — fog reveals (`nilx-one.fog.reveals.v1.<owner>`) and the
   landmark notebook (`nilx-one.avaia.landmarks.v1.<owner>`;
   [Avaia walks the world](avaia-walk.md));
@@ -132,9 +139,14 @@ Local-first. Eligible, not transported.
 
 - **`bch`** — this device's copies of the BondChain histories it is a party
   to ([the `.bnd` file](bnd-file-lifecycle.md));
-- **history** — the sealed visit journal (`nilx-presence/visits`,
+- **presence history** — the sealed visit journal (`nilx-presence/visits`,
   `bond.journal`). The key stays on the device. The ciphertext moves only
-  under the portability slice that lifecycle document reserves.
+  under the portability slice that lifecycle document reserves;
+- **committed award/find history** — `avaia-finds/events`, its direct-transfer
+  HMAC history key and device-chain metadata. Award records, finds and leads
+  stay here; the service gets only commitments/pricing fields and, for a rare
+  claim, the artifact id required by R3. This history moves only directly
+  between the Bond's devices, never through the identity service.
 
 ## What eligibility does not mean
 
