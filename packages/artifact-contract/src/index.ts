@@ -47,6 +47,9 @@ export interface TierRate {
  * About one find every 2 km and 30 experience a kilometre in all; tier 6
  * once in 100 km.
  */
+/** Canonical chance-find pack shared by the client and identity verifier. */
+export const FIND_PACK_ID = "nilx-one.finds";
+
 export const ROLL_TABLE = {
   version: 1,
   tiers: [
