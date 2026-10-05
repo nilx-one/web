@@ -431,19 +431,25 @@ What this means for the code:
 
 Decision: **the server holds the experience of the Bond and of its Avaia, a commitment to the history that earned it, and a claim on every rare find picked up. The history itself (finds, leads, opened cells, the notebook) stays on the device, travels only device to device, and never reaches the server.**
 
-The model is a commit and its sha. The record of an award is the commit: it is kept on the device. The server keeps the sha and the number. A rare find is the one exception that is shared: its sha and who picked it up.
+The model is a commit and its sha. The record of an award is the commit: it is kept on the device. The server keeps the sha and the number. A rare find is the one exception that is shared: which find it was and who picked it up.
 
 ### What the server holds
 
 - per Bond, the two totals (Bond and Avaia), as today in `bond_pub_info`;
-- per award, its commitment, the earner, the kind and the amount. The commitment is the award's id, so it replaces today's random `xp:` nonce;
+- per award, its commitment, the earner, the kind, the tier for a pick-up, and the amount the server priced it at. The commitment is the award's id, so it replaces today's random `xp:` nonce;
 - per device chain, the head: the last commitment it accepted and the chain's length;
 - per claimed find (tiers 4–6), its `artifactSha`, its epoch and tier, and the Bond that picked it up.
+
+### On the wire
+
+An award is sent as its commitment, its `parent`, its chain, its kind and its earner, and for a pick-up its tier. **It never carries an amount.** The server prices it from its own table (`awardAmount`: a sighting is 10, a pick-up is its tier's amount, a zone or a study is its `progression` price) and refuses a kind the earner cannot earn, such as an Avaia picking up tier 4. A claimed pick-up also carries its `artifactId` (see the claim below).
+
+The amount is not part of the award record either. The record holds what happened (kind, earner, tier, subject, time), and the amount is a function of it, so repricing the table never breaks a chain's replay.
 
 ### The commitment
 
 - `commitment = HMAC-SHA-256(historyKey, parent ‖ canonical award record)`, written as `xp:` and 43 base64url characters.
-- The award record is the local one: for a find, its `artifactId`, segment, epoch, tier and what happened (seen or picked up). It never leaves the device. Only the commitment does.
+- The award record is the local one: the kind, the earner, the tier for a pick-up, what earned it (a cell, a landmark, an `artifactId`) and when. It never leaves the device. The commitment does, with the fields the server prices by (on the wire, above).
 - `historyKey` is a Bond's key that the server never sees. Without it the commitment is useless to the server: a plain hash of a find would not be, because every `artifactId` of an epoch is enumerable and a dictionary over the city grid would give the place back.
 - `parent` is the previous commitment of the same device chain. A device keeps its own chain, so two devices playing at once never fork one chain, and the Bond's history is the union of its device chains.
 - The server accepts an award only on top of its chain's head (`parent` equals the head, fast-forward only). A repeat of an accepted commitment is idempotent and pays nothing.
@@ -453,7 +459,7 @@ The model is a commit and its sha. The record of an award is the commit: it is k
 Earning experience is an intent to keep what earned it. The order is fixed:
 
 1. **Intent.** The device builds the award record, computes its commitment and keeps both as pending: sealed on the device, outside the history, never shown as kept.
-2. **Commit.** It sends only the commitment, the kind and the amount. Nothing else.
+2. **Commit.** It sends the commitment and what the server prices by (on the wire, above). No amount, and no record.
 3. **Keep.** Only after the server accepted it does the device write the record into the history (a find into the finds journal, a sighting, a pick-up) and move its chain head.
 
 - The server refuses (a cap reached, a head that moved on): the pending record is dropped. It never enters the history, and there is no experience without a record or a record without experience.
@@ -462,8 +468,8 @@ Earning experience is an intent to keep what earned it. The order is fixed:
 
 ### What this protects, and what it does not
 
-- **Protected:** the number. Editing a total, a level or a queued amount on the device (memory, storage, a debugger) changes nothing, because the device shows the totals the server answered (an award not yet accepted shows as pending) and the server prices each award by its kind (a sighting is 10, a pick-up is its tier's amount, a zone or a study is its `progression` price). A device cannot rewrite or drop history it already committed without its own audit showing it: replaying the local history must reproduce the head the server holds.
-- **Not protected:** a rebuilt client can still invent awards that follow the rules. The server bounds that with per-kind caps per epoch (a week cannot hold more tier 6 pick-ups than a week of walking rolls). It is a bound, not proof of play, and the published standing is still this Bond's report.
+- **Protected:** the number. Editing a total, a level or a queued amount on the device (memory, storage, a debugger) changes nothing, because the device shows the totals the server answered (an award not yet accepted shows as pending) and no amount is ever sent: the server prices each award itself. A device cannot rewrite or drop history it already committed without its own audit showing it: replaying the local history must reproduce the head the server holds.
+- **Not protected, and accepted:** a rebuilt client can still invent awards that follow the rules. A tier 1–3 pick-up or a sighting names no find on the wire, so the server cannot check that it was rolled. A claimed pick-up names a real find (below), but nothing proves the Bond walked to it. The server bounds both with per-kind caps per Bond and epoch (a week cannot hold more tier 6 pick-ups than a week of walking rolls). It is a bound, not proof of play, and not presence evidence; the published standing is still this Bond's report.
 - The server learns how many awards of each kind a Bond earned, and when it published them. Where, it learns only from a claim (below).
 
 ### The claim: one rare find, one Bond
@@ -471,17 +477,23 @@ Earning experience is an intent to keep what earned it. The order is fixed:
 A find belongs to the artifact, not to the person: the roll is a public function of the pack, the epoch and the segment, so every client generates the same find on the same segment, and nothing has to be shared to see it. What is shared is who got it.
 
 1. **Generate.** Every client rolls the same find from the same segment and epoch (§3.3a). Its `artifactSha` is `SHA-256("nilx-one.artifact.v1:" ‖ artifactId)`, public by design: anyone can compute it.
-2. **Pick up.** The Bond picks the find up (tiers 4–6 are the person's, §3.4). The device sends one request: the `artifactSha`, the epoch, the tier, and the pick-up award's commitment.
-3. **Claim.** In one transaction the server writes the claim and accepts the award, or does neither. The first Bond wins. Only after that does the device keep the find (the order above).
-4. **Oh crap!** A pick-up of the same `artifactSha` by another Bond is refused as `claimed`. Its pending record is dropped and the Avaia says "oh crap! someone got there first". A second device of the same Bond gets `already yours` instead: the find was paid once.
+2. **Pick up.** The Bond picks the find up (tiers 4–6 are the person's, §3.4). The device sends one request: the `artifactId` and the pick-up award (on the wire, above).
+3. **Check.** The server rolls the find itself from the `artifactId`, with the same `rollSegment` and pack (a port with the same golden test). The roll must give a find of the tier the award names, and the epoch must be the current one, or the one before during the first day of a week. The server derives the `artifactSha` and the amount; the client supplies neither.
+4. **Claim.** In one transaction the server writes the claim and accepts the award, or does neither. The first Bond wins. Only after that does the device keep the find (the order above).
+5. **Oh crap!** A pick-up of the same find by another Bond is refused as `taken`. Its pending record is dropped and the Avaia says "oh crap! someone got there first". A second device of the same Bond gets `already yours` instead: the find was paid once.
 
-Leads hear about it without telling the server which leads they hold. A device reads the whole claimed set of the current epoch (each `artifactSha`, and whether this Bond is the one that claimed it, never who else) and matches its leads locally. A lead another Bond claimed closes with "oh crap!"; one this Bond claimed on another device closes quietly. A lead whose epoch ended with nobody picking it up closes quietly: the world rolled anew.
+Leads hear about it without naming themselves. A device asks for the claimed set of the current epoch by bucket: the first byte of each lead's `artifactSha`, so a question names 1/256 of the week's claims, never a lead. The answer is every claim in those buckets: the `artifactSha`, and whether this Bond is the one that claimed it, never who else. The device matches its leads locally. A lead another Bond claimed closes with "oh crap!"; one this Bond claimed on another device closes quietly. A lead whose epoch ended with nobody picking it up closes quietly: the world rolled anew.
 
-What a claim costs, said plainly: the server learns that this Bond was on this segment during this epoch. That is a place, and only the claim reveals it. It is bounded:
+What a claim costs, said plainly, to two readers:
+
+- **The server** learns that this Bond picked up the find on this segment during this epoch. That is a place tied to a Bond, and only a claim reveals it.
+- **Every other client** can learn that someone picked up the rare find on this segment this week. An `artifactSha` is not secret: every `artifactId` of a week is enumerable, so a dictionary turns a claimed set back into segments. The set names no Bond and no time, but in a place where only one person plays, "someone" is that person. This disclosure is accepted, not hidden: any representation a client can match its own leads against, a client can also match a dictionary against.
+
+Both are bounded:
 
 - only tiers 4–6 are claimed, about one find per 17 km walked; tiers 1–3 are never sent;
 - the claim holds the epoch, not a time; the device, the walk and the rest of the history stay on the device;
-- the claimed set a Bond reads names no other Bond;
+- the claimed set a Bond reads names no other Bond, and is answered per bucket, for the current epoch only, under the rate limit, so it is not a feed of the city;
 - a claim is deleted once its epoch is two epochs old: the find no longer exists, and the award it paid stands on its own commitment.
 
 ### Syncing between devices: directly only
@@ -493,9 +505,9 @@ What a claim costs, said plainly: the server learns that this Bond was on this s
 ### What this means for the code
 
 - `progression.ts`: an award's id becomes its commitment (`xp:` + HMAC), with `parent` and `kind`. A pending award holds its record until the server accepts it; only then is the record written to its journal and the chain head moved.
-- `services/identity`: the event log gains `chain`, `parent`, `kind`; a head per `(owner, chain)`; per-kind amounts and per-epoch caps. Totals stay where they are.
+- `services/identity`: the event log gains `chain`, `parent`, `kind`, `tier`; a head per `(owner, chain)`; the price table and per-kind caps per epoch. The request has no amount. Totals stay where they are.
 - `historyKey` is generated on the device and placed as `sealed-transport`: it leaves a device only wrapped for another device of the same Bond, over the direct transport, and never reaches the service.
-- `services/identity`: the claim table, `POST` a pick-up (claim and award in one transaction) and `GET` the claimed set of an epoch (#304).
+- `services/identity`: a port of `rollSegment` with the same golden test; the claim table; `POST` a pick-up (roll check, claim and award in one transaction); `GET` the claimed set of the current epoch by bucket (#304).
 - Leads: match the claimed set locally and close with "oh crap!"; a lead whose epoch ended closes quietly.
 
 ## Open decisions
