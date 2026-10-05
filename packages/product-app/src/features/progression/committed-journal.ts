@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  isClaimed,
   liveLeads as liveArtifactLeads,
   parseLeads,
   type ArtifactId,
@@ -462,7 +463,53 @@ export function queueCommittedAward(
   });
 }
 
-/** Marks the first pending award kept and advances the local chain head. */
+export type KeptAwardLeadChange =
+  | { readonly kind: "note"; readonly lead: FindLead }
+  | { readonly kind: "close"; readonly artifactId: ArtifactId }
+  | undefined;
+
+/** The lead mutation that belongs to an accepted find award, if any. */
+export function leadChangeForKeptAward(
+  snapshot: Pick<CommittedJournalSnapshot, "leads">,
+  award: PendingCommittedAward,
+): KeptAwardLeadChange {
+  if (
+    award.record.kind === "find_seen" &&
+    award.find !== undefined &&
+    isClaimed(award.find.tier) &&
+    !snapshot.leads.some(
+      (lead) => lead.artifactId === award.find?.artifactId,
+    )
+  ) {
+    return {
+      kind: "note",
+      lead: {
+        artifactId: award.find.artifactId,
+        segment: award.find.segment,
+        epoch: award.find.epoch,
+        tier: award.find.tier,
+        seenAt: award.record.at,
+      },
+    };
+  }
+  if (
+    award.record.kind === "find_picked_up" &&
+    snapshot.leads.some(
+      (lead) => lead.artifactId === award.record.subject,
+    )
+  ) {
+    return {
+      kind: "close",
+      artifactId: award.record.subject as ArtifactId,
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Marks the first pending award kept, advances the local chain head, and
+ * applies the find's lead consequence in the same IndexedDB transaction.
+ */
 export function keepCommittedAward(
   owner: string,
   id: Commitment,
@@ -473,13 +520,28 @@ export function keepCommittedAward(
       const { snapshot, sealKey, meta } = await snapshotFrom(database, owner);
       const award = snapshot.pending[0];
       if (award === undefined || award.id !== id) return undefined;
-      const stored = await seal(owner, sealKey, { type: "award.kept", id });
+      const events: JournalEvent[] = [{ type: "award.kept", id }];
+      const leadChange = leadChangeForKeptAward(snapshot, award);
+      if (leadChange?.kind === "note") {
+        events.push({ type: "lead.noted", lead: leadChange.lead });
+      } else if (leadChange?.kind === "close") {
+        events.push({
+          type: "lead.closed",
+          artifactId: leadChange.artifactId,
+          reason: "picked-up",
+        });
+      }
+      const stored = await Promise.all(
+        events.map((event) => seal(owner, sealKey, event)),
+      );
       const transaction = database.transaction(
         [EVENTS_STORE, META_STORE],
         "readwrite",
       );
       const done = transactionDone(transaction);
-      await request(transaction.objectStore(EVENTS_STORE).add(stored));
+      for (const event of stored) {
+        await request(transaction.objectStore(EVENTS_STORE).add(event));
+      }
       await request(
         transaction.objectStore(META_STORE).put({ ...meta, head: id }, owner),
       );
