@@ -310,9 +310,7 @@ export function foldCommittedJournal(
         leads = parseLeads([...leads, event.lead]);
         break;
       case "lead.closed":
-        leads = leads.filter(
-          (lead) => lead.artifactId !== event.artifactId,
-        );
+        leads = leads.filter((lead) => lead.artifactId !== event.artifactId);
         break;
     }
   }
@@ -363,10 +361,7 @@ export async function readCommittedJournal(
   }
 }
 
-function sameAward(
-  left: AwardRecord,
-  right: AwardRecord,
-): boolean {
+function sameAward(left: AwardRecord, right: AwardRecord): boolean {
   return (
     left.kind === right.kind &&
     left.earner === right.earner &&
@@ -578,12 +573,7 @@ export function dropCommittedAward(
       const first = snapshot.pending[0];
       if (first === undefined || first.id !== id) return undefined;
       const rest = snapshot.pending.slice(1);
-      const next = await rebased(
-        historyKey,
-        meta.chain,
-        meta.head,
-        rest,
-      );
+      const next = await rebased(historyKey, meta.chain, meta.head, rest);
       await writeRebase(
         database,
         owner,
@@ -659,7 +649,11 @@ export function noteCommittedLead(
     const database = await openDatabase();
     try {
       const { snapshot, sealKey } = await snapshotFrom(database, owner);
-      if (snapshot.leads.some((current) => current.artifactId === lead.artifactId)) {
+      if (
+        snapshot.leads.some(
+          (current) => current.artifactId === lead.artifactId,
+        )
+      ) {
         return;
       }
       await appendEvent(database, owner, sealKey, {
@@ -682,7 +676,9 @@ export function closeCommittedLead(
     const database = await openDatabase();
     try {
       const { snapshot, sealKey } = await snapshotFrom(database, owner);
-      if (!snapshot.leads.some((lead) => lead.artifactId === artifactId)) return;
+      if (!snapshot.leads.some((lead) => lead.artifactId === artifactId)) {
+        return;
+      }
       await appendEvent(database, owner, sealKey, {
         type: "lead.closed",
         artifactId,
