@@ -40,7 +40,8 @@ what this device walks past. The Avaia picks up tiers 1 to 3 itself and leaves
 tiers 4 to 6 as leads, which pay the Bond when the person walks there and picks
 them up. Each find pays its sighting once and its pick-up once. "Once" holds
 per history: the find journal stays on the device, and the server sees only
-each award's commitment (below), never the find.
+each award's commitment (below). A rare find (tiers 4 to 6) is also claimed:
+the first Bond to pick it up keeps it.
 
 ## Achievements
 
