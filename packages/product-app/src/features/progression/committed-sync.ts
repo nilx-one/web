@@ -189,7 +189,12 @@ export function flushCommittedAwards(
             );
             await dropCommittedAward(owner, award.id, "already-yours");
             continue;
-          case "oh-crap":
+          case "oh-crap": {
+            const tier = award.record.tier;
+            if (tier === undefined) {
+              await dropCommittedAward(owner, award.id, "invalid");
+              continue;
+            }
             await closeCommittedLead(
               owner,
               award.record.subject as ArtifactId,
@@ -197,11 +202,12 @@ export function flushCommittedAwards(
             );
             onEvent?.({
               kind: "find-taken",
-              tier: award.record.tier ?? 0,
+              tier,
               artifactId: award.record.subject as ArtifactId,
             });
             await dropCommittedAward(owner, award.id, "taken");
             continue;
+          }
           case "drop":
             if (answer.outcome.kind === "behind") {
               await rebaseCommittedAwards(
