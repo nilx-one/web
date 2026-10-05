@@ -570,7 +570,12 @@ export function dropCommittedAward(
       const first = snapshot.pending[0];
       if (first === undefined || first.id !== id) return undefined;
       const rest = snapshot.pending.slice(1);
-      const next = await rebasePendingAwards(historyKey, meta.chain, meta.head, rest);
+      const next = await rebasePendingAwards(
+        historyKey,
+        meta.chain,
+        meta.head,
+        rest,
+      );
       await writeRebase(
         database,
         owner,
