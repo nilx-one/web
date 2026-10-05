@@ -118,7 +118,7 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     medium: "identity-service",
     key: "bond_pub_info",
     perOwner: false,
-    what: "Client-asserted cosmetic activity totals (bond_xp, avaia_xp) and the opaque event ids that keep a retry from paying twice. The wire labels every total authority: client. The service stores and redistributes the owner's report; it does not attest that the play happened.",
+    what: "Activity totals (bond_xp, avaia_xp), legacy opaque event ids, and the R3 committed-award result. The wire still labels the standing authority: client: the service prices bounded award kinds and arbitrates rare claims, but it does not prove physical play.",
   },
 
   // ─── device: resident, never transported ───────────────────────────────
@@ -220,6 +220,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     key: "nilx-presence/keys",
     perOwner: false,
     what: "The non-extractable key the presence journal is sealed with. Never transmitted, never derived from identity.",
+  },
+  {
+    id: "finds.sealKey",
+    placement: "device",
+    mobility: "resident",
+    medium: "indexed-db",
+    key: "avaia-finds/seal-keys",
+    perOwner: true,
+    what: "The non-extractable AES key that seals this device's committed award/find journal. It never travels.",
   },
   {
     id: "fog.jobs",
@@ -346,6 +355,33 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     key: "nilx-presence/visits",
     perOwner: false,
     what: "The sealed visit history (bond.journal). Eligible to move only under its own lifecycle, still sealed, and never through the service in the clear.",
+  },
+  {
+    id: "finds.events",
+    placement: "synchronizable",
+    mobility: "sealed-transport",
+    medium: "indexed-db",
+    key: "avaia-finds/events",
+    perOwner: true,
+    what: "Encrypted append-only committed award facts and rare-lead lifecycle events. The service receives only their commitments and rare claim fields.",
+  },
+  {
+    id: "finds.historyKey",
+    placement: "synchronizable",
+    mobility: "sealed-transport",
+    medium: "indexed-db",
+    key: "avaia-finds/history-keys",
+    perOwner: true,
+    what: "The HMAC history key for this Bond on this device. It may move only directly to the Bond's own devices and never reaches the service.",
+  },
+  {
+    id: "finds.chainMeta",
+    placement: "synchronizable",
+    mobility: "sealed-transport",
+    medium: "indexed-db",
+    key: "avaia-finds/meta",
+    perOwner: true,
+    what: "Opaque device-chain id and last server-accepted commitment head used to append committed experience deterministically.",
   },
   {
     id: "bond.chain",
