@@ -22,8 +22,10 @@ export function decodeTileRoads(
       reader.skip(wire);
       continue;
     }
-    const layer = decodeLayer(reader.bytes());
-    if (layer.name !== layerName) continue;
+    const bytesOfLayer = reader.bytes();
+    // The name is read first; any other layer is skipped whole, undecoded.
+    if (nameOfLayer(bytesOfLayer) !== layerName) continue;
+    const layer = decodeLayer(bytesOfLayer);
     const roads: MapRoad[] = [];
     for (const feature of layer.features) {
       if (feature.type !== LINESTRING) continue;
@@ -62,6 +64,17 @@ interface Layer {
     geometry: number[];
     properties: Record<string, Value>;
   }[];
+}
+
+/** A layer's name, read without decoding its features, keys or values. */
+function nameOfLayer(bytes: Uint8Array): string | undefined {
+  const reader = protobuf(bytes);
+  while (!reader.done) {
+    const { field, wire } = reader.key();
+    if (field === 1) return text.decode(reader.bytes());
+    reader.skip(wire);
+  }
+  return undefined;
 }
 
 function decodeLayer(bytes: Uint8Array): Layer {

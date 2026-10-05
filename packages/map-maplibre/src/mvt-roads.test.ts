@@ -195,6 +195,23 @@ describe("decodeTileRoads", () => {
     expect(end![1]).toBeCloseTo(box.north, 9);
   });
 
+  it("skips every other layer without decoding it", () => {
+    // A layer whose one feature is a truncated varint: decoding it throws.
+    const broken = [
+      ...text(1, "pois"),
+      ...delimited(2, [0x80]),
+      ...key(5, 0),
+      ...varint(4096),
+    ];
+    const tile = new Uint8Array([...delimited(3, broken), ...bytes]);
+    expect(() => decodeTileRoads(tile, TILE, "roads")).not.toThrow();
+    expect(decodeTileRoads(tile, TILE, "roads")).toHaveLength(2);
+    // The same layer, asked for, is decoded, and fails as it should.
+    expect(() => decodeTileRoads(tile, TILE, "pois")).toThrow(
+      "truncated varint",
+    );
+  });
+
   it("answers nothing for a layer the tile does not carry", () => {
     expect(decodeTileRoads(bytes, TILE, "transportation")).toEqual([]);
     expect(decodeTileRoads(new Uint8Array(), TILE, "roads")).toEqual([]);
