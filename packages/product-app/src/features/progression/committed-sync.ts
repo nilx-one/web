@@ -305,7 +305,7 @@ export function useCommittedAwardSync({
         if (cancelled) return;
         void flushCommittedAwards(owner, port, (event) =>
           latest.current?.(event),
-        );
+        ).catch(() => undefined);
       });
     };
 
