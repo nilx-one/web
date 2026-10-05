@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { MapObstacle } from "@nilx-one/map-contract";
 import { LANDMARK_GROUPS, type NormalizedLandmark } from "./landmark-normalize";
 import {
   distanceM,
@@ -99,6 +100,11 @@ export interface OutingMenuInput {
   readonly budgetMeters: number;
   /** Targets left out this time, such as one just visited. */
   readonly exclude?: ReadonlySet<string> | undefined;
+  /**
+   * The buildings and water the map draws around: no anchor stands in one.
+   * Omitted, nothing is checked, as on a renderer that cannot say.
+   */
+  readonly obstacles?: readonly MapObstacle[] | undefined;
 }
 
 /**
@@ -119,17 +125,21 @@ export function outingMenu(input: OutingMenuInput): OutingMenu {
     ...(open ? { canEnter: open } : {}),
   });
 
+  const clear = standsClear(input.obstacles ?? []);
   const targets: OutingTarget[] = [];
   for (const candidate of input.candidates) {
     if (!isWalkTargetKind(candidate.kind)) continue;
     const name = candidate.name?.trim();
     if (name === undefined || name.length === 0) continue;
     if (input.exclude?.has(candidate.id)) continue;
-    const arrival = arrive(candidate.kind, candidate.geometry, graph, open, {
-      cost: reach.cost,
-      lengthM: reach.lengthM,
-      start,
-    });
+    const arrival = arrive(
+      candidate.kind,
+      candidate.geometry,
+      graph,
+      open,
+      { cost: reach.cost, lengthM: reach.lengthM, start },
+      clear,
+    );
     if (arrival === undefined || arrival.meters > budgetMeters) continue;
     targets.push({ id: candidate.id, kind: candidate.kind, name, ...arrival });
   }
@@ -230,6 +240,9 @@ interface Reached {
  * - a point: the nearest place on the graph within 30 m of it;
  * - a park or reserve: the cheapest node inside it or within 30 m of its edge;
  * - a lake or beach: the cheapest node outside it within 30 m of its shore.
+ *
+ * No anchor stands in a building or in water (`clear`): an area takes its
+ * next cheapest node instead, a point is not offered.
  */
 function arrive(
   kind: WalkTargetKind,
@@ -237,13 +250,14 @@ function arrive(
   graph: WalkGraph,
   open: CanEnter | undefined,
   reached: Reached,
+  clear: (point: LonLat) => boolean,
 ): { readonly anchor: LonLat; readonly meters: number } | undefined {
   if (geometry.type === "point") {
     const at = snapToGraph(graph, geometry.point, {
       maxDistanceM: ANCHOR_REACH_METERS,
       ...(open ? { canEnter: open } : {}),
     });
-    if (at === null) return undefined;
+    if (at === null || !clear(at.point)) return undefined;
     const edge = graph.edges[at.edge]!;
     const whole = edgeCost(edge);
     const ways = [
@@ -279,7 +293,7 @@ function arrive(
       const within = insideRings(node, rings);
       const near = edgeDistance(node, rings) <= ANCHOR_REACH_METERS;
       const fits = inside ? within || near : !within && near;
-      if (fits) best = { node: index, cost };
+      if (fits && clear(node)) best = { node: index, cost };
     });
   }
   if (best === undefined) return undefined;
@@ -287,6 +301,25 @@ function arrive(
     anchor: graph.nodes[best.node]!,
     meters: reached.lengthM[best.node]!,
   };
+}
+
+/**
+ * Whether a point stands clear of every building and water polygon. Each
+ * polygon's box is worked out once, so most polygons are passed over cheaply.
+ */
+function standsClear(
+  obstacles: readonly MapObstacle[],
+): (point: LonLat) => boolean {
+  const polygons = obstacles.flatMap((obstacle) =>
+    obstacle.polygons.map((rings) => ({
+      rings,
+      box: paddedBox(rings[0] ?? [], 0),
+    })),
+  );
+  return (point) =>
+    !polygons.some(
+      ({ rings, box }) => inBox(point, box) && insideRings(point, rings),
+    );
 }
 
 interface Box {

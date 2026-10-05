@@ -7,6 +7,7 @@ import {
   type LonLat,
   type RoadFeature,
 } from "@nilx-one/walk-graph";
+import type { MapObstacle } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -220,6 +221,71 @@ describe("outingMenu", () => {
       area("lake", "lake", square(580, 100, 820, 300)),
     ];
     expect(menu([...candidates].reverse())).toEqual(menu(candidates));
+  });
+});
+
+describe("anchors clear of buildings and water", () => {
+  const building = (ring: readonly LonLat[]): MapObstacle => ({
+    kind: "building",
+    polygons: [[ring.map(([lon, lat]) => [lon, lat] as const)]],
+  });
+  const water = (ring: readonly LonLat[]): MapObstacle => ({
+    kind: "water",
+    polygons: [[ring.map(([lon, lat]) => [lon, lat] as const)]],
+  });
+
+  it("does not offer a point whose arrival is inside a building", () => {
+    const museum = point("museum", "museum", 300, 10);
+    expect(targetIds(menu([museum]))).toEqual(["museum"]);
+    // The street runs through the building's footprint where the museum is.
+    const footprint = building(square(290, -10, 310, 20));
+    expect(targetIds(menu([museum], { obstacles: [footprint] }))).toEqual([]);
+    // A building elsewhere changes nothing.
+    const away = building(square(600, 50, 650, 80));
+    expect(targetIds(menu([museum], { obstacles: [away] }))).toEqual([
+      "museum",
+    ]);
+  });
+
+  it("arrives at a park by its next cheapest node when the first is built on", () => {
+    const paths = buildWalkGraph([
+      footway([0, 0], [1000, 0]),
+      footway([200, 0], [200, 120], [200, 150], [300, 150]),
+    ]);
+    const park = area("park", "park", square(150, 100, 450, 400));
+    const anchorOf = (obstacles: MapObstacle[]) => {
+      const option = menu([park], { graph: paths, obstacles }).options[1];
+      if (option?.kind !== "target") throw new Error("no park on the menu");
+      return metres(option.target.anchor);
+    };
+    expect(anchorOf([])[1]).toBeCloseTo(120, 0);
+    const [, y] = anchorOf([building(square(190, 110, 210, 130))]);
+    expect(y).toBeCloseTo(150, 0);
+  });
+
+  it("never puts a lake's anchor in any water", () => {
+    const lakeRing = square(580, 100, 820, 300);
+    const lake = area("lake", "lake", lakeRing);
+    // The lake itself is water, and a stream covers the west end of the shore path.
+    const stream = water(square(590, 80, 610, 100));
+    const option = menu([lake], {
+      obstacles: [water(lakeRing), stream],
+    }).options[1];
+    if (option?.kind !== "target") throw new Error("no lake on the menu");
+    const [x, y] = metres(option.target.anchor);
+    expect(y).toBeLessThan(100);
+    expect(x > 590 && x < 610 && y > 80 && y < 100).toBe(false);
+  });
+
+  it("gives the same anchors for the same obstacles", () => {
+    const obstacles = [building(square(190, 110, 210, 130))];
+    const candidates = [
+      point("museum", "museum", 300, 10),
+      area("park", "park", square(150, 100, 450, 400)),
+    ];
+    expect(menu(candidates, { obstacles })).toEqual(
+      menu([...candidates].reverse(), { obstacles: [...obstacles] }),
+    );
   });
 });
 

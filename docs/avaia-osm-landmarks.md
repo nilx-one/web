@@ -152,6 +152,8 @@ A polygon is one landmark, but a walk needs somewhere to arrive. The anchor is n
 
 The 30 m figure is the one in [Avaia walks on its own](avaia-outings.md) §0.2.
 
+Every anchor is checked against what the map draws before a target is offered: an anchor never stands inside a building footprint or a water body, the lake's own polygon included. For an area, the next cheapest node that passes is taken instead; for a point, the target is rejected. An anchor is also reachable over open ground within the walk's budget, by the same routing the walk itself uses, so an accepted target can always be walked to.
+
 ## Compatibility with the current `LANDMARK_KINDS`
 
 Existing noticing and studying keep reading `packages/map-maplibre/src/landmark-kinds.json` unchanged. The new layer maps those archive kinds as follows (proposed, to be checked against inspection output):

@@ -797,6 +797,7 @@ export function useAvaiaWalk({
           open: canEnter,
           budgetMeters: budget,
           exclude: recentlyVisited(state, wall),
+          obstacles: renderer.obstaclesWithin?.(area) ?? [],
         });
         const device = latest.current.observed;
         const choice = chooseOuting(state, menu, {
