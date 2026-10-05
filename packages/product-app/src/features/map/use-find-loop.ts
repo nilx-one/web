@@ -132,29 +132,24 @@ export function useFindLoop({
     onEvent: (event) => latestEvent.current?.(event),
   });
 
-  const refreshLeads = useCallback(async () => {
-    const epoch = epochOf(Date.now());
-    await pruneCommittedLeads(owner, epoch);
-    const snapshot = await readCommittedJournal(owner);
-    setLeads(currentCommittedLeads(snapshot, epoch));
-  }, [owner]);
-
   useEffect(() => {
-    let cancelled = false;
+    let active = true;
     const refresh = () => {
-      void refreshLeads().catch(() => undefined);
+      void (async () => {
+        const epoch = epochOf(Date.now());
+        await pruneCommittedLeads(owner, epoch);
+        const snapshot = await readCommittedJournal(owner);
+        if (active) setLeads(currentCommittedLeads(snapshot, epoch));
+      })().catch(() => undefined);
     };
-    void refreshLeads()
-      .then(() => {
-        if (cancelled) return;
-      })
-      .catch(() => undefined);
     const unsubscribe = subscribeCommittedJournal(owner, refresh);
+    const initial = globalThis.setTimeout(refresh, 0);
     return () => {
-      cancelled = true;
+      active = false;
+      globalThis.clearTimeout(initial);
       unsubscribe();
     };
-  }, [owner, refreshLeads]);
+  }, [owner]);
 
   // While there are live rare leads, ask only for their sha buckets. Matching
   // remains local. A remote claim closes the lead; whose Bond it was is never
