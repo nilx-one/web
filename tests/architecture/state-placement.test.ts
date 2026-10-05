@@ -312,8 +312,9 @@ describe("State placement contract", () => {
     expect(missing).toEqual([]);
   });
 
-  it("keeps the presence journal where the manifest says it is", () => {
-    const presence = sourceFiles(join(ROOT, "packages/presence-idb/src"))
+  it("keeps IndexedDB state where the manifest says it is", () => {
+    const implementations = clientSources()
+      .filter((file) => !file.endsWith("application/src/state-placement.ts"))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     const stores = STATE_PLACEMENT.filter(
@@ -322,8 +323,8 @@ describe("State placement contract", () => {
 
     expect(stores.length).toBeGreaterThan(0);
     for (const [database, store] of stores) {
-      expect(presence).toContain(`"${database}"`);
-      expect(presence).toContain(`"${store}"`);
+      expect(implementations).toContain(`"${database}"`);
+      expect(implementations).toContain(`"${store}"`);
     }
   });
 
