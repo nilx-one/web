@@ -51,7 +51,7 @@ function awardKind(kind: "seen" | "picked_up"): "find_seen" | "find_picked_up" {
 export function worldAwardsForFind(
   roll: FindRoll,
   by: FindEarner,
-  recorded: readonly Parameters<typeof awardsFor>[2],
+  recorded: Parameters<typeof awardsFor>[2],
   at: number,
 ): QueueWorldAward[] {
   const eventKind =
