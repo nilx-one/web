@@ -8,6 +8,7 @@ import {
   awardsFor,
   canPickUp,
   epochOf,
+  isFindPerceptible,
   rollAlong,
   rollSegment,
   segmentAt,
@@ -185,7 +186,9 @@ export function useFindLoop({
         epoch,
       });
       void (async () => {
-        for (const roll of rolls) await recordFind(owner, roll, "avaia");
+        for (const roll of rolls) {
+          if (isFindPerceptible(roll)) await recordFind(owner, roll, "avaia");
+        }
       })().catch(() => undefined);
     },
     [owner],
