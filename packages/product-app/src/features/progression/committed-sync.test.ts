@@ -21,7 +21,7 @@ vi.mock("./committed-journal", () => ({
 }));
 
 vi.mock("./progression", () => ({
-  notePublishedExperience: vi.fn((progression) => progression),
+  notePublishedExperience: vi.fn((progression: unknown) => progression),
   progressionSnapshot: vi.fn(),
   subscribeProgression: vi.fn(() => () => undefined),
   updateProgression: vi.fn(),
@@ -38,10 +38,7 @@ import {
   type PendingCommittedAward,
 } from "./committed-journal";
 import { flushCommittedAwards, type CommittedWorldEvent } from "./committed-sync";
-import {
-  progressionSnapshot,
-  type Progression,
-} from "./progression";
+import { progressionSnapshot, type Progression } from "./progression";
 
 const READY_PROGRESSION: Progression = {
   bondXp: 0,
@@ -148,18 +145,22 @@ beforeEach(() => {
   pending = [];
   vi.mocked(progressionSnapshot).mockReturnValue(READY_PROGRESSION);
   vi.mocked(readCommittedJournal).mockImplementation(async () => snapshot());
-  vi.mocked(keepCommittedAward).mockImplementation(async (_owner, commitment) => {
-    const first = pending[0];
-    if (first === undefined || first.id !== commitment) return undefined;
-    pending = pending.slice(1);
-    return first;
-  });
-  vi.mocked(dropCommittedAward).mockImplementation(async (_owner, commitment) => {
-    const first = pending[0];
-    if (first === undefined || first.id !== commitment) return undefined;
-    pending = pending.slice(1);
-    return first;
-  });
+  vi.mocked(keepCommittedAward).mockImplementation(
+    async (_owner, commitment) => {
+      const first = pending[0];
+      if (first === undefined || first.id !== commitment) return undefined;
+      pending = pending.slice(1);
+      return first;
+    },
+  );
+  vi.mocked(dropCommittedAward).mockImplementation(
+    async (_owner, commitment) => {
+      const first = pending[0];
+      if (first === undefined || first.id !== commitment) return undefined;
+      pending = pending.slice(1);
+      return first;
+    },
+  );
   vi.mocked(rebaseCommittedAwards).mockImplementation(async () => {
     pending = [];
   });
@@ -365,8 +366,9 @@ describe("flushCommittedAwards", () => {
     offline = false;
     await flushCommittedAwards("0x0sky", port);
 
-    expect(vi.mocked(port.commitAwards).mock.calls.map((call) => call[0][0]?.id))
-      .toEqual([seen.id, seen.id]);
+    expect(
+      vi.mocked(port.commitAwards).mock.calls.map((call) => call[0][0]?.id),
+    ).toEqual([seen.id, seen.id]);
     expect(keepCommittedAward).toHaveBeenCalledWith("0x0sky", seen.id);
   });
 
