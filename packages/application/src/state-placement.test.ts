@@ -78,6 +78,7 @@ describe("State placement", () => {
     expect(device).toContain("localModel.choice");
     expect(device).toContain("localModel.download");
     expect(device).toContain("presence.journalKey");
+    expect(device).toContain("finds.sealKey");
     expect(device).toContain("avatar.wardrobe");
   });
 

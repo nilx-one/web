@@ -133,20 +133,20 @@ export function useFindLoop({
   });
 
   useEffect(() => {
-    let cancelled = false;
-    const refresh = async () => {
-      const epoch = epochOf(Date.now());
-      await pruneCommittedLeads(owner, epoch);
-      const snapshot = await readCommittedJournal(owner);
-      if (!cancelled) setLeads(currentCommittedLeads(snapshot, epoch));
+    let active = true;
+    const refresh = () => {
+      void (async () => {
+        const epoch = epochOf(Date.now());
+        await pruneCommittedLeads(owner, epoch);
+        const snapshot = await readCommittedJournal(owner);
+        if (active) setLeads(currentCommittedLeads(snapshot, epoch));
+      })().catch(() => undefined);
     };
-    const run = () => {
-      void refresh().catch(() => undefined);
-    };
-    run();
-    const unsubscribe = subscribeCommittedJournal(owner, run);
+    const unsubscribe = subscribeCommittedJournal(owner, refresh);
+    const initial = globalThis.setTimeout(refresh, 0);
     return () => {
-      cancelled = true;
+      active = false;
+      globalThis.clearTimeout(initial);
       unsubscribe();
     };
   }, [owner]);
