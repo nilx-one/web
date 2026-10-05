@@ -524,16 +524,15 @@ async function writeRebase(
   head: Commitment | null,
 ): Promise<void> {
   const events: JournalEvent[] = [
-    ...oldAwards.map(
-      (award, index): JournalEvent => ({
-        type: "award.dropped",
-        id: award.id,
-        reason: index === 0 ? firstReason : "rebased",
-      }),
-    ),
-    ...nextAwards.map(
-      (award): JournalEvent => ({ type: "award.pending", award }),
-    ),
+    ...oldAwards.map((award, index): JournalEvent => ({
+      type: "award.dropped",
+      id: award.id,
+      reason: index === 0 ? firstReason : "rebased",
+    })),
+    ...nextAwards.map((award): JournalEvent => ({
+      type: "award.pending",
+      award,
+    })),
   ];
   const sealed = await Promise.all(
     events.map((event) => seal(owner, sealKey, event)),
@@ -547,9 +546,7 @@ async function writeRebase(
     await request(transaction.objectStore(EVENTS_STORE).add(event));
   }
   await request(
-    transaction
-      .objectStore(META_STORE)
-      .put({ ...meta, head }, owner),
+    transaction.objectStore(META_STORE).put({ ...meta, head }, owner),
   );
   await done;
 }
@@ -650,9 +647,7 @@ export function noteCommittedLead(
     try {
       const { snapshot, sealKey } = await snapshotFrom(database, owner);
       if (
-        snapshot.leads.some(
-          (current) => current.artifactId === lead.artifactId,
-        )
+        snapshot.leads.some((current) => current.artifactId === lead.artifactId)
       ) {
         return;
       }
@@ -676,9 +671,8 @@ export function closeCommittedLead(
     const database = await openDatabase();
     try {
       const { snapshot, sealKey } = await snapshotFrom(database, owner);
-      if (!snapshot.leads.some((lead) => lead.artifactId === artifactId)) {
+      if (!snapshot.leads.some((lead) => lead.artifactId === artifactId))
         return;
-      }
       await appendEvent(database, owner, sealKey, {
         type: "lead.closed",
         artifactId,
