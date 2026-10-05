@@ -475,13 +475,13 @@ A find belongs to the artifact, not to the person: the roll is a public function
 3. **Claim.** In one transaction the server writes the claim and accepts the award, or does neither. The first Bond wins. Only after that does the device keep the find (the order above).
 4. **Oh crap!** A pick-up of the same `artifactSha` by another Bond is refused as `claimed`. Its pending record is dropped and the Avaia says "oh crap! someone got there first". A second device of the same Bond gets `already yours` instead: the find was paid once.
 
-Leads hear about it without telling the server which leads they hold. A device reads the whole claimed set of the current epoch (`artifactSha`s only, never who) and matches its leads locally. A lead found there closes with "oh crap!". A lead whose epoch ended with nobody picking it up closes quietly: the world rolled anew.
+Leads hear about it without telling the server which leads they hold. A device reads the whole claimed set of the current epoch (each `artifactSha`, and whether this Bond is the one that claimed it, never who else) and matches its leads locally. A lead another Bond claimed closes with "oh crap!"; one this Bond claimed on another device closes quietly. A lead whose epoch ended with nobody picking it up closes quietly: the world rolled anew.
 
 What a claim costs, said plainly: the server learns that this Bond was on this segment during this epoch. That is a place, and only the claim reveals it. It is bounded:
 
 - only tiers 4–6 are claimed, about one find per 17 km walked; tiers 1–3 are never sent;
 - the claim holds the epoch, not a time; the device, the walk and the rest of the history stay on the device;
-- the claimed set others read holds no owners;
+- the claimed set a Bond reads names no other Bond;
 - a claim is deleted once its epoch is two epochs old: the find no longer exists, and the award it paid stands on its own commitment.
 
 ### Syncing between devices: directly only
