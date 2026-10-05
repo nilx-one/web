@@ -817,7 +817,7 @@ export function AuthenticatedMapHomeView({
         cue("spot");
         setFindToast({
           id: `find-seen-${event.artifactId}`,
-          kind: "success",
+          kind: "active",
           title: t("find.toast.rare.title"),
           description: t("find.toast.rare.detail").replace(
             "{tier}",
@@ -830,7 +830,7 @@ export function AuthenticatedMapHomeView({
         cue("achievement");
         setFindToast({
           id: `find-kept-${event.artifactId}`,
-          kind: "success",
+          kind: "active",
           title: t("find.toast.kept.title"),
           description: t("find.toast.kept.detail")
             .replace("{tier}", String(event.tier))
