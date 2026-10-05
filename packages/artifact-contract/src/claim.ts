@@ -56,11 +56,31 @@ export async function artifactSha(id: ArtifactId): Promise<ArtifactSha> {
 export type ClaimOutcome = "claimed" | "already_yours" | "taken";
 
 /**
- * The claimed set of one week: each claimed find, and whether this Bond is the
- * one that claimed it. It comes whole, so the server never learns which leads
- * a device holds, and it names no other Bond.
+ * Claims of one week, as the server answers them for the buckets asked: each
+ * claimed find, and whether this Bond is the one that claimed it. It names no
+ * other Bond. A find whose bucket was not asked is simply absent.
  */
 export type ClaimedSet = ReadonlyMap<string, "yours" | "theirs">;
+
+/**
+ * Which of 256 buckets a find's claim is answered in: the first byte of its
+ * `artifactSha`, as two hex digits. Asking by bucket names 1/256 of a week's
+ * claims, never a lead.
+ */
+export function claimBucket(sha: ArtifactSha): string {
+  return sha.slice(0, 2);
+}
+
+/** The buckets to ask for to hear about these leads, sorted, each once. */
+export async function bucketsFor(
+  leads: readonly FindLead[],
+): Promise<string[]> {
+  const buckets = new Set<string>();
+  for (const lead of leads) {
+    buckets.add(claimBucket(await artifactSha(lead.artifactId)));
+  }
+  return [...buckets].sort();
+}
 
 /** Leads the claimed set closes, sorted by who got there. */
 export interface ClosedLeads {

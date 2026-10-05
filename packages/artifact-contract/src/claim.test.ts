@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   artifactSha,
+  bucketsFor,
+  claimBucket,
   closedLeads,
   isArtifactSha,
   isClaimed,
@@ -84,5 +86,18 @@ describe("closedLeads", () => {
       taken: [],
       yours: [],
     });
+  });
+});
+
+describe("bucketsFor", () => {
+  it("asks for the first byte of each lead's sha, each bucket once", async () => {
+    const leads = [lead(0), lead(1), lead(0)];
+    const shas = await Promise.all(
+      leads.map((one) => artifactSha(one.artifactId)),
+    );
+    const buckets = await bucketsFor(leads);
+    expect(buckets).toEqual([...new Set(shas.map(claimBucket))].sort());
+    expect(claimBucket(shas[0]!)).toBe("33");
+    expect(buckets.every((bucket) => /^[0-9a-f]{2}$/.test(bucket))).toBe(true);
   });
 });
