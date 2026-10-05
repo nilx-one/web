@@ -34,6 +34,9 @@ import {
   type CommittedWorldEvent,
 } from "../progression/committed-sync";
 
+/** Ignore fixes too imprecise to establish entry into a 50 m find segment. */
+export const FIND_OBSERVATION_ACCURACY_METERS = 50;
+
 function awardKind(kind: "seen" | "picked_up"): "find_seen" | "find_picked_up" {
   return kind === "seen" ? "find_seen" : "find_picked_up";
 }
@@ -98,7 +101,9 @@ export function useFindLoop({
   readonly port: CommittedAwardAccessPort | undefined;
   readonly bondDriving: boolean;
   /** Firsthand observation only; never a declared/manual position. */
-  readonly device: MapPointSelection | undefined;
+  readonly device:
+    | (MapPointSelection & { readonly accuracyMeters: number })
+    | undefined;
   readonly onEvent?: (event: CommittedWorldEvent) => void;
 }): FindLoopState {
   const [leads, setLeads] = useState<readonly FindLead[]>([]);
@@ -193,12 +198,9 @@ export function useFindLoop({
   const previousBondSegment = useRef<string | undefined>(undefined);
   const deviceLongitude = device?.longitude;
   const deviceLatitude = device?.latitude;
+  const deviceAccuracy = device?.accuracyMeters;
   useEffect(() => {
-    if (
-      !bondDriving ||
-      deviceLongitude === undefined ||
-      deviceLatitude === undefined
-    ) {
+    if (!bondDriving) {
       previousBondSegment.current =
         deviceLongitude === undefined || deviceLatitude === undefined
           ? undefined
@@ -206,6 +208,14 @@ export function useFindLoop({
               deviceLongitude,
               deviceLatitude,
             ])}`;
+      return;
+    }
+    if (
+      deviceLongitude === undefined ||
+      deviceLatitude === undefined ||
+      deviceAccuracy === undefined ||
+      deviceAccuracy > FIND_OBSERVATION_ACCURACY_METERS
+    ) {
       return;
     }
 
@@ -223,7 +233,7 @@ export function useFindLoop({
       segment,
     });
     if (roll !== null) void recordFind(owner, roll, "bond").catch(() => undefined);
-  }, [bondDriving, deviceLatitude, deviceLongitude, owner]);
+  }, [bondDriving, deviceAccuracy, deviceLatitude, deviceLongitude, owner]);
 
   return { leads, completedAvaiaWalk };
 }
