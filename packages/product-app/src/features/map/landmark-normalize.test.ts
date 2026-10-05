@@ -202,7 +202,13 @@ describe("geometry", () => {
         name: "far",
         geometry: { type: "point", point: [200, 50] },
       },
-      area("open-ring", ["park"], square(0, 0, 200).slice(0, 3)),
+      area("short-ring", ["park"], square(0, 0, 200).slice(0, 3)),
+      // Five points and a real area, but the last is not the first: open.
+      area(
+        "open-ring",
+        ["park"],
+        [at(0, 0), at(200, 0), at(200, 200), at(0, 200), at(0, 100)],
+      ),
       area("flat", ["park"], [at(0, 0), at(100, 0), at(200, 0), at(0, 0)]),
       {
         sourceId: "stub",
