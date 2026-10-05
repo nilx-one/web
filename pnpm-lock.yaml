@@ -347,6 +347,9 @@ importers:
       '@nilx-one/application':
         specifier: workspace:*
         version: link:../application
+      '@nilx-one/artifact-contract':
+        specifier: workspace:*
+        version: link:../artifact-contract
       '@nilx-one/graphics':
         specifier: workspace:*
         version: link:../graphics

@@ -291,3 +291,16 @@ export {
   parseLeads,
   type FindLead,
 } from "./leads";
+
+export {
+  ARTIFACT_SHA_DOMAIN,
+  artifactSha,
+  CLAIMED_MIN_TIER,
+  closedLeads,
+  isArtifactSha,
+  isClaimed,
+  type ArtifactSha,
+  type ClaimedSet,
+  type ClaimOutcome,
+  type ClosedLeads,
+} from "./claim";

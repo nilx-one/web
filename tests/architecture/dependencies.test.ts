@@ -26,6 +26,7 @@ const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   "narration-webllm": ["@nilx-one/narration-contract"],
   "product-app": [
     "@nilx-one/application",
+    "@nilx-one/artifact-contract",
     "@nilx-one/graphics",
     "@nilx-one/host-contract",
     "@nilx-one/map-contract",
