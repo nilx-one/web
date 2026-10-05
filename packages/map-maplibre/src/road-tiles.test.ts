@@ -169,6 +169,61 @@ describe("createRoadTileCache", () => {
     expect(cache.roadsWithin(far)).toEqual([]);
   });
 
+  it("clips lines that cross the box to the box, splitting where they leave", async () => {
+    const box: MapBounds = {
+      west: 30.52,
+      east: 30.53,
+      south: 50.445,
+      north: 50.455,
+    };
+    const crossing: MapRoad = {
+      kind: "path",
+      kindDetail: "footway",
+      lines: [
+        // In from the west, a vertex inside, out to the east.
+        [
+          [30.51, 50.45],
+          [30.525, 50.451],
+          [30.54, 50.45],
+        ],
+        // Inside, out to the north, and back in: two pieces.
+        [
+          [30.521, 50.45],
+          [30.525, 50.46],
+          [30.529, 50.45],
+        ],
+      ],
+    };
+    const cache = createRoadTileCache({
+      fetchTile: async () => [crossing],
+      maxTiles: 64,
+    });
+    await cache.preload(box);
+    const pieces = cache
+      .roadsWithin(box)
+      .flatMap((road) => road.lines)
+      // Each held tile answers the same road; one copy is enough to check.
+      .slice(0, 3);
+    const epsilon = 1e-12;
+    for (const line of pieces) {
+      for (const [longitude, latitude] of line) {
+        expect(longitude).toBeGreaterThanOrEqual(box.west - epsilon);
+        expect(longitude).toBeLessThanOrEqual(box.east + epsilon);
+        expect(latitude).toBeGreaterThanOrEqual(box.south - epsilon);
+        expect(latitude).toBeLessThanOrEqual(box.north + epsilon);
+      }
+    }
+    expect(pieces).toHaveLength(3);
+    // The first line stays one piece, its inner vertex kept exactly.
+    expect(pieces[0]).toHaveLength(3);
+    expect(pieces[0]![1]).toEqual([30.525, 50.451]);
+    expect(pieces[0]![0]![0]).toBeCloseTo(box.west, 12);
+    expect(pieces[0]![2]![0]).toBeCloseTo(box.east, 12);
+    // The second leaves through the north edge and comes back.
+    expect(pieces[1]!.at(-1)![1]).toBeCloseTo(box.north, 12);
+    expect(pieces[2]![0]![1]).toBeCloseTo(box.north, 12);
+  });
+
   it("caps by default at the documented number of tiles", () => {
     expect(MAX_ROAD_TILES).toBe(32);
     expect(ROAD_TILE_ZOOM).toBe(14);

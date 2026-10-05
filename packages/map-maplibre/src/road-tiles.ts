@@ -290,10 +290,10 @@ function clipSegmentToBounds(
     return undefined;
   }
 
-  const pointAt = (t: number): LinePoint => [
-    start[0] + dx * t,
-    start[1] + dy * t,
-  ];
+  // A vertex inside the box is kept exactly, so consecutive segments still
+  // meet and the line is not split at every vertex.
+  const pointAt = (t: number): LinePoint =>
+    t === 0 ? start : t === 1 ? end : [start[0] + dx * t, start[1] + dy * t];
   return [pointAt(t0), pointAt(t1)];
 }
 
