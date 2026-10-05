@@ -307,8 +307,13 @@ export function useCommittedAwardSync({
     schedule();
     const unsubscribeJournal = subscribeCommittedJournal(owner, schedule);
     const unsubscribeProgression = subscribeProgression(schedule);
+    const retry = globalThis.setInterval(schedule, 60_000);
+    const onOnline = () => schedule();
+    globalThis.addEventListener?.("online", onOnline);
     return () => {
       cancelled = true;
+      globalThis.clearInterval(retry);
+      globalThis.removeEventListener?.("online", onOnline);
       unsubscribeJournal();
       unsubscribeProgression();
     };
