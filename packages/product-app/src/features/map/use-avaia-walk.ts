@@ -6,6 +6,7 @@ import {
   mapCompassBearing,
   mapDistanceMeters,
   type AvatarModelId,
+  type MapBounds,
   type MapGroundTap,
   type MapLandmark,
   type MapObstacle,
@@ -940,13 +941,17 @@ export function useAvaiaWalk({
         body: from,
         nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
       });
-      // The view holds only what is on screen; an outing reads the road tiles
-      // of its whole area ahead, but not a tile with no open ground in it.
-      await renderer.preloadRoads?.call(
-        renderer,
-        area,
-        open === undefined ? undefined : (tile) => touchesOpen(tile, open),
-      );
+      // The view holds only what is on screen; an outing reads the road and
+      // landmark tiles of its whole area ahead, but not a tile with no open
+      // ground in it.
+      const accept =
+        open === undefined
+          ? undefined
+          : (tile: MapBounds) => touchesOpen(tile, open);
+      await Promise.all([
+        renderer.preloadRoads?.call(renderer, area, accept),
+        renderer.preloadLandmarks?.call(renderer, area, accept),
+      ]);
       if (cancelled) return;
       {
         const nowMs = globalThis.performance.now();

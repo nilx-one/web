@@ -63,7 +63,8 @@ The renderer itself reads a little more, outside any style, for
 [Avaia walks the world](avaia-walk.md): a tap on the ground is classified by
 querying the painted `buildings`, `buildings-flat` and `water` layers, and
 `landmarksNear` reads `kind`, `name` and every other attribute of `pois`
-features from tiles already loaded. `roadsWithin` reads `kind`, `kind_detail`
+features from tiles already loaded and from the landmark tiles read ahead
+(below). `roadsWithin` reads `kind`, `kind_detail`
 and `is_bridge` of `roads` features, from tiles already loaded and from the
 road tiles read ahead (below), to build the pedestrian graph a walk follows.
 `LANDMARK_KINDS`
@@ -80,9 +81,10 @@ also be run on its own with any Node:
 node deploy/web/landmark-kinds.mjs /srv/nilx-one/map/basemap.pmtiles
 ```
 
-### Reading roads ahead
+### Reading roads and landmarks ahead
 
-This is the one place the client fetches map data the view did not ask for.
+These are the only places the client fetches map data the view did not ask
+for.
 An Avaia going out on its own ([Avaia walks the world](avaia-walk.md)) walks
 up to 2.5 km from where it stands, well past the tiles on screen, so before it
 plans the outing the renderer's `preloadRoads` reads the `roads` layer of the
@@ -100,11 +102,24 @@ tiles covering that area:
 - at most once per outing, and outings come at most once in four hours. A tile
   already held is not fetched again; one that failed is tried at the next.
 
+At the same moment `preloadLandmarks` reads the `pois` layer of the same area,
+so the outing knows the landmarks it could walk to, not only those on screen:
+
+- from the same archive, by the same range requests, and only the `pois` layer
+  of each tile is decoded, into the points whose kind is on `LANDMARK_KINDS`;
+- at zoom 15, the archive's last. The basemap schema gives every point a zoom
+  range ending at 15 and thins the zooms below it to a label grid, so a museum
+  or a viewpoint is only certain to be in the tiles at 15. A walk of 2.5 km
+  each way covers about 49 of them; the same caps and rules as the roads apply,
+  so at most 32 are fetched, nearest the centre first, never one that is all
+  fog, and the cache never holds more than 32;
+- once per outing, beside the roads, never on its own.
+
 Each preload answers what it did (`covering`, `refused`, `skipped`, `cached`,
 `fetched`, `failed`), so what it cost is observable. What it reads stays on the
-device, feeds the walking graph only, and never reaches a model: the decision
-menu carries closed labels, not roads. `landmarksNear` still reads only the
-tiles the view has loaded.
+device and never reaches a model: the roads feed the walking graph, the
+landmarks the outing menu, and the decision menu carries closed labels, not
+roads or names.
 
 Elements the reference imagery shows but the archive does not support are
 omitted rather than invented. In particular, individual street trees are not

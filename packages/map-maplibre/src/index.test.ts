@@ -916,6 +916,55 @@ describe("landmarks the basemap draws", () => {
       renderer.landmarksNear?.({ longitude: 30.5, latitude: 50.4 }, 100),
     ).toEqual([]);
   });
+
+  it("adds the landmarks read ahead for an outing, each once", async () => {
+    const museum = {
+      id: "poi:2",
+      longitude: 30.5235,
+      latitude: 50.4501,
+      kind: "museum",
+      name: "Museum",
+      facts: {},
+    };
+    const fetchLandmarkTile = vi.fn(async () => [
+      museum,
+      { ...museum, id: "poi:9", longitude: 30.53, name: "Farther" },
+    ]);
+    const fakeMap = makeFakeMap();
+    Object.assign(fakeMap, {
+      // The view has the same museum loaded: one archive id, one landmark.
+      querySourceFeatures: vi.fn(() => [
+        {
+          id: 2,
+          geometry: { type: "Point", coordinates: [30.5235, 50.4501] },
+          properties: { kind: "museum", name: "Museum" },
+        },
+      ]),
+    });
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      fetchLandmarkTile,
+    });
+    const at = { longitude: 30.5234, latitude: 50.4501 };
+
+    const preload = await renderer.preloadLandmarks?.({
+      west: 30.52,
+      east: 30.527,
+      south: 50.448,
+      north: 50.452,
+    });
+    expect(preload?.fetched).toBeGreaterThan(0);
+    for (const [tile] of fetchLandmarkTile.mock.calls as unknown as [
+      { z: number },
+    ][]) {
+      expect(tile.z).toBe(15);
+    }
+    // Read ahead, answered even before a map is mounted.
+    expect(renderer.landmarksNear?.(at, 1_000).map((l) => l.id)).toEqual([
+      "poi:2",
+      "poi:9",
+    ]);
+  });
 });
 
 describe("obstacles the basemap draws", () => {
