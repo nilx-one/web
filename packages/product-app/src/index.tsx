@@ -1058,6 +1058,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         {...(hasCommittedAwardAccess(dependencies.identity)
           ? { committedAwards: dependencies.identity }
           : {})}
+        findItems={dependencies.core}
         {...(hasNearbySpeechAccess(dependencies.identity)
           ? { nearbySpeech: dependencies.identity }
           : {})}

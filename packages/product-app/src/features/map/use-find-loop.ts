@@ -19,6 +19,7 @@ import {
 import type { MapPointSelection } from "@nilx-one/map-contract";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { readPickup } from "../finds/pickup-preference";
 import type { AvaiaWalk } from "../map/avaia-walk";
 import { claimedLeads } from "../progression/claims";
 import {
@@ -53,9 +54,13 @@ export function worldAwardsForFind(
   by: FindEarner,
   recorded: Parameters<typeof awardsFor>[2],
   at: number,
+  /** The pick-up setting's answer for this find; a find left is only seen. */
+  pickUp = true,
 ): QueueWorldAward[] {
   const eventKind =
-    by === "avaia" && !canPickUp(roll, "avaia") ? "seen" : "picked_up";
+    !pickUp || (by === "avaia" && !canPickUp(roll, "avaia"))
+      ? "seen"
+      : "picked_up";
   return awardsFor(roll, { kind: eventKind, by }, recorded).map((award) => ({
     record: {
       kind: awardKind(award.kind),
@@ -77,6 +82,7 @@ async function recordFind(
   owner: string,
   roll: FindRoll,
   by: FindEarner,
+  pickup: FindPickupPort | undefined,
 ): Promise<void> {
   const snapshot = await readCommittedJournal(owner);
   const awards = worldAwardsForFind(
@@ -84,9 +90,32 @@ async function recordFind(
     by,
     recordedFindEvents(snapshot),
     Date.now(),
+    await picksUp(pickup, roll),
   );
   if (awards.length === 0) return;
   await queueWorldAwards(owner, awards);
+}
+
+/** Core's answer to the pick-up setting (`CoreRuntimePort.picksUp`). */
+export interface FindPickupPort {
+  picksUp?(rarities: string, tier: number): Promise<boolean>;
+}
+
+/**
+ * Whether the stored setting picks this find up. Without Core's answer — an
+ * older runtime, a setting Core refuses — nothing changes from before the
+ * setting existed: the find is picked up.
+ */
+async function picksUp(
+  pickup: FindPickupPort | undefined,
+  roll: FindRoll,
+): Promise<boolean> {
+  if (pickup?.picksUp === undefined) return true;
+  try {
+    return await pickup.picksUp(readPickup(), roll.tier);
+  } catch {
+    return true;
+  }
 }
 
 export interface FindLoopState {
@@ -110,6 +139,7 @@ export function useFindLoop({
   port,
   bondDriving,
   device,
+  pickup,
   onEvent,
 }: {
   readonly owner: string;
@@ -118,6 +148,8 @@ export function useFindLoop({
   /** Firsthand observation only; never a declared/manual position. */
   readonly device:
     (MapPointSelection & { readonly accuracyMeters: number }) | undefined;
+  /** Core, for the pick-up setting. */
+  readonly pickup?: FindPickupPort | undefined;
   readonly onEvent?: (event: CommittedWorldEvent) => void;
 }): FindLoopState {
   const [leads, setLeads] = useState<readonly FindLead[]>([]);
@@ -125,6 +157,10 @@ export function useFindLoop({
   useEffect(() => {
     latestEvent.current = onEvent;
   }, [onEvent]);
+  const latestPickup = useRef(pickup);
+  useEffect(() => {
+    latestPickup.current = pickup;
+  }, [pickup]);
 
   useCommittedAwardSync({
     owner,
@@ -213,7 +249,9 @@ export function useFindLoop({
       });
       void (async () => {
         for (const roll of rolls) {
-          if (isFindPerceptible(roll)) await recordFind(owner, roll, "avaia");
+          if (isFindPerceptible(roll)) {
+            await recordFind(owner, roll, "avaia", latestPickup.current);
+          }
         }
       })().catch(() => undefined);
     },
@@ -263,7 +301,9 @@ export function useFindLoop({
       segment,
     });
     if (roll !== null) {
-      void recordFind(owner, roll, "bond").catch(() => undefined);
+      void recordFind(owner, roll, "bond", latestPickup.current).catch(
+        () => undefined,
+      );
     }
   }, [
     bondDriving,

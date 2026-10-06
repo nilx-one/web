@@ -213,6 +213,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "Which characters speak aloud on this device: nobody, others in cutscenes, or the Avaia as well. Like sound itself, it is about these speakers and this room.",
   },
   {
+    id: "finds.pickup",
+    placement: "device",
+    mobility: "resident",
+    medium: "local-storage",
+    key: "nilx-one.finds.pickup",
+    perOwner: false,
+    what: "Which rarities of chance finds this device picks up on the way, in Core's wire form. A find left behind is still seen; the choice is about what this device carries home.",
+  },
+  {
     id: "wipe.epoch",
     placement: "device",
     mobility: "resident",

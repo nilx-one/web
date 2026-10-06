@@ -51,6 +51,17 @@ describe("worldAwardsForFind", () => {
     expect(awards.every((award) => award.find === roll)).toBe(true);
   });
 
+  it("only sees a find the pick-up setting leaves behind", () => {
+    for (const by of ["avaia", "bond"] as const) {
+      expect(
+        worldAwardsForFind(find(1), by, [], 1234, false).map(({ record }) => [
+          record.kind,
+          record.earner,
+        ]),
+      ).toEqual([["find_seen", by]]);
+    }
+  });
+
   it("leaves a rare find as a sighting when the Avaia finds it", () => {
     const roll = find(5);
 

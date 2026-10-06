@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { TranslationKey } from "../localization";
+import { FINDS_RU } from "./finds";
 import { GUIDE_RU } from "./guide";
 
 /**
@@ -547,4 +548,5 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "0x1 не удалось запустить этот сеанс Discord Activity. Откройте Activity снова и повторите попытку. ({reason})",
   "discord.unknownFailure": "Неизвестный сбой",
   ...GUIDE_RU,
+  ...FINDS_RU,
 };

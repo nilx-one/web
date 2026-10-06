@@ -363,6 +363,12 @@ The vocabulary, validator and template narrator from phase 1 are taken unchanged
 - Changing the table, the grid or the seed changes the golden test and must raise `ROLL_TABLE.version`.
 - The pack (archetypes, names), writing to the journal, and who earns the experience (R2) are not part of this.
 
+### 3.3b Already built: what a find is (Core)
+
+Which item a rolled find is comes from Core, not from this repository: `find_item(artifactId, tier)` in the pinned Core Wasm runtime picks it from Core's catalog (`docs/find-items.md` in `nilx-one/core`). Kyiv has items of its own; the bands on its cassettes are invented. The kept-find toast names the item by `item.<id>` once Core answers, and says only "Find kept" until then, or when the runtime is older.
+
+**Pick up** in Settings (`nilx-one.finds.pickup`) chooses which rarities get picked up: 1–3 common, 4 uncommon, 5 rare, 6 legendary. Core reads the setting (`picks_up`). A find of a rarity left out is still seen and pays its sighting; only the pick-up is not made. Without Core's answer, finds are picked up as before.
+
 ### 3.4 "Saw it, but didn't pick it up"
 
 - The Avaia sees a tier 4–6 find and **does not pick it up**. It keeps a **lead**: the segment, the epoch and the tier, without exact coordinates.
