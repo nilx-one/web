@@ -192,6 +192,8 @@ jobs:
           sh -n \
             deploy/web/deploy.sh \
             deploy/web/bootstrap-basemap.sh \
+            deploy/web/prepare-map-runtime.sh \
+            deploy/web/prepare-map-runtime.test.sh \
             deploy/web/check-public.sh \
             deploy/web/check-public.test.sh \
             deploy/web/check-map-public.sh \
@@ -205,6 +207,7 @@ jobs:
             deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/check-public.test.sh
           sh deploy/web/check-map-public.test.sh
+          bash deploy/web/prepare-map-runtime.test.sh
           bash deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/bootstrap-models.test.sh
           sh deploy/web/check-models-public.test.sh
