@@ -4,7 +4,6 @@
 import {
   mapCompassBearing,
   mapDistanceMeters,
-  mapMetersPerPixel,
   type MapLandmark,
   type MapPointSelection,
 } from "@nilx-one/map-contract";
@@ -17,6 +16,8 @@ import {
  * not persisted, and never presence evidence: it is a body this device is
  * drawing, moved by a gesture on this device.
  */
+export type AvaiaLocomotionMode = "walk" | "jog" | "run";
+
 export interface AvaiaWalk {
   readonly from: MapPointSelection;
   readonly to: MapPointSelection;
@@ -29,6 +30,8 @@ export interface AvaiaWalk {
   readonly along: readonly number[];
   readonly startedMs: number;
   readonly durationMs: number;
+  /** Physical gait selected for this route before it sets off. */
+  readonly mode: AvaiaLocomotionMode;
   /** Compass heading of the first leg, which is where the body sets off. */
   readonly bearingDeg: number;
   /** Compass heading of the last leg, which is how the body arrives. */
@@ -59,32 +62,79 @@ export const STUDY_CLIP_MS = 1_600;
 export const STUDY_MS = STUDY_CLIP_MS * 2;
 
 /**
- * The screen stride a walk is paced against. A pace measured in metres alone
- * would crawl when the camera is far and teleport when it is close; a pace
- * measured against a fixed length on screen reads the same wherever the camera
- * is, which is what a character in a game does.
+ * Locomotion is physical world distance, never a screen-space effect.
+ *
+ * A close route is a walk. Past 400 m the body may settle into a jog, and a
+ * long route may become a real run only when the route planner says the ground
+ * supports it. Camera zoom never changes any of these speeds.
  */
-const WALK_STRIDE_PIXELS = 24;
+export const WALK_SPEED_MPS = 1.4;
+export const JOG_SPEED_MPS = 2.4;
+export const RUN_SPEED_MPS = 3.6;
 
-/** How far a body goes per second, in strides of the screen. */
-export const WALK_BODY_HEIGHTS_PER_SECOND = 1.1;
+export const JOG_AFTER_METERS = 400;
+export const RUN_AFTER_METERS = 1_200;
 
-/** Nobody walks slower than a stroll, even a body drawn very small. */
-export const MIN_WALK_SPEED_MPS = 1.4;
+/**
+ * The authored walk clip is reused at a gait-specific cadence. It remains
+ * in-place; world translation is still measured in metres.
+ */
+export const JOG_CYCLE_MS = 900;
+export const RUN_CYCLE_MS = 720;
+
+/** Kept for callers that still use the old name. */
+export const MIN_WALK_SPEED_MPS = WALK_SPEED_MPS;
 
 /** A tap closer than this is a body turning on the spot, not a walk. */
 export const MIN_WALK_METERS = 0.5;
 
-/** The ground speed a walk started at this scale moves at. */
-export function walkSpeedMetersPerSecond(
-  latitude: number,
-  zoom: number,
+const MODE_RANK: Readonly<Record<AvaiaLocomotionMode, number>> = {
+  walk: 0,
+  jog: 1,
+  run: 2,
+};
+
+export function locomotionMode(
+  meters: number,
+  maxMode: AvaiaLocomotionMode,
+): AvaiaLocomotionMode {
+  if (meters > RUN_AFTER_METERS && MODE_RANK[maxMode] >= MODE_RANK.run) {
+    return "run";
+  }
+  if (meters > JOG_AFTER_METERS && MODE_RANK[maxMode] >= MODE_RANK.jog) {
+    return "jog";
+  }
+  return "walk";
+}
+
+export function locomotionSpeedMetersPerSecond(
+  mode: AvaiaLocomotionMode,
 ): number {
-  const bodyMeters = WALK_STRIDE_PIXELS * mapMetersPerPixel(latitude, zoom);
-  const speed = bodyMeters * WALK_BODY_HEIGHTS_PER_SECOND;
-  return Number.isFinite(speed)
-    ? Math.max(MIN_WALK_SPEED_MPS, speed)
-    : MIN_WALK_SPEED_MPS;
+  if (mode === "run") return RUN_SPEED_MPS;
+  if (mode === "jog") return JOG_SPEED_MPS;
+  return WALK_SPEED_MPS;
+}
+
+export function locomotionCycleMs(mode: AvaiaLocomotionMode): number {
+  if (mode === "run") return RUN_CYCLE_MS;
+  if (mode === "jog") return JOG_CYCLE_MS;
+  return WALK_CLIP_MS;
+}
+
+/** Two footfalls land in each gait cycle. */
+export function locomotionStepMs(mode: AvaiaLocomotionMode): number {
+  return locomotionCycleMs(mode) / 2;
+}
+
+/**
+ * Compatibility helper for code that asks specifically for walking speed.
+ * Latitude and zoom are intentionally ignored.
+ */
+export function walkSpeedMetersPerSecond(
+  _latitude: number,
+  _zoom: number,
+): number {
+  return WALK_SPEED_MPS;
 }
 
 /**
@@ -96,7 +146,7 @@ export function startWalk({
   to,
   path,
   nowMs,
-  zoom,
+  maxLocomotion = "walk",
   landmark,
 }: {
   readonly from: MapPointSelection;
@@ -104,6 +154,7 @@ export function startWalk({
   readonly path?: readonly MapPointSelection[] | undefined;
   readonly nowMs: number;
   readonly zoom: number;
+  readonly maxLocomotion?: AvaiaLocomotionMode | undefined;
   readonly landmark?: MapLandmark | undefined;
 }): AvaiaWalk {
   const points = (
@@ -114,7 +165,8 @@ export function startWalk({
     along.push(along[i - 1]! + mapDistanceMeters(points[i - 1]!, points[i]!));
   }
   const meters = along[along.length - 1]!;
-  const speed = walkSpeedMetersPerSecond(from.latitude, zoom);
+  const mode = locomotionMode(meters, maxLocomotion);
+  const speed = locomotionSpeedMetersPerSecond(mode);
   return {
     from: points[0]!,
     to: points[points.length - 1]!,
@@ -122,6 +174,7 @@ export function startWalk({
     along,
     startedMs: nowMs,
     durationMs: meters < MIN_WALK_METERS ? 0 : (meters / speed) * 1_000,
+    mode,
     bearingDeg: legBearing(points, 0),
     arrivalBearingDeg: legBearing(points, points.length - 2),
     ...(landmark === undefined ? {} : { landmark }),
@@ -212,7 +265,8 @@ export function walkStance(walk: AvaiaWalk, nowMs: number): AvaiaStance {
     point: walkPosition(walk, nowMs),
     bearingDeg: walkBearing(walk, nowMs),
     clipId: "walk",
-    clipPhase: (since % WALK_CLIP_MS) / WALK_CLIP_MS,
+    clipPhase:
+      (since % locomotionCycleMs(walk.mode)) / locomotionCycleMs(walk.mode),
   };
 }
 

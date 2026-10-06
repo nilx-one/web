@@ -6,7 +6,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   approachPoint,
+  JOG_AFTER_METERS,
+  JOG_SPEED_MPS,
+  locomotionMode,
+  locomotionStepMs,
   MIN_WALK_SPEED_MPS,
+  RUN_AFTER_METERS,
+  RUN_SPEED_MPS,
   startWalk,
   studyFinished,
   studyStance,
@@ -24,6 +30,12 @@ const here = { longitude: 30.5234, latitude: 50.4501 };
 const east = { longitude: 30.5248, latitude: 50.4501 };
 // About 100 m north.
 const north = { longitude: 30.5234, latitude: 50.451 };
+const metresEast = (meters: number) => ({
+  longitude:
+    here.longitude +
+    meters / (111_195 * Math.cos((here.latitude * Math.PI) / 180)),
+  latitude: here.latitude,
+});
 
 describe("Avaia walking", () => {
   it("faces where it was sent, as a compass reads it", () => {
@@ -71,7 +83,7 @@ describe("Avaia walking", () => {
     expect(walkPosition(walk, walk.durationMs)).toEqual(beyond);
   });
 
-  it("takes as long as the distance at the pace the scale sets", () => {
+  it("takes as long as the distance at a physical walking pace", () => {
     const walk = startWalk({ from: here, to: east, nowMs: 1_000, zoom: 17 });
     const speed = walkSpeedMetersPerSecond(here.latitude, 17);
 
@@ -83,13 +95,75 @@ describe("Avaia walking", () => {
     expect(walkArrived(walk, 1_000 + walk.durationMs)).toBe(true);
   });
 
-  it("walks at a pace measured against the drawn body, never below a stroll", () => {
-    // Further out a body covers more ground per drawn height, so it walks
-    // faster on the ground to look the same pace on the screen.
-    expect(walkSpeedMetersPerSecond(50, 15)).toBeGreaterThan(
-      walkSpeedMetersPerSecond(50, 17),
-    );
+  it("keeps the same human walking pace at every camera zoom", () => {
+    expect(walkSpeedMetersPerSecond(50, 15)).toBe(MIN_WALK_SPEED_MPS);
+    expect(walkSpeedMetersPerSecond(50, 17)).toBe(MIN_WALK_SPEED_MPS);
     expect(walkSpeedMetersPerSecond(50, 30)).toBe(MIN_WALK_SPEED_MPS);
+  });
+
+  it("walks nearby, jogs after 400 m, and runs only when a long route allows it", () => {
+    expect(locomotionMode(JOG_AFTER_METERS, "run")).toBe("walk");
+    expect(locomotionMode(JOG_AFTER_METERS + 1, "run")).toBe("jog");
+    expect(locomotionMode(RUN_AFTER_METERS + 1, "jog")).toBe("jog");
+    expect(locomotionMode(RUN_AFTER_METERS + 1, "run")).toBe("run");
+    expect(locomotionMode(RUN_AFTER_METERS + 1, "walk")).toBe("walk");
+  });
+
+  it("keeps footfalls in human-scale ground distance for every gait", () => {
+    expect(MIN_WALK_SPEED_MPS * (locomotionStepMs("walk") / 1_000)).toBeCloseTo(
+      0.84,
+      2,
+    );
+    expect(JOG_SPEED_MPS * (locomotionStepMs("jog") / 1_000)).toBeCloseTo(
+      1.08,
+      2,
+    );
+    expect(RUN_SPEED_MPS * (locomotionStepMs("run") / 1_000)).toBeCloseTo(
+      1.296,
+      2,
+    );
+  });
+
+  it("takes about a minute to cover 100 m instead of skating across it", () => {
+    const walk = startWalk({ from: here, to: east, nowMs: 0, zoom: 15 });
+    const meters = mapDistanceMeters(here, east);
+
+    expect(meters).toBeGreaterThan(90);
+    expect(meters).toBeLessThan(110);
+    expect(walk.durationMs).toBeGreaterThan(60_000);
+    expect(walk.durationMs).toBeLessThan(90_000);
+  });
+
+  it("selects and times the gait from distance and route allowance", () => {
+    const jog = startWalk({
+      from: here,
+      to: metresEast(500),
+      nowMs: 0,
+      zoom: 10,
+      maxLocomotion: "run",
+    });
+    expect(jog.mode).toBe("jog");
+    expect(jog.durationMs).toBeCloseTo((500 / JOG_SPEED_MPS) * 1_000, -2);
+
+    const run = startWalk({
+      from: here,
+      to: metresEast(1_500),
+      nowMs: 0,
+      zoom: 20,
+      maxLocomotion: "run",
+    });
+    expect(run.mode).toBe("run");
+    expect(run.durationMs).toBeCloseTo((1_500 / RUN_SPEED_MPS) * 1_000, -2);
+  });
+
+  it("moves about one human step between footfalls", () => {
+    const walk = startWalk({ from: here, to: east, nowMs: 0, zoom: 17 });
+    const afterOneStep = walkPosition(walk, WALK_CLIP_MS / 2);
+
+    expect(mapDistanceMeters(here, afterOneStep)).toBeCloseTo(
+      MIN_WALK_SPEED_MPS * (WALK_CLIP_MS / 2 / 1_000),
+      1,
+    );
   });
 
   it("is halfway there halfway through, and stays at the end once arrived", () => {

@@ -81,13 +81,32 @@ is closed. See [Avaia walks on its own](avaia-outings.md) §2.
 
 ### Pace
 
-A body is drawn at one apparent size at every scale, so the pace is measured
-against the body, not the ground: 1.1 drawn heights per second, and never
-slower than a stroll. The pace is set when the walk starts. The `walk` clip
-loops at the 1.2 s the asset authored it at, and the body faces the compass
-bearing it is walking along. A new tap in the middle of a walk picks it up
-from wherever the body is. With reduced motion the body arrives where it was
-sent without walking there.
+Locomotion is measured against the ground, never the camera. Zoom changes only
+how much world is visible; it never changes how quickly the body crosses
+physical distance.
+
+A route starts from three physical gaits:
+
+- up to 400 m: walk at 1.4 m/s;
+- over 400 m: jog/cross at 2.4 m/s when the route allows at least a jog;
+- over 1.2 km: run at 3.6 m/s only when the actual route is made entirely of
+  runnable path/track ground.
+
+The route is allowed to cap that choice. Footways and tracks allow a run;
+ordinary streets allow a jog but not a run; steps and carriageways stay a walk.
+A connector over unspecified open ground is treated as cross-country ground:
+it may jog, but is not enough evidence to claim a full running surface. Thus a
+long distance never makes the Avaia sprint up stairs or along a major road.
+
+The authored in-place `walk` clip is paced to the selected gait rather than
+moving the body by screen pixels: 1.2 s per walking cycle, 0.9 s while jogging,
+0.72 s while running, with two footfalls per cycle. That corresponds to about
+0.84 m, 1.08 m and 1.30 m per footfall respectively. World translation remains
+continuous in metres, so the feet and the ground stay in the same scale instead
+of the body sliding over the map. The body faces the compass bearing it is
+moving along. A new tap in the middle of a route picks it up from wherever the
+body is. With reduced motion the body arrives where it was sent without moving
+through the intermediate animation.
 
 ## What it says
 

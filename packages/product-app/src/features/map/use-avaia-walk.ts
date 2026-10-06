@@ -40,6 +40,7 @@ import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
   approachPoint,
+  locomotionStepMs,
   startWalk,
   studyStance,
   STUDY_CLIP_MS,
@@ -113,12 +114,6 @@ export const FIRST_LOOK_MS = 1_500;
 
 /** How long an Avaia stands idle before curiosity moves it again. */
 export const IDLE_CURIOSITY_MS = 15_000;
-
-/**
- * One footfall in this many milliseconds: the `walk` clip loops at 1.2 s and
- * lands both feet in that time.
- */
-export const STEP_MS = 600;
 
 /**
  * The ground right around the person is theirs to send a body onto even
@@ -553,6 +548,7 @@ export function useAvaiaWalk({
         path: route.path,
         nowMs,
         zoom: latest.current.zoom,
+        maxLocomotion: route.maxLocomotion,
         landmark,
       });
       setStudy(undefined);
@@ -719,7 +715,7 @@ export function useAvaiaWalk({
     if (walk === undefined || walk.durationMs <= 0) return;
     const steps = globalThis.setInterval(() => {
       latest.current.onCue?.("step");
-    }, STEP_MS);
+    }, locomotionStepMs(walk.mode));
     const remaining = Math.max(
       0,
       walk.startedMs + walk.durationMs - globalThis.performance.now(),
