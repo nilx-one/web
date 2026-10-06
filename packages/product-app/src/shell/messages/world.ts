@@ -14,6 +14,9 @@ export const WORLD_EN = {
   "map.status.ready": "Map ready",
   "map.status.readyDetail": "MapLibre is rendering the geographic substrate.",
   "map.status.unavailable": "Map unavailable",
+  "readiness.webgpu.title": "On-device model unavailable",
+  "readiness.webgpu.probeFailed":
+    "Checking WebGPU on this device failed, so nothing is known about it.",
   "map.status.styleLoadFailed":
     "The versioned self-hosted map style is not published yet.",
   "map.status.basemapLoadFailed":
@@ -113,6 +116,9 @@ export const WORLD_UK: Readonly<Record<keyof typeof WORLD_EN, string>> = {
   "map.status.ready": "Мапа готова",
   "map.status.readyDetail": "MapLibre відображає географічну основу.",
   "map.status.unavailable": "Мапа недоступна",
+  "readiness.webgpu.title": "Локальна модель недоступна",
+  "readiness.webgpu.probeFailed":
+    "Не вдалося перевірити WebGPU на цьому пристрої, тож про нього нічого не відомо.",
   "map.status.styleLoadFailed":
     "Версіонований власний стиль мапи ще не опубліковано.",
   "map.status.basemapLoadFailed":
