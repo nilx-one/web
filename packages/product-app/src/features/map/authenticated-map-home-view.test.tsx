@@ -45,6 +45,10 @@ import { forgetAvatarChoices } from "../identity/avatar-wardrobe-store";
 import { createProfileSlugViewState } from "../identity/profile-slug-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import { chooseLocale } from "../../shell/localization";
+import type {
+  LocalModelDependency,
+  LocalModelHost,
+} from "../../shell/local-model-host";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
 import type { AvaiaAvailability } from "./bond-dock-view-model";
 import { avaiaStudy } from "./avatar-presence";
@@ -52,6 +56,7 @@ import { avaiaLines } from "./avaia-lines";
 import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
+import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
 import { rememberWorld } from "./world-memory";
 import {
   AuthenticatedMapHomeView,
@@ -71,6 +76,7 @@ interface ViewOverrides {
   onDisconnectProvider?: (provider: ConnectedProvider) => void;
   geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
+  localModel?: LocalModelDependency;
   section?: ShellSection;
   avaiaAvailability?: AvaiaAvailability;
   onPrepareAvaia?: () => void;
@@ -93,6 +99,9 @@ function renderView(overrides: ViewOverrides = {}) {
       ? {}
       : { nearbySpeech: overrides.nearbySpeech }),
     ...(overrides.sound === undefined ? {} : { sound: overrides.sound }),
+    ...(overrides.localModel === undefined
+      ? {}
+      : { localModel: overrides.localModel }),
     ...(overrides.providerDeepLinks === undefined
       ? {}
       : { providerDeepLinks: overrides.providerDeepLinks }),
@@ -1909,5 +1918,154 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.setObservedPosition).toHaveBeenCalledWith(null);
     // A host without the capability is not a renderer failure.
     expect(screen.queryByText("Map unavailable")).toBeNull();
+  });
+});
+
+describe("world readiness frame", () => {
+  function localModel(
+    host: Pick<LocalModelHost, "inspect" | "isCached">,
+  ): LocalModelDependency {
+    return {
+      defaultModelId: "small",
+      catalog: [
+        {
+          modelId: "small",
+          family: "qwen",
+          label: "Small",
+          vramMb: 512,
+          licence: "Apache-2.0",
+          licenceName: "Apache 2.0",
+          attribution: null,
+          usePolicy: null,
+          notices: [],
+          faithfulness: null,
+        },
+      ],
+      host: {
+        ...host,
+        describe: () => Promise.resolve({ bytes: null, source: "mirror" }),
+        open: () => Promise.reject(new Error("never opened")),
+        remove: () => Promise.resolve(),
+      },
+    };
+  }
+
+  function frame(container: HTMLElement): Element | null {
+    return container.querySelector(".authenticated-map-home");
+  }
+
+  afterEach(cleanup);
+
+  it("turns orange and says so when WebGPU cannot run the model", async () => {
+    const { container } = renderView({
+      localModel: localModel({
+        inspect: () => Promise.resolve({ kind: "webgpu_missing" }),
+        isCached: () => Promise.resolve(false),
+      }),
+    });
+
+    expect(
+      await screen.findByText("On-device model unavailable"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Unavailable: this browser has no WebGPU."),
+    ).toBeInTheDocument();
+    expect(frame(container)).toHaveAttribute("data-readiness", "degraded");
+  });
+
+  it("turns green once the model WebLLM needs is on this device", async () => {
+    const { container } = renderView({
+      localModel: localModel({
+        inspect: () => Promise.resolve({ kind: "usable" }),
+        isCached: () => Promise.resolve(true),
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(frame(container)).toHaveAttribute("data-readiness", "connected"),
+    );
+  });
+
+  it("fades a good answer after five seconds, and keeps a problem framed", async () => {
+    vi.useFakeTimers();
+    try {
+      const good = renderView({
+        localModel: localModel({
+          inspect: () => Promise.resolve({ kind: "usable" }),
+          isCached: () => Promise.resolve(true),
+        }),
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(frame(good.container)).toHaveAttribute(
+        "data-readiness",
+        "connected",
+      );
+      expect(frame(good.container)).toHaveAttribute(
+        "data-readiness-shown",
+        "true",
+      );
+      act(() => {
+        vi.advanceTimersByTime(READINESS_FRAME_SETTLE_MS);
+      });
+      expect(frame(good.container)).toHaveAttribute(
+        "data-readiness-shown",
+        "false",
+      );
+      good.unmount();
+
+      const bad = renderView({
+        mapRenderer: renderer({
+          kind: "unavailable",
+          reason: "styleLoadFailed",
+        }),
+      });
+      act(() => {
+        vi.advanceTimersByTime(READINESS_FRAME_SETTLE_MS * 2);
+      });
+      expect(frame(bad.container)).toHaveAttribute(
+        "data-readiness-shown",
+        "true",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("traces the frame along the screen edge, above every layer", () => {
+    const { container } = renderView();
+
+    expect(
+      container.querySelector(
+        ".app-shell__frame > .authenticated-map-home__readiness",
+      ),
+    ).not.toBeNull();
+  });
+
+  it("turns red when the map did not load", () => {
+    const { container } = renderView({
+      mapRenderer: renderer({
+        kind: "unavailable",
+        reason: "styleLoadFailed",
+      }),
+    });
+
+    expect(frame(container)).toHaveAttribute("data-readiness", "failed");
+  });
+
+  it("turns orange and says so when location permission is refused", async () => {
+    const { container } = renderView({
+      geolocation: createGeolocationDouble({ permission: "denied" }),
+    });
+
+    await vi.waitFor(() =>
+      expect(frame(container)).toHaveAttribute("data-readiness", "degraded"),
+    );
+    expect(
+      within(screen.getByRole("region", { name: "World status" })).getByText(
+        "Location permission denied",
+      ),
+    ).toBeInTheDocument();
   });
 });

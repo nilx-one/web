@@ -452,6 +452,9 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "map.status.ready": "Карта готова",
   "map.status.readyDetail": "MapLibre отображает географическую основу.",
   "map.status.unavailable": "Карта недоступна",
+  "readiness.webgpu.title": "Локальная модель недоступна",
+  "readiness.webgpu.probeFailed":
+    "Не удалось проверить WebGPU на этом устройстве, поэтому о нём ничего не известно.",
   "map.status.styleLoadFailed":
     "Версионированный собственный стиль карты ещё не опубликован.",
   "map.status.basemapLoadFailed":

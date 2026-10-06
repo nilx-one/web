@@ -165,6 +165,9 @@ import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { useNearbySpeech } from "./use-nearby-speech";
 import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
+import { useLocalModelReadiness } from "./use-local-model-readiness";
+import { useReadinessFrameVisible } from "./use-readiness-frame";
+import { createWorldReadiness } from "./world-readiness";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 import { GuideCutsceneView } from "../guide/guide-cutscene-view";
@@ -650,6 +653,10 @@ export function AuthenticatedMapHomeView({
   const [dismissedStatus, setDismissedStatus] = useState<string | undefined>(
     undefined,
   );
+  // Readiness notices a person closed stay closed while their cause stands.
+  const [dismissedReadiness, setDismissedReadiness] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   // What the service stored, said once where every transient notice is said.
   // It is not dismissed on a timer: a person closes it when they have read it.
   const [avaiaSavedToast, setAvaiaSavedToast] = useState<
@@ -778,10 +785,31 @@ export function AuthenticatedMapHomeView({
     port: nearbySpeech,
     onHeard: () => cue("heard"),
   });
+  // Settings is where the model is downloaded or removed, so leaving it is
+  // when this device is asked again.
+  const localModelReadiness = useLocalModelReadiness(
+    localModel,
+    section === "settings",
+  );
+  const readiness = createWorldReadiness({
+    map: mapStatus,
+    location: location.state,
+    model: localModelReadiness,
+  });
+  const readinessShown = useReadinessFrameVisible(readiness.tone);
+  const readinessToasts = readiness.issues
+    .filter((issue) => !dismissedReadiness.has(issue.id))
+    .map((issue): StatusToastItem => ({
+      id: issue.id,
+      kind: "error",
+      title: t(issue.title),
+      description: t(issue.detail),
+    }));
   const statusToasts = [
     ...(statusToast === undefined || statusToast.id === dismissedStatus
       ? []
       : [statusToast]),
+    ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
     ...(findToast === undefined ? [] : [findToast]),
     ...speech.toasts,
@@ -1781,6 +1809,9 @@ export function AuthenticatedMapHomeView({
       safeArea={safeArea}
       data-theme={resolvedAppearance}
       data-focus-state={focusState}
+      data-readiness={readiness.tone}
+      data-readiness-shown={readinessShown}
+      frame={<div className="authenticated-map-home__readiness" />}
       data-section={section}
       data-cutscene={guideActive}
       world={
@@ -1827,6 +1858,10 @@ export function AuthenticatedMapHomeView({
             }
             if (speech.toasts.some((toast) => toast.id === id)) {
               speech.dismiss(id);
+              return;
+            }
+            if (readiness.issues.some((issue) => issue.id === id)) {
+              setDismissedReadiness((closed) => new Set(closed).add(id));
               return;
             }
             setDismissedStatus(id);

@@ -121,6 +121,74 @@
     inset 0 0 7rem rgba(55, 215, 229, 0.035);
 }
 
+/* Readiness: one frame along the screen's edge says whether the world and
+   what it leans on answered. Red — the map did not load; orange — WebGPU, the
+   on-device model or location is refused; dim — still finding out; cyan —
+   ready, the model is not on this device yet; green — WebLLM has its model
+   here. A good answer fades after a few seconds; a problem stays framed, and
+   is said again by a notice. */
+.authenticated-map-home__readiness {
+  --readiness-ring: transparent;
+  --readiness-glow: transparent;
+  position: absolute;
+  inset: 0;
+  box-shadow:
+    inset 0 0 0 3px var(--readiness-ring),
+    inset 0 0 3rem var(--readiness-glow);
+  transition:
+    box-shadow 320ms ease,
+    opacity 900ms ease;
+}
+
+.authenticated-map-home[data-readiness-shown="false"]
+  .authenticated-map-home__readiness {
+  opacity: 0;
+}
+
+.authenticated-map-home[data-readiness="failed"]
+  .authenticated-map-home__readiness {
+  --readiness-ring: rgba(239, 68, 68, 0.85);
+  --readiness-glow: rgba(239, 68, 68, 0.22);
+}
+
+.authenticated-map-home[data-readiness="degraded"]
+  .authenticated-map-home__readiness {
+  --readiness-ring: rgba(245, 158, 11, 0.85);
+  --readiness-glow: rgba(245, 158, 11, 0.18);
+}
+
+.authenticated-map-home[data-readiness="pending"]
+  .authenticated-map-home__readiness {
+  --readiness-ring: rgba(55, 215, 229, 0.22);
+}
+
+.authenticated-map-home[data-readiness="ready"]
+  .authenticated-map-home__readiness {
+  --readiness-ring: rgba(55, 215, 229, 0.7);
+  --readiness-glow: rgba(55, 215, 229, 0.1);
+}
+
+.authenticated-map-home[data-readiness="connected"]
+  .authenticated-map-home__readiness {
+  --readiness-ring: rgba(52, 211, 153, 0.75);
+  --readiness-glow: rgba(52, 211, 153, 0.12);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .authenticated-map-home[data-readiness="pending"]
+    .authenticated-map-home__readiness {
+    animation: readiness-pending 1.6s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes readiness-pending {
+  to {
+    box-shadow:
+      inset 0 0 0 3px rgba(55, 215, 229, 0.5),
+      inset 0 0 3rem rgba(55, 215, 229, 0.06);
+  }
+}
+
 /* Header: floating spatial chrome, not a bar. AppHeader keeps route and menu
    semantics; this surface only supplies the map-native material. */
 .authenticated-map-home.authenticated-map-home .app-header {

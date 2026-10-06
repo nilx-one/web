@@ -36,6 +36,11 @@ export interface AppShellProps extends Omit<
   readonly statusRail?: ReactNode;
   /** Transient menus, popovers and announcements above every other layer. */
   readonly overlay?: ReactNode;
+  /**
+   * Decoration traced along the viewport's edge, above every layer and never
+   * in the way of input.
+   */
+  readonly frame?: ReactNode;
 }
 
 /**
@@ -52,6 +57,7 @@ export function AppShell({
   toasts,
   statusRail,
   overlay,
+  frame,
   className,
   style,
   ...rest
@@ -114,6 +120,11 @@ export function AppShell({
       </div>
       {overlay === undefined ? null : (
         <div className="app-shell__overlay">{overlay}</div>
+      )}
+      {frame === undefined ? null : (
+        <div className="app-shell__frame" aria-hidden="true">
+          {frame}
+        </div>
       )}
     </div>
   );
