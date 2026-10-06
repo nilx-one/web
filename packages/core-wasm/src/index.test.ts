@@ -117,6 +117,8 @@ describe("CoreWasmClient", () => {
         artifactId.startsWith("art:") && tier === 1
           ? "item:bottle_cap"
           : "error:artifact_id",
+      backpack_gift_due: (state, level) =>
+        state === "{" ? "error:invalid" : level >= 3 ? "yes" : "no",
       picks_up: (rarities, tier) =>
         rarities === "epic" ? "error:pickup_rarities" : tier < 4 ? "yes" : "no",
     });
@@ -134,6 +136,9 @@ describe("CoreWasmClient", () => {
       code: "artifact_id",
     });
     await expect(client.picksUp!("common", 2)).resolves.toBe(true);
+    await expect(client.backpackGiftDue!("", 3)).resolves.toBe(true);
+    await expect(client.backpackGiftDue!("", 2)).resolves.toBe(false);
+    await expect(client.backpackGiftDue!("{", 3)).rejects.toThrow("invalid");
     await expect(client.picksUp!("common", 5)).resolves.toBe(false);
     await expect(client.picksUp!("epic", 1)).rejects.toThrow("pickup_rarities");
   });
@@ -189,7 +194,7 @@ describe("CoreWasmClient", () => {
           legendary: false,
         },
       ],
-      carries: [{ id: "pocket", width: 5, height: 1 }],
+      carries: [{ id: "pocket", width: 5, height: 1, price: null }],
     };
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () =>
@@ -224,7 +229,7 @@ describe("CoreWasmClient", () => {
           legendary: false,
         },
       ],
-      carries: [{ id: "pocket", width: 5, height: 1 }],
+      carries: [{ id: "pocket", width: 5, height: 1, price: null }],
     });
 
     const malformed = await loadGeneratedCoreWasmBindings({

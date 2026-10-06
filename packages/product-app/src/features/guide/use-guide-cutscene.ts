@@ -82,6 +82,23 @@ export interface GuideCutsceneState {
   readonly replySpeaker: string;
   /** The achievement a reward scene is paying. */
   readonly reward?: AchievementDialogState;
+  /** What a gift scene gives, when it gives things rather than experience. */
+  readonly gift?: GuideGift;
+}
+
+/**
+ * Things she hands over, said beside her line like a reward: a backpack for
+ * the Bond and one for its Avaia. The gift is already given when she says it,
+ * as an achievement is already paid.
+ */
+export interface GuideGift {
+  /** Stable for the gift, so its entries fly to the corner once. */
+  readonly key: string;
+  readonly title: string;
+  readonly items: readonly {
+    readonly subject: "bond" | "avaia";
+    readonly text: string;
+  }[];
 }
 
 export interface GuideCutscene {
@@ -94,6 +111,7 @@ export interface GuideCutscene {
 
 export interface GuidePlayOptions {
   readonly reward?: AchievementDialogState;
+  readonly gift?: GuideGift;
 }
 
 export interface GuideCutsceneInput {
@@ -122,6 +140,7 @@ interface Playing {
   readonly next?: GuideChoice["next"];
   readonly outcome?: GuideOutcome;
   readonly reward?: AchievementDialogState;
+  readonly gift?: GuideGift;
 }
 
 let playedScenes = Math.floor(Math.random() * 1_000);
@@ -212,7 +231,7 @@ export function useGuideCutscene({
         latitude: base.center[1],
       };
       stageRef.current =
-        scene === "reward"
+        scene === "reward" || scene === "backpack"
           ? guideAsideStage(
               you,
               guideAsideBearing(
@@ -236,6 +255,7 @@ export function useGuideCutscene({
         beat: "arriving",
         seed: playedScenes,
         ...(options.reward === undefined ? {} : { reward: options.reward }),
+        ...(options.gift === undefined ? {} : { gift: options.gift }),
       });
     },
     [renderer, setPlaying],
@@ -538,6 +558,7 @@ export function useGuideCutscene({
               }),
           replySpeaker: bondName,
           ...(playing.reward === undefined ? {} : { reward: playing.reward }),
+          ...(playing.gift === undefined ? {} : { gift: playing.gift }),
         };
 
   return { state, play, choose, advance };

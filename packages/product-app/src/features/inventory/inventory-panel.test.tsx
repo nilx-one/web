@@ -17,9 +17,18 @@ vi.mock("./inventory", () => ({
   useInventory: () => ({
     model: {
       seeds: 15,
-      bond: { carry: "backpack", things: [{ id: "bottle", x: 0, y: 0 }] },
-      avaia: { carry: "pocket", things: [{ id: "flyer", x: 2, y: 0 }] },
+      bond: {
+        carry: "backpack",
+        things: [{ id: "bottle", x: 0, y: 0 }],
+        owned: ["pocket", "backpack"],
+      },
+      avaia: {
+        carry: "pocket",
+        things: [{ id: "flyer", x: 2, y: 0 }],
+        owned: ["pocket"],
+      },
       craft: undefined,
+      gifted: true,
     },
     catalog: {
       findCatalogVersion: 1,
@@ -48,9 +57,9 @@ vi.mock("./inventory", () => ({
       crafted: [],
       recipes: [],
       carries: [
-        { id: "pocket", width: 5, height: 1 },
-        { id: "backpack", width: 8, height: 5 },
-        { id: "bag", width: 12, height: 10 },
+        { id: "pocket", width: 5, height: 1, price: null },
+        { id: "backpack", width: 8, height: 5, price: 1500 },
+        { id: "bag", width: 12, height: 10, price: 5000 },
       ],
     },
   }),
@@ -71,6 +80,27 @@ describe("InventoryPanel", () => {
     expect(screen.getByRole("region", { name: "Avaia" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Flyer" }).style.gridColumn).toBe(
       "3 / span 1",
+    );
+  });
+
+  it("offers what each does not own yet, at Core's price", async () => {
+    render(<InventoryPanel owner="0x0sky" core={core} committed />);
+
+    expect(
+      screen.getAllByRole("button", { name: "Buy a bag · 5000 ₴€£" }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Buy a backpack · 1500 ₴€£" }),
+    ).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Buy a backpack · 1500 ₴€£" }),
+    );
+    await waitFor(() =>
+      expect(applyInventory).toHaveBeenLastCalledWith("0x0sky", core, {
+        op: "buy_carry",
+        holder: "avaia",
+        carry: "backpack",
+      }),
     );
   });
 

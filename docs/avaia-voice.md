@@ -66,6 +66,9 @@ Ukrainian lines already use.
   placeholder.
 - **Not recorded:** lines about a landmark. They carry its name, which only the
   moment knows. They stay text until stage 2.
+- **Not recorded yet:** xSasha's backpack gift ([xSasha](guide.md),
+  "Backpacks"). The node says `recorded: false`, so the line is typed out and
+  never asked for, and the asset test leaves it out until a render adds it.
 - **Not recorded: Russian.** No Russian voice we could find has a license that
   allows this product. Piper's `denis` and `dmitri` are fine-tuned from the
   `lessac` voice, whose Blizzard 2013 dataset is licensed for non-commercial use

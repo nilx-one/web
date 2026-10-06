@@ -25,7 +25,8 @@ import {
 export type InventoryPort = Pick<
   CoreRuntimePort,
   "applyInventoryCommand" | "economyCatalog"
->;
+> &
+  Partial<Pick<CoreRuntimePort, "backpackGiftDue">>;
 
 export interface PlacedThing {
   readonly id: string;
@@ -33,9 +34,13 @@ export interface PlacedThing {
   readonly y: number;
 }
 
+export type CarryId = "pocket" | "backpack" | "bag";
+
 export interface CarriedGrid {
-  readonly carry: "pocket" | "backpack" | "bag";
+  readonly carry: CarryId;
   readonly things: readonly PlacedThing[];
+  /** What this holder owns to carry things in: pockets, always. */
+  readonly owned: readonly CarryId[];
 }
 
 export interface CraftInProgress {
@@ -50,14 +55,17 @@ export interface InventoryModel {
   readonly bond: CarriedGrid;
   readonly avaia: CarriedGrid;
   readonly craft: CraftInProgress | undefined;
+  /** Whether xSasha's backpack gift was given. */
+  readonly gifted: boolean;
 }
 
-/** Two empty backpacks, as Core starts an inventory. */
+/** Pockets for both, as Core starts an inventory. */
 export const EMPTY_INVENTORY: InventoryModel = {
   seeds: 0,
-  bond: { carry: "backpack", things: [] },
-  avaia: { carry: "backpack", things: [] },
+  bond: { carry: "pocket", things: [], owned: ["pocket"] },
+  avaia: { carry: "pocket", things: [], owned: ["pocket"] },
   craft: undefined,
+  gifted: false,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,7 +80,11 @@ function decimal(value: unknown): number {
   throw new Error("Stored inventory holds an invalid amount");
 }
 
-function grid(value: unknown): CarriedGrid {
+function isCarry(value: unknown): value is CarryId {
+  return value === "pocket" || value === "backpack" || value === "bag";
+}
+
+function grid(value: unknown, owned: unknown): CarriedGrid {
   if (
     isRecord(value) &&
     (value.carry === "pocket" ||
@@ -80,8 +92,17 @@ function grid(value: unknown): CarriedGrid {
       value.carry === "bag") &&
     Array.isArray(value.things)
   ) {
+    const carry = value.carry;
+    const owns = new Set<CarryId>([
+      "pocket",
+      carry,
+      ...(Array.isArray(owned) ? owned.filter(isCarry) : []),
+    ]);
     return {
-      carry: value.carry,
+      carry,
+      owned: (["pocket", "backpack", "bag"] as const).filter((id) =>
+        owns.has(id),
+      ),
       things: value.things.map((thing: unknown) => {
         if (
           isRecord(thing) &&
@@ -115,11 +136,18 @@ export function readInventoryModel(state: string): InventoryModel {
           readyMs: decimal(parsed.craft.ready_ms),
         }
       : undefined;
+    const owned = isRecord(parsed.owned) ? parsed.owned : {};
+    const bond = grid(parsed.bond, owned.bond);
     return {
       seeds: decimal(parsed.seeds),
-      bond: grid(parsed.bond),
-      avaia: grid(parsed.avaia),
+      bond,
+      avaia: grid(parsed.avaia, owned.avaia),
       craft,
+      // A state stored before the gift counts a backpack worn as given.
+      gifted:
+        typeof parsed.gifted === "boolean"
+          ? parsed.gifted
+          : bond.carry !== "pocket",
     };
   } catch {
     return EMPTY_INVENTORY;

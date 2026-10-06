@@ -124,6 +124,31 @@ its new Avaia: from here it is the two of them. Handing the wheel over this way
 fetches nothing — a reply to her is not the gesture that asks a device to
 download a model.
 
+## Backpacks
+
+Both the Bond and its Avaia start out carrying things in their pockets: five
+cells each ([Inventory](inventory.md)). Once, she brings them a backpack each.
+It is due when the Bond's pockets have four of their five cells taken, or at
+the latest when the Bond reaches level 3, whichever comes first; Core decides
+which (`backpack_gift_due`). Like the reward, she is found on her way out and
+turns round to say it:
+
+```text
+xSasha   Pockets full already? Here — a backpack for you, and one for your Avaia.
+```
+
+Beside the line, the same way a reward is shown, two entries: _Backpack · 40
+cells_ for the Bond in cyan, and one for the Avaia in violet. They fly to the
+corner as a reward's do. The gift is given before she turns round, so a scene
+skipped or cut short gives exactly the same: both already carry their
+backpacks. She waits for the same moment the introduction does: the world in
+view, nothing open in the Dock, no other scene playing, and an Avaia already
+configured, so she never meets a Bond with a gift before she has introduced
+herself.
+
+This line is not recorded yet: it is typed out and not said aloud until a
+render adds it ([Character voices](avaia-voice.md)).
+
 ## What this is not
 
 xSasha guides and stages; she is not a second protocol. The rules below are

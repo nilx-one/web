@@ -14,10 +14,15 @@ import type { GuideShot } from "./guide-stage";
  * one thing a scene may pay is an achievement the product already priced —
  * she only says it out loud.
  */
-export type GuideSceneId = "intro" | "reward";
+export type GuideSceneId = "intro" | "reward" | "backpack";
 
 export type GuideNodeId =
-  "greeting" | "howTo" | "farewell" | "almostForgot" | "together";
+  | "greeting"
+  | "howTo"
+  | "farewell"
+  | "almostForgot"
+  | "together"
+  | "backpackGift";
 
 /**
  * How a scene ended, which is all the world is told about it.
@@ -93,12 +98,18 @@ export interface GuideNode {
   readonly shot: GuideShot;
   /** The line is said with the achievement the scene is paying beside it. */
   readonly reward?: true;
+  /**
+   * Not recorded yet: the line is typed out and not said aloud until a
+   * render adds it (`docs/avaia-voice.md`).
+   */
+  readonly recorded?: false;
   readonly choices: readonly GuideChoice[];
 }
 
 export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
   intro: "greeting",
   reward: "almostForgot",
+  backpack: "backpackGift",
 };
 
 export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
@@ -145,7 +156,37 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
     shot: "together",
     choices: [{ reply: "continue", next: { end: "together" } }],
   },
+  backpackGift: {
+    line: [
+      "guide.backpack.gift.0",
+      "guide.backpack.gift.1",
+      "guide.backpack.gift.2",
+    ],
+    shot: "reward",
+    reward: true,
+    recorded: false,
+    choices: [
+      { reply: "thanks", next: { end: "done" } },
+      { reply: "skip", next: { end: "done" } },
+    ],
+  },
 };
+
+/** Every wording of every line not recorded yet. */
+const UNRECORDED_KEYS: ReadonlySet<string> = new Set(
+  Object.values(GUIDE_NODES)
+    .filter((node) => node.recorded === false)
+    .flatMap((node) =>
+      node.line.flatMap((wording) =>
+        typeof wording === "string" ? [wording] : Object.values(wording),
+      ),
+    ),
+);
+
+/** Whether a line of hers has a recording to play. */
+export function isRecordedGuideLine(key: string): boolean {
+  return !UNRECORDED_KEYS.has(key);
+}
 
 const REPLY_KEYS: Readonly<Record<GuideReply, readonly GuideWording[]>> = {
   curious: [

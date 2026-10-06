@@ -39,9 +39,10 @@ const catalog = {
 };
 const model = {
   seeds: 0,
-  bond: { carry: "backpack" as const, things: [] },
-  avaia: { carry: "backpack" as const, things: [] },
+  bond: { carry: "backpack" as const, things: [], owned: [] },
+  avaia: { carry: "backpack" as const, things: [], owned: [] },
   craft: undefined,
+  gifted: true,
 };
 const core = { applyInventoryCommand: vi.fn(), economyCatalog: vi.fn() };
 

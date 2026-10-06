@@ -4,7 +4,10 @@ What the Bond and its Avaia carry, and the Bond's Seeds ₴€£. Every rule is 
 
 ## Two grids
 
-The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (5 cells), a backpack (40) or a bag (120). Every thing takes its own rectangle. Both start with a backpack. On screen the Bond's grid is marked blue and the Avaia's purple, the colours of their experience.
+The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (5 cells), a backpack (40) or a bag (120). Every thing takes its own rectangle. Both **start with pockets**. Anything bigger has to be owned before it can be worn:
+
+- **xSasha's gift**: once, a backpack each for the Bond and its Avaia, when the Bond's pockets have 4 of 5 cells taken or by Bond level 3 at the latest. She says so in a scene ([xSasha](guide.md), "Backpacks"), and the gift is given whether the scene plays or not.
+- **Buying**, under each grid: a backpack for **1,500** and a bag for **5,000** Seeds ₴€£, from the Bond's Seeds, for either of them. Something owned but not worn can be worn again from there. Real money for them comes later, through 0xda-market. On screen the Bond's grid is marked blue and the Avaia's purple, the colours of their experience.
 
 ## How things get in
 

@@ -3,7 +3,7 @@
 
 import type { AvatarModelId } from "@nilx-one/map-contract";
 
-import type { GuideVoice } from "../guide/guide-script";
+import { isRecordedGuideLine, type GuideVoice } from "../guide/guide-script";
 
 import type { ProductLocale } from "../../shell/localization";
 import { avaiaLines, type AvaiaLineKind } from "./avaia-lines";
@@ -77,6 +77,7 @@ export function guideVoiceUrl(line: {
 }): string | undefined {
   if (!VOICED_LOCALES.includes(line.locale)) return undefined;
   if (!GUIDE_VOICES.includes(line.voice)) return undefined;
+  if (!isRecordedGuideLine(line.key)) return undefined;
   return `/voices/${AVAIA_VOICE_VERSION}/${line.locale}/xsasha-${line.voice}/${line.key}.mp3`;
 }
 
