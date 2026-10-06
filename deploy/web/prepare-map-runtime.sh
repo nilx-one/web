@@ -70,6 +70,7 @@ docker run --rm -i \
   -e TERRAIN_CONCURRENCY="$TERRAIN_CONCURRENCY" \
   -e TERRAIN_UPSTREAM_BASE="$TERRAIN_UPSTREAM_BASE" \
   "$NODE_IMAGE" node - <<'NODE'
+(async () => {
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -229,6 +230,10 @@ fs.writeFileSync(
 console.log(
   `terrain ready: ${tiles.length} tiles (${fetched} fetched, ${cached} cached)`,
 );
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 NODE
 
 # The infra prepareEnv contract requires a non-empty output. This file is a
