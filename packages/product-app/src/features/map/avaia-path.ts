@@ -13,8 +13,13 @@ import {
   GRASS_WEIGHT,
   routeOnGraph,
   snapToGraph,
+  type GraphPosition,
+  type Surface,
+  type WalkGraph,
+  type WalkRoute,
 } from "@nilx-one/walk-graph";
 
+import type { AvaiaLocomotionMode } from "./avaia-walk";
 import { planRoute, type AvaiaRoute } from "./avaia-route";
 
 /**
@@ -59,11 +64,29 @@ export const FOG_CHECK_METERS = 10;
 /** Where a body may set foot. */
 export type OpenGround = (point: MapPointSelection) => boolean;
 
+export interface PlannedWalkRoute {
+  readonly kind: "route";
+  readonly path: readonly MapPointSelection[];
+  /**
+   * Fastest gait this route's observed surface supports. Distance still
+   * decides whether that gait is actually selected.
+   */
+  readonly maxLocomotion: AvaiaLocomotionMode;
+}
+
 /** A planned walk, or what stood in the way: a building, water, or fog. */
 export type WalkPlan =
-  AvaiaRoute | { readonly kind: "blocked"; readonly by: "fog" };
+  | PlannedWalkRoute
+  | { readonly kind: "blocked"; readonly by: MapObstacle["kind"] | "fog" };
 
 const FOG: WalkPlan = { kind: "blocked", by: "fog" };
+
+function planned(
+  route: AvaiaRoute,
+  maxLocomotion: AvaiaLocomotionMode,
+): WalkPlan {
+  return route.kind === "route" ? { ...route, maxLocomotion } : route;
+}
 
 /**
  * The ground a body may walk on while `fog` is drawn: revealed cells, the
@@ -116,7 +139,9 @@ export function planWalk({
 }): WalkPlan {
   const straight = planRoute(from, to, obstacles);
   const across =
-    straight.kind === "route" && !stays(straight.path, open) ? FOG : straight;
+    straight.kind === "route" && !stays(straight.path, open)
+      ? FOG
+      : planned(straight, "jog");
   const along = alongPaths(from, to, roads, obstacles, open);
   if (along === undefined) return across;
   if (across.kind === "blocked") return along.route;
@@ -130,7 +155,7 @@ export function planWalk({
 }
 
 interface AlongPaths {
-  readonly route: AvaiaRoute & { readonly kind: "route" };
+  readonly route: PlannedWalkRoute;
   readonly meters: number;
   readonly cost: number;
 }
@@ -177,10 +202,58 @@ function alongPaths(
   // off the line, may still cut a corner of the fog.
   if (!stays(path, open)) return undefined;
   return {
-    route: { kind: "route", path },
+    route: {
+      kind: "route",
+      path,
+      maxLocomotion: routeLocomotion(graph, start, end, route, grassMeters),
+    },
     meters: route.lengthM + grassMeters,
     cost: route.cost + grassMeters * GRASS_WEIGHT,
   };
+}
+
+function routeLocomotion(
+  graph: WalkGraph,
+  start: GraphPosition,
+  end: GraphPosition,
+  route: WalkRoute,
+  grassMeters: number,
+): AvaiaLocomotionMode {
+  // A connector across unspecified open ground is suitable for a cross/jog,
+  // but not enough evidence to call the whole route a running surface.
+  if (grassMeters > 0.5) return "jog";
+
+  const edges = new Set<number>([start.edge, end.edge]);
+  for (let i = 1; i < route.nodes.length; i++) {
+    const a = route.nodes[i - 1]!;
+    const b = route.nodes[i]!;
+    const edge = graph.adjacency[a]?.find((index) => {
+      const candidate = graph.edges[index];
+      return (
+        candidate !== undefined &&
+        ((candidate.a === a && candidate.b === b) ||
+          (candidate.a === b && candidate.b === a))
+      );
+    });
+    if (edge === undefined) return "walk";
+    edges.add(edge);
+  }
+
+  let max: AvaiaLocomotionMode = "run";
+  for (const index of edges) {
+    const surface = graph.edges[index]?.surface;
+    if (surface === undefined) return "walk";
+    const allowed = surfaceLocomotion(surface);
+    if (allowed === "walk") return "walk";
+    if (allowed === "jog") max = "jog";
+  }
+  return max;
+}
+
+function surfaceLocomotion(surface: Surface): AvaiaLocomotionMode {
+  if (surface === "footway" || surface === "track") return "run";
+  if (surface === "street") return "jog";
+  return "walk";
 }
 
 function point([longitude, latitude]: readonly [
