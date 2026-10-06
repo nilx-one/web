@@ -52,7 +52,8 @@
 		# same-origin; no browser request reaches the upstream DEM provider.
 		handle_path /map/0.1.0/terrain/* {
 			root * /srv/map-data/terrain
-			header Cache-Control "public, max-age=86400"
+			@terrain_tile file
+			header @terrain_tile Cache-Control "public, max-age=86400"
 			file_server
 		}
 
