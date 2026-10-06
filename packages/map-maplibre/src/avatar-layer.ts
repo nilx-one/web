@@ -66,10 +66,12 @@ interface AvatarInstance {
   mixer?: AnimationMixer;
   clips?: ReadonlyMap<string, AnimationClip>;
   actionClip?: AvatarClipId;
-  terrainAnchor?: {
-    readonly key: string;
-    readonly elevationMeters: number;
-  };
+  terrainAnchor?:
+    | {
+        readonly key: string;
+        readonly elevationMeters: number;
+      }
+    | undefined;
   loadGeneration: number;
 }
 
