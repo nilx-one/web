@@ -170,6 +170,22 @@ export const BUILDING_LAYER_IDS: readonly string[] = [
  */
 export const BUILDING_DEFAULT_HEIGHT_METERS = 7;
 
+/** Same-origin raster DEM published beside the regional vector basemap. */
+export const TERRAIN_SOURCE_ID = "terrain";
+
+/** Relief shading over the DEM; hidden together with the terrain in flat mode. */
+export const TERRAIN_HILLSHADE_LAYER_ID = "terrain-hillshade";
+
+/** Real ground height is not visually amplified: one DEM metre is one world metre. */
+export const TERRAIN_EXAGGERATION = 1;
+
+/**
+ * The adaptive globe is fully Mercator from this zoom onward. Actual mesh
+ * displacement starts here so custom Three layers never straddle globe/terrain
+ * projection handover; hillshade can still describe relief further out.
+ */
+export const TERRAIN_MESH_MIN_ZOOM = 12;
+
 /** The style layers whose paint means "this is water". */
 export const WATER_LAYER_IDS: readonly string[] = ["water"];
 
@@ -574,23 +590,57 @@ export function createMapLibreRenderer(
     }
   }
 
+  function applyTerrainMesh(mounted: MapLibreMap): void {
+    const current = mounted.getTerrain();
+    const shouldRaise =
+      dimension === "volumetric" &&
+      mounted.getZoom() >= TERRAIN_MESH_MIN_ZOOM &&
+      mounted.getSource(TERRAIN_SOURCE_ID) !== undefined;
+
+    if (shouldRaise) {
+      if (
+        current?.source !== TERRAIN_SOURCE_ID ||
+        current.exaggeration !== TERRAIN_EXAGGERATION
+      ) {
+        mounted.setTerrain({
+          source: TERRAIN_SOURCE_ID,
+          exaggeration: TERRAIN_EXAGGERATION,
+        });
+      }
+      return;
+    }
+
+    if (current?.source === TERRAIN_SOURCE_ID) {
+      mounted.setTerrain(null);
+    }
+  }
+
   function applyDimension(mounted: MapLibreMap): void {
     // The monument is its own custom layer, not a style layer, so it follows
     // dimension whether or not the published style still carries an
     // extrusion layer to match.
     monumentLayer?.setDimension(dimension);
 
-    // Depth is a presentation choice over one geographic truth: the flat mode
-    // hides the extrusion and leaves the same footprints the style already
-    // paints beneath it.
-    if (mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) === undefined) {
-      return;
+    // One geographic truth, two presentations: flat removes every depth cue,
+    // while volumetric may shade and physically raise the same DEM ground.
+    if (mounted.getLayer(TERRAIN_HILLSHADE_LAYER_ID) !== undefined) {
+      mounted.setLayoutProperty(
+        TERRAIN_HILLSHADE_LAYER_ID,
+        "visibility",
+        dimension === "flat" ? "none" : "visible",
+      );
     }
-    mounted.setLayoutProperty(
-      BUILDING_EXTRUSION_LAYER_ID,
-      "visibility",
-      dimension === "flat" ? "none" : "visible",
-    );
+    applyTerrainMesh(mounted);
+
+    // Buildings follow the same rule: footprints remain as the geographic
+    // fact while only their presentation rises into volume.
+    if (mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) !== undefined) {
+      mounted.setLayoutProperty(
+        BUILDING_EXTRUSION_LAYER_ID,
+        "visibility",
+        dimension === "flat" ? "none" : "visible",
+      );
+    }
   }
 
   /**
@@ -1217,6 +1267,7 @@ export function createMapLibreRenderer(
           for (const listener of [...landmarkListeners]) listener();
         });
         mountedMap.on("zoom", () => {
+          applyTerrainMesh(mountedMap);
           updateLabelVisibility(mountedMap);
           updatePinnedLabelVisibility(mountedMap);
         });
@@ -1549,6 +1600,12 @@ export function createMapLibreRenderer(
       // missing appearance variant is reported instead of blanking the map.
       styleResolved = false;
       presentationApplied = false;
+      // MapLibre 6.x style diffing is not a safe owner of terrain lifecycle.
+      // Detach our mesh explicitly before replacing the style, then styledata
+      // reapplies the selected presentation against the new DEM source.
+      if (map.getTerrain()?.source === TERRAIN_SOURCE_ID) {
+        map.setTerrain(null);
+      }
       map.setStyle(styleUrls[next]);
     },
 

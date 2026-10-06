@@ -107,9 +107,14 @@ export function createMonumentLayer(
 
   function place(): void {
     if (root === undefined) return;
+    const terrainElevation = map?.queryTerrainElevation(
+      MOTHERLAND_MONUMENT_LOCATION,
+    );
     const coordinate = MercatorCoordinate.fromLngLat(
       MOTHERLAND_MONUMENT_LOCATION,
-      0,
+      typeof terrainElevation === "number" && Number.isFinite(terrainElevation)
+        ? terrainElevation
+        : 0,
     );
     const metres = coordinate.meterInMercatorCoordinateUnits();
     root.position.set(

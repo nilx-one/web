@@ -20,9 +20,10 @@ The runtime contract remains:
 /map/0.1.0/style.json
 /map/0.1.0/style-dark.json
 /map/0.1.0/basemap.pmtiles
+/map/0.1.0/terrain/{z}/{x}/{y}.png
 ```
 
-`basemap.pmtiles` is deployment data and MUST NOT be committed to Git. The Web containers mount the server-owned archive read-only while `style.json` remains part of the immutable client image.
+`basemap.pmtiles` and the `terrain/` pyramid are deployment data and MUST NOT be committed to Git. The Web containers mount the server-owned map directory read-only while `style.json` remains part of the immutable client image.
 
 OpenStreetMap attribution must remain visible wherever OSM-derived map data is rendered.
 
@@ -130,9 +131,52 @@ roads or names.
 Elements the reference imagery shows but the archive does not support are
 omitted rather than invented. In particular, individual street trees are not
 placed: the archive carries no tree points, and drawing them at made-up
-coordinates would be the renderer manufacturing geography. Terrain and
-hillshade remain absent for the same reason — the bootstrap publishes no
-same-origin DEM.
+coordinates would be the renderer manufacturing geography. Terrain is not inferred from those vector tiles. A separately provisioned DEM
+supplies it as observed geographic data, described below.
+
+### Terrain and elevation
+
+The regional bootstrap publishes a same-origin Terrarium raster DEM beside the
+vector archive. `deploy/web/bootstrap-terrain.sh` acquires the fixed Kyiv tile
+pyramid once from the Mapzen Terrain Tiles dataset on the AWS Open Data Program,
+then the browser reads only `/map/0.1.0/terrain/*` from 0x1 itself. No runtime
+terrain request leaves the product origin.
+
+The first pyramid covers the same `29.75,49.95,31.35,51.15` envelope at zooms
+7–12. Zoom 12 is close to the useful resolution of the underlying regional DEM
+and is overzoomed at closer camera scales rather than storing a synthetic finer
+raster. Terrain height is presented at 1×: one source metre remains one world
+metre.
+
+Hillshade can describe relief from zoom 7. Physical terrain displacement starts
+at zoom 12, where MapLibre's adaptive globe has completed its handover to
+Mercator. That keeps the globe honest at world scale and gives the close map a
+real ground surface. `flat` presentation hides both hillshade and terrain mesh;
+`volumetric` enables them. The renderer, not the style document, owns the live
+terrain lifecycle so appearance swaps cannot silently redefine depth.
+
+Custom 3D bodies that do not explicitly carry altitude query the mounted terrain
+at their coordinate before converting to Mercator. Avatars and the Motherland
+Monument therefore stand on the DEM surface rather than on the zero-elevation
+plane. An explicit avatar altitude remains authoritative presentation input.
+
+The source is Mapzen/Tilezen Terrain Tiles (`elevation-tiles-prod`). Attribution
+for this European bootstrap is carried in the style and follows the upstream
+Joerd requirements: Mapzen; EU-DEM / Copernicus and European Union; SRTM and
+GMTED2010 courtesy of the U.S. Geological Survey; ETOPO1 from NOAA. Upstream
+requirements remain authoritative:
+https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+
+Provision the server-owned Docker volume before activating a client that names
+this DEM:
+
+```sh
+MAP_DATA_VOLUME=<map-data-volume> sh deploy/web/bootstrap-terrain.sh
+```
+
+The helper is idempotent after a complete pyramid exists and refuses to replace a
+partial or already-versioned dataset implicitly. Updating terrain data is a map
+contract/version change, not an application startup side effect.
 
 Building heights come from OpenStreetMap `height` where the data has it. Where
 it does not, the style falls back to a single conservative value declared in
@@ -195,7 +239,7 @@ and `tests/deployment/map-assets.test.ts` keeps the two documents structurally
 identical.
 
 Layer order follows the visual priority of the map: geography (`earth`,
-`landcover`, `parks`, `landuse-urban`), water (`water`, `water-accent`,
+`landcover`, `parks`, `landuse-urban`), terrain relief (`terrain-hillshade`), water (`water`, `water-accent`,
 `rivers`), urban mass (`buildings-flat`), movement (`roads-rail`,
 `roads-minor-casing`, `roads-secondary`, `roads-casing`, `roads-primary`),
 urban depth (`buildings`), then minor detail (`boundaries`, `pois`). Buildings
@@ -235,8 +279,9 @@ not imitated.
 ### Presentation depth
 
 `MapRenderer.setDimension` selects how the same geography is presented.
-`volumetric` lets the extrusion layer rise at building scale; `flat` hides it,
-leaving the footprints that paint beneath it at every zoom. There is one
+`volumetric` lets real DEM ground rise from zoom 12 and the extrusion layer rise
+at building scale; `flat` hides terrain mesh, hillshade, and extrusion while
+leaving the same geography and building footprints painted beneath them. There is one
 geographic truth and two presentations of it, so explicit 2D is never
 overridden by close-zoom behaviour and the camera policy holds pitch at zero
 while it is selected.
@@ -291,8 +336,6 @@ each style's metadata so that work is a delivery problem, not a design decision.
 Street and place labels at building scale therefore remain blocked on that
 payload; the layer order already leaves them room beneath the location overlay.
 
-Terrain and hillshade are likewise absent: they need a DEM source, and the
-regional bootstrap publishes no same-origin DEM yet.
 
 ## TODO — global coverage
 

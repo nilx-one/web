@@ -26,6 +26,10 @@ import {
   PINNED_LANDMARKS_GLOW_LAYER_ID,
   PINNED_LANDMARKS_POINT_LAYER_ID,
   PINNED_LANDMARKS_SOURCE_ID,
+  TERRAIN_EXAGGERATION,
+  TERRAIN_HILLSHADE_LAYER_ID,
+  TERRAIN_MESH_MIN_ZOOM,
+  TERRAIN_SOURCE_ID,
   createMapLibreRenderer,
   resolvePmtilesProtocolUrl,
   type MapLabelMarker,
@@ -51,6 +55,8 @@ interface FakeMap {
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly easeTo: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
+  readonly setTerrain: ReturnType<typeof vi.fn>;
+  readonly getTerrain: () => unknown;
   readonly addSource: ReturnType<typeof vi.fn>;
   readonly removeSource: ReturnType<typeof vi.fn>;
   readonly addLayer: ReturnType<typeof vi.fn>;
@@ -89,6 +95,7 @@ function makeFakeMap(): FakeMap {
   const layers = new Map<string, Record<string, unknown>>();
   const paint = new Map<string, unknown>();
   const layout = new Map<string, unknown>();
+  let terrain: unknown;
   const camera: FakeCamera = {
     center: [30.5234, 50.4501],
     zoom: 11,
@@ -117,6 +124,10 @@ function makeFakeMap(): FakeMap {
     jumpTo: vi.fn(),
     easeTo: vi.fn(),
     setStyle: vi.fn(),
+    setTerrain: vi.fn((next: unknown) => {
+      terrain = next ?? undefined;
+    }),
+    getTerrain: () => terrain,
     addSource: vi.fn((id: string) => {
       sources.set(id, { setData: vi.fn() });
     }),
@@ -158,6 +169,7 @@ function makeFakeMap(): FakeMap {
     reloadStyle() {
       layers.clear();
       sources.clear();
+      terrain = undefined;
       fake.emit("styledata");
     },
   };
@@ -652,6 +664,71 @@ describe("camera ownership", () => {
 });
 
 describe("presentation dimension", () => {
+  it("raises DEM ground only once the volumetric camera is fully Mercator", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.camera.zoom = TERRAIN_MESH_MIN_ZOOM - 1;
+    fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
+    fakeMap.layers.set(TERRAIN_HILLSHADE_LAYER_ID, {
+      id: TERRAIN_HILLSHADE_LAYER_ID,
+    });
+    const renderer = readyRenderer(fakeMap);
+
+    expect(fakeMap.setTerrain).not.toHaveBeenCalled();
+    expect(
+      fakeMap.layout.get(`${TERRAIN_HILLSHADE_LAYER_ID}.visibility`),
+    ).toBe("visible");
+
+    fakeMap.camera.zoom = TERRAIN_MESH_MIN_ZOOM;
+    fakeMap.emit("zoom");
+
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith({
+      source: TERRAIN_SOURCE_ID,
+      exaggeration: TERRAIN_EXAGGERATION,
+    });
+  });
+
+  it("makes explicit flat mode flat on both DEM ground and buildings", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.camera.zoom = TERRAIN_MESH_MIN_ZOOM;
+    fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
+    fakeMap.layers.set(TERRAIN_HILLSHADE_LAYER_ID, {
+      id: TERRAIN_HILLSHADE_LAYER_ID,
+    });
+    fakeMap.layers.set(BUILDING_EXTRUSION_LAYER_ID, {
+      id: BUILDING_EXTRUSION_LAYER_ID,
+    });
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setDimension("flat");
+
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith(null);
+    expect(
+      fakeMap.layout.get(`${TERRAIN_HILLSHADE_LAYER_ID}.visibility`),
+    ).toBe("none");
+    expect(
+      fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
+    ).toBe("none");
+
+    renderer.setDimension("volumetric");
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith({
+      source: TERRAIN_SOURCE_ID,
+      exaggeration: TERRAIN_EXAGGERATION,
+    });
+  });
+
+  it("detaches live terrain before an appearance style swap", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.camera.zoom = TERRAIN_MESH_MIN_ZOOM;
+    fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
+    const renderer = readyRenderer(fakeMap);
+    fakeMap.setTerrain.mockClear();
+
+    renderer.setAppearance("dark");
+
+    expect(fakeMap.setTerrain).toHaveBeenCalledExactlyOnceWith(null);
+    expect(fakeMap.setStyle).toHaveBeenCalledWith(MAP_STYLE_URLS.dark);
+  });
+
   it("suppresses building extrusion in explicit 2D without touching geography", () => {
     const fakeMap = makeFakeMap();
     fakeMap.layers.set(BUILDING_EXTRUSION_LAYER_ID, {

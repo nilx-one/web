@@ -30,7 +30,13 @@
     "nilx-one:zoom-neighborhood": 13,
     "nilx-one:zoom-street": 15,
     "nilx-one:zoom-building": 16.5,
-    "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold"
+    "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold",
+    "nilx-one:terrain-url": "/map/0.1.0/terrain/{z}/{x}/{y}.png",
+    "nilx-one:terrain-state": "regional-server-published",
+    "nilx-one:terrain-encoding": "terrarium",
+    "nilx-one:terrain-source-min-zoom": 7,
+    "nilx-one:terrain-source-max-zoom": 12,
+    "nilx-one:terrain-mesh-min-zoom": 12
   },
   "glyphs": "/map/0.1.0/fonts/{fontstack}/{range}.pbf",
   "projection": {
@@ -47,6 +53,15 @@
       "type": "vector",
       "url": "pmtiles:///map/0.1.0/basemap.pmtiles",
       "attribution": "© OpenStreetMap contributors"
+    },
+    "terrain": {
+      "type": "raster-dem",
+      "tiles": ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
+      "tileSize": 256,
+      "minzoom": 7,
+      "maxzoom": 12,
+      "encoding": "terrarium",
+      "attribution": "Terrain: Mapzen; EU-DEM: Copernicus / European Union; SRTM and GMTED2010: U.S. Geological Survey; ETOPO1: NOAA"
     }
   },
   "layers": [
@@ -163,6 +178,20 @@
           12,
           0.62
         ]
+      }
+    },
+    {
+      "id": "terrain-hillshade",
+      "type": "hillshade",
+      "source": "terrain",
+      "minzoom": 7,
+      "paint": {
+        "hillshade-illumination-anchor": "map",
+        "hillshade-illumination-direction": 315,
+        "hillshade-shadow-color": "#020405",
+        "hillshade-highlight-color": "#26373d",
+        "hillshade-accent-color": "#111d21",
+        "hillshade-exaggeration": 0.28
       }
     },
     {

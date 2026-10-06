@@ -11,6 +11,11 @@ import { describe, expect, it } from "vitest";
 interface MapStyleSource {
   readonly type?: string;
   readonly url?: string;
+  readonly tiles?: readonly string[];
+  readonly tileSize?: number;
+  readonly minzoom?: number;
+  readonly maxzoom?: number;
+  readonly encoding?: string;
   readonly attribution?: string;
 }
 
@@ -37,6 +42,7 @@ interface MapStyleContract {
   readonly metadata?: Record<string, unknown>;
   readonly glyphs?: string;
   readonly light?: MapStyleLight;
+  readonly terrain?: unknown;
   readonly sources: Record<string, MapStyleSource>;
   readonly layers: readonly MapStyleLayer[];
 }
@@ -94,6 +100,7 @@ const OPACITY_PROPERTY: Readonly<Record<string, string>> = {
   fill: "fill-opacity",
   line: "line-opacity",
   "fill-extrusion": "fill-extrusion-opacity",
+  hillshade: "hillshade-exaggeration",
   circle: "circle-opacity",
 };
 
@@ -209,6 +216,14 @@ describe("map deployment assets", () => {
         url: "pmtiles:///map/0.1.0/basemap.pmtiles",
         attribution: "© OpenStreetMap contributors",
       });
+      expect(style.sources.terrain).toMatchObject({
+        type: "raster-dem",
+        tiles: ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        minzoom: 7,
+        maxzoom: 12,
+        encoding: "terrarium",
+      });
     },
   );
 
@@ -219,6 +234,12 @@ describe("map deployment assets", () => {
 
       for (const layer of style.layers) {
         if (layer.type === "background") {
+          expect(layer.source).toBeUndefined();
+          expect(layer["source-layer"]).toBeUndefined();
+          continue;
+        }
+        if (layer.type === "hillshade") {
+          expect(layer.source).toBe("terrain");
           expect(layer["source-layer"]).toBeUndefined();
           continue;
         }
@@ -257,6 +278,7 @@ describe("map deployment assets", () => {
           "earth",
           "parks",
           "landuse-urban",
+          "terrain-hillshade",
           "water",
           "water-accent",
           "rivers",
@@ -269,6 +291,30 @@ describe("map deployment assets", () => {
       // 3D depth and point-level detail remain close-zoom concerns.
       expect(painted).not.toContain("buildings");
       expect(painted).not.toContain("pois");
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "publishes real relief as same-origin Terrarium data without style-owned mesh lifecycle (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      const terrain = style.sources.terrain;
+      const hillshade = style.layers.find(
+        (layer) => layer.id === "terrain-hillshade",
+      );
+
+      expect(terrain).toMatchObject({
+        type: "raster-dem",
+        tiles: ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        minzoom: 7,
+        maxzoom: 12,
+        encoding: "terrarium",
+      });
+      expect(style.terrain).toBeUndefined();
+      expect(hillshade?.type).toBe("hillshade");
+      expect(hillshade?.source).toBe("terrain");
+      expect(style.metadata?.["nilx-one:terrain-mesh-min-zoom"]).toBe(12);
     },
   );
 
@@ -291,6 +337,7 @@ describe("map deployment assets", () => {
       "landcover",
       "parks",
       "landuse-urban",
+      "terrain-hillshade",
       "water",
       "water-accent",
       "rivers",

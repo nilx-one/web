@@ -181,6 +181,7 @@ jobs:
           sh -n \
             deploy/web/deploy.sh \
             deploy/web/bootstrap-basemap.sh \
+            deploy/web/bootstrap-terrain.sh \
             deploy/web/check-public.sh \
             deploy/web/check-public.test.sh \
             deploy/web/check-map-public.sh \

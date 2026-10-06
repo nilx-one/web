@@ -195,10 +195,19 @@ export function createAvatarLayer(
   function place(instance: AvatarInstance): void {
     const root = instance.root;
     if (root === undefined) return;
-    const { lngLat, altitudeMeters = 0, bearingDeg, scale } = instance.handle;
+    const { lngLat, altitudeMeters, bearingDeg, scale } = instance.handle;
+    const terrainElevation = map?.queryTerrainElevation({
+      lng: lngLat[0],
+      lat: lngLat[1],
+    });
+    const resolvedAltitudeMeters =
+      altitudeMeters ??
+      (typeof terrainElevation === "number" && Number.isFinite(terrainElevation)
+        ? terrainElevation
+        : 0);
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
-      altitudeMeters,
+      resolvedAltitudeMeters,
     );
     const metres = coordinate.meterInMercatorCoordinateUnits();
     root.position.set(
