@@ -203,10 +203,8 @@ jobs:
           bash -n \
             deploy/web/prepare-map-runtime.sh \
             deploy/web/prepare-map-runtime.test.sh
-          bash -n deploy/web/prepare-map-runtime.sh deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/check-public.test.sh
           sh deploy/web/check-map-public.test.sh
-          bash deploy/web/prepare-map-runtime.test.sh
           bash deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/bootstrap-models.test.sh
           sh deploy/web/check-models-public.test.sh
