@@ -33,6 +33,21 @@ services/identity -> pinned Core contracts
 
 Both applications render the same `product-app` package. Host-specific code stays in adapters.
 
+## Avaia in the client
+
+The Web client may present Avaia's learned preferences, behavioral patterns, tendencies, traits, or identity projections, but it does not define or manufacture them.
+
+Avaia is not modeled as a chat-first surface. Personalization is expected to emerge from permitted behavioral and interaction evidence over time, with higher-level identity forming only after lower-level patterns become sufficiently stable.
+
+The UI must preserve the same evidence boundary as the protocol:
+
+```text
+BondChain fact -> derived personal state -> UI projection
+authoritative    revisable                presentational
+```
+
+A UI affordance may expose, explain, or let the Bond influence a preference signal where the product contract allows it. It must not turn presentation state, inferred traits, or a local model guess into BondChain truth. Device-specific model size, quantization, cache state, or host environment are local runtime concerns and do not define a different Avaia identity.
+
 ## Runtime services
 
 - `services/identity` — native credentials, recovery, sessions, and isolated
