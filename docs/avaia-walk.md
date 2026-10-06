@@ -81,13 +81,18 @@ is closed. See [Avaia walks on its own](avaia-outings.md) §2.
 
 ### Pace
 
-A body is drawn at one apparent size at every scale, so the pace is measured
-against the body, not the ground: 1.1 drawn heights per second, and never
-slower than a stroll. The pace is set when the walk starts. The `walk` clip
-loops at the 1.2 s the asset authored it at, and the body faces the compass
-bearing it is walking along. A new tap in the middle of a walk picks it up
-from wherever the body is. With reduced motion the body arrives where it was
-sent without walking there.
+Walking is measured against the ground, not the camera: an Avaia walks at
+1.4 m/s regardless of zoom. Zoom changes only how much world is visible; it
+never changes how quickly the body crosses physical distance. A 100 m walk
+therefore takes about 71 seconds instead of collapsing into a few screen-space
+seconds when the map is zoomed out.
+
+The `walk` clip loops at the 1.2 s the asset authored it at and lands two
+footfalls per loop. At 1.4 m/s that is about 0.84 m of ground per visible step,
+so the gait and world movement stay in the same scale instead of the body
+sliding over the map. The body faces the compass bearing it is walking along.
+A new tap in the middle of a walk picks it up from wherever the body is. With
+reduced motion the body arrives where it was sent without walking there.
 
 ## What it says
 
