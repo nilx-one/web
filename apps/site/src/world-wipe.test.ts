@@ -57,7 +57,7 @@ describe("wipeLocalWorldOnce", () => {
     expect(
       await wipeLocalWorldOnce(storage, factory("success", deleted)),
     ).toEqual({ status: "wiped" });
-    expect(deleted).toEqual(["nilx-presence"]);
+    expect(deleted).toEqual(["nilx-presence", "avaia-finds"]);
     expect(storage.getItem("nilx-one.fog.reveals.v1.x")).toBeNull();
     expect(storage.getItem("nilx-one.progression.v3.x")).toBeNull();
     expect(storage.getItem("nilx-one.interface.locale")).toBe("uk");

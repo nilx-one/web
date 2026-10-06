@@ -98,43 +98,44 @@ event; the caps bound an untrusted number. They are not proof the award was
 earned, and neither is an idempotent id or the rate limit. The public card
 says the standing is reported by this Bond.
 
-**Committed experience** (decided as R3 in
-[Avaia walks on its own](avaia-outings.md), not built yet). The totals are the
-only number a device shows; it never computes a standing of its own. Each
-award's id becomes its commitment, `xp:` and an HMAC of the local award record
-and the previous commitment, under a Bond key the server never sees. The
-server keeps the commitments, a head per device chain (fast-forward only), and
-prices each award by its kind instead of taking an amount. The record behind a
-commitment — which find, which cell, which landmark — stays on the device.
-This stops editing the number on the device; it does not stop a rebuilt client
-from inventing awards that follow the rules, so the standing stays this Bond's
-report, bounded by per-kind caps.
+**Committed experience** (R3 in
+[Avaia walks on its own](avaia-outings.md)) is the path for new world awards.
+The totals are the number a device shows. Each award id is its commitment,
+`xp:` plus an HMAC of the local award record and the previous commitment,
+under a history key the service never sees. The server stores the commitment,
+a fast-forward head per device chain and bounded per-kind counts; it prices the
+award from its kind/earner/tier instead of accepting an amount. The record
+behind the commitment — cell, landmark or find history and its time — stays
+in the encrypted `avaia-finds` journal on the device. A rare tier 4–6 pick-up
+is the exception that also sends its `artifactId` so the service can validate
+and atomically arbitrate the first claim.
 
-A device still remembers what it has not managed to publish yet, under
-`nilx-one.progression.v3.<owner>`, the same way fog reveals
-(`nilx-one.fog.reveals.v1.<owner>`) and the landmark notebook
-(`nilx-one.avaia.landmarks.v1.<owner>`) stay on the device. That local copy
-is transport-eligible — it may follow a Bond between its own devices — and
-that copy is not synced state and not service state (see
-[State placement](state-placement.md)). An award is an opaque `xp:` nonce
-plus an amount. The nonce is how a retry stays idempotent; it is not a cell,
-a landmark, or any other place, and it is not part of the public projection.
-Only the totals are. Version 2 (`nilx-one.progression.v2.<owner>`) and version
-1 (`nilx-one.progression.v1.<owner>`, less the configuration reward it used to
-pay) are offered once as carry: the service keeps the greatest such baseline
-and does not add it again. Experience earned after that is the event log, so
-two devices playing at once both count.
+The order is intent -> server commit -> local keep. Offline or an unanswered
+service leaves the exact commitment pending for an idempotent retry. A refused
+award is not kept; descendants are re-committed on the last accepted/server
+head. The server can therefore protect the number from a simple local edit,
+but it still cannot prove a person physically performed an allowed action. The
+standing remains this Bond's report.
+
+`nilx-one.progression.v3.<owner>` is now the **legacy migration path**:
+pre-R3 carry/pending events are published before a device starts flushing R3
+awards. Version 2 (`nilx-one.progression.v2.<owner>`) and version 1
+(`nilx-one.progression.v1.<owner>`, less the old configuration reward) are
+still offered once as carry and never written again. New zone, landmark and
+find awards are pending/kept in `avaia-finds`; fog reveals and the landmark
+notebook remain their separate local world records. See
+[State placement](state-placement.md).
 
 The **Avaia model downloaded** achievement stays on the device that downloaded
 it. It is added to that device's own standing and is not part of `pub_info`.
 
 A level is still not a protocol fact: it creates no Interaction and completes
-no BondChain. The service stores the totals the client publishes and
-redistributes that report; it does not price an action, derive a level, or
-attest the play. See [State placement](state-placement.md): the local copy
-stays transport-eligible, and `bond_pub_info` is a separate client-asserted
-record. Fog reveals and the landmark notebook stay on the device. What left
-the device is the experience the owner says those actions paid.
+no BondChain. The service redistributes the client-authority standing and, for
+R3 awards, prices a closed bounded kind; it still does not derive a
+Relationship, prove the physical play, or make the resulting level an
+attestation. Ordinary award records remain local. A rare claim reveals only
+the find needed for first-claim arbitration, under the disclosure documented
+in [Avaia walks on its own](avaia-outings.md).
 
 ## What this is not
 

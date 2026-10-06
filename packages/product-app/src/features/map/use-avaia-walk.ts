@@ -62,13 +62,7 @@ import {
   CURIOSITY_REACH_METERS,
   type LandmarkNotebook,
 } from "./landmark-notebook";
-import {
-  newExperienceEventId,
-  queueExperience,
-  updateProgression,
-  XP_LANDMARK_NOTICED_MANUALLY,
-  XP_LANDMARK_STUDIED_BY_AVAIA,
-} from "../progression/progression";
+import type { AwardRecord } from "../progression/commitment";
 import {
   chooseOuting,
   initialDrive,
@@ -158,6 +152,16 @@ export interface AvaiaWalkInput {
     readonly kind: AvaiaLineKind;
     readonly text: string;
   }) => void;
+  /**
+   * A route is evidence for chance finds only once the body actually reaches
+   * its end. Interrupted/replanned routes never report their unwalked tail.
+   */
+  readonly onWalkCompleted?: (walk: AvaiaWalk) => void;
+  /**
+   * A local fact that should enter R3 committed progression. The caller owns
+   * persistence/sync; this walking hook only names what actually happened.
+   */
+  readonly onAward?: (record: AwardRecord) => void;
   /**
    * Normalized walk targets the drive may take the Avaia out to. Until the
    * landmark mapper supplies them an outing can only wander or go home.
@@ -254,6 +258,8 @@ export function useAvaiaWalk({
   onFogTap,
   onCue,
   onLine,
+  onWalkCompleted,
+  onAward,
   outingCandidates,
 }: AvaiaWalkInput): AvaiaWalkState {
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
@@ -330,6 +336,8 @@ export function useAvaiaWalk({
     onFogTap,
     onCue,
     onLine,
+    onWalkCompleted,
+    onAward,
     outingCandidates,
   });
   useEffect(() => {
@@ -347,6 +355,8 @@ export function useAvaiaWalk({
       onFogTap,
       onCue,
       onLine,
+      onWalkCompleted,
+      onAward,
       outingCandidates,
     };
   });
@@ -519,6 +529,7 @@ export function useAvaiaWalk({
     const arrived = globalThis.setTimeout(() => {
       const nowMs = globalThis.performance.now();
       const purpose = walkPurpose.current;
+      latest.current.onWalkCompleted?.(walk);
       setWalk(undefined);
       dispatch({
         type: "arrived",
@@ -604,13 +615,12 @@ export function useAvaiaWalk({
       updateNotebook(book, (current) =>
         studyLandmark(current, study.landmark, by, Date.now()),
       );
-      updateProgression(book, (current) =>
-        queueExperience(current, {
-          id: newExperienceEventId(),
-          earner: "avaia",
-          amount: XP_LANDMARK_STUDIED_BY_AVAIA,
-        }),
-      );
+      latest.current.onAward?.({
+        kind: "landmark_studied",
+        earner: "avaia",
+        subject: study.landmark.id,
+        at: Date.now(),
+      });
       setStudy(undefined);
       setRest({ point: study.at, bearingDeg: study.bearingDeg });
       say("landmark.studied", study.landmark);
@@ -684,18 +694,13 @@ export function useAvaiaWalk({
       updateNotebook(owner, (current) =>
         noticeLandmarks(current, found, Date.now()),
       );
-      if (newlyNoticed.length > 0) {
-        updateProgression(owner, (current) =>
-          newlyNoticed.reduce(
-            (progression) =>
-              queueExperience(progression, {
-                id: newExperienceEventId(),
-                earner: "bond",
-                amount: XP_LANDMARK_NOTICED_MANUALLY,
-              }),
-            current,
-          ),
-        );
+      for (const landmark of newlyNoticed) {
+        latest.current.onAward?.({
+          kind: "landmark_noticed",
+          earner: "bond",
+          subject: landmark.id,
+          at: Date.now(),
+        });
       }
     }
 

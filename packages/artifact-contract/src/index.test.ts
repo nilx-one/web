@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   epochOf,
+  FIND_OFFSET_METERS,
+  isFindPerceptible,
+  PERCEPTION_METERS,
   rollAlong,
   rollSegment,
   ROLL_TABLE,
@@ -139,6 +142,21 @@ describe("rollSegment", () => {
       expect(roll.placement.along).toBeLessThan(1);
       expect(Math.abs(roll.placement.across)).toBeLessThanOrEqual(1);
     }
+  });
+
+  it("sees only placements within the 15 m perception radius", () => {
+    const boundary = PERCEPTION_METERS / FIND_OFFSET_METERS;
+    expect(
+      isFindPerceptible({ placement: { along: 0.5, across: boundary } }),
+    ).toBe(true);
+    expect(
+      isFindPerceptible({
+        placement: { along: 0.5, across: boundary + Number.EPSILON * 4 },
+      }),
+    ).toBe(false);
+    expect(
+      isFindPerceptible({ placement: { along: 0.5, across: -boundary } }),
+    ).toBe(true);
   });
 
   it("refuses a pack it cannot name finds by", () => {
