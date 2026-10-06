@@ -155,9 +155,7 @@ describe("joinAreas", () => {
         water,
       })[0]!.id;
 
-    expect(idAt([30.512341, 50.512341])).toBe(
-      idAt([30.512342, 50.512342]),
-    );
+    expect(idAt([30.512341, 50.512341])).toBe(idAt([30.512342, 50.512342]));
   });
 
   it("names nothing without both a label and a polygon", () => {
