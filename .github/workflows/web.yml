@@ -54,6 +54,17 @@ jobs:
         run: |
           sha256sum --check tools/avatars/SHA256SUMS
           python tools/avatars/test_rig.py
+      - name: Inspect avatar capabilities
+        run: |
+          python tools/avatars/test_inventory.py
+          python tools/avatars/inventory.py deploy/web/avatars --output "${{ runner.temp }}/avatar-inventory.json"
+      - name: Preserve avatar capability inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: avatar-inventory-${{ github.sha }}
+          path: ${{ runner.temp }}/avatar-inventory.json
+          retention-days: 7
       - id: monument-cache
         name: Restore deterministic monument assets
         uses: actions/cache@v4
