@@ -70,8 +70,9 @@ never more than once in four hours. The drive (`outing-drive.ts`) decides
 where, in code: a target from the outing menu, looked around for 30 seconds on
 arrival; a short wander of 150 to 400 m along the paths; home, to the device,
 when its energy (5 km on a full charge) runs low; or staying put. In the
-evening and at night it only takes a near target or a wander. Until the
-landmark mapper supplies targets, an outing is a wander or a walk home. Before
+evening and at night it only takes a near target or a wander. Its targets are
+the named museums, viewpoints, castles, forts, ruins and significant monuments
+on the loaded map ([landmarks from OpenStreetMap](avaia-osm-landmarks.md)). Before
 it plans, it reads the road tiles of its area ahead, so the paths past the edge
 of the screen are known; it gives the outing up if a tap comes meanwhile. When
 it last went out is kept with where it stands, so a reload does not send it out

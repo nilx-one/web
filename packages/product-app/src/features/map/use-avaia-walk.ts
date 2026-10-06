@@ -78,7 +78,9 @@ import {
   type DriveEvent,
   type WalkPurpose,
 } from "./outing-drive";
+import { landmarksFromArchive } from "./landmark-mapper";
 import {
+  outingCandidates as walkTargets,
   outingMenu,
   type OutingCandidate,
   type OutingTarget,
@@ -184,8 +186,9 @@ export interface AvaiaWalkInput {
    */
   readonly onAward?: (record: AwardRecord) => void;
   /**
-   * Normalized walk targets the drive may take the Avaia out to. Until the
-   * landmark mapper supplies them an outing can only wander or go home.
+   * Normalized walk targets the drive may take the Avaia out to. Absent, the
+   * drive maps the landmarks the renderer has loaded within the outing's
+   * budget (docs/avaia-osm-landmarks.md); with none it wanders or goes home.
    */
   readonly outingCandidates?: readonly OutingCandidate[];
 }
@@ -956,7 +959,13 @@ export function useAvaiaWalk({
                 open({ longitude, latitude });
         const at: LonLat = [from.longitude, from.latitude];
         const menu = outingMenu({
-          candidates: latest.current.outingCandidates ?? [],
+          candidates:
+            latest.current.outingCandidates ??
+            walkTargets(
+              landmarksFromArchive(
+                renderer.landmarksNear?.call(renderer, from, budget) ?? [],
+              ),
+            ),
           graph,
           from: at,
           open: canEnter,

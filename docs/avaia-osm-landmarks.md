@@ -224,11 +224,26 @@ This keeps OSM extensibility separate from the stable 0x1 landmark vocabulary.
 
 ## Implemented
 
-`landmark-normalize.ts` in `product-app` takes the mapper's candidates (the rows each archive object matched, its name, geometry and the attributes significance reads) and applies this document: one kind per object by group and table order, the significance rules, geometry and type checks, and deduplication. The mapping table, its version (`1.0`) and the thresholds (`parkMinAreaM2` 10 000, `majorMonumentMinFootprintM2` 100, `duplicateWithinMeters` 50) are constants, and a golden test pins the output. Landmarks come out with an id derived from the kind and a point of the feature, rounded to about a metre; source ids never leave it. `outingCandidates` passes the `walk_target` group on to the outing menu. The mapper that produces the candidates from the archive is #306.
+`landmark-normalize.ts` in `product-app` takes the mapper's candidates (the rows each archive object matched, its name, geometry and the attributes significance reads) and applies this document: one kind per object by group and table order, the significance rules, geometry and type checks, and deduplication. The mapping table, its version (`1.0`) and the thresholds (`parkMinAreaM2` 10 000, `majorMonumentMinFootprintM2` 100, `duplicateWithinMeters` 50) are constants, and a golden test pins the output. Landmarks come out with an id derived from the kind and a point of the feature, rounded to about a metre; source ids never leave it. `outingCandidates` passes the `walk_target` group on to the outing menu.
+
+`landmark-mapper.ts` in `product-app` is the mapper (#306). It reads the landmark points the renderer already reads, `pois` features whose `kind` is in `LANDMARK_KINDS`, and only their `kind` and `name`: no raw OSM tag and no other attribute. The enabled rows are the compatibility table above, nothing more:
+
+| Archive `pois` kind                 | Row                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| `monument`, `memorial`              | `major_monument`, small unless significance promotes                     |
+| `artwork`, `sculpture`, `statue`    | `artwork`                                                                |
+| `museum`, `castle`, `fort`, `ruins` | the same name                                                            |
+| `archaeological_site`, `viewpoint`  | the same name                                                            |
+| `attraction`, `landmark`            | none; a named one marks a same-named monument within 50 m as significant |
+
+Every kind it reads is in `LANDMARK_KINDS`, which `landmark-kinds.mjs` checks against the deployed archive, and a deployment test fails if the mapper ever reads a kind outside it. Parks, lakes, reserves, beaches, peaks, churches and the `micro_interest` rows stay disabled: their archive source (`landuse`/`water` polygons, or `pois` kinds nobody has listed) is not inspected yet. The mapper has its own version (`1.0`) beside the normalization's, and a golden test pins both.
+
+The drive maps what the renderer has loaded within the outing's budget at the moment it plans, so an Avaia goes out to the museums, viewpoints, castles, forts, ruins and significant monuments on the map around it. A target the map has not loaded is not one it knows of.
 
 ## Open items
 
-- which `pois` kinds, `landuse` kinds and `water` attributes the Kyiv archive actually carries for each row. Nothing here is enabled until `landmark-kinds.mjs` and a fixture say so;
+- which `landuse` kinds and `water` attributes the Kyiv archive actually carries for parks, lakes, reserves and beaches, and which further `pois` kinds it carries. Beyond the rows above nothing is enabled until `landmark-kinds.mjs` and a fixture say so (#309, #311);
+- reading landmarks ahead with the road tiles, so an outing knows targets past the loaded view;
 - whether the archive carries benches, camp sites, peaks and shrines at all; rows that it does not support are dropped rather than faked;
 - the numeric significance thresholds, once the real distribution is known;
 - whether the walking graph can be built from `roads` alone for parks, which decides if `park` is a place to wander in or only to reach ([Avaia walks on its own](avaia-outings.md) §0.5).

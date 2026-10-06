@@ -15,6 +15,10 @@ import {
   decodeLayerFeatures,
   zoomOfTileId,
 } from "../../deploy/web/landmark-kinds.mjs";
+import {
+  POI_KIND_ROWS,
+  POI_SIGNIFICANCE_KINDS,
+} from "../../packages/product-app/src/features/map/landmark-mapper";
 
 const SCRIPT = resolve(__dirname, "../../deploy/web/landmark-kinds.mjs");
 const KINDS = JSON.parse(
@@ -235,5 +239,19 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
     );
 
     expect(run(path).status).toBe(1);
+  });
+});
+
+describe("the Avaia's landmark mapper", () => {
+  // The mapper may only read archive kinds this check covers: a kind outside
+  // LANDMARK_KINDS is one nobody confirmed the deployed archive carries.
+  it("reads only kinds in LANDMARK_KINDS", () => {
+    const known = new Set(KINDS);
+    for (const kind of [
+      ...Object.keys(POI_KIND_ROWS),
+      ...POI_SIGNIFICANCE_KINDS,
+    ]) {
+      expect(known.has(kind), kind).toBe(true);
+    }
   });
 });

@@ -2,7 +2,7 @@
 
 Implementation plan, version 2. It replaces `avaia_finds — phase 1`, in which walking only served the finds and the finds came first. Here it is the other way round: **first the Avaia learns to walk around the city, and only then, along the way, does it find things.** Its walking today is described in [Avaia walks the world](avaia-walk.md): moving on a tap and curiosity about landmarks already noticed. This document adds outings of its own, routes and finds.
 
-Status: **plan**, partly built. The walking graph and router (§0.6), walking along paths (§0.7), the outing menu (§1.3), the drive (§2.4), the find rolls (§3.3a) and reading road tiles ahead (§0.5) are implemented, and R1 and R2 are decided; the rest is not yet. The values in the tables are starting values, tuned on live walking.
+Status: **plan**, partly built. The walking graph and router (§0.6), walking along paths (§0.7), the outing menu (§1.3), the drive (§2.4), the find rolls (§3.3a), reading road tiles ahead (§0.5) and the landmark mapper for the archive's confirmed kinds (§1) are implemented, and R1 and R2 are decided; the rest is not yet. The values in the tables are starting values, tuned on live walking.
 
 ## Goal
 
@@ -248,7 +248,7 @@ A target with no route (more than 30 m from the graph and unreachable across the
 
 ### 1.3 Already built: the outing menu
 
-`outing-targets.ts` in `product-app` is a pure function, `outingMenu`. Its input is normalized candidates from the mapper (#306, not ready yet), the graph, the Avaia's position, open ground (R1) and a budget in metres.
+`outing-targets.ts` in `product-app` is a pure function, `outingMenu`. Its input is normalized candidates from the mapper (#306), the graph, the Avaia's position, open ground (R1) and a budget in metres.
 
 - Only the `walk_target` group from the [mapping](avaia-osm-landmarks.md) enters the menu, and only named targets. A church is a `route_landmark` in the canonical vocabulary, so it does not become an outing target. Finds are never targets.
 - Arrival is not a centroid but an anchor, by the mapping's rules. For a point, the nearest place on the graph within 30 m. For a park or a reserve, the cheapest node inside it or within 30 m of its edge. For a lake or a beach, the cheapest node outside the polygon and within 30 m of the shore.
@@ -309,7 +309,7 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
 - **Wandering:** a graph node 150–400 m away along the paths, over open ground. It is picked deterministically per outing window.
 - **Home** is, for now, the device's last observed position. The cell with the longest visits from the journal comes separately.
 - **Lines:** for an outing the Avaia uses the existing `walk` line. There are no "I'll go for a walk" lines yet, because they need to be recorded.
-- Until the mapper (#306) supplies candidates, an outing is only "wander" or "home".
+- The mapper (#306) supplies candidates from the landmarks the map has loaded: museums, viewpoints, castles, forts, ruins, archaeological sites and significant monuments. Parks and lakes wait for their archive source to be confirmed ([Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md#implemented)).
 
 ## §3 Finds
 

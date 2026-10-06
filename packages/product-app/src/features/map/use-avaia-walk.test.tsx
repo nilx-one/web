@@ -6,6 +6,7 @@ import {
   type MapBounds,
   type MapFogField,
   type MapGroundTap,
+  type MapLandmark,
   type MapPointSelection,
   type MapRenderer,
   type MapRoad,
@@ -27,6 +28,7 @@ import {
   writeAffinity,
   type FondPlace,
 } from "./place-affinity";
+import { forgetNotebookCache } from "./landmark-notebook";
 import { useAvaiaWalk, type AvaiaWalkInput } from "./use-avaia-walk";
 import { readWorldMemory } from "./world-memory";
 
@@ -104,6 +106,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 9, 3, 13, 0, 0));
   window.localStorage.clear();
   forgetAffinityCache();
+  forgetNotebookCache();
 });
 
 afterEach(() => {
@@ -174,6 +177,41 @@ describe("an Avaia left idle", () => {
     expect(result.current.stance(performance.now())?.point).not.toEqual(
       out!.point,
     );
+  });
+
+  it("goes out to a named walk target the map has loaded", async () => {
+    const { renderer: base } = walkRenderer();
+    const museum = at(550, 10);
+    const near = (
+      kind: string,
+      point: MapPointSelection,
+      name?: string,
+    ): MapLandmark => ({
+      id: `${kind}:${point.longitude}`,
+      kind,
+      ...point,
+      ...(name === undefined ? {} : { name }),
+      facts: {},
+    });
+    const loaded = [
+      near("museum", museum, "City museum"),
+      // Neither an unnamed walk target nor a route landmark is somewhere to go.
+      near("viewpoint", at(250, 10)),
+      near("statue", at(300, 10), "Statue"),
+    ];
+    const landmarksNear = vi.fn((point: MapPointSelection, radius: number) =>
+      loaded.filter((landmark) => mapDistanceMeters(point, landmark) <= radius),
+    );
+    const renderer = { ...base, landmarksNear } as unknown as MapRenderer;
+    const { result } = render(renderer);
+
+    await advance(RESTLESS_MS + 1_000);
+    const out = result.current.stance(performance.now());
+    expect(out).toBeDefined();
+    expect(mapDistanceMeters(out!.point, at(550, 0))).toBeLessThan(15);
+    // Asked for the outing's whole budget, not only what is near the body.
+    const radii = landmarksNear.mock.calls.map(([, radius]) => radius);
+    expect(Math.max(...radii)).toBeGreaterThan(2_000);
   });
 
   it("still goes out after leaving the wheel mid-stand and taking it back", async () => {
