@@ -128,7 +128,7 @@ describe("determinism", () => {
       normalize: LANDMARK_MAPPING.version,
       kinds: once.map((landmark) => [landmark.name, landmark.kind]),
     }).toEqual({
-      version: "1.1",
+      version: "1.2",
       normalize: "1.0",
       kinds: [
         ["Artwork", "artwork"],
@@ -244,5 +244,45 @@ describe("areas", () => {
       ],
     );
     expect(before!.id).toBe(after!.id);
+  });
+});
+
+describe("by name, for what the archive has no kind for", () => {
+  const point = (id: string, kind: string, name: string) => ({
+    id,
+    longitude: 30.5536,
+    latitude: 50.4342,
+    kind,
+    name,
+    facts: {},
+  });
+
+  it("finds Kyiv's fortress and its towers as forts", () => {
+    const found = mapArchiveLandmarks([
+      point("poi:1", "castle", "Київська фортеця"),
+      point("poi:2", "ruins", "Башта №4, Київська фортеця"),
+      point("poi:3", "attraction", "Башта №7, Київська фортеця"),
+      point("poi:4", "castle", "Замок Річарда"),
+    ]);
+    expect(found.map(({ sourceId, matches }) => [sourceId, matches])).toEqual([
+      ["poi:1", ["castle", "fort"]],
+      ["poi:2", ["ruins", "fort"]],
+      ["poi:3", ["fort"]],
+      ["poi:4", ["castle"]],
+    ]);
+  });
+
+  it("finds statues and sculptures among memorials", () => {
+    const found = mapArchiveLandmarks([
+      point("poi:1", "memorial", "Статуя Свободи"),
+      point("poi:2", "monument", "Скульптура «Ангел»"),
+      point("poi:3", "memorial", "Меморіальна дошка"),
+      point("poi:4", "cafe", "Скульптура кави"),
+    ]);
+    expect(found.map(({ sourceId, matches }) => [sourceId, matches])).toEqual([
+      ["poi:1", ["major_monument", "artwork"]],
+      ["poi:2", ["major_monument", "artwork"]],
+      ["poi:3", ["major_monument"]],
+    ]);
   });
 });

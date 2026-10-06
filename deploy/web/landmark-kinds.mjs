@@ -196,13 +196,19 @@ export function compareKinds(kinds, landmarkKinds, required = []) {
 
 // The kinds the mapper reads: the keys of its rows, and the kinds that only
 // support significance.
+// Kinds and areas marked optional are read when an archive carries them and
+// are not required of it.
 export function mapperKinds(mapper) {
-  return [...Object.keys(mapper.rows), ...mapper.significance];
+  const optional = new Set(mapper.optional?.kinds ?? []);
+  return [...Object.keys(mapper.rows), ...mapper.significance].filter(
+    (kind) => !optional.has(kind),
+  );
 }
 
 // The areas the mapper reads, as `layer:kind` or `layer:kind:kind_detail`.
 export function mapperAreaKeys(mapper) {
-  return Object.keys(mapper.areas ?? {});
+  const optional = new Set(mapper.optional?.areas ?? []);
+  return Object.keys(mapper.areas ?? {}).filter((key) => !optional.has(key));
 }
 
 const POINT = 1;

@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "rows": {
     "monument": ["major_monument"],
     "memorial": ["major_monument"],
@@ -14,6 +14,25 @@
     "viewpoint": ["viewpoint"]
   },
   "significance": ["attraction", "landmark"],
+  "optional": {
+    "why": "Read when an archive carries them; Kyiv's does not (sculpture, statue, fort, landmark as kinds; lakes come as water:water:lake). The name rules below find Kyiv's statues and forts instead.",
+    "kinds": ["sculpture", "statue", "fort", "landmark"],
+    "areas": ["water:lake"]
+  },
+  "names": [
+    {
+      "why": "Statues and sculptures: the archive folds them into memorial, monument and attraction points.",
+      "kinds": ["memorial", "monument", "attraction"],
+      "pattern": "статуя|скульптур|statue|sculpture",
+      "rows": ["artwork"]
+    },
+    {
+      "why": "Forts: the archive carries no fort kind; Kyiv's fortress is a castle, its towers ruins and attractions.",
+      "kinds": ["castle", "ruins", "attraction", "historic"],
+      "pattern": "фортец|бастіон|редут|fortress|bastion|redoubt",
+      "rows": ["fort"]
+    }
+  ],
   "areas": {
     "landuse:park": ["park"],
     "landuse:nature_reserve": ["nature_reserve"],

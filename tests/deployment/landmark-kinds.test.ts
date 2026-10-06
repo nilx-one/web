@@ -21,6 +21,7 @@ import {
 import AREA_KINDS from "../../packages/map-maplibre/src/landmark-area-kinds.json";
 import MAPPER_KINDS from "../../packages/product-app/src/features/map/landmark-mapper-kinds.json";
 import {
+  NAME_ROWS,
   POI_KIND_ROWS,
   POI_SIGNIFICANCE_KINDS,
 } from "../../packages/product-app/src/features/map/landmark-mapper";
@@ -259,7 +260,11 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
     return layers;
   };
 
-  /** An archive whose full-detail tile carries every kind the mapper reads. */
+  /**
+   * An archive whose full-detail tile carries every kind the mapper requires:
+   * the optional ones (sculpture, statue, fort, landmark, water:lake) are
+   * not in it, as they are not in Kyiv's, and it passes.
+   */
   const mapperArchive = (except?: string, zoomOne = "cafe") =>
     archive(
       [
@@ -355,7 +360,7 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
   });
 
   it("fails an archive that lacks one kind the mapper reads", () => {
-    for (const kind of ["museum", "landmark"]) {
+    for (const kind of ["museum", "attraction"]) {
       const { status, stdout, stderr } = run(write(mapperArchive(kind)));
 
       expect(status, kind).toBe(1);
@@ -391,10 +396,27 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
 });
 
 describe("the Avaia's landmark mapper", () => {
-  it("reads exactly the kinds the archive check requires", () => {
+  it("reads exactly the kinds the archive check requires, and the optional ones", () => {
+    const optional = MAPPER_KINDS.optional.kinds;
     expect(
-      [...Object.keys(POI_KIND_ROWS), ...POI_SIGNIFICANCE_KINDS].sort(),
+      [...Object.keys(POI_KIND_ROWS), ...POI_SIGNIFICANCE_KINDS]
+        .filter((kind) => !optional.includes(kind))
+        .sort(),
     ).toEqual([...REQUIRED].sort());
+    for (const kind of optional) {
+      expect(
+        Object.hasOwn(POI_KIND_ROWS, kind) || POI_SIGNIFICANCE_KINDS.has(kind),
+        kind,
+      ).toBe(true);
+    }
+  });
+
+  // A name rule reads points the renderer hands over, like any row.
+  it("names only kinds in LANDMARK_KINDS in its name rules", () => {
+    const known = new Set(KINDS);
+    for (const rule of NAME_ROWS) {
+      for (const kind of rule.kinds) expect(known.has(kind), kind).toBe(true);
+    }
   });
 
   // The renderer only hands over points whose kind is in LANDMARK_KINDS, so a
