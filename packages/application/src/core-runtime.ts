@@ -59,6 +59,22 @@ export interface CoreCraftedItem {
   readonly size: CoreSize | null;
 }
 
+/** A repair or a craft, as Core's catalog lists it. */
+export interface CoreRecipe {
+  readonly id: string;
+  readonly consumes: readonly { readonly id: string; readonly count: number }[];
+  /** Needed, and kept. */
+  readonly tools: readonly string[];
+  readonly seeds: number;
+  readonly makes: string;
+  /** What finishing it pays the Bond. */
+  readonly experience: number;
+  readonly place: "anywhere" | "repair_workshop";
+  readonly minutes: number;
+  /** A week, or at once for real money. */
+  readonly legendary: boolean;
+}
+
 /** What things are carried in, and its grid. */
 export interface CoreCarry extends CoreSize {
   readonly id: "pocket" | "backpack" | "bag";
@@ -75,6 +91,7 @@ export interface CoreEconomyCatalog {
   readonly currency: { readonly code: string; readonly emblem: string };
   readonly found: readonly CoreFoundItem[];
   readonly crafted: readonly CoreCraftedItem[];
+  readonly recipes: readonly CoreRecipe[];
   readonly carries: readonly CoreCarry[];
 }
 

@@ -27,7 +27,7 @@ import {
   subscribeProgression,
   updateProgression,
 } from "./progression";
-import { awardAmount, type AwardRecord } from "./commitment";
+import { awardAmount, craftRecipeOf, type AwardRecord } from "./commitment";
 
 export type CommittedWorldEvent =
   | {
@@ -60,6 +60,9 @@ function toWire(award: PendingCommittedAward): CommittedAward {
     ...(tier === undefined ? {} : { tier }),
     ...(tier !== undefined && isClaimed(tier)
       ? { artifactId: record.subject }
+      : {}),
+    ...(record.kind === "craft_finished"
+      ? { recipe: craftRecipeOf(record.subject) }
       : {}),
   };
 }

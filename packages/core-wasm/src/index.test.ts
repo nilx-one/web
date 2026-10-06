@@ -176,6 +176,19 @@ describe("CoreWasmClient", () => {
       crafted: [
         { id: "album", sell_price: "350", size: { width: 1, height: 1 } },
       ],
+      recipes: [
+        {
+          id: "craft_album",
+          consumes: [{ id: "scratched_cd", count: 3 }],
+          tools: ["cd_player"],
+          seeds: "0",
+          makes: "album",
+          experience: 75,
+          place: "anywhere",
+          minutes: 45,
+          legendary: false,
+        },
+      ],
       carries: [{ id: "pocket", width: 5, height: 1 }],
     };
     const bindings = await loadGeneratedCoreWasmBindings({
@@ -198,6 +211,19 @@ describe("CoreWasmClient", () => {
         },
       ],
       crafted: [{ id: "album", sellPrice: 350, size: { width: 1, height: 1 } }],
+      recipes: [
+        {
+          id: "craft_album",
+          consumes: [{ id: "scratched_cd", count: 3 }],
+          tools: ["cd_player"],
+          seeds: 0,
+          makes: "album",
+          experience: 75,
+          place: "anywhere",
+          minutes: 45,
+          legendary: false,
+        },
+      ],
       carries: [{ id: "pocket", width: 5, height: 1 }],
     });
 

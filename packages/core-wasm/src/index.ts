@@ -9,6 +9,7 @@ import type {
   CoreFoundItem,
   CoreInventoryAnswer,
   CoreInventoryCommand,
+  CoreRecipe,
   CoreSize,
   CorePubDressLabelErrorCode,
   CorePubDressLabelResult,
@@ -160,6 +161,43 @@ function decodeCrafted(value: unknown): CoreCraftedItem {
   throw new Error("0x1 Core returned an invalid crafted item");
 }
 
+function isCode(value: unknown): value is string {
+  return typeof value === "string" && CORE_CODE.test(value);
+}
+
+function decodeRecipe(value: unknown): CoreRecipe {
+  if (
+    isRecord(value) &&
+    isCode(value.id) &&
+    Array.isArray(value.consumes) &&
+    Array.isArray(value.tools) &&
+    value.tools.every(isCode) &&
+    isCode(value.makes) &&
+    isCount(value.experience) &&
+    (value.place === "anywhere" || value.place === "repair_workshop") &&
+    isCount(value.minutes) &&
+    typeof value.legendary === "boolean"
+  ) {
+    return {
+      id: value.id,
+      consumes: value.consumes.map((input: unknown) => {
+        if (isRecord(input) && isCode(input.id) && isCount(input.count)) {
+          return { id: input.id, count: input.count };
+        }
+        throw new Error("0x1 Core returned an invalid recipe input");
+      }),
+      tools: value.tools,
+      seeds: decodeAmount(value.seeds),
+      makes: value.makes,
+      experience: value.experience,
+      place: value.place,
+      minutes: value.minutes,
+      legendary: value.legendary,
+    };
+  }
+  throw new Error("0x1 Core returned an invalid recipe");
+}
+
 const CARRIES = new Set(["pocket", "backpack", "bag"]);
 
 function decodeCarry(value: unknown): CoreCarry {
@@ -227,6 +265,9 @@ function decodeEconomyCatalog(value: string): CoreEconomyCatalog {
       found: parsed.found.map(decodeFoundItem),
       crafted: Array.isArray(parsed.crafted)
         ? parsed.crafted.map(decodeCrafted)
+        : [],
+      recipes: Array.isArray(parsed.recipes)
+        ? parsed.recipes.map(decodeRecipe)
         : [],
       carries: Array.isArray(parsed.carries)
         ? parsed.carries.map(decodeCarry)
