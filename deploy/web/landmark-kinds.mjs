@@ -25,6 +25,8 @@ import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import * as zlib from "node:zlib";
 
 const POI_LAYER = "pois";
+// The layers whose polygons the mapper's areas come from.
+const AREA_LAYERS = ["landuse", "water"];
 
 // ---- protobuf ------------------------------------------------------------
 
@@ -193,6 +195,27 @@ export function mapperKinds(mapper) {
   return [...Object.keys(mapper.rows), ...mapper.significance];
 }
 
+// The areas the mapper reads, as `layer:kind` or `layer:kind:kind_detail`.
+export function mapperAreaKeys(mapper) {
+  return Object.keys(mapper.areas ?? {});
+}
+
+// Which `layer:kind` and `layer:kind:kind_detail` keys occur in the given
+// layers' features.
+export function areaKeysIn(featuresByLayer) {
+  const keys = new Set();
+  for (const [layer, features] of featuresByLayer) {
+    for (const { properties } of features) {
+      const kind = properties.kind;
+      if (typeof kind !== "string") continue;
+      keys.add(`${layer}:${kind}`);
+      const detail = properties.kind_detail;
+      if (typeof detail === "string") keys.add(`${layer}:${kind}:${detail}`);
+    }
+  }
+  return keys;
+}
+
 // ---- PMTiles v3 ----------------------------------------------------------
 
 function decompress(bytes, compression) {
@@ -326,12 +349,21 @@ async function main(argv) {
         import.meta.url,
       ),
     );
-  const required = mapperKinds(JSON.parse(await readFile(mapperFile, "utf8")));
+  const mapper = JSON.parse(await readFile(mapperFile, "utf8"));
+  const required = mapperKinds(mapper);
+  const requiredAreas = mapperAreaKeys(mapper);
 
   const lists = [];
+  const areaKeys = new Set();
   for await (const tile of maxZoomTiles(path)) {
     lists.push(decodeLayerFeatures(tile, POI_LAYER));
+    for (const key of areaKeysIn(
+      AREA_LAYERS.map((layer) => [layer, decodeLayerFeatures(tile, layer)]),
+    )) {
+      areaKeys.add(key);
+    }
   }
+  const missingAreas = requiredAreas.filter((key) => !areaKeys.has(key));
   const kinds = countKinds(lists);
   const wanted = new Set(landmarkKinds);
 
@@ -354,6 +386,7 @@ async function main(argv) {
   console.log(`LANDMARK_KINDS present: ${present.join(", ") || "none"}`);
   console.log(`LANDMARK_KINDS absent:  ${absent.join(", ") || "none"}`);
   console.log(`Avaia mapper absent:    ${missing.join(", ") || "none"}`);
+  console.log(`Avaia areas absent:     ${missingAreas.join(", ") || "none"}`);
   let status = 0;
   if (present.length === 0) {
     console.error(
@@ -364,6 +397,12 @@ async function main(argv) {
   if (missing.length > 0) {
     console.error(
       `The Avaia's landmark mapper reads kinds this archive does not carry: ${missing.join(", ")}. Disable those rows in landmark-mapper-kinds.json.`,
+    );
+    status = 1;
+  }
+  if (missingAreas.length > 0) {
+    console.error(
+      `The Avaia's landmark mapper reads areas this archive does not carry: ${missingAreas.join(", ")}. Disable those rows in landmark-mapper-kinds.json.`,
     );
     status = 1;
   }

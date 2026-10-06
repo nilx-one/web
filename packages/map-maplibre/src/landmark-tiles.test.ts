@@ -8,6 +8,8 @@ import {
   createLandmarkTileCache,
   LANDMARK_TILE_ZOOM,
   landmarkFromPoint,
+  NO_AREA_SOURCES,
+  type LandmarkTile,
 } from "./landmark-tiles";
 import { tileBounds, type TileId } from "./road-tiles";
 
@@ -60,17 +62,16 @@ describe("landmarkFromPoint", () => {
 describe("createLandmarkTileCache", () => {
   /** One museum at the middle of every tile, its id the tile's. */
   const fetchTile = () =>
-    vi.fn(async (tile: TileId): Promise<readonly MapLandmark[]> => {
+    vi.fn(async (tile: TileId): Promise<LandmarkTile> => {
       const box = tileBounds(tile);
-      return [
-        {
-          id: `poi:${tile.x}/${tile.y}`,
-          longitude: (box.west + box.east) / 2,
-          latitude: (box.south + box.north) / 2,
-          kind: "museum",
-          facts: {},
-        },
-      ];
+      const museum: MapLandmark = {
+        id: `poi:${tile.x}/${tile.y}`,
+        longitude: (box.west + box.east) / 2,
+        latitude: (box.south + box.north) / 2,
+        kind: "museum",
+        facts: {},
+      };
+      return { landmarks: [museum], areas: NO_AREA_SOURCES };
     });
 
   it("reads the archive's last zoom, where every point is", async () => {

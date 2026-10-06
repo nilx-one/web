@@ -27,4 +27,10 @@ export function mapperKinds(mapper: {
   readonly rows: Readonly<Record<string, readonly string[]>>;
   readonly significance: readonly string[];
 }): string[];
+export function mapperAreaKeys(mapper: {
+  readonly areas?: Readonly<Record<string, readonly string[]>>;
+}): string[];
+export function areaKeysIn(
+  featuresByLayer: readonly (readonly [string, readonly DecodedFeature[]])[],
+): Set<string>;
 export function zoomOfTileId(tileId: number): number;

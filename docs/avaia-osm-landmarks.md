@@ -236,9 +236,24 @@ This keeps OSM extensibility separate from the stable 0x1 landmark vocabulary.
 | `archaeological_site`, `viewpoint`  | the same name                                                            |
 | `attraction`, `landmark`            | none; a named one marks a same-named monument within 50 m as significant |
 
-These rows are **not yet confirmed against the deployed archive.** They follow the Protomaps schema `LANDMARK_KINDS` already follows, and that is all. What holds them to the archive is the inspection: `landmark-kinds.mjs` reads `landmark-mapper-kinds.json` and fails `inspect-basemap.sh` when any kind in it, the significance kinds included, does not occur in the archive's full-detail `pois` tiles. Until someone runs that against the deployed archive and records the output, this part of #306 stays open with #309 and #311, and a failing kind is disabled in the JSON rather than kept. A deployment test also fails if the mapper reads a kind outside `LANDMARK_KINDS`, which the renderer would never hand it. Parks, lakes, reserves, beaches, peaks, churches and the `micro_interest` rows stay disabled: their archive source (`landuse`/`water` polygons, or `pois` kinds nobody has listed) is not inspected yet. The mapper has its own version (`1.0`) beside the normalization's, and a golden test pins both.
+These rows are **not yet confirmed against the deployed archive.** They follow the Protomaps schema `LANDMARK_KINDS` already follows, and that is all. What holds them to the archive is the inspection: `landmark-kinds.mjs` reads `landmark-mapper-kinds.json` and fails `inspect-basemap.sh` when any kind in it, the significance kinds included, does not occur in the archive's full-detail `pois` tiles. Until someone runs that against the deployed archive and records the output, this part of #306 stays open with #309 and #311, and a failing kind is disabled in the JSON rather than kept. A deployment test also fails if the mapper reads a kind outside `LANDMARK_KINDS`, which the renderer would never hand it. Peaks, churches and the `micro_interest` rows stay disabled. The mapper has its own version (`1.1`) beside the normalization's, and a golden test pins both.
 
-The drive maps what the renderer holds within the outing's budget at the moment it plans: the view's tiles and the `pois` tiles it reads ahead at the archive's last zoom ([map data](map-data.md)). So an Avaia goes out to the museums, viewpoints, castles, forts, ruins and significant monuments within its reach, not only those on screen. A tile it did not read, because it is all fog or past the cap, has no targets for it.
+### Areas: parks, reserves, beaches, lakes
+
+An area is drawn and named in two places in the archive, and the renderer joins them (`areasNear`, `landmark-areas.ts` in `map-maplibre`). It reads only the polygon's `kind` and `kind_detail` and the label's `name`:
+
+| Area                 | Polygon                                                      | Label                                      | Joined by                                                               |
+| -------------------- | ------------------------------------------------------------ | ------------------------------------------ | ----------------------------------------------------------------------- |
+| park, reserve, beach | `landuse`, `kind` `park`, `nature_reserve` or `beach`        | the named `pois` point of the same feature | the feature id the schema gives both                                    |
+| lake                 | `water`, `kind` `lake`, or `kind` `water` with detail `lake` | the named `water` point                    | the label lies inside the polygon (the schema places it on the surface) |
+
+The mapper's `areas` rows in `landmark-mapper-kinds.json` decide which joined areas are walk targets, keyed `layer:kind` or `layer:kind:kind_detail`: `landuse:park`, `landuse:nature_reserve`, `landuse:beach`, `water:lake`, `water:water:lake`. A park still needs a name and a hectare; anchors follow the table below, inside a park or reserve and on the shore of a lake or beach.
+
+A large area arrives in pieces, one per tile. A park's pieces share its id and come together whole. A lake's pieces have no id: the ones that overlap the piece around its label, through the tiles' buffers, come with it, and a piece in a tile not held is missing. The cut edge of a missing piece is not a shore anyone walks to, since no path runs across the water, and an anchor in the water is still refused.
+
+Like the point rows, these are **not yet confirmed against the deployed archive.** They follow the Protomaps schema, read from its source. The inspection holds them to the archive: `landmark-kinds.mjs` reads the `landuse` and `water` layers of the full-detail tiles too, and fails when any `areas` key does not occur.
+
+The drive maps what the renderer holds within the outing's budget at the moment it plans: the view's tiles and the `pois` tiles it reads ahead at the archive's last zoom ([map data](map-data.md)). So an Avaia goes out to the parks, reserves, beaches and lakes, and the museums, viewpoints, castles, forts, ruins and significant monuments within its reach, not only those on screen. A tile it did not read, because it is all fog or past the cap, has no targets for it.
 
 ## Open items
 

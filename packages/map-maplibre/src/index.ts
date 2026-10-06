@@ -57,11 +57,17 @@ import {
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Protocol } from "pmtiles";
 
+import { joinAreas } from "./landmark-areas";
 import {
+  areaLabelOf,
+  areaPartOf,
   createLandmarkTileCache,
+  LANDUSE_SOURCE_LAYER,
   landmarkFromPoint,
+  mergeAreaSources,
   pmtilesLandmarkTiles,
   POI_SOURCE_LAYER,
+  WATER_SOURCE_LAYER,
   type FetchLandmarkTile,
 } from "./landmark-tiles";
 import {
@@ -1040,6 +1046,58 @@ export function createMapLibreRenderer(
     });
   }
 
+  /** The labels and polygon parts of areas in the tiles the view has loaded. */
+  function viewAreaSources() {
+    if (map === undefined) {
+      return { poiLabels: [], landuse: [], waterLabels: [], water: [] };
+    }
+    const mounted = map;
+    const features = (layer: string) => {
+      const sourceId = mounted.getLayer(layer)?.source ?? "basemap";
+      return mounted.getSource(sourceId) === undefined
+        ? []
+        : mounted.querySourceFeatures(sourceId, { sourceLayer: layer });
+    };
+    const labels = (layer: string) =>
+      features(layer).flatMap((feature) => {
+        if (feature.geometry.type !== "Point") return [];
+        const label = areaLabelOf({
+          id: feature.id,
+          properties: feature.properties ?? {},
+          point: (
+            feature.geometry as unknown as { coordinates: [number, number] }
+          ).coordinates,
+        });
+        return label === undefined ? [] : [label];
+      });
+    const parts = (layer: string) =>
+      features(layer).flatMap((feature) => {
+        const geometry = feature.geometry as {
+          readonly type: string;
+          readonly coordinates: unknown;
+        };
+        const polygons =
+          geometry.type === "Polygon"
+            ? [geometry.coordinates as [number, number][][]]
+            : geometry.type === "MultiPolygon"
+              ? (geometry.coordinates as [number, number][][][])
+              : [];
+        if (polygons.length === 0) return [];
+        const part = areaPartOf({
+          id: feature.id,
+          properties: feature.properties ?? {},
+          polygons,
+        });
+        return part === undefined ? [] : [part];
+      });
+    return {
+      poiLabels: labels(POI_SOURCE_LAYER),
+      landuse: parts(LANDUSE_SOURCE_LAYER),
+      waterLabels: labels(WATER_SOURCE_LAYER),
+      water: parts(WATER_SOURCE_LAYER),
+    };
+  }
+
   function releaseLabel(): void {
     labelMarker?.remove();
     labelMarker = undefined;
@@ -1267,6 +1325,25 @@ export function createMapLibreRenderer(
       return [...found.values()]
         .sort((a, b) => a.distance - b.distance)
         .map((entry) => entry.landmark);
+    },
+
+    areasNear(point, radiusMeters) {
+      if (!validPoint(point)) return [];
+      const fromView = viewAreaSources();
+      const areas = joinAreas(
+        mergeAreaSources([
+          landmarkTiles.areaSourcesNear(point, radiusMeters),
+          fromView,
+        ]),
+      );
+      return areas
+        .map((area) => ({
+          area,
+          distance: mapDistanceMeters(point, area.label),
+        }))
+        .filter(({ distance }) => distance <= radiusMeters)
+        .sort((a, b) => a.distance - b.distance)
+        .map(({ area }) => area);
     },
 
     obstaclesWithin(bounds) {

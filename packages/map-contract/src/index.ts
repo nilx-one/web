@@ -270,6 +270,29 @@ export interface MapLandmark {
 }
 
 /**
+ * A named area the basemap carries: a park, a reserve, a beach, a lake — the
+ * archive's label for it and the polygons it draws. `layer`, `kind` and
+ * `kindDetail` are the polygon's own attributes, read verbatim; the
+ * application decides what, if anything, such an area is. Each polygon is
+ * its rings in `[longitude, latitude]` order, outer ring first. A large area
+ * arrives as the pieces of it the loaded tiles hold, clipped at each tile.
+ */
+export interface MapArea {
+  /** Stable for the same feature across tiles and sessions. */
+  readonly id: string;
+  readonly layer: "landuse" | "water";
+  readonly kind: string;
+  readonly kindDetail?: string;
+  readonly name: string;
+  /** Where the archive puts the label: always inside the area. */
+  readonly label: MapPointSelection;
+  readonly polygons: readonly (readonly (readonly (readonly [
+    number,
+    number,
+  ])[])[])[];
+}
+
+/**
  * What a pinned landmark is, as far as its colour goes: something built, a
  * place of worship, a square people gather on, or ground that is green.
  */
@@ -482,6 +505,14 @@ export interface MapRenderer {
     point: MapPointSelection,
     radiusMeters: number,
   ): readonly MapLandmark[];
+  /**
+   * The named areas whose label lies within a radius of a point, nearest
+   * first, from the same tiles `landmarksNear` reads and nothing else.
+   */
+  areasNear?(
+    point: MapPointSelection,
+    radiusMeters: number,
+  ): readonly MapArea[];
   /**
    * Notifies when what `landmarksNear` can answer may have changed: the map
    * has settled after loading what the current view needs. A position known

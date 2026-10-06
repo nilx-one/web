@@ -926,10 +926,13 @@ describe("landmarks the basemap draws", () => {
       name: "Museum",
       facts: {},
     };
-    const fetchLandmarkTile = vi.fn(async () => [
-      museum,
-      { ...museum, id: "poi:9", longitude: 30.53, name: "Farther" },
-    ]);
+    const fetchLandmarkTile = vi.fn(async () => ({
+      landmarks: [
+        museum,
+        { ...museum, id: "poi:9", longitude: 30.53, name: "Farther" },
+      ],
+      areas: { poiLabels: [], landuse: [], waterLabels: [], water: [] },
+    }));
     const fakeMap = makeFakeMap();
     Object.assign(fakeMap, {
       // The view has the same museum loaded: one archive id, one landmark.

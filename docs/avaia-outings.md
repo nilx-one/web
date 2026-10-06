@@ -108,12 +108,12 @@ The renderer answers `roadsWithin(bounds)` from tiles already loaded, and `planW
 
 Targets are **what is on the map**: parks, lakes, churches, monuments. Finds from §3 are not targets.
 
-| Kind                              | Source                                 | Missing today                          |
-| --------------------------------- | -------------------------------------- | -------------------------------------- |
-| monument, memorial, museum, ruins | `pois`, `LANDMARK_KINDS`               | already there                          |
-| church, place of worship          | `pois` (check the kind in the archive) | not in `LANDMARK_KINDS`                |
-| park, garden                      | `pois` or `landuse` (to check)         | missing                                |
-| lake, pond, embankment            | `water` (polygon)                      | missing; landmarks are only pois today |
+| Kind                              | Source                                 | Missing today                         |
+| --------------------------------- | -------------------------------------- | ------------------------------------- |
+| monument, memorial, museum, ruins | `pois`, `LANDMARK_KINDS`               | already there                         |
+| church, place of worship          | `pois` (check the kind in the archive) | not in `LANDMARK_KINDS`               |
+| park, garden                      | `landuse` polygon + `pois` label       | parks and reserves built; gardens not |
+| lake, pond, embankment            | `water` polygon + `water` label        | lakes built; embankments not          |
 
 ### 1.1 More OSM landmarks
 
@@ -309,7 +309,7 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
 - **Wandering:** a graph node 150–400 m away along the paths, over open ground. It is picked deterministically per outing window.
 - **Home** is, for now, the device's last observed position. The cell with the longest visits from the journal comes separately.
 - **Lines:** for an outing the Avaia uses the existing `walk` line. There are no "I'll go for a walk" lines yet, because they need to be recorded.
-- The mapper (#306) supplies candidates from the landmarks the map has loaded: museums, viewpoints, castles, forts, ruins, archaeological sites and significant monuments. Those rows wait on the archive inspection, and parks and lakes on their archive source ([Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md#implemented)).
+- The mapper (#306) supplies candidates from the landmarks the map has loaded: museums, viewpoints, castles, forts, ruins, archaeological sites and significant monuments. It supplies parks, reserves, beaches and lakes as areas too, from the `landuse` and `water` polygons and their labels. All of these rows wait on the archive inspection ([Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md#implemented)).
 
 ## §3 Finds
 
@@ -512,12 +512,12 @@ Both are bounded:
 
 ## Open decisions
 
-| №   | Question                                                           | My option                                                                                                                      |
-| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| R1  | where the Avaia may walk: open ground only (fog) or the whole city | **decided:** open ground only. The person opens cells bordering open ground by tapping. See "R1: open ground only"             |
-| R2  | who earns a find's experience: the Avaia or the Bond               | **decided:** whoever saw it gets 10, whoever picked it up gets the tier's experience. See §3.4                                 |
-| R3  | what the server holds: a claim registry, experience, or nothing    | **decided:** experience with a commitment, and a claim on tiers 4–6. See "R3: experience on the server, history on the device" |
-| R4  | sources for parks, lakes, churches                                 | extend `LANDMARK_KINDS` for pois, read `landuse`/`water` separately. Checked against the archive                               |
+| №   | Question                                                           | My option                                                                                                                                              |
+| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R1  | where the Avaia may walk: open ground only (fog) or the whole city | **decided:** open ground only. The person opens cells bordering open ground by tapping. See "R1: open ground only"                                     |
+| R2  | who earns a find's experience: the Avaia or the Bond               | **decided:** whoever saw it gets 10, whoever picked it up gets the tier's experience. See §3.4                                                         |
+| R3  | what the server holds: a claim registry, experience, or nothing    | **decided:** experience with a commitment, and a claim on tiers 4–6. See "R3: experience on the server, history on the device"                         |
+| R4  | sources for parks, lakes, churches                                 | **decided for parks and lakes:** `landuse`/`water` polygons named by their `pois`/`water` labels, held to the archive by the inspection. Churches open |
 
 ## Order of work
 

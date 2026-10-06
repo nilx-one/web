@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "rows": {
     "monument": ["major_monument"],
     "memorial": ["major_monument"],
@@ -13,5 +13,12 @@
     "archaeological_site": ["archaeological_site"],
     "viewpoint": ["viewpoint"]
   },
-  "significance": ["attraction", "landmark"]
+  "significance": ["attraction", "landmark"],
+  "areas": {
+    "landuse:park": ["park"],
+    "landuse:nature_reserve": ["nature_reserve"],
+    "landuse:beach": ["beach"],
+    "water:lake": ["lake"],
+    "water:water:lake": ["lake"]
+  }
 }

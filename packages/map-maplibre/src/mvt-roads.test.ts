@@ -3,7 +3,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { decodeTilePoints, decodeTileRoads } from "./mvt-roads";
+import {
+  decodeTilePoints,
+  decodeTilePolygons,
+  decodeTileRoads,
+} from "./mvt-roads";
 import { tileBounds } from "./road-tiles";
 
 // A minimal Mapbox Vector Tile writer: just enough protobuf to build fixtures.
@@ -268,5 +272,64 @@ describe("decodeTilePoints", () => {
 
   it("answers nothing for a layer the tile does not carry", () => {
     expect(decodeTilePoints(tile, TILE, "water")).toEqual([]);
+  });
+});
+
+describe("decodeTilePolygons", () => {
+  const POLYGON = 3;
+  // Clockwise in tile coordinates (y down) is an outer ring; the other way a hole.
+  const outer: [number, number][] = [
+    [0, 0],
+    [2048, 0],
+    [2048, 2048],
+    [0, 2048],
+  ];
+  const hole: [number, number][] = [
+    [512, 512],
+    [512, 1024],
+    [1024, 1024],
+    [1024, 512],
+  ];
+  const second: [number, number][] = [
+    [3000, 3000],
+    [4000, 3000],
+    [4000, 4000],
+    [3000, 4000],
+  ];
+  const tile = encodeTile({
+    landuse: [
+      {
+        id: 7,
+        type: POLYGON,
+        properties: { kind: "park" },
+        lines: [outer, hole, second],
+      },
+      {
+        type: 2,
+        properties: { kind: "park" },
+        lines: [
+          [
+            [0, 0],
+            [9, 9],
+          ],
+        ],
+      },
+    ],
+  });
+
+  it("reads outer rings with their holes, closed, and the feature id", () => {
+    const [park, ...rest] = decodeTilePolygons(tile, TILE, "landuse");
+    expect(rest).toEqual([]);
+    expect(park!.id).toBe(7);
+    expect(park!.properties).toEqual({ kind: "park" });
+    expect(park!.polygons.map((rings) => rings.length)).toEqual([2, 1]);
+    for (const rings of park!.polygons) {
+      for (const ring of rings) {
+        expect(ring[0]).toEqual(ring[ring.length - 1]);
+      }
+    }
+    const box = tileBounds(TILE);
+    expect(park!.polygons[0]![0]![0]![0]).toBeCloseTo(box.west, 9);
+    expect(park!.polygons[0]![0]![0]![1]).toBeCloseTo(box.north, 9);
   });
 });

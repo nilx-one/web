@@ -13,6 +13,8 @@ import {
   compareKinds,
   countKinds,
   decodeLayerFeatures,
+  areaKeysIn,
+  mapperAreaKeys,
   mapperKinds,
   zoomOfTileId,
 } from "../../deploy/web/landmark-kinds.mjs";
@@ -31,6 +33,7 @@ const KINDS = JSON.parse(
 ) as string[];
 
 const REQUIRED = mapperKinds(MAPPER_KINDS);
+const AREA_KEYS = mapperAreaKeys(MAPPER_KINDS);
 
 // A minimal protobuf writer: enough to author a vector tile and a PMTiles
 // directory by hand, so the check is exercised against real encodings.
@@ -214,6 +217,25 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
   });
 
   /** An archive whose full-detail tile carries every kind the mapper reads. */
+  /** One feature per area key: `layer:kind` or `layer:kind:kind_detail`. */
+  const areaLayers = (except?: string) => {
+    const layers: Record<string, { properties: Record<string, string> }[]> = {
+      landuse: [],
+      water: [],
+    };
+    for (const key of AREA_KEYS) {
+      if (key === except) continue;
+      const [layer, kind, detail] = key.split(":") as [string, string, string?];
+      layers[layer]!.push({
+        properties: {
+          kind,
+          ...(detail === undefined ? {} : { kind_detail: detail }),
+        },
+      });
+    }
+    return layers;
+  };
+
   const mapperArchive = (except?: string, zoomOne = "cafe") =>
     archive(
       [
@@ -233,6 +255,7 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
               ),
               { id: 1_000, properties: { kind: "cafe" } },
             ],
+            ...areaLayers(except),
           }),
         },
       ],
@@ -244,6 +267,32 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
 
     expect(status).toBe(0);
     expect(stdout).toContain("Avaia mapper absent:    none");
+    expect(stdout).toContain("Avaia areas absent:     none");
+  });
+
+  it("fails an archive that lacks one area the mapper reads", () => {
+    for (const key of ["landuse:park", "water:water:lake"]) {
+      const { status, stdout, stderr } = run(write(mapperArchive(key)));
+
+      expect(status, key).toBe(1);
+      expect(stdout).toContain(`Avaia areas absent:     ${key}`);
+      expect(stderr).toContain(key);
+    }
+  });
+
+  it("tells an area key from the kinds that are present", () => {
+    const keys = areaKeysIn([
+      ["landuse", [{ id: 1, properties: { kind: "park" } }]],
+      [
+        "water",
+        [{ id: undefined, properties: { kind: "water", kind_detail: "lake" } }],
+      ],
+    ]);
+    expect([...keys].sort()).toEqual([
+      "landuse:park",
+      "water:water",
+      "water:water:lake",
+    ]);
   });
 
   it("fails an archive that lacks one kind the mapper reads", () => {

@@ -70,7 +70,7 @@ echo "Landmark kinds:"
 # values they take, so the tiles themselves are read here. A stock node image
 # is enough: the check uses only Node built-ins. It fails the inspection when
 # none of LANDMARK_KINDS occur, which is the silent failure it exists to catch,
-# and when any kind the Avaia's landmark mapper reads is absent.
+# and when any kind or area the Avaia's landmark mapper reads is absent.
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 kinds_file="$script_dir/../../packages/map-maplibre/src/landmark-kinds.json"
 mapper_file="$script_dir/../../packages/product-app/src/features/map/landmark-mapper-kinds.json"
