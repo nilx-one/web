@@ -47,7 +47,7 @@ case "$url" in
     printf '%s' "${MOCK_STYLE_STATUS:-200}"
     ;;
   https://nilx.one/map/0.1.0/style-dark.json)
-    printf '%s\n' '{"sources":{"basemap":{"url":"pmtiles:///map/0.1.0/basemap.pmtiles"}}}' >"$output_file"
+    printf '%s\n' '{"sources":{"basemap":{"url":"pmtiles:///map/0.1.0/basemap.pmtiles"},"terrain":{"tiles":["/map/0.1.0/terrain/{z}/{x}/{y}.png"]}}}' >"$output_file"
     printf '%s' "${MOCK_DARK_STYLE_STATUS:-200}"
     ;;
   https://nilx.one/map/0.1.0/basemap.pmtiles)
