@@ -47,7 +47,7 @@ stdin="$work/docker.stdin"
 PATH="$work/bin:$PATH" \
 MOCK_DOCKER_LOG="$log" \
 MOCK_DOCKER_STDIN="$stdin" \
-  "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider"
+  bash "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider"
 
 grep -Fxq 'NILXONE_MAP_DATA_READY=1' "$runtime"
 grep -Fq 'volume create nilxone-web-map-data' "$log"
@@ -61,7 +61,7 @@ PATH="$work/bin:$PATH" \
 MOCK_VOLUME_EXISTS=true \
 MOCK_DOCKER_LOG="$log" \
 MOCK_DOCKER_STDIN="$stdin" \
-  "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider"
+  bash "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider"
 if grep -Fq 'volume create' "$log"; then
   echo "existing map-data volume was recreated" >&2
   exit 1
@@ -73,7 +73,7 @@ if PATH="$work/bin:$PATH" \
   MOCK_DOCKER_RUN_STATUS=7 \
   MOCK_DOCKER_LOG="$log" \
   MOCK_DOCKER_STDIN="$stdin" \
-  "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider" >/dev/null 2>&1; then
+  bash "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider" >/dev/null 2>&1; then
   echo "terrain bootstrap unexpectedly accepted a failed downloader" >&2
   exit 1
 fi
@@ -83,7 +83,7 @@ if PATH="$work/bin:$PATH" \
   MAP_DATA_VOLUME='bad/volume' \
   MOCK_DOCKER_LOG="$log" \
   MOCK_DOCKER_STDIN="$stdin" \
-  "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider" >/dev/null 2>&1; then
+  bash "$script_dir/prepare-map-runtime.sh" "$runtime" "$provider" >/dev/null 2>&1; then
   echo "terrain bootstrap unexpectedly accepted an invalid volume name" >&2
   exit 1
 fi
