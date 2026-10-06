@@ -7,6 +7,15 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# Parse the embedded downloader as the same CommonJS program `node -` runs.
+# This catches syntax errors without contacting the terrain provider.
+awk '
+  /<<'"'"'NODE'"'"'$/ { capture = 1; next }
+  capture && $0 == "NODE" { exit }
+  capture { print }
+' "$script_dir/prepare-map-runtime.sh" >"$work/terrain-bootstrap.cjs"
+node --check "$work/terrain-bootstrap.cjs"
+
 mkdir -p "$work/bin"
 cat >"$work/bin/docker" <<'MOCK'
 #!/usr/bin/env sh
