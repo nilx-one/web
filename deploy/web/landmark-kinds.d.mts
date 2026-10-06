@@ -21,5 +21,10 @@ export function countKinds(
 export function compareKinds(
   kinds: ReadonlyMap<string, KindSummary>,
   landmarkKinds: readonly string[],
-): { present: string[]; absent: string[]; ok: boolean };
+  required?: readonly string[],
+): { present: string[]; absent: string[]; missing: string[]; ok: boolean };
+export function mapperKinds(mapper: {
+  readonly rows: Readonly<Record<string, readonly string[]>>;
+  readonly significance: readonly string[];
+}): string[];
 export function zoomOfTileId(tileId: number): number;

@@ -5,6 +5,7 @@ import type { MapLandmark } from "@nilx-one/map-contract";
 import { distanceM, type LonLat } from "@nilx-one/walk-graph";
 
 import {
+  LANDMARK_GROUPS,
   LANDMARK_MAPPING,
   normalizeLandmarks,
   normalizeName,
@@ -12,6 +13,7 @@ import {
   type NormalizedLandmark,
   type SourceCandidate,
 } from "./landmark-normalize";
+import MAPPER_KINDS from "./landmark-mapper-kinds.json";
 
 /**
  * From archive features to mapped candidates (docs/avaia-osm-landmarks.md,
@@ -20,52 +22,38 @@ import {
  * The mapper reads what the archive carries and says which rows of the mapping
  * table each object matched. It reads no raw OSM tag: only the archive's own
  * `pois` `kind` and `name`, the fields the renderer already reads for noticing
- * and studying, and that `deploy/web/landmark-kinds.mjs` checks against the
- * deployed archive. Deciding what an object is stays with `normalizeLandmarks`.
+ * and studying. Deciding what an object is stays with `normalizeLandmarks`.
  *
- * Only rows whose archive source is confirmed are enabled. Parks, lakes,
+ * Which `pois` kinds it reads is `landmark-mapper-kinds.json`, and nowhere
+ * else: `deploy/web/landmark-kinds.mjs` reads the same file and fails the
+ * archive inspection when any of those kinds is absent. Parks, lakes,
  * reserves, beaches and peaks come from `landuse`/`water` polygons or `pois`
- * kinds nobody has inspected yet; until the archive inspection says which
- * field carries them, they are not read, rather than read from a guess.
+ * kinds nobody has inspected yet; until the inspection says which field
+ * carries them, they are not read, rather than read from a guess.
  */
 
 /**
- * The `pois` kinds this mapping reads, and the rows each matches. Every key is
- * in the renderer's `LANDMARK_KINDS`, so the deploy check already fails when
- * the archive stops carrying all of them. A monument matches the major row;
- * the significance rule makes it small when it is not.
+ * The `pois` kinds this mapping reads, and the rows each matches. A monument
+ * matches the major row; the significance rule makes it small when it is not.
  */
 export const POI_KIND_ROWS: Readonly<Record<string, readonly LandmarkKind[]>> =
-  {
-    monument: ["major_monument"],
-    memorial: ["major_monument"],
-    artwork: ["artwork"],
-    sculpture: ["artwork"],
-    statue: ["artwork"],
-    museum: ["museum"],
-    castle: ["castle"],
-    fort: ["fort"],
-    ruins: ["ruins"],
-    archaeological_site: ["archaeological_site"],
-    viewpoint: ["viewpoint"],
-  };
+  checkedRows(MAPPER_KINDS.rows);
 
 /**
  * `pois` kinds that are no landmark on their own, but say the named thing at
  * the same place is significant (the compatibility table: `attraction`,
  * `landmark`). `historic` alone resolves nothing and is not read.
  */
-export const POI_SIGNIFICANCE_KINDS: ReadonlySet<string> = new Set([
-  "attraction",
-  "landmark",
-]);
+export const POI_SIGNIFICANCE_KINDS: ReadonlySet<string> = new Set(
+  MAPPER_KINDS.significance,
+);
 
 /**
  * The mapper's version: which kinds it reads and how. Changing a row or a
  * supporting kind changes which landmarks come out, so it raises this in the
  * same commit, beside `LANDMARK_MAPPING.version`.
  */
-export const LANDMARK_MAPPER_VERSION = "1.0";
+export const LANDMARK_MAPPER_VERSION: string = MAPPER_KINDS.version;
 
 /**
  * The archive's landmark points as mapped candidates. Pure and deterministic:
@@ -122,4 +110,19 @@ export function landmarksFromArchive(
 
 function pointOf(feature: MapLandmark): LonLat {
   return [feature.longitude, feature.latitude];
+}
+
+/** The JSON's rows, refused at load when one names no landmark kind. */
+function checkedRows(
+  rows: Readonly<Record<string, readonly string[]>>,
+): Readonly<Record<string, readonly LandmarkKind[]>> {
+  const known = new Set<string>(Object.values(LANDMARK_GROUPS).flat());
+  for (const [kind, matches] of Object.entries(rows)) {
+    for (const match of matches) {
+      if (!known.has(match)) {
+        throw new RangeError(`${kind} maps to no landmark kind: ${match}`);
+      }
+    }
+  }
+  return rows as Readonly<Record<string, readonly LandmarkKind[]>>;
 }

@@ -13,8 +13,10 @@ import {
   compareKinds,
   countKinds,
   decodeLayerFeatures,
+  mapperKinds,
   zoomOfTileId,
 } from "../../deploy/web/landmark-kinds.mjs";
+import MAPPER_KINDS from "../../packages/product-app/src/features/map/landmark-mapper-kinds.json";
 import {
   POI_KIND_ROWS,
   POI_SIGNIFICANCE_KINDS,
@@ -27,6 +29,8 @@ const KINDS = JSON.parse(
     "utf8",
   ),
 ) as string[];
+
+const REQUIRED = mapperKinds(MAPPER_KINDS);
 
 // A minimal protobuf writer: enough to author a vector tile and a PMTiles
 // directory by hand, so the check is exercised against real encodings.
@@ -139,7 +143,11 @@ function write(bytes: Buffer): string {
   return path;
 }
 
-function run(path: string): { status: number; stdout: string } {
+function run(path: string): {
+  status: number;
+  stdout: string;
+  stderr: string;
+} {
   try {
     return {
       status: 0,
@@ -147,10 +155,15 @@ function run(path: string): { status: number; stdout: string } {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       }),
+      stderr: "",
     };
   } catch (error) {
-    const failed = error as { status: number; stdout: string };
-    return { status: failed.status, stdout: failed.stdout };
+    const failed = error as { status: number; stdout: string; stderr: string };
+    return {
+      status: failed.status,
+      stdout: failed.stdout,
+      stderr: failed.stderr,
+    };
   }
 }
 
@@ -181,7 +194,15 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
     expect(compareKinds(kinds, ["memorial", "statue"])).toEqual({
       present: ["memorial"],
       absent: ["statue"],
+      missing: [],
       ok: true,
+    });
+    // A kind the mapper requires has to occur, whatever else does.
+    expect(compareKinds(kinds, ["memorial"], ["memorial", "museum"])).toEqual({
+      present: ["memorial"],
+      absent: [],
+      missing: ["museum"],
+      ok: false,
     });
   });
 
@@ -192,37 +213,56 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
     expect(zoomOfTileId(FIRST_Z2_TILE)).toBe(2);
   });
 
-  it("passes an archive that carries a landmark kind, reading only max zoom", () => {
-    const path = write(
-      archive(
-        [
-          {
-            tileId: 1,
-            bytes: tile({ pois: [{ properties: { kind: "castle" } }] }),
-          },
-          {
-            tileId: FIRST_Z2_TILE,
-            bytes: tile({
-              pois: [
-                {
-                  id: 1,
-                  properties: { kind: KINDS[0] ?? "monument", name: "A" },
-                },
-                { id: 2, properties: { kind: "cafe" } },
-              ],
-            }),
-          },
-        ],
-        2,
-      ),
+  /** An archive whose full-detail tile carries every kind the mapper reads. */
+  const mapperArchive = (except?: string, zoomOne = "cafe") =>
+    archive(
+      [
+        {
+          tileId: 1,
+          bytes: tile({ pois: [{ properties: { kind: zoomOne } }] }),
+        },
+        {
+          tileId: FIRST_Z2_TILE,
+          bytes: tile({
+            pois: [
+              ...REQUIRED.filter((kind) => kind !== except).map(
+                (kind, index) => ({
+                  id: index + 1,
+                  properties: { kind, name: kind },
+                }),
+              ),
+              { id: 1_000, properties: { kind: "cafe" } },
+            ],
+          }),
+        },
+      ],
+      2,
     );
 
-    const { status, stdout } = run(path);
+  it("passes an archive that carries every kind the mapper reads", () => {
+    const { status, stdout } = run(write(mapperArchive()));
 
     expect(status).toBe(0);
-    expect(stdout).toContain(`LANDMARK_KINDS present: ${KINDS[0]}`);
-    // The zoom-1 tile is not the archive's full detail and is not read.
+    expect(stdout).toContain("Avaia mapper absent:    none");
+  });
+
+  it("fails an archive that lacks one kind the mapper reads", () => {
+    for (const kind of ["museum", "landmark"]) {
+      const { status, stdout, stderr } = run(write(mapperArchive(kind)));
+
+      expect(status, kind).toBe(1);
+      expect(stdout).toContain(`Avaia mapper absent:    ${kind}`);
+      expect(stderr).toContain(kind);
+    }
+  });
+
+  it("reads only the archive's max zoom", () => {
+    // castle is only on the zoom-1 tile, which is not the archive's full
+    // detail: it is not read, so the mapper's castle row is missing.
+    const { status, stdout } = run(write(mapperArchive("castle", "castle")));
+
     expect(stdout).not.toMatch(/✓ castle/);
+    expect(status).toBe(1);
   });
 
   it("fails an archive that carries none of them", () => {
@@ -243,8 +283,14 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
 });
 
 describe("the Avaia's landmark mapper", () => {
-  // The mapper may only read archive kinds this check covers: a kind outside
-  // LANDMARK_KINDS is one nobody confirmed the deployed archive carries.
+  it("reads exactly the kinds the archive check requires", () => {
+    expect(
+      [...Object.keys(POI_KIND_ROWS), ...POI_SIGNIFICANCE_KINDS].sort(),
+    ).toEqual([...REQUIRED].sort());
+  });
+
+  // The renderer only hands over points whose kind is in LANDMARK_KINDS, so a
+  // mapper kind outside it would never reach the mapper at all.
   it("reads only kinds in LANDMARK_KINDS", () => {
     const known = new Set(KINDS);
     for (const kind of [

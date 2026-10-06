@@ -155,7 +155,8 @@ walked past. It never goes looking beyond that.
 The `LANDMARK_KINDS` list (`landmark-kinds.json` in `map-maplibre`) follows the
 Protomaps basemap schema the archive is built from. `inspect-basemap.sh` checks
 it against the real archive with `landmark-kinds.mjs`, and fails when none of
-its kinds occur there (see [map data](map-data.md)).
+its kinds occur there, or when any kind the outing mapper reads does not (see
+[map data](map-data.md)).
 
 Noticing a landmark and the Avaia studying one each pay their own experience,
 priced differently on purpose. That experience is published in `pub_info` as

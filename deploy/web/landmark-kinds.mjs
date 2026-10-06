@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 //
 // Lists the `kind` values the archive's `pois` layer actually carries, and
-// checks the renderer's LANDMARK_KINDS against them. The renderer only treats
+// checks the renderer's LANDMARK_KINDS against them, and requires every kind
+// the Avaia's landmark mapper reads. The renderer only treats
 // a point as a landmark when its kind is on that list, so a kind the archive
 // never uses would make landmarks quietly disappear. This is the check that
 // catches it.
@@ -12,7 +13,8 @@
 //
 // It uses nothing but Node built-ins, so it runs on the server in a stock
 // `node` container next to inspect-basemap.sh without an install step. It
-// exits 1 when none of LANDMARK_KINDS occur in the archive.
+// exits 1 when none of LANDMARK_KINDS occur in the archive, or when any kind
+// the mapper reads (landmark-mapper-kinds.json) does not.
 
 import console from "node:console";
 import { open, readFile } from "node:fs/promises";
@@ -170,10 +172,25 @@ export function countKinds(featureLists) {
 }
 
 /** What the archive carries, against what the renderer looks for. */
-export function compareKinds(kinds, landmarkKinds) {
+// LANDMARK_KINDS passes when any of them occur: the renderer copes with a
+// kind the archive lacks. A required kind is one the Avaia's landmark mapper
+// reads, and every one of those must occur, or the mapper reads a guess.
+export function compareKinds(kinds, landmarkKinds, required = []) {
   const present = landmarkKinds.filter((kind) => kinds.has(kind));
   const absent = landmarkKinds.filter((kind) => !kinds.has(kind));
-  return { present, absent, ok: present.length > 0 };
+  const missing = required.filter((kind) => !kinds.has(kind));
+  return {
+    present,
+    absent,
+    missing,
+    ok: present.length > 0 && missing.length === 0,
+  };
+}
+
+// The kinds the mapper reads: the keys of its rows, and the kinds that only
+// support significance.
+export function mapperKinds(mapper) {
+  return [...Object.keys(mapper.rows), ...mapper.significance];
 }
 
 // ---- PMTiles v3 ----------------------------------------------------------
@@ -301,6 +318,15 @@ async function main(argv) {
       ),
     );
   const landmarkKinds = JSON.parse(await readFile(kindsFile, "utf8"));
+  const mapperFile =
+    process.env.MAPPER_KINDS_PATH ??
+    fileURLToPath(
+      new URL(
+        "../../packages/product-app/src/features/map/landmark-mapper-kinds.json",
+        import.meta.url,
+      ),
+    );
+  const required = mapperKinds(JSON.parse(await readFile(mapperFile, "utf8")));
 
   const lists = [];
   for await (const tile of maxZoomTiles(path)) {
@@ -319,17 +345,29 @@ async function main(argv) {
     );
   }
 
-  const { present, absent, ok } = compareKinds(kinds, landmarkKinds);
+  const { present, absent, missing } = compareKinds(
+    kinds,
+    landmarkKinds,
+    required,
+  );
   console.log();
   console.log(`LANDMARK_KINDS present: ${present.join(", ") || "none"}`);
   console.log(`LANDMARK_KINDS absent:  ${absent.join(", ") || "none"}`);
-  if (!ok) {
+  console.log(`Avaia mapper absent:    ${missing.join(", ") || "none"}`);
+  let status = 0;
+  if (present.length === 0) {
     console.error(
       "No LANDMARK_KINDS occur in this archive: landmarks would never be found.",
     );
-    return 1;
+    status = 1;
   }
-  return 0;
+  if (missing.length > 0) {
+    console.error(
+      `The Avaia's landmark mapper reads kinds this archive does not carry: ${missing.join(", ")}. Disable those rows in landmark-mapper-kinds.json.`,
+    );
+    status = 1;
+  }
+  return status;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

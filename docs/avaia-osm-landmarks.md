@@ -226,7 +226,7 @@ This keeps OSM extensibility separate from the stable 0x1 landmark vocabulary.
 
 `landmark-normalize.ts` in `product-app` takes the mapper's candidates (the rows each archive object matched, its name, geometry and the attributes significance reads) and applies this document: one kind per object by group and table order, the significance rules, geometry and type checks, and deduplication. The mapping table, its version (`1.0`) and the thresholds (`parkMinAreaM2` 10 000, `majorMonumentMinFootprintM2` 100, `duplicateWithinMeters` 50) are constants, and a golden test pins the output. Landmarks come out with an id derived from the kind and a point of the feature, rounded to about a metre; source ids never leave it. `outingCandidates` passes the `walk_target` group on to the outing menu.
 
-`landmark-mapper.ts` in `product-app` is the mapper (#306). It reads the landmark points the renderer already reads, `pois` features whose `kind` is in `LANDMARK_KINDS`, and only their `kind` and `name`: no raw OSM tag and no other attribute. The enabled rows are the compatibility table above, nothing more:
+`landmark-mapper.ts` in `product-app` is the mapper (#306). It reads the landmark points the renderer already reads, `pois` features whose `kind` is in `LANDMARK_KINDS`, and only their `kind` and `name`: no raw OSM tag and no other attribute. Its rows are `landmark-mapper-kinds.json`, the compatibility table above and nothing more:
 
 | Archive `pois` kind                 | Row                                                                      |
 | ----------------------------------- | ------------------------------------------------------------------------ |
@@ -236,12 +236,13 @@ This keeps OSM extensibility separate from the stable 0x1 landmark vocabulary.
 | `archaeological_site`, `viewpoint`  | the same name                                                            |
 | `attraction`, `landmark`            | none; a named one marks a same-named monument within 50 m as significant |
 
-Every kind it reads is in `LANDMARK_KINDS`, which `landmark-kinds.mjs` checks against the deployed archive, and a deployment test fails if the mapper ever reads a kind outside it. Parks, lakes, reserves, beaches, peaks, churches and the `micro_interest` rows stay disabled: their archive source (`landuse`/`water` polygons, or `pois` kinds nobody has listed) is not inspected yet. The mapper has its own version (`1.0`) beside the normalization's, and a golden test pins both.
+These rows are **not yet confirmed against the deployed archive.** They follow the Protomaps schema `LANDMARK_KINDS` already follows, and that is all. What holds them to the archive is the inspection: `landmark-kinds.mjs` reads `landmark-mapper-kinds.json` and fails `inspect-basemap.sh` when any kind in it, the significance kinds included, does not occur in the archive's full-detail `pois` tiles. Until someone runs that against the deployed archive and records the output, this part of #306 stays open with #309 and #311, and a failing kind is disabled in the JSON rather than kept. A deployment test also fails if the mapper reads a kind outside `LANDMARK_KINDS`, which the renderer would never hand it. Parks, lakes, reserves, beaches, peaks, churches and the `micro_interest` rows stay disabled: their archive source (`landuse`/`water` polygons, or `pois` kinds nobody has listed) is not inspected yet. The mapper has its own version (`1.0`) beside the normalization's, and a golden test pins both.
 
 The drive maps what the renderer has loaded within the outing's budget at the moment it plans, so an Avaia goes out to the museums, viewpoints, castles, forts, ruins and significant monuments on the map around it. A target the map has not loaded is not one it knows of.
 
 ## Open items
 
+- running `inspect-basemap.sh` against the deployed archive to confirm the mapper's rows, and recording its output (#309, #311);
 - which `landuse` kinds and `water` attributes the Kyiv archive actually carries for parks, lakes, reserves and beaches, and which further `pois` kinds it carries. Beyond the rows above nothing is enabled until `landmark-kinds.mjs` and a fixture say so (#309, #311);
 - reading landmarks ahead with the road tiles, so an outing knows targets past the loaded view;
 - whether the archive carries benches, camp sites, peaks and shrines at all; rows that it does not support are dropped rather than faked;
