@@ -230,7 +230,8 @@ export function createAvatarLayer(
     // With volumetric terrain, an unspecified altitude means "stand on the
     // ground MapLibre actually draws". An explicit altitude remains absolute
     // metres above sea level and is never silently offset by terrain.
-    const altitude = instance.handle.altitudeMeters ?? terrainAltitude(instance);
+    const altitude =
+      instance.handle.altitudeMeters ?? terrainAltitude(instance);
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
       altitude,
