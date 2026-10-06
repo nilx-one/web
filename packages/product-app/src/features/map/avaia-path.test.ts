@@ -124,34 +124,38 @@ describe("planWalk", () => {
   it("allows running only on a route whose surface supports it", () => {
     const from = at(0, 0);
     const to = at(1_500, 0);
+    const runnable = walk(
+      from,
+      to,
+      [footway([0, 0], [1_500, 0])],
+      "own",
+    );
+    const street = walk(
+      from,
+      to,
+      [road("minor_road", "residential", [0, 0], [1_500, 0])],
+      "own",
+    );
+    const steps = walk(
+      from,
+      to,
+      [road("path", "steps", [0, 0], [1_500, 0])],
+      "own",
+    );
 
-    expect(
-      walk(from, to, [footway([0, 0], [1_500, 0])], "own"),
-    ).toMatchObject({ kind: "route", maxLocomotion: "run" });
-
-    expect(
-      walk(
-        from,
-        to,
-        [road("minor_road", "residential", [0, 0], [1_500, 0])],
-        "own",
-      ),
-    ).toMatchObject({ kind: "route", maxLocomotion: "jog" });
-
-    expect(
-      walk(from, to, [road("path", "steps", [0, 0], [1_500, 0])], "own"),
-    ).toMatchObject({ kind: "route", maxLocomotion: "walk" });
+    expect(runnable).toMatchObject({ kind: "route", maxLocomotion: "run" });
+    expect(street).toMatchObject({ kind: "route", maxLocomotion: "jog" });
+    expect(steps).toMatchObject({ kind: "route", maxLocomotion: "walk" });
   });
 
   it("treats a grass connector as cross-country rather than a full run", () => {
-    expect(
-      walk(
-        at(0, 5),
-        at(1_500, 5),
-        [footway([-10, 0], [1_510, 0])],
-        "own",
-      ),
-    ).toMatchObject({ kind: "route", maxLocomotion: "jog" });
+    const route = walk(
+      at(0, 5),
+      at(1_500, 5),
+      [footway([-10, 0], [1_510, 0])],
+      "own",
+    );
+    expect(route).toMatchObject({ kind: "route", maxLocomotion: "jog" });
   });
 
   describe("a footway that loops far round", () => {
