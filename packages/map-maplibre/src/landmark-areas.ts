@@ -168,7 +168,9 @@ function waterKeysForLabel(label: AreaLabel): string[] {
       label.kind === "water" && label.kindDetail === undefined
         ? []
         : [waterKey(label.kind, label.kindDetail)];
-    return [...new Set([...exact, waterKey("lake"), waterKey("water", "lake")])];
+    return [
+      ...new Set([...exact, waterKey("lake"), waterKey("water", "lake")]),
+    ];
   }
   return [waterKey(label.kind, label.kindDetail)];
 }
