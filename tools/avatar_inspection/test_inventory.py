@@ -9,8 +9,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from inventory import inspect_glb, inventory
+from inventory import discover_glbs, inspect_glb, inventory, main
 
 
 def glb(doc):
@@ -95,6 +96,78 @@ class InventoryTests(unittest.TestCase):
                                      str(self.root), "--output", str(output)], capture_output=True)
             self.assertEqual(result.returncode, 2)
             self.assertEqual(source.read_bytes(), before)
+
+    def test_missing_position_preserves_rig_and_clips(self):
+        doc = {"asset": {"version": "2.0"}, "nodes": [{"name": "hips"}],
+               "skins": [{"joints": [0]}], "accessors": [{"count": 3}],
+               "meshes": [{"primitives": [{"attributes": {"NORMAL": 0}}]}],
+               "animations": [{"name": "idle", "channels": [{"sampler": 0, "target": {"node": 0, "path": "rotation"}}],
+                               "samplers": [{"input": 0, "output": 0}]}]}
+        result = inspect_glb(self.write(doc))
+        self.assertIsNone(result["meshes"][0]["primitives"][0]["vertex_count"])
+        self.assertEqual(result["skins"][0]["joint_names"], ["hips"])
+        self.assertEqual(result["animations"][0]["name"], "idle")
+        del doc["meshes"][0]["primitives"][0]["attributes"]
+        with self.assertRaisesRegex(ValueError, "mesh 0 primitive 0: missing required 'attributes'"):
+            inspect_glb(self.write(doc))
+
+    def test_deep_json_preserves_partial_cli_report(self):
+        self.write({"asset": {"version": "2.0"}})
+        payload = b"[" * 10000 + b"0" + b"]" * 10000
+        payload += b" " * (-len(payload) % 4)
+        (self.root / "deep.glb").write_bytes(
+            struct.pack("<5I", 0x46546C67, 2, 20 + len(payload), len(payload), 0x4E4F534A) + payload)
+        output = self.root / "report.json"
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name("inventory.py")),
+                                 str(self.root), "--output", str(output)], capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        models = json.loads(output.read_text())["models"]
+        self.assertEqual([m["status"] for m in models], ["error", "inspected"])
+        self.assertIn("recursion", models[0]["error"])
+        self.assertNotIn(b"Traceback", result.stderr)
+
+    def test_mixed_case_discovery_and_single_cli_walk(self):
+        source = self.write({"asset": {"version": "2.0"}})
+        source.rename(self.root / "MODEL.GLB")
+        (self.root / "nested").mkdir()
+        (self.root / "nested/other.GlB").write_bytes(glb({"asset": {"version": "2.0"}}))
+        output = self.root / "report.json"
+        output.write_text("old")
+        with patch("inventory.discover_glbs", wraps=discover_glbs) as discover:
+            with patch.object(sys, "argv", ["inventory.py", str(self.root), "--output", str(output)]):
+                self.assertEqual(main(), 0)
+            discover.assert_called_once_with(self.root)
+        self.assertEqual([m["path"] for m in json.loads(output.read_text())["models"]],
+                         ["MODEL.GLB", "nested/other.GlB"])
+
+    def test_node_summary_excludes_extras_and_checks_references(self):
+        doc = {"asset": {"version": "2.0"}, "nodes": [
+            {"name": "root", "translation": [0, 1, 0], "children": [1],
+             "extras": {"large": "x" * 1000}, "extensions": {"vendor": {}}}, {}]}
+        self.assertEqual(inspect_glb(self.write(doc))["nodes"],
+                         [{"name": "root", "translation": [0, 1, 0], "children": [1]}, {}])
+        for field in ("children", "mesh", "camera"):
+            for bad in (-1, 2, True):
+                with self.subTest(field=field, bad=bad):
+                    doc["nodes"] = [{field: [bad] if field == "children" else bad}]
+                    with self.assertRaisesRegex(ValueError, "node 0"):
+                        inspect_glb(self.write(doc))
+
+    def test_dangling_output_and_hardlink_do_not_modify_sources(self):
+        source = self.write({"asset": {"version": "2.0"}})
+        source = source.rename(self.root / "source.GLB")
+        before = source.read_bytes()
+        hardlink = self.root / "hardlink.json"
+        hardlink.hardlink_to(source)
+        dangling = self.root / "dangling.json"
+        target = self.root / "not-created.glb"
+        dangling.symlink_to(target)
+        for output in (hardlink, dangling):
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name("inventory.py")),
+                                     str(self.root), "--output", str(output)], capture_output=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(source.read_bytes(), before)
+            self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":

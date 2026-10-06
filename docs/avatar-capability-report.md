@@ -49,20 +49,27 @@ for humanoid retargeting. Presence of joints alone does not establish that.
 After the documented [asset build](avatar-rendering.md#build-and-verification):
 
 ```sh
-python tools/avatars/test_inventory.py
-python tools/avatars/inventory.py deploy/web/avatars --output /tmp/avatar-inventory.json
+python tools/avatar_inspection/test_inventory.py
+python tools/avatar_inspection/inventory.py deploy/web/avatars --output /tmp/avatar-inventory.json
 ```
 
-The standard-library-only inspector walks all `.glb` files in sorted relative
+The standard-library-only inspector walks all `.glb` files (case-insensitive extension) in sorted relative
 path order. It records source SHA-256, byte size, nodes/rest transforms, skin
 bindings, joint names, inverse-bind accessor metadata, mesh attributes, morph
 target counts, material/texture counts, required extensions and animation
 channels. It never changes the inputs. Output has no timestamp or absolute
-workspace path and is deterministic for identical inputs.
+workspace path and is deterministic for identical inputs. Nodes retain only
+names, transforms, hierarchy, mesh/skin/camera references and morph weights;
+vendor extras and extensions are omitted. Node references are range-checked.
+Primitives without `POSITION` report `vertex_count: null`; missing required
+fields such as `attributes` produce labelled errors. Output symlinks (including
+dangling links) and hardlinks to source GLBs are rejected before writing.
 
 An empty directory, unreadable file, malformed container/JSON, or invalid
 inspected reference returns a nonzero exit code. Per-model errors remain in
-the report alongside successful inspections. `status: inspected` means only
+the report alongside successful inspections, including excessive JSON nesting.
+Process termination, memory exhaustion and output write failures cannot
+guarantee a partial report. `status: inspected` means only
 that this metadata inspection completed: accessor payloads, compression,
 external resources and deformation are not validated by this tool. Existing
 rig tests remain the numeric gate; Khronos validation and visual QA remain
@@ -72,6 +79,9 @@ Full CI generates the report from the same assets it already builds/verifies
 and retains `avatar-inventory-<commit>` for seven days, including a partial
 report when inspection fails. It does not rebuild models for inspection or
 include the report in the deployed client package.
+The inspector and its tests live in `tools/avatar_inspection/`, outside
+`hashFiles('tools/avatars/**')`, so inspection-only changes do not invalidate
+the asset cache in either Full CI or release packaging.
 
 ## Next small PRs
 

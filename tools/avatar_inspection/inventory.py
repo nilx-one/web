@@ -9,6 +9,12 @@ from pathlib import Path
 import struct
 
 
+def required(obj, key, label):
+    if key not in obj:
+        raise ValueError(f"{label}: missing required '{key}'")
+    return obj[key]
+
+
 def inspect_glb(path):
     raw = path.read_bytes()
     if len(raw) < 20:
@@ -44,7 +50,7 @@ def inspect_glb(path):
 
     skins = []
     for skin in doc.get("skins", []):
-        joints = skin["joints"]
+        joints = required(skin, "joints", "skin")
         joint_names = [at(nodes, j, "joint").get("name") for j in joints]
         inverse = skin.get("inverseBindMatrices")
         descriptor = at(accessors, inverse, "inverse bind accessor") if inverse is not None else None
@@ -52,50 +58,71 @@ def inspect_glb(path):
                       "joint_names": joint_names,
                       "inverse_bind_matrices": descriptor})
     meshes = []
-    for mesh in doc.get("meshes", []):
+    for mesh_index, mesh in enumerate(doc.get("meshes", [])):
         primitives = []
-        for primitive in mesh["primitives"]:
-            attrs = primitive["attributes"]
-            for index in attrs.values():
-                at(accessors, index, "attribute accessor")
+        for primitive_index, primitive in enumerate(required(mesh, "primitives", f"mesh {mesh_index}")):
+            label = f"mesh {mesh_index} primitive {primitive_index}"
+            attrs = required(primitive, "attributes", label)
+            resolved = {name: at(accessors, index, f"{label} {name} accessor")
+                        for name, index in attrs.items()}
+            vertex_count = (required(resolved["POSITION"], "count", f"{label} POSITION accessor")
+                            if "POSITION" in resolved else None)
             primitives.append({"attributes": sorted(attrs),
-                               "vertex_count": at(accessors, attrs["POSITION"], "position accessor")["count"],
+                               "vertex_count": vertex_count,
                                "has_skin_attributes": "JOINTS_0" in attrs and "WEIGHTS_0" in attrs,
                                "morph_target_count": len(primitive.get("targets", []))})
         meshes.append({"name": mesh.get("name"), "primitives": primitives})
     bindings = []
+    node_summaries = []
     for index, node in enumerate(nodes):
+        for child in node.get("children", []):
+            at(nodes, child, f"node {index} child")
+        if "mesh" in node:
+            at(meshes, node["mesh"], f"node {index} mesh")
+        if "camera" in node:
+            at(doc.get("cameras", []), node["camera"], f"node {index} camera")
         if "skin" in node:
             at(skins, node["skin"], "skin")
-            at(meshes, node["mesh"], "mesh")
+            required(node, "mesh", f"skinned node {index}")
             bindings.append({"node": index, "mesh": node["mesh"], "skin": node["skin"]})
+        node_summaries.append({key: node[key] for key in
+                               ("name", "translation", "rotation", "scale", "matrix", "children",
+                                "mesh", "skin", "camera", "weights") if key in node})
     animations = []
     for clip in doc.get("animations", []):
-        for channel in clip["channels"]:
-            sampler = at(clip["samplers"], channel["sampler"], "animation sampler")
-            at(accessors, sampler["input"], "animation input")
-            at(accessors, sampler["output"], "animation output")
-            if "node" in channel["target"]:
-                at(nodes, channel["target"]["node"], "animation target")
+        for channel in required(clip, "channels", "animation"):
+            sampler = at(required(clip, "samplers", "animation"),
+                         required(channel, "sampler", "animation channel"), "animation sampler")
+            at(accessors, required(sampler, "input", "animation sampler"), "animation input")
+            at(accessors, required(sampler, "output", "animation sampler"), "animation output")
+            target = required(channel, "target", "animation channel")
+            required(target, "path", "animation target")
+            if "node" in target:
+                at(nodes, target["node"], "animation target")
         animations.append({"name": clip.get("name"),
                            "channel_count": len(clip["channels"]),
                            "target_paths": sorted({c["target"]["path"] for c in clip["channels"]})})
     return {"status": "inspected", "sha256": hashlib.sha256(raw).hexdigest(),
             "bytes": len(raw), "generator": doc["asset"].get("generator"),
             "skins": skins, "skin_bindings": bindings, "meshes": meshes,
-            "animations": animations, "nodes": nodes,
+            "animations": animations, "nodes": node_summaries,
             "material_count": len(doc.get("materials", [])),
             "texture_count": len(doc.get("textures", [])),
             "extensions_required": doc.get("extensionsRequired", [])}
 
 
-def inventory(root):
-    paths = sorted(root.rglob("*.glb"))
+def discover_glbs(root):
+    return sorted(p for p in root.rglob("*") if p.suffix.lower() == ".glb" and not p.is_dir())
+
+
+def inventory(root, paths=None):
+    if paths is None:
+        paths = discover_glbs(root)
     models = []
     for path in paths:
         try:
             model = inspect_glb(path)
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError) as error:
             model = {"status": "error", "error": str(error)}
         models.append({"path": path.relative_to(root).as_posix(), **model})
     return {"schema_version": 1, "inspection": "GLB container and JSON metadata only",
@@ -111,9 +138,12 @@ def main():
     args = parser.parse_args()
     if args.output.suffix.lower() != ".json":
         parser.error("output must be a .json report, never a source GLB")
-    if args.output.exists() and any(args.output.samefile(path) for path in args.asset_dir.rglob("*.glb")):
+    if args.output.is_symlink():
+        parser.error("output must not be a symlink (including a dangling symlink)")
+    paths = discover_glbs(args.asset_dir)
+    if args.output.exists() and any(path.exists() and args.output.samefile(path) for path in paths):
         parser.error("output must not alias a source GLB")
-    report = inventory(args.asset_dir)
+    report = inventory(args.asset_dir, paths)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0 if report["models"] and all(m["status"] == "inspected" for m in report["models"]) else 1
