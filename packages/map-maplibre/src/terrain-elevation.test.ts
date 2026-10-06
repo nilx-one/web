@@ -3,7 +3,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { terrainElevationMeters } from "./terrain-elevation";
+import {
+  loadedTerrainElevationMeters,
+  terrainElevationMeters,
+} from "./terrain-elevation";
 
 describe("terrain elevation", () => {
   it("uses the DEM elevation MapLibre has loaded", () => {
@@ -16,6 +19,21 @@ describe("terrain elevation", () => {
       ),
     ).toBe(183.25);
     expect(queryTerrainElevation).toHaveBeenCalledWith([30.5234, 50.4501]);
+  });
+
+  it("distinguishes a loaded sea-level sample from missing terrain", () => {
+    expect(
+      loadedTerrainElevationMeters(
+        { queryTerrainElevation: () => 0 } as never,
+        [30.5234, 50.4501],
+      ),
+    ).toBe(0);
+    expect(
+      loadedTerrainElevationMeters(
+        { queryTerrainElevation: () => null } as never,
+        [30.5234, 50.4501],
+      ),
+    ).toBeUndefined();
   });
 
   it("never invents relief when terrain is absent or unreadable", () => {
