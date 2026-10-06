@@ -63,6 +63,17 @@ export interface CommittedJournalSnapshot {
   readonly pending: readonly PendingCommittedAward[];
   readonly history: readonly KeptCommittedAward[];
   readonly leads: readonly FindLead[];
+  readonly inventory: InventoryRecord;
+}
+
+/**
+ * What the Bond and its Avaia carry: Core's stored inventory (`""` for none
+ * yet), and the finds already put into it, so a find goes in once however
+ * often its award is seen kept.
+ */
+export interface InventoryRecord {
+  readonly state: string;
+  readonly pickedUp: ReadonlySet<string>;
 }
 
 interface StoredEvent {
@@ -98,6 +109,13 @@ type JournalEvent =
       readonly type: "lead.closed";
       readonly artifactId: ArtifactId;
       readonly reason: "picked-up" | "already-yours" | "taken" | "expired";
+    }
+  | {
+      readonly type: "inventory.state";
+      /** Core's whole stored inventory after this change. */
+      readonly state: string;
+      /** The find this change put in, if it was a pick-up. */
+      readonly pickedUp?: string;
     };
 
 function assertCapabilities(): void {
@@ -290,6 +308,8 @@ export function foldCommittedJournal(
   const active = new Set<Commitment>();
   const history: KeptCommittedAward[] = [];
   let leads: FindLead[] = [];
+  let inventoryState = "";
+  const pickedUp = new Set<string>();
 
   for (const event of events) {
     switch (event.type) {
@@ -313,6 +333,10 @@ export function foldCommittedJournal(
       case "lead.closed":
         leads = leads.filter((lead) => lead.artifactId !== event.artifactId);
         break;
+      case "inventory.state":
+        inventoryState = event.state;
+        if (event.pickedUp !== undefined) pickedUp.add(event.pickedUp);
+        break;
     }
   }
 
@@ -325,6 +349,7 @@ export function foldCommittedJournal(
     }),
     history,
     leads,
+    inventory: { state: inventoryState, pickedUp },
   };
 }
 
@@ -427,6 +452,40 @@ export function subscribeCommittedJournal(
     own.delete(listener);
     if (own.size === 0) listeners.delete(owner);
   };
+}
+
+/**
+ * Changes the inventory. `change` gets the current record and answers the next
+ * Core state, and the find it put in if it was a pick-up, or `undefined` to
+ * change nothing (a refused command, a find already in). Changes to one
+ * owner's journal run one at a time, so two pick-ups never both start from
+ * the same state.
+ */
+export function updateInventory(
+  owner: string,
+  change: (
+    current: InventoryRecord,
+  ) => Promise<
+    { readonly state: string; readonly pickedUp?: string } | undefined
+  >,
+): Promise<boolean> {
+  return serial(owner, async () => {
+    const database = await openDatabase();
+    try {
+      const { snapshot, sealKey } = await snapshotFrom(database, owner);
+      const next = await change(snapshot.inventory);
+      if (next === undefined) return false;
+      await appendEvent(database, owner, sealKey, {
+        type: "inventory.state",
+        state: next.state,
+        ...(next.pickedUp === undefined ? {} : { pickedUp: next.pickedUp }),
+      });
+    } finally {
+      database.close();
+    }
+    notify(owner);
+    return true;
+  });
 }
 
 /**

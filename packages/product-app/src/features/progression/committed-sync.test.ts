@@ -152,6 +152,7 @@ function snapshot(): CommittedJournalSnapshot {
     pending: [...pending],
     history: [],
     leads: [],
+    inventory: { state: "", pickedUp: new Set() },
   };
 }
 

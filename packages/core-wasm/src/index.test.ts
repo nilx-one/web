@@ -163,8 +163,20 @@ describe("CoreWasmClient", () => {
       economy_version: 1,
       currency: { code: "seed", emblem: "₴€£" },
       found: [
-        { id: "cd_radio", tier: 5, rarity: "rare", experience: 25, size: null },
+        {
+          id: "cd_radio",
+          tier: 5,
+          rarity: "rare",
+          experience: 25,
+          seeds: "0",
+          sell_price: "80",
+          size: { width: 3, height: 2 },
+        },
       ],
+      crafted: [
+        { id: "album", sell_price: "350", size: { width: 1, height: 1 } },
+      ],
+      carries: [{ id: "pocket", width: 5, height: 1 }],
     };
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () =>
@@ -174,7 +186,19 @@ describe("CoreWasmClient", () => {
       findCatalogVersion: 1,
       economyVersion: 1,
       currency: { code: "seed", emblem: "₴€£" },
-      found: [{ id: "cd_radio", tier: 5, rarity: "rare", experience: 25 }],
+      found: [
+        {
+          id: "cd_radio",
+          tier: 5,
+          rarity: "rare",
+          experience: 25,
+          seeds: 0,
+          sellPrice: 80,
+          size: { width: 3, height: 2 },
+        },
+      ],
+      crafted: [{ id: "album", sellPrice: 350, size: { width: 1, height: 1 } }],
+      carries: [{ id: "pocket", width: 5, height: 1 }],
     });
 
     const malformed = await loadGeneratedCoreWasmBindings({
@@ -188,6 +212,58 @@ describe("CoreWasmClient", () => {
         }),
     });
     expect(() => malformed.economyCatalog?.()).toThrow("invalid catalog item");
+  });
+
+  it("applies inventory commands through Core and keeps its state opaque", async () => {
+    const seen: string[] = [];
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          apply_inventory_command: (state, command, now) => {
+            seen.push(`${state}|${command}|${now}`);
+            return command.includes("sell")
+              ? JSON.stringify({ ok: false, error: "missing" })
+              : JSON.stringify({
+                  ok: true,
+                  item: "bottle_cap",
+                  state: { seeds: "0" },
+                  outcome: {
+                    seeds_gained: "0",
+                    seeds_spent: "0",
+                    experience: 0,
+                  },
+                });
+          },
+        }),
+    });
+
+    expect(
+      bindings.applyInventoryCommand?.(
+        "",
+        { op: "pick_up", holder: "bond", artifact_id: "art:x", tier: 1 },
+        1_000,
+      ),
+    ).toEqual({
+      ok: true,
+      state: '{"seeds":"0"}',
+      seedsGained: 0,
+      seedsSpent: 0,
+      experience: 0,
+      item: "bottle_cap",
+    });
+    expect(
+      bindings.applyInventoryCommand?.(
+        '{"seeds":"0"}',
+        { op: "sell", id: "can", count: 1 },
+        1_000,
+      ),
+    ).toEqual({ ok: false, error: "missing" });
+    expect(seen[0]).toBe(
+      '|{"op":"pick_up","holder":"bond","artifact_id":"art:x","tier":1}|1000',
+    );
+    expect(() =>
+      bindings.applyInventoryCommand?.("", { op: "finish_craft" }, 1.5),
+    ).toThrow(RangeError);
   });
 
   it("rejects a generated runtime with a different corpus digest", async () => {

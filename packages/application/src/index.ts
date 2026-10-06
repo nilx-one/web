@@ -136,9 +136,15 @@ export {
 } from "./failure-notice";
 export {
   ReadRuntimeReadiness,
+  type CoreCarry,
+  type CoreCraftedItem,
   type CoreEconomyCatalog,
   type CoreFindItemResult,
   type CoreFoundItem,
+  type CoreHolder,
+  type CoreInventoryAnswer,
+  type CoreInventoryCommand,
+  type CoreSize,
   type CorePubDressLabelErrorCode,
   type CorePubDressLabelResult,
   type CoreRuntimePort,

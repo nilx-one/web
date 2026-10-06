@@ -1,0 +1,87 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* Two S.T.A.L.K.E.R.-style grids: every thing takes its own rectangle of
+   cells. Blue is the Bond's, purple the Avaia's, as their experience is. */
+.inventory {
+  --inventory-cell: 34px;
+  --inventory-bond: #3d8bfd;
+  --inventory-avaia: #a970ff;
+  display: grid;
+  gap: 14px;
+}
+
+.inventory__seeds {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.inventory__holder {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inventory__holder-title {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  border-left: 3px solid var(--inventory-bond);
+  padding-left: 8px;
+}
+
+.inventory__holder[data-holder="avaia"] .inventory__holder-title {
+  border-left-color: var(--inventory-avaia);
+}
+
+.inventory__grid-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.inventory__grid {
+  display: grid;
+  grid-auto-rows: var(--inventory-cell);
+  gap: 2px;
+  padding: 2px;
+  width: max-content;
+  border-radius: 8px;
+  background: var(--line);
+}
+
+.inventory__cell {
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.inventory__thing {
+  z-index: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.15;
+  text-align: left;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.inventory__thing[aria-pressed="true"] {
+  outline: 2px solid var(--inventory-bond);
+}
+
+.inventory__holder[data-holder="avaia"] .inventory__thing[aria-pressed="true"] {
+  outline-color: var(--inventory-avaia);
+}
+
+.inventory__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
