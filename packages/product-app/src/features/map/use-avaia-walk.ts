@@ -977,13 +977,13 @@ export function useAvaiaWalk({
           ),
           obstacles: renderer.obstaclesWithin?.(area) ?? [],
         });
-        const device = latest.current.observed;
+        // Home is where this device dwelt longest, by its own journal; until
+        // the journal can say, where the device was last observed.
+        const home = renderer.fog?.home?.() ?? latest.current.observed;
         const choice = chooseOuting(state, menu, {
           at,
           home:
-            device === undefined
-              ? undefined
-              : [device.longitude, device.latitude],
+            home === undefined ? undefined : [home.longitude, home.latitude],
           hour: new Date(wall).getHours(),
           affinity: affinitySnapshot(
             latest.current.owner,
@@ -1002,8 +1002,8 @@ export function useAvaiaWalk({
               purpose: "outing",
               target: choice.target,
             }) === "walking";
-        } else if (choice.kind === "home" && device !== undefined) {
-          went = goTo(device, nowMs, { purpose: "home" }) === "walking";
+        } else if (choice.kind === "home" && home !== undefined) {
+          went = goTo(home, nowMs, { purpose: "home" }) === "walking";
         } else if (choice.kind === "wander") {
           const start = snapToGraph(graph, at, canEnter ? { canEnter } : {});
           const there =

@@ -395,6 +395,14 @@ export interface MapFogField {
   frontier(point: MapPointSelection, rings: number): readonly MapFogCell[];
   /** Lifts the fog from one cell on this device. Idempotent. */
   reveal(cellId: string): void;
+  /**
+   * Where this device has dwelt longest, by its own presence journal: the
+   * centre of that one cell, or nothing while the journal is loading, could
+   * not load, or holds too little time anywhere to call a place home. It is
+   * one derived point, never the visits behind it, and like the fog it stays
+   * on this device. A composition with no journal may omit this.
+   */
+  home?(): MapPointSelection | undefined;
   /** Notifies when a cell was revealed, by either path. */
   subscribe(listener: () => void): () => void;
   /**
