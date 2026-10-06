@@ -104,8 +104,18 @@ describe("joinAreas", () => {
     };
 
     for (const label of [
-      { id: undefined, name: "Lake", point: [0.5, 0.5] as [number, number], kind: "lake" },
-      { id: undefined, name: "Lake", point: [0.5, 0.5] as [number, number], kind: "water" },
+      {
+        id: undefined,
+        name: "Lake",
+        point: [0.5, 0.5] as [number, number],
+        kind: "lake",
+      },
+      {
+        id: undefined,
+        name: "Lake",
+        point: [0.5, 0.5] as [number, number],
+        kind: "water",
+      },
     ]) {
       const [found] = joinAreas({
         ...none,
