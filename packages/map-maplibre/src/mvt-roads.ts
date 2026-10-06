@@ -278,7 +278,10 @@ function protobuf(bytes: Uint8Array) {
     skip(wire: number) {
       if (wire === 0) varint();
       else if (wire === 1) position += 8;
-      else if (wire === 2) {\n        const length = varint();\n        position += length;\n      }
+      else if (wire === 2) {
+        const length = varint();
+        position += length;
+      }
       else if (wire === 5) position += 4;
       else throw new Error(`unsupported wire type ${wire}`);
     },
