@@ -47,6 +47,15 @@
 			file_server
 		}
 
+		# Raster DEM tiles are deployment data in the same persistent volume as
+		# the basemap. Strip the public versioned prefix and serve the regional
+		# Terrarium pyramid as same-origin map data.
+		handle_path /map/0.1.0/terrain/* {
+			root * /srv/map-data/terrain
+			header Cache-Control "public, max-age=86400"
+			file_server
+		}
+
 		@map_assets path /map/*
 		handle @map_assets {
 			root * /srv
