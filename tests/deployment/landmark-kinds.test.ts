@@ -78,6 +78,9 @@ function tile(
         ...bytesField(2, tags),
         ...field(3, 0),
         ...varint(1),
+        // A real MVT feature also carries packed geometry. This specifically
+        // exercises skipping a length-delimited field after tags.
+        ...bytesField(4, [9, 0, 0]),
       ];
     });
     const layer = [
