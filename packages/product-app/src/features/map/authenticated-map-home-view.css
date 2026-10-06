@@ -121,22 +121,28 @@
     inset 0 0 7rem rgba(55, 215, 229, 0.035);
 }
 
-/* Readiness: one frame says whether the world and what it leans on answered.
-   Red — the map did not load; orange — WebGPU, the on-device model or
-   location is refused; dim — still finding out; cyan — ready, the model is
-   not on this device yet; green — WebLLM has its model here. What went wrong
-   is said again by a notice; the frame only says that something did. */
+/* Readiness: one frame along the screen's edge says whether the world and
+   what it leans on answered. Red — the map did not load; orange — WebGPU, the
+   on-device model or location is refused; dim — still finding out; cyan —
+   ready, the model is not on this device yet; green — WebLLM has its model
+   here. A good answer fades after a few seconds; a problem stays framed, and
+   is said again by a notice. */
 .authenticated-map-home__readiness {
   --readiness-ring: transparent;
   --readiness-glow: transparent;
   position: absolute;
   inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
   box-shadow:
-    inset 0 0 0 2px var(--readiness-ring),
-    inset 0 0 2.4rem var(--readiness-glow);
-  transition: box-shadow 320ms ease;
+    inset 0 0 0 3px var(--readiness-ring),
+    inset 0 0 3rem var(--readiness-glow);
+  transition:
+    box-shadow 320ms ease,
+    opacity 900ms ease;
+}
+
+.authenticated-map-home[data-readiness-shown="false"]
+  .authenticated-map-home__readiness {
+  opacity: 0;
 }
 
 .authenticated-map-home[data-readiness="failed"]
@@ -178,8 +184,8 @@
 @keyframes readiness-pending {
   to {
     box-shadow:
-      inset 0 0 0 2px rgba(55, 215, 229, 0.5),
-      inset 0 0 2.4rem rgba(55, 215, 229, 0.06);
+      inset 0 0 0 3px rgba(55, 215, 229, 0.5),
+      inset 0 0 3rem rgba(55, 215, 229, 0.06);
   }
 }
 

@@ -56,6 +56,7 @@ import { avaiaLines } from "./avaia-lines";
 import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
+import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
 import { rememberWorld } from "./world-memory";
 import {
   AuthenticatedMapHomeView,
@@ -1983,6 +1984,63 @@ describe("world readiness frame", () => {
     await vi.waitFor(() =>
       expect(frame(container)).toHaveAttribute("data-readiness", "connected"),
     );
+  });
+
+  it("fades a good answer after five seconds, and keeps a problem framed", async () => {
+    vi.useFakeTimers();
+    try {
+      const good = renderView({
+        localModel: localModel({
+          inspect: () => Promise.resolve({ kind: "usable" }),
+          isCached: () => Promise.resolve(true),
+        }),
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(frame(good.container)).toHaveAttribute(
+        "data-readiness",
+        "connected",
+      );
+      expect(frame(good.container)).toHaveAttribute(
+        "data-readiness-shown",
+        "true",
+      );
+      act(() => {
+        vi.advanceTimersByTime(READINESS_FRAME_SETTLE_MS);
+      });
+      expect(frame(good.container)).toHaveAttribute(
+        "data-readiness-shown",
+        "false",
+      );
+      good.unmount();
+
+      const bad = renderView({
+        mapRenderer: renderer({
+          kind: "unavailable",
+          reason: "styleLoadFailed",
+        }),
+      });
+      act(() => {
+        vi.advanceTimersByTime(READINESS_FRAME_SETTLE_MS * 2);
+      });
+      expect(frame(bad.container)).toHaveAttribute(
+        "data-readiness-shown",
+        "true",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("traces the frame along the screen edge, above every layer", () => {
+    const { container } = renderView();
+
+    expect(
+      container.querySelector(
+        ".app-shell__frame > .authenticated-map-home__readiness",
+      ),
+    ).not.toBeNull();
   });
 
   it("turns red when the map did not load", () => {

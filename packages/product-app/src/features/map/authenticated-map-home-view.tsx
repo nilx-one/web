@@ -166,6 +166,7 @@ import { useNearbySpeech } from "./use-nearby-speech";
 import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
 import { useLocalModelReadiness } from "./use-local-model-readiness";
+import { useReadinessFrameVisible } from "./use-readiness-frame";
 import { createWorldReadiness } from "./world-readiness";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
 import type { AvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
@@ -795,6 +796,7 @@ export function AuthenticatedMapHomeView({
     location: location.state,
     model: localModelReadiness,
   });
+  const readinessShown = useReadinessFrameVisible(readiness.tone);
   const readinessToasts = readiness.issues
     .filter((issue) => !dismissedReadiness.has(issue.id))
     .map((issue): StatusToastItem => ({
@@ -1808,6 +1810,8 @@ export function AuthenticatedMapHomeView({
       data-theme={resolvedAppearance}
       data-focus-state={focusState}
       data-readiness={readiness.tone}
+      data-readiness-shown={readinessShown}
+      frame={<div className="authenticated-map-home__readiness" />}
       data-section={section}
       data-cutscene={guideActive}
       world={
@@ -1820,10 +1824,6 @@ export function AuthenticatedMapHomeView({
             />
           </div>
           <div className="authenticated-map-home__shade" aria-hidden="true" />
-          <div
-            className="authenticated-map-home__readiness"
-            aria-hidden="true"
-          />
         </>
       }
       header={
