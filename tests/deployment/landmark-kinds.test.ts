@@ -12,12 +12,13 @@ import { describe, expect, it } from "vitest";
 import {
   compareKinds,
   countKinds,
+  createAreaKeyCheck,
   decodeLayerFeatures,
-  areaKeysIn,
   mapperAreaKeys,
   mapperKinds,
   zoomOfTileId,
 } from "../../deploy/web/landmark-kinds.mjs";
+import AREA_KINDS from "../../packages/map-maplibre/src/landmark-area-kinds.json";
 import MAPPER_KINDS from "../../packages/product-app/src/features/map/landmark-mapper-kinds.json";
 import {
   POI_KIND_ROWS,
@@ -55,9 +56,14 @@ const bytesField = (number: number, bytes: readonly number[]) => [
 ];
 const utf8 = (value: string) => [...new TextEncoder().encode(value)];
 
-function tile(
-  layers: Record<string, { id?: number; properties: Record<string, string> }[]>,
-): Uint8Array {
+interface Feature {
+  id?: number;
+  /** 1 point (the default), 3 polygon. */
+  type?: number;
+  properties: Record<string, string>;
+}
+
+function tile(layers: Record<string, Feature[]>): Uint8Array {
   const out: number[] = [];
   for (const [name, features] of Object.entries(layers)) {
     const keys: string[] = [];
@@ -68,7 +74,7 @@ function tile(
       list.push(value);
       return list.length - 1;
     };
-    const encoded = features.map(({ id, properties }) => {
+    const encoded = features.map(({ id, type = 1, properties }) => {
       const tags = Object.entries(properties).flatMap(([key, value]) => [
         ...varint(index(keys, key)),
         ...varint(index(values, value)),
@@ -77,7 +83,7 @@ function tile(
         ...(id === undefined ? [] : [...field(1, 0), ...varint(id)]),
         ...bytesField(2, tags),
         ...field(3, 0),
-        ...varint(1),
+        ...varint(type),
         // A real MVT feature also carries packed geometry. This specifically
         // exercises skipping a length-delimited field after tags.
         ...bytesField(4, [9, 0, 0]),
@@ -187,13 +193,13 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
     );
 
     expect(features).toEqual([
-      { id: 7, properties: { kind: "memorial", name: "Pam" } },
-      { id: undefined, properties: { kind: "cafe" } },
+      { id: 7, type: 1, properties: { kind: "memorial", name: "Pam" } },
+      { id: undefined, type: 1, properties: { kind: "cafe" } },
     ]);
   });
 
   it("counts a point shared by two tiles once", () => {
-    const shared = { id: 7, properties: { kind: "memorial" } };
+    const shared = { id: 7, type: 1, properties: { kind: "memorial" } };
     const kinds = countKinds([[shared], [shared]]);
 
     expect(kinds.get("memorial")?.count).toBe(1);
@@ -219,26 +225,41 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
     expect(zoomOfTileId(FIRST_Z2_TILE)).toBe(2);
   });
 
-  /** An archive whose full-detail tile carries every kind the mapper reads. */
-  /** One feature per area key: `layer:kind` or `layer:kind:kind_detail`. */
+  /**
+   * One polygon per area key, `layer:kind` or `layer:kind:kind_detail`, and
+   * the label it is joined by: a named `pois` point with a `landuse`
+   * polygon's id, a named `water` point of a `water` polygon's kind.
+   */
   const areaLayers = (except?: string) => {
-    const layers: Record<string, { properties: Record<string, string> }[]> = {
+    const layers: Record<"pois" | "landuse" | "water", Feature[]> = {
+      pois: [],
       landuse: [],
       water: [],
     };
-    for (const key of AREA_KEYS) {
-      if (key === except) continue;
-      const [layer, kind, detail] = key.split(":") as [string, string, string?];
-      layers[layer]!.push({
-        properties: {
-          kind,
-          ...(detail === undefined ? {} : { kind_detail: detail }),
-        },
-      });
-    }
+    AREA_KEYS.forEach((key, index) => {
+      if (key === except) return;
+      const [layer, kind, detail] = key.split(":") as [
+        "landuse" | "water",
+        string,
+        string?,
+      ];
+      const properties = {
+        kind,
+        ...(detail === undefined ? {} : { kind_detail: detail }),
+      };
+      const id = 500 + index;
+      if (layer === "landuse") {
+        layers.landuse.push({ id, type: 3, properties });
+        layers.pois.push({ id, properties: { kind, name: key } });
+      } else {
+        layers.water.push({ type: 3, properties });
+        layers.water.push({ properties: { ...properties, name: key } });
+      }
+    });
     return layers;
   };
 
+  /** An archive whose full-detail tile carries every kind the mapper reads. */
   const mapperArchive = (except?: string, zoomOne = "cafe") =>
     archive(
       [
@@ -257,8 +278,10 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
                 }),
               ),
               { id: 1_000, properties: { kind: "cafe" } },
+              ...areaLayers(except).pois,
             ],
-            ...areaLayers(except),
+            landuse: areaLayers(except).landuse,
+            water: areaLayers(except).water,
           }),
         },
       ],
@@ -283,19 +306,52 @@ describe("checking LANDMARK_KINDS against a real archive", () => {
     }
   });
 
-  it("tells an area key from the kinds that are present", () => {
-    const keys = areaKeysIn([
-      ["landuse", [{ id: 1, properties: { kind: "park" } }]],
-      [
-        "water",
-        [{ id: undefined, properties: { kind: "water", kind_detail: "lake" } }],
-      ],
-    ]);
-    expect([...keys].sort()).toEqual([
+  it("counts an area only where the renderer can join it to its label", () => {
+    const check = createAreaKeyCheck([
       "landuse:park",
-      "water:water",
+      "landuse:beach",
+      "water:lake",
       "water:water:lake",
     ]);
+    const lake = { kind: "water", kind_detail: "lake" };
+    check.add({
+      // A park whose label comes in a later tile; a beach only as a point.
+      landuse: [{ id: 1, type: 3, properties: { kind: "park" } }],
+      pois: [{ id: 2, type: 1, properties: { kind: "beach", name: "Sand" } }],
+      // A lake polygon whose label is a plain `lake` point: no join.
+      water: [
+        { id: undefined, type: 3, properties: lake },
+        { id: undefined, type: 1, properties: { kind: "lake", name: "L" } },
+      ],
+    });
+    expect([...check.found]).toEqual([]);
+
+    check.add({
+      pois: [{ id: 1, type: 1, properties: { kind: "park", name: "Park" } }],
+      // Its label in another tile than the polygon does not join either.
+      water: [
+        { id: undefined, type: 1, properties: { ...lake, name: "Lake" } },
+      ],
+    });
+    expect([...check.found]).toEqual(["landuse:park"]);
+
+    check.add({
+      water: [
+        { id: undefined, type: 3, properties: lake },
+        { id: undefined, type: 1, properties: { ...lake, name: "Lake" } },
+      ],
+    });
+    expect([...check.found].sort()).toEqual([
+      "landuse:park",
+      "water:water:lake",
+    ]);
+  });
+
+  it("decodes every area the mapper reads from the archive", () => {
+    for (const key of AREA_KEYS) {
+      const [layer, kind] = key.split(":") as [keyof typeof AREA_KINDS, string];
+      expect(AREA_KINDS[layer], key).toContain(kind);
+    }
   });
 
   it("fails an archive that lacks one kind the mapper reads", () => {

@@ -110,7 +110,8 @@ so the outing knows the landmarks it could walk to, not only those on screen:
 - from the same archive, by the same range requests. Three layers of each tile
   are decoded: `pois` into the points whose kind is on `LANDMARK_KINDS` and
   the named points that label areas; `landuse` polygons (`kind`, `kind_detail`
-  and the feature id) and `water` polygons and named points (`kind`,
+  and the feature id) and `water` polygons, only of the kinds on
+  `landmark-area-kinds.json`, and named points (`kind`,
   `kind_detail`, `name`), for the areas `areasNear` joins;
 - at zoom 15, the archive's last. The basemap schema gives every point a zoom
   range ending at 15 and thins the zooms below it to a label grid, so a museum

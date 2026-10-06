@@ -22,14 +22,15 @@ import MAPPER_KINDS from "./landmark-mapper-kinds.json";
  * The mapper reads what the archive carries and says which rows of the mapping
  * table each object matched. It reads no raw OSM tag: only the archive's own
  * `pois` `kind` and `name`, the fields the renderer already reads for noticing
- * and studying. Deciding what an object is stays with `normalizeLandmarks`.
+ * and studying, and for areas the `layer`, `kind` and `kind_detail` of the
+ * `landuse`/`water` polygons the renderer joins to their labels. Deciding
+ * what an object is stays with `normalizeLandmarks`.
  *
- * Which `pois` kinds it reads is `landmark-mapper-kinds.json`, and nowhere
- * else: `deploy/web/landmark-kinds.mjs` reads the same file and fails the
- * archive inspection when any of those kinds is absent. Parks, lakes,
- * reserves, beaches and peaks come from `landuse`/`water` polygons or `pois`
- * kinds nobody has inspected yet; until the inspection says which field
- * carries them, they are not read, rather than read from a guess.
+ * Which `pois` kinds and which areas it reads is `landmark-mapper-kinds.json`,
+ * and nowhere else: `deploy/web/landmark-kinds.mjs` reads the same file and
+ * fails the archive inspection when any of those kinds, or any area that can
+ * be joined to a label, is absent. Peaks and whatever else nobody has
+ * inspected yet are not read, rather than read from a guess.
  */
 
 /**
@@ -114,7 +115,8 @@ export function mapArchiveLandmarks(
 /**
  * The archive's named areas as mapped candidates: every row its layer and
  * kind, or layer, kind and detail, match. Source ids stay in here, as for
- * points. An area with no row is dropped.
+ * points. An area with no row is dropped. The archive's label stands for the
+ * area, so its landmark id holds while its loaded pieces change.
  */
 export function mapArchiveAreas(areas: readonly MapArea[]): SourceCandidate[] {
   const candidates: SourceCandidate[] = [];
@@ -138,6 +140,7 @@ export function mapArchiveAreas(areas: readonly MapArea[]): SourceCandidate[] {
       sourceId: area.id,
       matches,
       name,
+      anchor: [area.label.longitude, area.label.latitude],
       geometry: {
         type: "area",
         polygons: area.polygons.map((rings) =>

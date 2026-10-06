@@ -3,7 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { inside, joinAreas, type AreaPart } from "./landmark-areas";
+import { joinAreas, type AreaPart } from "./landmark-areas";
+import { tileBounds } from "./road-tiles";
 
 type Ring = [number, number][];
 
@@ -132,13 +133,50 @@ describe("joinAreas", () => {
     ).toEqual(once);
     expect(once.map((area) => area.id)).toEqual(["poi:1", "poi:2"]);
   });
-});
 
-describe("inside", () => {
-  it("is inside the outer ring and in no hole", () => {
-    const polygon = [square(0, 0, 4), square(1, 1, 2)];
-    expect(inside([0.5, 0.5], polygon)).toBe(true);
-    expect(inside([2, 2], polygon)).toBe(false);
-    expect(inside([5, 5], polygon)).toBe(false);
+  it("counts ground once where tiles' buffers and zooms overlap", () => {
+    // A park across the edge of two z15 tiles, each piece reaching into the
+    // other tile's buffer, and the same park from a z14 view tile.
+    const left = { z: 15, x: 19_168, y: 11_093 };
+    const right = { ...left, x: left.x + 1 };
+    const l = tileBounds(left);
+    const r = tileBounds(right);
+    const pad = (l.east - l.west) / 64;
+    const rect = (west: number, east: number): Ring => [
+      [west, l.south + pad],
+      [east, l.south + pad],
+      [east, l.north - pad],
+      [west, l.north - pad],
+      [west, l.south + pad],
+    ];
+    const westPark = (l.west + l.east) / 2;
+    const eastPark = (r.west + r.east) / 2;
+    const part = (polygon: Ring, tile: AreaPart["tile"]): AreaPart => ({
+      id: 7,
+      kind: "park",
+      polygons: [[polygon]],
+      ...(tile === undefined ? {} : { tile }),
+    });
+    const [park] = joinAreas({
+      ...none,
+      poiLabels: [
+        { id: 7, name: "Park", point: [l.east, (l.south + l.north) / 2] },
+      ],
+      landuse: [
+        part(rect(westPark, l.east + pad), left),
+        part(rect(r.west - pad, eastPark), right),
+        part(rect(westPark, eastPark), { z: 14, x: left.x / 2, y: 5_546 }),
+      ],
+    });
+
+    const edges = park!.polygons.map((rings) => {
+      const xs = rings[0]!.map(([x]) => x);
+      return [Math.min(...xs), Math.max(...xs)];
+    });
+    expect(edges).toHaveLength(2);
+    expect(edges[0]![0]).toBeCloseTo(westPark, 12);
+    expect(edges[0]![1]).toBeCloseTo(l.east, 12);
+    expect(edges[1]![0]).toBeCloseTo(r.west, 12);
+    expect(edges[1]![1]).toBeCloseTo(eastPark, 12);
   });
 });

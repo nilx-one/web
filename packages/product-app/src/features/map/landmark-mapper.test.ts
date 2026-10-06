@@ -215,11 +215,34 @@ describe("areas", () => {
   it("passes no source id or layer attribute on", () => {
     const [park] = mapArchiveAreas([area("Park", "landuse", "park", 200)]);
     expect(Object.keys(park!).sort()).toEqual([
+      "anchor",
       "geometry",
       "matches",
       "name",
       "sourceId",
     ]);
     expect(park!.matches).toEqual(["park"]);
+  });
+
+  it("keeps an area's landmark id while its loaded pieces change", () => {
+    // The label stands inside both: one piece loaded, then a second beside it.
+    const label = {
+      longitude: ORIGIN.longitude + 100 * M_LON,
+      latitude: ORIGIN.latitude + 100 * M_LAT,
+    };
+    const [before] = landmarksFromArchive(
+      [],
+      [area("Park", "landuse", "park", 200, { label })],
+    );
+    const [after] = landmarksFromArchive(
+      [],
+      [
+        area("Park", "landuse", "park", 200, {
+          label,
+          polygons: [[square(0, 0, 200)], [square(200, 0, 200)]],
+        }),
+      ],
+    );
+    expect(before!.id).toBe(after!.id);
   });
 });

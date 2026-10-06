@@ -1,7 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapArea } from "@nilx-one/map-contract";
+import {
+  insideRings,
+  type MapArea,
+  type MapBounds,
+} from "@nilx-one/map-contract";
+
+import { tileBounds, type TileId } from "./road-tiles";
 
 /**
  * Named areas from what tiles hold (docs/avaia-osm-landmarks.md).
@@ -11,6 +17,11 @@ import type { MapArea } from "@nilx-one/map-contract";
  * the same feature id. A lake is a `water` polygon, unnamed and without an id,
  * and a `water` point with its name, placed inside the polygon. This joins
  * the two, and nothing else: which areas matter is the application's call.
+ *
+ * A tile carries its piece of a polygon clipped at its buffer, past its own
+ * edge, and the view may hold tiles of more than one zoom. An area keeps the
+ * pieces of its deepest zoom only, each cut back to its own tile, so no
+ * ground is counted twice where pieces overlap.
  */
 
 type Ring = readonly (readonly [number, number])[];
@@ -32,6 +43,15 @@ export interface AreaPart {
   readonly kind: string;
   readonly kindDetail?: string;
   readonly polygons: readonly Polygon[];
+  /** The tile the piece came from; without one it is taken as it is. */
+  readonly tile?: TileId;
+}
+
+/** One polygon of a part, with where it came from and its outer ring's box. */
+interface Piece {
+  readonly polygon: Polygon;
+  readonly tile: TileId | undefined;
+  readonly box: MapBounds;
 }
 
 export interface AreaSources {
@@ -78,17 +98,25 @@ export function joinAreas(sources: AreaSources): MapArea[] {
         : { kindDetail: first!.kindDetail }),
       name: label.name,
       label: { longitude: label.point[0], latitude: label.point[1] },
-      polygons: dedupe(parts.flatMap((part) => part.polygons)),
+      polygons: footprint(parts.flatMap(piecesOf)),
     });
   }
 
+  const water = new Map<string, Piece[]>();
+  for (const part of sources.water) {
+    const key = `${part.kind}\u0000${part.kindDetail ?? ""}`;
+    const pieces = water.get(key) ?? [];
+    pieces.push(...piecesOf(part));
+    water.set(key, pieces);
+  }
   for (const label of sources.waterLabels) {
-    const same = sources.water.filter(
-      (part) =>
-        part.kind === label.kind && part.kindDetail === label.kindDetail,
+    const pieces =
+      water.get(`${label.kind ?? ""}\u0000${label.kindDetail ?? ""}`) ?? [];
+    const seed = pieces.filter(
+      (piece) =>
+        inBox(label.point, piece.box) &&
+        insideRings(label.point, piece.polygon),
     );
-    const pieces = same.flatMap((part) => part.polygons);
-    const seed = pieces.filter((polygon) => inside(label.point, polygon));
     if (seed.length === 0) continue;
     const id = `water:${label.name}:${label.point[0].toFixed(6)},${label.point[1].toFixed(6)}`;
     if (areas.has(id)) continue;
@@ -101,7 +129,7 @@ export function joinAreas(sources: AreaSources): MapArea[] {
         : { kindDetail: label.kindDetail }),
       name: label.name,
       label: { longitude: label.point[0], latitude: label.point[1] },
-      polygons: dedupe(connected(seed, pieces)),
+      polygons: footprint(connected(seed, pieces)),
     });
   }
 
@@ -110,12 +138,17 @@ export function joinAreas(sources: AreaSources): MapArea[] {
   );
 }
 
+function piecesOf(part: AreaPart): Piece[] {
+  return part.polygons.map((polygon) => ({
+    polygon,
+    tile: part.tile,
+    box: boxOf(polygon[0] ?? []),
+  }));
+}
+
 /** The pieces reachable from `seed` through pieces that overlap. */
-function connected(
-  seed: readonly Polygon[],
-  pieces: readonly Polygon[],
-): Polygon[] {
-  const taken = new Set<Polygon>(seed);
+function connected(seed: readonly Piece[], pieces: readonly Piece[]): Piece[] {
+  const taken = new Set<Piece>(seed);
   const queue = [...seed];
   while (queue.length > 0) {
     const current = queue.pop()!;
@@ -129,31 +162,100 @@ function connected(
 }
 
 /** Two pieces overlap when a vertex of either lies inside the other. */
-function overlap(a: Polygon, b: Polygon): boolean {
-  const outer = (polygon: Polygon) => polygon[0] ?? [];
-  return (
-    boxesMeet(outer(a), outer(b)) &&
-    (outer(a).some((point) => inside(point, b)) ||
-      outer(b).some((point) => inside(point, a)))
-  );
+function overlap(a: Piece, b: Piece): boolean {
+  if (!boxesMeet(a.box, b.box)) return false;
+  const within = (from: Piece, to: Piece) =>
+    (from.polygon[0] ?? []).some(
+      (point) => inBox(point, to.box) && insideRings(point, to.polygon),
+    );
+  return within(a, b) || within(b, a);
 }
 
-function boxesMeet(a: Ring, b: Ring): boolean {
-  const box = (ring: Ring) => {
-    let west = Infinity;
-    let east = -Infinity;
-    let south = Infinity;
-    let north = -Infinity;
-    for (const [x, y] of ring) {
-      west = Math.min(west, x);
-      east = Math.max(east, x);
-      south = Math.min(south, y);
-      north = Math.max(north, y);
+/**
+ * The ground an area's pieces cover, each piece once: the deepest zoom's
+ * pieces cut back to their own tiles, and a piece read twice taken once.
+ */
+function footprint(pieces: readonly Piece[]): Polygon[] {
+  let deepest = -Infinity;
+  for (const { tile } of pieces) {
+    if (tile !== undefined) deepest = Math.max(deepest, tile.z);
+  }
+  const seen = new Set<string>();
+  const polygons: Polygon[] = [];
+  for (const { polygon, tile } of pieces) {
+    if (tile !== undefined && tile.z !== deepest) continue;
+    const kept =
+      tile === undefined ? polygon : clipPolygon(polygon, tileBounds(tile));
+    if (kept === undefined) continue;
+    const key = JSON.stringify(kept[0]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    polygons.push(kept);
+  }
+  return polygons;
+}
+
+/** A polygon cut to a box, or nothing when no ground of it is left inside. */
+function clipPolygon(polygon: Polygon, box: MapBounds): Polygon | undefined {
+  const [outer, ...holes] = polygon.map((ring) => clipRing(ring, box));
+  if (outer === undefined || outer.length < 4) return undefined;
+  return [outer, ...holes.filter((hole) => hole.length >= 4)];
+}
+
+/** Sutherland–Hodgman against each edge of the box; the ring comes back closed. */
+function clipRing(ring: Ring, box: MapBounds): Ring {
+  const edges: ((point: readonly [number, number]) => number)[] = [
+    ([x]) => x - box.west,
+    ([x]) => box.east - x,
+    ([, y]) => y - box.south,
+    ([, y]) => box.north - y,
+  ];
+  let points: (readonly [number, number])[] = ring.slice(0, -1);
+  for (const side of edges) {
+    if (points.length === 0) break;
+    const next: (readonly [number, number])[] = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[(i + points.length - 1) % points.length]!;
+      const b = points[i]!;
+      const da = side(a);
+      const db = side(b);
+      if (db >= 0) {
+        if (da < 0) next.push(crossing(a, b, da, db));
+        next.push(b);
+      } else if (da >= 0) {
+        next.push(crossing(a, b, da, db));
+      }
     }
-    return { west, east, south, north };
-  };
-  const p = box(a);
-  const q = box(b);
+    points = next;
+  }
+  return points.length < 3 ? [] : [...points, points[0]!];
+}
+
+function crossing(
+  a: readonly [number, number],
+  b: readonly [number, number],
+  da: number,
+  db: number,
+): readonly [number, number] {
+  const t = da / (da - db);
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+function boxOf(ring: Ring): MapBounds {
+  let west = Infinity;
+  let east = -Infinity;
+  let south = Infinity;
+  let north = -Infinity;
+  for (const [x, y] of ring) {
+    west = Math.min(west, x);
+    east = Math.max(east, x);
+    south = Math.min(south, y);
+    north = Math.max(north, y);
+  }
+  return { west, east, south, north };
+}
+
+function boxesMeet(p: MapBounds, q: MapBounds): boolean {
   return (
     p.west <= q.east &&
     p.east >= q.west &&
@@ -162,31 +264,6 @@ function boxesMeet(a: Ring, b: Ring): boolean {
   );
 }
 
-/** The same piece read twice, from the view and from a tile read ahead, once. */
-function dedupe(polygons: readonly Polygon[]): Polygon[] {
-  const seen = new Set<string>();
-  return polygons.filter((polygon) => {
-    const key = JSON.stringify(polygon[0]);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-/** Inside the outer ring and in no hole. */
-export function inside(
-  [x, y]: readonly [number, number],
-  polygon: Polygon,
-): boolean {
-  let within = false;
-  for (const ring of polygon) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i]!;
-      const [xj, yj] = ring[j]!;
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-        within = !within;
-      }
-    }
-  }
-  return within;
+function inBox([x, y]: readonly [number, number], box: MapBounds): boolean {
+  return x >= box.west && x <= box.east && y >= box.south && y <= box.north;
 }

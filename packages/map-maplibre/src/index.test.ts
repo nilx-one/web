@@ -5,6 +5,8 @@ import { MAP_BODY_HANDOVER_ZOOM } from "@nilx-one/map-contract";
 import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
 
+import { tileBounds, type TileId } from "./road-tiles";
+
 import {
   BUILDING_DEFAULT_HEIGHT_METERS,
   BUILDING_EXTRUSION_LAYER_ID,
@@ -967,6 +969,152 @@ describe("landmarks the basemap draws", () => {
       "poi:2",
       "poi:9",
     ]);
+  });
+
+  it("joins areas in reach once, a tile both hold read from the tiles ahead", async () => {
+    const at = { longitude: 30.5234, latitude: 50.4501 };
+    const holds = (tile: TileId) => {
+      const b = tileBounds(tile);
+      return (
+        b.west <= at.longitude &&
+        at.longitude < b.east &&
+        b.south <= at.latitude &&
+        at.latitude < b.north
+      );
+    };
+    let home: TileId | undefined;
+    const rect = (west: number, south: number, east: number, north: number) => [
+      [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+      ] as [number, number][],
+    ];
+    const fetchLandmarkTile = vi.fn(async (tile: TileId) => {
+      if (!holds(tile)) {
+        return {
+          landmarks: [],
+          areas: { poiLabels: [], landuse: [], waterLabels: [], water: [] },
+        };
+      }
+      home = tile;
+      const b = tileBounds(tile);
+      return {
+        landmarks: [],
+        areas: {
+          poiLabels: [
+            {
+              id: 7,
+              name: "Park",
+              point: [at.longitude, at.latitude] as const,
+            },
+          ],
+          landuse: [
+            {
+              id: 7,
+              kind: "park",
+              polygons: [rect(b.west, b.south, b.east, b.north)],
+              tile,
+            },
+          ],
+          waterLabels: [],
+          water: [],
+        },
+      };
+    });
+    const fakeMap = makeFakeMap();
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    const querySourceFeatures = vi.fn(
+      (_source: string, { sourceLayer }: { sourceLayer: string }) => {
+        const b = tileBounds(home!);
+        const tile = { _z: home!.z, _x: home!.x, _y: home!.y };
+        if (sourceLayer === "pois") {
+          return [
+            {
+              id: 7,
+              geometry: {
+                type: "Point",
+                coordinates: [at.longitude, at.latitude],
+              },
+              properties: { kind: "park", name: "Park" },
+            },
+            // A park out of reach: its label is not joined.
+            {
+              id: 8,
+              geometry: { type: "Point", coordinates: [31, 50.4501] },
+              properties: { kind: "park", name: "Far" },
+            },
+          ];
+        }
+        if (sourceLayer === "landuse") {
+          return [
+            // The same tile from the view, rounded otherwise and past its edge.
+            {
+              id: 7,
+              ...tile,
+              geometry: {
+                type: "Polygon",
+                coordinates: rect(
+                  b.west - 1e-4,
+                  b.south,
+                  b.east + 1e-7,
+                  b.north - 1e-7,
+                ),
+              },
+              properties: { kind: "park" },
+            },
+            {
+              id: 8,
+              geometry: {
+                type: "Polygon",
+                coordinates: rect(30.99, 50.44, 31.01, 50.46),
+              },
+              properties: { kind: "park" },
+            },
+            // Housing is never an area.
+            {
+              id: 9,
+              ...tile,
+              geometry: {
+                type: "Polygon",
+                coordinates: rect(b.west, b.south, b.east, b.north),
+              },
+              properties: { kind: "residential" },
+            },
+          ];
+        }
+        return [];
+      },
+    );
+    Object.assign(fakeMap, { querySourceFeatures });
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      fetchLandmarkTile,
+    });
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    await renderer.preloadLandmarks?.({
+      west: at.longitude - 0.001,
+      east: at.longitude + 0.001,
+      south: at.latitude - 0.001,
+      north: at.latitude + 0.001,
+    });
+
+    const areas = renderer.areasNear?.(at, 500) ?? [];
+    renderer.landmarksNear?.(at, 500);
+
+    expect(areas.map((area) => [area.id, area.polygons.length])).toEqual([
+      ["poi:7", 1],
+    ]);
+    const b = tileBounds(home!);
+    expect(areas[0]!.polygons[0]![0]![0]).toEqual([b.west, b.south]);
+    // Each layer is asked for once, whoever asks in the same turn.
+    const layers = querySourceFeatures.mock.calls.map(
+      ([, { sourceLayer }]) => sourceLayer,
+    );
+    expect(layers.sort()).toEqual(["landuse", "pois", "water"]);
   });
 });
 

@@ -101,8 +101,9 @@ function decodeValue(bytes) {
 
 /**
  * The properties of every feature in one layer of a Mapbox Vector Tile, with
- * the feature id when the tile carries one. Geometry is not decoded: what a
- * landmark is lives in its attributes.
+ * the feature id when the tile carries one and its geometry type (1 point,
+ * 2 line, 3 polygon). Geometry is not decoded: what a landmark is lives in
+ * its attributes.
  */
 export function decodeLayerFeatures(tileBytes, layerName) {
   const tile = reader(tileBytes);
@@ -129,10 +130,12 @@ export function decodeLayerFeatures(tileBytes, layerName) {
     return features.map((bytes) => {
       const feature = reader(bytes);
       let id;
+      let type = 0;
       const properties = {};
       while (!feature.done) {
         const entry = feature.key();
         if (entry.field === 1) id = feature.varint();
+        else if (entry.field === 3) type = feature.varint();
         else if (entry.field === 2) {
           const tags = reader(feature.bytes());
           while (!tags.done) {
@@ -142,7 +145,7 @@ export function decodeLayerFeatures(tileBytes, layerName) {
           }
         } else feature.skip(entry.wire);
       }
-      return { id, properties };
+      return { id, type, properties };
     });
   }
   return [];
@@ -202,20 +205,87 @@ export function mapperAreaKeys(mapper) {
   return Object.keys(mapper.areas ?? {});
 }
 
-// Which `layer:kind` and `layer:kind:kind_detail` keys occur in the given
-// layers' features.
-export function areaKeysIn(featuresByLayer) {
-  const keys = new Set();
-  for (const [layer, features] of featuresByLayer) {
-    for (const { properties } of features) {
-      const kind = properties.kind;
-      if (typeof kind !== "string") continue;
-      keys.add(`${layer}:${kind}`);
-      const detail = properties.kind_detail;
-      if (typeof detail === "string") keys.add(`${layer}:${kind}:${detail}`);
-    }
-  }
-  return keys;
+const POINT = 1;
+const POLYGON = 3;
+
+// The `layer:kind` and `layer:kind:kind_detail` keys a polygon answers to.
+function keysOf(layer, properties) {
+  const kind = properties.kind;
+  if (typeof kind !== "string") return [];
+  const detail = properties.kind_detail;
+  return [
+    `${layer}:${kind}`,
+    ...(typeof detail === "string" ? [`${layer}:${kind}:${detail}`] : []),
+  ];
+}
+
+const named = (properties) =>
+  typeof properties.name === "string" && properties.name.trim().length > 0;
+
+// Which of the `required` area keys the archive carries as areas the renderer
+// can join (packages/map-maplibre/src/landmark-areas.ts), fed one tile's
+// `pois`, `landuse` and `water` features at a time. A key counts only on a
+// polygon, never a point, and only when its label is there too: a `landuse`
+// polygon whose id a named `pois` point carries, in any tile; a `water`
+// polygon with a named `water` point of the same kind and kind detail in the
+// same tile.
+export function createAreaKeyCheck(required) {
+  const wanted = new Set(required);
+  const found = new Set();
+  const namedPoiIds = new Set();
+  // Landuse ids per key still waiting for their label.
+  const waiting = new Map();
+  return {
+    add({ pois = [], landuse = [], water = [] }) {
+      for (const { id, type, properties } of pois) {
+        if (type !== POINT || id === undefined || !named(properties)) continue;
+        namedPoiIds.add(id);
+        for (const [key, ids] of waiting) {
+          if (!ids.has(id)) continue;
+          found.add(key);
+          waiting.delete(key);
+        }
+      }
+      for (const { id, type, properties } of landuse) {
+        if (type !== POLYGON || id === undefined) continue;
+        for (const key of keysOf("landuse", properties)) {
+          if (!wanted.has(key) || found.has(key)) continue;
+          if (namedPoiIds.has(id)) {
+            found.add(key);
+            waiting.delete(key);
+          } else {
+            const ids = waiting.get(key) ?? new Set();
+            ids.add(id);
+            waiting.set(key, ids);
+          }
+        }
+      }
+      const labels = new Set(
+        water
+          .filter(
+            ({ type, properties }) =>
+              type === POINT &&
+              typeof properties.kind === "string" &&
+              named(properties),
+          )
+          .map(({ properties }) => labelKey(properties)),
+      );
+      for (const { type, properties } of water) {
+        if (type !== POLYGON || !labels.has(labelKey(properties))) continue;
+        for (const key of keysOf("water", properties)) {
+          if (wanted.has(key)) found.add(key);
+        }
+      }
+    },
+    get found() {
+      return new Set(found);
+    },
+  };
+}
+
+// The renderer joins a water label to polygons of exactly its kind and detail.
+function labelKey(properties) {
+  return `${String(properties.kind)}\u0000${String(properties.kind_detail ?? "")}`;
 }
 
 // ---- PMTiles v3 ----------------------------------------------------------
@@ -356,16 +426,18 @@ async function main(argv) {
   const requiredAreas = mapperAreaKeys(mapper);
 
   const lists = [];
-  const areaKeys = new Set();
+  const areas = createAreaKeyCheck(requiredAreas);
   for await (const tile of maxZoomTiles(path)) {
-    lists.push(decodeLayerFeatures(tile, POI_LAYER));
-    for (const key of areaKeysIn(
-      AREA_LAYERS.map((layer) => [layer, decodeLayerFeatures(tile, layer)]),
-    )) {
-      areaKeys.add(key);
-    }
+    const pois = decodeLayerFeatures(tile, POI_LAYER);
+    lists.push(pois);
+    areas.add({
+      pois,
+      ...Object.fromEntries(
+        AREA_LAYERS.map((layer) => [layer, decodeLayerFeatures(tile, layer)]),
+      ),
+    });
   }
-  const missingAreas = requiredAreas.filter((key) => !areaKeys.has(key));
+  const missingAreas = requiredAreas.filter((key) => !areas.found.has(key));
   const kinds = countKinds(lists);
   const wanted = new Set(landmarkKinds);
 

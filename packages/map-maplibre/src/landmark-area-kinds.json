@@ -1,0 +1,4 @@
+{
+  "landuse": ["park", "nature_reserve", "beach"],
+  "water": ["lake", "water"]
+}

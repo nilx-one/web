@@ -69,7 +69,13 @@ export function decodeTilePoints(
   layerName: string,
 ): TilePoint[] {
   const layer = layerOf(bytes, layerName);
-  if (layer === undefined) return [];
+  return layer === undefined ? [] : pointsOf(layer, tile);
+}
+
+function pointsOf(
+  layer: Layer,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+): TilePoint[] {
   const points: TilePoint[] = [];
   for (const feature of layer.features) {
     if (feature.type !== POINT) continue;
@@ -104,7 +110,56 @@ export function decodeTilePolygons(
   layerName: string,
 ): TilePolygon[] {
   const layer = layerOf(bytes, layerName);
-  if (layer === undefined) return [];
+  return layer === undefined ? [] : polygonsOf(layer, tile);
+}
+
+/** What one layer holds: its points and its polygons. */
+export interface TileShapes {
+  readonly points: TilePoint[];
+  readonly polygons: TilePolygon[];
+}
+
+/**
+ * Reads the points and polygons of several layers in one pass over the tile,
+ * each named layer decoded once; any other layer is skipped whole. A named
+ * layer the tile lacks comes back empty.
+ */
+export function decodeTileShapes<Name extends string>(
+  bytes: Uint8Array,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+  layerNames: readonly Name[],
+): Record<Name, TileShapes> {
+  const shapes = Object.fromEntries(
+    layerNames.map((name): [Name, TileShapes] => [
+      name,
+      { points: [], polygons: [] },
+    ]),
+  ) as Record<Name, TileShapes>;
+  const wanted = new Set<string>(layerNames);
+  const reader = protobuf(bytes);
+  while (!reader.done) {
+    const { field, wire } = reader.key();
+    if (field !== 3) {
+      reader.skip(wire);
+      continue;
+    }
+    const bytesOfLayer = reader.bytes();
+    const name = nameOfLayer(bytesOfLayer);
+    if (name === undefined || !wanted.has(name)) continue;
+    wanted.delete(name);
+    const layer = decodeLayer(bytesOfLayer);
+    shapes[name as Name] = {
+      points: pointsOf(layer, tile),
+      polygons: polygonsOf(layer, tile),
+    };
+  }
+  return shapes;
+}
+
+function polygonsOf(
+  layer: Layer,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+): TilePolygon[] {
   const features: TilePolygon[] = [];
   for (const feature of layer.features) {
     if (feature.type !== POLYGON) continue;

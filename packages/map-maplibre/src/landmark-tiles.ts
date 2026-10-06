@@ -6,8 +6,9 @@ import { mapDistanceMeters } from "@nilx-one/map-contract";
 import { PMTiles } from "pmtiles";
 
 import type { AreaLabel, AreaPart, AreaSources } from "./landmark-areas";
+import landmarkAreaKinds from "./landmark-area-kinds.json";
 import landmarkKinds from "./landmark-kinds.json";
-import { decodeTilePoints, decodeTilePolygons } from "./mvt-roads";
+import { decodeTileShapes } from "./mvt-roads";
 import { createTileCache, type TileCache, type TileId } from "./road-tiles";
 
 /**
@@ -47,6 +48,22 @@ export const LANDMARK_KINDS: ReadonlySet<string> = new Set(landmarkKinds);
 /** The layers that draw and name areas: parks, reserves and beaches; lakes. */
 export const LANDUSE_SOURCE_LAYER = "landuse";
 export const WATER_SOURCE_LAYER = "water";
+
+/**
+ * The polygon kinds, by layer, an area may be read from. Every other polygon
+ * (housing, farmland, the sea) is dropped as it is decoded, so neither the
+ * join nor the tiles held ahead carry it. The Avaia's mapper reads a subset
+ * of these, and a test keeps every area it reads on this list.
+ */
+export const AREA_KINDS: Readonly<
+  Record<
+    typeof LANDUSE_SOURCE_LAYER | typeof WATER_SOURCE_LAYER,
+    ReadonlySet<string>
+  >
+> = {
+  landuse: new Set(landmarkAreaKinds.landuse),
+  water: new Set(landmarkAreaKinds.water),
+};
 
 /** What one tile read ahead holds: its landmark points, and its areas' parts. */
 export interface LandmarkTile {
@@ -158,20 +175,34 @@ export function areaLabelOf(feature: {
   };
 }
 
-/** A polygon feature as an area part, or nothing without a kind. */
-export function areaPartOf(feature: {
-  readonly id: string | number | undefined;
-  readonly properties: Readonly<Record<string, unknown>>;
-  readonly polygons: AreaPart["polygons"];
-}): AreaPart | undefined {
+/**
+ * A polygon feature as an area part, or nothing when it can be no area: a
+ * kind not on `AREA_KINDS`, or a `landuse` polygon without the id its label
+ * is found by.
+ */
+export function areaPartOf(
+  layer: keyof typeof AREA_KINDS,
+  feature: {
+    readonly id: string | number | undefined;
+    readonly properties: Readonly<Record<string, unknown>>;
+    readonly polygons: AreaPart["polygons"];
+    readonly tile?: TileId;
+  },
+): AreaPart | undefined {
   const kind = feature.properties["kind"];
-  if (typeof kind !== "string") return undefined;
+  if (typeof kind !== "string" || !AREA_KINDS[layer].has(kind)) {
+    return undefined;
+  }
+  if (layer === LANDUSE_SOURCE_LAYER && feature.id === undefined) {
+    return undefined;
+  }
   const detail = feature.properties["kind_detail"];
   return {
     id: feature.id,
     kind,
     ...(typeof detail === "string" ? { kindDetail: detail } : {}),
     polygons: feature.polygons,
+    ...(feature.tile === undefined ? {} : { tile: feature.tile }),
   };
 }
 
@@ -244,15 +275,20 @@ export function decodeLandmarkTile(
   bytes: Uint8Array,
   tile: TileId,
 ): LandmarkTile {
-  const pois = decodeTilePoints(bytes, tile, POI_SOURCE_LAYER);
+  const shapes = decodeTileShapes(bytes, tile, [
+    POI_SOURCE_LAYER,
+    LANDUSE_SOURCE_LAYER,
+    WATER_SOURCE_LAYER,
+  ]);
+  const pois = shapes[POI_SOURCE_LAYER].points;
   const labels = (layer: readonly Parameters<typeof areaLabelOf>[0][]) =>
     layer.flatMap((feature) => {
       const label = areaLabelOf(feature);
       return label === undefined ? [] : [label];
     });
-  const parts = (layer: readonly Parameters<typeof areaPartOf>[0][]) =>
-    layer.flatMap((feature) => {
-      const part = areaPartOf(feature);
+  const parts = (layer: keyof typeof AREA_KINDS) =>
+    shapes[layer].polygons.flatMap((feature) => {
+      const part = areaPartOf(layer, { ...feature, tile });
       return part === undefined ? [] : [part];
     });
   return {
@@ -267,9 +303,9 @@ export function decodeLandmarkTile(
     }),
     areas: {
       poiLabels: labels(pois),
-      landuse: parts(decodeTilePolygons(bytes, tile, LANDUSE_SOURCE_LAYER)),
-      waterLabels: labels(decodeTilePoints(bytes, tile, WATER_SOURCE_LAYER)),
-      water: parts(decodeTilePolygons(bytes, tile, WATER_SOURCE_LAYER)),
+      landuse: parts(LANDUSE_SOURCE_LAYER),
+      waterLabels: labels(shapes[WATER_SOURCE_LAYER].points),
+      water: parts(WATER_SOURCE_LAYER),
     },
   };
 }

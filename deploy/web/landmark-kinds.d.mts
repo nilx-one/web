@@ -3,6 +3,8 @@
 
 export interface DecodedFeature {
   readonly id: number | undefined;
+  /** 1 point, 2 line, 3 polygon; 0 when the tile does not say. */
+  readonly type: number;
   readonly properties: Record<string, string | number | boolean | undefined>;
 }
 
@@ -30,7 +32,12 @@ export function mapperKinds(mapper: {
 export function mapperAreaKeys(mapper: {
   readonly areas?: Readonly<Record<string, readonly string[]>>;
 }): string[];
-export function areaKeysIn(
-  featuresByLayer: readonly (readonly [string, readonly DecodedFeature[]])[],
-): Set<string>;
+export function createAreaKeyCheck(required: readonly string[]): {
+  add(tile: {
+    readonly pois?: readonly DecodedFeature[];
+    readonly landuse?: readonly DecodedFeature[];
+    readonly water?: readonly DecodedFeature[];
+  }): void;
+  readonly found: Set<string>;
+};
 export function zoomOfTileId(tileId: number): number;

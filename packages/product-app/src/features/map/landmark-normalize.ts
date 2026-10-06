@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { insideRings } from "@nilx-one/map-contract";
 import { distanceM, type LonLat } from "@nilx-one/walk-graph";
 
 /**
@@ -100,6 +101,12 @@ export interface SourceCandidate {
   readonly matches: readonly LandmarkKind[];
   readonly name?: string | undefined;
   readonly geometry: LandmarkGeometry;
+  /**
+   * Where the archive puts the object's label, when it has one apart from
+   * the geometry. It stands for an area instead of its vertices, which move
+   * as tiles load and clip it differently.
+   */
+  readonly anchor?: LonLat | undefined;
   /** A heritage-style attribute, when the archive carries one. */
   readonly heritage?: boolean | undefined;
   /** A co-occurring `attraction` or `landmark` kind. */
@@ -123,6 +130,7 @@ export function normalizeLandmarks(
   const resolved: Resolved[] = [];
   for (const candidate of candidates) {
     if (!wellFormed(candidate.geometry)) continue;
+    if (candidate.anchor !== undefined && !finite(candidate.anchor)) continue;
     const kind = resolveKind(candidate);
     if (kind === undefined) continue;
     const name = candidate.name?.trim();
@@ -131,7 +139,7 @@ export function normalizeLandmarks(
       kind,
       ...(name === undefined || name.length === 0 ? {} : { name }),
       geometry: candidate.geometry,
-      at: representativePoint(candidate.geometry),
+      at: candidate.anchor ?? representativePoint(candidate.geometry),
     });
   }
 
@@ -295,14 +303,18 @@ function landmarkId(kind: LandmarkKind, [lon, lat]: LonLat): string {
   return `lm:${kind}:${q(lon)}:${q(lat)}`;
 }
 
-function wellFormed(geometry: LandmarkGeometry): boolean {
-  const finite = ([lon, lat]: LonLat) =>
+function finite([lon, lat]: LonLat): boolean {
+  return (
     Number.isFinite(lon) &&
     Number.isFinite(lat) &&
     lon >= -180 &&
     lon <= 180 &&
     lat >= -90 &&
-    lat <= 90;
+    lat <= 90
+  );
+}
+
+function wellFormed(geometry: LandmarkGeometry): boolean {
   switch (geometry.type) {
     case "point":
       return finite(geometry.point);
@@ -343,7 +355,9 @@ function closedRing(ring: readonly LonLat[]): boolean {
 /**
  * A point that stands for the geometry: the point itself, the middle vertex
  * of a line, the vertex average of an area's outer rings. Only for closeness
- * and ids, never for arriving: arrival anchors are routing's.
+ * and ids, never for arriving: arrival anchors are routing's. A candidate's
+ * own `anchor` comes first: the vertex average of an area depends on which of
+ * its pieces are loaded.
  */
 function representativePoint(geometry: LandmarkGeometry): LonLat {
   if (geometry.type === "point") return geometry.point;
@@ -392,18 +406,4 @@ function ringArea(ring: readonly LonLat[]): number {
       (xi - origin[0]) * kx * ((yj - origin[1]) * ky);
   }
   return Math.abs(twice) / 2;
-}
-
-function insideRings([x, y]: LonLat, rings: AreaRings): boolean {
-  let inside = false;
-  for (const ring of rings) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i]!;
-      const [xj, yj] = ring[j]!;
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-        inside = !inside;
-      }
-    }
-  }
-  return inside;
 }

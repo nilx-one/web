@@ -57,7 +57,12 @@ import {
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Protocol } from "pmtiles";
 
-import { joinAreas } from "./landmark-areas";
+import {
+  joinAreas,
+  type AreaLabel,
+  type AreaPart,
+  type AreaSources,
+} from "./landmark-areas";
 import {
   areaLabelOf,
   areaPartOf,
@@ -205,6 +210,9 @@ let pmtilesProtocolRegistered = false;
 let workerUrlBound = false;
 
 type MapFactory = (options: MapOptions) => MapLibreMap;
+
+/** A feature the view's loaded tiles hold, with the tile it was read from. */
+type ViewFeature = ReturnType<MapLibreMap["querySourceFeatures"]>[number];
 
 /** The part of a MapLibre marker the observed-position label depends on. */
 export interface MapLabelMarker {
@@ -1046,20 +1054,38 @@ export function createMapLibreRenderer(
     });
   }
 
-  /** The labels and polygon parts of areas in the tiles the view has loaded. */
-  function viewAreaSources() {
-    if (map === undefined) {
-      return { poiLabels: [], landuse: [], waterLabels: [], water: [] };
+  /**
+   * The features of one source layer in the tiles the view has loaded. One
+   * outing asks for landmarks and then areas in the same turn, so what was
+   * read is kept until the turn ends and each layer is queried once.
+   */
+  let viewFeaturesHeld: Map<string, readonly ViewFeature[]> | undefined;
+  function viewFeatures(layer: string): readonly ViewFeature[] {
+    if (map === undefined) return [];
+    let held = viewFeaturesHeld;
+    if (held === undefined) {
+      const fresh = new Map<string, readonly ViewFeature[]>();
+      held = viewFeaturesHeld = fresh;
+      queueMicrotask(() => {
+        if (viewFeaturesHeld === fresh) viewFeaturesHeld = undefined;
+      });
     }
-    const mounted = map;
-    const features = (layer: string) => {
-      const sourceId = mounted.getLayer(layer)?.source ?? "basemap";
-      return mounted.getSource(sourceId) === undefined
-        ? []
-        : mounted.querySourceFeatures(sourceId, { sourceLayer: layer });
-    };
-    const labels = (layer: string) =>
-      features(layer).flatMap((feature) => {
+    let features = held.get(layer);
+    if (features === undefined) {
+      const sourceId = map.getLayer(layer)?.source ?? "basemap";
+      features =
+        map.getSource(sourceId) === undefined
+          ? []
+          : map.querySourceFeatures(sourceId, { sourceLayer: layer });
+      held.set(layer, features);
+    }
+    return features;
+  }
+
+  /** The labels and polygon parts of areas in the tiles the view has loaded. */
+  function viewAreaSources(): AreaSources {
+    const labels = (features: readonly ViewFeature[]) =>
+      features.flatMap((feature) => {
         if (feature.geometry.type !== "Point") return [];
         const label = areaLabelOf({
           id: feature.id,
@@ -1070,8 +1096,11 @@ export function createMapLibreRenderer(
         });
         return label === undefined ? [] : [label];
       });
-    const parts = (layer: string) =>
-      features(layer).flatMap((feature) => {
+    const parts = (
+      layer: typeof LANDUSE_SOURCE_LAYER | typeof WATER_SOURCE_LAYER,
+      features: readonly ViewFeature[],
+    ) =>
+      features.flatMap((feature) => {
         const geometry = feature.geometry as {
           readonly type: string;
           readonly coordinates: unknown;
@@ -1083,18 +1112,24 @@ export function createMapLibreRenderer(
               ? (geometry.coordinates as [number, number][][][])
               : [];
         if (polygons.length === 0) return [];
-        const part = areaPartOf({
+        // The tile the view read the feature from, to cut its piece back to.
+        const { _z: z, _x: x, _y: y } = feature as Partial<ViewFeature>;
+        const part = areaPartOf(layer, {
           id: feature.id,
           properties: feature.properties ?? {},
           polygons,
+          ...(z === undefined || x === undefined || y === undefined
+            ? {}
+            : { tile: { z, x, y } }),
         });
         return part === undefined ? [] : [part];
       });
+    const water = viewFeatures(WATER_SOURCE_LAYER);
     return {
-      poiLabels: labels(POI_SOURCE_LAYER),
-      landuse: parts(LANDUSE_SOURCE_LAYER),
-      waterLabels: labels(WATER_SOURCE_LAYER),
-      water: parts(WATER_SOURCE_LAYER),
+      poiLabels: labels(viewFeatures(POI_SOURCE_LAYER)),
+      landuse: parts(LANDUSE_SOURCE_LAYER, viewFeatures(LANDUSE_SOURCE_LAYER)),
+      waterLabels: labels(water),
+      water: parts(WATER_SOURCE_LAYER, water),
     };
   }
 
@@ -1314,13 +1349,8 @@ export function createMapLibreRenderer(
       for (const landmark of landmarkTiles.landmarksNear(point, radiusMeters)) {
         add(landmark);
       }
-      const sourceId = map?.getLayer(POI_SOURCE_LAYER)?.source ?? "basemap";
-      if (map !== undefined && map.getSource(sourceId) !== undefined) {
-        for (const feature of map.querySourceFeatures(sourceId, {
-          sourceLayer: POI_SOURCE_LAYER,
-        })) {
-          add(landmarkFrom(feature));
-        }
+      for (const feature of viewFeatures(POI_SOURCE_LAYER)) {
+        add(landmarkFrom(feature));
       }
       return [...found.values()]
         .sort((a, b) => a.distance - b.distance)
@@ -1329,13 +1359,38 @@ export function createMapLibreRenderer(
 
     areasNear(point, radiusMeters) {
       if (!validPoint(point)) return [];
+      const readAhead = landmarkTiles.areaSourcesNear(point, radiusMeters);
       const fromView = viewAreaSources();
-      const areas = joinAreas(
-        mergeAreaSources([
-          landmarkTiles.areaSourcesNear(point, radiusMeters),
-          fromView,
-        ]),
+      // A tile both hold is read once, from the tiles read ahead: the view's
+      // copy is the same ground, decoded with other rounding.
+      const tileKey = ({ tile }: AreaPart) =>
+        tile === undefined ? undefined : `${tile.z}/${tile.x}/${tile.y}`;
+      const held = new Set(
+        [...readAhead.landuse, ...readAhead.water].map(tileKey),
       );
+      const fresh = (part: AreaPart) => {
+        const key = tileKey(part);
+        return key === undefined || !held.has(key);
+      };
+      // Only labels in reach are joined; their parts may lie anywhere.
+      const near = (label: AreaLabel) =>
+        mapDistanceMeters(point, {
+          longitude: label.point[0],
+          latitude: label.point[1],
+        }) <= radiusMeters;
+      const sources = mergeAreaSources([
+        readAhead,
+        {
+          ...fromView,
+          landuse: fromView.landuse.filter(fresh),
+          water: fromView.water.filter(fresh),
+        },
+      ]);
+      const areas = joinAreas({
+        ...sources,
+        poiLabels: sources.poiLabels.filter(near),
+        waterLabels: sources.waterLabels.filter(near),
+      });
       return areas
         .map((area) => ({
           area,

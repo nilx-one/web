@@ -170,6 +170,28 @@ export function mapDistanceMeters(
 }
 
 /**
+ * Whether a point lies in a polygon given as its rings, outer ring first:
+ * even-odd over every ring, so a point in a hole is outside. Renderer and
+ * application share it so "inside an area" is the same test on both sides.
+ */
+export function insideRings(
+  [x, y]: readonly [number, number],
+  rings: readonly (readonly (readonly [number, number])[])[],
+): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!;
+      const [xj, yj] = ring[j]!;
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+
+/**
  * The compass heading from one point to another: degrees clockwise from
  * north, in [0, 360). It is what `AvatarHandle.bearingDeg` means.
  */
