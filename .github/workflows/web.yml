@@ -200,8 +200,12 @@ jobs:
             deploy/web/bootstrap-models.test.sh \
             deploy/web/check-models-public.sh \
             deploy/web/check-models-public.test.sh
+          bash -n \
+            deploy/web/prepare-map-runtime.sh \
+            deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/check-public.test.sh
           sh deploy/web/check-map-public.test.sh
+          bash deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/bootstrap-models.test.sh
           sh deploy/web/check-models-public.test.sh
       - name: Reuse verified Web host builds
