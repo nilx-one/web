@@ -105,6 +105,19 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Пока ничего. Пройдите мимо памятника, а потом передайте руль своей Avaia.",
   "avaia.notebook.note":
     "Хранится только на этом устройстве. Ничего отсюда никуда не отправляется и ни о ком не утверждается.",
+  "avaia.finds.title": "Редкие находки",
+  "avaia.finds.empty": "Активных следов нет.",
+  "avaia.finds.leadTitle": "Находка уровня {tier}",
+  "avaia.finds.leadDetail":
+    "Замечена на этой неделе · возьмите управление и дойдите туда.",
+  "avaia.finds.note":
+    "Следы остаются на этом устройстве. Редкая находка разделяется только как claim, никогда не как BondChain.",
+  "find.toast.rare.title": "Замечена редкая находка",
+  "find.toast.rare.detail": "Уровень {tier}. След сохранён на этом устройстве.",
+  "find.toast.kept.title": "Находка сохранена",
+  "find.toast.kept.detail": "Уровень {tier} · +{xp} опыта.",
+  "find.toast.taken.title": "Вот чёрт!",
+  "find.toast.taken.detail": "Кто-то успел раньше. След закрыт.",
   "settings.language.legend": "Язык",
   "settings.language.auto": "Автоматически",
   "settings.language.autoAction": "Использовать определённый язык",

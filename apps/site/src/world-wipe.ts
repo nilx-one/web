@@ -16,7 +16,7 @@ export const WIPE_EPOCH = "2026-09-28";
 const EPOCH_KEY = "nilx-one.wipe-epoch";
 const GAME_PREFIX = "nilx-one.";
 const KEEP_PREFIXES = ["nilx-one.interface.", "nilx-one.localModel."];
-const DATABASES = ["nilx-presence"];
+const DATABASES = ["nilx-presence", "avaia-finds"];
 
 /** A delete blocked by a connection some other tab holds open is not waited on forever. */
 const DELETE_TIMEOUT_MS = 3000;

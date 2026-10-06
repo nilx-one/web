@@ -1,0 +1,62 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Format helper
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/format-helper.yml"
+      - "docs/state-placement.md"
+      - "packages/artifact-contract/src/index.ts"
+      - "packages/product-app/src/features/map/use-find-loop.ts"
+      - "packages/product-app/src/features/progression/committed-journal.test.ts"
+      - "packages/product-app/src/features/progression/committed-journal.ts"
+      - "packages/product-app/src/features/progression/committed-sync.test.ts"
+      - "packages/product-app/src/features/progression/committed-sync.ts"
+      - "packages/product-app/src/shell/localization.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format files
+        run: |
+          pnpm exec prettier --write \
+            docs/state-placement.md \
+            packages/artifact-contract/src/index.ts \
+            packages/product-app/src/features/map/use-find-loop.ts \
+            packages/product-app/src/features/progression/committed-journal.test.ts \
+            packages/product-app/src/features/progression/committed-journal.ts \
+            packages/product-app/src/features/progression/committed-sync.test.ts \
+            packages/product-app/src/features/progression/committed-sync.ts \
+            packages/product-app/src/shell/localization.ts
+      - name: Print formatted files
+        run: |
+          for file in \
+            docs/state-placement.md \
+            packages/artifact-contract/src/index.ts \
+            packages/product-app/src/features/map/use-find-loop.ts \
+            packages/product-app/src/features/progression/committed-journal.test.ts \
+            packages/product-app/src/features/progression/committed-journal.ts \
+            packages/product-app/src/features/progression/committed-sync.test.ts \
+            packages/product-app/src/features/progression/committed-sync.ts \
+            packages/product-app/src/shell/localization.ts; do
+            echo "::group::FORMATTED:$file"
+            base64 -w0 "$file"
+            echo
+            echo "::endgroup::"
+          done

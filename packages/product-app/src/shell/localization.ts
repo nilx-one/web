@@ -114,6 +114,18 @@ const EN_MESSAGES = {
     "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
   "avaia.notebook.note":
     "Kept on this device only. Nothing here is sent anywhere or asserted about anyone.",
+  "avaia.finds.title": "Rare finds",
+  "avaia.finds.empty": "No live leads.",
+  "avaia.finds.leadTitle": "Tier {tier} find",
+  "avaia.finds.leadDetail": "Seen this week · take the wheel and walk there.",
+  "avaia.finds.note":
+    "Leads stay on this device. A rare pick-up is shared only as a claim, never as BondChain.",
+  "find.toast.rare.title": "Rare find spotted",
+  "find.toast.rare.detail": "Tier {tier}. A lead is waiting on this device.",
+  "find.toast.kept.title": "Find kept",
+  "find.toast.kept.detail": "Tier {tier} · +{xp} experience.",
+  "find.toast.taken.title": "Oh crap!",
+  "find.toast.taken.detail": "Someone got there first. The lead is closed.",
   "settings.language.legend": "Language",
   "settings.language.auto": "Auto",
   "settings.language.autoAction": "Use detected language",
@@ -407,6 +419,19 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",
   "avaia.notebook.note":
     "Зберігається лише на цьому пристрої. Нічого звідси нікуди не надсилається і ні про кого не стверджується.",
+  "avaia.finds.title": "Рідкісні знахідки",
+  "avaia.finds.empty": "Активних слідів немає.",
+  "avaia.finds.leadTitle": "Знахідка рівня {tier}",
+  "avaia.finds.leadDetail":
+    "Помічена цього тижня · заберіть кермо й дійдіть туди.",
+  "avaia.finds.note":
+    "Сліди лишаються на цьому пристрої. Рідкісне підбирання ділиться лише як claim, ніколи не як BondChain.",
+  "find.toast.rare.title": "Помічено рідкісну знахідку",
+  "find.toast.rare.detail": "Рівень {tier}. Слід збережено на цьому пристрої.",
+  "find.toast.kept.title": "Знахідку збережено",
+  "find.toast.kept.detail": "Рівень {tier} · +{xp} досвіду.",
+  "find.toast.taken.title": "Ой, чорт!",
+  "find.toast.taken.detail": "Хтось дістався раніше. Слід закрито.",
   "settings.language.legend": "Мова",
   "settings.language.auto": "Автоматично",
   "settings.language.autoAction": "Використовувати визначену мову",

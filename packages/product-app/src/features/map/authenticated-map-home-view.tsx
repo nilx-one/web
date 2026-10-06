@@ -8,6 +8,7 @@ import {
   type AvatarSelection,
   type BondProviderConnections,
   type BondProviderType,
+  type CommittedAwardAccessPort,
   type NearbySpeechAccessPort,
   type PubInfoAccessPort,
 } from "@nilx-one/application";
@@ -142,24 +143,22 @@ import {
   ACHIEVEMENTS,
   earnDeviceAchievement,
   markSettingsHintSeen,
-  newExperienceEventId,
   progressionSnapshot,
   progressionStanding,
-  queueExperience,
   subscribeProgression,
   updateProgression,
   EMPTY_PROGRESSION,
-  XP_ZONE_REVEALED_BY_AVAIA,
-  XP_ZONE_REVEALED_MANUALLY,
   type LevelStanding,
 } from "../progression/progression";
 import { usePubInfoSync } from "../progression/use-pub-info-sync";
+import { earnActivity } from "../progression/committed-sync";
 import {
   AchievementDialog,
   type AchievementDialogState,
 } from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
+import { useFindLoop } from "./use-find-loop";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
@@ -216,6 +215,11 @@ export interface AuthenticatedMapHomeViewProps {
    * capability — the device then keeps what it earned until one does.
    */
   readonly pubInfo?: PubInfoAccessPort;
+  /**
+   * Commits newly earned activity through R3. The history remains local; this
+   * port receives only commitments and the fields the identity service prices.
+   */
+  readonly committedAwards?: CommittedAwardAccessPort;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
    * host's identity client has no such capability, which is a normal state.
@@ -359,6 +363,7 @@ function passedSectionTitle(scroller: HTMLElement): string | undefined {
 
 /** Long enough to read "saved", short enough not to linger over the world. */
 const AVAIA_SAVED_TOAST_MS = 4_000;
+const FIND_TOAST_MS = 6_000;
 
 /**
  * The world has settled — the map painted, the first fix framed — before
@@ -602,6 +607,7 @@ export function AuthenticatedMapHomeView({
   section = "world",
   localModel,
   pubInfo,
+  committedAwards,
   nearbySpeech,
   connectedProviders,
   providerDeepLinks = [],
@@ -649,6 +655,9 @@ export function AuthenticatedMapHomeView({
   const [avaiaSavedToast, setAvaiaSavedToast] = useState<
     StatusToastItem | undefined
   >(undefined);
+  const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
+    undefined,
+  );
   const [achievementDialog, setAchievementDialog] = useState<
     AchievementDialogState | undefined
   >(undefined);
@@ -774,6 +783,7 @@ export function AuthenticatedMapHomeView({
       ? []
       : [statusToast]),
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
+    ...(findToast === undefined ? [] : [findToast]),
     ...speech.toasts,
   ];
   const headerActions: readonly HeaderAction[] =
@@ -788,6 +798,48 @@ export function AuthenticatedMapHomeView({
   // this device is anywhere.
   const declaredPosition = observedPosition?.declared === true;
   const deviceObservation = declaredPosition ? undefined : observedPosition;
+  const findLoop = useFindLoop({
+    owner: pubDress,
+    port: committedAwards,
+    bondDriving: wheel === "bond" && handover === undefined,
+    device: deviceObservation,
+    onEvent: (event) => {
+      if (event.kind === "find-taken") {
+        cue("failure");
+        setFindToast({
+          id: `find-taken-${event.artifactId}`,
+          kind: "error",
+          title: t("find.toast.taken.title"),
+          description: t("find.toast.taken.detail"),
+        });
+        return;
+      }
+      if (event.kind === "find-seen" && event.tier >= 4) {
+        cue("spot");
+        setFindToast({
+          id: `find-seen-${event.artifactId}`,
+          kind: "active",
+          title: t("find.toast.rare.title"),
+          description: t("find.toast.rare.detail").replace(
+            "{tier}",
+            String(event.tier),
+          ),
+        });
+        return;
+      }
+      if (event.kind === "find-kept") {
+        cue("achievement");
+        setFindToast({
+          id: `find-kept-${event.artifactId}`,
+          kind: "active",
+          title: t("find.toast.kept.title"),
+          description: t("find.toast.kept.detail")
+            .replace("{tier}", String(event.tier))
+            .replace("{xp}", String(event.experience)),
+        });
+      }
+    },
+  });
   // The Avaia answers fog taps through the reveal below, which in turn talks
   // in the Avaia's voice: the ref is what lets the two hooks meet.
   const fogRevealRef = useRef<FogRevealState | undefined>(undefined);
@@ -807,6 +859,10 @@ export function AuthenticatedMapHomeView({
       return outcome === "offered" || outcome === "revealing";
     },
     onCue: cue,
+    onWalkCompleted: findLoop.completedAvaiaWalk,
+    onAward: (record) => {
+      void earnActivity(pubDress, record, committedAwards !== undefined);
+    },
     // The line is on the card either way; a recording only says it aloud.
     // Its own walking lines are the loudest level: the person is driving it.
     onLine: (line) => {
@@ -822,18 +878,18 @@ export function AuthenticatedMapHomeView({
     bondPoint: observedPosition,
     observed: deviceObservation,
     owner: pubDress,
-    onRevealed: (_cell, via) => {
+    onRevealed: (cell, via) => {
       setFogAnnouncement(t("fog.announce.revealed"));
       cue("reveal");
-      updateProgression(pubDress, (current) =>
-        queueExperience(current, {
-          id: newExperienceEventId(),
+      void earnActivity(
+        pubDress,
+        {
+          kind: via === "avaia" ? "zone_revealed" : "zone_walked",
           earner: via === "avaia" ? "avaia" : "bond",
-          amount:
-            via === "avaia"
-              ? XP_ZONE_REVEALED_BY_AVAIA
-              : XP_ZONE_REVEALED_MANUALLY,
-        }),
+          subject: cell.id,
+          at: Date.now(),
+        },
+        committedAwards !== undefined,
       );
       if (via === "avaia" && wheel === "avaia" && handover === undefined) {
         avaiaWalk.announce("fog.revealed");
@@ -871,6 +927,14 @@ export function AuthenticatedMapHomeView({
     );
     return () => globalThis.clearTimeout(fades);
   }, [avaiaSavedToast]);
+  useEffect(() => {
+    if (findToast === undefined) return;
+    const fades = globalThis.setTimeout(
+      () => setFindToast(undefined),
+      FIND_TOAST_MS,
+    );
+    return () => globalThis.clearTimeout(fades);
+  }, [findToast]);
   useEffect(() => {
     fogRevealRef.current = fogReveal;
   });
@@ -1757,6 +1821,10 @@ export function AuthenticatedMapHomeView({
               setAvaiaSavedToast(undefined);
               return;
             }
+            if (findToast?.id === id) {
+              setFindToast(undefined);
+              return;
+            }
             if (speech.toasts.some((toast) => toast.id === id)) {
               speech.dismiss(id);
               return;
@@ -2182,6 +2250,39 @@ export function AuthenticatedMapHomeView({
                         )}
                         <p className="interface-settings__note">
                           {t("avaia.notebook.note")}
+                        </p>
+                      </section>
+                      <section
+                        className="avaia-notebook"
+                        aria-labelledby="avaia-finds-title"
+                      >
+                        <span
+                          className="interface-settings__eyebrow"
+                          id="avaia-finds-title"
+                        >
+                          {t("avaia.finds.title")}
+                        </span>
+                        {findLoop.leads.length === 0 ? (
+                          <p className="profile-edit__note">
+                            {t("avaia.finds.empty")}
+                          </p>
+                        ) : (
+                          <ul className="avaia-notebook__list">
+                            {findLoop.leads.map((lead) => (
+                              <li key={lead.artifactId}>
+                                <strong>
+                                  {t("avaia.finds.leadTitle").replace(
+                                    "{tier}",
+                                    String(lead.tier),
+                                  )}
+                                </strong>
+                                <small>{t("avaia.finds.leadDetail")}</small>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <p className="interface-settings__note">
+                          {t("avaia.finds.note")}
                         </p>
                       </section>
                     </>

@@ -47,6 +47,9 @@ export interface TierRate {
  * About one find every 2 km and 30 experience a kilometre in all; tier 6
  * once in 100 km.
  */
+/** Canonical chance-find pack shared by the client and identity verifier. */
+export const FIND_PACK_ID = "nilx-one.finds";
+
 export const ROLL_TABLE = {
   version: 1,
   tiers: [
@@ -186,6 +189,18 @@ export interface FindRoll {
    * coordinate: the caller lays it on the walk it is drawing.
    */
   readonly placement: { readonly along: number; readonly across: number };
+}
+
+/**
+ * Whether the rolled placement comes within the Avaia's fixed perception
+ * radius of the walk that laid it down. `placement.across` is a fraction of
+ * FIND_OFFSET_METERS, so no coordinate has to be created or persisted merely
+ * to decide whether the find was actually seen.
+ */
+export function isFindPerceptible(roll: Pick<FindRoll, "placement">): boolean {
+  return (
+    Math.abs(roll.placement.across) * FIND_OFFSET_METERS <= PERCEPTION_METERS
+  );
 }
 
 export interface RollInput {
