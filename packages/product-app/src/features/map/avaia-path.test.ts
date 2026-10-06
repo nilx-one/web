@@ -34,8 +34,16 @@ function line(...points: (readonly [number, number])[]): [number, number][] {
   });
 }
 
+function road(
+  kind: string,
+  kindDetail: string,
+  ...points: (readonly [number, number])[]
+): MapRoad {
+  return { kind, kindDetail, lines: [line(...points)] };
+}
+
 function footway(...points: (readonly [number, number])[]): MapRoad {
-  return { kind: "path", kindDetail: "footway", lines: [line(...points)] };
+  return road("path", "footway", ...points);
 }
 
 function building(x0: number, y0: number, x1: number, y1: number): MapObstacle {
@@ -87,7 +95,10 @@ describe("planWalk", () => {
   it("crosses open ground as before when the map has no paths", () => {
     const from = at(0, 0);
     const to = at(100, 0);
-    expect(walk(from, to, [], "tap")).toEqual(planRoute(from, to, []));
+    const route = planRoute(from, to, []);
+    expect(walk(from, to, [], "tap")).toEqual(
+      route.kind === "route" ? { ...route, maxLocomotion: "jog" } : route,
+    );
   });
 
   it("steps onto a nearby footway and follows it", () => {
@@ -104,7 +115,43 @@ describe("planWalk", () => {
     const from = at(0, 0);
     const to = at(100, 0);
     const far = footway([-10, 40], [110, 40]);
-    expect(walk(from, to, [far], "own")).toEqual(planRoute(from, to, []));
+    const route = planRoute(from, to, []);
+    expect(walk(from, to, [far], "own")).toEqual(
+      route.kind === "route" ? { ...route, maxLocomotion: "jog" } : route,
+    );
+  });
+
+  it("allows running only on a route whose surface supports it", () => {
+    const from = at(0, 0);
+    const to = at(1_500, 0);
+
+    expect(
+      walk(from, to, [footway([0, 0], [1_500, 0])], "own"),
+    ).toMatchObject({ kind: "route", maxLocomotion: "run" });
+
+    expect(
+      walk(
+        from,
+        to,
+        [road("minor_road", "residential", [0, 0], [1_500, 0])],
+        "own",
+      ),
+    ).toMatchObject({ kind: "route", maxLocomotion: "jog" });
+
+    expect(
+      walk(from, to, [road("path", "steps", [0, 0], [1_500, 0])], "own"),
+    ).toMatchObject({ kind: "route", maxLocomotion: "walk" });
+  });
+
+  it("treats a grass connector as cross-country rather than a full run", () => {
+    expect(
+      walk(
+        at(0, 5),
+        at(1_500, 5),
+        [footway([-10, 0], [1_510, 0])],
+        "own",
+      ),
+    ).toMatchObject({ kind: "route", maxLocomotion: "jog" });
   });
 
   describe("a footway that loops far round", () => {
