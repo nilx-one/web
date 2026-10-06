@@ -17,6 +17,8 @@ import {
   MAP_CAMERA_TRANSITION_MS,
   MAP_STYLE_URL,
   MAP_STYLE_URLS,
+  TERRAIN_EXAGGERATION,
+  TERRAIN_SOURCE_ID,
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
   OBSERVED_POSITION_CELL_LAYER_ID,
   OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
@@ -57,6 +59,7 @@ interface FakeMap {
   readonly removeLayer: ReturnType<typeof vi.fn>;
   readonly setPaintProperty: ReturnType<typeof vi.fn>;
   readonly setLayoutProperty: ReturnType<typeof vi.fn>;
+  readonly setTerrain: ReturnType<typeof vi.fn>;
   readonly getSource: (id: string) => unknown;
   readonly getLayer: (id: string) => unknown;
   readonly getCenter: () => { lng: number; lat: number };
@@ -135,6 +138,7 @@ function makeFakeMap(): FakeMap {
     setLayoutProperty: vi.fn((id: string, property: string, value: unknown) => {
       layout.set(`${id}.${property}`, value);
     }),
+    setTerrain: vi.fn(),
     getSource: (id) => sources.get(id),
     getLayer: (id) => layers.get(id),
     getCenter: () => ({ lng: camera.center[0], lat: camera.center[1] }),
@@ -652,28 +656,53 @@ describe("camera ownership", () => {
 });
 
 describe("presentation dimension", () => {
-  it("suppresses building extrusion in explicit 2D without touching geography", () => {
+  it("switches measured terrain and building mass as one depth presentation", () => {
     const fakeMap = makeFakeMap();
+    fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
     fakeMap.layers.set(BUILDING_EXTRUSION_LAYER_ID, {
       id: BUILDING_EXTRUSION_LAYER_ID,
     });
     const renderer = readyRenderer(fakeMap);
 
+    // Volumetric is the default and applies the DEM at real scale on load.
+    expect(fakeMap.setTerrain).toHaveBeenCalledWith({
+      source: TERRAIN_SOURCE_ID,
+      exaggeration: TERRAIN_EXAGGERATION,
+    });
+
     renderer.setDimension("flat");
 
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith(null);
     expect(
       fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
     ).toBe("none");
 
     renderer.setDimension("volumetric");
 
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith({
+      source: TERRAIN_SOURCE_ID,
+      exaggeration: TERRAIN_EXAGGERATION,
+    });
     expect(
       fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
     ).toBe("visible");
   });
 
+  it("stays deterministic when a compatible style has no DEM source", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith(null);
+
+    renderer.setDimension("flat");
+    renderer.setDimension("volumetric");
+
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith(null);
+  });
+
   it("reapplies the selected dimension after a style reload", () => {
     const fakeMap = makeFakeMap();
+    fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
     const renderer = readyRenderer(fakeMap);
 
     renderer.setDimension("flat");
@@ -683,6 +712,7 @@ describe("presentation dimension", () => {
     renderer.setAppearance("dark");
     fakeMap.emit("styledata");
 
+    expect(fakeMap.setTerrain).toHaveBeenLastCalledWith(null);
     expect(
       fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
     ).toBe("none");
