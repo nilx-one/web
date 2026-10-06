@@ -5,6 +5,11 @@
     "nilx-one:contract-version": "0.1.0",
     "nilx-one:basemap-url": "/map/0.1.0/basemap.pmtiles",
     "nilx-one:basemap-state": "regional-server-published",
+    "nilx-one:terrain-url": "/map/0.1.0/terrain/{z}/{x}/{y}.png",
+    "nilx-one:terrain-state": "regional-server-published",
+    "nilx-one:terrain-encoding": "terrarium",
+    "nilx-one:terrain-maxzoom": 12,
+    "nilx-one:terrain-exaggeration": 1,
     "nilx-one:coverage": "kyiv-bootstrap",
     "nilx-one:visual-language": "0x1-spatial",
     "nilx-one:visual-direction": "0x1 spatial map with restrained cyan accents",
@@ -30,12 +35,7 @@
     "nilx-one:zoom-neighborhood": 13,
     "nilx-one:zoom-street": 15,
     "nilx-one:zoom-building": 16.5,
-    "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold",
-    "nilx-one:terrain-url": "/map/0.1.0/terrain/{z}/{x}/{y}.png",
-    "nilx-one:terrain-state": "regional-server-published",
-    "nilx-one:terrain-encoding": "terrarium",
-    "nilx-one:terrain-maxzoom": 12,
-    "nilx-one:terrain-exaggeration": 1
+    "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold"
   },
   "glyphs": "/map/0.1.0/fonts/{fontstack}/{range}.pbf",
   "projection": {
@@ -43,11 +43,7 @@
   },
   "light": {
     "anchor": "viewport",
-    "position": [
-      1.4,
-      205,
-      32
-    ],
+    "position": [1.4, 205, 32],
     "color": "#ffffff",
     "intensity": 0.4
   },
@@ -59,15 +55,8 @@
     },
     "terrain": {
       "type": "raster-dem",
-      "tiles": [
-        "/map/0.1.0/terrain/{z}/{x}/{y}.png"
-      ],
-      "bounds": [
-        29.75,
-        49.95,
-        31.35,
-        51.15
-      ],
+      "tiles": ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
+      "bounds": [29.75, 49.95, 31.35, 51.15],
       "minzoom": 8,
       "maxzoom": 12,
       "tileSize": 256,
@@ -88,13 +77,7 @@
       "type": "fill",
       "source": "basemap",
       "source-layer": "earth",
-      "filter": [
-        "==",
-        [
-          "geometry-type"
-        ],
-        "Polygon"
-      ],
+      "filter": ["==", ["geometry-type"], "Polygon"],
       "paint": {
         "fill-color": "#f1f4f5"
       }
@@ -108,35 +91,14 @@
       "paint": {
         "fill-color": [
           "match",
-          [
-            "get",
-            "kind"
-          ],
-          [
-            "forest",
-            "scrub",
-            "grassland"
-          ],
+          ["get", "kind"],
+          ["forest", "scrub", "grassland"],
           "#eaf2ef",
-          [
-            "urban_area"
-          ],
+          ["urban_area"],
           "#e8edef",
           "#f1f4f5"
         ],
-        "fill-opacity": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          4,
-          0.9,
-          10,
-          0.5
-        ]
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 4, 0.9, 10, 0.5]
       }
     },
     {
@@ -146,10 +108,7 @@
       "source-layer": "landuse",
       "filter": [
         "in",
-        [
-          "get",
-          "kind"
-        ],
+        ["get", "kind"],
         [
           "literal",
           [
@@ -175,19 +134,7 @@
       ],
       "paint": {
         "fill-color": "#eaf2ef",
-        "fill-opacity": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          6,
-          0,
-          10,
-          1
-        ]
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], 6, 0, 10, 1]
       }
     },
     {
@@ -198,10 +145,7 @@
       "minzoom": 9,
       "filter": [
         "in",
-        [
-          "get",
-          "kind"
-        ],
+        ["get", "kind"],
         [
           "literal",
           [
@@ -225,12 +169,8 @@
         "fill-color": "#e3eaec",
         "fill-opacity": [
           "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
+          ["linear"],
+          ["zoom"],
           9,
           0.18,
           10,
@@ -245,13 +185,7 @@
       "type": "fill",
       "source": "basemap",
       "source-layer": "water",
-      "filter": [
-        "==",
-        [
-          "geometry-type"
-        ],
-        "Polygon"
-      ],
+      "filter": ["==", ["geometry-type"], "Polygon"],
       "paint": {
         "fill-color": "#d9f4f7"
       }
@@ -261,41 +195,22 @@
       "type": "line",
       "source": "basemap",
       "source-layer": "water",
-      "filter": [
-        "==",
-        [
-          "geometry-type"
-        ],
-        "Polygon"
-      ],
+      "filter": ["==", ["geometry-type"], "Polygon"],
       "paint": {
         "line-color": "#37d7e5",
         "line-opacity": [
           "match",
-          [
-            "get",
-            "kind_detail"
-          ],
-          [
-            "river",
-            "riverbank"
-          ],
+          ["get", "kind_detail"],
+          ["river", "riverbank"],
           0.62,
-          [
-            "lake",
-            "reservoir"
-          ],
+          ["lake", "reservoir"],
           0.4,
           0.32
         ],
         "line-width": [
           "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
+          ["linear"],
+          ["zoom"],
           6,
           0.35,
           10,
@@ -313,21 +228,8 @@
       "minzoom": 8,
       "filter": [
         "all",
-        [
-          "==",
-          [
-            "geometry-type"
-          ],
-          "LineString"
-        ],
-        [
-          "==",
-          [
-            "get",
-            "kind_detail"
-          ],
-          "river"
-        ]
+        ["==", ["geometry-type"], "LineString"],
+        ["==", ["get", "kind_detail"], "river"]
       ],
       "layout": {
         "line-cap": "round",
@@ -338,13 +240,8 @@
         "line-opacity": 0.5,
         "line-width": [
           "interpolate",
-          [
-            "exponential",
-            1.6
-          ],
-          [
-            "zoom"
-          ],
+          ["exponential", 1.6],
+          ["zoom"],
           8,
           0.45,
           12,
@@ -362,29 +259,16 @@
       "minzoom": 10,
       "filter": [
         "in",
-        [
-          "get",
-          "kind"
-        ],
-        [
-          "literal",
-          [
-            "building",
-            "building_part"
-          ]
-        ]
+        ["get", "kind"],
+        ["literal", ["building", "building_part"]]
       ],
       "paint": {
         "fill-color": "#d8e2e5",
         "fill-outline-color": "#c9d8dc",
         "fill-opacity": [
           "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
+          ["linear"],
+          ["zoom"],
           10,
           0.12,
           11,
@@ -406,34 +290,12 @@
       "source": "basemap",
       "source-layer": "roads",
       "minzoom": 11,
-      "filter": [
-        "==",
-        [
-          "get",
-          "kind"
-        ],
-        "rail"
-      ],
+      "filter": ["==", ["get", "kind"], "rail"],
       "paint": {
         "line-color": "#c4d4d8",
         "line-opacity": 0.58,
-        "line-dasharray": [
-          3,
-          2
-        ],
-        "line-width": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          11,
-          0.3,
-          18,
-          1.5
-        ]
+        "line-dasharray": [3, 2],
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.3, 18, 1.5]
       }
     },
     {
@@ -442,42 +304,18 @@
       "source": "basemap",
       "source-layer": "roads",
       "minzoom": 14,
-      "filter": [
-        "==",
-        [
-          "get",
-          "kind"
-        ],
-        "minor_road"
-      ],
+      "filter": ["==", ["get", "kind"], "minor_road"],
       "layout": {
         "line-cap": "round",
         "line-join": "round"
       },
       "paint": {
         "line-color": "#f6fafa",
-        "line-opacity": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          14,
-          0,
-          15,
-          0.8
-        ],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0, 15, 0.8],
         "line-width": [
           "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
+          ["exponential", 1.5],
+          ["zoom"],
           14,
           2,
           18,
@@ -493,14 +331,7 @@
       "source": "basemap",
       "source-layer": "roads",
       "minzoom": 10,
-      "filter": [
-        "==",
-        [
-          "get",
-          "kind"
-        ],
-        "minor_road"
-      ],
+      "filter": ["==", ["get", "kind"], "minor_road"],
       "layout": {
         "line-cap": "round",
         "line-join": "round"
@@ -509,12 +340,8 @@
         "line-color": "#cedcdf",
         "line-opacity": [
           "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
+          ["linear"],
+          ["zoom"],
           10,
           0.42,
           12,
@@ -524,13 +351,8 @@
         ],
         "line-width": [
           "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
+          ["exponential", 1.5],
+          ["zoom"],
           10,
           0.18,
           11,
@@ -552,20 +374,7 @@
       "source": "basemap",
       "source-layer": "roads",
       "minzoom": 11,
-      "filter": [
-        "in",
-        [
-          "get",
-          "kind"
-        ],
-        [
-          "literal",
-          [
-            "highway",
-            "major_road"
-          ]
-        ]
-      ],
+      "filter": ["in", ["get", "kind"], ["literal", ["highway", "major_road"]]],
       "layout": {
         "line-cap": "round",
         "line-join": "round"
@@ -574,13 +383,8 @@
         "line-color": "#f8fbfb",
         "line-width": [
           "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
+          ["exponential", 1.5],
+          ["zoom"],
           11,
           2,
           14,
@@ -598,20 +402,7 @@
       "source": "basemap",
       "source-layer": "roads",
       "minzoom": 7,
-      "filter": [
-        "in",
-        [
-          "get",
-          "kind"
-        ],
-        [
-          "literal",
-          [
-            "highway",
-            "major_road"
-          ]
-        ]
-      ],
+      "filter": ["in", ["get", "kind"], ["literal", ["highway", "major_road"]]],
       "layout": {
         "line-cap": "round",
         "line-join": "round"
@@ -620,13 +411,8 @@
         "line-color": "#bccfd4",
         "line-width": [
           "interpolate",
-          [
-            "exponential",
-            1.5
-          ],
-          [
-            "zoom"
-          ],
+          ["exponential", 1.5],
+          ["zoom"],
           7,
           0.55,
           11,
@@ -648,44 +434,17 @@
       "minzoom": 14,
       "filter": [
         "in",
-        [
-          "get",
-          "kind"
-        ],
-        [
-          "literal",
-          [
-            "building",
-            "building_part"
-          ]
-        ]
+        ["get", "kind"],
+        ["literal", ["building", "building_part"]]
       ],
       "paint": {
         "fill-extrusion-color": "#eef3f4",
-        "fill-extrusion-height": [
-          "coalesce",
-          [
-            "get",
-            "height"
-          ],
-          7
-        ],
-        "fill-extrusion-base": [
-          "coalesce",
-          [
-            "get",
-            "min_height"
-          ],
-          0
-        ],
+        "fill-extrusion-height": ["coalesce", ["get", "height"], 7],
+        "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
         "fill-extrusion-opacity": [
           "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
+          ["linear"],
+          ["zoom"],
           15,
           0,
           16.5,
@@ -703,10 +462,7 @@
       "paint": {
         "line-color": "#7d8a90",
         "line-opacity": 0.34,
-        "line-dasharray": [
-          2,
-          2
-        ],
+        "line-dasharray": [2, 2],
         "line-width": 0.7
       }
     },
@@ -719,12 +475,8 @@
       "paint": {
         "circle-radius": [
           "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
+          ["linear"],
+          ["zoom"],
           16,
           0.8,
           19,
@@ -740,25 +492,10 @@
       "source": "basemap",
       "source-layer": "water",
       "minzoom": 11,
-      "filter": [
-        "has",
-        "name"
-      ],
+      "filter": ["has", "name"],
       "layout": {
-        "text-field": [
-          "coalesce",
-          [
-            "get",
-            "name:uk"
-          ],
-          [
-            "get",
-            "name"
-          ]
-        ],
-        "text-font": [
-          "Noto Sans Regular"
-        ],
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
         "text-size": 11,
         "text-letter-spacing": 0.15,
         "text-max-width": 6
@@ -778,46 +515,14 @@
       "minzoom": 13,
       "filter": [
         "all",
-        [
-          "has",
-          "name"
-        ],
-        [
-          "in",
-          "kind",
-          "highway",
-          "major_road"
-        ]
+        ["has", "name"],
+        ["in", "kind", "highway", "major_road"]
       ],
       "layout": {
-        "text-field": [
-          "coalesce",
-          [
-            "get",
-            "name:uk"
-          ],
-          [
-            "get",
-            "name"
-          ]
-        ],
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
         "symbol-placement": "line",
-        "text-font": [
-          "Noto Sans Regular"
-        ],
-        "text-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          13,
-          10,
-          17,
-          13
-        ],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 17, 13],
         "text-letter-spacing": 0.05,
         "symbol-spacing": 320
       },
@@ -836,46 +541,14 @@
       "minzoom": 15,
       "filter": [
         "all",
-        [
-          "has",
-          "name"
-        ],
-        [
-          "in",
-          "kind",
-          "medium_road",
-          "minor_road"
-        ]
+        ["has", "name"],
+        ["in", "kind", "medium_road", "minor_road"]
       ],
       "layout": {
-        "text-field": [
-          "coalesce",
-          [
-            "get",
-            "name:uk"
-          ],
-          [
-            "get",
-            "name"
-          ]
-        ],
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
         "symbol-placement": "line",
-        "text-font": [
-          "Noto Sans Regular"
-        ],
-        "text-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          15,
-          10,
-          18,
-          12.5
-        ],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 15, 10, 18, 12.5],
         "symbol-spacing": 280
       },
       "paint": {
@@ -892,39 +565,11 @@
       "source-layer": "places",
       "minzoom": 13,
       "maxzoom": 17.5,
-      "filter": [
-        "==",
-        "kind",
-        "neighbourhood"
-      ],
+      "filter": ["==", "kind", "neighbourhood"],
       "layout": {
-        "text-field": [
-          "coalesce",
-          [
-            "get",
-            "name:uk"
-          ],
-          [
-            "get",
-            "name"
-          ]
-        ],
-        "text-font": [
-          "Noto Sans Regular"
-        ],
-        "text-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          13,
-          10,
-          16,
-          13
-        ],
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 13],
         "text-transform": "uppercase",
         "text-letter-spacing": 0.12,
         "text-max-width": 7
@@ -943,41 +588,11 @@
       "source-layer": "places",
       "minzoom": 10,
       "maxzoom": 15,
-      "filter": [
-        "in",
-        "kind",
-        "macrohood",
-        "borough",
-        "localadmin"
-      ],
+      "filter": ["in", "kind", "macrohood", "borough", "localadmin"],
       "layout": {
-        "text-field": [
-          "coalesce",
-          [
-            "get",
-            "name:uk"
-          ],
-          [
-            "get",
-            "name"
-          ]
-        ],
-        "text-font": [
-          "Noto Sans SemiBold"
-        ],
-        "text-size": [
-          "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
-          10,
-          11,
-          14,
-          15
-        ],
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans SemiBold"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 10, 11, 14, 15],
         "text-transform": "uppercase",
         "text-letter-spacing": 0.14,
         "text-max-width": 8
@@ -995,34 +610,14 @@
       "source": "basemap",
       "source-layer": "places",
       "minzoom": 6,
-      "filter": [
-        "==",
-        "kind",
-        "locality"
-      ],
+      "filter": ["==", "kind", "locality"],
       "layout": {
-        "text-field": [
-          "coalesce",
-          [
-            "get",
-            "name:uk"
-          ],
-          [
-            "get",
-            "name"
-          ]
-        ],
-        "text-font": [
-          "Noto Sans SemiBold"
-        ],
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans SemiBold"],
         "text-size": [
           "interpolate",
-          [
-            "linear"
-          ],
-          [
-            "zoom"
-          ],
+          ["linear"],
+          ["zoom"],
           6,
           11,
           10,
@@ -1045,31 +640,13 @@
       "source": "basemap",
       "source-layer": "pois",
       "minzoom": 16.5,
-      "filter": [
-        "has",
-        "name"
-      ],
+      "filter": ["has", "name"],
       "layout": {
-        "text-field": [
-          "coalesce",
-          [
-            "get",
-            "name:uk"
-          ],
-          [
-            "get",
-            "name"
-          ]
-        ],
-        "text-font": [
-          "Noto Sans Regular"
-        ],
+        "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
         "text-size": 11,
         "text-anchor": "top",
-        "text-offset": [
-          0,
-          0.6
-        ],
+        "text-offset": [0, 0.6],
         "text-max-width": 7,
         "text-optional": true
       },
