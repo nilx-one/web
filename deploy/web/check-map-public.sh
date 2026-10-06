@@ -42,6 +42,7 @@ style_file="$work_dir/style.json"
 dark_style_file="$work_dir/style-dark.json"
 range_file="$work_dir/basemap.range"
 terrain_file="$work_dir/terrain.png"
+terrain_file="$work_dir/terrain.png"
 
 attempt=1
 while [ "$attempt" -le "$retry" ]; do
