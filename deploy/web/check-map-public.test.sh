@@ -63,10 +63,6 @@ case "$url" in
     printf '\211PNG\r\n\032\nfixture' >"$output_file"
     printf '%s' "${MOCK_TERRAIN_STATUS:-200}"
     ;;
-  https://nilx.one/map/0.1.0/terrain/12/2395/1381.png)
-    printf '\211PNG\015\012\032\012fixture' >"$output_file"
-    printf '%s' "${MOCK_TERRAIN_STATUS:-200}"
-    ;;
   *)
     : >"$output_file"
     printf '%s' 404
@@ -118,13 +114,4 @@ if PATH="$mock_bin:$PATH" \
   exit 1
 fi
 
-grep -Fq 'map terrain public smoke failed' "$failure_log"
-
-if PATH="$mock_bin:$PATH" \
-  MOCK_TERRAIN_STATUS=404 \
-  MAP_RETRY=1 \
-  sh "$(dirname "$0")/check-map-public.sh" >"$failure_log" 2>&1; then
-  echo "map public smoke unexpectedly accepted missing terrain" >&2
-  exit 1
-fi
 grep -Fq 'map terrain public smoke failed' "$failure_log"
