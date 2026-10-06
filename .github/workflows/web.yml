@@ -70,10 +70,7 @@ jobs:
       - name: Verify repository policy
         run: pnpm policy
       - name: Verify formatting
-        run: |
-          pnpm exec prettier docs/map-data.md packages/map-maplibre/src/index.test.ts --write
-          git diff -- docs/map-data.md packages/map-maplibre/src/index.test.ts
-          exit 1
+        run: pnpm format
       - name: Lint
         run: pnpm lint
       - name: Typecheck

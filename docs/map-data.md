@@ -337,7 +337,6 @@ each style's metadata so that work is a delivery problem, not a design decision.
 Street and place labels at building scale therefore remain blocked on that
 payload; the layer order already leaves them room beneath the location overlay.
 
-
 ## TODO — global coverage
 
 The regional bootstrap is not the product target. 0x1 requires global basemap coverage.

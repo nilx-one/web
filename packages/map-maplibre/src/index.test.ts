@@ -675,9 +675,9 @@ describe("presentation dimension", () => {
     const renderer = readyRenderer(fakeMap);
 
     expect(fakeMap.setTerrain).not.toHaveBeenCalled();
-    expect(
-      fakeMap.layout.get(`${TERRAIN_HILLSHADE_LAYER_ID}.visibility`),
-    ).toBe("visible");
+    expect(fakeMap.layout.get(`${TERRAIN_HILLSHADE_LAYER_ID}.visibility`)).toBe(
+      "visible",
+    );
 
     fakeMap.camera.zoom = TERRAIN_MESH_MIN_ZOOM;
     fakeMap.emit("zoom");
@@ -712,9 +712,9 @@ describe("presentation dimension", () => {
     renderer.setDimension("flat");
 
     expect(fakeMap.setTerrain).toHaveBeenLastCalledWith(null);
-    expect(
-      fakeMap.layout.get(`${TERRAIN_HILLSHADE_LAYER_ID}.visibility`),
-    ).toBe("none");
+    expect(fakeMap.layout.get(`${TERRAIN_HILLSHADE_LAYER_ID}.visibility`)).toBe(
+      "none",
+    );
     expect(
       fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
     ).toBe("none");
