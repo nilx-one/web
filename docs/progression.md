@@ -30,15 +30,15 @@ Chance finds, once they are wired into walking, pay the same way: whoever did
 it. The rules live in `awardsFor` (`artifact-contract`); see
 [Avaia walks on its own](avaia-outings.md) §3.4.
 
-| Action                      | Who earns it                   |     Reward |
-| --------------------------- | ------------------------------ | ---------: |
-| A find seen, first sighting | the Avaia or the Bond, who saw |         10 |
-| A find picked up            | whoever picked it up           | 10 to 1000 |
+| Action                      | Who earns it                   |                  Reward |
+| --------------------------- | ------------------------------ | ----------------------: |
+| A find seen, first sighting | the Avaia or the Bond, who saw |                      10 |
+| A find picked up            | whoever picked it up           | by the item, 10 to 1000 |
 
 The Avaia sees what it walks past, on its own or sent by a tap; the Bond sees
 what this device walks past. The Avaia picks up tiers 1 to 3 itself and leaves
 tiers 4 to 6 as leads, which pay the Bond when the person walks there and picks
-them up. Each find pays its sighting once and its pick-up once. "Once" holds
+them up. A pick-up pays what the item is worth, not its tier: Core's catalog (`docs/find-items.md` in `nilx-one/core`) decides which item a find is and what it pays. A rare CD radio (tier 5) pays 25, and a rare CD player 400. The service prices it the same way. A claimed pick-up (tiers 4 to 6) names its find, so the service asks Core which item that is. A common pick-up names nothing and needs nothing, because every item of a common tier pays that tier's amount, and a test in the service holds Core's catalog to that. Each find pays its sighting once and its pick-up once. "Once" holds
 per history: the find journal stays on the device, and the server sees only
 each award's commitment (below). A rare find (tiers 4 to 6) is also claimed:
 the first Bond to pick it up keeps it.

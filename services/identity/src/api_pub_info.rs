@@ -567,6 +567,47 @@ mod pub_info_api_tests {
         response
     }
 
+    /// A tier 5 find that Core's catalog says is a CD radio.
+    fn rare_cd_radio() -> String {
+        let epoch = crate::finds::epoch_of(i64::try_from(NOW * 1000).expect("ms"));
+        (0..400_000)
+            .find_map(|row| {
+                crate::finds::roll_segment(crate::finds::FIND_PACK_ID, 1, epoch, 312_000 + row, 298_243)
+                    .expect("roll")
+                    .filter(|roll| {
+                        roll.tier == 5
+                            && nilxone_contracts::item_for_find(
+                                &roll.artifact_id,
+                                nilxone_contracts::FindTier::new(5).expect("a tier"),
+                            )
+                            .is_ok_and(|item| item.id == "cd_radio")
+                    })
+            })
+            .map(|roll| roll.artifact_id)
+            .expect("a CD radio within reach")
+    }
+
+    #[tokio::test]
+    async fn a_rare_pick_up_pays_what_its_item_is_worth() {
+        let (app, sky, _other) = two_bonds().await;
+        let mut session = None;
+        let response = post_awards(
+            &app,
+            &sky,
+            &mut session,
+            &serde_json::json!({ "awards": [
+                { "id": commitment("radio"), "chain": "ch:phone-01", "kind": "find_picked_up",
+                  "earner": "bond", "tier": 5, "artifact_id": rare_cd_radio() },
+            ]}),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json(response).await;
+        assert_eq!(body["results"][0]["outcome"], "accepted");
+        // Rare to come across, worth little by itself: 25, not tier 5's 400.
+        assert_eq!(body["experience"]["bond_xp"], 25);
+    }
+
     #[tokio::test]
     async fn committed_awards_are_priced_by_the_service_and_rare_finds_claimed_once() {
         let (app, sky, other) = two_bonds().await;
@@ -589,7 +630,13 @@ mod pub_info_api_tests {
         assert_eq!(first.status(), StatusCode::OK);
         let cookie = sky_session.clone().expect("a session");
         let body = json(first).await;
-        let paid = 30 + [150, 400, 1000][usize::from(tier - 4)];
+        // A claimed pick-up pays what its item is worth (Core's catalog).
+        let item = nilxone_contracts::item_for_find(
+            &artifact_id,
+            nilxone_contracts::FindTier::new(tier).expect("a tier"),
+        )
+        .expect("an item");
+        let paid = 30 + u64::from(item.experience);
         assert_eq!(body["experience"]["authority"], "client");
         assert_eq!(body["experience"]["bond_xp"], paid);
         assert_eq!(body["results"][0]["outcome"], "accepted");

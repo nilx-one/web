@@ -136,7 +136,9 @@ export {
 } from "./failure-notice";
 export {
   ReadRuntimeReadiness,
+  type CoreEconomyCatalog,
   type CoreFindItemResult,
+  type CoreFoundItem,
   type CorePubDressLabelErrorCode,
   type CorePubDressLabelResult,
   type CoreRuntimePort,

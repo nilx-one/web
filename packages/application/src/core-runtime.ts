@@ -32,6 +32,27 @@ export type CorePubDressLabelResult =
 export type CoreFindItemResult =
   { kind: "item"; id: string } | { kind: "error"; code: string };
 
+/** One thing a find can be, as Core's economy catalog lists it. */
+export interface CoreFoundItem {
+  readonly id: string;
+  readonly tier: number;
+  readonly rarity: "common" | "uncommon" | "rare" | "legendary";
+  /** What picking it up pays: the item's own, not its tier's. */
+  readonly experience: number;
+}
+
+/**
+ * Core's economy catalog (`economy_catalog`), as far as the client reads it
+ * today. The wire carries more (prices, sizes, recipes, grids); a field is
+ * added here when a surface uses it.
+ */
+export interface CoreEconomyCatalog {
+  readonly findCatalogVersion: number;
+  readonly economyVersion: number;
+  readonly currency: { readonly code: string; readonly emblem: string };
+  readonly found: readonly CoreFoundItem[];
+}
+
 /**
  * Product-facing boundary to the versioned 0x1 Core runtime.
  *
@@ -54,6 +75,8 @@ export interface CoreRuntimePort {
    * `common,rare`) picks up a find of `tier`. Rejects on a malformed setting.
    */
   picksUp?(rarities: string, tier: number): Promise<boolean>;
+  /** Core's economy catalog. Rejects on a malformed one. */
+  economyCatalog?(): Promise<CoreEconomyCatalog>;
 }
 
 export type RuntimeReadiness =

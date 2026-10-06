@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  CoreEconomyCatalog,
   CoreFindItemResult,
+  CoreFoundItem,
   CorePubDressLabelErrorCode,
   CorePubDressLabelResult,
   CoreRuntimePort,
@@ -76,10 +78,67 @@ function decodePicksUpWire(value: string): boolean {
   throw new Error(`0x1 Core refused the pick-up setting: ${value}`);
 }
 
+const RARITIES = new Set(["common", "uncommon", "rare", "legendary"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function decodeFoundItem(value: unknown): CoreFoundItem {
+  if (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    CORE_CODE.test(value.id) &&
+    isCount(value.tier) &&
+    value.tier >= 1 &&
+    value.tier <= 6 &&
+    typeof value.rarity === "string" &&
+    RARITIES.has(value.rarity) &&
+    isCount(value.experience)
+  ) {
+    return {
+      id: value.id,
+      tier: value.tier,
+      rarity: value.rarity as CoreFoundItem["rarity"],
+      experience: value.experience,
+    };
+  }
+  throw new Error("0x1 Core returned an invalid catalog item");
+}
+
+function decodeEconomyCatalog(value: string): CoreEconomyCatalog {
+  const parsed: unknown = JSON.parse(value);
+  if (
+    isRecord(parsed) &&
+    isCount(parsed.find_catalog_version) &&
+    isCount(parsed.economy_version) &&
+    isRecord(parsed.currency) &&
+    typeof parsed.currency.code === "string" &&
+    typeof parsed.currency.emblem === "string" &&
+    Array.isArray(parsed.found)
+  ) {
+    return {
+      findCatalogVersion: parsed.find_catalog_version,
+      economyVersion: parsed.economy_version,
+      currency: {
+        code: parsed.currency.code,
+        emblem: parsed.currency.emblem,
+      },
+      found: parsed.found.map(decodeFoundItem),
+    };
+  }
+  throw new Error("0x1 Core returned an invalid economy catalog");
+}
+
 export interface CoreWasmBindings {
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
+  economyCatalog?(): CoreEconomyCatalog;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
@@ -100,6 +159,7 @@ export interface GeneratedCoreWasmModule {
   /** Absent from a runtime built before Core's find catalog. */
   find_item?(artifact_id: string, tier: number): string;
   picks_up?(rarities: string, tier: number): string;
+  economy_catalog?(): string;
 }
 
 export type CoreWasmBindingsLoader = () => Promise<CoreWasmBindings>;
@@ -160,6 +220,12 @@ export async function loadGeneratedCoreWasmBindings(
             decodeFindItemWire(runtime.find_item!(artifactId, tier)),
           picksUp: (rarities: string, tier: number) =>
             decodePicksUpWire(runtime.picks_up!(rarities, tier)),
+        }),
+    ...(runtime.economy_catalog === undefined
+      ? {}
+      : {
+          economyCatalog: () =>
+            decodeEconomyCatalog(runtime.economy_catalog!()),
         }),
   };
 }
@@ -238,6 +304,14 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm find catalog binding is missing");
     }
     return bindings.findItem(artifactId, tier);
+  }
+
+  public async economyCatalog(): Promise<CoreEconomyCatalog> {
+    const bindings = await this.loadBindings();
+    if (bindings.economyCatalog === undefined) {
+      throw new Error("0x1 Core Wasm economy catalog binding is missing");
+    }
+    return bindings.economyCatalog();
   }
 
   public async picksUp(rarities: string, tier: number): Promise<boolean> {

@@ -139,6 +139,14 @@ fn validate_awards(
             (None, true) | (Some(_), false) => return None,
             (None, false) => None,
         };
+        // A claimed pick-up named its find: it pays what that item is worth,
+        // not its tier. Everything else is the tier's price above.
+        let amount = match (&claim, &body.artifact_id) {
+            (Some(_), Some(artifact_id)) if kind == AwardKind::FindPickedUp => {
+                finds::pick_up_amount(Some(artifact_id), body.tier?)?
+            }
+            _ => amount,
+        };
         awards.push(crate::repository::CommittedAward {
             id: body.id.clone(),
             parent: body.parent.clone(),

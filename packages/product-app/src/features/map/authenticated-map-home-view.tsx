@@ -230,7 +230,10 @@ export interface AuthenticatedMapHomeViewProps {
    * Core, naming what a find is and reading the pick-up setting. Absent or
    * older, finds are still paid; the toast then names the tier, not the item.
    */
-  readonly findItems?: Pick<CoreRuntimePort, "findItem" | "picksUp">;
+  readonly findItems?: Pick<
+    CoreRuntimePort,
+    "findItem" | "picksUp" | "economyCatalog"
+  >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
    * host's identity client has no such capability, which is a normal state.
@@ -880,12 +883,32 @@ export function AuthenticatedMapHomeView({
         // toast says only that something was kept.
         void findItems
           ?.findItem?.(event.artifactId, event.tier)
-          .then((item) => {
+          .then(async (item) => {
             if (item.kind !== "item") return;
             const key = `item.${item.id}`;
             if (!isTranslationKey(key)) return;
+            // What it paid is the item's, as the service prices it: a rare
+            // CD radio is worth 25, not its tier's 400.
+            const catalog = await findItems
+              .economyCatalog?.()
+              .catch(() => undefined);
+            const worth = catalog?.found.find(
+              (found) => found.id === item.id,
+            )?.experience;
             setFindToast((current) =>
-              current?.id === toast.id ? { ...toast, title: t(key) } : current,
+              current?.id === toast.id
+                ? {
+                    ...toast,
+                    title: t(key),
+                    ...(worth === undefined
+                      ? {}
+                      : {
+                          description: t("find.toast.kept.detail")
+                            .replace("{tier}", String(event.tier))
+                            .replace("{xp}", String(worth)),
+                        }),
+                  }
+                : current,
             );
           })
           .catch(() => undefined);
