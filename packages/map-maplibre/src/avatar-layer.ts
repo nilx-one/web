@@ -35,7 +35,7 @@ import {
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
-import { terrainElevationMeters } from "./terrain-elevation";
+import { loadedTerrainElevationMeters } from "./terrain-elevation";
 
 export const AVATAR_LAYER_ID = "nilx-one-local-avatars";
 export { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
@@ -68,6 +68,12 @@ interface AvatarInstance {
   mixer?: AnimationMixer;
   clips?: ReadonlyMap<string, AnimationClip>;
   actionClip?: AvatarClipId;
+  terrainAnchor?:
+    | {
+        readonly key: string;
+        readonly elevationMeters: number;
+      }
+    | undefined;
   loadGeneration: number;
 }
 
@@ -194,6 +200,29 @@ export function createAvatarLayer(
     applyAvatarNodeVisibility(instance.root, instance.handle.visibleNodes);
   }
 
+  function terrainAltitude(instance: AvatarInstance): number {
+    const { lngLat } = instance.handle;
+    const terrainSource = map?.getTerrain()?.source;
+    if (map === undefined || terrainSource === undefined) {
+      instance.terrainAnchor = undefined;
+      return 0;
+    }
+
+    const key = `${terrainSource}:${lngLat[0]}:${lngLat[1]}`;
+    if (instance.terrainAnchor?.key === key) {
+      return instance.terrainAnchor.elevationMeters;
+    }
+
+    const elevation = loadedTerrainElevationMeters(map, lngLat);
+    if (elevation === undefined) {
+      instance.terrainAnchor = undefined;
+      return 0;
+    }
+
+    instance.terrainAnchor = { key, elevationMeters: elevation };
+    return elevation;
+  }
+
   function place(instance: AvatarInstance): void {
     const root = instance.root;
     if (root === undefined) return;
@@ -201,9 +230,7 @@ export function createAvatarLayer(
     // With volumetric terrain, an unspecified altitude means "stand on the
     // ground MapLibre actually draws". An explicit altitude remains absolute
     // metres above sea level and is never silently offset by terrain.
-    const altitude =
-      instance.handle.altitudeMeters ??
-      terrainElevationMeters(map, [lngLat[0], lngLat[1]]);
+    const altitude = instance.handle.altitudeMeters ?? terrainAltitude(instance);
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
       altitude,
@@ -265,6 +292,8 @@ export function createAvatarLayer(
 
     onAdd(mountedMap, gl) {
       map = mountedMap;
+      for (const instance of instances.values())
+        instance.terrainAnchor = undefined;
       renderer = new WebGLRenderer({
         canvas: mountedMap.getCanvas(),
         context: gl,
@@ -308,6 +337,8 @@ export function createAvatarLayer(
       renderer?.dispose();
       renderer = undefined;
       map = undefined;
+      for (const instance of instances.values())
+        instance.terrainAnchor = undefined;
     },
 
     upsert(handle) {
