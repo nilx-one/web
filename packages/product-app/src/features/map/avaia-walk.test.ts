@@ -71,7 +71,7 @@ describe("Avaia walking", () => {
     expect(walkPosition(walk, walk.durationMs)).toEqual(beyond);
   });
 
-  it("takes as long as the distance at the pace the scale sets", () => {
+  it("takes as long as the distance at a physical walking pace", () => {
     const walk = startWalk({ from: here, to: east, nowMs: 1_000, zoom: 17 });
     const speed = walkSpeedMetersPerSecond(here.latitude, 17);
 
@@ -83,13 +83,30 @@ describe("Avaia walking", () => {
     expect(walkArrived(walk, 1_000 + walk.durationMs)).toBe(true);
   });
 
-  it("walks at a pace measured against the drawn body, never below a stroll", () => {
-    // Further out a body covers more ground per drawn height, so it walks
-    // faster on the ground to look the same pace on the screen.
-    expect(walkSpeedMetersPerSecond(50, 15)).toBeGreaterThan(
-      walkSpeedMetersPerSecond(50, 17),
-    );
+  it("keeps the same human walking pace at every camera zoom", () => {
+    expect(walkSpeedMetersPerSecond(50, 15)).toBe(MIN_WALK_SPEED_MPS);
+    expect(walkSpeedMetersPerSecond(50, 17)).toBe(MIN_WALK_SPEED_MPS);
     expect(walkSpeedMetersPerSecond(50, 30)).toBe(MIN_WALK_SPEED_MPS);
+  });
+
+  it("takes about a minute to cover 100 m instead of skating across it", () => {
+    const walk = startWalk({ from: here, to: east, nowMs: 0, zoom: 15 });
+    const meters = mapDistanceMeters(here, east);
+
+    expect(meters).toBeGreaterThan(90);
+    expect(meters).toBeLessThan(110);
+    expect(walk.durationMs).toBeGreaterThan(60_000);
+    expect(walk.durationMs).toBeLessThan(90_000);
+  });
+
+  it("moves about one human step between footfalls", () => {
+    const walk = startWalk({ from: here, to: east, nowMs: 0, zoom: 17 });
+    const afterOneStep = walkPosition(walk, WALK_CLIP_MS / 2);
+
+    expect(mapDistanceMeters(here, afterOneStep)).toBeCloseTo(
+      MIN_WALK_SPEED_MPS * (WALK_CLIP_MS / 2 / 1_000),
+      1,
+    );
   });
 
   it("is halfway there halfway through, and stays at the end once arrived", () => {
