@@ -157,6 +157,39 @@ describe("CoreWasmClient", () => {
     await expect(older.findItem!("art:x", 1)).rejects.toThrow("missing");
   });
 
+  it("reads the economy catalog and refuses a malformed one", async () => {
+    const catalog = {
+      find_catalog_version: 1,
+      economy_version: 1,
+      currency: { code: "seed", emblem: "₴€£" },
+      found: [
+        { id: "cd_radio", tier: 5, rarity: "rare", experience: 25, size: null },
+      ],
+    };
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({ economy_catalog: () => JSON.stringify(catalog) }),
+    });
+    expect(bindings.economyCatalog?.()).toEqual({
+      findCatalogVersion: 1,
+      economyVersion: 1,
+      currency: { code: "seed", emblem: "₴€£" },
+      found: [{ id: "cd_radio", tier: 5, rarity: "rare", experience: 25 }],
+    });
+
+    const malformed = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          economy_catalog: () =>
+            JSON.stringify({
+              ...catalog,
+              found: [{ ...catalog.found[0], rarity: "epic" }],
+            }),
+        }),
+    });
+    expect(() => malformed.economyCatalog?.()).toThrow("invalid catalog item");
+  });
+
   it("rejects a generated runtime with a different corpus digest", async () => {
     const runtime = generatedRuntime({
       fixture_corpus_digest: () => "sha256_wrong",

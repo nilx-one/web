@@ -244,6 +244,29 @@ pub fn award_amount(kind: AwardKind, earner: Earner, tier: Option<u8>) -> Option
     }
 }
 
+/// What picking up a find of `tier` pays, by the item it is (Core's
+/// catalog, `docs/find-items.md` in `nilx-one/core`).
+///
+/// A claimed pick-up (tier 4 and up) names its find, so the item is Core's
+/// pick for that artifact: a rare CD radio pays 25, a rare CD player 400. A
+/// common pick-up names nothing, and needs nothing: every item a common tier
+/// can be pays that tier's amount, which a test here holds Core's catalog
+/// to. The tier amount is `award_amount`'s.
+pub fn pick_up_amount(artifact_id: Option<&str>, tier: u8) -> Option<u64> {
+    match artifact_id {
+        Some(artifact_id) => {
+            let tier = nilxone_contracts::FindTier::new(tier)?;
+            nilxone_contracts::item_for_find(artifact_id, tier)
+                .ok()
+                .map(|item| u64::from(item.experience))
+        }
+        None => ROLL_TABLE
+            .iter()
+            .find(|(t, _, _)| *t == tier)
+            .map(|(_, experience, _)| *experience),
+    }
+}
+
 /// The pack the service rolls claimed finds with. A claim cannot choose its
 /// pack: if it could, any segment could be made to roll a rare find. It has
 /// to equal the pack id the client rolls with once finds ship.
@@ -311,6 +334,32 @@ impl Mulberry32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn common_tiers_pay_the_same_for_every_item() {
+        for item in nilxone_contracts::FIND_CATALOG {
+            let tier = item.tier.get();
+            if tier < CLAIMED_MIN_TIER {
+                assert_eq!(
+                    pick_up_amount(None, tier),
+                    Some(u64::from(item.experience)),
+                    "{} would need its artifact id to be priced",
+                    item.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_claimed_pick_up_pays_by_its_item() {
+        // Core's golden picks: a Kyiv find at tier 5 is a CD radio, at tier 6
+        // a test pressing.
+        let kyiv = "art:seg:312346:298243:e2908:1:0";
+        assert_eq!(pick_up_amount(Some(kyiv), 5), Some(25));
+        assert_eq!(pick_up_amount(Some(kyiv), 6), Some(1000));
+        assert_eq!(pick_up_amount(Some("art:nope"), 5), None);
+        assert_eq!(pick_up_amount(None, 5), Some(400));
+    }
 
     // The golden snapshot from `artifact-contract`'s index.test.ts.
     #[test]
