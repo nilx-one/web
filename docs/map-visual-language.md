@@ -118,12 +118,25 @@ A stretch of fog can wear its own palette: a **fog zone** is a circle on the gro
 
 No zone is drawn today. Like every colour on the map, a zone is presentation only: it says what the mist looks like there, never who has been there, what happened, or that anything is nearby.
 
+## Terrain
+
+Volumetric presentation raises the ground from the published same-origin
+Terrarium DEM at measured `1×` elevation. Relief is geography rendered by
+MapLibre, not a shader pretending that a flat map has depth. Buildings rise
+from that ground, and custom 3D bodies query the same loaded terrain surface
+before they are placed.
+
+Flat presentation deliberately removes both terrain and building extrusion.
+The switch therefore changes how one geographic world is shown; it never
+creates Presence, movement, Interaction, BondChain, or Relationship facts.
+
 ## Known data-bound limits
 
 The visual reference is intent, not evidence. Features are rendered only when the published same-origin map data supports them.
 
 - text labels require a same-origin glyph payload before MapLibre text layers can be enabled;
-- terrain or hillshade requires a published DEM source;
+- terrain exists only inside the published regional DEM envelope; global relief waits on global map-data publication;
+- hillshade remains optional presentation and is not used as a substitute for geometric terrain;
 - individual vegetation, landmarks or other geometry must not be invented solely to imitate a reference image.
 
 These limits are data/rendering concerns. The shell must stay usable and spatially coherent without fabricating missing geography.
