@@ -1569,6 +1569,10 @@ export function createMapLibreRenderer(
       // missing appearance variant is reported instead of blanking the map.
       styleResolved = false;
       presentationApplied = false;
+      // MapLibre owns style diffing, but the renderer owns live terrain state.
+      // Detach it before replacing the style so an in-flight presentation
+      // change cannot rebind the outgoing style's DEM source.
+      map.setTerrain(null);
       map.setStyle(styleUrls[next]);
     },
 
@@ -1579,7 +1583,7 @@ export function createMapLibreRenderer(
 
       dimension = next;
 
-      if (map !== undefined) {
+      if (map !== undefined && presentationApplied) {
         applyDimension(map);
       }
     },

@@ -3,6 +3,17 @@
 
 import type { Map as MapLibreMap } from "maplibre-gl";
 
+/** Returns a finite DEM sample only when MapLibre has one loaded. */
+export function loadedTerrainElevationMeters(
+  map: Pick<MapLibreMap, "queryTerrainElevation"> | undefined,
+  lngLat: readonly [longitude: number, latitude: number],
+): number | undefined {
+  const elevation = map?.queryTerrainElevation([lngLat[0], lngLat[1]]);
+  return typeof elevation === "number" && Number.isFinite(elevation)
+    ? elevation
+    : undefined;
+}
+
 /**
  * Returns the terrain surface at a geographic point in metres above sea level.
  *
@@ -14,8 +25,5 @@ export function terrainElevationMeters(
   map: Pick<MapLibreMap, "queryTerrainElevation"> | undefined,
   lngLat: readonly [longitude: number, latitude: number],
 ): number {
-  const elevation = map?.queryTerrainElevation([lngLat[0], lngLat[1]]);
-  return typeof elevation === "number" && Number.isFinite(elevation)
-    ? elevation
-    : 0;
+  return loadedTerrainElevationMeters(map, lngLat) ?? 0;
 }

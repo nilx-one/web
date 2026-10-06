@@ -61,7 +61,13 @@ while [ "$attempt" -le "$retry" ]; do
   fi
 
   if [ "$attempt" -eq "$retry" ]; then
-    echo "map style public smoke failed: expected versioned PMTiles source from $style_url, got ${style_status:-request-failed}" >&2
+    if [ "$style_status" != 200 ]; then
+      echo "map style public smoke failed: expected HTTP 200 from $style_url, got ${style_status:-request-failed}" >&2
+    elif ! grep -Fq "pmtiles:///map/$map_version/basemap.pmtiles" "$style_file"; then
+      echo "map style public smoke failed: expected versioned PMTiles source in $style_url" >&2
+    else
+      echo "map style public smoke failed: expected versioned terrain source in $style_url" >&2
+    fi
     exit 1
   fi
 
@@ -78,10 +84,18 @@ dark_style_status="$(
     "$dark_style_url" || true
 )"
 
-if [ "$dark_style_status" != 200 ] \
-  || ! grep -Fq "pmtiles:///map/$map_version/basemap.pmtiles" "$dark_style_file" \
-  || ! grep -Fq "/map/$map_version/terrain/{z}/{x}/{y}.png" "$dark_style_file"; then
-  echo "map style public smoke failed: expected versioned PMTiles source from $dark_style_url, got ${dark_style_status:-request-failed}" >&2
+if [ "$dark_style_status" != 200 ]; then
+  echo "map style public smoke failed: expected HTTP 200 from $dark_style_url, got ${dark_style_status:-request-failed}" >&2
+  exit 1
+fi
+
+if ! grep -Fq "pmtiles:///map/$map_version/basemap.pmtiles" "$dark_style_file"; then
+  echo "map style public smoke failed: expected versioned PMTiles source in $dark_style_url" >&2
+  exit 1
+fi
+
+if ! grep -Fq "/map/$map_version/terrain/{z}/{x}/{y}.png" "$dark_style_file"; then
+  echo "map style public smoke failed: expected versioned terrain source in $dark_style_url" >&2
   exit 1
 fi
 

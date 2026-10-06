@@ -700,6 +700,20 @@ describe("presentation dimension", () => {
     expect(fakeMap.setTerrain).toHaveBeenLastCalledWith(null);
   });
 
+  it("keeps terrain detached while an appearance style swap is unresolved", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
+    const renderer = readyRenderer(fakeMap);
+    fakeMap.setTerrain.mockClear();
+
+    renderer.setAppearance("dark");
+    renderer.setDimension("flat");
+    renderer.setDimension("volumetric");
+
+    expect(fakeMap.setTerrain).toHaveBeenCalledExactlyOnceWith(null);
+    expect(fakeMap.setStyle).toHaveBeenCalledWith(MAP_STYLE_URLS.dark);
+  });
+
   it("reapplies the selected dimension after a style reload", () => {
     const fakeMap = makeFakeMap();
     fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
