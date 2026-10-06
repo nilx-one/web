@@ -102,40 +102,86 @@ export function joinAreas(sources: AreaSources): MapArea[] {
     });
   }
 
-  const water = new Map<string, Piece[]>();
+  const water = new Map<
+    string,
+    { kind: string; kindDetail?: string; pieces: Piece[] }
+  >();
   for (const part of sources.water) {
-    const key = `${part.kind}\u0000${part.kindDetail ?? ""}`;
-    const pieces = water.get(key) ?? [];
-    pieces.push(...piecesOf(part));
-    water.set(key, pieces);
+    const key = waterKey(part.kind, part.kindDetail);
+    const group = water.get(key) ?? {
+      kind: part.kind,
+      ...(part.kindDetail === undefined ? {} : { kindDetail: part.kindDetail }),
+      pieces: [],
+    };
+    group.pieces.push(...piecesOf(part));
+    water.set(key, group);
   }
   for (const label of sources.waterLabels) {
-    const pieces =
-      water.get(`${label.kind ?? ""}\u0000${label.kindDetail ?? ""}`) ?? [];
-    const seed = pieces.filter(
-      (piece) =>
-        inBox(label.point, piece.box) &&
-        insideRings(label.point, piece.polygon),
-    );
-    if (seed.length === 0) continue;
-    const id = `water:${label.name}:${label.point[0].toFixed(6)},${label.point[1].toFixed(6)}`;
-    if (areas.has(id)) continue;
-    areas.set(id, {
-      id,
-      layer: "water",
-      kind: label.kind ?? "water",
-      ...(label.kindDetail === undefined
-        ? {}
-        : { kindDetail: label.kindDetail }),
-      name: label.name,
-      label: { longitude: label.point[0], latitude: label.point[1] },
-      polygons: footprint(connected(seed, pieces)),
-    });
+    for (const key of waterKeysForLabel(label)) {
+      const group = water.get(key);
+      if (group === undefined) continue;
+      const seed = group.pieces.filter(
+        (piece) =>
+          inBox(label.point, piece.box) &&
+          insideRings(label.point, piece.polygon),
+      );
+      if (seed.length === 0) continue;
+      const id = waterAreaId(label);
+      if (areas.has(id)) break;
+      areas.set(id, {
+        id,
+        layer: "water",
+        kind: group.kind,
+        ...(group.kindDetail === undefined
+          ? {}
+          : { kindDetail: group.kindDetail }),
+        name: label.name,
+        label: { longitude: label.point[0], latitude: label.point[1] },
+        polygons: footprint(connected(seed, group.pieces)),
+      });
+      break;
+    }
   }
 
   return [...areas.values()].sort((a, b) =>
     a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
   );
+}
+
+function waterKey(kind: string, kindDetail?: string): string {
+  return `${kind}\u0000${kindDetail ?? ""}`;
+}
+
+/**
+ * Water labels and polygons are not guaranteed to use the same schema spelling.
+ * A lake label may be `lake`, `water/lake`, or generic `water`; all name
+ * the polygon forms the mapper supports for a lake. Other kinds stay exact.
+ */
+function waterKeysForLabel(label: AreaLabel): string[] {
+  if (label.kind === undefined) return [];
+  if (
+    label.kind === "lake" ||
+    (label.kind === "water" &&
+      (label.kindDetail === undefined || label.kindDetail === "lake"))
+  ) {
+    const exact =
+      label.kind === "water" && label.kindDetail === undefined
+        ? []
+        : [waterKey(label.kind, label.kindDetail)];
+    return [...new Set([...exact, waterKey("lake"), waterKey("water", "lake")])];
+  }
+  return [waterKey(label.kind, label.kindDetail)];
+}
+
+/**
+ * Prefer the archive feature id. Water labels without one fall back to the
+ * same ~1 m coordinate quantization used by normalized landmark ids, so tiny
+ * view/read-ahead decode differences do not split one lake into two areas.
+ */
+function waterAreaId(label: AreaLabel): string {
+  if (label.id !== undefined) return `water:${String(label.id)}`;
+  const q = (value: number) => Math.round(value * 1e5);
+  return `water:${label.name}:${q(label.point[0])}:${q(label.point[1])}`;
 }
 
 function piecesOf(part: AreaPart): Piece[] {
