@@ -3,6 +3,7 @@
 
 import type { MapObstacle } from "@nilx-one/map-contract";
 import { LANDMARK_GROUPS, type NormalizedLandmark } from "./landmark-normalize";
+import type { PlaceFeeling } from "./place-affinity";
 import {
   distanceM,
   edgeCost,
@@ -192,19 +193,29 @@ export type ModelOption =
       readonly index: number;
       readonly label: WalkTargetKind;
       readonly reach: "near" | "far";
+      /** How the Avaia feels about the place, when its feelings are given. */
+      readonly feeling?: PlaceFeeling;
     };
 
 /**
  * The menu without coordinates, names or ids: what a local model may read.
- * A landmark's name stays in the interface, never in the decision.
+ * A landmark's name stays in the interface, never in the decision. How the
+ * Avaia feels about a target is a closed label too, read from code's own
+ * record of its visits; the model reads it and never writes it.
  */
-export function menuForModel(menu: OutingMenu): readonly ModelOption[] {
+export function menuForModel(
+  menu: OutingMenu,
+  feeling?: (targetId: string) => PlaceFeeling,
+): readonly ModelOption[] {
   return menu.options.map((option, index) =>
     option.kind === "target"
       ? {
           index,
           label: option.target.kind,
           reach: option.target.meters <= NEAR_METERS ? "near" : "far",
+          ...(feeling === undefined
+            ? {}
+            : { feeling: feeling(option.target.id) }),
         }
       : { index, label: option.kind },
   );

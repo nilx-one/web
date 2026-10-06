@@ -305,7 +305,7 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
   - a walk that did not arrive, or a stand cut short because the Avaia left the wheel, becomes `idle` where it stands.
 - **When to go out:** `restlessness` builds over 10 min of idling, and an outing comes no more often than once in 4 h (`nextOutingAt`). The time of the last outing is kept in `world-memory`, so a reload does not reset the interval.
 - **Energy:** 0.2 per kilometre, so a full charge lasts 5 km. An outing's budget is a there-and-back on what is left, but never beyond 3 km.
-- **Choice** (`chooseOuting`): tired and far from home, go home. In the evening and at night (20:00–07:00), only a target within 1 km, or wander. By day, the nearest target, otherwise wander, otherwise stay. A target visited less than a week ago stays off the menu.
+- **Choice** (`chooseOuting`): tired and far from home, go home. In the evening and at night (20:00–07:00), only a target within 1 km, or wander. By day, the nearest target, otherwise wander, otherwise stay. A target visited less than a week ago stays off the menu. With the Avaia's feelings at hand, the most wanted target wins instead of the nearest, a loved one waits a day rather than a week, and a visit lasts by what is done there ([Favourite places](avaia-walk.md#favourite-places)).
 - **Wandering:** a graph node 150–400 m away along the paths, over open ground. It is picked deterministically per outing window.
 - **Home** is, for now, the device's last observed position. The cell with the longest visits from the journal comes separately.
 - **Lines:** for an outing the Avaia uses the existing `walk` line. There are no "I'll go for a walk" lines yet, because they need to be recorded.

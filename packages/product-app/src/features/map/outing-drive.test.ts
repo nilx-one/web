@@ -32,6 +32,13 @@ import {
   type DriveState,
 } from "./outing-drive";
 import type { OutingMenu, OutingTarget } from "./outing-targets";
+import {
+  emptyAffinity,
+  enjoyment,
+  LOVED_RETURN_MS,
+  recordVisit,
+  type PlaceAffinity,
+} from "./place-affinity";
 
 const T0 = 1_000_000;
 
@@ -246,7 +253,53 @@ describe("when to go out", () => {
     };
     expect([...recentlyVisited(state, T0)]).toEqual(["new"]);
   });
+
+  it("goes back to a loved place after a day, and remembers past a reload", () => {
+    const { affinity, id } = lovedPark();
+    const lastAt = affinity.places[0]!.lastAt;
+    const reloaded = initialDrive(lastAt);
+    expect([...recentlyVisited(reloaded, lastAt + 1, affinity)]).toEqual([id]);
+    expect([
+      ...recentlyVisited(reloaded, lastAt + LOVED_RETURN_MS, affinity),
+    ]).toEqual([]);
+  });
+
+  it("stands at a target as long as the place says", () => {
+    const state = play(
+      initialDrive(T0),
+      { type: "set_off", at: T0, purpose: "outing", targetId: "park" },
+      { type: "arrived", at: T0 + 10, meters: 100, stayMs: 99_000 },
+    );
+    expect(state.activity).toEqual({
+      kind: "standing",
+      reason: "visit",
+      until: T0 + 10 + 99_000,
+    });
+  });
 });
+
+/** A park this Avaia loves, visited daily until it did. */
+function lovedPark(): { affinity: PlaceAffinity; id: string } {
+  const by = "xdashaai";
+  const empty = emptyAffinity(by);
+  let id = "";
+  for (let index = 0; index < 100 && id === ""; index++) {
+    const candidate = `park:${index}`;
+    if (enjoyment(empty, { id: candidate, kind: "park" }, 13) >= 0.8) {
+      id = candidate;
+    }
+  }
+  let affinity = empty;
+  for (let day = 0; day < 6; day++) {
+    affinity = recordVisit(
+      affinity,
+      { id, kind: "park", longitude: 30.5, latitude: 50.4 },
+      T0 + day * 86_400_000,
+      13,
+    ).affinity;
+  }
+  return { affinity, id };
+}
 
 describe("chooseOuting", () => {
   const day = { at: at(0, 0), home: at(0, 0), hour: 13 };
@@ -288,6 +341,28 @@ describe("chooseOuting", () => {
     expect(chooseOuting(tired, menuOf(target("a", 300)), day).kind).toBe(
       "target",
     );
+  });
+
+  it("goes back to a place it loves and misses, over a nearer new one", () => {
+    const { affinity, id } = lovedPark();
+    const now = affinity.places[0]!.lastAt + 3 * 86_400_000;
+    const pick = chooseOuting(
+      initialDrive(now),
+      menuOf(target("nearby", 300), target(id, 1_500)),
+      { ...day, affinity, now },
+    );
+    expect(pick.kind === "target" && pick.target.id).toBe(id);
+  });
+
+  it("still keeps to near targets at night, loved or not", () => {
+    const { affinity, id } = lovedPark();
+    const now = affinity.places[0]!.lastAt + 3 * 86_400_000;
+    const pick = chooseOuting(
+      initialDrive(now),
+      menuOf(target("nearby", 300), target(id, 1_500)),
+      { ...day, hour: 23, affinity, now },
+    );
+    expect(pick.kind === "target" && pick.target.id).toBe("nearby");
   });
 
   it("stays when there is nowhere to go", () => {

@@ -29,6 +29,8 @@ export type AvaiaLineKind =
   | "blocked.fog"
   | "landmark.spotted"
   | "landmark.studied"
+  | "landmark.loved"
+  | "landmark.longing"
   | "fog.reveal"
   | "fog.revealed"
   | "fog.busy";
@@ -73,6 +75,16 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "So that's {landmark}. Logged it.",
       "{landmark}. Now I know.",
       "Marked on my chart: {landmark}.",
+    ],
+    "landmark.loved": [
+      "{landmark}. This one's mine now.",
+      "{landmark}. A heading I'll keep.",
+      "Some places become a course. {landmark} is one.",
+    ],
+    "landmark.longing": [
+      "Back to {landmark}. Course set.",
+      "{landmark}, again. Heading over.",
+      "I know the way to {landmark}.",
     ],
     "fog.reveal": [
       "Into the fog. I'll chart it.",
@@ -128,6 +140,16 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "So pretty. {landmark}, noted.",
       "{landmark}. Added to my little book.",
     ],
+    "landmark.loved": [
+      "Okay, I'm in love with {landmark}.",
+      "{landmark}! My favourite place, officially.",
+      "I could stay at {landmark} forever.",
+    ],
+    "landmark.longing": [
+      "I miss {landmark}. Going back!",
+      "Let's visit {landmark} again, please?",
+      "{landmark}, here I come again!",
+    ],
     "fog.reveal": [
       "Ooh, a mystery patch! Going in.",
       "Let me clear that up for you!",
@@ -182,6 +204,16 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. Filed under things that stand still.",
       "{landmark}, done. It was very… there.",
     ],
+    "landmark.loved": [
+      "Fine. I like {landmark}. Don't tell anyone.",
+      "{landmark}. Upgraded from 'thing' to 'my thing'.",
+      "Apparently I have a favourite now: {landmark}.",
+    ],
+    "landmark.longing": [
+      "Going back to {landmark}. Purely for research.",
+      "{landmark} again. Consistent, not obsessed.",
+      "My feet say {landmark}. Not arguing.",
+    ],
     "fog.reveal": [
       "Deploying one (1) fog remover.",
       "Fine. Revealing the unrevealed.",
@@ -235,6 +267,16 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Got it: {landmark}. Very iconic.",
       "{landmark}. Saved to favourites.",
       "{landmark}: studied and styled.",
+    ],
+    "landmark.loved": [
+      "{landmark}. Officially my aesthetic.",
+      "In love with {landmark}. It's a whole mood.",
+      "{landmark}: my spot. Pinned forever.",
+    ],
+    "landmark.longing": [
+      "{landmark} again. A classic never goes out of style.",
+      "Back to {landmark}. It suits me.",
+      "{landmark}, back in my look of the day.",
     ],
     "fog.reveal": [
       "Let's give that patch a makeover.",
@@ -293,6 +335,16 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. Тепер знаю.",
       "Позначив на своїй карті: {landmark}.",
     ],
+    "landmark.loved": [
+      "{landmark}. Тепер це моє місце.",
+      "{landmark} — мій орієнтир відтепер.",
+      "Деякі місця стають курсом. {landmark} — з таких.",
+    ],
+    "landmark.longing": [
+      "Курс — {landmark}. Повертаюся.",
+      "Знову туди: {landmark}. Іду.",
+      "Дорогу знаю: {landmark}.",
+    ],
     "fog.reveal": [
       "У туман. Нанесу на карту.",
       "Розчищу цю ділянку. Дай кілька хвилин.",
@@ -346,6 +398,16 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Записала: {landmark}.",
       "Яка краса. {landmark}, занотовано.",
       "{landmark}. Додала до своєї книжечки.",
+    ],
+    "landmark.loved": [
+      "Здається, я закохалася: {landmark}.",
+      "{landmark}! Офіційно моє улюблене місце.",
+      "{landmark}… Я б тут лишилася назавжди.",
+    ],
+    "landmark.longing": [
+      "Скучила: {landmark}. Повертаюся!",
+      "{landmark} — ще разочок, можна?",
+      "Біжу знову: {landmark}!",
     ],
     "fog.reveal": [
       "Ой, таємнича ділянка! Іду.",
@@ -401,6 +463,16 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. У теку «речі, що стоять на місці».",
       "{landmark} — готово. Воно було дуже… тут.",
     ],
+    "landmark.loved": [
+      "Гаразд. Мені тут подобається: {landmark}. Нікому ні слова.",
+      "{landmark}: підвищення з «річ» до «моя річ».",
+      "Схоже, тепер є улюблене місце: {landmark}.",
+    ],
+    "landmark.longing": [
+      "Знову {landmark}. Суто з наукових міркувань.",
+      "{landmark} ще раз. Це послідовність, а не одержимість.",
+      "Ноги кажуть: {landmark}. Не сперечаюся.",
+    ],
     "fog.reveal": [
       "Запускаю один (1) туманоприбирач.",
       "Гаразд. Відкриваю невідкрите.",
@@ -454,6 +526,16 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Є: {landmark}. Дуже знаково.",
       "{landmark}. Додала в обране.",
       "{landmark}: вивчено й оцінено.",
+    ],
+    "landmark.loved": [
+      "{landmark}. Офіційно моя естетика.",
+      "Закохалася: {landmark}. Це настрій.",
+      "{landmark} — моє місце. Закріпила назавжди.",
+    ],
+    "landmark.longing": [
+      "Знову {landmark}. Класика не виходить з моди.",
+      "Повертаюся: {landmark}. Мені личить.",
+      "{landmark} — знову в моєму образі дня.",
     ],
     "fog.reveal": [
       "Зробимо цій ділянці макіяж.",
@@ -512,6 +594,16 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. Теперь знаю.",
       "Отметил на своей карте: {landmark}.",
     ],
+    "landmark.loved": [
+      "{landmark}. Теперь это моё место.",
+      "{landmark} — мой ориентир отныне.",
+      "Некоторые места становятся курсом. {landmark} — из таких.",
+    ],
+    "landmark.longing": [
+      "Курс — {landmark}. Возвращаюсь.",
+      "Снова туда: {landmark}. Иду.",
+      "Дорогу знаю: {landmark}.",
+    ],
     "fog.reveal": [
       "В туман. Нанесу на карту.",
       "Расчищу этот участок. Дай пару минут.",
@@ -565,6 +657,16 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Записала: {landmark}.",
       "Какая красота. {landmark}, записано.",
       "{landmark}. Добавила в свою книжечку.",
+    ],
+    "landmark.loved": [
+      "Кажется, я влюбилась: {landmark}.",
+      "{landmark}! Официально моё любимое место.",
+      "{landmark}… Я бы осталась тут навсегда.",
+    ],
+    "landmark.longing": [
+      "Соскучилась: {landmark}. Возвращаюсь!",
+      "{landmark} — ещё разочек, можно?",
+      "Бегу снова: {landmark}!",
     ],
     "fog.reveal": [
       "Ой, таинственный участок! Иду.",
@@ -620,6 +722,16 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}. В папку «вещи, которые стоят на месте».",
       "{landmark} — готово. Оно было очень… здесь.",
     ],
+    "landmark.loved": [
+      "Ладно. Мне здесь нравится: {landmark}. Никому ни слова.",
+      "{landmark}: повышение с «вещь» до «моя вещь».",
+      "Похоже, теперь есть любимое место: {landmark}.",
+    ],
+    "landmark.longing": [
+      "Снова {landmark}. Исключительно в научных целях.",
+      "{landmark} ещё раз. Это последовательность, а не одержимость.",
+      "Ноги говорят: {landmark}. Не спорю.",
+    ],
     "fog.reveal": [
       "Запускаю один (1) туманоуборщик.",
       "Ладно. Открываю неоткрытое.",
@@ -673,6 +785,16 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Есть: {landmark}. Очень культово.",
       "{landmark}. Добавила в избранное.",
       "{landmark}: изучено и оценено.",
+    ],
+    "landmark.loved": [
+      "{landmark}. Официально моя эстетика.",
+      "Влюбилась: {landmark}. Это настроение.",
+      "{landmark} — моё место. Закрепила навсегда.",
+    ],
+    "landmark.longing": [
+      "Снова {landmark}. Классика не выходит из моды.",
+      "Возвращаюсь: {landmark}. Мне идёт.",
+      "{landmark} — снова в моём образе дня.",
     ],
     "fog.reveal": [
       "Сделаем этому участку макияж.",
@@ -791,8 +913,10 @@ export function lineCue(kind: AvaiaLineKind): SoundCue | undefined {
     case "fog.busy":
       return "refuse";
     case "landmark.spotted":
+    case "landmark.longing":
       return "spot";
     case "landmark.studied":
+    case "landmark.loved":
       return "study";
     case "fog.revealed":
       return undefined;

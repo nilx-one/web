@@ -161,6 +161,67 @@ priced differently on purpose. That experience is published in `pub_info` as
 the owner's report (`authority: client`) — see [progression](progression.md).
 The notebook itself stays on this device.
 
+## Favourite places
+
+Every visit leaves a feeling behind: a landmark studied, a park rested in, a
+view gazed from. An Avaia grows fond of some places, falls for a few, and
+goes back to them on its own. All of it is worked out in code
+(`place-affinity.ts`), never by a model, so it means the same on every device
+and under every model.
+
+How much one visit was enjoyed, 0 to 1, comes from four things:
+
+| Part        | Weight | What it is                                                                                 |
+| ----------- | -----: | ------------------------------------------------------------------------------------------ |
+| temperament |    0.4 | what the Avaia's address leans toward: nature, heights, history or art, 0.3–0.9 each       |
+| chemistry   |    0.3 | fixed for this Avaia and this one place, so one park is _the_ park and another only a park |
+| taste       |    0.2 | learned: every visit moves taste for that family of places a little toward how it went     |
+| the hour    |    0.1 | a park by day, a viewpoint at dawn or sunset, a museum in opening hours                    |
+
+Temperament and chemistry are drawn from the Avaia's address, so they never
+have to travel: the same Avaia feels the same about the same place anywhere.
+
+- **Fondness** starts as a first impression, 60 % of how the first visit
+  went, so a place enjoyed at 0.67 or more is a favourite at once and worth
+  coming back to, and a duller one is only known. Each later visit moves it
+  40 % of the way from what it was toward that visit's enjoyment. It halves
+  over 30 days left alone.
+- **Love** happens once: on the first visit, from the third on, that leaves
+  fondness at 0.62 or more. Only a place the Avaia really enjoys gets there;
+  a lukewarm one never does, however often it is visited. A loved place
+  fades no lower than 0.5, and the moment is said aloud (`landmark.loved`).
+- **Longing** is fondness grown back over two days away. An idle Avaia with
+  nothing new to study goes back to the notebook landmark it longs for most,
+  if that longing reaches 0.35, the landmark is within 3 km on open ground,
+  and it has been away long enough: about a day from a loved place, three
+  days from a favourite (a place its last visit left at fondness 0.4 or
+  more, even if it has faded a little since). It never goes back on its own
+  to a place that is only known. It says so first (`landmark.longing`).
+  Going back pays no experience again and needs no new study line. A place
+  an outing found, such as a park, is the drive's to go back to, not
+  curiosity's: it is never written into the notebook as studied.
+- **Outings** weigh the same feelings. A place it longs for, or a new one its
+  temperament leans toward, wins over one a little closer; distance takes
+  off up to a quarter. Night still keeps it to near targets, and a tired
+  Avaia still goes home. A loved target can be gone back to after a day
+  rather than the week other targets wait.
+- **Lingering:** a visit lasts by what is done there (resting 90 s, gazing
+  45 s, studying 30 s), and up to twice that where the Avaia is fond.
+- **A model** reads how the Avaia feels about each outing option as a closed
+  label (`new`, `known`, `fond`, `loved`) beside its kind and reach. It reads
+  the label, never writes it.
+
+The record keeps at most 64 places, loved ones first, and is one Bond's own,
+kept for its Avaia's address, in local storage under
+`nilx-one.avaia.affinity.v1.<pub_dress>`. Nothing sends it anywhere and it is
+never training signal. It is transport-eligible, not synced state (see
+[State placement](state-placement.md)). It asserts nothing about presence,
+attendance or any Bond: it is about where a body this device draws liked to
+stand. The Dock lists the favourites on the Avaia's own screen ("Favourite
+places"), loved ones first, read at the time the world opens or the last
+visit ended; a favourite left alone fades out of the list when its time
+comes, while the page is open too.
+
 ## Revealing the fog
 
 The fog is lifted in two ways besides the presence journal. Both are local to
@@ -224,8 +285,8 @@ where its owner is. Nothing walks in the background.
 
 ## Not yet
 
-- **Model-driven choice.** Curiosity picks the nearest landmark, which is a
-  rule, not a decision. Routing the choice through `DecisionMenu` and the
+- **Model-driven choice.** Curiosity picks the nearest landmark it has not
+  studied, or the dear place it misses most, which is a rule, not a decision. Routing the choice through `DecisionMenu` and the
   loaded model is the next step, and the candidates would stay what they are
   here: landmarks the person already passed.
 - **Outings and finds.** Walks go where they are sent or to a noticed

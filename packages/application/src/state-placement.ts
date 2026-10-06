@@ -337,6 +337,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "Landmarks noticed in passing and studied by the Avaia.",
   },
   {
+    id: "avaia.affinity",
+    placement: "synchronizable",
+    mobility: "transport",
+    medium: "local-storage",
+    key: "nilx-one.avaia.affinity.v1",
+    perOwner: true,
+    what: "The places the Avaia grew fond of or loved, and its taste in places, worked out in code from its visits.",
+  },
+  {
     id: "guide.intro",
     placement: "synchronizable",
     mobility: "transport",
