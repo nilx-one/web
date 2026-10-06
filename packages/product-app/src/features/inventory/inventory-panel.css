@@ -85,3 +85,39 @@
   gap: 8px;
   align-items: center;
 }
+
+.inventory__craft {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory__craft-running {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-left: 3px solid var(--inventory-bond);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.inventory__recipes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inventory__recipe {
+  display: flex;
+  gap: 8px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.inventory__recipe > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}

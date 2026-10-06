@@ -46,6 +46,7 @@ vi.mock("./inventory", () => ({
         },
       ],
       crafted: [],
+      recipes: [],
       carries: [
         { id: "pocket", width: 5, height: 1 },
         { id: "backpack", width: 8, height: 5 },
@@ -61,7 +62,7 @@ const core = { applyInventoryCommand: vi.fn(), economyCatalog: vi.fn() };
 
 describe("InventoryPanel", () => {
   it("shows both grids, the balance, and things in their cells", () => {
-    render(<InventoryPanel owner="0x0sky" core={core} />);
+    render(<InventoryPanel owner="0x0sky" core={core} committed />);
 
     expect(screen.getByRole("status")).toHaveTextContent("15 Seed ₴€£");
     const bottle = screen.getByRole("button", { name: "Bottle" });
@@ -74,7 +75,7 @@ describe("InventoryPanel", () => {
   });
 
   it("sells what the Bond carries and hands the Avaia's across", async () => {
-    render(<InventoryPanel owner="0x0sky" core={core} />);
+    render(<InventoryPanel owner="0x0sky" core={core} committed />);
 
     fireEvent.click(screen.getByRole("button", { name: "Bottle" }));
     fireEvent.click(screen.getByRole("button", { name: "Sell for 5 ₴€£" }));

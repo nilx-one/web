@@ -70,7 +70,8 @@ export type AwardKind =
   | "landmark_studied"
   | "landmark_noticed"
   | "find_seen"
-  | "find_picked_up";
+  | "find_picked_up"
+  | "craft_finished";
 
 /**
  * One award as the service gets it: its commitment, where it sits on this
@@ -91,6 +92,8 @@ export interface CommittedAward {
   readonly tier?: number;
   /** For a pick-up of tier 4 to 6 only. */
   readonly artifactId?: string;
+  /** For `craft_finished` only: Core's recipe id, which prices it. */
+  readonly recipe?: string;
 }
 
 /**

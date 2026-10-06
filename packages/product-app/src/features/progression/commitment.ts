@@ -89,7 +89,24 @@ export function awardAmount(
       if (earner === "avaia" && tier > AVAIA_PICKUP_MAX_TIER) return null;
       return ROLL_TABLE.tiers[tier - 1]?.experience ?? null;
     }
+    // Priced by its recipe in Core, by the service: never estimated here,
+    // and never published the legacy way.
+    case "craft_finished":
+      return null;
   }
+}
+
+/**
+ * A finished craft's subject: its recipe and when it started, so two crafts
+ * of one recipe are two records. Only the recipe is ever sent.
+ */
+export function craftSubject(recipe: string, startedMs: number): string {
+  return `craft:${recipe}:${startedMs}`;
+}
+
+/** The recipe a finished craft's subject names. */
+export function craftRecipeOf(subject: string): string {
+  return subject.split(":")[1] ?? "";
 }
 
 /**

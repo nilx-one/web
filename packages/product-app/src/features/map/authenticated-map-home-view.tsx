@@ -50,8 +50,10 @@ import {
 } from "../../shell/sound-preference";
 import { SoundSettings } from "../../shell/sound-settings";
 import { PickupSettings } from "../finds/pickup-settings";
+import { useCraftCompletion } from "../inventory/craft";
 import { pickUpFind } from "../inventory/inventory";
-import { InventoryPanel, thingName } from "../inventory/inventory-panel";
+import { InventoryPanel } from "../inventory/inventory-panel";
+import { thingName } from "../inventory/thing-name";
 import {
   DOCK_ACTION_KEYS,
   DOCK_ROLE_KEYS,
@@ -942,6 +944,27 @@ export function AuthenticatedMapHomeView({
           })
           .catch(() => undefined);
       }
+    },
+  });
+  // A confirmed craft finishes in the background, wherever the person is.
+  useCraftCompletion({
+    owner: pubDress,
+    core: committedAwards === undefined ? undefined : findItems,
+    committed: committedAwards !== undefined,
+    onFinished: (finished) => {
+      cue("achievement");
+      setFindToast({
+        id: `craft-done-${finished.recipe}-${Date.now()}`,
+        kind: "active",
+        title: t("craft.done.title").replace(
+          "{item}",
+          finished.makes === undefined ? "" : thingName(t, finished.makes),
+        ),
+        description: t("craft.done.detail").replace(
+          "{xp}",
+          String(finished.experience),
+        ),
+      });
     },
   });
   // The Avaia answers fog taps through the reveal below, which in turn talks
@@ -2262,7 +2285,11 @@ export function AuthenticatedMapHomeView({
                   ) : null}
 
                   {activeDetail === "inventory" && findItems !== undefined ? (
-                    <InventoryPanel owner={pubDress} core={findItems} />
+                    <InventoryPanel
+                      owner={pubDress}
+                      core={findItems}
+                      committed={committedAwards !== undefined}
+                    />
                   ) : null}
 
                   {activeDetail === "avaia" ? (
