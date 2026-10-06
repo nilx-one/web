@@ -672,7 +672,7 @@ describe("presentation dimension", () => {
     fakeMap.layers.set(TERRAIN_HILLSHADE_LAYER_ID, {
       id: TERRAIN_HILLSHADE_LAYER_ID,
     });
-    const renderer = readyRenderer(fakeMap);
+    readyRenderer(fakeMap);
 
     expect(fakeMap.setTerrain).not.toHaveBeenCalled();
     expect(fakeMap.layout.get(`${TERRAIN_HILLSHADE_LAYER_ID}.visibility`)).toBe(
