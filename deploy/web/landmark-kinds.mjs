@@ -71,8 +71,7 @@ function reader(bytes) {
       else if (wire === 2) {
         const length = varint();
         position += length;
-      }
-      else if (wire === 5) position += 4;
+      } else if (wire === 5) position += 4;
       else throw new Error(`unsupported wire type ${wire}`);
     },
   };
