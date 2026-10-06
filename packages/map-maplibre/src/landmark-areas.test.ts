@@ -95,6 +95,61 @@ describe("joinAreas", () => {
     expect(found!.polygons).toHaveLength(2);
   });
 
+  it("joins equivalent lake label and polygon schema spellings", () => {
+    const waterLake: AreaPart = {
+      id: undefined,
+      kind: "water",
+      kindDetail: "lake",
+      polygons: [[square(0, 0, 1)]],
+    };
+
+    for (const label of [
+      { id: undefined, name: "Lake", point: [0.5, 0.5] as [number, number], kind: "lake" },
+      { id: undefined, name: "Lake", point: [0.5, 0.5] as [number, number], kind: "water" },
+    ]) {
+      const [found] = joinAreas({
+        ...none,
+        waterLabels: [label],
+        water: [waterLake],
+      });
+      expect(found).toMatchObject({
+        layer: "water",
+        kind: "water",
+        kindDetail: "lake",
+        name: "Lake",
+      });
+    }
+  });
+
+  it("keeps one water area id across tiny label decode differences", () => {
+    const water: AreaPart[] = [
+      {
+        id: undefined,
+        kind: "water",
+        kindDetail: "lake",
+        polygons: [[square(30, 50, 1)]],
+      },
+    ];
+    const idAt = (point: [number, number]) =>
+      joinAreas({
+        ...none,
+        waterLabels: [
+          {
+            id: undefined,
+            name: "Lake",
+            point,
+            kind: "water",
+            kindDetail: "lake",
+          },
+        ],
+        water,
+      })[0]!.id;
+
+    expect(idAt([30.512341, 50.512341])).toBe(
+      idAt([30.512342, 50.512342]),
+    );
+  });
+
   it("names nothing without both a label and a polygon", () => {
     expect(
       joinAreas({
