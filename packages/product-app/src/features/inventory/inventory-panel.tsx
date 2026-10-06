@@ -4,11 +4,8 @@
 import type { CoreEconomyCatalog, CoreHolder } from "@nilx-one/application";
 import { useState } from "react";
 
-import {
-  isTranslationKey,
-  useLocalization,
-  type Translate,
-} from "../../shell/localization";
+import { useLocalization } from "../../shell/localization";
+import { CraftSection } from "./craft-section";
 import "./inventory-panel.css";
 import {
   applyInventory,
@@ -17,10 +14,13 @@ import {
   type InventoryPort,
   type PlacedThing,
 } from "./inventory";
+import { thingName } from "./thing-name";
 
 export interface InventoryPanelProps {
   readonly owner: string;
   readonly core: InventoryPort;
+  /** Whether experience goes through committed awards on this host. */
+  readonly committed: boolean;
 }
 
 const GRIDS: Readonly<
@@ -30,11 +30,6 @@ const GRIDS: Readonly<
   backpack: { width: 8, height: 5 },
   bag: { width: 12, height: 10 },
 };
-
-export function thingName(t: Translate, id: string): string {
-  const key = `item.${id}`;
-  return isTranslationKey(key) ? t(key) : id;
-}
 
 function sizeOf(catalog: CoreEconomyCatalog | undefined, id: string) {
   const sized =
@@ -62,7 +57,11 @@ interface Selection {
  * it or hand it across. Every rule is Core's; a refused change says so and
  * leaves everything where it was.
  */
-export function InventoryPanel({ owner, core }: InventoryPanelProps) {
+export function InventoryPanel({
+  owner,
+  core,
+  committed,
+}: InventoryPanelProps) {
   const { t } = useLocalization();
   const { model, catalog } = useInventory(owner, core);
   const [selected, setSelected] = useState<Selection | undefined>();
@@ -216,6 +215,13 @@ export function InventoryPanel({ owner, core }: InventoryPanelProps) {
           {note}
         </p>
       )}
+      <CraftSection
+        owner={owner}
+        core={core}
+        model={model}
+        catalog={catalog}
+        committed={committed}
+      />
     </div>
   );
 }

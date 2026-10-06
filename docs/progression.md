@@ -12,12 +12,13 @@ does not attest that the play happened.
 The Bond and its Avaia keep separate experience. What the owner did
 themselves pays the Bond; what the Avaia did pays the Avaia.
 
-| Action                                    | Who earns it | Reward |
-| ----------------------------------------- | ------------ | -----: |
-| A zone (fog cell) revealed by the Avaia   | the Avaia    |      n |
-| A zone (fog cell) walked open             | the Bond     |     3n |
-| A monument studied, full description kept | the Avaia    |   4.5n |
-| A monument noticed in passing             | the Bond     |     2n |
+| Action                                    | Who earns it |                  Reward |
+| ----------------------------------------- | ------------ | ----------------------: |
+| A zone (fog cell) revealed by the Avaia   | the Avaia    |                       n |
+| A zone (fog cell) walked open             | the Bond     |                      3n |
+| A monument studied, full description kept | the Avaia    |                    4.5n |
+| A monument noticed in passing             | the Bond     |                      2n |
+| A repair or a craft finished              | the Bond     | its recipe's, 15 to 500 |
 
 `n` is `EXPERIENCE_UNIT` in `progression.ts`, currently `10`. Walking a zone
 open yourself costs more effort than sending the Avaia, so it pays more; the

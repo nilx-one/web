@@ -19,6 +19,12 @@ A find goes into its finder's grid when its pick-up award is **kept**, that is, 
 
 A change Core refuses (no room, not for sale) changes nothing, and the screen says why.
 
+## Crafting
+
+Under the grids, **Craft** lists Core's recipes: what each uses and needs, how long it takes, what it costs and what it pays. Starting one **asks first**: what it uses goes at once, and the thing comes when its time is up (15 to 45 minutes; a legendary craft takes a week). One craft runs at a time, in the background, like a cell opening: it finishes on its own wherever the person is in the app, the thing goes into the Bond's grid, and a toast says so. A craft with no room to land waits until room is made.
+
+Finishing pays the **Bond** the recipe's experience as a committed `craft_finished` award. It names only its recipe, and the service prices it by Core's recipe ([Progression](progression.md)). Repairs that need a repair workshop are listed but refused until workshops on the map come. A legendary craft finished at once for real money will go through 0xda-market, later.
+
 ## Where it lives
 
 In the sealed `avaia-finds` journal, as `inventory.state` events: Core's whole stored inventory after each change, plus the find a pick-up put in. The journal's own AES-GCM key seals them, and the wipe that deletes the journal deletes them. Nothing about the inventory reaches the service yet: the Seeds balance and craft times held against a commitment come next.

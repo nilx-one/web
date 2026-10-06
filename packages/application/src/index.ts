@@ -144,6 +144,7 @@ export {
   type CoreHolder,
   type CoreInventoryAnswer,
   type CoreInventoryCommand,
+  type CoreRecipe,
   type CoreSize,
   type CorePubDressLabelErrorCode,
   type CorePubDressLabelResult,

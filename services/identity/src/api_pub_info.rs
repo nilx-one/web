@@ -588,6 +588,46 @@ mod pub_info_api_tests {
     }
 
     #[tokio::test]
+    async fn a_finished_craft_pays_its_recipe_to_the_bond_only() {
+        let (app, sky, _other) = two_bonds().await;
+        let mut session = None;
+        let paid = post_awards(
+            &app,
+            &sky,
+            &mut session,
+            &serde_json::json!({ "awards": [
+                { "id": commitment("repair"), "chain": "ch:phone-01", "kind": "craft_finished",
+                  "earner": "bond", "recipe": "repair_cd_player" },
+            ]}),
+        )
+        .await;
+        assert_eq!(paid.status(), StatusCode::OK);
+        let body = json(paid).await;
+        assert_eq!(body["results"][0]["outcome"], "accepted");
+        assert_eq!(body["experience"]["bond_xp"], 50);
+
+        for refused in [
+            serde_json::json!({ "id": commitment("avaia"), "chain": "ch:phone-01",
+                "kind": "craft_finished", "earner": "avaia", "recipe": "repair_cd_player" }),
+            serde_json::json!({ "id": commitment("unknown"), "chain": "ch:phone-01",
+                "kind": "craft_finished", "earner": "bond", "recipe": "nothing" }),
+            serde_json::json!({ "id": commitment("bare"), "chain": "ch:phone-01",
+                "kind": "craft_finished", "earner": "bond" }),
+            serde_json::json!({ "id": commitment("named"), "chain": "ch:phone-01",
+                "kind": "zone_walked", "earner": "bond", "recipe": "repair_cd_player" }),
+        ] {
+            let response = post_awards(
+                &app,
+                &sky,
+                &mut session,
+                &serde_json::json!({ "awards": [refused] }),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{refused}");
+        }
+    }
+
+    #[tokio::test]
     async fn a_rare_pick_up_pays_what_its_item_is_worth() {
         let (app, sky, _other) = two_bonds().await;
         let mut session = None;

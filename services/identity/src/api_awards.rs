@@ -120,6 +120,33 @@ fn validate_awards(
             crate::repository::ExperienceEarner::Bond => finds::Earner::Bond,
             crate::repository::ExperienceEarner::Avaia => finds::Earner::Avaia,
         };
+        // A finished craft is the Bond's, names its recipe and nothing else,
+        // and is priced by it. Nothing else names a recipe.
+        if kind == AwardKind::CraftFinished {
+            let recipe = body.recipe.as_deref()?;
+            if finds_earner != finds::Earner::Bond
+                || body.tier.is_some()
+                || body.artifact_id.is_some()
+            {
+                return None;
+            }
+            let (amount, bucket) = finds::craft_award(recipe)?;
+            awards.push(crate::repository::CommittedAward {
+                id: body.id.clone(),
+                parent: body.parent.clone(),
+                chain: body.chain.clone(),
+                kind: kind.as_str(),
+                tier: bucket,
+                earner,
+                amount,
+                weekly_cap: finds::weekly_cap(kind, Some(bucket)),
+                claim: None,
+            });
+            continue;
+        }
+        if body.recipe.is_some() {
+            return None;
+        }
         let amount = finds::award_amount(kind, finds_earner, body.tier)?;
         let claimed = body.tier.is_some_and(|tier| tier >= finds::CLAIMED_MIN_TIER);
         let claim = match (&body.artifact_id, claimed) {
@@ -285,6 +312,9 @@ struct AwardBody {
     tier: Option<u8>,
     #[serde(default)]
     artifact_id: Option<String>,
+    /// For `craft_finished` only: Core's recipe id, which prices it.
+    #[serde(default)]
+    recipe: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -1092,6 +1092,7 @@ class IdentityHttpAdapter
             ...(award.artifactId === undefined
               ? {}
               : { artifact_id: award.artifactId }),
+            ...(award.recipe === undefined ? {} : { recipe: award.recipe }),
           })),
         }),
       });

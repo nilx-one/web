@@ -182,6 +182,9 @@ pub enum AwardKind {
     LandmarkNoticed,
     FindSeen,
     FindPickedUp,
+    /// A repair or a craft finished (`docs/economy.md` in core): the Bond's
+    /// own doing, priced by its recipe.
+    CraftFinished,
 }
 
 impl AwardKind {
@@ -193,6 +196,7 @@ impl AwardKind {
             "landmark_noticed" => Self::LandmarkNoticed,
             "find_seen" => Self::FindSeen,
             "find_picked_up" => Self::FindPickedUp,
+            "craft_finished" => Self::CraftFinished,
             _ => return None,
         })
     }
@@ -205,6 +209,7 @@ impl AwardKind {
             Self::LandmarkNoticed => "landmark_noticed",
             Self::FindSeen => "find_seen",
             Self::FindPickedUp => "find_picked_up",
+            Self::CraftFinished => "craft_finished",
         }
     }
 }
@@ -230,6 +235,8 @@ pub fn award_amount(kind: AwardKind, earner: Earner, tier: Option<u8>) -> Option
         (AwardKind::LandmarkStudied, Earner::Avaia) => Some(EXPERIENCE_UNIT * 9 / 2),
         (AwardKind::LandmarkNoticed, Earner::Bond) => Some(EXPERIENCE_UNIT * 2),
         (AwardKind::FindSeen, _) => Some(FIND_SEEN_EXPERIENCE),
+        // Priced by its recipe: `craft_award`.
+        (AwardKind::CraftFinished, _) => None,
         (AwardKind::FindPickedUp, earner) => {
             let tier = tier?;
             if earner == Earner::Avaia && tier > AVAIA_PICKUP_MAX_TIER {
@@ -293,7 +300,28 @@ pub fn weekly_cap(kind: AwardKind, tier: Option<u8>) -> u32 {
         (AwardKind::FindPickedUp, Some(5)) => 10,
         (AwardKind::FindPickedUp, Some(6)) => 6,
         (AwardKind::FindPickedUp, _) => 0,
+        // Everyday crafts take 15 to 45 minutes, one at a time: a week holds
+        // under 700. A legendary one takes a week, or real money; its bucket
+        // (see `craft_cap_bucket`) allows a few.
+        (AwardKind::CraftFinished, Some(LEGENDARY_CRAFT_BUCKET)) => 3,
+        (AwardKind::CraftFinished, _) => 300,
     }
+}
+
+/// The weekly-cap bucket a legendary craft counts in. Crafts carry no tier;
+/// the bucket only keeps a legendary craft from sharing the everyday cap.
+pub const LEGENDARY_CRAFT_BUCKET: u8 = 6;
+
+/// What a finished craft pays and the cap bucket it counts in, by Core's
+/// recipe, or `None` for a recipe Core does not have.
+pub fn craft_award(recipe: &str) -> Option<(u64, u8)> {
+    let recipe = nilxone_contracts::recipe(recipe)?;
+    let bucket = if recipe.legendary {
+        LEGENDARY_CRAFT_BUCKET
+    } else {
+        0
+    };
+    Some((u64::from(recipe.experience), bucket))
 }
 
 /// Whether a pick-up of a find rolled in `find_epoch` may still be claimed at
@@ -334,6 +362,21 @@ impl Mulberry32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_finished_craft_pays_its_recipe() {
+        assert_eq!(craft_award("repair_cd_player"), Some((50, 0)));
+        assert_eq!(
+            craft_award("craft_kyiv_anthology"),
+            Some((500, LEGENDARY_CRAFT_BUCKET))
+        );
+        assert_eq!(craft_award("nothing"), None);
+        assert_eq!(
+            award_amount(AwardKind::CraftFinished, Earner::Bond, None),
+            None
+        );
+        assert!(weekly_cap(AwardKind::CraftFinished, Some(LEGENDARY_CRAFT_BUCKET)) < 10);
+    }
 
     #[test]
     fn common_tiers_pay_the_same_for_every_item() {
