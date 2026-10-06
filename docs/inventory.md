@@ -23,7 +23,16 @@ A change Core refuses (no room, not for sale) changes nothing, and the screen sa
 
 Under the grids, **Craft** lists Core's recipes: what each uses and needs, how long it takes, what it costs and what it pays. Starting one **asks first**: what it uses goes at once, and the thing comes when its time is up (15 to 45 minutes; a legendary craft takes a week). One craft runs at a time, in the background, like a cell opening: it finishes on its own wherever the person is in the app, the thing goes into the Bond's grid, and a toast says so. A craft with no room to land waits until room is made.
 
-Finishing pays the **Bond** the recipe's experience as a committed `craft_finished` award. It names only its recipe, and the service prices it by Core's recipe ([Progression](progression.md)). Repairs that need a repair workshop are listed but refused until workshops on the map come. A legendary craft finished at once for real money will go through 0xda-market, later.
+Finishing pays the **Bond** the recipe's experience as a committed `craft_finished` award. It names only its recipe, and the service prices it by Core's recipe ([Progression](progression.md)). Player repairs need a **repair workshop**: see below. A legendary craft finished at once for real money will go through 0xda-market, later.
+
+## Repair workshops
+
+A repair workshop is a real place in the basemap, and the Bond has to walk there. These count:
+
+- every electronics repair shop (`electronics_repair`; about 96 in Kyiv's archive) and radio parts shop (`radiotechnics`, about 10);
+- a radio market, by its name: Kyiv's «Радіоринок» is a `marketplace` in the archive, and «Дарницький Радіо ринок» an `electronics` shop.
+
+The rule is `features/inventory/workshops.ts`. The map answers through `pointsNear` (`map-contract`), from the `pois` of the tiles the view has loaded. The Bond is **at** a workshop when a real fix of this device (not a declared position) with accuracy of 50 m or better lies within 40 m of one. The Craft section then names it, and Core accepts the repairs (`Place::RepairWorkshop`). Workshops are already labelled on the map, like any named point.
 
 ## Where it lives
 

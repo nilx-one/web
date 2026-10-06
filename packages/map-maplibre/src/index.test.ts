@@ -895,6 +895,37 @@ describe("landmarks the basemap draws", () => {
     expect(found?.[1]?.facts).toEqual({ min_zoom: 15 });
   });
 
+  it("answers points of the kinds a caller names, nearest first", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.layers.set("pois", { id: "pois", source: "basemap" });
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    const point = (id: number, lng: number, properties: object) => ({
+      id,
+      geometry: { type: "Point", coordinates: [lng, 50.4501] },
+      properties,
+    });
+    Object.assign(fakeMap, {
+      querySourceFeatures: vi.fn(() => [
+        point(1, 30.5236, { kind: "electronics_repair", name: "Fixlab" }),
+        point(2, 30.5235, { kind: "radiotechnics", name: "Радіодеталі" }),
+        point(3, 30.5235, { kind: "monument", name: "Not asked for" }),
+        point(4, 30.6, { kind: "electronics_repair", name: "Elsewhere" }),
+      ]),
+    });
+    const renderer = readyRenderer(fakeMap);
+
+    const found = renderer.pointsNear?.(
+      { longitude: 30.5234, latitude: 50.4501 },
+      100,
+      new Set(["electronics_repair", "radiotechnics"]),
+    );
+
+    expect(found?.map((place) => [place.id, place.kind])).toEqual([
+      ["poi:2", "radiotechnics"],
+      ["poi:1", "electronics_repair"],
+    ]);
+  });
+
   it("says the answer may have changed each time the map settles", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);

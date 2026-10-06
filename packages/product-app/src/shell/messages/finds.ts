@@ -82,6 +82,8 @@ export const FINDS_EN = {
   "craft.error.missing": "Something it needs is missing.",
   "craft.error.not_enough_seeds": "Not enough Seed ₴€£.",
   "craft.error.wrong_place": "This needs a repair workshop.",
+  "craft.atWorkshop": "At a repair workshop: {name}",
+  "craft.workshopNoName": "a repair workshop",
 } as const;
 
 export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
@@ -161,6 +163,8 @@ export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "craft.error.missing": "Чогось потрібного бракує.",
   "craft.error.not_enough_seeds": "Бракує Зерна ₴€£.",
   "craft.error.wrong_place": "Для цього потрібна ремонтна майстерня.",
+  "craft.atWorkshop": "Ти в ремонтній майстерні: {name}",
+  "craft.workshopNoName": "без назви",
 };
 
 export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
@@ -239,4 +243,6 @@ export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "craft.error.missing": "Чего-то нужного не хватает.",
   "craft.error.not_enough_seeds": "Не хватает Зерна ₴€£.",
   "craft.error.wrong_place": "Для этого нужна ремонтная мастерская.",
+  "craft.atWorkshop": "Ты в ремонтной мастерской: {name}",
+  "craft.workshopNoName": "без названия",
 };

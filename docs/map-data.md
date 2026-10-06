@@ -64,7 +64,7 @@ The renderer itself reads a little more, outside any style, for
 querying the painted `buildings`, `buildings-flat` and `water` layers, and
 `landmarksNear` reads `kind`, `name` and every other attribute of `pois`
 features from tiles already loaded and from the landmark tiles read ahead
-(below). `areasNear` reads the same tiles' named `pois` and `water` points and
+(below). `pointsNear` reads the view's `pois` of the kinds the caller names (repair workshops, [Inventory](inventory.md)). `areasNear` reads the same tiles' named `pois` and `water` points and
 the `kind` and `kind_detail` of `landuse` and `water` polygons, to name the
 parks, reserves, beaches and lakes an outing may go to. `roadsWithin` reads `kind`, `kind_detail`
 and `is_bridge` of `roads` features, from tiles already loaded and from the

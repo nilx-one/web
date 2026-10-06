@@ -47,8 +47,10 @@ export interface CraftSectionProps {
   readonly catalog: CoreEconomyCatalog | undefined;
   /** Whether experience goes through committed awards on this host. */
   readonly committed: boolean;
-  /** Where the Bond stands. Workshops on the map come later. */
+  /** Where the Bond stands. */
   readonly place?: CraftPlace;
+  /** The workshop's name, when the Bond stands at one. */
+  readonly workshopName?: string | undefined;
 }
 
 /**
@@ -62,6 +64,7 @@ export function CraftSection({
   catalog,
   committed,
   place = "anywhere",
+  workshopName,
 }: CraftSectionProps) {
   const { t } = useLocalization();
   const [confirming, setConfirming] = useState<CoreRecipe | undefined>();
@@ -121,6 +124,14 @@ export function CraftSection({
   return (
     <section className="inventory__craft" aria-labelledby="craft-title">
       <strong id="craft-title">{t("craft.title")}</strong>
+      {place === "repair_workshop" ? (
+        <small className="inventory__workshop">
+          {t("craft.atWorkshop").replace(
+            "{name}",
+            workshopName ?? t("craft.workshopNoName"),
+          )}
+        </small>
+      ) : null}
       {craft === undefined || running === undefined ? null : (
         <div className="inventory__craft-running" role="status">
           {craft.readyMs > now ? (
@@ -175,7 +186,8 @@ export function CraftSection({
                   : ""}
                 {` · ${t("craft.reward").replace("{xp}", String(recipe.experience))}`}
               </small>
-              {recipe.place === "repair_workshop" ? (
+              {recipe.place === "repair_workshop" &&
+              place !== "repair_workshop" ? (
                 <small>{t("craft.workshopOnly")}</small>
               ) : null}
               {recipe.legendary ? <small>{t("craft.legendary")}</small> : null}
