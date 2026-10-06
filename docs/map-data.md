@@ -64,7 +64,9 @@ The renderer itself reads a little more, outside any style, for
 querying the painted `buildings`, `buildings-flat` and `water` layers, and
 `landmarksNear` reads `kind`, `name` and every other attribute of `pois`
 features from tiles already loaded and from the landmark tiles read ahead
-(below). `roadsWithin` reads `kind`, `kind_detail`
+(below). `areasNear` reads the same tiles' named `pois` and `water` points and
+the `kind` and `kind_detail` of `landuse` and `water` polygons, to name the
+parks, reserves, beaches and lakes an outing may go to. `roadsWithin` reads `kind`, `kind_detail`
 and `is_bridge` of `roads` features, from tiles already loaded and from the
 road tiles read ahead (below), to build the pedestrian graph a walk follows.
 `LANDMARK_KINDS`
@@ -105,8 +107,12 @@ tiles covering that area:
 At the same moment `preloadLandmarks` reads the `pois` layer of the same area,
 so the outing knows the landmarks it could walk to, not only those on screen:
 
-- from the same archive, by the same range requests, and only the `pois` layer
-  of each tile is decoded, into the points whose kind is on `LANDMARK_KINDS`;
+- from the same archive, by the same range requests. Three layers of each tile
+  are decoded: `pois` into the points whose kind is on `LANDMARK_KINDS` and
+  the named points that label areas; `landuse` polygons (`kind`, `kind_detail`
+  and the feature id) and `water` polygons, only of the kinds on
+  `landmark-area-kinds.json`, and named points (`kind`,
+  `kind_detail`, `name`), for the areas `areasNear` joins;
 - at zoom 15, the archive's last. The basemap schema gives every point a zoom
   range ending at 15 and thins the zooms below it to a label grid, so a museum
   or a viewpoint is only certain to be in the tiles at 15. A walk of 2.5 km

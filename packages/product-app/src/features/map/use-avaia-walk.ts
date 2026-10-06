@@ -969,6 +969,7 @@ export function useAvaiaWalk({
             walkTargets(
               landmarksFromArchive(
                 renderer.landmarksNear?.call(renderer, from, budget) ?? [],
+                renderer.areasNear?.call(renderer, from, budget) ?? [],
               ),
             ),
           graph,

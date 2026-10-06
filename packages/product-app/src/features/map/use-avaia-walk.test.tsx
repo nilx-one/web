@@ -6,6 +6,7 @@ import {
   type MapBounds,
   type MapFogField,
   type MapGroundTap,
+  type MapArea,
   type MapLandmark,
   type MapPointSelection,
   type MapRenderer,
@@ -214,6 +215,47 @@ describe("an Avaia left idle", () => {
     expect(Math.max(...radii)).toBeGreaterThan(2_000);
   });
 
+  it("goes out to a named park the map draws", async () => {
+    const { renderer: base } = walkRenderer();
+    // A 200 m park whose west edge is 500 m down the footway.
+    const corner = (x: number, y: number) => {
+      const p = at(x, y);
+      return [p.longitude, p.latitude] as [number, number];
+    };
+    const park: MapArea = {
+      id: "poi:5",
+      layer: "landuse",
+      kind: "park",
+      name: "City park",
+      label: at(600, 50),
+      polygons: [
+        [
+          [
+            corner(500, -100),
+            corner(700, -100),
+            corner(700, 100),
+            corner(500, 100),
+            corner(500, -100),
+          ],
+        ],
+      ],
+    };
+    const areasNear = vi.fn(() => [park]);
+    const renderer = {
+      ...base,
+      areasNear,
+      landmarksNear: () => [],
+    } as unknown as MapRenderer;
+    const { result } = render(renderer);
+
+    await advance(RESTLESS_MS + 1_000);
+    expect(areasNear).toHaveBeenCalled();
+    const out = result.current.stance(performance.now());
+    // Arrived inside the park or at its edge, on the footway: not a wander.
+    expect(out!.point.longitude).toBeGreaterThanOrEqual(at(470, 0).longitude);
+    expect(out!.point.longitude).toBeLessThanOrEqual(at(600, 0).longitude);
+  });
+
   it("goes home tired to where the journal says it lives, not to the device", async () => {
     const { renderer: base, tap } = walkRenderer();
     const home = at(-800, 0);
@@ -235,16 +277,12 @@ describe("an Avaia left idle", () => {
     } as unknown as MapRenderer;
     const { result } = render(renderer);
 
-    // Three long errands back to back, none idle long enough to go out:
-    // 6 km walked, energy below the low mark. Each step is its own act, so
-    // the effect an arrival schedules is in place before time moves on.
     for (const x of [2_000, 0, 2_000]) {
       tap(at(x, 0));
       await advance(25 * 60 * 1000);
       await advance(1);
     }
     await advance(POINT_B_STAND_MS);
-    // Restless, it goes out tired, far from home: so home it goes.
     await advance(RESTLESS_MS);
     await advance(60 * 60 * 1000);
     await advance(1);

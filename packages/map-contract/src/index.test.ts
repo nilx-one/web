@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { mapCompassBearing, mapDistanceMeters } from "./index";
+import { insideRings, mapCompassBearing, mapDistanceMeters } from "./index";
 
 const kyiv = { longitude: 30.5234, latitude: 50.4501 };
 
@@ -29,5 +29,20 @@ describe("ground geometry both sides of the contract share", () => {
     expect(
       mapCompassBearing(kyiv, { ...kyiv, longitude: kyiv.longitude - step }),
     ).toBeCloseTo(270, 1);
+  });
+
+  it("is inside an area's outer ring and in none of its holes", () => {
+    const square = (x: number, y: number, side: number) =>
+      [
+        [x, y],
+        [x + side, y],
+        [x + side, y + side],
+        [x, y + side],
+        [x, y],
+      ] as [number, number][];
+    const rings = [square(0, 0, 4), square(1, 1, 2)];
+    expect(insideRings([0.5, 0.5], rings)).toBe(true);
+    expect(insideRings([2, 2], rings)).toBe(false);
+    expect(insideRings([5, 5], rings)).toBe(false);
   });
 });

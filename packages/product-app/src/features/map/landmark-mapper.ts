@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapLandmark } from "@nilx-one/map-contract";
+import type { MapArea, MapLandmark } from "@nilx-one/map-contract";
 import { distanceM, type LonLat } from "@nilx-one/walk-graph";
 
 import {
@@ -22,14 +22,15 @@ import MAPPER_KINDS from "./landmark-mapper-kinds.json";
  * The mapper reads what the archive carries and says which rows of the mapping
  * table each object matched. It reads no raw OSM tag: only the archive's own
  * `pois` `kind` and `name`, the fields the renderer already reads for noticing
- * and studying. Deciding what an object is stays with `normalizeLandmarks`.
+ * and studying, and for areas the `layer`, `kind` and `kind_detail` of the
+ * `landuse`/`water` polygons the renderer joins to their labels. Deciding
+ * what an object is stays with `normalizeLandmarks`.
  *
- * Which `pois` kinds it reads is `landmark-mapper-kinds.json`, and nowhere
- * else: `deploy/web/landmark-kinds.mjs` reads the same file and fails the
- * archive inspection when any of those kinds is absent. Parks, lakes,
- * reserves, beaches and peaks come from `landuse`/`water` polygons or `pois`
- * kinds nobody has inspected yet; until the inspection says which field
- * carries them, they are not read, rather than read from a guess.
+ * Which `pois` kinds and which areas it reads is `landmark-mapper-kinds.json`,
+ * and nowhere else: `deploy/web/landmark-kinds.mjs` reads the same file and
+ * fails the archive inspection when any of those kinds, or any area that can
+ * be joined to a label, is absent. Peaks and whatever else nobody has
+ * inspected yet are not read, rather than read from a guess.
  */
 
 /**
@@ -47,6 +48,16 @@ export const POI_KIND_ROWS: Readonly<Record<string, readonly LandmarkKind[]>> =
 export const POI_SIGNIFICANCE_KINDS: ReadonlySet<string> = new Set(
   MAPPER_KINDS.significance,
 );
+
+/**
+ * The areas this mapping reads, by the polygon's layer and kind, and by layer,
+ * kind and kind detail: `landuse:park`, `water:water:lake`. Parks, reserves
+ * and beaches are `landuse` polygons named by the `pois` point that shares
+ * their id; a lake is a `water` polygon of kind `lake`, or of kind `water`
+ * with the detail `lake`, named by the `water` point inside it.
+ */
+export const AREA_ROWS: Readonly<Record<string, readonly LandmarkKind[]>> =
+  checkedRows(MAPPER_KINDS.areas);
 
 /**
  * The mapper's version: which kinds it reads and how. Changing a row or a
@@ -101,11 +112,57 @@ export function mapArchiveLandmarks(
   );
 }
 
+/**
+ * The archive's named areas as mapped candidates: every row its layer and
+ * kind, or layer, kind and detail, match. Source ids stay in here, as for
+ * points. An area with no row is dropped. The archive's label stands for the
+ * area, so its landmark id holds while its loaded pieces change.
+ */
+export function mapArchiveAreas(areas: readonly MapArea[]): SourceCandidate[] {
+  const candidates: SourceCandidate[] = [];
+  for (const area of areas) {
+    const keys = [
+      `${area.layer}:${area.kind}`,
+      ...(area.kindDetail === undefined
+        ? []
+        : [`${area.layer}:${area.kind}:${area.kindDetail}`]),
+    ];
+    const matches = [
+      ...new Set(
+        keys.flatMap((key) =>
+          Object.hasOwn(AREA_ROWS, key) ? (AREA_ROWS[key] ?? []) : [],
+        ),
+      ),
+    ];
+    const name = area.name.trim();
+    if (matches.length === 0 || name.length === 0) continue;
+    candidates.push({
+      sourceId: area.id,
+      matches,
+      name,
+      anchor: [area.label.longitude, area.label.latitude],
+      geometry: {
+        type: "area",
+        polygons: area.polygons.map((rings) =>
+          rings.map((ring) => ring.map(([x, y]): LonLat => [x, y])),
+        ),
+      },
+    });
+  }
+  return candidates.sort((a, b) =>
+    a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0,
+  );
+}
+
 /** Archive features straight to normalized landmarks. */
 export function landmarksFromArchive(
   features: readonly MapLandmark[],
+  areas: readonly MapArea[] = [],
 ): NormalizedLandmark[] {
-  return normalizeLandmarks(mapArchiveLandmarks(features));
+  return normalizeLandmarks([
+    ...mapArchiveLandmarks(features),
+    ...mapArchiveAreas(areas),
+  ]);
 }
 
 function pointOf(feature: MapLandmark): LonLat {

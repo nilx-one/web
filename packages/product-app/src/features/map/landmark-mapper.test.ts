@@ -1,12 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapLandmark } from "@nilx-one/map-contract";
+import type { MapArea, MapLandmark } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
   LANDMARK_MAPPER_VERSION,
   landmarksFromArchive,
+  mapArchiveAreas,
   mapArchiveLandmarks,
 } from "./landmark-mapper";
 import { LANDMARK_MAPPING } from "./landmark-normalize";
@@ -127,7 +128,7 @@ describe("determinism", () => {
       normalize: LANDMARK_MAPPING.version,
       kinds: once.map((landmark) => [landmark.name, landmark.kind]),
     }).toEqual({
-      version: "1.0",
+      version: "1.1",
       normalize: "1.0",
       kinds: [
         ["Artwork", "artwork"],
@@ -137,5 +138,111 @@ describe("determinism", () => {
         ["Viewpoint", "viewpoint"],
       ],
     });
+  });
+});
+
+describe("areas", () => {
+  /** A closed square `side` metres across from (x, y) metres off the origin. */
+  const square = (x: number, y: number, side: number) => {
+    const p = (dx: number, dy: number) =>
+      [
+        ORIGIN.longitude + (x + dx) * M_LON,
+        ORIGIN.latitude + (y + dy) * M_LAT,
+      ] as const;
+    return [p(0, 0), p(side, 0), p(side, side), p(0, side), p(0, 0)];
+  };
+  const area = (
+    id: string,
+    layer: MapArea["layer"],
+    kind: string,
+    side: number,
+    extra: Partial<MapArea> = {},
+  ): MapArea => ({
+    id,
+    layer,
+    kind,
+    name: id,
+    label: { longitude: ORIGIN.longitude, latitude: ORIGIN.latitude },
+    polygons: [[square(0, 0, side)]],
+    ...extra,
+  });
+
+  it("maps a park, a reserve, a beach and a lake by layer, kind and detail", () => {
+    const targets = outingCandidates(
+      landmarksFromArchive(
+        [],
+        [
+          area("Park", "landuse", "park", 200),
+          area("Reserve", "landuse", "nature_reserve", 300, {
+            polygons: [[square(1_000, 0, 300)]],
+          }),
+          area("Beach", "landuse", "beach", 100, {
+            polygons: [[square(2_000, 0, 100)]],
+          }),
+          area("Lake", "water", "water", 200, {
+            kindDetail: "lake",
+            polygons: [[square(3_000, 0, 200)]],
+          }),
+          area("Reservoir", "water", "lake", 200, {
+            polygons: [[square(4_000, 0, 200)]],
+          }),
+        ],
+      ),
+    );
+    // In landmark id order: kind first.
+    expect(targets.map((t) => [t.name, t.kind, t.geometry.type])).toEqual([
+      ["Beach", "beach", "area"],
+      ["Lake", "lake", "area"],
+      ["Reservoir", "lake", "area"],
+      ["Reserve", "nature_reserve", "area"],
+      ["Park", "park", "area"],
+    ]);
+  });
+
+  it("drops what no row names, a river, and a park under a hectare", () => {
+    expect(
+      landmarksFromArchive(
+        [],
+        [
+          area("School", "landuse", "school", 200),
+          area("River", "water", "water", 200, { kindDetail: "river" }),
+          area("Pocket park", "landuse", "park", 50),
+        ],
+      ),
+    ).toEqual([]);
+  });
+
+  it("passes no source id or layer attribute on", () => {
+    const [park] = mapArchiveAreas([area("Park", "landuse", "park", 200)]);
+    expect(Object.keys(park!).sort()).toEqual([
+      "anchor",
+      "geometry",
+      "matches",
+      "name",
+      "sourceId",
+    ]);
+    expect(park!.matches).toEqual(["park"]);
+  });
+
+  it("keeps an area's landmark id while its loaded pieces change", () => {
+    // The label stands inside both: one piece loaded, then a second beside it.
+    const label = {
+      longitude: ORIGIN.longitude + 100 * M_LON,
+      latitude: ORIGIN.latitude + 100 * M_LAT,
+    };
+    const [before] = landmarksFromArchive(
+      [],
+      [area("Park", "landuse", "park", 200, { label })],
+    );
+    const [after] = landmarksFromArchive(
+      [],
+      [
+        area("Park", "landuse", "park", 200, {
+          label,
+          polygons: [[square(0, 0, 200)], [square(200, 0, 200)]],
+        }),
+      ],
+    );
+    expect(before!.id).toBe(after!.id);
   });
 });

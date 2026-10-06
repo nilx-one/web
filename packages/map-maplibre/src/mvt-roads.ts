@@ -69,7 +69,13 @@ export function decodeTilePoints(
   layerName: string,
 ): TilePoint[] {
   const layer = layerOf(bytes, layerName);
-  if (layer === undefined) return [];
+  return layer === undefined ? [] : pointsOf(layer, tile);
+}
+
+function pointsOf(
+  layer: Layer,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+): TilePoint[] {
   const points: TilePoint[] = [];
   for (const feature of layer.features) {
     if (feature.type !== POINT) continue;
@@ -82,6 +88,114 @@ export function decodeTilePoints(
     }
   }
   return points;
+}
+
+/** One polygon feature: outer ring first, holes after, `[longitude, latitude]`. */
+export interface TilePolygon {
+  readonly id: number | undefined;
+  readonly properties: Readonly<Record<string, string | number | boolean>>;
+  readonly polygons: readonly (readonly (readonly [number, number])[])[][];
+}
+
+/**
+ * Reads the polygon features of one layer. A ring wound like an outer ring
+ * (positive area in tile coordinates, y down) starts a polygon; one wound the
+ * other way is a hole in the polygon before it. Rings come back closed. What
+ * the tile clipped at its buffer stays clipped: a feature crossing tiles
+ * arrives once per tile.
+ */
+export function decodeTilePolygons(
+  bytes: Uint8Array,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+  layerName: string,
+): TilePolygon[] {
+  const layer = layerOf(bytes, layerName);
+  return layer === undefined ? [] : polygonsOf(layer, tile);
+}
+
+/** What one layer holds: its points and its polygons. */
+export interface TileShapes {
+  readonly points: TilePoint[];
+  readonly polygons: TilePolygon[];
+}
+
+/**
+ * Reads the points and polygons of several layers in one pass over the tile,
+ * each named layer decoded once; any other layer is skipped whole. A named
+ * layer the tile lacks comes back empty.
+ */
+export function decodeTileShapes<Name extends string>(
+  bytes: Uint8Array,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+  layerNames: readonly Name[],
+): Record<Name, TileShapes> {
+  const shapes = Object.fromEntries(
+    layerNames.map((name): [Name, TileShapes] => [
+      name,
+      { points: [], polygons: [] },
+    ]),
+  ) as Record<Name, TileShapes>;
+  const wanted = new Set<string>(layerNames);
+  const reader = protobuf(bytes);
+  while (!reader.done) {
+    const { field, wire } = reader.key();
+    if (field !== 3) {
+      reader.skip(wire);
+      continue;
+    }
+    const bytesOfLayer = reader.bytes();
+    const name = nameOfLayer(bytesOfLayer);
+    if (name === undefined || !wanted.has(name)) continue;
+    wanted.delete(name);
+    const layer = decodeLayer(bytesOfLayer);
+    shapes[name as Name] = {
+      points: pointsOf(layer, tile),
+      polygons: polygonsOf(layer, tile),
+    };
+  }
+  return shapes;
+}
+
+function polygonsOf(
+  layer: Layer,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+): TilePolygon[] {
+  const features: TilePolygon[] = [];
+  for (const feature of layer.features) {
+    if (feature.type !== POLYGON) continue;
+    const polygons: [number, number][][][] = [];
+    for (const ring of linesOf(feature.geometry)) {
+      if (ring.length < 3) continue;
+      const area = signedArea(ring);
+      if (area === 0) continue;
+      const closed = [...ring, ring[0]!].map(
+        ([px, py]) =>
+          toLonLat(tile, px / layer.extent, py / layer.extent) as [
+            number,
+            number,
+          ],
+      );
+      if (area > 0 || polygons.length === 0) polygons.push([closed]);
+      else polygons[polygons.length - 1]!.push(closed);
+    }
+    if (polygons.length > 0) {
+      features.push({
+        id: feature.id,
+        properties: feature.properties,
+        polygons,
+      });
+    }
+  }
+  return features;
+}
+
+/** Twice the signed area of a ring in tile units: positive is an outer ring. */
+function signedArea(ring: readonly (readonly [number, number])[]): number {
+  let sum = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    sum += ring[j]![0] * ring[i]![1] - ring[i]![0] * ring[j]![1];
+  }
+  return sum;
 }
 
 /** The named layer of a tile, decoded; any other layer is skipped whole. */
@@ -103,6 +217,7 @@ function layerOf(bytes: Uint8Array, layerName: string): Layer | undefined {
 
 const POINT = 1;
 const LINESTRING = 2;
+const POLYGON = 3;
 
 type Value = string | number | boolean;
 

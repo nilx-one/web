@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapObstacle } from "@nilx-one/map-contract";
+import { insideRings, type MapObstacle } from "@nilx-one/map-contract";
 import { LANDMARK_GROUPS, type NormalizedLandmark } from "./landmark-normalize";
 import type { PlaceFeeling } from "./place-affinity";
 import {
@@ -369,21 +369,6 @@ function inBox([longitude, latitude]: LonLat, box: Box): boolean {
     latitude >= box.south &&
     latitude <= box.north
   );
-}
-
-/** Even-odd over every ring: a hole is outside. */
-function insideRings([x, y]: LonLat, rings: AreaRings): boolean {
-  let inside = false;
-  for (const ring of rings) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i]!;
-      const [xj, yj] = ring[j]!;
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-        inside = !inside;
-      }
-    }
-  }
-  return inside;
 }
 
 function edgeDistance(point: LonLat, rings: AreaRings): number {

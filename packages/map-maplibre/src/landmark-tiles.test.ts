@@ -5,9 +5,12 @@ import type { MapLandmark } from "@nilx-one/map-contract";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  areaPartOf,
   createLandmarkTileCache,
   LANDMARK_TILE_ZOOM,
   landmarkFromPoint,
+  NO_AREA_SOURCES,
+  type LandmarkTile,
 } from "./landmark-tiles";
 import { tileBounds, type TileId } from "./road-tiles";
 
@@ -24,6 +27,62 @@ function around(km: number) {
     north: AT.latitude + dLat,
   };
 }
+
+describe("areaPartOf", () => {
+  const polygons = [
+    [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ] as [number, number][],
+    ],
+  ];
+  const tile = { z: 15, x: 1, y: 2 };
+
+  it("keeps a polygon an area may be read from, with its tile", () => {
+    expect(
+      areaPartOf("landuse", {
+        id: 5,
+        properties: { kind: "park" },
+        polygons,
+        tile,
+      }),
+    ).toEqual({ id: 5, kind: "park", polygons, tile });
+    expect(
+      areaPartOf("water", {
+        id: undefined,
+        properties: { kind: "water", kind_detail: "lake" },
+        polygons,
+      }),
+    ).toEqual({ id: undefined, kind: "water", kindDetail: "lake", polygons });
+  });
+
+  it("drops housing, the sea, and a landuse polygon no label can find", () => {
+    expect(
+      areaPartOf("landuse", {
+        id: 5,
+        properties: { kind: "residential" },
+        polygons,
+      }),
+    ).toBeUndefined();
+    expect(
+      areaPartOf("water", {
+        id: undefined,
+        properties: { kind: "ocean" },
+        polygons,
+      }),
+    ).toBeUndefined();
+    expect(
+      areaPartOf("landuse", {
+        id: undefined,
+        properties: { kind: "park" },
+        polygons,
+      }),
+    ).toBeUndefined();
+  });
+});
 
 describe("landmarkFromPoint", () => {
   it("keeps the archive id, so a point read ahead and on screen is one", () => {
@@ -60,17 +119,16 @@ describe("landmarkFromPoint", () => {
 describe("createLandmarkTileCache", () => {
   /** One museum at the middle of every tile, its id the tile's. */
   const fetchTile = () =>
-    vi.fn(async (tile: TileId): Promise<readonly MapLandmark[]> => {
+    vi.fn(async (tile: TileId): Promise<LandmarkTile> => {
       const box = tileBounds(tile);
-      return [
-        {
-          id: `poi:${tile.x}/${tile.y}`,
-          longitude: (box.west + box.east) / 2,
-          latitude: (box.south + box.north) / 2,
-          kind: "museum",
-          facts: {},
-        },
-      ];
+      const museum: MapLandmark = {
+        id: `poi:${tile.x}/${tile.y}`,
+        longitude: (box.west + box.east) / 2,
+        latitude: (box.south + box.north) / 2,
+        kind: "museum",
+        facts: {},
+      };
+      return { landmarks: [museum], areas: NO_AREA_SOURCES };
     });
 
   it("reads the archive's last zoom, where every point is", async () => {

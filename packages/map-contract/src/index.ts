@@ -170,6 +170,28 @@ export function mapDistanceMeters(
 }
 
 /**
+ * Whether a point lies in a polygon given as its rings, outer ring first:
+ * even-odd over every ring, so a point in a hole is outside. Renderer and
+ * application share it so "inside an area" is the same test on both sides.
+ */
+export function insideRings(
+  [x, y]: readonly [number, number],
+  rings: readonly (readonly (readonly [number, number])[])[],
+): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!;
+      const [xj, yj] = ring[j]!;
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+}
+
+/**
  * The compass heading from one point to another: degrees clockwise from
  * north, in [0, 360). It is what `AvatarHandle.bearingDeg` means.
  */
@@ -267,6 +289,29 @@ export interface MapLandmark {
    * What a body "learns" about a landmark is exactly this and nothing more.
    */
   readonly facts: Readonly<Record<string, string | number | boolean>>;
+}
+
+/**
+ * A named area the basemap carries: a park, a reserve, a beach, a lake — the
+ * archive's label for it and the polygons it draws. `layer`, `kind` and
+ * `kindDetail` are the polygon's own attributes, read verbatim; the
+ * application decides what, if anything, such an area is. Each polygon is
+ * its rings in `[longitude, latitude]` order, outer ring first. A large area
+ * arrives as the pieces of it the loaded tiles hold, clipped at each tile.
+ */
+export interface MapArea {
+  /** Stable for the same feature across tiles and sessions. */
+  readonly id: string;
+  readonly layer: "landuse" | "water";
+  readonly kind: string;
+  readonly kindDetail?: string;
+  readonly name: string;
+  /** Where the archive puts the label: always inside the area. */
+  readonly label: MapPointSelection;
+  readonly polygons: readonly (readonly (readonly (readonly [
+    number,
+    number,
+  ])[])[])[];
 }
 
 /**
@@ -490,6 +535,14 @@ export interface MapRenderer {
     point: MapPointSelection,
     radiusMeters: number,
   ): readonly MapLandmark[];
+  /**
+   * The named areas whose label lies within a radius of a point, nearest
+   * first, from the same tiles `landmarksNear` reads and nothing else.
+   */
+  areasNear?(
+    point: MapPointSelection,
+    radiusMeters: number,
+  ): readonly MapArea[];
   /**
    * Notifies when what `landmarksNear` can answer may have changed: the map
    * has settled after loading what the current view needs. A position known
