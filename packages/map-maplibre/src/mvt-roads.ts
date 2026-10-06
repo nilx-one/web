@@ -52,6 +52,56 @@ export function decodeTileRoads(
   return [];
 }
 
+/** One point feature of a layer: its id, its attributes, where it stands. */
+export interface TilePoint {
+  readonly id: number | undefined;
+  readonly properties: Readonly<Record<string, string | number | boolean>>;
+  readonly point: readonly [number, number];
+}
+
+/**
+ * Reads the point features of one layer, attributes verbatim and each point
+ * in `[longitude, latitude]`. A multipoint gives one entry per point.
+ */
+export function decodeTilePoints(
+  bytes: Uint8Array,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+  layerName: string,
+): TilePoint[] {
+  const layer = layerOf(bytes, layerName);
+  if (layer === undefined) return [];
+  const points: TilePoint[] = [];
+  for (const feature of layer.features) {
+    if (feature.type !== POINT) continue;
+    for (const [px, py] of linesOf(feature.geometry).flat()) {
+      points.push({
+        id: feature.id,
+        properties: feature.properties,
+        point: toLonLat(tile, px / layer.extent, py / layer.extent),
+      });
+    }
+  }
+  return points;
+}
+
+/** The named layer of a tile, decoded; any other layer is skipped whole. */
+function layerOf(bytes: Uint8Array, layerName: string): Layer | undefined {
+  const reader = protobuf(bytes);
+  while (!reader.done) {
+    const { field, wire } = reader.key();
+    if (field !== 3) {
+      reader.skip(wire);
+      continue;
+    }
+    const bytesOfLayer = reader.bytes();
+    if (nameOfLayer(bytesOfLayer) === layerName) {
+      return decodeLayer(bytesOfLayer);
+    }
+  }
+  return undefined;
+}
+
+const POINT = 1;
 const LINESTRING = 2;
 
 type Value = string | number | boolean;
@@ -60,6 +110,7 @@ interface Layer {
   name: string | undefined;
   extent: number;
   features: {
+    id: number | undefined;
     type: number;
     geometry: number[];
     properties: Record<string, Value>;
@@ -95,12 +146,14 @@ function decodeLayer(bytes: Uint8Array): Layer {
   }
   const features = raw.map((featureBytes) => {
     const feature = protobuf(featureBytes);
+    let id: number | undefined;
     let type = 0;
     let geometry: number[] = [];
     const properties: Record<string, Value> = {};
     while (!feature.done) {
       const { field, wire } = feature.key();
-      if (field === 2) {
+      if (field === 1) id = feature.varint();
+      else if (field === 2) {
         const tags = protobuf(feature.bytes());
         while (!tags.done) {
           const key = keys[tags.varint()];
@@ -111,7 +164,7 @@ function decodeLayer(bytes: Uint8Array): Layer {
       else if (field === 4) geometry = packed(feature.bytes());
       else feature.skip(wire);
     }
-    return { type, geometry, properties };
+    return { id, type, geometry, properties };
   });
   return { name, extent, features };
 }

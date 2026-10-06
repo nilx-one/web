@@ -63,15 +63,62 @@ export function createRoadTileCache({
   readonly zoom?: number;
   readonly maxTiles?: number;
 }): RoadTileCache {
+  const tiles = createTileCache({ fetchTile, zoom, maxTiles });
+  return {
+    preload: tiles.preload,
+
+    roadsWithin(bounds) {
+      const found: MapRoad[] = [];
+      for (const roads of tiles.within(bounds)) {
+        for (const road of roads) {
+          const lines = road.lines.flatMap((line) =>
+            clipLineToBounds(line, bounds),
+          );
+          if (lines.length > 0) found.push({ ...road, lines });
+        }
+      }
+      return found;
+    },
+
+    get size() {
+      return tiles.size;
+    },
+  };
+}
+
+/**
+ * Tiles of one zoom read ahead and held: what one tile decoded to, by tile.
+ * A fixed cap on how many it ever holds, the oldest dropped first, and a
+ * tile asked for twice at once fetched once.
+ */
+export interface TileCache<T> {
+  preload(
+    bounds: MapBounds,
+    accept?: (tile: MapBounds) => boolean,
+  ): Promise<MapRoadPreload>;
+  /** What the held tiles touching `bounds` decoded to, one entry per tile. */
+  within(bounds: MapBounds): T[];
+  readonly size: number;
+}
+
+export function createTileCache<T>({
+  fetchTile,
+  zoom,
+  maxTiles,
+}: {
+  readonly fetchTile: (tile: TileId) => Promise<T>;
+  readonly zoom: number;
+  readonly maxTiles: number;
+}): TileCache<T> {
   // Insertion order is age: a tile touched again moves to the end.
-  const held = new Map<string, readonly MapRoad[]>();
-  const pending = new Map<string, Promise<readonly MapRoad[] | undefined>>();
+  const held = new Map<string, T>();
+  const pending = new Map<string, Promise<{ value: T } | undefined>>();
 
   const keyOf = ({ z, x, y }: TileId) => `${z}/${x}/${y}`;
 
-  const touch = (key: string, roads: readonly MapRoad[]) => {
+  const touch = (key: string, value: T) => {
     held.delete(key);
-    held.set(key, roads);
+    held.set(key, value);
     while (held.size > maxTiles) {
       const oldest = held.keys().next().value;
       if (oldest === undefined) break;
@@ -85,7 +132,7 @@ export function createRoadTileCache({
     if (inFlight !== undefined) return inFlight;
     const request = fetchTile(tile)
       .then(
-        (roads) => roads,
+        (value) => ({ value }),
         () => undefined,
       )
       .finally(() => pending.delete(key));
@@ -110,22 +157,21 @@ export function createRoadTileCache({
       const missing: TileId[] = [];
       for (const tile of chosen) {
         const key = keyOf(tile);
-        const roads = held.get(key);
-        if (roads === undefined) {
+        if (!held.has(key)) {
           missing.push(tile);
         } else {
           cached += 1;
-          touch(key, roads);
+          touch(key, held.get(key)!);
         }
       }
       const results = await Promise.all(missing.map(load));
-      results.forEach((roads, index) => {
-        if (roads === undefined) {
+      results.forEach((result, index) => {
+        if (result === undefined) {
           failed += 1;
           return;
         }
         fetched += 1;
-        touch(keyOf(missing[index]!), roads);
+        touch(keyOf(missing[index]!), result.value);
       });
       return {
         covering: covering.length,
@@ -137,21 +183,15 @@ export function createRoadTileCache({
       };
     },
 
-    roadsWithin(bounds) {
-      const found: MapRoad[] = [];
-      for (const [key, roads] of held) {
+    within(bounds) {
+      const found: T[] = [];
+      for (const [key, value] of held) {
         const [z, x, y] = key.split("/").map(Number) as [
           number,
           number,
           number,
         ];
-        if (!overlaps(tileBounds({ z, x, y }), bounds)) continue;
-        for (const road of roads) {
-          const lines = road.lines.flatMap((line) =>
-            clipLineToBounds(line, bounds),
-          );
-          if (lines.length > 0) found.push({ ...road, lines });
-        }
+        if (overlaps(tileBounds({ z, x, y }), bounds)) found.push(value);
       }
       return found;
     },

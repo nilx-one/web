@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { decodeTileRoads } from "./mvt-roads";
+import { decodeTilePoints, decodeTileRoads } from "./mvt-roads";
 import { tileBounds } from "./road-tiles";
 
 // A minimal Mapbox Vector Tile writer: just enough protobuf to build fixtures.
@@ -54,6 +54,7 @@ function geometry(lines: readonly (readonly [number, number])[][]): number[] {
 }
 
 interface FixtureFeature {
+  readonly id?: number;
   readonly type: number;
   readonly properties: Record<string, Value>;
   readonly lines: readonly (readonly [number, number])[][];
@@ -79,6 +80,9 @@ function encodeTile(
       ]);
       const geom = geometry(feature.lines);
       return [
+        ...(feature.id === undefined
+          ? []
+          : [...key(1, 0), ...varint(feature.id)]),
         ...delimited(2, tags.flatMap(varint)),
         ...key(3, 0),
         ...varint(feature.type),
@@ -215,5 +219,54 @@ describe("decodeTileRoads", () => {
   it("answers nothing for a layer the tile does not carry", () => {
     expect(decodeTileRoads(bytes, TILE, "transportation")).toEqual([]);
     expect(decodeTileRoads(new Uint8Array(), TILE, "roads")).toEqual([]);
+  });
+});
+
+describe("decodeTilePoints", () => {
+  const POINT = 1;
+  const LINE = 2;
+  const tile = encodeTile({
+    roads: [
+      { id: 9, type: POINT, properties: { kind: "museum" }, lines: [[[1, 1]]] },
+    ],
+    pois: [
+      {
+        id: 41,
+        type: POINT,
+        properties: { kind: "museum", name: "Museum" },
+        lines: [[[0, 4096]]],
+      },
+      { type: POINT, properties: { kind: "viewpoint" }, lines: [[[4096, 0]]] },
+      {
+        id: 42,
+        type: LINE,
+        properties: { kind: "museum" },
+        lines: [
+          [
+            [0, 0],
+            [10, 10],
+          ],
+        ],
+      },
+    ],
+  });
+
+  it("reads the layer's points with their ids and attributes verbatim", () => {
+    const points = decodeTilePoints(tile, TILE, "pois");
+    const box = tileBounds(TILE);
+
+    expect(points.map(({ id, properties }) => ({ id, properties }))).toEqual([
+      { id: 41, properties: { kind: "museum", name: "Museum" } },
+      { id: undefined, properties: { kind: "viewpoint" } },
+    ]);
+    // The tile's south-west and north-east corners.
+    expect(points[0]!.point[0]).toBeCloseTo(box.west, 9);
+    expect(points[0]!.point[1]).toBeCloseTo(box.south, 9);
+    expect(points[1]!.point[0]).toBeCloseTo(box.east, 9);
+    expect(points[1]!.point[1]).toBeCloseTo(box.north, 9);
+  });
+
+  it("answers nothing for a layer the tile does not carry", () => {
+    expect(decodeTilePoints(tile, TILE, "water")).toEqual([]);
   });
 });

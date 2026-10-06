@@ -58,6 +58,13 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { Protocol } from "pmtiles";
 
 import {
+  createLandmarkTileCache,
+  landmarkFromPoint,
+  pmtilesLandmarkTiles,
+  POI_SOURCE_LAYER,
+  type FetchLandmarkTile,
+} from "./landmark-tiles";
+import {
   createRoadTileCache,
   pmtilesRoadTiles,
   ROAD_SOURCE_LAYER,
@@ -75,7 +82,6 @@ import {
   fogMarksSource,
   fogPulseLevel,
 } from "./fog-marks";
-import landmarkKinds from "./landmark-kinds.json";
 import {
   PINNED_LANDMARKS_GLOW_LAYER_ID,
   PINNED_LANDMARKS_POINT_LAYER_ID,
@@ -157,17 +163,11 @@ export const BUILDING_DEFAULT_HEIGHT_METERS = 7;
 export const WATER_LAYER_IDS: readonly string[] = ["water"];
 
 /** The archive's point-of-interest source layer. */
-export const POI_SOURCE_LAYER = "pois";
-
-/**
- * The `kind` values a body treats as worth walking up to. The published
- * archive follows the Protomaps basemap schema; these are the kinds it assigns
- * to monuments, memorials, art and the like. It is read against the archive,
- * not invented: a kind the archive never carries simply never matches, and
- * `deploy/web/inspect-basemap.sh` is what confirms the list against the real
- * `pois` declaration.
- */
-export const LANDMARK_KINDS: ReadonlySet<string> = new Set(landmarkKinds);
+export {
+  LANDMARK_KINDS,
+  LANDMARK_TILE_ZOOM,
+  POI_SOURCE_LAYER,
+} from "./landmark-tiles";
 
 /** Eased camera transitions stay short enough to read as one continuous world. */
 export const MAP_CAMERA_TRANSITION_MS = 900;
@@ -247,6 +247,11 @@ export interface MapLibreRendererOptions {
    * basemap archive at `MAP_BASEMAP_URL`; nothing else is ever fetched.
    */
   readonly fetchRoadTile?: FetchRoadTile;
+  /**
+   * Where `preloadLandmarks` reads landmark tiles from. Defaults to the same
+   * self-hosted archive; nothing else is ever fetched.
+   */
+  readonly fetchLandmarkTile?: FetchLandmarkTile;
 }
 
 function createMapLibreLabelMarker(
@@ -363,6 +368,17 @@ export function createMapLibreRenderer(
           new URL(MAP_BASEMAP_URL, globalThis.location.href).href,
         );
         return archiveRoads(tile);
+      }),
+  });
+  let archiveLandmarks: FetchLandmarkTile | undefined;
+  const landmarkTiles = createLandmarkTileCache({
+    fetchTile:
+      options.fetchLandmarkTile ??
+      ((tile) => {
+        archiveLandmarks ??= pmtilesLandmarkTiles(
+          new URL(MAP_BASEMAP_URL, globalThis.location.href).href,
+        );
+        return archiveLandmarks(tile);
       }),
   });
   let appearance = options.initialAppearance ?? DEFAULT_MAP_APPEARANCE;
@@ -1016,38 +1032,12 @@ export function createMapLibreRenderer(
     const [longitude, latitude] = (
       feature.geometry as unknown as { coordinates: [number, number] }
     ).coordinates;
-    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
-      return undefined;
-    }
-    const properties = feature.properties ?? {};
-    const kind = properties.kind;
-    if (typeof kind !== "string" || !LANDMARK_KINDS.has(kind)) return undefined;
-    const name = typeof properties.name === "string" ? properties.name : "";
-    const facts: Record<string, string | number | boolean> = {};
-    for (const [key, value] of Object.entries(properties)) {
-      if (key === "kind" || key === "name") continue;
-      if (
-        typeof value === "string" ||
-        typeof value === "number" ||
-        typeof value === "boolean"
-      ) {
-        facts[key] = value;
-      }
-    }
-    // A feature id is the archive's own and survives a tile boundary; without
-    // one the place itself is the identity, rounded to well under a metre.
-    const id =
-      feature.id === undefined
-        ? `${kind}:${name}:${longitude.toFixed(6)},${latitude.toFixed(6)}`
-        : `poi:${String(feature.id)}`;
-    return {
-      id,
+    return landmarkFromPoint({
+      id: feature.id,
+      properties: feature.properties ?? {},
       longitude,
       latitude,
-      kind,
-      ...(name.length === 0 ? {} : { name }),
-      facts,
-    };
+    });
   }
 
   function releaseLabel(): void {
@@ -1250,21 +1240,29 @@ export function createMapLibreRenderer(
     },
 
     landmarksNear(point, radiusMeters) {
-      if (map === undefined || !validPoint(point)) return [];
-      const sourceId = map.getLayer(POI_SOURCE_LAYER)?.source ?? "basemap";
-      if (map.getSource(sourceId) === undefined) return [];
+      if (!validPoint(point)) return [];
       const found = new Map<
         string,
         { landmark: MapLandmark; distance: number }
       >();
-      for (const feature of map.querySourceFeatures(sourceId, {
-        sourceLayer: POI_SOURCE_LAYER,
-      })) {
-        const landmark = landmarkFrom(feature);
-        if (landmark === undefined || found.has(landmark.id)) continue;
+      const add = (landmark: MapLandmark | undefined) => {
+        if (landmark === undefined || found.has(landmark.id)) return;
         const distance = mapDistanceMeters(point, landmark);
         if (distance <= radiusMeters)
           found.set(landmark.id, { landmark, distance });
+      };
+      // What was read ahead for an outing, beside what the view has loaded.
+      // One feature in both has one archive id and is counted once.
+      for (const landmark of landmarkTiles.landmarksNear(point, radiusMeters)) {
+        add(landmark);
+      }
+      const sourceId = map?.getLayer(POI_SOURCE_LAYER)?.source ?? "basemap";
+      if (map !== undefined && map.getSource(sourceId) !== undefined) {
+        for (const feature of map.querySourceFeatures(sourceId, {
+          sourceLayer: POI_SOURCE_LAYER,
+        })) {
+          add(landmarkFrom(feature));
+        }
       }
       return [...found.values()]
         .sort((a, b) => a.distance - b.distance)
@@ -1341,6 +1339,10 @@ export function createMapLibreRenderer(
 
     preloadRoads(bounds, accept) {
       return roadTiles.preload(bounds, accept);
+    },
+
+    preloadLandmarks(bounds, accept) {
+      return landmarkTiles.preload(bounds, accept);
     },
 
     subscribeLandmarksChanged(listener) {

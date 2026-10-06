@@ -238,13 +238,12 @@ This keeps OSM extensibility separate from the stable 0x1 landmark vocabulary.
 
 These rows are **not yet confirmed against the deployed archive.** They follow the Protomaps schema `LANDMARK_KINDS` already follows, and that is all. What holds them to the archive is the inspection: `landmark-kinds.mjs` reads `landmark-mapper-kinds.json` and fails `inspect-basemap.sh` when any kind in it, the significance kinds included, does not occur in the archive's full-detail `pois` tiles. Until someone runs that against the deployed archive and records the output, this part of #306 stays open with #309 and #311, and a failing kind is disabled in the JSON rather than kept. A deployment test also fails if the mapper reads a kind outside `LANDMARK_KINDS`, which the renderer would never hand it. Parks, lakes, reserves, beaches, peaks, churches and the `micro_interest` rows stay disabled: their archive source (`landuse`/`water` polygons, or `pois` kinds nobody has listed) is not inspected yet. The mapper has its own version (`1.0`) beside the normalization's, and a golden test pins both.
 
-The drive maps what the renderer has loaded within the outing's budget at the moment it plans, so an Avaia goes out to the museums, viewpoints, castles, forts, ruins and significant monuments on the map around it. A target the map has not loaded is not one it knows of.
+The drive maps what the renderer holds within the outing's budget at the moment it plans: the view's tiles and the `pois` tiles it reads ahead at the archive's last zoom ([map data](map-data.md)). So an Avaia goes out to the museums, viewpoints, castles, forts, ruins and significant monuments within its reach, not only those on screen. A tile it did not read, because it is all fog or past the cap, has no targets for it.
 
 ## Open items
 
 - running `inspect-basemap.sh` against the deployed archive to confirm the mapper's rows, and recording its output (#309, #311);
 - which `landuse` kinds and `water` attributes the Kyiv archive actually carries for parks, lakes, reserves and beaches, and which further `pois` kinds it carries. Beyond the rows above nothing is enabled until `landmark-kinds.mjs` and a fixture say so (#309, #311);
-- reading landmarks ahead with the road tiles, so an outing knows targets past the loaded view;
 - whether the archive carries benches, camp sites, peaks and shrines at all; rows that it does not support are dropped rather than faked;
 - the numeric significance thresholds, once the real distribution is known;
 - whether the walking graph can be built from `roads` alone for parks, which decides if `park` is a place to wander in or only to reach ([Avaia walks on its own](avaia-outings.md) §0.5).
