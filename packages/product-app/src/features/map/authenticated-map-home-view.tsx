@@ -9,6 +9,7 @@ import {
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
+  type CoreRuntimePort,
   type NearbySpeechAccessPort,
   type PubInfoAccessPort,
 } from "@nilx-one/application";
@@ -48,10 +49,12 @@ import {
   useVoicePreference,
 } from "../../shell/sound-preference";
 import { SoundSettings } from "../../shell/sound-settings";
+import { PickupSettings } from "../finds/pickup-settings";
 import {
   DOCK_ACTION_KEYS,
   DOCK_ROLE_KEYS,
   RUNTIME_LABEL_KEYS,
+  isTranslationKey,
   translate,
   translateCopy,
   translateFirst,
@@ -223,6 +226,11 @@ export interface AuthenticatedMapHomeViewProps {
    * port receives only commitments and the fields the identity service prices.
    */
   readonly committedAwards?: CommittedAwardAccessPort;
+  /**
+   * Core, naming what a find is and reading the pick-up setting. Absent or
+   * older, finds are still paid; the toast then names the tier, not the item.
+   */
+  readonly findItems?: Pick<CoreRuntimePort, "findItem" | "picksUp">;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
    * host's identity client has no such capability, which is a normal state.
@@ -611,6 +619,7 @@ export function AuthenticatedMapHomeView({
   localModel,
   pubInfo,
   committedAwards,
+  findItems,
   nearbySpeech,
   connectedProviders,
   providerDeepLinks = [],
@@ -829,6 +838,7 @@ export function AuthenticatedMapHomeView({
   const findLoop = useFindLoop({
     owner: pubDress,
     port: committedAwards,
+    pickup: findItems,
     bondDriving: wheel === "bond" && handover === undefined,
     device: deviceObservation,
     onEvent: (event) => {
@@ -857,14 +867,28 @@ export function AuthenticatedMapHomeView({
       }
       if (event.kind === "find-kept") {
         cue("achievement");
-        setFindToast({
+        const toast = {
           id: `find-kept-${event.artifactId}`,
-          kind: "active",
+          kind: "active" as const,
           title: t("find.toast.kept.title"),
           description: t("find.toast.kept.detail")
             .replace("{tier}", String(event.tier))
             .replace("{xp}", String(event.experience)),
-        });
+        };
+        setFindToast(toast);
+        // What it is comes from Core; until (or unless) it answers, the
+        // toast says only that something was kept.
+        void findItems
+          ?.findItem?.(event.artifactId, event.tier)
+          .then((item) => {
+            if (item.kind !== "item") return;
+            const key = `item.${item.id}`;
+            if (!isTranslationKey(key)) return;
+            setFindToast((current) =>
+              current?.id === toast.id ? { ...toast, title: t(key) } : current,
+            );
+          })
+          .catch(() => undefined);
       }
     },
   });
@@ -2157,6 +2181,10 @@ export function AuthenticatedMapHomeView({
                       </fieldset>
                       {sound === undefined ? null : (
                         <SoundSettings sound={sound} />
+                      )}
+                      {committedAwards === undefined ||
+                      findItems?.picksUp === undefined ? null : (
+                        <PickupSettings />
                       )}
                       <p className="interface-settings__note">
                         {t("settings.presentation")}

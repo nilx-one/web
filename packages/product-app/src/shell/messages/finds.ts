@@ -1,0 +1,103 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+/**
+ * What a find is called, and the pick-up setting. Item keys are
+ * `item.<id>` for every id in Core's catalog (`find_item.rs` in
+ * `nilx-one/core`); the bands are invented, as the catalog's are.
+ */
+export const FINDS_EN = {
+  "item.bottle": "Bottle",
+  "item.can": "Can",
+  "item.bottle_cap": "Bottle cap",
+  "item.flyer": "Flyer",
+  "item.small_change": "Small change",
+  "item.metro_token": "Metro token",
+  "item.scratched_cd": "Scratched CD",
+  "item.blank_cassette": "Blank cassette",
+  "item.broken_headphones": "Broken headphones",
+  "item.cassette_podil_at_dawn": "Cassette: Podil at Dawn",
+  "item.cassette_left_bank_echo": "Cassette: Left Bank Echo",
+  "item.cassette_trukhaniv_summer": "Cassette: Trukhaniv Summer",
+  "item.broken_cassette_player": "Broken cassette player",
+  "item.broken_cd_player": "Broken CD player",
+  "item.broken_dictaphone": "Broken dictaphone",
+  "item.dictaphone": "Dictaphone",
+  "item.microphone": "Microphone",
+  "item.cassette_player": "Cassette player",
+  "item.cd_player": "CD player",
+  "item.cd_radio": "CD radio",
+  "item.reel_to_reel": "Reel-to-reel",
+  "item.test_pressing": "Test pressing",
+  "settings.pickup.legend": "Pick up",
+  "settings.pickup.detail":
+    "What gets picked up on the way. A find left behind is still seen.",
+  "settings.pickup.common": "1–3 · common",
+  "settings.pickup.uncommon": "4 · uncommon",
+  "settings.pickup.rare": "5 · rare",
+  "settings.pickup.legendary": "6 · legendary",
+} as const;
+
+export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
+  "item.bottle": "Пляшка",
+  "item.can": "Бляшанка",
+  "item.bottle_cap": "Кришечка",
+  "item.flyer": "Флаєр",
+  "item.small_change": "Дрібняки",
+  "item.metro_token": "Жетон метро",
+  "item.scratched_cd": "Подряпаний CD",
+  "item.blank_cassette": "Чиста касета",
+  "item.broken_headphones": "Зламані навушники",
+  "item.cassette_podil_at_dawn": "Касета: «Поділ на світанку»",
+  "item.cassette_left_bank_echo": "Касета: «Луна Лівого берега»",
+  "item.cassette_trukhaniv_summer": "Касета: «Труханівське літо»",
+  "item.broken_cassette_player": "Зламаний магнітофон",
+  "item.broken_cd_player": "Зламаний CD-плеєр",
+  "item.broken_dictaphone": "Зламаний диктофон",
+  "item.dictaphone": "Диктофон",
+  "item.microphone": "Мікрофон",
+  "item.cassette_player": "Магнітофон",
+  "item.cd_player": "CD-плеєр",
+  "item.cd_radio": "Магнітола на дисках",
+  "item.reel_to_reel": "Котушковий магнітофон",
+  "item.test_pressing": "Пробний вініл",
+  "settings.pickup.legend": "Підбирати",
+  "settings.pickup.detail":
+    "Що підбирати дорогою. Залишена знахідка однаково зараховується як побачена.",
+  "settings.pickup.common": "1–3 · звичайні",
+  "settings.pickup.uncommon": "4 · незвичайні",
+  "settings.pickup.rare": "5 · рідкісні",
+  "settings.pickup.legendary": "6 · легендарні",
+};
+
+export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
+  "item.bottle": "Бутылка",
+  "item.can": "Жестянка",
+  "item.bottle_cap": "Крышечка",
+  "item.flyer": "Флаер",
+  "item.small_change": "Мелочь",
+  "item.metro_token": "Жетон метро",
+  "item.scratched_cd": "Поцарапанный CD",
+  "item.blank_cassette": "Чистая кассета",
+  "item.broken_headphones": "Сломанные наушники",
+  "item.cassette_podil_at_dawn": "Кассета: «Подол на рассвете»",
+  "item.cassette_left_bank_echo": "Кассета: «Эхо Левого берега»",
+  "item.cassette_trukhaniv_summer": "Кассета: «Труханово лето»",
+  "item.broken_cassette_player": "Сломанный магнитофон",
+  "item.broken_cd_player": "Сломанный CD-плеер",
+  "item.broken_dictaphone": "Сломанный диктофон",
+  "item.dictaphone": "Диктофон",
+  "item.microphone": "Микрофон",
+  "item.cassette_player": "Магнитофон",
+  "item.cd_player": "CD-плеер",
+  "item.cd_radio": "Магнитола на дисках",
+  "item.reel_to_reel": "Катушечный магнитофон",
+  "item.test_pressing": "Пробный винил",
+  "settings.pickup.legend": "Подбирать",
+  "settings.pickup.detail":
+    "Что подбирать по дороге. Оставленная находка всё равно засчитывается как замеченная.",
+  "settings.pickup.common": "1–3 · обычные",
+  "settings.pickup.uncommon": "4 · необычные",
+  "settings.pickup.rare": "5 · редкие",
+  "settings.pickup.legendary": "6 · легендарные",
+};

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  CoreFindItemResult,
   CorePubDressLabelErrorCode,
   CorePubDressLabelResult,
   CoreRuntimePort,
@@ -55,8 +56,30 @@ function decodePubDressLabelWire(value: string): CorePubDressLabelResult {
   throw new Error("0x1 Core returned an invalid PubDress label result");
 }
 
+/** Core's catalog ids and error codes: lowercase words joined by `_`. */
+const CORE_CODE = /^[a-z][a-z_]*$/;
+
+function decodeFindItemWire(value: string): CoreFindItemResult {
+  for (const kind of ["item", "error"] as const) {
+    const prefix = `${kind}:`;
+    if (!value.startsWith(prefix)) continue;
+    const rest = value.slice(prefix.length);
+    if (!CORE_CODE.test(rest)) break;
+    return kind === "item" ? { kind, id: rest } : { kind, code: rest };
+  }
+  throw new Error("0x1 Core returned an invalid find item");
+}
+
+function decodePicksUpWire(value: string): boolean {
+  if (value === "yes") return true;
+  if (value === "no") return false;
+  throw new Error(`0x1 Core refused the pick-up setting: ${value}`);
+}
+
 export interface CoreWasmBindings {
   contractVersion(): string;
+  findItem?(artifactId: string, tier: number): CoreFindItemResult;
+  picksUp?(rarities: string, tier: number): boolean;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
@@ -74,6 +97,9 @@ export interface GeneratedCoreWasmModule {
   pub_dress_unicode_version(): string;
   pub_dress_uts46_implementation(): string;
   validate_pub_dress(value: string): string;
+  /** Absent from a runtime built before Core's find catalog. */
+  find_item?(artifact_id: string, tier: number): string;
+  picks_up?(rarities: string, tier: number): string;
 }
 
 export type CoreWasmBindingsLoader = () => Promise<CoreWasmBindings>;
@@ -127,6 +153,14 @@ export async function loadGeneratedCoreWasmBindings(
       decodePubDressLabelWire(
         runtime.compose_pub_dress_label(pubDress, suffix),
       ),
+    ...(runtime.find_item === undefined || runtime.picks_up === undefined
+      ? {}
+      : {
+          findItem: (artifactId: string, tier: number) =>
+            decodeFindItemWire(runtime.find_item!(artifactId, tier)),
+          picksUp: (rarities: string, tier: number) =>
+            decodePicksUpWire(runtime.picks_up!(rarities, tier)),
+        }),
   };
 }
 
@@ -193,6 +227,25 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm label composition binding is missing");
     }
     return bindings.composePubDressLabel(pubDress, suffix);
+  }
+
+  public async findItem(
+    artifactId: string,
+    tier: number,
+  ): Promise<CoreFindItemResult> {
+    const bindings = await this.loadBindings();
+    if (bindings.findItem === undefined) {
+      throw new Error("0x1 Core Wasm find catalog binding is missing");
+    }
+    return bindings.findItem(artifactId, tier);
+  }
+
+  public async picksUp(rarities: string, tier: number): Promise<boolean> {
+    const bindings = await this.loadBindings();
+    if (bindings.picksUp === undefined) {
+      throw new Error("0x1 Core Wasm pick-up binding is missing");
+    }
+    return bindings.picksUp(rarities, tier);
   }
 }
 

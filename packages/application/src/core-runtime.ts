@@ -28,6 +28,10 @@ export type CorePubDressLabelResult =
   | { kind: "label"; label: string }
   | { kind: "error"; code: CorePubDressLabelErrorCode };
 
+/** Which item of Core's catalog a rolled find is. */
+export type CoreFindItemResult =
+  { kind: "item"; id: string } | { kind: "error"; code: string };
+
 /**
  * Product-facing boundary to the versioned 0x1 Core runtime.
  *
@@ -43,6 +47,13 @@ export interface CoreRuntimePort {
     pubDress: string,
     suffix: string,
   ): Promise<CorePubDressLabelResult>;
+  /** Core's catalog pick for a rolled find (`docs/find-items.md` in core). */
+  findItem?(artifactId: string, tier: number): Promise<CoreFindItemResult>;
+  /**
+   * Whether the stored pick-up setting (Core's wire form, e.g.
+   * `common,rare`) picks up a find of `tier`. Rejects on a malformed setting.
+   */
+  picksUp?(rarities: string, tier: number): Promise<boolean>;
 }
 
 export type RuntimeReadiness =

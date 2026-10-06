@@ -98,6 +98,11 @@ These are not carried:
   ([Sound](sound.md)), and which characters speak aloud: nobody, others in
   cutscenes, or the Avaia as well (`nilx-one.interface.voice`,
   [Character voices](avaia-voice.md));
+- **what this device picks up** (`nilx-one.finds.pickup`) — which rarities of
+  chance finds are picked up on the way, in Core's wire form
+  (`common,uncommon,rare,legendary`). A find left behind is still seen. It
+  is a choice about what this device carries home, so it stays here, as the
+  sound does ([Find items in core](https://github.com/nilx-one/core/blob/master/docs/find-items.md));
 - **which wipe this device has applied** (`nilx-one.wipe-epoch`) — the marker
   that makes a full local wipe run once per browser. It says nothing about who
   the person is;

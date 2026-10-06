@@ -5,6 +5,7 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { GUIDE_EN, GUIDE_UK } from "./messages/guide";
 import { IDENTITY_EN, IDENTITY_UK } from "./messages/identity";
 import { RU_MESSAGES } from "./messages/russian";
+import { FINDS_EN, FINDS_UK } from "./messages/finds";
 import { WORLD_EN, WORLD_UK } from "./messages/world";
 
 /** A real language locale the product can render today. */
@@ -282,10 +283,16 @@ const EN_MESSAGES = {
   ...IDENTITY_EN,
   ...WORLD_EN,
   ...GUIDE_EN,
+  ...FINDS_EN,
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
 export type Translate = (key: TranslationKey) => string;
+
+/** Whether a key built at run time (`item.<id>`, say) has copy. */
+export function isTranslationKey(key: string): key is TranslationKey {
+  return Object.hasOwn(EN_MESSAGES, key);
+}
 
 export const HOST_LABEL_KEYS = [
   "host.browser",
@@ -590,6 +597,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   ...IDENTITY_UK,
   ...WORLD_UK,
   ...GUIDE_UK,
+  ...FINDS_UK,
 };
 
 const CATALOGS: Readonly<
