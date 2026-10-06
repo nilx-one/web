@@ -362,6 +362,47 @@ describe("an outing reading ahead", () => {
     );
   });
 
+  it("reads landmarks ahead too, and goes to one only the read found", async () => {
+    const { renderer: base, release } = readAheadRenderer();
+    const museum: MapLandmark = {
+      id: "poi:1",
+      ...at(550, 10),
+      kind: "museum",
+      name: "City museum",
+      facts: {},
+    };
+    let read = false;
+    const preloadLandmarks = vi.fn(async () => {
+      read = true;
+      return {
+        covering: 1,
+        refused: 0,
+        skipped: 0,
+        cached: 0,
+        fetched: 1,
+        failed: 0,
+      };
+    });
+    const renderer = {
+      ...base,
+      preloadLandmarks,
+      landmarksNear: (point: MapPointSelection, radius: number) =>
+        read && mapDistanceMeters(point, museum) <= radius ? [museum] : [],
+    } as unknown as MapRenderer;
+    const { result } = render(renderer);
+
+    await advance(RESTLESS_MS + 1_000);
+    expect(preloadLandmarks).toHaveBeenCalledTimes(1);
+    // The same area as the roads, and the same tiles turned down.
+    expect(preloadLandmarks.mock.calls[0]).toEqual(
+      (base.preloadRoads as ReturnType<typeof vi.fn>).mock.calls[0],
+    );
+    release();
+    await advance(1);
+    const out = result.current.stance(performance.now());
+    expect(mapDistanceMeters(out!.point, at(550, 0))).toBeLessThan(15);
+  });
+
   it("gives up the outing when a tap comes while it is reading ahead", async () => {
     const { renderer, tap, release } = readAheadRenderer();
     const { result } = render(renderer);
