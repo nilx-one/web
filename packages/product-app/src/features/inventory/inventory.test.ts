@@ -51,9 +51,14 @@ describe("readInventoryModel", () => {
   it("reads Core's stored inventory for the screen", () => {
     expect(readInventoryModel(STATE)).toEqual({
       seeds: 15,
-      bond: { carry: "backpack", things: [{ id: "can", x: 0, y: 0 }] },
-      avaia: { carry: "pocket", things: [] },
+      bond: {
+        carry: "backpack",
+        things: [{ id: "can", x: 0, y: 0 }],
+        owned: ["pocket", "backpack"],
+      },
+      avaia: { carry: "pocket", things: [], owned: ["pocket"] },
       craft: { recipe: "repair_cd_player", startedMs: 1000, readyMs: 2701000 },
+      gifted: true,
     });
   });
 
@@ -61,6 +66,17 @@ describe("readInventoryModel", () => {
     expect(readInventoryModel("")).toBe(EMPTY_INVENTORY);
     expect(readInventoryModel("{")).toBe(EMPTY_INVENTORY);
     expect(readInventoryModel('{"seeds":"-1"}')).toBe(EMPTY_INVENTORY);
+  });
+});
+
+describe("reading what each owns", () => {
+  it("takes what Core stored, and counts an old backpack as the gift", () => {
+    const model = readInventoryModel(
+      '{"avaia":{"carry":"pocket","things":[]},"bond":{"carry":"pocket","things":[]},"craft":null,"gifted":false,"owned":{"avaia":["pocket","bag"],"bond":["pocket"]},"seeds":"0"}',
+    );
+    expect(model.avaia.owned).toEqual(["pocket", "bag"]);
+    expect(model.gifted).toBe(false);
+    expect(EMPTY_INVENTORY.bond.carry).toBe("pocket");
   });
 });
 

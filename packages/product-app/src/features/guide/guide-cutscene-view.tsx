@@ -180,12 +180,11 @@ export function GuideCutsceneView({
   const choosing = state.beat === "line" && typed.done;
   // What the scene paid is shown as she says it, and stays while it is
   // answered — not while she is still on her way.
-  const reward =
-    state.reward !== undefined &&
-    state.line.reward &&
-    (state.beat === "line" || state.beat === "reply")
-      ? state.reward
-      : undefined;
+  const showing =
+    state.line.reward && (state.beat === "line" || state.beat === "reply");
+  const reward = showing ? state.reward : undefined;
+  // A gift scene hands over things instead of experience.
+  const gift = showing && reward === undefined ? state.gift : undefined;
 
   useEffect(() => {
     if (choosing) firstChoiceRef.current?.focus();
@@ -274,6 +273,17 @@ export function GuideCutsceneView({
       }
     }
   }
+  if (gift !== undefined) {
+    for (const [index, item] of gift.items.entries()) {
+      paid.push({
+        key: `${item.subject}:gift:${index}`,
+        subject: item.subject,
+        value: undefined,
+        level: true,
+        label: () => item.text,
+      });
+    }
+  }
 
   // Once it has landed and counted up, what was paid leaves the scene for
   // the corner. A scene that moves on sooner sends it on its way from where
@@ -287,7 +297,7 @@ export function GuideCutsceneView({
     onRewardFlyRef.current = onRewardFly;
   });
   const [flown, setFlown] = useState<string | undefined>(undefined);
-  const rewardKey = reward?.achievement;
+  const rewardKey = reward?.achievement ?? gift?.key;
   useEffect(() => {
     if (rewardKey === undefined) return;
     const started = globalThis.performance.now();
@@ -356,8 +366,42 @@ export function GuideCutsceneView({
         className="guide-cutscene__panel"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={reward === undefined ? speakerId : rewardId}
+        aria-labelledby={
+          reward === undefined && gift === undefined ? speakerId : rewardId
+        }
       >
+        {gift === undefined ? null : (
+          <div className="guide-cutscene__reward">
+            <h2 className="guide-cutscene__reward-title" id={rewardId}>
+              {gift.title}
+            </h2>
+            <ul
+              className="guide-cutscene__rewards"
+              data-flown={flown === gift.key ? "true" : undefined}
+            >
+              {paid.map((line, index) => (
+                <GuideXpLine
+                  key={line.key}
+                  subject={line.subject}
+                  value={line.value}
+                  label={line.label}
+                  level={line.level}
+                  burst={
+                    paid.findIndex(
+                      (other) => other.subject === line.subject,
+                    ) === index
+                  }
+                  salt={gift.key}
+                  animate={!reducedMotion}
+                  chipRef={(element) => {
+                    if (element === null) chipsRef.current.delete(line.key);
+                    else chipsRef.current.set(line.key, element);
+                  }}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
         {reward === undefined || achievement === undefined ? null : (
           <div className="guide-cutscene__reward">
             <h2 className="guide-cutscene__reward-title" id={rewardId}>

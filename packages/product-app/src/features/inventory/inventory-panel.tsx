@@ -90,7 +90,9 @@ export function InventoryPanel({
     setNote(
       answer.error === "no_room"
         ? t("inventory.error.no_room")
-        : t("inventory.error.generic"),
+        : answer.error === "not_enough_seeds"
+          ? t("craft.error.not_enough_seeds")
+          : t("inventory.error.generic"),
     );
   }
 
@@ -108,6 +110,42 @@ export function InventoryPanel({
             {t(holder === "bond" ? "inventory.bond" : "inventory.avaia")}
           </strong>
           <small>{t(`inventory.carry.${carried.carry}`)}</small>
+        </div>
+        <div className="inventory__actions">
+          {(["backpack", "bag"] as const).map((carry) => {
+            const name = t(`inventory.carryName.${carry}`);
+            if (carried.owned.includes(carry)) {
+              return carried.carry === carry ? null : (
+                <button
+                  key={carry}
+                  type="button"
+                  onClick={() =>
+                    void run({ op: "switch_carry", holder, carry })
+                  }
+                >
+                  {t("inventory.wear").replace("{carry}", name)}
+                </button>
+              );
+            }
+            const price = catalog?.carries.find(
+              (candidate) => candidate.id === carry,
+            )?.price;
+            return price === undefined || price === null ? null : (
+              <button
+                key={carry}
+                type="button"
+                onClick={() =>
+                  void run({ op: "buy_carry", holder, carry }, () =>
+                    t("inventory.bought").replace("{carry}", name),
+                  )
+                }
+              >
+                {t("inventory.buy")
+                  .replace("{carry}", name)
+                  .replace("{price}", String(price))}
+              </button>
+            );
+          })}
         </div>
         <div className="inventory__grid-scroll">
           <div

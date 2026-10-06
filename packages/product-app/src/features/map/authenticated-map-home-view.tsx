@@ -50,6 +50,7 @@ import {
 } from "../../shell/sound-preference";
 import { SoundSettings } from "../../shell/sound-settings";
 import { PickupSettings } from "../finds/pickup-settings";
+import { useBackpackGift } from "../inventory/backpack-gift";
 import { useCraftCompletion } from "../inventory/craft";
 import { pickUpFind } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
@@ -237,7 +238,11 @@ export interface AuthenticatedMapHomeViewProps {
    */
   readonly findItems?: Pick<
     CoreRuntimePort,
-    "findItem" | "picksUp" | "economyCatalog" | "applyInventoryCommand"
+    | "findItem"
+    | "picksUp"
+    | "economyCatalog"
+    | "applyInventoryCommand"
+    | "backpackGiftDue"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -1159,6 +1164,37 @@ export function AuthenticatedMapHomeView({
     (focusState === "focused" || focusState === "unavailable") &&
     !guideActive &&
     achievementDialog === undefined;
+  // Her backpack gift comes when the Bond's pockets fill up, or by level 3:
+  // given first, then said, once the world is free to film it.
+  useBackpackGift({
+    owner: pubDress,
+    core:
+      committedAwards === undefined || findItems === undefined
+        ? undefined
+        : findItems,
+    bondLevel: standing.bond.level,
+    ready:
+      avaiaConfiguration !== "unconfigured" &&
+      section === "world" &&
+      activeDetail === undefined &&
+      mapStatus.kind === "ready" &&
+      (focusState === "focused" || focusState === "unavailable") &&
+      !guideActive &&
+      achievementDialog === undefined,
+    onGiven: () => {
+      const item = t("guide.backpack.item");
+      playGuide("backpack", {
+        gift: {
+          key: "backpacks",
+          title: t("guide.backpack.title"),
+          items: [
+            { subject: "bond", text: item },
+            { subject: "avaia", text: item },
+          ],
+        },
+      });
+    },
+  });
   useEffect(() => {
     if (!guideIntroDue || !guideIntroOwed(pubDress)) return;
     const arrives = globalThis.setTimeout(

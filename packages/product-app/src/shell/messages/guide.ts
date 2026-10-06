@@ -49,6 +49,14 @@ export const GUIDE_EN = {
     "Oh, I nearly left without giving you this. Here, {bond}.",
   "guide.reward.almostForgot.2": "Wait. This is yours, {bond}.",
   "guide.reward.together.0": "And now it’s the two of you. I’ll be near.",
+  "guide.backpack.gift.0":
+    "Pockets full already? Here — a backpack for you, and one for your Avaia.",
+  "guide.backpack.gift.1":
+    "You’ll need more than pockets out there. A backpack each, for you and your Avaia.",
+  "guide.backpack.gift.2":
+    "Take these. Two backpacks: yours, and your Avaia’s.",
+  "guide.backpack.title": "Backpacks",
+  "guide.backpack.item": "Backpack · 40 cells",
   "guide.reward.together.1": "Now go — you and {avaia}. I’ll find you.",
   "guide.choice.curious.0.feminine":
     "This is strange. I feel like I’ve been here before.",
@@ -111,6 +119,13 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
     "Ой, ще дещо наостанок. Тримай, {bond}.",
   "guide.reward.almostForgot.2": "Стій. Це твоє, {bond}.",
   "guide.reward.together.0": "А тепер — ви удвох. Я поруч.",
+  "guide.backpack.gift.0":
+    "Кишені вже повні? Тримай — рюкзак тобі й один для твоєї Avaia.",
+  "guide.backpack.gift.1":
+    "Самих кишень там не вистачить. По рюкзаку — тобі й твоїй Avaia.",
+  "guide.backpack.gift.2": "Бери. Два рюкзаки: твій і твоєї Avaia.",
+  "guide.backpack.title": "Рюкзаки",
+  "guide.backpack.item": "Рюкзак · 40 клітинок",
   "guide.reward.together.1": "Тепер ідіть — ти і {avaia}. Я вас знайду.",
   "guide.choice.curious.0.feminine": "Це дивно. Я відчуваю, що вже була тут.",
   "guide.choice.curious.0.masculine": "Це дивно. Я відчуваю, що вже був тут.",
@@ -171,6 +186,13 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
     "Ой, ещё кое-что напоследок. Держи, {bond}.",
   "guide.reward.almostForgot.2": "Стой. Это твоё, {bond}.",
   "guide.reward.together.0": "А теперь — вы вдвоём. Я рядом.",
+  "guide.backpack.gift.0":
+    "Карманы уже полны? Держи — рюкзак тебе и один для твоей Avaia.",
+  "guide.backpack.gift.1":
+    "Одних карманов там не хватит. По рюкзаку — тебе и твоей Avaia.",
+  "guide.backpack.gift.2": "Бери. Два рюкзака: твой и твоей Avaia.",
+  "guide.backpack.title": "Рюкзаки",
+  "guide.backpack.item": "Рюкзак · 40 клеток",
   "guide.reward.together.1": "Теперь идите — ты и {avaia}. Я вас найду.",
   "guide.choice.curious.0.feminine":
     "Это странно. Я чувствую, что уже была здесь.",

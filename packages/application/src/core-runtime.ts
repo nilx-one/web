@@ -78,6 +78,8 @@ export interface CoreRecipe {
 /** What things are carried in, and its grid. */
 export interface CoreCarry extends CoreSize {
   readonly id: "pocket" | "backpack" | "bag";
+  /** Seeds it costs, or `null` for pockets, which everyone has. */
+  readonly price: number | null;
 }
 
 /**
@@ -136,6 +138,11 @@ export interface CoreRuntimePort {
   /** Core's economy catalog. Rejects on a malformed one. */
   economyCatalog?(): Promise<CoreEconomyCatalog>;
   /**
+   * Whether xSasha's backpack gift is due for a stored inventory at the
+   * Bond's level (`docs/economy.md` in core). Rejects a malformed state.
+   */
+  backpackGiftDue?(state: string, bondLevel: number): Promise<boolean>;
+  /**
    * Applies one inventory command (Core's wire form, `docs/economy.md` in
    * core) to a stored inventory, `""` for a new one. A refused command
    * resolves `ok: false`; the stored state is then kept as it was.
@@ -181,7 +188,13 @@ export type CoreInventoryCommand =
       readonly place: "anywhere" | "repair_workshop";
     }
   | { readonly op: "finish_craft" }
-  | { readonly op: "finish_paid" };
+  | { readonly op: "finish_paid" }
+  | {
+      readonly op: "buy_carry";
+      readonly holder: CoreHolder;
+      readonly carry: "backpack" | "bag";
+    }
+  | { readonly op: "gift_backpacks"; readonly bond_level: number };
 
 export type RuntimeReadiness =
   | {

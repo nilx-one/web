@@ -92,6 +92,8 @@ describe("recorded Avaia lines", () => {
     for (const locale of VOICED_LOCALES) {
       for (const voice of GUIDE_VOICES) {
         for (const node of Object.values(GUIDE_NODES)) {
+          // A line not recorded yet is typed out and never asked for.
+          if (node.recorded === false) continue;
           for (const wording of node.line) {
             const key = typeof wording === "string" ? wording : wording[voice];
             expected[`${locale}/xsasha-${voice}/${key}`] =

@@ -78,10 +78,10 @@ function decodeFindItemWire(value: string): CoreFindItemResult {
   throw new Error("0x1 Core returned an invalid find item");
 }
 
-function decodePicksUpWire(value: string): boolean {
+function decodeYesNo(value: string): boolean {
   if (value === "yes") return true;
   if (value === "no") return false;
-  throw new Error(`0x1 Core refused the pick-up setting: ${value}`);
+  throw new Error(`0x1 Core answered neither yes nor no: ${value}`);
 }
 
 const RARITIES = new Set(["common", "uncommon", "rare", "legendary"]);
@@ -208,7 +208,11 @@ function decodeCarry(value: unknown): CoreCarry {
   ) {
     const size = decodeSize(value);
     if (size !== null) {
-      return { id: value.id as CoreCarry["id"], ...size };
+      return {
+        id: value.id as CoreCarry["id"],
+        ...size,
+        price: decodePrice(value.price),
+      };
     }
   }
   throw new Error("0x1 Core returned an invalid carry");
@@ -282,6 +286,7 @@ export interface CoreWasmBindings {
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
   economyCatalog?(): CoreEconomyCatalog;
+  backpackGiftDue?(state: string, bondLevel: number): boolean;
   applyInventoryCommand?(
     state: string,
     command: CoreInventoryCommand,
@@ -308,6 +313,7 @@ export interface GeneratedCoreWasmModule {
   find_item?(artifact_id: string, tier: number): string;
   picks_up?(rarities: string, tier: number): string;
   economy_catalog?(): string;
+  backpack_gift_due?(state: string, bond_level: number): string;
   apply_inventory_command?(
     state: string,
     command: string,
@@ -372,13 +378,24 @@ export async function loadGeneratedCoreWasmBindings(
           findItem: (artifactId: string, tier: number) =>
             decodeFindItemWire(runtime.find_item!(artifactId, tier)),
           picksUp: (rarities: string, tier: number) =>
-            decodePicksUpWire(runtime.picks_up!(rarities, tier)),
+            decodeYesNo(runtime.picks_up!(rarities, tier)),
         }),
     ...(runtime.economy_catalog === undefined
       ? {}
       : {
           economyCatalog: () =>
             decodeEconomyCatalog(runtime.economy_catalog!()),
+        }),
+    ...(runtime.backpack_gift_due === undefined
+      ? {}
+      : {
+          backpackGiftDue: (state: string, bondLevel: number) =>
+            decodeYesNo(
+              runtime.backpack_gift_due!(
+                state,
+                Math.max(0, Math.floor(bondLevel)),
+              ),
+            ),
         }),
     ...(runtime.apply_inventory_command === undefined
       ? {}
@@ -497,6 +514,17 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm inventory binding is missing");
     }
     return bindings.applyInventoryCommand(state, command, nowMs);
+  }
+
+  public async backpackGiftDue(
+    state: string,
+    bondLevel: number,
+  ): Promise<boolean> {
+    const bindings = await this.loadBindings();
+    if (bindings.backpackGiftDue === undefined) {
+      throw new Error("0x1 Core Wasm backpack gift binding is missing");
+    }
+    return bindings.backpackGiftDue(state, bondLevel);
   }
 
   public async picksUp(rarities: string, tier: number): Promise<boolean> {

@@ -84,6 +84,12 @@ export const FINDS_EN = {
   "craft.error.wrong_place": "This needs a repair workshop.",
   "craft.atWorkshop": "At a repair workshop: {name}",
   "craft.workshopNoName": "a repair workshop",
+  "inventory.carryName.backpack": "a backpack",
+  "inventory.carryName.bag": "a bag",
+  "inventory.carryName.pocket": "pockets",
+  "inventory.buy": "Buy {carry} · {price} ₴€£",
+  "inventory.wear": "Carry in {carry}",
+  "inventory.bought": "Bought: {carry}.",
 } as const;
 
 export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
@@ -165,6 +171,12 @@ export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "craft.error.wrong_place": "Для цього потрібна ремонтна майстерня.",
   "craft.atWorkshop": "Ти в ремонтній майстерні: {name}",
   "craft.workshopNoName": "без назви",
+  "inventory.carryName.backpack": "рюкзак",
+  "inventory.carryName.bag": "сумку",
+  "inventory.carryName.pocket": "кишені",
+  "inventory.buy": "Купити {carry} · {price} ₴€£",
+  "inventory.wear": "Носити в: {carry}",
+  "inventory.bought": "Куплено: {carry}.",
 };
 
 export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
@@ -245,4 +257,10 @@ export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "craft.error.wrong_place": "Для этого нужна ремонтная мастерская.",
   "craft.atWorkshop": "Ты в ремонтной мастерской: {name}",
   "craft.workshopNoName": "без названия",
+  "inventory.carryName.backpack": "рюкзак",
+  "inventory.carryName.bag": "сумку",
+  "inventory.carryName.pocket": "карманы",
+  "inventory.buy": "Купить {carry} · {price} ₴€£",
+  "inventory.wear": "Носить в: {carry}",
+  "inventory.bought": "Куплено: {carry}.",
 };
