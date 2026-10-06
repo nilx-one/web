@@ -124,12 +124,7 @@ describe("planWalk", () => {
   it("allows running only on a route whose surface supports it", () => {
     const from = at(0, 0);
     const to = at(1_500, 0);
-    const runnable = walk(
-      from,
-      to,
-      [footway([0, 0], [1_500, 0])],
-      "own",
-    );
+    const runnable = walk(from, to, [footway([0, 0], [1_500, 0])], "own");
     const street = walk(
       from,
       to,
