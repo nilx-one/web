@@ -71,7 +71,9 @@ road tiles read ahead (below), to build the pedestrian graph a walk follows.
 the archive is built from. The declaration above names fields, not the values
 they take, so `inspect-basemap.sh` ends by reading the `pois` tiles themselves
 with `deploy/web/landmark-kinds.mjs`: it lists every `kind` the archive
-carries, marks the ones on the list, and fails when none of them occur. It can
+carries, marks the ones on the list, and fails when none of them occur. It
+also fails when any kind the Avaia's landmark mapper reads
+(`landmark-mapper-kinds.json` in `product-app`) is absent. It can
 also be run on its own with any Node:
 
 ```sh

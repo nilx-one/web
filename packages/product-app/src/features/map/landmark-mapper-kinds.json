@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "rows": {
+    "monument": ["major_monument"],
+    "memorial": ["major_monument"],
+    "artwork": ["artwork"],
+    "sculpture": ["artwork"],
+    "statue": ["artwork"],
+    "museum": ["museum"],
+    "castle": ["castle"],
+    "fort": ["fort"],
+    "ruins": ["ruins"],
+    "archaeological_site": ["archaeological_site"],
+    "viewpoint": ["viewpoint"]
+  },
+  "significance": ["attraction", "landmark"]
+}

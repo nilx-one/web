@@ -69,20 +69,26 @@ echo "Landmark kinds:"
 # LANDMARK_KINDS. The vector_layers declaration above names fields, not the
 # values they take, so the tiles themselves are read here. A stock node image
 # is enough: the check uses only Node built-ins. It fails the inspection when
-# none of LANDMARK_KINDS occur, which is the silent failure it exists to catch.
+# none of LANDMARK_KINDS occur, which is the silent failure it exists to catch,
+# and when any kind the Avaia's landmark mapper reads is absent.
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 kinds_file="$script_dir/../../packages/map-maplibre/src/landmark-kinds.json"
+mapper_file="$script_dir/../../packages/product-app/src/features/map/landmark-mapper-kinds.json"
 NODE_IMAGE="${NODE_IMAGE:-node:24-alpine}"
 
-if [ ! -s "$kinds_file" ]; then
-  echo "  skipped: $kinds_file is not present next to this script" >&2
-  exit 0
-fi
+for required_file in "$kinds_file" "$mapper_file"; do
+  if [ ! -s "$required_file" ]; then
+    echo "  skipped: $required_file is not present next to this script" >&2
+    exit 0
+  fi
+done
 
 docker run --rm \
   -v "$archive_dir:/data:ro" \
   -v "$script_dir/landmark-kinds.mjs:/tool/landmark-kinds.mjs:ro" \
   -v "$kinds_file:/tool/landmark-kinds.json:ro" \
+  -v "$mapper_file:/tool/landmark-mapper-kinds.json:ro" \
   -e LANDMARK_KINDS_PATH=/tool/landmark-kinds.json \
+  -e MAPPER_KINDS_PATH=/tool/landmark-mapper-kinds.json \
   "$NODE_IMAGE" \
   node /tool/landmark-kinds.mjs "/data/$archive_name"
