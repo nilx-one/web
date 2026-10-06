@@ -256,6 +256,41 @@ describe("an Avaia left idle", () => {
     expect(out!.point.longitude).toBeLessThanOrEqual(at(600, 0).longitude);
   });
 
+  it("goes home tired to where the journal says it lives, not to the device", async () => {
+    const { renderer: base, tap } = walkRenderer();
+    const home = at(-800, 0);
+    const renderer = {
+      ...base,
+      fog: {
+        isActive: () => true,
+        cellAt: (point: MapPointSelection) => ({
+          id: "open",
+          center: point,
+          boundary: [],
+        }),
+        isRevealed: () => true,
+        frontier: () => [],
+        reveal: () => undefined,
+        subscribe: () => () => undefined,
+        home: () => home,
+      } as unknown as MapFogField,
+    } as unknown as MapRenderer;
+    const { result } = render(renderer);
+
+    for (const x of [2_000, 0, 2_000]) {
+      tap(at(x, 0));
+      await advance(25 * 60 * 1000);
+      await advance(1);
+    }
+    await advance(POINT_B_STAND_MS);
+    await advance(RESTLESS_MS);
+    await advance(60 * 60 * 1000);
+    await advance(1);
+
+    const after = result.current.stance(performance.now());
+    expect(mapDistanceMeters(after!.point, home)).toBeLessThan(5);
+  });
+
   it("still goes out after leaving the wheel mid-stand and taking it back", async () => {
     const { renderer, tap } = walkRenderer();
     const { result } = render(renderer);
