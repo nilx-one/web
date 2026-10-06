@@ -98,16 +98,10 @@ export function locomotionMode(
   meters: number,
   maxMode: AvaiaLocomotionMode,
 ): AvaiaLocomotionMode {
-  if (
-    meters > RUN_AFTER_METERS &&
-    MODE_RANK[maxMode] >= MODE_RANK.run
-  ) {
+  if (meters > RUN_AFTER_METERS && MODE_RANK[maxMode] >= MODE_RANK.run) {
     return "run";
   }
-  if (
-    meters > JOG_AFTER_METERS &&
-    MODE_RANK[maxMode] >= MODE_RANK.jog
-  ) {
+  if (meters > JOG_AFTER_METERS && MODE_RANK[maxMode] >= MODE_RANK.jog) {
     return "jog";
   }
   return "walk";
@@ -152,7 +146,6 @@ export function startWalk({
   to,
   path,
   nowMs,
-  zoom,
   maxLocomotion = "walk",
   landmark,
 }: {
@@ -172,8 +165,6 @@ export function startWalk({
     along.push(along[i - 1]! + mapDistanceMeters(points[i - 1]!, points[i]!));
   }
   const meters = along[along.length - 1]!;
-  void from.latitude;
-  void zoom;
   const mode = locomotionMode(meters, maxLocomotion);
   const speed = locomotionSpeedMetersPerSecond(mode);
   return {
