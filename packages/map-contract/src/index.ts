@@ -332,7 +332,7 @@ export interface MapRoad {
 }
 
 /**
- * What one `preloadRoads` did, so a caller can see what it cost: the tiles
+ * What one `preloadRoads` or `preloadLandmarks` did, so a caller can see what it cost: the tiles
  * the box touched, those turned down as somewhere a walk cannot go, those left
  * over the cap, and of the rest how many were already held, fetched, or failed.
  */
@@ -481,9 +481,10 @@ export interface MapRenderer {
   subscribeGroundTap?(listener: (tap: MapGroundTap) => void): () => void;
   /**
    * The landmarks the basemap carries within a radius of a point, nearest
-   * first. It reads tiles already loaded for the current view and nothing
-   * else: no request is made on its behalf, so a place off the loaded map
-   * answers with nothing rather than a guess.
+   * first. It reads tiles already loaded, for the current view or read ahead
+   * by `preloadLandmarks`, and nothing else: no request is made on its
+   * behalf, so a place off the loaded map answers with nothing rather than a
+   * guess.
    */
   landmarksNear?(
     point: MapPointSelection,
@@ -516,6 +517,16 @@ export interface MapRenderer {
    * `accept` turns down a tile's box before it is fetched.
    */
   preloadRoads?(
+    bounds: MapBounds,
+    accept?: (tile: MapBounds) => boolean,
+  ): Promise<MapRoadPreload>;
+  /**
+   * Reads the landmarks of the tiles covering a box ahead of an outing, from
+   * the same archive, so `landmarksNear` answers past the view. Like
+   * `preloadRoads`: one zoom, a fixed cap on tiles fetched and held, the
+   * oldest dropped first, and `accept` turns a tile down before it is fetched.
+   */
+  preloadLandmarks?(
     bounds: MapBounds,
     accept?: (tile: MapBounds) => boolean,
   ): Promise<MapRoadPreload>;
