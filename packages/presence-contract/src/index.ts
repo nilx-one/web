@@ -33,7 +33,9 @@ export interface PresenceStore {
 
 /**
  * The renderer sees membership only. Journal contents remain reachable solely
- * through the explicit cell-activation path.
+ * through the explicit cell-activation path, and through the fog field's home
+ * derivation in `map-shade`, which reads closed-visit durations and hands out
+ * one point: the centre of the cell dwelt in longest, never the visits.
  */
 export interface ShadeSource {
   litCells(): readonly CellIndex[];

@@ -5,12 +5,16 @@ import type {
   CellIndex,
   PresenceStore,
   ShadeSource,
+  VisitRecord,
 } from "@nilx-one/presence-contract";
 import { gridDisk, latLngToCell } from "h3-js";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   createFogField,
+  dwellMs,
+  HOME_MIN_DWELL_MS,
+  homeCellOf,
   readFogReveals,
   type FogRevealStorage,
 } from "./fog-field";
@@ -28,11 +32,27 @@ function memoryStorage(): FogRevealStorage & { values: Map<string, string> } {
   };
 }
 
-function journal(lit: readonly CellIndex[]): {
+function journal(
+  lit: readonly CellIndex[],
+  visits: readonly VisitRecord[] = [],
+): {
   runtime: Promise<ShadeRuntime | null>;
   light(cell: CellIndex): void;
+  append(record: VisitRecord): void;
 } {
   const cells = new Set(lit);
+  const records = [...visits];
+  const appended = new Set<(record: VisitRecord) => void>();
+  const store: PresenceStore = {
+    append: async () => undefined,
+    listCells: async () => [...cells],
+    recordsForCell: async (cell) =>
+      records.filter((record) => record.cell === cell),
+    subscribe(listener) {
+      appended.add(listener);
+      return () => appended.delete(listener);
+    },
+  };
   const listeners = new Set<(cell: CellIndex) => void>();
   const source: ShadeSource = {
     litCells: () => [...cells],
@@ -43,10 +63,14 @@ function journal(lit: readonly CellIndex[]): {
     },
   };
   return {
-    runtime: Promise.resolve({ store: {} as PresenceStore, source }),
+    runtime: Promise.resolve({ store, source }),
     light(cell) {
       cells.add(cell);
       for (const listener of [...listeners]) listener(cell);
+    },
+    append(record) {
+      records.push(record);
+      for (const listener of [...appended]) listener(record);
     },
   };
 }
@@ -224,5 +248,85 @@ describe("fog field", () => {
     expect(cell.boundary.length).toBeGreaterThanOrEqual(6);
     expect(Math.abs(cell.center.longitude - HERE.longitude)).toBeLessThan(0.01);
     expect(Math.abs(cell.center.latitude - HERE.latitude)).toBeLessThan(0.01);
+  });
+});
+
+describe("home", () => {
+  const HOUR = 60 * 60 * 1000;
+  const [, NEXT_CELL, FAR_CELL] = gridDisk(HERE_CELL, 1);
+  const visit = (
+    cell: CellIndex,
+    enteredAt: number,
+    hours: number | null,
+  ): VisitRecord => ({
+    cell,
+    enteredAt,
+    leftAt: hours === null ? null : enteredAt + hours * HOUR,
+    source: "self",
+    fixCount: 3,
+    bestAccuracyM: 10,
+  });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("counts closed visits only", () => {
+    expect(
+      dwellMs([visit(HERE_CELL, 0, 2), visit(HERE_CELL, 10 * HOUR, null)]),
+    ).toBe(2 * HOUR);
+  });
+
+  it("is the cell dwelt in longest, ties to the smallest id, never a passing one", () => {
+    expect(
+      homeCellOf(
+        new Map([
+          ["b", 3 * HOUR],
+          ["a", 3 * HOUR],
+        ]),
+      ),
+    ).toBe("a");
+    expect(
+      homeCellOf(
+        new Map([
+          ["a", HOUR],
+          ["b", 5 * HOUR],
+        ]),
+      ),
+    ).toBe("b");
+    expect(homeCellOf(new Map([["a", HOME_MIN_DWELL_MS - 1]]))).toBeUndefined();
+  });
+
+  it("answers one point from the journal, and moves as visits close", async () => {
+    const lit = journal(
+      [HERE_CELL, NEXT_CELL!],
+      [visit(HERE_CELL, 0, 3), visit(NEXT_CELL!, 0, 2)],
+    );
+    const { field, runtime } = createFogField(lit.runtime, memoryStorage());
+    expect(field.home?.()).toBeUndefined();
+
+    await runtime;
+    await settle();
+    const home = field.home?.();
+    expect(home).toBeDefined();
+    expect(latLngToCell(home!.latitude, home!.longitude, 9)).toBe(HERE_CELL);
+    // Exactly a point: nothing of the visits comes with it.
+    expect(Object.keys(home!).sort()).toEqual(["latitude", "longitude"]);
+
+    lit.append(visit(NEXT_CELL!, 10 * HOUR, 2));
+    await settle();
+    const moved = field.home?.();
+    expect(latLngToCell(moved!.latitude, moved!.longitude, 9)).toBe(NEXT_CELL);
+
+    // An open visit is no time spent yet.
+    lit.append(visit(FAR_CELL!, 20 * HOUR, null));
+    await settle();
+    expect(field.home?.()).toEqual(moved);
+  });
+
+  it("has none without a journal", async () => {
+    const { field, runtime } = createFogField(
+      Promise.resolve(null),
+      memoryStorage(),
+    );
+    await runtime;
+    expect(field.home?.()).toBeUndefined();
   });
 });
