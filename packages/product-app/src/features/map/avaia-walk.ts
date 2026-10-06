@@ -4,7 +4,6 @@
 import {
   mapCompassBearing,
   mapDistanceMeters,
-  mapMetersPerPixel,
   type MapLandmark,
   type MapPointSelection,
 } from "@nilx-one/map-contract";
@@ -59,32 +58,33 @@ export const STUDY_CLIP_MS = 1_600;
 export const STUDY_MS = STUDY_CLIP_MS * 2;
 
 /**
- * The screen stride a walk is paced against. A pace measured in metres alone
- * would crawl when the camera is far and teleport when it is close; a pace
- * measured against a fixed length on screen reads the same wherever the camera
- * is, which is what a character in a game does.
+ * Walking speed is physical world distance, not a screen-space effect.
+ *
+ * Camera zoom changes only how much ground is visible. It must never make a
+ * body cross that ground faster: at 1.4 m/s a 100 m walk takes about 71 s.
+ * With the authored 1.2 s walk cycle (two footfalls), one visible step advances
+ * about 0.84 m, so the feet and the ground stay in the same scale.
  */
-const WALK_STRIDE_PIXELS = 24;
+export const WALK_SPEED_MPS = 1.4;
 
-/** How far a body goes per second, in strides of the screen. */
-export const WALK_BODY_HEIGHTS_PER_SECOND = 1.1;
-
-/** Nobody walks slower than a stroll, even a body drawn very small. */
-export const MIN_WALK_SPEED_MPS = 1.4;
+/**
+ * Kept for callers that still use the old name. There is no longer a
+ * zoom-dependent minimum: this is the walking speed.
+ */
+export const MIN_WALK_SPEED_MPS = WALK_SPEED_MPS;
 
 /** A tap closer than this is a body turning on the spot, not a walk. */
 export const MIN_WALK_METERS = 0.5;
 
-/** The ground speed a walk started at this scale moves at. */
+/**
+ * The ground speed of a walk. Latitude and zoom are accepted because the walk
+ * boundary already supplies them, but intentionally do not affect locomotion.
+ */
 export function walkSpeedMetersPerSecond(
-  latitude: number,
-  zoom: number,
+  _latitude: number,
+  _zoom: number,
 ): number {
-  const bodyMeters = WALK_STRIDE_PIXELS * mapMetersPerPixel(latitude, zoom);
-  const speed = bodyMeters * WALK_BODY_HEIGHTS_PER_SECOND;
-  return Number.isFinite(speed)
-    ? Math.max(MIN_WALK_SPEED_MPS, speed)
-    : MIN_WALK_SPEED_MPS;
+  return WALK_SPEED_MPS;
 }
 
 /**
