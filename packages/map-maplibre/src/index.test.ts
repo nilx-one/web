@@ -754,7 +754,7 @@ describe("presentation dimension", () => {
     expect(fakeMap.setTerrain).not.toHaveBeenCalled();
   });
 
-  it("suppresses building extrusion in explicit 2D without touching geography",
+  it("suppresses building extrusion in explicit 2D without touching geography", () => {
     const fakeMap = makeFakeMap();
     fakeMap.layers.set(BUILDING_EXTRUSION_LAYER_ID, {
       id: BUILDING_EXTRUSION_LAYER_ID,

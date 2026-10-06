@@ -289,7 +289,8 @@ export function createAvatarLayer(
 
     onAdd(mountedMap, gl) {
       map = mountedMap;
-      for (const instance of instances.values()) instance.terrainAnchor = undefined;
+      for (const instance of instances.values())
+        instance.terrainAnchor = undefined;
       renderer = new WebGLRenderer({
         canvas: mountedMap.getCanvas(),
         context: gl,
@@ -333,7 +334,8 @@ export function createAvatarLayer(
       renderer?.dispose();
       renderer = undefined;
       map = undefined;
-      for (const instance of instances.values()) instance.terrainAnchor = undefined;
+      for (const instance of instances.values())
+        instance.terrainAnchor = undefined;
     },
 
     upsert(handle) {
@@ -374,7 +376,8 @@ export function createAvatarLayer(
     setCamera(next) {
       // Stored only as local presentation input. Projection remains MapLibre-owned.
       cameraState = next;
-      for (const instance of instances.values()) instance.terrainAnchor = undefined;
+      for (const instance of instances.values())
+        instance.terrainAnchor = undefined;
       void cameraState;
     },
 
