@@ -35,8 +35,7 @@
     "nilx-one:terrain-state": "regional-server-published",
     "nilx-one:terrain-encoding": "terrarium",
     "nilx-one:terrain-source-min-zoom": 7,
-    "nilx-one:terrain-source-max-zoom": 12,
-    "nilx-one:terrain-mesh-min-zoom": 12
+    "nilx-one:terrain-source-max-zoom": 12
   },
   "glyphs": "/map/0.1.0/fonts/{fontstack}/{range}.pbf",
   "projection": {
@@ -60,6 +59,7 @@
       "tileSize": 256,
       "minzoom": 7,
       "maxzoom": 12,
+      "bounds": [29.75, 49.95, 31.35, 51.15],
       "encoding": "terrarium",
       "attribution": "Terrain: Mapzen; EU-DEM: Copernicus / European Union; SRTM and GMTED2010: U.S. Geological Survey; ETOPO1: NOAA"
     }

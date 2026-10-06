@@ -158,7 +158,8 @@ terrain lifecycle so appearance swaps cannot silently redefine depth.
 Custom 3D bodies that do not explicitly carry altitude query the mounted terrain
 at their coordinate before converting to Mercator. Avatars and the Motherland
 Monument therefore stand on the DEM surface rather than on the zero-elevation
-plane. An explicit avatar altitude remains authoritative presentation input.
+plane. An explicit avatar altitude remains authoritative absolute presentation
+input; it is not interpreted as an offset above terrain.
 
 The source is Mapzen/Tilezen Terrain Tiles (`elevation-tiles-prod`). Attribution
 for this European bootstrap is carried in the style and follows the upstream

@@ -669,6 +669,10 @@ export interface AvatarHandle {
   readonly id: string;
   readonly modelId: AvatarModelId;
   readonly lngLat: readonly [longitude: number, latitude: number];
+  /**
+   * Absolute altitude passed to MapLibre's Mercator conversion. It is not a
+   * terrain-relative offset; omit it when the body should stand on the mounted DEM.
+   */
   readonly altitudeMeters?: number;
   /** The way the body faces: degrees clockwise from north, as a compass reads. */
   readonly bearingDeg: number;

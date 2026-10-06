@@ -15,6 +15,7 @@ interface MapStyleSource {
   readonly tileSize?: number;
   readonly minzoom?: number;
   readonly maxzoom?: number;
+  readonly bounds?: readonly number[];
   readonly encoding?: string;
   readonly attribution?: string;
 }
@@ -222,6 +223,7 @@ describe("map deployment assets", () => {
         tileSize: 256,
         minzoom: 7,
         maxzoom: 12,
+        bounds: [29.75, 49.95, 31.35, 51.15],
         encoding: "terrarium",
       });
     },
@@ -309,12 +311,12 @@ describe("map deployment assets", () => {
         tileSize: 256,
         minzoom: 7,
         maxzoom: 12,
+        bounds: [29.75, 49.95, 31.35, 51.15],
         encoding: "terrarium",
       });
       expect(style.terrain).toBeUndefined();
       expect(hillshade?.type).toBe("hillshade");
       expect(hillshade?.source).toBe("terrain");
-      expect(style.metadata?.["nilx-one:terrain-mesh-min-zoom"]).toBe(12);
     },
   );
 

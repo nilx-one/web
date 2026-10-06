@@ -66,6 +66,10 @@ interface AvatarInstance {
   mixer?: AnimationMixer;
   clips?: ReadonlyMap<string, AnimationClip>;
   actionClip?: AvatarClipId;
+  terrainAnchor?: {
+    readonly key: string;
+    readonly elevationMeters: number;
+  };
   loadGeneration: number;
 }
 
@@ -192,19 +196,38 @@ export function createAvatarLayer(
     applyAvatarNodeVisibility(instance.root, instance.handle.visibleNodes);
   }
 
+  function terrainAltitude(instance: AvatarInstance): number {
+    const { lngLat } = instance.handle;
+    const mounted = map;
+    const terrainSource = mounted?.getTerrain()?.source;
+    if (mounted === undefined || terrainSource === undefined) {
+      instance.terrainAnchor = undefined;
+      return 0;
+    }
+
+    const key = `${terrainSource}:${lngLat[0]}:${lngLat[1]}`;
+    if (instance.terrainAnchor?.key === key) {
+      return instance.terrainAnchor.elevationMeters;
+    }
+
+    const elevation = mounted.queryTerrainElevation({
+      lng: lngLat[0],
+      lat: lngLat[1],
+    });
+    if (typeof elevation === "number" && Number.isFinite(elevation)) {
+      instance.terrainAnchor = { key, elevationMeters: elevation };
+      return elevation;
+    }
+
+    instance.terrainAnchor = undefined;
+    return 0;
+  }
+
   function place(instance: AvatarInstance): void {
     const root = instance.root;
     if (root === undefined) return;
     const { lngLat, altitudeMeters, bearingDeg, scale } = instance.handle;
-    const terrainElevation = map?.queryTerrainElevation({
-      lng: lngLat[0],
-      lat: lngLat[1],
-    });
-    const resolvedAltitudeMeters =
-      altitudeMeters ??
-      (typeof terrainElevation === "number" && Number.isFinite(terrainElevation)
-        ? terrainElevation
-        : 0);
+    const resolvedAltitudeMeters = altitudeMeters ?? terrainAltitude(instance);
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
       resolvedAltitudeMeters,
@@ -266,6 +289,7 @@ export function createAvatarLayer(
 
     onAdd(mountedMap, gl) {
       map = mountedMap;
+      for (const instance of instances.values()) instance.terrainAnchor = undefined;
       renderer = new WebGLRenderer({
         canvas: mountedMap.getCanvas(),
         context: gl,
@@ -309,6 +333,7 @@ export function createAvatarLayer(
       renderer?.dispose();
       renderer = undefined;
       map = undefined;
+      for (const instance of instances.values()) instance.terrainAnchor = undefined;
     },
 
     upsert(handle) {
@@ -349,6 +374,7 @@ export function createAvatarLayer(
     setCamera(next) {
       // Stored only as local presentation input. Projection remains MapLibre-owned.
       cameraState = next;
+      for (const instance of instances.values()) instance.terrainAnchor = undefined;
       void cameraState;
     },
 

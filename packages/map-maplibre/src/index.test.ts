@@ -28,6 +28,7 @@ import {
   PINNED_LANDMARKS_SOURCE_ID,
   TERRAIN_EXAGGERATION,
   TERRAIN_HILLSHADE_LAYER_ID,
+  TERRAIN_MESH_EXIT_ZOOM,
   TERRAIN_MESH_MIN_ZOOM,
   TERRAIN_SOURCE_ID,
   createMapLibreRenderer,
@@ -685,6 +686,15 @@ describe("presentation dimension", () => {
       source: TERRAIN_SOURCE_ID,
       exaggeration: TERRAIN_EXAGGERATION,
     });
+
+    fakeMap.setTerrain.mockClear();
+    fakeMap.camera.zoom = TERRAIN_MESH_MIN_ZOOM - 0.1;
+    fakeMap.emit("zoom");
+    expect(fakeMap.setTerrain).not.toHaveBeenCalled();
+
+    fakeMap.camera.zoom = TERRAIN_MESH_EXIT_ZOOM - 0.01;
+    fakeMap.emit("zoom");
+    expect(fakeMap.setTerrain).toHaveBeenCalledExactlyOnceWith(null);
   });
 
   it("makes explicit flat mode flat on both DEM ground and buildings", () => {
@@ -724,12 +734,27 @@ describe("presentation dimension", () => {
     fakeMap.setTerrain.mockClear();
 
     renderer.setAppearance("dark");
+    fakeMap.emit("zoom");
 
     expect(fakeMap.setTerrain).toHaveBeenCalledExactlyOnceWith(null);
     expect(fakeMap.setStyle).toHaveBeenCalledWith(MAP_STYLE_URLS.dark);
   });
 
-  it("suppresses building extrusion in explicit 2D without touching geography", () => {
+  it("defers dimension changes until an appearance style swap resolves", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.camera.zoom = TERRAIN_MESH_MIN_ZOOM;
+    fakeMap.sources.set(TERRAIN_SOURCE_ID, { setData: vi.fn() });
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setDimension("flat");
+    fakeMap.setTerrain.mockClear();
+    renderer.setAppearance("dark");
+    renderer.setDimension("volumetric");
+
+    expect(fakeMap.setTerrain).not.toHaveBeenCalled();
+  });
+
+  it("suppresses building extrusion in explicit 2D without touching geography",
     const fakeMap = makeFakeMap();
     fakeMap.layers.set(BUILDING_EXTRUSION_LAYER_ID, {
       id: BUILDING_EXTRUSION_LAYER_ID,

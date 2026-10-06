@@ -186,6 +186,9 @@ export const TERRAIN_EXAGGERATION = 1;
  */
 export const TERRAIN_MESH_MIN_ZOOM = 12;
 
+/** Keep an attached mesh stable across tiny camera corrections around z12. */
+export const TERRAIN_MESH_EXIT_ZOOM = 11.75;
+
 /** The style layers whose paint means "this is water". */
 export const WATER_LAYER_IDS: readonly string[] = ["water"];
 
@@ -592,9 +595,13 @@ export function createMapLibreRenderer(
 
   function applyTerrainMesh(mounted: MapLibreMap): void {
     const current = mounted.getTerrain();
+    const terrainAttached = current?.source === TERRAIN_SOURCE_ID;
+    const threshold = terrainAttached
+      ? TERRAIN_MESH_EXIT_ZOOM
+      : TERRAIN_MESH_MIN_ZOOM;
     const shouldRaise =
       dimension === "volumetric" &&
-      mounted.getZoom() >= TERRAIN_MESH_MIN_ZOOM &&
+      mounted.getZoom() >= threshold &&
       mounted.getSource(TERRAIN_SOURCE_ID) !== undefined;
 
     if (shouldRaise) {
@@ -1267,7 +1274,7 @@ export function createMapLibreRenderer(
           for (const listener of [...landmarkListeners]) listener();
         });
         mountedMap.on("zoom", () => {
-          applyTerrainMesh(mountedMap);
+          if (presentationApplied) applyTerrainMesh(mountedMap);
           updateLabelVisibility(mountedMap);
           updatePinnedLabelVisibility(mountedMap);
         });
@@ -1616,7 +1623,7 @@ export function createMapLibreRenderer(
 
       dimension = next;
 
-      if (map !== undefined) {
+      if (map !== undefined && presentationApplied) {
         applyDimension(map);
       }
     },
