@@ -43,7 +43,7 @@ done
 
 case "$url" in
   https://nilx.one/map/0.1.0/style.json)
-    printf '%s\n' '{"sources":{"basemap":{"url":"pmtiles:///map/0.1.0/basemap.pmtiles"}}}' >"$output_file"
+    printf '%s\n' '{"sources":{"basemap":{"url":"pmtiles:///map/0.1.0/basemap.pmtiles"},"terrain":{"tiles":["/map/0.1.0/terrain/{z}/{x}/{y}.png"]}}}' >"$output_file"
     printf '%s' "${MOCK_STYLE_STATUS:-200}"
     ;;
   https://nilx.one/map/0.1.0/style-dark.json)
@@ -58,6 +58,10 @@ case "$url" in
       : >"$output_file"
       printf '%s' 400
     fi
+    ;;
+  https://nilx.one/map/0.1.0/terrain/12/2395/1381.png)
+    printf '\211PNG\015\012\032\012fixture' >"$output_file"
+    printf '%s' "${MOCK_TERRAIN_STATUS:-200}"
     ;;
   *)
     : >"$output_file"
@@ -101,3 +105,13 @@ if PATH="$mock_bin:$PATH" \
 fi
 
 grep -Fq 'style-dark.json' "$failure_log"
+
+if PATH="$mock_bin:$PATH" \
+  MOCK_TERRAIN_STATUS=404 \
+  MAP_RETRY=1 \
+  sh "$(dirname "$0")/check-map-public.sh" >"$failure_log" 2>&1; then
+  echo "map public smoke unexpectedly accepted a missing terrain tile" >&2
+  exit 1
+fi
+
+grep -Fq 'map terrain public smoke failed' "$failure_log"
