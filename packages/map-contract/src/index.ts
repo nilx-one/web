@@ -536,6 +536,17 @@ export interface MapRenderer {
     radiusMeters: number,
   ): readonly MapLandmark[];
   /**
+   * The archive's points of the given `kinds` within a radius of a point,
+   * nearest first, from the tiles the view has loaded. Unlike
+   * `landmarksNear`, the caller names the kinds: a repair workshop is a place
+   * the product cares about, not a landmark a body studies.
+   */
+  pointsNear?(
+    point: MapPointSelection,
+    radiusMeters: number,
+    kinds: ReadonlySet<string>,
+  ): readonly MapLandmark[];
+  /**
    * The named areas whose label lies within a radius of a point, nearest
    * first, from the same tiles `landmarksNear` reads and nothing else.
    */

@@ -21,6 +21,8 @@ export interface InventoryPanelProps {
   readonly core: InventoryPort;
   /** Whether experience goes through committed awards on this host. */
   readonly committed: boolean;
+  /** The repair workshop this device stands at, if any. */
+  readonly workshop?: { readonly name?: string | undefined } | undefined;
 }
 
 const GRIDS: Readonly<
@@ -61,6 +63,7 @@ export function InventoryPanel({
   owner,
   core,
   committed,
+  workshop,
 }: InventoryPanelProps) {
   const { t } = useLocalization();
   const { model, catalog } = useInventory(owner, core);
@@ -221,6 +224,8 @@ export function InventoryPanel({
         model={model}
         catalog={catalog}
         committed={committed}
+        place={workshop === undefined ? "anywhere" : "repair_workshop"}
+        workshopName={workshop?.name}
       />
     </div>
   );

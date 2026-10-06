@@ -54,6 +54,7 @@ import { useCraftCompletion } from "../inventory/craft";
 import { pickUpFind } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
 import { thingName } from "../inventory/thing-name";
+import { useWorkshop } from "../inventory/workshops";
 import {
   DOCK_ACTION_KEYS,
   DOCK_ROLE_KEYS,
@@ -842,6 +843,8 @@ export function AuthenticatedMapHomeView({
   // this device is anywhere.
   const declaredPosition = observedPosition?.declared === true;
   const deviceObservation = declaredPosition ? undefined : observedPosition;
+  // A real repair workshop this device stands at opens its repairs.
+  const workshop = useWorkshop(renderer, deviceObservation);
   const findLoop = useFindLoop({
     owner: pubDress,
     port: committedAwards,
@@ -2289,6 +2292,7 @@ export function AuthenticatedMapHomeView({
                       owner={pubDress}
                       core={findItems}
                       committed={committedAwards !== undefined}
+                      workshop={workshop}
                     />
                   ) : null}
 

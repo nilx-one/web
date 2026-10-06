@@ -55,6 +55,7 @@ describe("CraftSection", () => {
         catalog={catalog}
         committed
         place="repair_workshop"
+        workshopName="Радіоринок"
       />,
     );
 
@@ -62,7 +63,12 @@ describe("CraftSection", () => {
     expect(
       screen.getByText(/45 min · 200 ₴€£ · \+50 experience/),
     ).toBeInTheDocument();
-    expect(screen.getByText("Only at a repair workshop.")).toBeInTheDocument();
+    expect(
+      screen.getByText("At a repair workshop: Радіоринок"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Only at a repair workshop."),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Craft" }));
     expect(startCraft).not.toHaveBeenCalled();

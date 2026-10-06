@@ -1037,11 +1037,14 @@ export function createMapLibreRenderer(
     return { polygons, heights };
   }
 
-  function landmarkFrom(feature: {
-    readonly id?: string | number | undefined;
-    readonly geometry: { readonly type: string };
-    readonly properties: Record<string, unknown> | null;
-  }): MapLandmark | undefined {
+  function landmarkFrom(
+    feature: {
+      readonly id?: string | number | undefined;
+      readonly geometry: { readonly type: string };
+      readonly properties: Record<string, unknown> | null;
+    },
+    kinds?: ReadonlySet<string>,
+  ): MapLandmark | undefined {
     if (feature.geometry.type !== "Point") return undefined;
     const [longitude, latitude] = (
       feature.geometry as unknown as { coordinates: [number, number] }
@@ -1051,6 +1054,7 @@ export function createMapLibreRenderer(
       properties: feature.properties ?? {},
       longitude,
       latitude,
+      ...(kinds === undefined ? {} : { kinds }),
     });
   }
 
@@ -1355,6 +1359,22 @@ export function createMapLibreRenderer(
       return [...found.values()]
         .sort((a, b) => a.distance - b.distance)
         .map((entry) => entry.landmark);
+    },
+
+    pointsNear(point, radiusMeters, kinds) {
+      if (!validPoint(point)) return [];
+      const found = new Map<string, { point: MapLandmark; distance: number }>();
+      for (const feature of viewFeatures(POI_SOURCE_LAYER)) {
+        const candidate = landmarkFrom(feature, kinds);
+        if (candidate === undefined || found.has(candidate.id)) continue;
+        const distance = mapDistanceMeters(point, candidate);
+        if (distance <= radiusMeters) {
+          found.set(candidate.id, { point: candidate, distance });
+        }
+      }
+      return [...found.values()]
+        .sort((a, b) => a.distance - b.distance)
+        .map((entry) => entry.point);
     },
 
     areasNear(point, radiusMeters) {

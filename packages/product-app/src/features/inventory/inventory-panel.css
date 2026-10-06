@@ -121,3 +121,7 @@
   gap: 2px;
   min-width: 0;
 }
+
+.inventory__workshop {
+  color: var(--positive);
+}

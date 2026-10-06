@@ -216,17 +216,20 @@ export function landmarkFromPoint({
   properties,
   longitude,
   latitude,
+  kinds = LANDMARK_KINDS,
 }: {
   readonly id: string | number | undefined;
   readonly properties: Readonly<Record<string, unknown>>;
   readonly longitude: number;
   readonly latitude: number;
+  /** The kinds that count; landmarks unless a caller names others. */
+  readonly kinds?: ReadonlySet<string>;
 }): MapLandmark | undefined {
   if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
     return undefined;
   }
   const kind = properties["kind"];
-  if (typeof kind !== "string" || !LANDMARK_KINDS.has(kind)) return undefined;
+  if (typeof kind !== "string" || !kinds.has(kind)) return undefined;
   const name = typeof properties["name"] === "string" ? properties["name"] : "";
   const facts: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(properties)) {
