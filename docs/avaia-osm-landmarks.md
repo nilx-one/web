@@ -255,9 +255,21 @@ Like the point rows, these are **not yet confirmed against the deployed archive.
 
 The drive maps what the renderer holds within the outing's budget at the moment it plans: the view's tiles and the `pois` tiles it reads ahead at the archive's last zoom ([map data](map-data.md)). So an Avaia goes out to the parks, reserves, beaches and lakes, and the museums, viewpoints, castles, forts, ruins and significant monuments within its reach, not only those on screen. A tile it did not read, because it is all fog or past the cap, has no targets for it.
 
+### Kyiv's archive, inspected
+
+`landmark-kinds.mjs` was run against the deployed archive (`nilx.one/map/0.1.0/basemap.pmtiles`). It carries every required point row and the lakes as `water:water:lake` (1,208 named). It does **not** carry `sculpture`, `statue`, `fort` or `landmark` as kinds, and its named lakes never come as `water:lake`. The schema folds statues and sculptures into `memorial` (2,141), `artwork` (753) and `attraction` (369) points with no detail, and Kyiv's fortress is a `castle` («Київська фортеця») with towers that are `ruins` and `attraction`s.
+
+So those rows stay, under `optional` in `landmark-mapper-kinds.json`. They are read when an archive carries them, as another city's may, and are not required of this one. Two **name rules** (`names`, mapper 1.2) find what Kyiv's archive holds:
+
+| Rule             | Kinds                                       | Name matches                                       | Also matches |
+| ---------------- | ------------------------------------------- | -------------------------------------------------- | ------------ |
+| statue/sculpture | `memorial`, `monument`, `attraction`        | статуя, скульптур, statue, sculpture               | `artwork`    |
+| fort             | `castle`, `ruins`, `attraction`, `historic` | фортец, бастіон, редут, fortress, bastion, redoubt | `fort`       |
+
+A rule only adds rows to a point the renderer already hands over (every kind it names is on `LANDMARK_KINDS`, which a deployment test checks), and the archive's own name decides. `landmark` as a significance kind has no counterpart in the schema: `attraction` carries significance alone in Kyiv.
+
 ## Open items
 
-- running `inspect-basemap.sh` against the deployed archive to confirm the mapper's rows, and recording its output (#309, #311);
 - which `landuse` kinds and `water` attributes the Kyiv archive actually carries for parks, lakes, reserves and beaches, and which further `pois` kinds it carries. Beyond the rows above nothing is enabled until `landmark-kinds.mjs` and a fixture say so (#309, #311);
 - whether the archive carries benches, camp sites, peaks and shrines at all; rows that it does not support are dropped rather than faked;
 - the numeric significance thresholds, once the real distribution is known;

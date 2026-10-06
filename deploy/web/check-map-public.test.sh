@@ -50,10 +50,6 @@ case "$url" in
     printf '%s\n' '{"sources":{"basemap":{"url":"pmtiles:///map/0.1.0/basemap.pmtiles"},"terrain":{"tiles":["/map/0.1.0/terrain/{z}/{x}/{y}.png"]}}}' >"$output_file"
     printf '%s' "${MOCK_DARK_STYLE_STATUS:-200}"
     ;;
-  https://nilx.one/map/0.1.0/terrain/12/2395/1381.png)
-    printf '\211PNG\r\n\032\nfixture' >"$output_file"
-    printf '%s' "${MOCK_TERRAIN_STATUS:-200}"
-    ;;
   https://nilx.one/map/0.1.0/basemap.pmtiles)
     if [ "$range_request" = true ]; then
       printf 'PMTilesfixture' >"$output_file"
@@ -62,6 +58,10 @@ case "$url" in
       : >"$output_file"
       printf '%s' 400
     fi
+    ;;
+  https://nilx.one/map/0.1.0/terrain/12/2395/1381.png)
+    printf '\211PNG\r\n\032\nfixture' >"$output_file"
+    printf '%s' "${MOCK_TERRAIN_STATUS:-200}"
     ;;
   *)
     : >"$output_file"

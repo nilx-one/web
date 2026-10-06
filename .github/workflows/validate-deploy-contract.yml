@@ -202,6 +202,8 @@ jobs:
           grep -Fq "INFRA_DEPLOY_TOKEN:" "$file"
           grep -Fq 'event_type: "deploy-workload"' "$file"
           grep -Fq "source_repository" "$file"
+          grep -Fq -- '--arg ref "$RELEASE_SHA"' "$file"
+          grep -Fq 'ref: $ref' "$file"
           grep -Fq "IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web" "$file"
           grep -Fq 'sha-$RELEASE_SHA' "$file"
 

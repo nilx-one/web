@@ -54,6 +54,17 @@ jobs:
         run: |
           sha256sum --check tools/avatars/SHA256SUMS
           python tools/avatars/test_rig.py
+      - name: Inspect avatar capabilities
+        run: |
+          python tools/avatar_inspection/test_inventory.py
+          python tools/avatar_inspection/inventory.py deploy/web/avatars --output "${{ runner.temp }}/avatar-inventory.json"
+      - name: Preserve avatar capability inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: avatar-inventory-${{ github.sha }}
+          path: ${{ runner.temp }}/avatar-inventory.json
+          retention-days: 7
       - id: monument-cache
         name: Restore deterministic monument assets
         uses: actions/cache@v4
@@ -181,7 +192,6 @@ jobs:
           sh -n \
             deploy/web/deploy.sh \
             deploy/web/bootstrap-basemap.sh \
-            deploy/web/bootstrap-terrain.sh \
             deploy/web/check-public.sh \
             deploy/web/check-public.test.sh \
             deploy/web/check-map-public.sh \
@@ -190,8 +200,12 @@ jobs:
             deploy/web/bootstrap-models.test.sh \
             deploy/web/check-models-public.sh \
             deploy/web/check-models-public.test.sh
+          bash -n \
+            deploy/web/prepare-map-runtime.sh \
+            deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/check-public.test.sh
           sh deploy/web/check-map-public.test.sh
+          bash deploy/web/prepare-map-runtime.test.sh
           sh deploy/web/bootstrap-models.test.sh
           sh deploy/web/check-models-public.test.sh
       - name: Reuse verified Web host builds

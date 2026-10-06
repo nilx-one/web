@@ -35,6 +35,8 @@ import {
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
+import { terrainElevationMeters } from "./terrain-elevation";
+
 export const AVATAR_LAYER_ID = "nilx-one-local-avatars";
 export { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
 
@@ -66,12 +68,6 @@ interface AvatarInstance {
   mixer?: AnimationMixer;
   clips?: ReadonlyMap<string, AnimationClip>;
   actionClip?: AvatarClipId;
-  terrainAnchor?:
-    | {
-        readonly key: string;
-        readonly elevationMeters: number;
-      }
-    | undefined;
   loadGeneration: number;
 }
 
@@ -198,41 +194,19 @@ export function createAvatarLayer(
     applyAvatarNodeVisibility(instance.root, instance.handle.visibleNodes);
   }
 
-  function terrainAltitude(instance: AvatarInstance): number {
-    const { lngLat } = instance.handle;
-    const mounted = map;
-    const terrainSource = mounted?.getTerrain()?.source;
-    if (mounted === undefined || terrainSource === undefined) {
-      instance.terrainAnchor = undefined;
-      return 0;
-    }
-
-    const key = `${terrainSource}:${lngLat[0]}:${lngLat[1]}`;
-    if (instance.terrainAnchor?.key === key) {
-      return instance.terrainAnchor.elevationMeters;
-    }
-
-    const elevation = mounted.queryTerrainElevation({
-      lng: lngLat[0],
-      lat: lngLat[1],
-    });
-    if (typeof elevation === "number" && Number.isFinite(elevation)) {
-      instance.terrainAnchor = { key, elevationMeters: elevation };
-      return elevation;
-    }
-
-    instance.terrainAnchor = undefined;
-    return 0;
-  }
-
   function place(instance: AvatarInstance): void {
     const root = instance.root;
     if (root === undefined) return;
-    const { lngLat, altitudeMeters, bearingDeg, scale } = instance.handle;
-    const resolvedAltitudeMeters = altitudeMeters ?? terrainAltitude(instance);
+    const { lngLat, bearingDeg, scale } = instance.handle;
+    // With volumetric terrain, an unspecified altitude means "stand on the
+    // ground MapLibre actually draws". An explicit altitude remains absolute
+    // metres above sea level and is never silently offset by terrain.
+    const altitude =
+      instance.handle.altitudeMeters ??
+      terrainElevationMeters(map, [lngLat[0], lngLat[1]]);
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
-      resolvedAltitudeMeters,
+      altitude,
     );
     const metres = coordinate.meterInMercatorCoordinateUnits();
     root.position.set(
@@ -291,8 +265,6 @@ export function createAvatarLayer(
 
     onAdd(mountedMap, gl) {
       map = mountedMap;
-      for (const instance of instances.values())
-        instance.terrainAnchor = undefined;
       renderer = new WebGLRenderer({
         canvas: mountedMap.getCanvas(),
         context: gl,
@@ -336,8 +308,6 @@ export function createAvatarLayer(
       renderer?.dispose();
       renderer = undefined;
       map = undefined;
-      for (const instance of instances.values())
-        instance.terrainAnchor = undefined;
     },
 
     upsert(handle) {
@@ -378,8 +348,6 @@ export function createAvatarLayer(
     setCamera(next) {
       // Stored only as local presentation input. Projection remains MapLibre-owned.
       cameraState = next;
-      for (const instance of instances.values())
-        instance.terrainAnchor = undefined;
       void cameraState;
     },
 

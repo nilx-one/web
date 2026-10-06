@@ -19,6 +19,8 @@ import {
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
+import { terrainElevationMeters } from "./terrain-elevation";
+
 export const MONUMENT_LAYER_ID = "nilx-one-motherland-monument";
 export const MONUMENT_ASSET_VERSION = "0.1.0";
 export const MONUMENT_ASSET_URL = `/monuments/${MONUMENT_ASSET_VERSION}/motherland.glb`;
@@ -107,14 +109,13 @@ export function createMonumentLayer(
 
   function place(): void {
     if (root === undefined) return;
-    const terrainElevation = map?.queryTerrainElevation(
-      MOTHERLAND_MONUMENT_LOCATION,
-    );
+    const elevation = terrainElevationMeters(map, [
+      MOTHERLAND_MONUMENT_LOCATION.lng,
+      MOTHERLAND_MONUMENT_LOCATION.lat,
+    ]);
     const coordinate = MercatorCoordinate.fromLngLat(
       MOTHERLAND_MONUMENT_LOCATION,
-      typeof terrainElevation === "number" && Number.isFinite(terrainElevation)
-        ? terrainElevation
-        : 0,
+      elevation,
     );
     const metres = coordinate.meterInMercatorCoordinateUnits();
     root.position.set(

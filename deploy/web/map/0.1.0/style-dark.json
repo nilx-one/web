@@ -5,6 +5,11 @@
     "nilx-one:contract-version": "0.1.0",
     "nilx-one:basemap-url": "/map/0.1.0/basemap.pmtiles",
     "nilx-one:basemap-state": "regional-server-published",
+    "nilx-one:terrain-url": "/map/0.1.0/terrain/{z}/{x}/{y}.png",
+    "nilx-one:terrain-state": "regional-server-published",
+    "nilx-one:terrain-encoding": "terrarium",
+    "nilx-one:terrain-maxzoom": 12,
+    "nilx-one:terrain-exaggeration": 1,
     "nilx-one:coverage": "kyiv-bootstrap",
     "nilx-one:visual-language": "0x1-spatial",
     "nilx-one:visual-direction": "0x1 spatial map with restrained cyan accents",
@@ -30,12 +35,7 @@
     "nilx-one:zoom-neighborhood": 13,
     "nilx-one:zoom-street": 15,
     "nilx-one:zoom-building": 16.5,
-    "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold",
-    "nilx-one:terrain-url": "/map/0.1.0/terrain/{z}/{x}/{y}.png",
-    "nilx-one:terrain-state": "regional-server-published",
-    "nilx-one:terrain-encoding": "terrarium",
-    "nilx-one:terrain-source-min-zoom": 7,
-    "nilx-one:terrain-source-max-zoom": 12
+    "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold"
   },
   "glyphs": "/map/0.1.0/fonts/{fontstack}/{range}.pbf",
   "projection": {
@@ -56,12 +56,12 @@
     "terrain": {
       "type": "raster-dem",
       "tiles": ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
-      "tileSize": 256,
-      "minzoom": 7,
-      "maxzoom": 12,
       "bounds": [29.75, 49.95, 31.35, 51.15],
+      "minzoom": 8,
+      "maxzoom": 12,
+      "tileSize": 256,
       "encoding": "terrarium",
-      "attribution": "Terrain: Mapzen; EU-DEM: Copernicus / European Union; SRTM and GMTED2010: U.S. Geological Survey; ETOPO1: NOAA"
+      "attribution": "Terrain: Mapzen/Tilezen · SRTM courtesy of U.S. Geological Survey · ETOPO1 U.S. NOAA"
     }
   },
   "layers": [
@@ -178,20 +178,6 @@
           12,
           0.62
         ]
-      }
-    },
-    {
-      "id": "terrain-hillshade",
-      "type": "hillshade",
-      "source": "terrain",
-      "minzoom": 7,
-      "paint": {
-        "hillshade-illumination-anchor": "map",
-        "hillshade-illumination-direction": 315,
-        "hillshade-shadow-color": "#020405",
-        "hillshade-highlight-color": "#26373d",
-        "hillshade-accent-color": "#111d21",
-        "hillshade-exaggeration": 0.28
       }
     },
     {

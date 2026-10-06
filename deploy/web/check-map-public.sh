@@ -61,13 +61,7 @@ while [ "$attempt" -le "$retry" ]; do
   fi
 
   if [ "$attempt" -eq "$retry" ]; then
-    if [ "$style_status" != 200 ]; then
-      echo "map style public smoke failed: expected HTTP 200 from $style_url, got ${style_status:-request-failed}" >&2
-    elif ! grep -Fq "pmtiles:///map/$map_version/basemap.pmtiles" "$style_file"; then
-      echo "map style public smoke failed: expected versioned PMTiles source in $style_url" >&2
-    else
-      echo "map style public smoke failed: expected versioned terrain source in $style_url" >&2
-    fi
+    echo "map style public smoke failed: expected versioned PMTiles source from $style_url, got ${style_status:-request-failed}" >&2
     exit 1
   fi
 
@@ -84,18 +78,10 @@ dark_style_status="$(
     "$dark_style_url" || true
 )"
 
-if [ "$dark_style_status" != 200 ]; then
-  echo "map style public smoke failed: expected HTTP 200 from $dark_style_url, got ${dark_style_status:-request-failed}" >&2
-  exit 1
-fi
-
-if ! grep -Fq "pmtiles:///map/$map_version/basemap.pmtiles" "$dark_style_file"; then
-  echo "map style public smoke failed: expected versioned PMTiles source in $dark_style_url" >&2
-  exit 1
-fi
-
-if ! grep -Fq "/map/$map_version/terrain/{z}/{x}/{y}.png" "$dark_style_file"; then
-  echo "map style public smoke failed: expected versioned terrain source in $dark_style_url" >&2
+if [ "$dark_style_status" != 200 ] \
+  || ! grep -Fq "pmtiles:///map/$map_version/basemap.pmtiles" "$dark_style_file" \
+  || ! grep -Fq "/map/$map_version/terrain/{z}/{x}/{y}.png" "$dark_style_file"; then
+  echo "map style public smoke failed: expected versioned PMTiles source from $dark_style_url, got ${dark_style_status:-request-failed}" >&2
   exit 1
 fi
 
@@ -139,13 +125,13 @@ if [ "$terrain_status" != 200 ]; then
 fi
 
 test -s "$terrain_file" || {
-  echo "map terrain public smoke failed: terrain tile was empty" >&2
+  echo "map terrain public smoke failed: terrain response was empty" >&2
   exit 1
 }
 
-terrain_signature="$(dd if="$terrain_file" bs=1 count=8 2>/dev/null | od -An -tx1 | tr -d ' \n')"
-if [ "$terrain_signature" != "89504e470d0a1a0a" ]; then
-  echo "map terrain public smoke failed: terrain tile is not a PNG" >&2
+signature="$(od -An -tx1 -N8 "$terrain_file" | tr -d '[:space:]')"
+if [ "$signature" != "89504e470d0a1a0a" ]; then
+  echo "map terrain public smoke failed: tile is not a PNG" >&2
   exit 1
 fi
 

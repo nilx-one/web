@@ -49,9 +49,10 @@ export interface MapCameraChange {
 export type MapAppearance = "light" | "dark";
 
 /**
- * Presentation depth only. `volumetric` lets the renderer raise real DEM
- * ground and the published style's close-zoom building extrusion; `flat` keeps
- * the same geography planar. One geographic truth, two presentations of it.
+ * Presentation depth only. `volumetric` lets the renderer raise measured
+ * terrain and the published style's close-zoom building extrusion; `flat`
+ * keeps the same geography on a flat ground plane with building footprints.
+ * One geographic truth, two presentations of it.
  */
 export type MapDimension = "flat" | "volumetric";
 
@@ -669,10 +670,6 @@ export interface AvatarHandle {
   readonly id: string;
   readonly modelId: AvatarModelId;
   readonly lngLat: readonly [longitude: number, latitude: number];
-  /**
-   * Absolute altitude passed to MapLibre's Mercator conversion. It is not a
-   * terrain-relative offset; omit it when the body should stand on the mounted DEM.
-   */
   readonly altitudeMeters?: number;
   /** The way the body faces: degrees clockwise from north, as a compass reads. */
   readonly bearingDeg: number;

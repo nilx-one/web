@@ -170,25 +170,6 @@ export const BUILDING_LAYER_IDS: readonly string[] = [
  */
 export const BUILDING_DEFAULT_HEIGHT_METERS = 7;
 
-/** Same-origin raster DEM published beside the regional vector basemap. */
-export const TERRAIN_SOURCE_ID = "terrain";
-
-/** Relief shading over the DEM; hidden together with the terrain in flat mode. */
-export const TERRAIN_HILLSHADE_LAYER_ID = "terrain-hillshade";
-
-/** Real ground height is not visually amplified: one DEM metre is one world metre. */
-export const TERRAIN_EXAGGERATION = 1;
-
-/**
- * The adaptive globe is fully Mercator from this zoom onward. Actual mesh
- * displacement starts here so custom Three layers never straddle globe/terrain
- * projection handover; hillshade can still describe relief further out.
- */
-export const TERRAIN_MESH_MIN_ZOOM = 12;
-
-/** Keep an attached mesh stable across tiny camera corrections around z12. */
-export const TERRAIN_MESH_EXIT_ZOOM = 11.75;
-
 /** The style layers whose paint means "this is water". */
 export const WATER_LAYER_IDS: readonly string[] = ["water"];
 
@@ -214,6 +195,12 @@ export const MAP_STYLE_URLS: Readonly<Record<MapAppearance, string>> = {
 
 export const MAP_STYLE_URL = MAP_STYLE_URLS[DEFAULT_MAP_APPEARANCE];
 export const MAP_BASEMAP_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/basemap.pmtiles`;
+
+/** Same-origin raster DEM published beside the basemap. */
+export const TERRAIN_SOURCE_ID = "terrain";
+
+/** Real terrain stays at measured scale; exaggeration is never used as effect. */
+export const TERRAIN_EXAGGERATION = 1;
 
 // Presentation bootstrap only. Keep temporary regional coverage in the
 // MapLibre adapter rather than leaking deployment geography into MapRenderer.
@@ -593,61 +580,37 @@ export function createMapLibreRenderer(
     }
   }
 
-  function applyTerrainMesh(mounted: MapLibreMap): void {
-    const current = mounted.getTerrain();
-    const terrainAttached = current?.source === TERRAIN_SOURCE_ID;
-    const threshold = terrainAttached
-      ? TERRAIN_MESH_EXIT_ZOOM
-      : TERRAIN_MESH_MIN_ZOOM;
-    const shouldRaise =
-      dimension === "volumetric" &&
-      mounted.getZoom() >= threshold &&
-      mounted.getSource(TERRAIN_SOURCE_ID) !== undefined;
-
-    if (shouldRaise) {
-      if (
-        current?.source !== TERRAIN_SOURCE_ID ||
-        current.exaggeration !== TERRAIN_EXAGGERATION
-      ) {
-        mounted.setTerrain({
-          source: TERRAIN_SOURCE_ID,
-          exaggeration: TERRAIN_EXAGGERATION,
-        });
-      }
-      return;
-    }
-
-    if (current?.source === TERRAIN_SOURCE_ID) {
-      mounted.setTerrain(null);
-    }
-  }
-
   function applyDimension(mounted: MapLibreMap): void {
     // The monument is its own custom layer, not a style layer, so it follows
     // dimension whether or not the published style still carries an
     // extrusion layer to match.
     monumentLayer?.setDimension(dimension);
 
-    // One geographic truth, two presentations: flat removes every depth cue,
-    // while volumetric may shade and physically raise the same DEM ground.
-    if (mounted.getLayer(TERRAIN_HILLSHADE_LAYER_ID) !== undefined) {
-      mounted.setLayoutProperty(
-        TERRAIN_HILLSHADE_LAYER_ID,
-        "visibility",
-        dimension === "flat" ? "none" : "visible",
-      );
+    // Terrain and building mass are two views of the same geographic
+    // presentation switch. Explicit flat mode disables both; volumetric mode
+    // uses the measured DEM at 1:1 scale when the published style provides it.
+    if (
+      dimension === "volumetric" &&
+      mounted.getSource(TERRAIN_SOURCE_ID) !== undefined
+    ) {
+      mounted.setTerrain({
+        source: TERRAIN_SOURCE_ID,
+        exaggeration: TERRAIN_EXAGGERATION,
+      });
+    } else {
+      mounted.setTerrain(null);
     }
-    applyTerrainMesh(mounted);
 
-    // Buildings follow the same rule: footprints remain as the geographic
-    // fact while only their presentation rises into volume.
-    if (mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) !== undefined) {
-      mounted.setLayoutProperty(
-        BUILDING_EXTRUSION_LAYER_ID,
-        "visibility",
-        dimension === "flat" ? "none" : "visible",
-      );
+    // The footprints remain underneath the extrusion, so hiding depth never
+    // removes buildings from the geographic map.
+    if (mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) === undefined) {
+      return;
     }
+    mounted.setLayoutProperty(
+      BUILDING_EXTRUSION_LAYER_ID,
+      "visibility",
+      dimension === "flat" ? "none" : "visible",
+    );
   }
 
   /**
@@ -1274,7 +1237,6 @@ export function createMapLibreRenderer(
           for (const listener of [...landmarkListeners]) listener();
         });
         mountedMap.on("zoom", () => {
-          if (presentationApplied) applyTerrainMesh(mountedMap);
           updateLabelVisibility(mountedMap);
           updatePinnedLabelVisibility(mountedMap);
         });
@@ -1607,12 +1569,6 @@ export function createMapLibreRenderer(
       // missing appearance variant is reported instead of blanking the map.
       styleResolved = false;
       presentationApplied = false;
-      // MapLibre 6.x style diffing is not a safe owner of terrain lifecycle.
-      // Detach our mesh explicitly before replacing the style, then styledata
-      // reapplies the selected presentation against the new DEM source.
-      if (map.getTerrain()?.source === TERRAIN_SOURCE_ID) {
-        map.setTerrain(null);
-      }
       map.setStyle(styleUrls[next]);
     },
 
@@ -1623,7 +1579,7 @@ export function createMapLibreRenderer(
 
       dimension = next;
 
-      if (map !== undefined && presentationApplied) {
+      if (map !== undefined) {
         applyDimension(map);
       }
     },

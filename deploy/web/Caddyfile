@@ -47,13 +47,12 @@
 			file_server
 		}
 
-		# DEM tiles are deployment data in the same server-owned map volume as
-		# basemap.pmtiles. Strip the public versioned prefix and serve the immutable
-		# regional Terrarium pyramid without baking hundreds of tiles into the app.
+		# Terrain tiles are server-owned deployment data in the same persistent
+		# map-data volume as the basemap. The public URL stays versioned and
+		# same-origin; no browser request reaches the upstream DEM provider.
 		handle_path /map/0.1.0/terrain/* {
 			root * /srv/map-data/terrain
-			@terrain_tile file
-			header @terrain_tile Cache-Control "public, max-age=31536000, immutable"
+			header Cache-Control "public, max-age=86400"
 			file_server
 		}
 

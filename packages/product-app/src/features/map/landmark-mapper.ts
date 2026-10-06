@@ -50,6 +50,31 @@ export const POI_SIGNIFICANCE_KINDS: ReadonlySet<string> = new Set(
 );
 
 /**
+ * Rows a point matches by its name, for what the archive does not carry as a
+ * kind of its own (statues and sculptures, forts): a point of one of `kinds`
+ * whose name matches `pattern` also matches `rows`. Checked against Kyiv's
+ * archive, where «Київська фортеця» is a castle and its towers are ruins and
+ * attractions.
+ */
+export const NAME_ROWS: readonly {
+  readonly kinds: ReadonlySet<string>;
+  readonly pattern: RegExp;
+  readonly rows: readonly LandmarkKind[];
+}[] = MAPPER_KINDS.names.map((rule) => ({
+  kinds: new Set(rule.kinds),
+  pattern: new RegExp(rule.pattern, "iu"),
+  rows: checkedRows({ [rule.pattern]: rule.rows })[rule.pattern] ?? [],
+}));
+
+/** The rows a named point matches by its name. */
+function nameRows(kind: string, name: string | undefined): LandmarkKind[] {
+  if (name === undefined || name.length === 0) return [];
+  return NAME_ROWS.filter(
+    (rule) => rule.kinds.has(kind) && rule.pattern.test(name),
+  ).flatMap((rule) => rule.rows);
+}
+
+/**
  * The areas this mapping reads, by the polygon's layer and kind, and by layer,
  * kind and kind detail: `landuse:park`, `water:water:lake`. Parks, reserves
  * and beaches are `landuse` polygons named by the `pois` point that shares
@@ -85,12 +110,13 @@ export function mapArchiveLandmarks(
 
   const candidates: SourceCandidate[] = [];
   for (const feature of features) {
-    const matches = Object.hasOwn(POI_KIND_ROWS, feature.kind)
-      ? POI_KIND_ROWS[feature.kind]
-      : undefined;
-    if (matches === undefined) continue;
-    const at = pointOf(feature);
     const name = feature.name?.trim();
+    const byKind = Object.hasOwn(POI_KIND_ROWS, feature.kind)
+      ? (POI_KIND_ROWS[feature.kind] ?? [])
+      : [];
+    const matches = [...new Set([...byKind, ...nameRows(feature.kind, name)])];
+    if (matches.length === 0) continue;
+    const at = pointOf(feature);
     const named = name !== undefined && name.length > 0;
     const attraction =
       named &&
