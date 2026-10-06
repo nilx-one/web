@@ -49,8 +49,9 @@ export interface MapCameraChange {
 export type MapAppearance = "light" | "dark";
 
 /**
- * Presentation depth only. `volumetric` lets the published style raise its
- * close-zoom building extrusion; `flat` keeps the same geography as footprints.
+ * Presentation depth only. `volumetric` lets the renderer raise measured
+ * terrain and the published style's close-zoom building extrusion; `flat`
+ * keeps the same geography on a flat ground plane with building footprints.
  * One geographic truth, two presentations of it.
  */
 export type MapDimension = "flat" | "volumetric";

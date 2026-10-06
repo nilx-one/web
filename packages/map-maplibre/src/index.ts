@@ -196,6 +196,12 @@ export const MAP_STYLE_URLS: Readonly<Record<MapAppearance, string>> = {
 export const MAP_STYLE_URL = MAP_STYLE_URLS[DEFAULT_MAP_APPEARANCE];
 export const MAP_BASEMAP_URL = `/map/${MAP_STYLE_CONTRACT_VERSION}/basemap.pmtiles`;
 
+/** Same-origin raster DEM published beside the basemap. */
+export const TERRAIN_SOURCE_ID = "terrain";
+
+/** Real terrain stays at measured scale; exaggeration is never used as effect. */
+export const TERRAIN_EXAGGERATION = 1;
+
 // Presentation bootstrap only. Keep temporary regional coverage in the
 // MapLibre adapter rather than leaking deployment geography into MapRenderer.
 export const MAP_BOOTSTRAP_CAMERA: MapCamera = {
@@ -580,9 +586,23 @@ export function createMapLibreRenderer(
     // extrusion layer to match.
     monumentLayer?.setDimension(dimension);
 
-    // Depth is a presentation choice over one geographic truth: the flat mode
-    // hides the extrusion and leaves the same footprints the style already
-    // paints beneath it.
+    // Terrain and building mass are two views of the same geographic
+    // presentation switch. Explicit flat mode disables both; volumetric mode
+    // uses the measured DEM at 1:1 scale when the published style provides it.
+    if (
+      dimension === "volumetric" &&
+      mounted.getSource(TERRAIN_SOURCE_ID) !== undefined
+    ) {
+      mounted.setTerrain({
+        source: TERRAIN_SOURCE_ID,
+        exaggeration: TERRAIN_EXAGGERATION,
+      });
+    } else {
+      mounted.setTerrain(null);
+    }
+
+    // The footprints remain underneath the extrusion, so hiding depth never
+    // removes buildings from the geographic map.
     if (mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) === undefined) {
       return;
     }

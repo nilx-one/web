@@ -5,6 +5,11 @@
     "nilx-one:contract-version": "0.1.0",
     "nilx-one:basemap-url": "/map/0.1.0/basemap.pmtiles",
     "nilx-one:basemap-state": "regional-server-published",
+    "nilx-one:terrain-url": "/map/0.1.0/terrain/{z}/{x}/{y}.png",
+    "nilx-one:terrain-state": "regional-server-published",
+    "nilx-one:terrain-encoding": "terrarium",
+    "nilx-one:terrain-maxzoom": 12,
+    "nilx-one:terrain-exaggeration": 1,
     "nilx-one:coverage": "kyiv-bootstrap",
     "nilx-one:visual-language": "0x1-spatial",
     "nilx-one:visual-direction": "0x1 spatial map with restrained cyan accents",
@@ -47,6 +52,16 @@
       "type": "vector",
       "url": "pmtiles:///map/0.1.0/basemap.pmtiles",
       "attribution": "© OpenStreetMap contributors"
+    },
+    "terrain": {
+      "type": "raster-dem",
+      "tiles": ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
+      "bounds": [29.75, 49.95, 31.35, 51.15],
+      "minzoom": 8,
+      "maxzoom": 12,
+      "tileSize": 256,
+      "encoding": "terrarium",
+      "attribution": "Terrain: Mapzen/Tilezen · SRTM courtesy of U.S. Geological Survey · ETOPO1 U.S. NOAA"
     }
   },
   "layers": [

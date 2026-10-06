@@ -11,6 +11,12 @@ import { describe, expect, it } from "vitest";
 interface MapStyleSource {
   readonly type?: string;
   readonly url?: string;
+  readonly tiles?: readonly string[];
+  readonly bounds?: readonly number[];
+  readonly minzoom?: number;
+  readonly maxzoom?: number;
+  readonly tileSize?: number;
+  readonly encoding?: string;
   readonly attribution?: string;
 }
 
@@ -209,6 +215,21 @@ describe("map deployment assets", () => {
         url: "pmtiles:///map/0.1.0/basemap.pmtiles",
         attribution: "© OpenStreetMap contributors",
       });
+      expect(style.sources.terrain).toEqual({
+        type: "raster-dem",
+        tiles: ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
+        bounds: [29.75, 49.95, 31.35, 51.15],
+        minzoom: 8,
+        maxzoom: 12,
+        tileSize: 256,
+        encoding: "terrarium",
+        attribution:
+          "Terrain: Mapzen/Tilezen · SRTM courtesy of U.S. Geological Survey · ETOPO1 U.S. NOAA",
+      });
+      expect(style.metadata?.["nilx-one:terrain-state"]).toBe(
+        "regional-server-published",
+      );
+      expect(style.metadata?.["nilx-one:terrain-exaggeration"]).toBe(1);
     },
   );
 

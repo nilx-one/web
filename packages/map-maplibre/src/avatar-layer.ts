@@ -35,6 +35,8 @@ import {
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
+import { terrainElevationMeters } from "./terrain-elevation";
+
 export const AVATAR_LAYER_ID = "nilx-one-local-avatars";
 export { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
 
@@ -195,10 +197,16 @@ export function createAvatarLayer(
   function place(instance: AvatarInstance): void {
     const root = instance.root;
     if (root === undefined) return;
-    const { lngLat, altitudeMeters = 0, bearingDeg, scale } = instance.handle;
+    const { lngLat, bearingDeg, scale } = instance.handle;
+    // With volumetric terrain, an unspecified altitude means "stand on the
+    // ground MapLibre actually draws". An explicit altitude remains absolute
+    // metres above sea level and is never silently offset by terrain.
+    const altitude =
+      instance.handle.altitudeMeters ??
+      terrainElevationMeters(map, [lngLat[0], lngLat[1]]);
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
-      altitudeMeters,
+      altitude,
     );
     const metres = coordinate.meterInMercatorCoordinateUnits();
     root.position.set(

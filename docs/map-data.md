@@ -20,9 +20,10 @@ The runtime contract remains:
 /map/0.1.0/style.json
 /map/0.1.0/style-dark.json
 /map/0.1.0/basemap.pmtiles
+/map/0.1.0/terrain/{z}/{x}/{y}.png
 ```
 
-`basemap.pmtiles` is deployment data and MUST NOT be committed to Git. The Web containers mount the server-owned archive read-only while `style.json` remains part of the immutable client image.
+`basemap.pmtiles` and the regional terrain pyramid are deployment data and MUST NOT be committed to Git. The Web containers mount the server-owned map-data volume read-only while the style documents remain part of the immutable client image. Before activation, infra runs `deploy/web/prepare-map-runtime.sh` from the exact client release to populate missing Terrarium tiles; a browser never contacts the upstream terrain provider.
 
 OpenStreetMap attribution must remain visible wherever OSM-derived map data is rendered.
 
@@ -130,9 +131,30 @@ roads or names.
 Elements the reference imagery shows but the archive does not support are
 omitted rather than invented. In particular, individual street trees are not
 placed: the archive carries no tree points, and drawing them at made-up
-coordinates would be the renderer manufacturing geography. Terrain and
-hillshade remain absent for the same reason — the bootstrap publishes no
-same-origin DEM.
+coordinates would be the renderer manufacturing geography.
+
+### Terrain
+
+Volumetric presentation uses a real raster DEM, not a visual displacement
+effect. The regional bootstrap publishes Mapzen/Tilezen Terrarium PNG tiles for
+the same Kyiv envelope at zooms 8–12 from the AWS Open Data Terrain Tiles
+dataset. MapLibre overzooms the last DEM level as the camera moves closer.
+Terrain exaggeration is fixed at `1`: measured height is not amplified for
+effect. `flat` presentation disables terrain and building extrusion together.
+
+The DEM remains presentation geography. It does not create Presence, movement,
+Interaction, BondChain, or Relationship facts. Custom 3D bodies and the fixed
+Motherland model query MapLibre's loaded terrain elevation so their bases follow
+the rendered ground instead of remaining at sea level. An explicit avatar
+`altitudeMeters` remains an absolute altitude and is not silently offset.
+
+Runtime terrain requests are same-origin. The upstream dataset is contacted
+only by the server-side pre-activation bootstrap, which fills the persistent
+map-data volume and leaves already-valid PNG tiles untouched. The public smoke
+checks a Kyiv terrain tile as well as both style documents and the PMTiles Range
+boundary. Hillshade is intentionally separate: geometric relief already
+provides physical depth, and a second shaded-relief layer is not required to
+make terrain real.
 
 Building heights come from OpenStreetMap `height` where the data has it. Where
 it does not, the style falls back to a single conservative value declared in
@@ -302,7 +324,7 @@ Moving from the Kyiv bootstrap to global coverage MUST NOT require a new `MapRen
 
 Before global publication, replace the one-time server bootstrap with a reproducible data pipeline that pins source provenance, validates the generated archive, publishes atomically, and supports rollback independently of the Web client release.
 
-Close Zoom, terrain, routing, transport, and Avaia world simulation are separate capabilities and must not be smuggled into this basemap bootstrap task.
+Close Zoom, global terrain coverage, routing, transport, and Avaia world simulation are separate capabilities and must not be smuggled into this basemap bootstrap task.
 
 ---
 

@@ -16,6 +16,7 @@ interface FakeMap {
   readonly remove: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
+  readonly setTerrain: ReturnType<typeof vi.fn>;
   // A painted map mounts the renderer's own custom layers, the monument's
   // among them, once their lazy chunk resolves.
   readonly addLayer: ReturnType<typeof vi.fn>;
@@ -45,6 +46,7 @@ function makeFakeMap(): FakeMap {
     remove: vi.fn(),
     jumpTo: vi.fn(),
     setStyle: vi.fn(),
+    setTerrain: vi.fn(),
     addLayer: vi.fn(),
     getCanvas: () => canvas,
     getSource: () => undefined,
