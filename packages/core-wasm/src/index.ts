@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  CoreCarry,
+  CoreCraftedItem,
   CoreEconomyCatalog,
   CoreFindItemResult,
   CoreFoundItem,
+  CoreInventoryAnswer,
+  CoreInventoryCommand,
+  CoreSize,
   CorePubDressLabelErrorCode,
   CorePubDressLabelResult,
   CoreRuntimePort,
@@ -105,9 +110,100 @@ function decodeFoundItem(value: unknown): CoreFoundItem {
       tier: value.tier,
       rarity: value.rarity as CoreFoundItem["rarity"],
       experience: value.experience,
+      seeds: decodeAmount(value.seeds),
+      sellPrice: decodePrice(value.sell_price),
+      size: decodeSize(value.size),
     };
   }
   throw new Error("0x1 Core returned an invalid catalog item");
+}
+
+/** Core's u64 wire form: a canonical decimal string, within JS's safe range. */
+function decodeAmount(value: unknown): number {
+  if (typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value)) {
+    const amount = Number(value);
+    if (Number.isSafeInteger(amount)) return amount;
+  }
+  throw new Error("0x1 Core returned an invalid amount");
+}
+
+function decodePrice(value: unknown): number | null {
+  return value === null || value === undefined ? null : decodeAmount(value);
+}
+
+function decodeSize(value: unknown): CoreSize | null {
+  if (value === null || value === undefined) return null;
+  if (
+    isRecord(value) &&
+    isCount(value.width) &&
+    isCount(value.height) &&
+    value.width > 0 &&
+    value.height > 0
+  ) {
+    return { width: value.width, height: value.height };
+  }
+  throw new Error("0x1 Core returned an invalid size");
+}
+
+function decodeCrafted(value: unknown): CoreCraftedItem {
+  if (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    CORE_CODE.test(value.id)
+  ) {
+    return {
+      id: value.id,
+      sellPrice: decodePrice(value.sell_price),
+      size: decodeSize(value.size),
+    };
+  }
+  throw new Error("0x1 Core returned an invalid crafted item");
+}
+
+const CARRIES = new Set(["pocket", "backpack", "bag"]);
+
+function decodeCarry(value: unknown): CoreCarry {
+  if (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    CARRIES.has(value.id)
+  ) {
+    const size = decodeSize(value);
+    if (size !== null) {
+      return { id: value.id as CoreCarry["id"], ...size };
+    }
+  }
+  throw new Error("0x1 Core returned an invalid carry");
+}
+
+function decodeInventoryAnswer(value: string): CoreInventoryAnswer {
+  const parsed: unknown = JSON.parse(value);
+  if (
+    isRecord(parsed) &&
+    parsed.ok === false &&
+    typeof parsed.error === "string"
+  ) {
+    return { ok: false, error: parsed.error };
+  }
+  if (
+    isRecord(parsed) &&
+    parsed.ok === true &&
+    isRecord(parsed.state) &&
+    isRecord(parsed.outcome) &&
+    isCount(parsed.outcome.experience) &&
+    (parsed.item === undefined ||
+      (typeof parsed.item === "string" && CORE_CODE.test(parsed.item)))
+  ) {
+    return {
+      ok: true,
+      state: JSON.stringify(parsed.state),
+      seedsGained: decodeAmount(parsed.outcome.seeds_gained),
+      seedsSpent: decodeAmount(parsed.outcome.seeds_spent),
+      experience: parsed.outcome.experience,
+      ...(parsed.item === undefined ? {} : { item: parsed.item }),
+    };
+  }
+  throw new Error("0x1 Core returned an invalid inventory answer");
 }
 
 function decodeEconomyCatalog(value: string): CoreEconomyCatalog {
@@ -129,6 +225,12 @@ function decodeEconomyCatalog(value: string): CoreEconomyCatalog {
         emblem: parsed.currency.emblem,
       },
       found: parsed.found.map(decodeFoundItem),
+      crafted: Array.isArray(parsed.crafted)
+        ? parsed.crafted.map(decodeCrafted)
+        : [],
+      carries: Array.isArray(parsed.carries)
+        ? parsed.carries.map(decodeCarry)
+        : [],
     };
   }
   throw new Error("0x1 Core returned an invalid economy catalog");
@@ -139,6 +241,11 @@ export interface CoreWasmBindings {
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
   economyCatalog?(): CoreEconomyCatalog;
+  applyInventoryCommand?(
+    state: string,
+    command: CoreInventoryCommand,
+    nowMs: number,
+  ): CoreInventoryAnswer;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
@@ -160,6 +267,11 @@ export interface GeneratedCoreWasmModule {
   find_item?(artifact_id: string, tier: number): string;
   picks_up?(rarities: string, tier: number): string;
   economy_catalog?(): string;
+  apply_inventory_command?(
+    state: string,
+    command: string,
+    now_ms: string,
+  ): string;
 }
 
 export type CoreWasmBindingsLoader = () => Promise<CoreWasmBindings>;
@@ -226,6 +338,26 @@ export async function loadGeneratedCoreWasmBindings(
       : {
           economyCatalog: () =>
             decodeEconomyCatalog(runtime.economy_catalog!()),
+        }),
+    ...(runtime.apply_inventory_command === undefined
+      ? {}
+      : {
+          applyInventoryCommand: (
+            state: string,
+            command: CoreInventoryCommand,
+            nowMs: number,
+          ) => {
+            if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+              throw new RangeError("now must be a whole number of ms");
+            }
+            return decodeInventoryAnswer(
+              runtime.apply_inventory_command!(
+                state,
+                JSON.stringify(command),
+                String(nowMs),
+              ),
+            );
+          },
         }),
   };
 }
@@ -312,6 +444,18 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm economy catalog binding is missing");
     }
     return bindings.economyCatalog();
+  }
+
+  public async applyInventoryCommand(
+    state: string,
+    command: CoreInventoryCommand,
+    nowMs: number,
+  ): Promise<CoreInventoryAnswer> {
+    const bindings = await this.loadBindings();
+    if (bindings.applyInventoryCommand === undefined) {
+      throw new Error("0x1 Core Wasm inventory binding is missing");
+    }
+    return bindings.applyInventoryCommand(state, command, nowMs);
   }
 
   public async picksUp(rarities: string, tier: number): Promise<boolean> {

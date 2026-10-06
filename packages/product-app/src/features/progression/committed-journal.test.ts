@@ -9,6 +9,7 @@ import {
   type Commitment,
 } from "./commitment";
 import {
+  foldCommittedJournal,
   leadChangeForKeptAward,
   rebasePendingAwards,
   recordedFindEvents,
@@ -203,5 +204,33 @@ describe("leadChangeForKeptAward", () => {
       artifactId: rareFind.artifactId,
     });
     expect(leadChangeForKeptAward(snapshot(), pickup)).toBeUndefined();
+  });
+});
+
+describe("the inventory in the journal", () => {
+  it("keeps the latest state and every find already put in", () => {
+    const snapshot = foldCommittedJournal(
+      { chain: "ch:phone123", head: null },
+      [
+        { type: "inventory.state", state: '{"seeds":"0"}', pickedUp: "art:a" },
+        { type: "inventory.state", state: '{"seeds":"5"}' },
+        {
+          type: "inventory.state",
+          state: '{"seeds":"5","x":1}',
+          pickedUp: "art:b",
+        },
+      ],
+    );
+    expect(snapshot.inventory.state).toBe('{"seeds":"5","x":1}');
+    expect([...snapshot.inventory.pickedUp]).toEqual(["art:a", "art:b"]);
+  });
+
+  it("starts empty", () => {
+    const snapshot = foldCommittedJournal(
+      { chain: "ch:phone123", head: null },
+      [],
+    );
+    expect(snapshot.inventory.state).toBe("");
+    expect(snapshot.inventory.pickedUp.size).toBe(0);
   });
 });

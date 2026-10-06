@@ -154,6 +154,8 @@ Local-first. Eligible, not transported.
   stay here; the service gets only commitments/pricing fields and, for a rare
   claim, the artifact id required by R3. This history moves only directly
   between the Bond's devices, never through the identity service.
+  The same journal keeps what the Bond and its Avaia carry and the Seeds
+  ([Inventory](inventory.md)), sealed the same way.
 
 ## What eligibility does not mean
 

@@ -50,6 +50,8 @@ import {
 } from "../../shell/sound-preference";
 import { SoundSettings } from "../../shell/sound-settings";
 import { PickupSettings } from "../finds/pickup-settings";
+import { pickUpFind } from "../inventory/inventory";
+import { InventoryPanel, thingName } from "../inventory/inventory-panel";
 import {
   DOCK_ACTION_KEYS,
   DOCK_ROLE_KEYS,
@@ -232,7 +234,7 @@ export interface AuthenticatedMapHomeViewProps {
    */
   readonly findItems?: Pick<
     CoreRuntimePort,
-    "findItem" | "picksUp" | "economyCatalog"
+    "findItem" | "picksUp" | "economyCatalog" | "applyInventoryCommand"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -315,7 +317,7 @@ function focusStateFor(location: DeviceLocationState): FocusState {
 }
 
 /** Identity detail is a state of the Dock's own stack, never a separate route. */
-type IdentityDetail = "providers" | "avaia" | "avatar";
+type IdentityDetail = "providers" | "avaia" | "avatar" | "inventory";
 
 /**
  * Detail is scoped to the section that opened it, so leaving the identity
@@ -870,6 +872,33 @@ export function AuthenticatedMapHomeView({
       }
       if (event.kind === "find-kept") {
         cue("achievement");
+        // A kept find goes into its finder's grid, once. One that fits
+        // nowhere stays where it lay, and the toast says so.
+        if (findItems?.applyInventoryCommand !== undefined) {
+          void pickUpFind(pubDress, findItems, {
+            artifactId: event.artifactId,
+            tier: event.tier,
+            holder: event.earner,
+          })
+            .then(async (answer) => {
+              if (answer === "already-in" || answer.ok) return;
+              if (answer.error !== "no_room") return;
+              const item = await findItems.findItem?.(
+                event.artifactId,
+                event.tier,
+              );
+              setFindToast({
+                id: `find-full-${event.artifactId}`,
+                kind: "error",
+                title: t("inventory.title"),
+                description: t("inventory.full").replace(
+                  "{item}",
+                  item?.kind === "item" ? thingName(t, item.id) : "",
+                ),
+              });
+            })
+            .catch(() => undefined);
+        }
         const toast = {
           id: `find-kept-${event.artifactId}`,
           kind: "active" as const,
@@ -1825,6 +1854,8 @@ export function AuthenticatedMapHomeView({
         return t("dock.threeDModel");
       case "avaia":
         return avaiaLabel;
+      case "inventory":
+        return t("inventory.title");
       case undefined:
         return section === "settings" ? t("header.settings") : pubDress;
     }
@@ -2069,6 +2100,21 @@ export function AuthenticatedMapHomeView({
                         </p>
                       </section>
                       <dl className="bond-profile__rows">
+                        {findItems?.applyInventoryCommand === undefined ||
+                        committedAwards === undefined ? null : (
+                          <div>
+                            <dt>{t("inventory.open")}</dt>
+                            <dd>
+                              <button
+                                className="provider-control"
+                                type="button"
+                                onClick={() => openDetail("inventory")}
+                              >
+                                {t("inventory.open")}
+                              </button>
+                            </dd>
+                          </div>
+                        )}
                         <div>
                           <dt>{t("dock.providers")}</dt>
                           <dd>
@@ -2213,6 +2259,10 @@ export function AuthenticatedMapHomeView({
                         {t("settings.presentation")}
                       </p>
                     </>
+                  ) : null}
+
+                  {activeDetail === "inventory" && findItems !== undefined ? (
+                    <InventoryPanel owner={pubDress} core={findItems} />
                   ) : null}
 
                   {activeDetail === "avaia" ? (
