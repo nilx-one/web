@@ -15,7 +15,7 @@ The Web client owns the journal lifecycle.
 - `presence-idb` owns persistence and encryption.
 - `presence-contract` defines the local record shape without network operations.
 - `presence-geo` creates local evidence from accepted host observations.
-- `map-shade` receives only the lit-cell projection plus the explicit local read path.
+- `map-shade` receives only the lit-cell projection plus the explicit local read path. From that read path it derives one point, the centre of the cell dwelt in longest, which the fog field exposes as `home()` for where the Avaia rests ([Avaia walks on its own](avaia-outings.md) §2.4). The durations behind it stay inside `map-shade`; the point stays on the device, like the fog.
 - Core does not own, sync, re-key, or recover the journal.
 - Identity services do not know that the journal exists.
 

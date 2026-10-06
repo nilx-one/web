@@ -6,13 +6,53 @@ import type {
   MapFogField,
   MapPointSelection,
 } from "@nilx-one/map-contract";
-import type { CellIndex, ShadeSource } from "@nilx-one/presence-contract";
+import type {
+  CellIndex,
+  PresenceStore,
+  ShadeSource,
+  VisitRecord,
+} from "@nilx-one/presence-contract";
 import { cellToBoundary, cellToLatLng, gridDisk, isValidCell } from "h3-js";
 
 import type { ShadeRuntime } from "./map-factory";
 import { cellAtLngLat } from "./pick";
 
 const STORAGE_PREFIX = "nilx-one.fog.reveals.v1.";
+
+/**
+ * The least closed-visit time a cell needs before it can be home: one
+ * passing dwell is not where someone lives. A starting value.
+ */
+export const HOME_MIN_DWELL_MS = 60 * 60 * 1000;
+
+/** Closed-visit time in one cell's folded records; an open visit counts none. */
+export function dwellMs(records: readonly VisitRecord[]): number {
+  let total = 0;
+  for (const record of records) {
+    if (record.leftAt !== null && record.leftAt > record.enteredAt) {
+      total += record.leftAt - record.enteredAt;
+    }
+  }
+  return total;
+}
+
+/**
+ * The cell dwelt in longest, at least `HOME_MIN_DWELL_MS`, ties to the
+ * smallest id, so the same journal always gives the same home.
+ */
+export function homeCellOf(
+  dwelt: ReadonlyMap<CellIndex, number>,
+): CellIndex | undefined {
+  let best: CellIndex | undefined;
+  let bestMs = HOME_MIN_DWELL_MS - 1;
+  for (const [cell, ms] of dwelt) {
+    if (ms > bestMs || (ms === bestMs && best !== undefined && cell < best)) {
+      best = cell;
+      bestMs = ms;
+    }
+  }
+  return best;
+}
 
 /** Enough for a city's worth of reveals, small enough to stay a note. */
 export const FOG_REVEAL_LIMIT = 5_000;
@@ -151,9 +191,30 @@ export function createFogField(
     return () => cellListeners.delete(listener);
   };
 
+  // Home is read from the journal here, inside the presence boundary: the
+  // durations stay in this closure, and the field hands out one point.
+  const dwelt = new Map<CellIndex, number>();
+  let homeCell: CellIndex | undefined;
+  const measure = async (store: PresenceStore, cell: CellIndex) => {
+    try {
+      dwelt.set(cell, dwellMs(await store.recordsForCell(cell)));
+      homeCell = homeCellOf(dwelt);
+    } catch {
+      // An unreadable cell is no home; it never breaks the fog.
+    }
+  };
+
   const runtime = journal.then(
     (resolved) => {
       if (resolved === null) return null;
+      void (async () => {
+        for (const cell of resolved.source.litCells()) {
+          await measure(resolved.store, cell);
+        }
+      })();
+      resolved.store.subscribe((record) => {
+        if (record.leftAt !== null) void measure(resolved.store, record.cell);
+      });
       source = unionShadeSource(resolved.source, reveals, subscribeReveals);
       // A cell the journal lights is revealed ground too, and whoever is
       // working out the frontier needs to hear about it.
@@ -218,6 +279,10 @@ export function createFogField(
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+
+    home() {
+      return homeCell === undefined ? undefined : describeCell(homeCell).center;
     },
 
     bindOwner(nextOwner) {

@@ -214,6 +214,45 @@ describe("an Avaia left idle", () => {
     expect(Math.max(...radii)).toBeGreaterThan(2_000);
   });
 
+  it("goes home tired to where the journal says it lives, not to the device", async () => {
+    const { renderer: base, tap } = walkRenderer();
+    const home = at(-800, 0);
+    const renderer = {
+      ...base,
+      fog: {
+        isActive: () => true,
+        cellAt: (point: MapPointSelection) => ({
+          id: "open",
+          center: point,
+          boundary: [],
+        }),
+        isRevealed: () => true,
+        frontier: () => [],
+        reveal: () => undefined,
+        subscribe: () => () => undefined,
+        home: () => home,
+      } as unknown as MapFogField,
+    } as unknown as MapRenderer;
+    const { result } = render(renderer);
+
+    // Three long errands back to back, none idle long enough to go out:
+    // 6 km walked, energy below the low mark. Each step is its own act, so
+    // the effect an arrival schedules is in place before time moves on.
+    for (const x of [2_000, 0, 2_000]) {
+      tap(at(x, 0));
+      await advance(25 * 60 * 1000);
+      await advance(1);
+    }
+    await advance(POINT_B_STAND_MS);
+    // Restless, it goes out tired, far from home: so home it goes.
+    await advance(RESTLESS_MS);
+    await advance(60 * 60 * 1000);
+    await advance(1);
+
+    const after = result.current.stance(performance.now());
+    expect(mapDistanceMeters(after!.point, home)).toBeLessThan(5);
+  });
+
   it("still goes out after leaving the wheel mid-stand and taking it back", async () => {
     const { renderer, tap } = walkRenderer();
     const { result } = render(renderer);
