@@ -4,9 +4,12 @@
 import {
   mapCompassBearing,
   mapDistanceMeters,
+  type AvatarModelId,
   type MapLandmark,
   type MapPointSelection,
 } from "@nilx-one/map-contract";
+
+import GAIT from "./avatar-gait.json";
 
 /**
  * An Avaia walking across the world, the way a character in an isometric game
@@ -49,9 +52,9 @@ export interface AvaiaStance {
 }
 
 /**
- * The length of the published `walk` clip (tools/avatars/rig.py). The clip is
- * in place, so the loop is driven here and one stride takes as long as the
- * asset authored it to.
+ * The length the published `walk` clip was authored at (tools/avatars/rig.py).
+ * The clip is in place, so the loop is driven here, at whatever stride the
+ * body's own legs and speed call for rather than at this length.
  */
 export const WALK_CLIP_MS = 1_200;
 
@@ -76,11 +79,13 @@ export const JOG_AFTER_METERS = 400;
 export const RUN_AFTER_METERS = 1_200;
 
 /**
- * The authored walk clip is reused at a gait-specific cadence. It remains
- * in-place; world translation is still measured in metres.
+ * Steps a minute that a person with the reference body's legs settles into at
+ * each gait's speed: an unhurried walk, an easy jog, a steady run. The
+ * reference is the shortest study, the one every body is measured against.
  */
-export const JOG_CYCLE_MS = 900;
-export const RUN_CYCLE_MS = 720;
+export const WALK_CADENCE_SPM = 120;
+export const JOG_CADENCE_SPM = 165;
+export const RUN_CADENCE_SPM = 180;
 
 /** Kept for callers that still use the old name. */
 export const MIN_WALK_SPEED_MPS = WALK_SPEED_MPS;
@@ -115,15 +120,120 @@ export function locomotionSpeedMetersPerSecond(
   return WALK_SPEED_MPS;
 }
 
+/** A study's legs as the published rig moves them: measured, never tuned. */
+export interface AvatarGait {
+  /** Standing, from the ground to the hip joint. */
+  readonly legMeters: number;
+  /** Ground one foot sweeps under the hips in one step of the walk clip. */
+  readonly stepMeters: number;
+}
+
+/**
+ * Each published study's legs, measured from its own walk clip by forward
+ * kinematics. tools/avatars/test_rig.py measures the built assets again and
+ * fails if these drift, so a rebuilt body never walks on another body's legs.
+ */
+export const AVATAR_GAIT: Readonly<Record<AvatarModelId, AvatarGait>> =
+  GAIT.studies;
+
+/** The legs every body is measured against: the 1.8 m study. */
+const REFERENCE_GAIT = AVATAR_GAIT["dasha-study"];
+
+/**
+ * Where in the walk clip each foot lands, as a share of the stride: the right
+ * foot reaches furthest forward at a quarter, the left at three quarters.
+ */
+export const FOOTFALL_PHASES: readonly number[] = GAIT.footfallPhases;
+
+function locomotionCadenceSpm(mode: AvaiaLocomotionMode): number {
+  if (mode === "run") return RUN_CADENCE_SPM;
+  if (mode === "jog") return JOG_CADENCE_SPM;
+  return WALK_CADENCE_SPM;
+}
+
+/**
+ * How long one full stride (two footfalls) takes a body with these legs.
+ *
+ * A planted foot stays planted when each step covers exactly the ground the
+ * clip sweeps under the hips, so that is the stride a body would take. Legs
+ * swing like pendulums, though: the cadence a person settles into falls with
+ * the square root of leg length, and no stride is quicker than that. Where a
+ * clip's legs cannot cover the ground at a human cadence, the feet give up
+ * the difference as slip rather than the body scurrying to keep them planted.
+ */
+export function gaitCycleMs(
+  mode: AvaiaLocomotionMode,
+  gait: AvatarGait,
+): number {
+  const speed = locomotionSpeedMetersPerSecond(mode);
+  const planted = ((2 * gait.stepMeters) / speed) * 1_000;
+  const cadence =
+    locomotionCadenceSpm(mode) *
+    Math.sqrt(REFERENCE_GAIT.legMeters / gait.legMeters);
+  return Math.max(planted, (2 * 60_000) / cadence);
+}
+
+/**
+ * How much faster the ground moves under a body than its planted foot does:
+ * 1 is a foot that stays where it landed, 2 is one that skates half its step.
+ */
+export function gaitFootSlip(
+  mode: AvaiaLocomotionMode,
+  gait: AvatarGait,
+): number {
+  const strideMeters =
+    locomotionSpeedMetersPerSecond(mode) * (gaitCycleMs(mode, gait) / 1_000);
+  return strideMeters / (2 * gait.stepMeters);
+}
+
+/** The stride of the reference body, for callers that draw no study. */
 export function locomotionCycleMs(mode: AvaiaLocomotionMode): number {
-  if (mode === "run") return RUN_CYCLE_MS;
-  if (mode === "jog") return JOG_CYCLE_MS;
-  return WALK_CLIP_MS;
+  return gaitCycleMs(mode, REFERENCE_GAIT);
 }
 
 /** Two footfalls land in each gait cycle. */
 export function locomotionStepMs(mode: AvaiaLocomotionMode): number {
   return locomotionCycleMs(mode) / 2;
+}
+
+/**
+ * A study walks on its own legs. The route speed stays what the gait says; how
+ * often the feet land is the body's.
+ */
+export function avatarLocomotionCycleMs(
+  mode: AvaiaLocomotionMode,
+  model: AvatarModelId | undefined,
+): number {
+  return gaitCycleMs(
+    mode,
+    model === undefined ? REFERENCE_GAIT : AVATAR_GAIT[model],
+  );
+}
+
+export function avatarLocomotionStepMs(
+  mode: AvaiaLocomotionMode,
+  model: AvatarModelId | undefined,
+): number {
+  return avatarLocomotionCycleMs(mode, model) / 2;
+}
+
+/**
+ * How long from `nowMs` until this walk's next foot lands, so a footfall is
+ * heard when a foot is seen to land rather than on a clock of its own.
+ */
+export function nextFootfallMs(
+  walk: AvaiaWalk,
+  nowMs: number,
+  model?: AvatarModelId,
+): number {
+  const cycleMs = avatarLocomotionCycleMs(walk.mode, model);
+  const phase = (Math.max(0, nowMs - walk.startedMs) % cycleMs) / cycleMs;
+  // A foot that has just landed is not landing again: a timer that fires on
+  // the footfall it was set for must find the next one.
+  const next =
+    FOOTFALL_PHASES.find((landing) => landing - phase > 1e-3) ??
+    FOOTFALL_PHASES[0]! + 1;
+  return (next - phase) * cycleMs;
 }
 
 /**
@@ -288,14 +398,18 @@ export function walkArrived(walk: AvaiaWalk, nowMs: number): boolean {
   return nowMs - walk.startedMs >= walk.durationMs;
 }
 
-export function walkStance(walk: AvaiaWalk, nowMs: number): AvaiaStance {
+export function walkStance(
+  walk: AvaiaWalk,
+  nowMs: number,
+  model?: AvatarModelId,
+): AvaiaStance {
   const since = Math.max(0, nowMs - walk.startedMs);
+  const cycleMs = avatarLocomotionCycleMs(walk.mode, model);
   return {
     point: walkPosition(walk, nowMs),
     bearingDeg: walkBearing(walk, nowMs),
     clipId: "walk",
-    clipPhase:
-      (since % locomotionCycleMs(walk.mode)) / locomotionCycleMs(walk.mode),
+    clipPhase: (since % cycleMs) / cycleMs,
   };
 }
 
