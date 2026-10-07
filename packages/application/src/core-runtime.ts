@@ -1,7 +1,12 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AvaiaDriveAnswer, AvaiaDriveInput } from "./avaia-drive";
+import type {
+  AvaiaDriveAnswer,
+  AvaiaDriveInput,
+  AvaiaLifeAnswer,
+  AvaiaLifeCommand,
+} from "./avaia-drive";
 
 export type CoreUnavailableReason =
   "artifact-missing" | "binding-invalid" | "load-failed";
@@ -165,6 +170,17 @@ export interface CoreRuntimePort {
     nowMs: number,
     hour: number,
   ): Promise<AvaiaDriveAnswer>;
+  /**
+   * One command to Avaia life (`docs/avaia-life.md` in core) for the Avaia
+   * `subject` its Bond `owner` owns, on the stored state, `""` before it is
+   * initialized. A refused command resolves `ok: false`.
+   */
+  applyAvaiaLife?(
+    state: string,
+    owner: string,
+    subject: string,
+    command: AvaiaLifeCommand,
+  ): Promise<AvaiaLifeAnswer>;
 }
 
 export type CoreHolder = "bond" | "avaia";
