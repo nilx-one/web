@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  AvaiaDriveAnswer,
+  AvaiaDriveCommand,
+  AvaiaDriveInput,
+  AvaiaDriveMenuOption,
   CoreCarry,
   CoreCraftedItem,
   CoreEconomyCatalog,
@@ -281,6 +285,161 @@ function decodeEconomyCatalog(value: string): CoreEconomyCatalog {
   throw new Error("0x1 Core returned an invalid economy catalog");
 }
 
+/** A ref the drive hands back: one the host minted, never read here. */
+function isRef(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function decodeMs(value: unknown): number {
+  return decodeAmount(value);
+}
+
+const PURPOSES = new Set([
+  "tap",
+  "curiosity",
+  "outing",
+  "wander",
+  "home",
+  "stroll",
+  "detour",
+]);
+const LINES = new Set([
+  "walk",
+  "stroll",
+  "landmark.spotted",
+  "landmark.longing",
+  "blocked.building",
+  "blocked.water",
+  "blocked.fog",
+]);
+const ACTIONS = new Set([
+  "carry_on",
+  "glance",
+  "pick_up",
+  "stay",
+  "go",
+  "wander",
+  "home",
+]);
+const FEELINGS = new Set(["new", "known", "fond", "loved"]);
+
+function decodeMenuOption(value: unknown, index: number): AvaiaDriveMenuOption {
+  if (
+    isRecord(value) &&
+    value.index === index &&
+    typeof value.action === "string" &&
+    ACTIONS.has(value.action) &&
+    (value.kind === undefined ||
+      (typeof value.kind === "string" && CORE_CODE.test(value.kind))) &&
+    (value.reach === undefined ||
+      value.reach === "near" ||
+      value.reach === "far") &&
+    (value.feeling === undefined ||
+      (typeof value.feeling === "string" && FEELINGS.has(value.feeling)))
+  ) {
+    return value as unknown as AvaiaDriveMenuOption;
+  }
+  throw new Error("0x1 Core returned an invalid drive menu");
+}
+
+/**
+ * One command, checked member by member: a host carries out only what Core
+ * may say, and a command it cannot read stops the whole answer rather than
+ * running half of it.
+ */
+function decodeDriveCommand(value: unknown): AvaiaDriveCommand {
+  if (!isRecord(value) || typeof value.do !== "string") {
+    throw new Error("0x1 Core returned an invalid drive command");
+  }
+  switch (value.do) {
+    case "walk":
+      if (
+        isRef(value.to) &&
+        typeof value.purpose === "string" &&
+        PURPOSES.has(value.purpose) &&
+        typeof value.grass === "boolean"
+      ) {
+        return value as unknown as AvaiaDriveCommand;
+      }
+      break;
+    case "look":
+    case "wake_at":
+      return { do: value.do, ms: decodeMs(value.ms) };
+    case "study":
+    case "glance":
+    case "pick_up":
+    case "visited":
+      if (isRef(value.at)) return { do: value.do, at: value.at };
+      break;
+    case "say":
+      if (
+        typeof value.line === "string" &&
+        LINES.has(value.line) &&
+        (value.about === undefined || isRef(value.about))
+      ) {
+        return value as unknown as AvaiaDriveCommand;
+      }
+      break;
+    case "resolve":
+      if (
+        (value.what === "curiosity" ||
+          value.what === "stroll" ||
+          value.what === "outing") &&
+        isCount(value.min_m) &&
+        isCount(value.max_m) &&
+        (value.leash_m === undefined || isCount(value.leash_m)) &&
+        (value.anchor === undefined || isRef(value.anchor)) &&
+        (value.wander_m === undefined ||
+          (Array.isArray(value.wander_m) &&
+            value.wander_m.length === 2 &&
+            value.wander_m.every(isCount)))
+      ) {
+        return value as unknown as AvaiaDriveCommand;
+      }
+      break;
+    case "choose":
+      if (
+        (value.what === "distraction" || value.what === "outing") &&
+        (value.heading === undefined ||
+          (typeof value.heading === "string" && PURPOSES.has(value.heading))) &&
+        Array.isArray(value.menu) &&
+        isCount(value.default) &&
+        value.default < value.menu.length
+      ) {
+        return {
+          ...(value as unknown as AvaiaDriveCommand & { do: "choose" }),
+          menu: value.menu.map(decodeMenuOption),
+        };
+      }
+      break;
+  }
+  throw new Error("0x1 Core returned an invalid drive command");
+}
+
+function decodeDriveAnswer(value: string): AvaiaDriveAnswer {
+  const parsed: unknown = JSON.parse(value);
+  if (
+    isRecord(parsed) &&
+    parsed.ok === false &&
+    typeof parsed.error === "string"
+  ) {
+    return { ok: false, error: parsed.error };
+  }
+  if (
+    isRecord(parsed) &&
+    parsed.ok === true &&
+    isRecord(parsed.state) &&
+    Array.isArray(parsed.commands)
+  ) {
+    return {
+      ok: true,
+      state: JSON.stringify(parsed.state),
+      commands: parsed.commands.map(decodeDriveCommand),
+    };
+  }
+  throw new Error("0x1 Core returned an invalid drive answer");
+}
+
 export interface CoreWasmBindings {
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
@@ -292,6 +451,12 @@ export interface CoreWasmBindings {
     command: CoreInventoryCommand,
     nowMs: number,
   ): CoreInventoryAnswer;
+  avaiaDriveStep?(
+    state: string,
+    input: AvaiaDriveInput,
+    nowMs: number,
+    hour: number,
+  ): AvaiaDriveAnswer;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
@@ -318,6 +483,13 @@ export interface GeneratedCoreWasmModule {
     state: string,
     command: string,
     now_ms: string,
+  ): string;
+  /** Absent from a runtime built before Core's Avaia drive. */
+  avaia_drive_step?(
+    state: string,
+    input: string,
+    now_ms: string,
+    hour: number,
   ): string;
 }
 
@@ -413,6 +585,31 @@ export async function loadGeneratedCoreWasmBindings(
                 state,
                 JSON.stringify(command),
                 String(nowMs),
+              ),
+            );
+          },
+        }),
+    ...(runtime.avaia_drive_step === undefined
+      ? {}
+      : {
+          avaiaDriveStep: (
+            state: string,
+            input: AvaiaDriveInput,
+            nowMs: number,
+            hour: number,
+          ) => {
+            if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+              throw new RangeError("now must be a whole number of ms");
+            }
+            if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+              throw new RangeError("hour must be 0 to 23");
+            }
+            return decodeDriveAnswer(
+              runtime.avaia_drive_step!(
+                state,
+                JSON.stringify(input),
+                String(nowMs),
+                hour,
               ),
             );
           },
@@ -514,6 +711,19 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm inventory binding is missing");
     }
     return bindings.applyInventoryCommand(state, command, nowMs);
+  }
+
+  public async avaiaDriveStep(
+    state: string,
+    input: AvaiaDriveInput,
+    nowMs: number,
+    hour: number,
+  ): Promise<AvaiaDriveAnswer> {
+    const bindings = await this.loadBindings();
+    if (bindings.avaiaDriveStep === undefined) {
+      throw new Error("0x1 Core Wasm drive binding is missing");
+    }
+    return bindings.avaiaDriveStep(state, input, nowMs, hour);
   }
 
   public async backpackGiftDue(
