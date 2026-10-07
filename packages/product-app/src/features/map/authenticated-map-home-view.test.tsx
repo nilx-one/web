@@ -553,6 +553,44 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getAllByRole("heading", { name: "0x0sky" })).toHaveLength(1);
   });
 
+  it("keeps an owned Avaia's address in the header instead of repeating it as a large body title", () => {
+    const { container } = renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    const headerTitle = container.querySelector(".bond-dock__detail-header h2");
+    const scroll = container.querySelector<HTMLElement>(".bond-dock__scroll");
+    expect(headerTitle).not.toBeNull();
+    expect(scroll).not.toBeNull();
+
+    // "Owned Avaia" names the screen; the address is its stable subtitle.
+    expect(headerTitle).toHaveAttribute("aria-hidden", "false");
+    expect(headerTitle).toHaveTextContent(/^x0skai$/);
+    expect(
+      container.querySelector(".bond-dock__detail-large-title"),
+    ).toBeNull();
+
+    // Once Progress has actually scrolled past the body edge, the same header
+    // subtitle follows the section being read.
+    const progressTitle = [
+      ...(scroll as HTMLElement).querySelectorAll<HTMLElement>(
+        ".interface-settings__eyebrow",
+      ),
+    ].find((element) => element.textContent === "Progress");
+    expect(progressTitle).toBeDefined();
+    (scroll as HTMLElement).getBoundingClientRect = () =>
+      ({ top: 100, bottom: 600, height: 500 }) as DOMRect;
+    (progressTitle as HTMLElement).getBoundingClientRect = () =>
+      ({ top: 40, bottom: 60, height: 20 }) as DOMRect;
+    Object.defineProperty(scroll, "scrollTop", {
+      configurable: true,
+      value: 160,
+    });
+    fireEvent.scroll(scroll as HTMLElement);
+
+    expect(headerTitle).toHaveTextContent(/^Progress$/);
+  });
+
   it("lets the header say the section a person has scrolled into, and the screen above the first", () => {
     const { container } = renderView({ section: "settings" });
     const scroll = container.querySelector<HTMLElement>(".bond-dock__scroll");
