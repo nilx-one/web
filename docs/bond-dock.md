@@ -111,4 +111,23 @@ Nothing in the move touches the persistent world; the map is never animated or
 remounted by a Dock navigation, and no view transition is taken over the
 document to achieve it.
 
+## A screen's header
+
+A screen the Dock opens keeps its header fixed while only the body under it
+scrolls. The header's small eyebrow says what kind of screen this is — `Owned
+Avaia`, `Application` — and the line under it names the screen: the Avaia's
+address, `Settings`, the Bond's pub_dress. Once a section's title has scrolled
+up past the header, that section's name takes over the same line, and back at
+the top the screen's name returns. The name is said once, in the header, never
+again as a large title in the body.
+
+The way back is the control a phone reaches for most, so it keeps a full touch
+target even where its drawn circle shrinks.
+
+Leaving the 3D model editor is the same as cancelling it: nothing in it is kept
+until Save. Cancel says so on its face. The way back is navigation, so when a
+person has actually changed the model since the editor opened, it asks once —
+keep editing, or discard — and focuses on keeping. Asked again, back leaves. A
+draft only looked at leaves at once.
+
 © 2026 aiaiaiai · aiaiaiai.org

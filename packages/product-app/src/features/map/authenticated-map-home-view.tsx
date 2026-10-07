@@ -87,6 +87,7 @@ import {
   createAvatarEditorViewState,
   createAvatarFieldViewState,
   draftFromSelection,
+  draftMovedFrom,
   draftSelection,
   equipInDraft,
   type AvatarDraft,
@@ -749,6 +750,14 @@ export function AuthenticatedMapHomeView({
   const [avatarDraft, setAvatarDraft] = useState<AvatarDraft | undefined>(
     undefined,
   );
+  // What the editor opened on, so leaving it can tell a draft a person worked
+  // on from one they only looked at.
+  const [avatarDraftOpened, setAvatarDraftOpened] = useState<
+    AvatarDraft | undefined
+  >(undefined);
+  // The way back has already asked once about this draft; asked again, it
+  // leaves.
+  const [avatarLeaveAsked, setAvatarLeaveAsked] = useState(false);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState<string | undefined>(undefined);
   const commitAvatar = useCommitAvatarSelection();
@@ -1433,14 +1442,15 @@ export function AuthenticatedMapHomeView({
     // An identity that has chosen nothing still needs a way in. The editor
     // opens on the first published study with nothing saved behind it, so the
     // first choice is already something to save.
-    setAvatarDraft(
-      draftFromSelection(
-        selection ?? {
-          modelId: AVATAR_CATALOG[0]?.id ?? "sky-study",
-          appearance: {},
-        },
-      ),
+    const draft = draftFromSelection(
+      selection ?? {
+        modelId: AVATAR_CATALOG[0]?.id ?? "sky-study",
+        appearance: {},
+      },
     );
+    setAvatarDraft(draft);
+    setAvatarDraftOpened(draft);
+    setAvatarLeaveAsked(false);
     setAvatarError(undefined);
     openDetail("avatar", subject);
   }
@@ -1448,6 +1458,8 @@ export function AuthenticatedMapHomeView({
   function closeAvatarEditor(): void {
     const returnTo = detailState?.subject === "avaia" ? "avaia" : undefined;
     setAvatarDraft(undefined);
+    setAvatarDraftOpened(undefined);
+    setAvatarLeaveAsked(false);
     setAvatarError(undefined);
     setDetailState(
       returnTo === undefined ? undefined : { section, detail: returnTo },
@@ -1879,7 +1891,19 @@ export function AuthenticatedMapHomeView({
     }
     if (activeDetail === "avatar") {
       // Leaving the editor is the same as cancelling it: a draft that was
-      // never saved does not survive the way out.
+      // never saved does not survive the way out. Cancel says so on its face;
+      // the way back is navigation, so it asks once before it throws away
+      // something a person actually changed.
+      if (
+        !avatarLeaveAsked &&
+        !avatarSaving &&
+        avatarDraft !== undefined &&
+        avatarDraftOpened !== undefined &&
+        draftMovedFrom(avatarDraft, avatarDraftOpened)
+      ) {
+        setAvatarLeaveAsked(true);
+        return;
+      }
       closeAvatarEditor();
       return;
     }
@@ -2479,14 +2503,24 @@ export function AuthenticatedMapHomeView({
                           ? {}
                           : { error: avatarError }),
                       })}
-                      onChooseModel={(model) =>
-                        setAvatarDraft(chooseDraftModel(avatarDraft, model))
-                      }
-                      onEquip={(itemId) =>
-                        setAvatarDraft(equipInDraft(avatarDraft, itemId))
-                      }
+                      onChooseModel={(model) => {
+                        setAvatarLeaveAsked(false);
+                        setAvatarDraft(chooseDraftModel(avatarDraft, model));
+                      }}
+                      onEquip={(itemId) => {
+                        setAvatarLeaveAsked(false);
+                        setAvatarDraft(equipInDraft(avatarDraft, itemId));
+                      }}
                       onCancel={closeAvatarEditor}
                       onSave={() => void saveAvatarDraft()}
+                      {...(avatarLeaveAsked
+                        ? {
+                            leaving: {
+                              onStay: () => setAvatarLeaveAsked(false),
+                              onDiscard: closeAvatarEditor,
+                            },
+                          }
+                        : {})}
                     />
                   ) : null}
 

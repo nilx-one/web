@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { useEffect, useRef } from "react";
+
 import { translateCopy, useLocalization } from "../../shell/localization";
 import { AvatarPreviewCanvas } from "./avatar-preview-canvas";
 import type { AvatarEditorViewState } from "./avatar-editor-view-model";
@@ -11,6 +13,14 @@ export interface AvatarEditorViewProps {
   readonly onEquip: (itemId: string) => void;
   readonly onCancel: () => void;
   readonly onSave: () => void;
+  /**
+   * Present while the way back has asked whether to throw away a draft a
+   * person changed. Staying keeps every choice; discarding is Cancel.
+   */
+  readonly leaving?: {
+    readonly onStay: () => void;
+    readonly onDiscard: () => void;
+  };
 }
 
 /**
@@ -27,11 +37,16 @@ export function AvatarEditorView({
   onEquip: _onEquip,
   onCancel,
   onSave,
+  leaving,
 }: AvatarEditorViewProps): React.ReactElement {
   const { t } = useLocalization();
 
   return (
     <div className="avatar-editor">
+      {leaving === undefined ? null : (
+        <LeavePrompt onStay={leaving.onStay} onDiscard={leaving.onDiscard} />
+      )}
+
       <div className="avatar-editor__stage">
         <AvatarPreviewCanvas
           scene={state.scene}
@@ -112,6 +127,41 @@ export function AvatarEditorView({
           disabled={!state.canSave}
         >
           {state.busy ? t("dock.saving") : t("dock.save")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Asked at the top, right under the way back a person just reached for, and
+ * focused on staying: the answer that loses nothing is the one a stray tap
+ * lands on.
+ */
+function LeavePrompt({
+  onStay,
+  onDiscard,
+}: NonNullable<AvatarEditorViewProps["leaving"]>): React.ReactElement {
+  const { t } = useLocalization();
+  const stay = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    stay.current?.focus();
+  }, []);
+
+  return (
+    <div className="avatar-editor__leave">
+      <p role="alert">{t("dock.unsavedModel")}</p>
+      <div className="avatar-editor__actions">
+        <button type="button" onClick={onDiscard}>
+          {t("dock.discardChanges")}
+        </button>
+        <button
+          type="button"
+          className="avatar-editor__save"
+          ref={stay}
+          onClick={onStay}
+        >
+          {t("dock.keepEditing")}
         </button>
       </div>
     </div>

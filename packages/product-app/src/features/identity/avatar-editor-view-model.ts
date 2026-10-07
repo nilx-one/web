@@ -187,6 +187,18 @@ function sameSelection(a: AvatarSelection, b: AvatarSelection): boolean {
   );
 }
 
+/**
+ * Whether a person has done anything since the editor opened. This is not
+ * `changed`: an identity that chose nothing opens on a body that is already
+ * something to save, yet leaving it untouched loses nothing.
+ */
+export function draftMovedFrom(
+  draft: AvatarDraft,
+  opened: AvatarDraft,
+): boolean {
+  return !sameSelection(draftSelection(draft), draftSelection(opened));
+}
+
 export function createAvatarEditorViewState(
   input: AvatarEditorInput,
 ): AvatarEditorViewState {
