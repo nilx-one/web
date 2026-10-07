@@ -10,6 +10,7 @@ import {
   createAvatarFieldViewState,
   draftAppearance,
   draftFromSelection,
+  draftMovedFrom,
   draftSelection,
   equipInDraft,
   type AvatarDraft,
@@ -230,5 +231,25 @@ describe("the settings field", () => {
     expect(field.showStill).toBe(true);
     expect(field.stillUrl).toBe("/avatars/0.1.0/sky-study.png");
     expect(field.editable).toBe(false);
+  });
+});
+
+describe("whether a draft moved since the editor opened", () => {
+  it("is still while a person only looks, even at a body never saved", () => {
+    const opened = draftFromSelection(persisted());
+    expect(draftMovedFrom(opened, opened)).toBe(false);
+    // Going to another study and coming back is the same body again.
+    const returned = chooseDraftModel(
+      chooseDraftModel(opened, "sky-study"),
+      DASHA_2,
+    );
+    expect(draftMovedFrom(returned, opened)).toBe(false);
+  });
+
+  it("moves once another study is chosen", () => {
+    const opened = draftFromSelection(persisted());
+    expect(draftMovedFrom(chooseDraftModel(opened, "sky-study"), opened)).toBe(
+      true,
+    );
   });
 });

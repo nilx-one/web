@@ -552,6 +552,44 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeNull();
   });
 
+  it("lets an owned Avaia's header follow the section scrolled into", () => {
+    const { container } = renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
+
+    const headerTitle = container.querySelector(".bond-dock__detail-header h2");
+    const scroll = container.querySelector<HTMLElement>(".bond-dock__scroll");
+    expect(scroll).not.toBeNull();
+    const progress = [
+      ...(scroll as HTMLElement).querySelectorAll<HTMLElement>(
+        ".interface-settings__eyebrow",
+      ),
+    ].find((element) => element.textContent === "Progress");
+    expect(progress).toBeDefined();
+    const at = (element: Element, top: number, bottom: number) => {
+      element.getBoundingClientRect = () =>
+        ({ top, bottom, height: bottom - top }) as DOMRect;
+    };
+    const scrollTo = (top: number) => {
+      Object.defineProperty(scroll, "scrollTop", {
+        configurable: true,
+        value: top,
+      });
+      fireEvent.scroll(scroll as HTMLElement);
+    };
+    at(scroll as HTMLElement, 100, 600);
+
+    // Progress gone up under the header, it takes over the address's line…
+    at(progress as HTMLElement, 40, 60);
+    scrollTo(160);
+    expect(headerTitle).toHaveTextContent(/^Progress$/);
+
+    // …and back at the top, the address is the subtitle again.
+    at(progress as HTMLElement, 120, 140);
+    scrollTo(0);
+    expect(headerTitle).toHaveTextContent(/^x0skai$/);
+  });
+
   it("lets the header say the section a person has scrolled into, and the screen above the first", () => {
     const { container } = renderView({ section: "settings" });
     const scroll = container.querySelector<HTMLElement>(".bond-dock__scroll");
@@ -694,6 +732,95 @@ describe("AuthenticatedMapHomeView", () => {
     // A sculpted study has no wardrobe, and says so rather than offering one.
     expect(screen.getByText(/one sculpted study/i)).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Hair" })).toBeNull();
+  });
+
+  it("leaves an untouched editor at once, and asks once before the way back discards a change", () => {
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
+    });
+    const openEditor = () =>
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Change your 3D model — currently Sky/,
+        }),
+      );
+
+    // Nothing changed: back is just back.
+    openEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("radio", { name: /Sky/ })).toBeNull();
+
+    // A changed draft is not thrown away by navigation alone…
+    openEditor();
+    fireEvent.click(screen.getByRole("radio", { name: /Kai/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your changes to this 3D model are not saved.",
+    );
+    const keepEditing = screen.getByRole("button", { name: "Keep editing" });
+    expect(keepEditing).toHaveFocus();
+
+    // …staying keeps every choice…
+    fireEvent.click(keepEditing);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked();
+
+    // …and asked again, back leaves without saving.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("radio", { name: /Kai/ })).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Sky/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("takes the leave prompt away once Save is pressed, so a pending save cannot be discarded", async () => {
+    let answer: (result: undefined) => void = () => undefined;
+    const onAvatarChoice = vi.fn(
+      () =>
+        new Promise<undefined>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
+      onAvatarChoice,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Sky/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Kai/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(
+      screen.getByRole("button", { name: "Discard changes" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onAvatarChoice).toHaveBeenCalledExactlyOnceWith("kai-study");
+
+    // While the service is still answering, nothing offers to throw the
+    // model away: the prompt is gone and Cancel waits with Save.
+    expect(
+      screen.queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+
+    answer(undefined);
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled(),
+    );
+    // A refused save leaves the editor and its draft where they were.
+    expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked();
+    expect(
+      screen.queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
   });
 
   // Skipped along with the wardrobe sections themselves: avatar-editor-view.tsx

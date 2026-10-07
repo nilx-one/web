@@ -233,6 +233,21 @@
   background: rgba(245, 243, 247, 0.14);
 }
 
+/* Asked where the way back was reached for, inside the same card language as
+   the fields below it rather than as a dialog over the world. */
+.avatar-editor__leave {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(245, 243, 247, 0.22);
+  border-radius: 1rem;
+  background: rgba(245, 243, 247, 0.06);
+}
+
+.avatar-editor__leave p {
+  margin: 0;
+}
+
 .avatar-editor__actions button:disabled {
   opacity: 0.5;
   cursor: default;

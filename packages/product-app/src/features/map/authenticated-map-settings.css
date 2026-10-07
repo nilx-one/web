@@ -855,9 +855,20 @@ button.provider-control {
   margin-bottom: 0.8rem;
 }
 
+/* The way back is the control a phone reaches for most, so it keeps a full
+   touch target even where its drawn circle shrinks: the hit area reaches past
+   the circle into the header's own gap. */
 .authenticated-map-home[data-presentation="compact"] .interface-settings__back {
+  position: relative;
   width: 2.25rem;
   min-height: 2.25rem;
+}
+
+.authenticated-map-home[data-presentation="compact"]
+  .interface-settings__back::after {
+  position: absolute;
+  inset: -0.25rem;
+  content: "";
 }
 
 /* The edit action stays a full touch target on a phone, where the rest of the
