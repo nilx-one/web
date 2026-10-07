@@ -145,23 +145,17 @@ export function useDriveChooser(
     readiness.kind === "present"
       ? (readiness.modelId ?? localModel?.defaultModelId)
       : undefined;
+  const openCached = localModel?.host.openCached;
   const chooser = useMemo(
     () =>
-      localModel === undefined ||
-      modelId === undefined ||
-      localModel.host.openCached === undefined
+      openCached === undefined || modelId === undefined
         ? undefined
         : createDriveChooser({
             // This is a distinct host capability, not `open` guarded by a stale cache
             // check: eviction and cached-only acquisition are serialized by the host.
-            open: (signal) =>
-              localModel.host.openCached!(
-                modelId,
-                () => undefined,
-                signal,
-              ),
+            open: (signal) => openCached(modelId, () => undefined, signal),
           }),
-    [localModel, modelId],
+    [openCached, modelId],
   );
   useEffect(
     () => () => {
