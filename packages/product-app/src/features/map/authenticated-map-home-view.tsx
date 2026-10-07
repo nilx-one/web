@@ -1477,6 +1477,10 @@ export function AuthenticatedMapHomeView({
   async function saveAvatarDraft(): Promise<void> {
     const subject = detailState?.subject ?? "bond";
     if (avatarDraft === undefined) return;
+    // Save answers the leave prompt. Left standing, its discard would close an
+    // editor whose save is still on its way, and that save would commit the
+    // very model a person had just thrown away.
+    setAvatarLeaveAsked(false);
     const persisted = subject === "bond" ? bondAvatar : avaiaAvatar;
     const selection = draftSelection(avatarDraft);
     const address = subject === "bond" ? pubDress : avaiaAddress;

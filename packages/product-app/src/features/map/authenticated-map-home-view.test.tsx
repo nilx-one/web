@@ -777,6 +777,52 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
+  it("takes the leave prompt away once Save is pressed, so a pending save cannot be discarded", async () => {
+    let answer: (result: undefined) => void = () => undefined;
+    const onAvatarChoice = vi.fn(
+      () =>
+        new Promise<undefined>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
+      onAvatarChoice,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Sky/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Kai/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(
+      screen.getByRole("button", { name: "Discard changes" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onAvatarChoice).toHaveBeenCalledExactlyOnceWith("kai-study");
+
+    // While the service is still answering, nothing offers to throw the
+    // model away: the prompt is gone and Cancel waits with Save.
+    expect(
+      screen.queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+
+    answer(undefined);
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled(),
+    );
+    // A refused save leaves the editor and its draft where they were.
+    expect(screen.getByRole("radio", { name: /Kai/ })).toBeChecked();
+    expect(
+      screen.queryByRole("button", { name: "Discard changes" }),
+    ).toBeNull();
+  });
+
   // Skipped along with the wardrobe sections themselves: avatar-editor-view.tsx
   // hides them for now because equipping an item does not persist. Model-level
   // equip logic stays covered in avatar-editor-view-model.test.ts; unskip this
