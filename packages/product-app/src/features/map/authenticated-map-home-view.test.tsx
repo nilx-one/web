@@ -594,7 +594,10 @@ describe("AuthenticatedMapHomeView", () => {
     scrollTo(320);
     expect(headerTitle).toHaveTextContent(/^Appearance$/);
 
-    // Back at the top, the fixed subtitle names the screen again.
+    // Back at the top, the sections move back below the fixed header and the
+    // screen name takes the subtitle again.
+    at(legend("Language"), 120, 140);
+    at(legend("Appearance"), 260, 280);
     scrollTo(0);
     expect(headerTitle).not.toHaveAttribute("aria-hidden");
     expect(headerTitle).toHaveTextContent(/^Settings$/);
