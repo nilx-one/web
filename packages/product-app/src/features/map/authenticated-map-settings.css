@@ -96,7 +96,7 @@
    title has scrolled out of view — silent, not merely faint, until then, so
    a screen reader never meets the same name twice. */
 .bond-dock__detail-header h2 {
-  margin: 0.55rem 0 0;
+  margin: 0.7rem 0 0;
   overflow: hidden;
   color: #f5f3f7;
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
