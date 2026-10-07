@@ -349,13 +349,6 @@ const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
 const AT_DEVICE_METERS = 5;
 
 /**
- * Past this many pixels of scroll, a Dock detail's large title has scrolled
- * far enough out of the way that the fixed header needs to start saying
- * its name.
- */
-const DETAIL_TITLE_COLLAPSE_PX = 24;
-
-/**
  * What names a section of a Dock screen: a fieldset's legend, or the eyebrow
  * a section opens with. A field's own eyebrow label names a field, not a
  * section, and a legend nested in another fieldset names part of a section;
@@ -657,14 +650,9 @@ export function AuthenticatedMapHomeView({
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
   >(undefined);
-  // A Dock detail's own name is its large title, at the top of the screen it
-  // names — the same place iOS puts one — until scrolling carries it out of
-  // view, at which point the fixed header's small title takes over saying
-  // it. The two are one name in two states, never both said at once.
-  const [detailTitleCollapsed, setDetailTitleCollapsed] = useState(false);
-  // Further down, the header's small title follows the body: it says the
-  // section a person is reading — the last one whose own title has gone up
-  // under the header — and goes back to the screen's name above the first.
+  // The Dock's fixed subtitle names the screen from the first frame. Further
+  // down it follows the body: the last section title carried past the header
+  // takes over, and the screen name returns above the first section.
   const [dockSectionTitle, setDockSectionTitle] = useState<string | undefined>(
     undefined,
   );
@@ -1079,12 +1067,11 @@ export function AuthenticatedMapHomeView({
   useEffect(() => {
     fogRevealRef.current?.dismiss();
   }, [activeDetail]);
-  // A screen just opened reads from its own top, its large title showing —
-  // never scrolled to wherever the screen before it was left.
+  // A screen just opened reads from its own top, with the fixed header naming
+  // that screen — never scrolled to wherever the screen before it was left.
   const detailScreenKey = `${section}:${activeDetail ?? ""}`;
   if (detailScreenKey !== renderedDetailScreenKey.current) {
     renderedDetailScreenKey.current = detailScreenKey;
-    if (detailTitleCollapsed) setDetailTitleCollapsed(false);
     if (dockSectionTitle !== undefined) setDockSectionTitle(undefined);
   }
   useEffect(() => {
@@ -1934,12 +1921,7 @@ export function AuthenticatedMapHomeView({
   }
 
   function handleDockScroll(event: UIEvent<HTMLElement>): void {
-    const scroller = event.currentTarget;
-    const collapsed = scroller.scrollTop > DETAIL_TITLE_COLLAPSE_PX;
-    setDetailTitleCollapsed((current) =>
-      current === collapsed ? current : collapsed,
-    );
-    setDockSectionTitle(collapsed ? passedSectionTitle(scroller) : undefined);
+    setDockSectionTitle(passedSectionTitle(event.currentTarget));
   }
 
   return (
@@ -2072,10 +2054,7 @@ export function AuthenticatedMapHomeView({
               </>
             ) : (
               <div className="bond-dock__detail">
-                <div
-                  className="bond-dock__detail-header"
-                  data-collapsed={detailTitleCollapsed}
-                >
+                <div className="bond-dock__detail-header">
                   <button
                     className="interface-settings__back"
                     type="button"
@@ -2088,7 +2067,7 @@ export function AuthenticatedMapHomeView({
                     <span className="interface-settings__eyebrow">
                       {detailEyebrow()}
                     </span>
-                    <h2 aria-hidden={!detailTitleCollapsed}>
+                    <h2>
                       {/* Keyed by what it says, so a new section's name
                         arrives rather than being swapped in place. */}
                       <span
@@ -2101,16 +2080,6 @@ export function AuthenticatedMapHomeView({
                   </div>
                 </div>
                 <div className="bond-dock__scroll" onScroll={handleDockScroll}>
-                  {/* The same name the collapsed header takes over saying once
-                    this has scrolled out of view — never both at once. */}
-                  <h1
-                    className="bond-dock__detail-large-title"
-                    data-collapsed={detailTitleCollapsed}
-                    aria-hidden={detailTitleCollapsed}
-                  >
-                    {detailTitle()}
-                  </h1>
-
                   {section === "identity" && activeDetail === undefined ? (
                     <div className="bond-profile">
                       <AddressField
