@@ -4,6 +4,7 @@
 import {
   mapCompassBearing,
   mapDistanceMeters,
+  type AvatarModelId,
   type MapLandmark,
   type MapPointSelection,
 } from "@nilx-one/map-contract";
@@ -124,6 +125,33 @@ export function locomotionCycleMs(mode: AvaiaLocomotionMode): number {
 /** Two footfalls land in each gait cycle. */
 export function locomotionStepMs(mode: AvaiaLocomotionMode): number {
   return locomotionCycleMs(mode) / 2;
+}
+
+/**
+ * A study has its own physical rhythm. These are presentation profiles, not
+ * identity traits: the same route speed is preserved, while cadence changes
+ * how much ground each visible step covers.
+ */
+export const AVATAR_GAIT_CADENCE: Readonly<Record<AvatarModelId, number>> = {
+  "sky-study": 0.92,
+  "dasha-study": 1.08,
+  "kai-study": 1,
+  "dasha-v2-study": 1.04,
+};
+
+export function avatarLocomotionCycleMs(
+  mode: AvaiaLocomotionMode,
+  model: AvatarModelId | undefined,
+): number {
+  const cadence = model === undefined ? 1 : AVATAR_GAIT_CADENCE[model];
+  return locomotionCycleMs(mode) / cadence;
+}
+
+export function avatarLocomotionStepMs(
+  mode: AvaiaLocomotionMode,
+  model: AvatarModelId | undefined,
+): number {
+  return avatarLocomotionCycleMs(mode, model) / 2;
 }
 
 /**
@@ -259,14 +287,18 @@ export function walkArrived(walk: AvaiaWalk, nowMs: number): boolean {
   return nowMs - walk.startedMs >= walk.durationMs;
 }
 
-export function walkStance(walk: AvaiaWalk, nowMs: number): AvaiaStance {
+export function walkStance(
+  walk: AvaiaWalk,
+  nowMs: number,
+  model?: AvatarModelId,
+): AvaiaStance {
   const since = Math.max(0, nowMs - walk.startedMs);
+  const cycleMs = avatarLocomotionCycleMs(walk.mode, model);
   return {
     point: walkPosition(walk, nowMs),
     bearingDeg: walkBearing(walk, nowMs),
     clipId: "walk",
-    clipPhase:
-      (since % locomotionCycleMs(walk.mode)) / locomotionCycleMs(walk.mode),
+    clipPhase: (since % cycleMs) / cycleMs,
   };
 }
 
