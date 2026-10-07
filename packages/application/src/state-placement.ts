@@ -364,6 +364,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "Whether xSasha's introduction was played through or skipped for this Bond.",
   },
   {
+    id: "avaia.life",
+    placement: "synchronizable",
+    mobility: "transport",
+    medium: "local-storage",
+    key: "nilx-one.avaia.life.v1",
+    perOwner: true,
+    what: "The Avaia's needs as Core's Avaia life keeps them: hunger, energy, home and where it stands. Simulated product needs, not a biological claim.",
+  },
+  {
     id: "world.memory",
     placement: "synchronizable",
     mobility: "transport",

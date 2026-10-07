@@ -142,3 +142,44 @@ export type AvaiaDriveAnswer =
       readonly commands: readonly AvaiaDriveCommand[];
     }
   | { readonly ok: false; readonly error: string };
+
+/** A coordinate as Core's wire carries it: E7 integers as decimal strings. */
+export interface CoreGeoCoordinate {
+  readonly longitude_e7: string;
+  readonly latitude_e7: string;
+}
+
+/**
+ * One command to Avaia life (`docs/avaia-life.md` in core): its needs and
+ * where it is, owned by Core for one AI Bond.
+ */
+export type AvaiaLifeCommand =
+  | {
+      readonly op: "initialize";
+      readonly home: CoreGeoCoordinate;
+      readonly position: CoreGeoCoordinate;
+    }
+  | {
+      readonly op: "observe";
+      /** Active milliseconds since the last observation, 0 to 60000. */
+      readonly elapsed_ms: string;
+      readonly position: CoreGeoCoordinate;
+      readonly motion: "idle" | "walking" | "studying";
+    };
+
+/**
+ * Core's answer to one life command. `state` is opaque here; what the host
+ * reads of it is what its needs ask and the home it was given.
+ */
+export type AvaiaLifeAnswer =
+  | {
+      readonly ok: true;
+      readonly state: string;
+      readonly intent: AvaiaDriveLifeIntent;
+      /** 0 to 10000. */
+      readonly energy: number;
+      /** 0 to 10000. */
+      readonly hunger: number;
+      readonly home: { readonly longitude: number; readonly latitude: number };
+    }
+  | { readonly ok: false; readonly error: string };
