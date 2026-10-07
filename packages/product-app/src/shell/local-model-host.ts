@@ -95,6 +95,15 @@ export interface LocalModelHost {
     onProgress: (progress: LocalModelDownloadProgress) => void,
     signal?: AbortSignal,
   ): Promise<LocalModelEngine>;
+  /**
+   * Opens only when every artifact is already cached. It must never fetch missing
+   * artifacts; `null` means the cache could not be leased safely.
+   */
+  readonly openCached?: (
+    modelId: string,
+    onProgress: (progress: LocalModelDownloadProgress) => void,
+    signal?: AbortSignal,
+  ) => Promise<LocalModelEngine | null>;
   remove(modelId: string): Promise<void>;
 }
 
