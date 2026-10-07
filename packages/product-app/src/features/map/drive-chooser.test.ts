@@ -155,19 +155,21 @@ describe("the model choosing what the Avaia does", () => {
 
 describe("the chooser in the world", () => {
   const dependency = (
-    open: LocalModelDependency["host"]["open"],
-    isCached: LocalModelDependency["host"]["isCached"] = async () => true,
+    openCached?: NonNullable<LocalModelDependency["host"]["openCached"]>,
+    open: LocalModelDependency["host"]["open"] = vi.fn(async () =>
+      engine("download").model,
+    ),
   ) =>
     ({
-      host: { open, isCached } as unknown as LocalModelDependency["host"],
+      host: { open, openCached } as unknown as LocalModelDependency["host"],
       catalog: [],
       defaultModelId: "Qwen3-0.6B-q4f16_1-MLC",
     }) satisfies LocalModelDependency;
 
-  it("refuses a stale present snapshot when the model is no longer cached", async () => {
-    const open = vi.fn(async () => engine("1").model);
-    const isCached = vi.fn(async () => false);
-    const local = dependency(open, isCached);
+  it("refuses a stale present snapshot without falling back to download-capable open", async () => {
+    const open = vi.fn(async () => engine("download").model);
+    const openCached = vi.fn(async () => null);
+    const local = dependency(openCached, open);
     const { result } = renderHook(() =>
       useDriveChooser(local, {
         kind: "present",
@@ -176,13 +178,31 @@ describe("the chooser in the world", () => {
     );
 
     await expect(result.current?.(onTheWay)).resolves.toBeNull();
-    expect(isCached).toHaveBeenCalledWith("Qwen3-1.7B-q4f16_1-MLC");
+    expect(openCached).toHaveBeenCalledWith(
+      "Qwen3-1.7B-q4f16_1-MLC",
+      expect.any(Function),
+      expect.any(AbortSignal),
+    );
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("does not create a chooser when the host cannot guarantee cached-only acquisition", () => {
+    const open = vi.fn(async () => engine("download").model);
+    const local = dependency(undefined, open);
+    const { result } = renderHook(() =>
+      useDriveChooser(local, {
+        kind: "present",
+        modelId: "Qwen3-1.7B-q4f16_1-MLC",
+      }),
+    );
+
+    expect(result.current).toBeUndefined();
     expect(open).not.toHaveBeenCalled();
   });
 
   it("exists only once the model is on this device, and opens the one in effect", async () => {
-    const open = vi.fn(async () => engine("1").model);
-    const local = dependency(open);
+    const openCached = vi.fn(async () => engine("1").model);
+    const local = dependency(openCached);
     const { result, rerender } = renderHook(
       ({ kind }: { kind: "available" | "present" }) =>
         useDriveChooser(
@@ -196,7 +216,7 @@ describe("the chooser in the world", () => {
     expect(result.current).toBeUndefined();
     rerender({ kind: "present" });
     await expect(result.current?.(onTheWay)).resolves.toBe(1);
-    expect(open).toHaveBeenCalledWith(
+    expect(openCached).toHaveBeenCalledWith(
       "Qwen3-1.7B-q4f16_1-MLC",
       expect.any(Function),
       expect.any(AbortSignal),
