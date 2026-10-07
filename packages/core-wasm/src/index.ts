@@ -6,6 +6,8 @@ import type {
   AvaiaDriveCommand,
   AvaiaDriveInput,
   AvaiaDriveMenuOption,
+  AvaiaLifeAnswer,
+  AvaiaLifeCommand,
   CoreCarry,
   CoreCraftedItem,
   CoreEconomyCatalog,
@@ -440,6 +442,63 @@ function decodeDriveAnswer(value: string): AvaiaDriveAnswer {
   throw new Error("0x1 Core returned an invalid drive answer");
 }
 
+const LIFE_INTENTS = new Set(["explore", "return_home", "recover"]);
+
+/** An E7 coordinate off the wire, in degrees. */
+function decodeCoordinate(value: unknown): {
+  longitude: number;
+  latitude: number;
+} {
+  if (
+    isRecord(value) &&
+    typeof value.longitude_e7 === "string" &&
+    typeof value.latitude_e7 === "string" &&
+    /^-?(0|[1-9][0-9]*)$/.test(value.longitude_e7) &&
+    /^-?(0|[1-9][0-9]*)$/.test(value.latitude_e7)
+  ) {
+    return {
+      longitude: Number(value.longitude_e7) / 1e7,
+      latitude: Number(value.latitude_e7) / 1e7,
+    };
+  }
+  throw new Error("0x1 Core returned an invalid coordinate");
+}
+
+function decodeLifeAnswer(value: string): AvaiaLifeAnswer {
+  const parsed: unknown = JSON.parse(value);
+  if (
+    isRecord(parsed) &&
+    parsed.ok === false &&
+    typeof parsed.error === "string"
+  ) {
+    return { ok: false, error: parsed.error };
+  }
+  if (
+    isRecord(parsed) &&
+    parsed.ok === true &&
+    isRecord(parsed.state) &&
+    typeof parsed.state.intent === "string" &&
+    LIFE_INTENTS.has(parsed.state.intent)
+  ) {
+    const energy = decodeAmount(parsed.state.energy);
+    const hunger = decodeAmount(parsed.state.hunger);
+    if (energy <= 10_000 && hunger <= 10_000) {
+      return {
+        ok: true,
+        state: JSON.stringify(parsed.state),
+        intent: parsed.state.intent as Extract<
+          AvaiaLifeAnswer,
+          { ok: true }
+        >["intent"],
+        energy,
+        hunger,
+        home: decodeCoordinate(parsed.state.home),
+      };
+    }
+  }
+  throw new Error("0x1 Core returned an invalid life answer");
+}
+
 export interface CoreWasmBindings {
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
@@ -457,6 +516,12 @@ export interface CoreWasmBindings {
     nowMs: number,
     hour: number,
   ): AvaiaDriveAnswer;
+  applyAvaiaLife?(
+    state: string,
+    owner: string,
+    subject: string,
+    command: AvaiaLifeCommand,
+  ): AvaiaLifeAnswer;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
@@ -483,6 +548,13 @@ export interface GeneratedCoreWasmModule {
     state: string,
     command: string,
     now_ms: string,
+  ): string;
+  /** Absent from a runtime built before Core's Avaia life. */
+  apply_avaia_life?(
+    state: string,
+    owner: string,
+    subject: string,
+    command: string,
   ): string;
   /** Absent from a runtime built before Core's Avaia drive. */
   avaia_drive_step?(
@@ -588,6 +660,24 @@ export async function loadGeneratedCoreWasmBindings(
               ),
             );
           },
+        }),
+    ...(runtime.apply_avaia_life === undefined
+      ? {}
+      : {
+          applyAvaiaLife: (
+            state: string,
+            owner: string,
+            subject: string,
+            command: AvaiaLifeCommand,
+          ) =>
+            decodeLifeAnswer(
+              runtime.apply_avaia_life!(
+                state,
+                owner,
+                subject,
+                JSON.stringify(command),
+              ),
+            ),
         }),
     ...(runtime.avaia_drive_step === undefined
       ? {}
@@ -724,6 +814,19 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm drive binding is missing");
     }
     return bindings.avaiaDriveStep(state, input, nowMs, hour);
+  }
+
+  public async applyAvaiaLife(
+    state: string,
+    owner: string,
+    subject: string,
+    command: AvaiaLifeCommand,
+  ): Promise<AvaiaLifeAnswer> {
+    const bindings = await this.loadBindings();
+    if (bindings.applyAvaiaLife === undefined) {
+      throw new Error("0x1 Core Wasm life binding is missing");
+    }
+    return bindings.applyAvaiaLife(state, owner, subject, command);
   }
 
   public async backpackGiftDue(

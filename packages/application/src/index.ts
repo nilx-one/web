@@ -147,6 +147,9 @@ export type {
   AvaiaDrivePassing,
   AvaiaDrivePurpose,
   AvaiaDriveTarget,
+  AvaiaLifeAnswer,
+  AvaiaLifeCommand,
+  CoreGeoCoordinate,
 } from "./avaia-drive";
 export {
   ReadRuntimeReadiness,

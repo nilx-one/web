@@ -70,7 +70,7 @@ What the Avaia does next on its own is decided by the Avaia drive in Core (`docs
 - **After a point B** it stands 20 s, then is its own again. It goes to see a landmark its owner walked past, or one it misses. Otherwise it strolls off a few steps (30–120 m) along the paths, never further than 200 m from where it settled, looks around for 8 s, and stands again. The pauses grow while it potters, up to five minutes, and are longer at night. It says so once (`stroll`).
 - **On the way anywhere**, a point B included, it may step aside for something it passes: a sight or a lake shore within 25 m of the way, which it looks at and names (`landmark.glanced`), or studies when its owner walked past it before; or a find within 15 m, which it bends for. It does this at most twice a walk, then carries on to where it was going.
 - **Going out**: restless after ten minutes, never more than once in four hours, it goes to a target from the outing menu, wanders 150–400 m along the paths, goes home, or stays. In the evening and at night it only takes a near target. Before it plans, this device reads the road and landmark tiles of the area ahead, but not tiles that are all fog.
-- **Its needs come first**: when Avaia life says it must go home or rest, nothing of its own competes.
+- **Its needs come first**: hunger and energy are Core's Avaia life (`docs/avaia-life.md` in `nilx-one/core`). While it is at the wheel, this device reports every ten seconds where the body is and whether it walks, and only that time counts: time away from the wheel or with the page closed is never reported. When life says it must go home or rest, the drive takes it home and nothing of its own competes; a point B its owner set is finished first.
 - **A choice is the Avaia's**: where to go out to, and whether to step aside, go to the model on this device as a closed numbered menu, once the person has downloaded it ([local models](local-models.md)). Without one, or when it answers late or off the menu, the drive's own pick stands.
 
 A tap always comes first, and nothing walks while the page is closed. Without a Core runtime that carries the drive, the Avaia only walks where it is tapped.
@@ -307,8 +307,6 @@ where its owner is. Nothing walks in the background.
 - **Curiosity by model.** Outings and distractions are the model's to choose
   ([local models](local-models.md)); curiosity is still a rule: the nearest
   landmark the person passed, or the dear place the Avaia misses most.
-- **Needs.** The walk hook passes Avaia life's report on to the drive, but the
-  world does not run Avaia life yet, so nothing sends the Avaia home to rest.
 - **The raw presence journal.** A tap now belongs to the Avaia, so the hosts
   no longer open the phase-1 journal panel on a lit cell. The panel itself
   (`createRawJournalPresenter`) and the shade layer's `onCellTap` stay in

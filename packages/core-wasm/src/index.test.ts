@@ -368,6 +368,56 @@ describe("CoreWasmClient", () => {
     ).toThrow(RangeError);
   });
 
+  it("reads Avaia life's needs and home through Core", async () => {
+    // Answers as Core's life gives them (docs/avaia-life.md in core).
+    const walked =
+      '{"ok":true,"state":{"activity":"walking","energy":"9820","home":{"latitude_e7":"504501000","longitude_e7":"305234000"},"hunger":"60","intent":"explore","owner":"0x0sky","position":{"latitude_e7":"504501000","longitude_e7":"305234000"},"remainder_ms":"0","subject":"x0skai","version":"1"}}';
+    const seen: string[] = [];
+    let answer = walked;
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          apply_avaia_life: (state, owner, subject, command) => {
+            seen.push(`${state}|${owner}|${subject}|${command}`);
+            return answer;
+          },
+        }),
+    });
+    const position = { longitude_e7: "305234000", latitude_e7: "504501000" };
+    const read = bindings.applyAvaiaLife?.("{}", "0x0sky", "x0skai", {
+      op: "observe",
+      elapsed_ms: "60000",
+      position,
+      motion: "walking",
+    });
+    expect(read).toMatchObject({
+      ok: true,
+      intent: "explore",
+      energy: 9_820,
+      hunger: 60,
+      home: { longitude: 30.5234, latitude: 50.4501 },
+    });
+    expect(seen[0]).toBe(
+      '{}|0x0sky|x0skai|{"op":"observe","elapsed_ms":"60000","position":{"longitude_e7":"305234000","latitude_e7":"504501000"},"motion":"walking"}',
+    );
+    answer = '{"error":"invalid_command","ok":false}';
+    expect(
+      bindings.applyAvaiaLife?.("", "0x0sky", "x0skai", {
+        op: "initialize",
+        home: position,
+        position,
+      }),
+    ).toEqual({ ok: false, error: "invalid_command" });
+    answer = walked.replace('"intent":"explore"', '"intent":"fly"');
+    expect(() =>
+      bindings.applyAvaiaLife?.("", "0x0sky", "x0skai", {
+        op: "initialize",
+        home: position,
+        position,
+      }),
+    ).toThrow();
+  });
+
   it("has no drive on a runtime built before it", async () => {
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () => generatedRuntime(),
