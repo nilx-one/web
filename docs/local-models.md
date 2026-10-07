@@ -1,7 +1,8 @@
 # Local models
 
 Narration can be rephrased by a model that runs on the device, in the browser, offline once
-downloaded. This page is what that means for a person using it and for whoever deploys it.
+downloaded, and the same model makes the Avaia's own choices. This page is what that means
+for a person using it and for whoever deploys it.
 
 ## What is served
 
@@ -49,6 +50,23 @@ Each family is asked with its own profile (`packages/narration-webllm/src/profil
 token bound follows the tokenizer: the same Ukrainian sentence costs 58 tokens for Llama 3.2
 and 143 for SmolLM2, and the single bound of 48 tokens the first profile used cut Qwen3's
 rephrasings at about 85 characters.
+
+## What a model is allowed to choose
+
+Where a choice is the Avaia's own — where to go out to, whether to step aside for something
+on the way — the drive in Core offers a closed numbered menu and its own pick
+([Avaia walks on its own](avaia-outings.md) §2.4). The model on this device answers it
+(`drive-chooser.ts`), and only once the person has that model here: nothing in the world ever
+starts a download. It is loaded the first time a choice comes, kept while choices keep coming,
+and let go after two minutes without one; a model that failed to load is not tried again for
+ten.
+
+The menu is worded by the port of `nilx-one/ai`'s `src/choice.rs` (`drive-choice.ts`): the
+situation and one line per option, a kind of place, near or far, and how the Avaia feels about
+it, never a place, a name or a distance. The decode is constrained to the offered numbers
+(`responseFormat: grammar`), and what comes back is read against the menu all the same. A
+menu outside the closed vocabulary is never put to the model, and an answer that is not one
+offered number, a late one, or none leaves the drive's own pick standing.
 
 ## Known gap in the foundation
 

@@ -42,8 +42,7 @@ export function terrainSamplePoint(
   const dEast = Math.sin(bearing) * meters;
   const dLat = dNorth / EARTH_RADIUS_METERS;
   const dLng =
-    dEast /
-    (EARTH_RADIUS_METERS * Math.max(0.01, Math.cos(latitude)));
+    dEast / (EARTH_RADIUS_METERS * Math.max(0.01, Math.cos(latitude)));
   return [
     lngLat[0] + (dLng * 180) / Math.PI,
     lngLat[1] + (dLat * 180) / Math.PI,

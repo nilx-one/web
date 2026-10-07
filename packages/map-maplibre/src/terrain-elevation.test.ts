@@ -72,11 +72,7 @@ describe("terrain elevation", () => {
     );
 
     expect(
-      loadedTerrainSlopeRadians(
-        { queryTerrainElevation } as never,
-        origin,
-        90,
-      ),
+      loadedTerrainSlopeRadians({ queryTerrainElevation } as never, origin, 90),
     ).toBeCloseTo(Math.PI / 4, 2);
     expect(
       loadedTerrainSlopeRadians(
@@ -98,5 +94,4 @@ describe("terrain elevation", () => {
       terrainBodyPitchRadians(steep as never, [30.5234, 50.4501], 0),
     ).toBeCloseTo((25 * Math.PI) / 180);
   });
-
 });

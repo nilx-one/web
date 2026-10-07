@@ -43,7 +43,9 @@ export async function readLocalModelReadiness(
   // An artifact the cache cannot read back is a model that is not here yet;
   // Settings is where it is repaired.
   const cached = await host.isCached(effectiveModelId).catch(() => false);
-  return { kind: cached ? "present" : "available" };
+  return cached
+    ? { kind: "present", modelId: effectiveModelId }
+    : { kind: "available" };
 }
 
 /**
