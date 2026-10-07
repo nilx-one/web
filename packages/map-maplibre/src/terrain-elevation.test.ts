@@ -72,11 +72,7 @@ describe("terrain elevation", () => {
     );
 
     expect(
-      loadedTerrainSlopeRadians(
-        { queryTerrainElevation } as never,
-        origin,
-        90,
-      ),
+      loadedTerrainSlopeRadians({ queryTerrainElevation } as never, origin, 90),
     ).toBeCloseTo(Math.PI / 4, 2);
     expect(
       loadedTerrainSlopeRadians(
