@@ -519,38 +519,37 @@ describe("AuthenticatedMapHomeView", () => {
     }
   });
 
-  it("says a Dock screen's own name once, as a large title that hands off to the header once scrolled", () => {
+  it("keeps a Dock screen's own name in the fixed header instead of duplicating it in the body", () => {
     const { container } = renderView({
       section: "identity",
       slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
     });
 
-    // At rest, the large title alone carries the name: one heading, not two.
-    expect(screen.getAllByRole("heading", { name: "0x0sky" })).toHaveLength(1);
-    const largeTitle = container.querySelector(
-      ".bond-dock__detail-large-title",
-    );
     const headerTitle = container.querySelector(".bond-dock__detail-header h2");
-    expect(largeTitle).toHaveAttribute("aria-hidden", "false");
-    expect(headerTitle).toHaveAttribute("aria-hidden", "true");
+    expect(headerTitle).toHaveTextContent(/^0x0sky$/);
+    expect(screen.getAllByRole("heading", { name: "0x0sky" })).toHaveLength(1);
 
-    // The header stays outside the scroller; only the body under it moves.
+    // The header stays outside the scroller; the body starts with its content,
+    // not another copy of the screen name.
     const scroll = container.querySelector<HTMLElement>(".bond-dock__scroll");
     expect(scroll).not.toBeNull();
     expect(scroll?.contains(headerTitle)).toBe(false);
-    expect(scroll?.contains(largeTitle)).toBe(true);
+    expect(
+      container.querySelector(".bond-dock__detail-large-title"),
+    ).toBeNull();
+  });
 
-    // Scrolled past it, the header's own small title takes over saying it —
-    // still one heading, never both at once.
-    Object.defineProperty(scroll, "scrollTop", {
-      configurable: true,
-      value: 200,
-    });
-    fireEvent.scroll(scroll as HTMLElement);
+  it("shows the owned Avaia address as the fixed header subtitle", () => {
+    const { container } = renderView();
 
-    expect(largeTitle).toHaveAttribute("aria-hidden", "true");
-    expect(headerTitle).toHaveAttribute("aria-hidden", "false");
-    expect(screen.getAllByRole("heading", { name: "0x0sky" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
+
+    const header = container.querySelector(".bond-dock__detail-header");
+    expect(header).toHaveTextContent("Owned Avaia");
+    expect(header?.querySelector("h2")).toHaveTextContent(/^x0skai$/);
+    expect(
+      container.querySelector(".bond-dock__detail-large-title"),
+    ).toBeNull();
   });
 
   it("lets the header say the section a person has scrolled into, and the screen above the first", () => {
@@ -578,10 +577,11 @@ describe("AuthenticatedMapHomeView", () => {
     };
     at(scroll as HTMLElement, 100, 600);
 
-    // The large title has gone, the first section's has not: the screen.
+    // Before the first section passes, the fixed subtitle names the screen.
     at(legend("Language"), 120, 140);
     scrollTo(40);
     expect(headerTitle).toHaveTextContent(/^Settings$/);
+    expect(headerTitle).not.toHaveAttribute("aria-hidden");
 
     // Its title gone up under the header, the section takes over saying it…
     at(legend("Language"), 40, 60);
@@ -594,9 +594,9 @@ describe("AuthenticatedMapHomeView", () => {
     scrollTo(320);
     expect(headerTitle).toHaveTextContent(/^Appearance$/);
 
-    // Back at the top, the screen's own name is the large title again.
+    // Back at the top, the fixed subtitle names the screen again.
     scrollTo(0);
-    expect(headerTitle).toHaveAttribute("aria-hidden", "true");
+    expect(headerTitle).not.toHaveAttribute("aria-hidden");
     expect(headerTitle).toHaveTextContent(/^Settings$/);
   });
 
