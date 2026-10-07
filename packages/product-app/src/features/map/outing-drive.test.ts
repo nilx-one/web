@@ -339,7 +339,7 @@ describe("chooseOuting", () => {
       kind: "home",
     });
     expect(chooseOuting(tired, menuOf(target("a", 300)), day).kind).toBe(
-      "target",
+      "stay",
     );
   });
 

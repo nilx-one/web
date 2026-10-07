@@ -22,6 +22,11 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import type {
+  OutingDecider,
+  OutingDecision,
+  WalkOutcome,
+} from "./outing-decision";
 import type { ProductLocale } from "../../shell/localization";
 import {
   blockedLineKind,
@@ -187,6 +192,7 @@ export interface AvaiaWalkInput {
    * budget (docs/avaia-osm-landmarks.md); with none it wanders or goes home.
    */
   readonly outingCandidates?: readonly OutingCandidate[];
+  readonly decideOuting?: OutingDecider;
 }
 
 /** Standing somewhere and looking around: at a tapped point B, or a target. */
@@ -287,6 +293,7 @@ export interface AvaiaWalkState {
   /** True while something is moving and the world needs frames. */
   readonly moving: boolean;
   readonly speech: AvaiaSpeech | undefined;
+  readonly decision: OutingDecision | undefined;
   readonly notebook: LandmarkNotebook;
   /** The places this Avaia grew fond of, loved ones first. */
   readonly favourites: readonly FondPlace[];
@@ -313,7 +320,7 @@ export interface AvaiaWalkState {
  */
 export function useAvaiaWalk({
   renderer,
-  active,
+  active: enabled,
   observed,
   model,
   locale,
@@ -327,7 +334,20 @@ export function useAvaiaWalk({
   onWalkCompleted,
   onAward,
   outingCandidates,
+  decideOuting,
 }: AvaiaWalkInput): AvaiaWalkState {
+  const visible = useSyncExternalStore(
+    subscribeVisibility,
+    pageVisible,
+    () => false,
+  );
+  const active = enabled && visible;
+  const decisionAbort = useRef<AbortController | undefined>(undefined);
+  const outcome = useRef<WalkOutcome>("none");
+  const blockedTargets = useRef(new Map<string, number>());
+  const [decision, setDecision] = useState<OutingDecision | undefined>(
+    undefined,
+  );
   const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
   const [study, setStudy] = useState<AvaiaStudy | undefined>(undefined);
   const [pause, setPause] = useState<Pause | undefined>(undefined);
@@ -523,6 +543,7 @@ export function useAvaiaWalk({
         readonly landmark?: MapLandmark;
       },
     ): "walking" | "nowhere" | MapObstacle["kind"] | "fog" => {
+      decisionAbort.current?.abort();
       const { purpose, target, landmark } = how;
       const targetId = how.targetId ?? target?.id;
       const from = currentPoint(nowMs);
@@ -630,7 +651,7 @@ export function useAvaiaWalk({
   // arriving at a tapped point B or an outing's target is standing there a
   // while, looking around; arriving anywhere else is simply standing there.
   useEffect(() => {
-    if (walk === undefined) return;
+    if (!active || walk === undefined) return;
     const remaining = Math.max(
       0,
       walk.startedMs + walk.durationMs - globalThis.performance.now(),
@@ -638,6 +659,7 @@ export function useAvaiaWalk({
     const arrived = globalThis.setTimeout(() => {
       const nowMs = globalThis.performance.now();
       const purpose = walkPurpose.current;
+      outcome.current = "arrived";
       latest.current.onWalkCompleted?.(walk);
       const visiting = purpose === "outing" ? walkTarget.current : undefined;
       const wall = Date.now();
@@ -684,12 +706,12 @@ export function useAvaiaWalk({
       }
     }, remaining);
     return () => globalThis.clearTimeout(arrived);
-  }, [dispatch, walk]);
+  }, [active, dispatch, walk]);
 
   // A stand ends on its own too, and the Avaia carries on from where it
   // stands: from point B, not from home.
   useEffect(() => {
-    if (pause === undefined) return;
+    if (!active || pause === undefined) return;
     const remaining = Math.max(
       0,
       pause.startedMs + pause.durationMs - globalThis.performance.now(),
@@ -707,12 +729,12 @@ export function useAvaiaWalk({
       });
     }, remaining);
     return () => globalThis.clearTimeout(done);
-  }, [dispatch, feel, pause]);
+  }, [active, dispatch, feel, pause]);
 
   // A walking body is heard walking. A walk with no duration — reduced
   // motion, which arrives without walking — makes no footfall at all.
   useEffect(() => {
-    if (walk === undefined || walk.durationMs <= 0) return;
+    if (!active || walk === undefined || walk.durationMs <= 0) return;
     const steps = globalThis.setInterval(() => {
       latest.current.onCue?.("step");
     }, locomotionStepMs(walk.mode));
@@ -728,12 +750,12 @@ export function useAvaiaWalk({
       globalThis.clearInterval(steps);
       globalThis.clearTimeout(stops);
     };
-  }, [walk]);
+  }, [active, walk]);
 
   // Looking a landmark over takes a moment; then it goes in the notebook and
   // the Avaia says what it learned.
   useEffect(() => {
-    if (study === undefined) return;
+    if (!active || study === undefined) return;
     const remaining = Math.max(
       0,
       study.startedMs + STUDY_MS - globalThis.performance.now(),
@@ -764,33 +786,49 @@ export function useAvaiaWalk({
       }
     }, remaining);
     return () => globalThis.clearTimeout(done);
-  }, [feel, say, study]);
+  }, [active, feel, say, study]);
 
-  // Where the body will be once what it is doing ends is what this device
-  // keeps, so a page dropped mid-walk comes back with the Avaia arrived.
-  const settledPoint =
-    walk !== undefined
-      ? { point: walk.to, bearingDeg: walk.arrivalBearingDeg }
-      : study !== undefined
-        ? { point: study.at, bearingDeg: study.bearingDeg }
-        : rest;
-  const settledLongitude = settledPoint?.point.longitude;
-  const settledLatitude = settledPoint?.point.latitude;
-  const settledBearing = settledPoint?.bearingDeg;
+  // Closing or suspending the page never manufactures an arrival. Checkpoint
+  // actual progress while walking and once more at the session boundary.
   useEffect(() => {
-    rememberWorld(owner, {
-      avaia:
-        settledLongitude === undefined ||
-        settledLatitude === undefined ||
-        settledBearing === undefined
-          ? undefined
-          : {
-              longitude: settledLongitude,
-              latitude: settledLatitude,
-              bearingDeg: settledBearing,
-            },
-    });
-  }, [owner, settledBearing, settledLatitude, settledLongitude]);
+    const remember = () => {
+      const point = currentPoint(globalThis.performance.now());
+      if (point !== undefined)
+        rememberWorld(owner, {
+          avaia: {
+            ...point,
+            bearingDeg:
+              walk === undefined
+                ? (rest?.bearingDeg ?? 0)
+                : walkStance(walk, globalThis.performance.now()).bearingDeg,
+          },
+        });
+    };
+    remember();
+    const timer =
+      active && walk !== undefined
+        ? globalThis.setInterval(remember, 1_000)
+        : undefined;
+    window.addEventListener("pagehide", remember);
+    return () => {
+      if (timer !== undefined) globalThis.clearInterval(timer);
+      window.removeEventListener("pagehide", remember);
+      remember();
+    };
+  }, [active, currentPoint, owner, rest, walk]);
+
+  useEffect(() => {
+    if (active) return;
+    decisionAbort.current?.abort();
+    const point = currentPoint(globalThis.performance.now());
+    if (point !== undefined && drive.current.activity.kind !== "idle")
+      setRest({ point, bearingDeg: latest.current.rest?.bearingDeg ?? 0 });
+    if (drive.current.activity.kind !== "idle") outcome.current = "interrupted";
+    dispatch({ type: "stopped", at: Date.now() });
+    setWalk(undefined);
+    setStudy(undefined);
+    setPause(undefined);
+  }, [active, currentPoint, dispatch]);
 
   // A line is on the card for as long as a person needs to read it.
   useEffect(() => {
@@ -917,7 +955,7 @@ export function useAvaiaWalk({
   }, [acted, affinity, currentPoint, goTo, idle, notebook, renderer, say]);
 
   // The drive: an idle Avaia, restless enough and rested since its last
-  // outing, goes out on its own. The menu and the pick are code's; with no
+  // outing, goes out on its own. A local model may pick from code's menu; with no
   // targets yet it wanders a short way along the paths, or goes home tired.
   useEffect(() => {
     if (!idle) return;
@@ -925,6 +963,8 @@ export function useAvaiaWalk({
     if (when === null) return;
     // Set when the Avaia gets busy while the outing is still reading ahead.
     let cancelled = false;
+    const controller = new AbortController();
+    decisionAbort.current = controller;
     const goOut = async () => {
       const from = currentPoint(globalThis.performance.now());
       if (from === undefined) return;
@@ -948,9 +988,8 @@ export function useAvaiaWalk({
         renderer.preloadRoads?.call(renderer, area, accept),
         renderer.preloadLandmarks?.call(renderer, area, accept),
       ]);
-      if (cancelled) return;
+      if (cancelled || controller.signal.aborted) return;
       {
-        const nowMs = globalThis.performance.now();
         const wall = Date.now();
         const graph = buildWalkGraph(renderer.roadsWithin?.(area) ?? []);
         const canEnter =
@@ -972,27 +1011,52 @@ export function useAvaiaWalk({
           from: at,
           open: canEnter,
           budgetMeters: budget,
-          exclude: recentlyVisited(
-            state,
-            wall,
-            affinitySnapshot(latest.current.owner, latest.current.avaiaAddress),
-          ),
+          exclude: new Set([
+            ...recentlyVisited(
+              state,
+              wall,
+              affinitySnapshot(
+                latest.current.owner,
+                latest.current.avaiaAddress,
+              ),
+            ),
+            ...[...blockedTargets.current]
+              .filter(([, until]) => until > wall)
+              .map(([id]) => id),
+          ]),
           obstacles: renderer.obstaclesWithin?.(area) ?? [],
         });
         // Home is where this device dwelt longest, by its own journal; until
         // the journal can say, where the device was last observed.
         const home = renderer.fog?.home?.() ?? latest.current.observed;
-        const choice = chooseOuting(state, menu, {
+        const context = {
           at,
           home:
-            home === undefined ? undefined : [home.longitude, home.latitude],
+            home === undefined
+              ? undefined
+              : ([home.longitude, home.latitude] as LonLat),
           hour: new Date(wall).getHours(),
           affinity: affinitySnapshot(
             latest.current.owner,
             latest.current.avaiaAddress,
           ),
           now: wall,
-        });
+        };
+        const selected =
+          decideOuting === undefined
+            ? {
+                choice: chooseOuting(state, menu, context),
+                source: "rules" as const,
+              }
+            : await decideOuting(
+                { state, menu, context, outcome: outcome.current },
+                controller.signal,
+              );
+        if (cancelled || controller.signal.aborted) return;
+        setDecision(selected);
+        const choice = selected.choice;
+        // Time spent loading/thinking is not time the body spent walking.
+        const departedMs = globalThis.performance.now();
         const point = ([longitude, latitude]: LonLat) => ({
           longitude,
           latitude,
@@ -1000,12 +1064,12 @@ export function useAvaiaWalk({
         let went = false;
         if (choice.kind === "target") {
           went =
-            goTo(point(choice.target.anchor), nowMs, {
+            goTo(point(choice.target.anchor), departedMs, {
               purpose: "outing",
               target: choice.target,
             }) === "walking";
         } else if (choice.kind === "home" && home !== undefined) {
-          went = goTo(home, nowMs, { purpose: "home" }) === "walking";
+          went = goTo(home, departedMs, { purpose: "home" }) === "walking";
         } else if (choice.kind === "wander") {
           const start = snapToGraph(graph, at, canEnter ? { canEnter } : {});
           const there =
@@ -1021,10 +1085,17 @@ export function useAvaiaWalk({
                 );
           went =
             there !== undefined &&
-            goTo(point(there), nowMs, { purpose: "wander" }) === "walking";
+            goTo(point(there), departedMs, { purpose: "wander" }) === "walking";
         }
-        if (!went) dispatch({ type: "stayed", at: wall });
-        else if (
+        if (!went) {
+          outcome.current = choice.kind === "stay" ? "stayed" : "blocked";
+          if (choice.kind === "target")
+            blockedTargets.current.set(
+              choice.target.id,
+              Date.now() + 5 * 60_000,
+            );
+          dispatch({ type: "stayed", at: Date.now() });
+        } else if (
           choice.kind === "target" &&
           wantsBack(
             affinitySnapshot(latest.current.owner, latest.current.avaiaAddress),
@@ -1036,14 +1107,38 @@ export function useAvaiaWalk({
       }
     };
     const outing = globalThis.setTimeout(
-      () => void goOut(),
+      () =>
+        void goOut().catch(() => {
+          if (cancelled || controller.signal.aborted) return;
+          outcome.current = "blocked";
+          setDecision({
+            choice: { kind: "stay" },
+            source: "rules",
+            reason: "error",
+          });
+          dispatch({ type: "stayed", at: Date.now() });
+        }),
       Math.max(0, when - Date.now()),
     );
     return () => {
       cancelled = true;
+      controller.abort();
       globalThis.clearTimeout(outing);
     };
-  }, [currentPoint, dispatch, driveVersion, goTo, idle, renderer, say]);
+  }, [
+    currentPoint,
+    decideOuting,
+    dispatch,
+    driveVersion,
+    goTo,
+    idle,
+    renderer,
+    say,
+    owner,
+    avaiaAddress,
+    observedLongitude,
+    observedLatitude,
+  ]);
 
   const stance = useCallback(
     (nowMs: number): BodyStance | undefined => {
@@ -1064,6 +1159,8 @@ export function useAvaiaWalk({
   );
 
   const reset = useCallback(() => {
+    decisionAbort.current?.abort();
+    outcome.current = "interrupted";
     dispatch({ type: "stopped", at: Date.now() });
     setWalk(undefined);
     setStudy(undefined);
@@ -1102,12 +1199,21 @@ export function useAvaiaWalk({
       stance,
       moving,
       speech,
+      decision,
       notebook,
       favourites: fond,
       reset,
       walkTo,
       announce: say,
     }),
-    [fond, moving, notebook, reset, say, speech, stance, walkTo],
+    [decision, fond, moving, notebook, reset, say, speech, stance, walkTo],
   );
+}
+
+function pageVisible(): boolean {
+  return document.visibilityState !== "hidden";
+}
+function subscribeVisibility(notify: () => void): () => void {
+  document.addEventListener("visibilitychange", notify);
+  return () => document.removeEventListener("visibilitychange", notify);
 }

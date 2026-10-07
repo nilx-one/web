@@ -36,10 +36,10 @@ import {
  */
 
 /** No two outings closer together than this. */
-export const OUTING_INTERVAL_MS = 4 * 60 * 60 * 1000;
+export const OUTING_INTERVAL_MS = 60_000;
 
 /** How long an Avaia stands idle before it gets restless enough to go out. */
-export const RESTLESS_MS = 10 * 60 * 1000;
+export const RESTLESS_MS = 15_000;
 
 /** How long it stands at a tapped point B, looking around, before it carries on. */
 export const POINT_B_STAND_MS = 20_000;
@@ -57,7 +57,7 @@ export const LOW_ENERGY = 0.3;
 export const HOME_RADIUS_METERS = 50;
 
 /** A target visited this recently is left off the menu. */
-export const REVISIT_MS = 7 * 24 * 60 * 60 * 1000;
+export const REVISIT_MS = 7 * 260_000;
 
 /** A wander goes this far, along the paths. */
 export const WANDER_MIN_METERS = 150;
@@ -174,6 +174,8 @@ export function stepDrive(state: DriveState, event: DriveEvent): DriveState {
             ...state,
             activity: { kind: "idle", since: event.at },
             lastOutingAt: event.at,
+            // Rest is simulated only while the active loop is running.
+            energy: clamp01(state.energy + 0.1),
           }
         : state;
     case "arrived": {
@@ -317,6 +319,7 @@ export function chooseOuting(
   ) {
     return { kind: "home" };
   }
+  if (state.energy < LOW_ENERGY) return { kind: "stay" };
   const evening = context.hour >= 20 || context.hour < 7;
   const targets = menu.options.flatMap((option) =>
     option.kind === "target" &&

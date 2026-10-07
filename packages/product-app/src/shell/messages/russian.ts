@@ -10,6 +10,10 @@ import { GUIDE_RU } from "./guide";
  * Russian or Belarusian; see `offersRussian`.
  */
 export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
+  "avaia.decision.pending": "Avaia ещё не выбрала прогулку.",
+  "avaia.decision.model": "Последний выбор прогулки: локальный ИИ.",
+  "avaia.decision.rules":
+    "Последний выбор прогулки: простые правила поведения.",
   "failure.region": "Уведомления об ошибках",
   "failure.retry": "Попробовать снова",
   "failure.unavailable.title": "Запрос без ответа",

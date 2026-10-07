@@ -31,6 +31,11 @@ import {
 } from "./place-affinity";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { useAvaiaWalk, type AvaiaWalkInput } from "./use-avaia-walk";
+import {
+  createOutingDecider,
+  type OutingDecider,
+  type OutingDecision,
+} from "./outing-decision";
 import { readWorldMemory } from "./world-memory";
 
 const ORIGIN = { longitude: 30.5234, latitude: 50.4501 };
@@ -71,7 +76,10 @@ function walkRenderer() {
   };
 }
 
-function render(renderer: MapRenderer) {
+function render(
+  renderer: MapRenderer,
+  overrides: Partial<AvaiaWalkInput> = {},
+) {
   return renderHook((props: AvaiaWalkInput) => useAvaiaWalk(props), {
     initialProps: {
       renderer,
@@ -83,6 +91,7 @@ function render(renderer: MapRenderer) {
       owner: "0x0sky",
       zoom: 17,
       reducedMotion: true,
+      ...overrides,
     },
   });
 }
@@ -535,5 +544,194 @@ describe("the favourites on the Avaia's screen", () => {
 
     await advance(HOUR + 1_000);
     expect(result.current.favourites).toEqual([]);
+  });
+});
+
+describe("the want → choose → walk → result loop", () => {
+  function targetRenderer() {
+    const base = walkRenderer();
+    return {
+      ...base,
+      renderer: {
+        ...base.renderer,
+        landmarksNear: (point: MapPointSelection, radius: number) =>
+          mapDistanceMeters(point, at(500, 0)) > radius
+            ? []
+            : [
+                {
+                  ...at(500, 0),
+                  id: "museum:1",
+                  kind: "museum",
+                  name: "Museum",
+                  facts: {},
+                },
+              ],
+      } as unknown as MapRenderer,
+    };
+  }
+
+  it("uses real adapter inference to choose, walks, then feeds arrival into the next choice", async () => {
+    const { renderer } = targetRenderer();
+    const rephrase = vi.fn(async () => "1");
+    const unload = vi.fn(async () => undefined);
+    const decideOuting = createOutingDecider(
+      {
+        catalog: [],
+        defaultModelId: "test",
+        host: {
+          inspect: async () => ({ kind: "usable" }),
+          isCached: async () => true,
+          describe: async () => ({ bytes: 10, source: "mirror", notices: [] }),
+          open: async () => ({ rephrase, unload }),
+          remove: async () => undefined,
+        },
+      },
+      () => undefined,
+    );
+    const completed = vi.fn();
+    const { result } = render(renderer, {
+      decideOuting,
+      onWalkCompleted: completed,
+    });
+    await advance(RESTLESS_MS + 1);
+    await advance(1);
+    expect(result.current.decision?.source).toBe("model");
+    expect(
+      mapDistanceMeters(
+        result.current.stance(performance.now())!.point,
+        at(500, 0),
+      ),
+    ).toBeLessThan(1);
+    expect(completed).toHaveBeenCalledOnce();
+    expect(unload).toHaveBeenCalledOnce();
+    await advance(OUTING_INTERVAL_MS + 60_000);
+    await advance(1);
+    expect(rephrase.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const second = (
+      rephrase.mock.calls as unknown as [string, string][]
+    )[1]![1];
+    expect(JSON.parse(second).previous).toBe("arrived");
+    // The first place is no longer offered; a completed visit changed the next decision.
+    expect(
+      JSON.parse(second).options.some(
+        (option: { label: string }) => option.label === "museum",
+      ),
+    ).toBe(false);
+  });
+
+  it("starts the walking clock after inference, not before it", async () => {
+    const { renderer } = targetRenderer();
+    let finish!: (value: OutingDecision) => void;
+    let picked: OutingDecision | undefined;
+    const decideOuting = vi.fn<OutingDecider>(async (input) => {
+      picked = { source: "model", choice: input.menu.options[1]! };
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const { result } = render(renderer, { decideOuting, reducedMotion: false });
+    await advance(RESTLESS_MS);
+    await advance(10_000);
+    await act(async () => finish(picked!));
+    expect(
+      mapDistanceMeters(
+        result.current.stance(performance.now())!.point,
+        ORIGIN,
+      ),
+    ).toBeLessThan(1);
+    await advance(1_000);
+    const distance = mapDistanceMeters(
+      result.current.stance(performance.now())!.point,
+      ORIGIN,
+    );
+    expect(distance).toBeGreaterThan(0);
+    expect(distance).toBeLessThan(5);
+  });
+
+  it("lets the owner's tap cancel an in-flight choice and ignores its late answer", async () => {
+    const { renderer, tap } = targetRenderer();
+    let finish!: (value: OutingDecision) => void;
+    let picked!: OutingDecision;
+    let signal!: AbortSignal;
+    const decideOuting = vi.fn<OutingDecider>(async (input, abort) => {
+      signal = abort;
+      picked = { source: "model", choice: input.menu.options[1]! };
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    const { result } = render(renderer, { decideOuting });
+    await advance(RESTLESS_MS);
+    tap(at(100, 0));
+    expect(signal.aborted).toBe(true);
+    await advance(1);
+    await act(async () => finish(picked));
+    expect(
+      mapDistanceMeters(
+        result.current.stance(performance.now())!.point,
+        at(100, 0),
+      ),
+    ).toBeLessThan(1);
+    expect(result.current.decision).toBeUndefined();
+  });
+
+  it("quiesces a walk at its actual position with no false completion", async () => {
+    const { renderer, tap } = walkRenderer();
+    const completed = vi.fn();
+    const props: AvaiaWalkInput = {
+      renderer,
+      active: true,
+      observed: { ...ORIGIN, accuracyMeters: 10 },
+      model: undefined,
+      locale: "en",
+      avaiaAddress: "avaia:test",
+      owner: "0x0sky",
+      zoom: 17,
+      reducedMotion: false,
+      onWalkCompleted: completed,
+    };
+    const { result, rerender, unmount } = render(renderer, props);
+    tap(at(500, 0));
+    await advance(5_000);
+    const position = result.current.stance(performance.now())!.point;
+    expect(mapDistanceMeters(position, ORIGIN)).toBeLessThan(20);
+    rerender({ ...props, active: false });
+    await advance(600_000);
+    expect(result.current.stance(performance.now())?.point).toEqual(position);
+    expect(completed).not.toHaveBeenCalled();
+    unmount();
+    const remembered = readWorldMemory("0x0sky").avaia!;
+    expect(mapDistanceMeters(remembered, position)).toBeLessThan(1);
+    expect(mapDistanceMeters(remembered, at(500, 0))).toBeGreaterThan(400);
+  });
+
+  it("cancels a pending decision when unmounted", async () => {
+    const { renderer } = targetRenderer();
+    let signal!: AbortSignal;
+    const decideOuting = vi.fn<OutingDecider>(async (_input, abort) => {
+      signal = abort;
+      return new Promise(() => undefined);
+    });
+    const { unmount } = render(renderer, { decideOuting });
+    await advance(RESTLESS_MS);
+    unmount();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it("reports a tile-load failure and retries after a bounded pause", async () => {
+    const { renderer: base } = walkRenderer();
+    const preloadRoads = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("tiles unavailable"))
+      .mockResolvedValue(undefined);
+    const renderer = { ...base, preloadRoads } as unknown as MapRenderer;
+    const { result } = render(renderer);
+    await advance(RESTLESS_MS);
+    expect(result.current.decision).toMatchObject({
+      source: "rules",
+      reason: "error",
+    });
+    await advance(OUTING_INTERVAL_MS + 1);
+    expect(preloadRoads).toHaveBeenCalledTimes(2);
   });
 });

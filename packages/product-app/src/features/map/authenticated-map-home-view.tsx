@@ -31,6 +31,7 @@ import {
 import { StatusToastStack, type StatusToastItem } from "@nilx-one/ui";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -167,6 +168,8 @@ import {
   type AchievementDialogState,
 } from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
+import { createOutingDecider } from "./outing-decision";
+import { readLocalModelChoice } from "../../shell/local-model-choice";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFindLoop } from "./use-find-loop";
 import { readWorldMemory, rememberWorld } from "./world-memory";
@@ -975,7 +978,12 @@ export function AuthenticatedMapHomeView({
   // The Avaia answers fog taps through the reveal below, which in turn talks
   // in the Avaia's voice: the ref is what lets the two hooks meet.
   const fogRevealRef = useRef<FogRevealState | undefined>(undefined);
+  const decideOuting = useMemo(
+    () => createOutingDecider(localModel, readLocalModelChoice),
+    [localModel],
+  );
   const avaiaWalk = useAvaiaWalk({
+    decideOuting,
     renderer,
     active: wheel === "avaia" && handover === undefined,
     observed: observedPosition,
@@ -1960,6 +1968,8 @@ export function AuthenticatedMapHomeView({
       data-theme={resolvedAppearance}
       data-focus-state={focusState}
       data-readiness={readiness.tone}
+      data-avaia-decision={avaiaWalk.decision?.source ?? "pending"}
+      data-avaia-decision-reason={avaiaWalk.decision?.reason}
       data-readiness-shown={readinessShown}
       frame={<div className="authenticated-map-home__readiness" />}
       data-section={section}
@@ -2208,6 +2218,11 @@ export function AuthenticatedMapHomeView({
                   {section === "settings" ? (
                     <>
                       <LanguageSettings />
+                      <p role="status" className="profile-edit__note">
+                        {t(
+                          `avaia.decision.${avaiaWalk.decision?.source ?? "pending"}`,
+                        )}
+                      </p>
                       {localModel === undefined ? null : (
                         <LocalModelSettings
                           host={localModel.host}

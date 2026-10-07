@@ -62,6 +62,16 @@ export type LocalModelDescription =
   | { readonly bytes: null; readonly source: "mirror" | "upstream" };
 
 export interface LocalModelEngine {
+  /** Bounded local text inference; absent on hosts that only manage downloads. */
+  rephrase?(
+    system: string,
+    user: string,
+    options: {
+      readonly maxNewTokens: number;
+      readonly temperature: number;
+      readonly topP: number;
+    },
+  ): Promise<string>;
   unload(): Promise<void>;
 }
 

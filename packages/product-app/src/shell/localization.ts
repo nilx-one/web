@@ -23,6 +23,9 @@ export const SUPPORTED_LOCALES: readonly ProductLocale[] = [
 ];
 
 const EN_MESSAGES = {
+  "avaia.decision.pending": "Avaia has not chosen a walk yet.",
+  "avaia.decision.model": "Last walk choice: local AI.",
+  "avaia.decision.rules": "Last walk choice: simple behaviour rules.",
   "failure.region": "Failure notices",
   "failure.retry": "Try again",
   "failure.unavailable.title": "Request unanswered",
@@ -336,6 +339,10 @@ export const DOCK_ACTION_KEYS = [
 ] as const satisfies readonly TranslationKey[];
 
 const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
+  "avaia.decision.pending": "Avaia ще не обрала прогулянку.",
+  "avaia.decision.model": "Останній вибір прогулянки: локальний ШІ.",
+  "avaia.decision.rules":
+    "Останній вибір прогулянки: прості правила поведінки.",
   "failure.region": "Сповіщення про помилки",
   "failure.retry": "Спробувати знову",
   "failure.unavailable.title": "Запит без відповіді",

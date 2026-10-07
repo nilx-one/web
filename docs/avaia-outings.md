@@ -286,7 +286,7 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
 
 ### 2.3 When it starts
 
-- Autonomous walking switches on when the Avaia is "at the wheel" and doing nothing (just as curiosity does today), no more often than `AVAIA_OUTING_INTERVAL_MS` (starting value: 4 h).
+- Autonomous walking switches on when the Avaia is "at the wheel" and doing nothing (just as curiosity does today), no more often than `AVAIA_OUTING_INTERVAL_MS` (60 s).
 - A tap always takes priority over the drive.
 - **While the page is closed, the Avaia does not walk.** This keeps today's "Nothing walks in the background". An option for later: on opening, run a deterministic route and show the outcome ("it already went out and came back"), the way the fog reveal does on the wall clock. Not part of this plan.
 - Each walk starts from where the Avaia is now. If it went to a point B, the next outing starts from there.
@@ -303,13 +303,52 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
   - arriving at a target is a 30 s look around and a "visited" mark;
   - arriving home restores full energy;
   - a walk that did not arrive, or a stand cut short because the Avaia left the wheel, becomes `idle` where it stands.
-- **When to go out:** `restlessness` builds over 10 min of idling, and an outing comes no more often than once in 4 h (`nextOutingAt`). The time of the last outing is kept in `world-memory`, so a reload does not reset the interval.
+- **When to go out:** `restlessness` builds over 15 s of idling, and an outing comes no more often than once in 60 s (`nextOutingAt`). The time of the last outing is kept in `world-memory`, so a reload does not reset the interval.
 - **Energy:** 0.2 per kilometre, so a full charge lasts 5 km. An outing's budget is a there-and-back on what is left, but never beyond 3 km.
 - **Choice** (`chooseOuting`): tired and far from home, go home. In the evening and at night (20:00–07:00), only a target within 1 km, or wander. By day, the nearest target, otherwise wander, otherwise stay. A target visited less than a week ago stays off the menu. With the Avaia's feelings at hand, the most wanted target wins instead of the nearest, a loved one waits a day rather than a week, and a visit lasts by what is done there ([Favourite places](avaia-walk.md#favourite-places)).
 - **Wandering:** a graph node 150–400 m away along the paths, over open ground. It is picked deterministically per outing window.
 - **Home** is the cell this device dwelt in longest, by closed visits in its own presence journal, once that is at least an hour (`HOME_MIN_DWELL_MS`); ties go to the smallest cell id. The fog field computes it inside `map-shade` and hands the application one point, the cell's centre (`MapFogField.home`); no visit, duration or other cell leaves the presence boundary. Until the journal loads, or with no cell dwelt in long enough, home is the device's last observed position.
 - **Lines:** for an outing the Avaia uses the existing `walk` line. There are no "I'll go for a walk" lines yet, because they need to be recorded.
 - The mapper (#306) supplies candidates from the landmarks the map has loaded: museums, viewpoints, castles, forts, ruins, archaeological sites and significant monuments. It supplies parks, reserves, beaches and lakes as areas too, from the `landuse` and `water` polygons and their labels. All of these rows wait on the archive inspection ([Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md#implemented)).
+
+### 2.5 Local decision loop
+
+The world composes `createOutingDecider` with the same local-model host and
+model choice as Settings. The loop is **want → choose → walk → outcome**:
+
+- Curiosity after 15 s of idling asks for a choice. A new outing is at least
+  60 s after the previous choice; travel and a visit finish before another starts.
+- The existing mapper and router build reachable, open-ground options. Evening
+  targets remain within 1 km. Tired Avaia goes home, or rests if already home
+  or home is unknown. Staying restores 0.1 energy per decision; it is a
+  simulation value, not a biological claim, and never advances offline.
+- A cached, device-eligible model from this deployment's mirror gets only closed
+  labels: curiosity, an energy band, day/evening, the previous outcome, and
+  menu indices with kind, near/far and new/known/fond/loved. Names, coordinates,
+  addresses, identifiers and journal records never enter its prompt.
+- Inference returns one integer. A strict parser resolves it against that exact
+  menu. A malformed answer, missing model, unsupported device or failure uses
+  `chooseOuting`; it is explicitly recorded as a rules decision, never a model
+  success. No automatic weight download is started by the walk loop.
+- One pass has a 30 s deadline and a 16-token output bound. Its engine is unloaded
+  after each pass and on cancellation; a stuck pass cannot spawn overlapping
+  engines. Settings identifies whether the latest choice came from local AI or
+  simple rules. The map's `data-avaia-decision-reason` exposes the failure category
+  without prompt content or private state.
+- Arrival, staying, interruption and a blocked route feed the next choice. A
+  blocked target is left out for five minutes, without recording a visit.
+  Existing notebook curiosity and favourite-place visits remain available.
+- A tap interrupts a pending decision when it starts a new walk. Leaving
+  spectate, hiding the page or unmounting cancels pending choice work. A suspended
+  walk keeps its actual position and emits no arrival or reward; resuming starts
+  a new decision from there. Position checkpoints never persist the destination
+  as if it had already been reached.
+
+This is device-local presentation under `04-ai-bonds.md`'s observer-gated
+runtime and `nilx-one/ai/docs/map-walk-and-landmarks.md`'s closed-choice boundary.
+It creates no presence observation, Interaction or BondChain record. On-device
+WebGPU inference still needs a smoke check with the deployment's served model;
+unit tests exercise the host boundary with injected engines, not GPU hardware.
 
 ## §3 Finds
 
