@@ -1933,13 +1933,23 @@ export function AuthenticatedMapHomeView({
     return dockSectionTitle ?? detailTitle();
   }
 
+  // An owned Avaia is already named by the eyebrow above it, so its address is
+  // a stable subtitle in the header rather than a second large title in the
+  // scrolling body. Other Dock screens keep the iOS-style large-title handoff.
+  const detailHeaderTitleVisible =
+    activeDetail === "avaia" || detailTitleCollapsed;
+
   function handleDockScroll(event: UIEvent<HTMLElement>): void {
     const scroller = event.currentTarget;
     const collapsed = scroller.scrollTop > DETAIL_TITLE_COLLAPSE_PX;
     setDetailTitleCollapsed((current) =>
       current === collapsed ? current : collapsed,
     );
-    setDockSectionTitle(collapsed ? passedSectionTitle(scroller) : undefined);
+    setDockSectionTitle(
+      activeDetail === "avaia" || collapsed
+        ? passedSectionTitle(scroller)
+        : undefined,
+    );
   }
 
   return (
@@ -2074,7 +2084,7 @@ export function AuthenticatedMapHomeView({
               <div className="bond-dock__detail">
                 <div
                   className="bond-dock__detail-header"
-                  data-collapsed={detailTitleCollapsed}
+                  data-collapsed={detailHeaderTitleVisible}
                 >
                   <button
                     className="interface-settings__back"
@@ -2088,7 +2098,7 @@ export function AuthenticatedMapHomeView({
                     <span className="interface-settings__eyebrow">
                       {detailEyebrow()}
                     </span>
-                    <h2 aria-hidden={!detailTitleCollapsed}>
+                    <h2 aria-hidden={!detailHeaderTitleVisible}>
                       {/* Keyed by what it says, so a new section's name
                         arrives rather than being swapped in place. */}
                       <span
@@ -2101,15 +2111,18 @@ export function AuthenticatedMapHomeView({
                   </div>
                 </div>
                 <div className="bond-dock__scroll" onScroll={handleDockScroll}>
-                  {/* The same name the collapsed header takes over saying once
-                    this has scrolled out of view — never both at once. */}
-                  <h1
-                    className="bond-dock__detail-large-title"
-                    data-collapsed={detailTitleCollapsed}
-                    aria-hidden={detailTitleCollapsed}
-                  >
-                    {detailTitle()}
-                  </h1>
+                  {/* The Avaia's address belongs to the fixed header: "Owned
+                    Avaia" is the screen name and the address is its subtitle.
+                    Other screens keep the large-title handoff. */}
+                  {activeDetail === "avaia" ? null : (
+                    <h1
+                      className="bond-dock__detail-large-title"
+                      data-collapsed={detailTitleCollapsed}
+                      aria-hidden={detailTitleCollapsed}
+                    >
+                      {detailTitle()}
+                    </h1>
+                  )}
 
                   {section === "identity" && activeDetail === undefined ? (
                     <div className="bond-profile">
