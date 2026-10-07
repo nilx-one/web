@@ -24,10 +24,12 @@ import type { ProductLocale } from "../../shell/localization";
  */
 export type AvaiaLineKind =
   | "walk"
+  | "stroll"
   | "blocked.building"
   | "blocked.water"
   | "blocked.fog"
   | "landmark.spotted"
+  | "landmark.glanced"
   | "landmark.studied"
   | "landmark.loved"
   | "landmark.longing"
@@ -49,6 +51,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "On my way. The horizon can wait.",
       "Good spot. Going.",
     ],
+    stroll: [
+      "Stretching my legs.",
+      "A few steps. Nothing far.",
+      "Just checking the air around here.",
+    ],
     "blocked.building": [
       "That's a wall, not a path.",
       "Even the sky goes around buildings.",
@@ -69,6 +76,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Something on the skyline: {landmark}.",
       "{landmark} is out there. Going to see it.",
       "{landmark}. Let me check.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Worth the detour.",
+      "Had to see {landmark} up close.",
+      "{landmark}. Good bearing from here.",
     ],
     "landmark.studied": [
       "{landmark}. Noted.",
@@ -113,6 +125,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Just a peek, I promise.",
       "Going, going…",
     ],
+    stroll: [
+      "I'll just wander about a little.",
+      "Ooh, what's round the corner?",
+      "Can't stand still. A tiny stroll!",
+    ],
     "blocked.building": [
       "That's somebody's house!",
       "Walls. Not my style.",
@@ -133,6 +150,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}? Ooh, going!",
       "You walked right past {landmark}. My turn!",
       "Look, {landmark}. Let me get closer.",
+    ],
+    "landmark.glanced": [
+      "Ooh, {landmark}! Just a peek.",
+      "I had to stop for {landmark}.",
+      "{landmark} — look at it!",
     ],
     "landmark.studied": [
       "{landmark}. I'll remember it now.",
@@ -177,6 +199,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Fine, I'll go look. For science.",
       "Relocating one (1) Avaia.",
     ],
+    stroll: [
+      "Pacing. It's what we do.",
+      "Standing still was getting old.",
+      "A short walk to nowhere in particular.",
+    ],
     "blocked.building": [
       "Bold of you to assume I phase through walls.",
       "That's architecture. I respect it.",
@@ -197,6 +224,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Oh look, {landmark}. Going to stare at it.",
       "{landmark} spotted. Curiosity: engaged.",
       "{landmark} isn't going anywhere. I am.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. I stopped. Character development.",
+      "Brief detour for {landmark}. No regrets.",
+      "{landmark}. Yes, I looked.",
     ],
     "landmark.studied": [
       "{landmark}: examined. Opinions pending.",
@@ -241,6 +273,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Updating my location…",
       "Coming through, in style.",
     ],
+    stroll: [
+      "Strutting about a bit.",
+      "A little lap to break in the shoes.",
+      "Can't just stand there. Stroll time.",
+    ],
     "blocked.building": [
       "Not through a wall, darling.",
       "That door isn't my size.",
@@ -261,6 +298,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Is that {landmark}? Photo op!",
       "{landmark}. I must see it up close.",
       "Found one: {landmark}. My turn now.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Great backdrop.",
+      "Pausing for {landmark}, obviously.",
+      "{landmark} matches the outfit.",
     ],
     "landmark.studied": [
       "{landmark}. Archived, like a good look.",
@@ -308,6 +350,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Іду. Горизонт почекає.",
       "Добре місце. Рушаю.",
     ],
+    stroll: [
+      "Розімну ноги.",
+      "Кілька кроків. Недалеко.",
+      "Перевірю повітря поблизу.",
+    ],
     "blocked.building": [
       "Це стіна, а не стежка.",
       "Навіть небо оминає будинки.",
@@ -328,6 +375,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Щось видніється на обрії: {landmark}.",
       "Там {landmark}. Піду подивлюся.",
       "{landmark}. Перевірю.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Вартувало звернути.",
+      "{landmark} — довелося глянути зблизька.",
+      "{landmark}. Добрий орієнтир.",
     ],
     "landmark.studied": [
       "{landmark}. Занотовано.",
@@ -372,6 +424,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Лише одним оком, чесно.",
       "Іду-іду…",
     ],
+    stroll: [
+      "Трохи поблукаю тут.",
+      "Ой, а що там за рогом?",
+      "Не можу стояти на місці. Маленька прогулянка!",
+    ],
     "blocked.building": [
       "Це ж чийсь дім!",
       "Стіни — не мій стиль.",
@@ -392,6 +449,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}? Ой, іду!",
       "Он, {landmark}. Тепер моя черга!",
       "Дивись, {landmark}. Гляну ближче.",
+    ],
+    "landmark.glanced": [
+      "Ой, {landmark}! Лише одним оком.",
+      "{landmark} — я мусила зупинитися.",
+      "{landmark}! Ти тільки поглянь.",
     ],
     "landmark.studied": [
       "{landmark}. Тепер запам’ятаю.",
@@ -436,6 +498,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Гаразд, гляну. Заради науки.",
       "Переміщую одну (1) Avaia.",
     ],
+    stroll: [
+      "Походжу. Це в нас таке.",
+      "Стояти на місці набридло.",
+      "Коротка прогулянка в нікуди.",
+    ],
     "blocked.building": [
       "Сміливо думати, що я ходжу крізь стіни.",
       "Це архітектура. Я її поважаю.",
@@ -456,6 +523,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "О, {landmark}. Піду повитріщаюся.",
       "Помічено: {landmark}. Цікавість увімкнено.",
       "{landmark} нікуди не дінеться. А я — так.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Зупинка. Розвиток персонажа.",
+      "{landmark} — короткий гачок. Без жалю.",
+      "{landmark}. Так, подивитися довелося.",
     ],
     "landmark.studied": [
       "{landmark}: оглянуто. Думки згодом.",
@@ -500,6 +572,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Оновлюю свою локацію…",
       "Дайте дорогу, я стильно.",
     ],
+    stroll: [
+      "Трохи пройдуся тут.",
+      "Маленьке коло — розносити туфлі.",
+      "Не стоятиму ж я просто так. Час прогулянки.",
+    ],
     "blocked.building": [
       "Не крізь стіну, любий.",
       "Ці двері не мого розміру.",
@@ -520,6 +597,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Це {landmark}? Час для фото!",
       "{landmark}. Мушу побачити зблизька.",
       "Знахідка: {landmark}. Тепер іду я.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Чудове тло.",
+      "{landmark} — звісно, я зупинилася.",
+      "{landmark} пасує до образу.",
     ],
     "landmark.studied": [
       "{landmark}. В архіві, як вдалий образ.",
@@ -567,6 +649,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Иду. Горизонт подождёт.",
       "Хорошее место. Выдвигаюсь.",
     ],
+    stroll: [
+      "Разомну ноги.",
+      "Пара шагов. Недалеко.",
+      "Проверю воздух поблизости.",
+    ],
     "blocked.building": [
       "Это стена, а не тропа.",
       "Даже небо обходит дома.",
@@ -587,6 +674,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Что-то виднеется на горизонте: {landmark}.",
       "Там {landmark}. Пойду посмотрю.",
       "{landmark}. Проверю.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Стоило свернуть.",
+      "{landmark} — пришлось взглянуть вблизи.",
+      "{landmark}. Хороший ориентир.",
     ],
     "landmark.studied": [
       "{landmark}. Записано.",
@@ -631,6 +723,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Только одним глазком, честно.",
       "Иду-иду…",
     ],
+    stroll: [
+      "Немножко поброжу тут.",
+      "Ой, а что там за углом?",
+      "Не могу стоять на месте. Маленькая прогулка!",
+    ],
     "blocked.building": [
       "Это же чей-то дом!",
       "Стены — не мой стиль.",
@@ -651,6 +748,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "{landmark}? Ой, иду!",
       "Вон, {landmark}. Теперь моя очередь!",
       "Смотри, {landmark}. Гляну поближе.",
+    ],
+    "landmark.glanced": [
+      "Ой, {landmark}! Только одним глазком.",
+      "{landmark} — я должна была остановиться.",
+      "{landmark}! Ты только посмотри.",
     ],
     "landmark.studied": [
       "{landmark}. Теперь запомню.",
@@ -695,6 +797,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Ладно, гляну. Ради науки.",
       "Перемещаю одну (1) Avaia.",
     ],
+    stroll: [
+      "Похожу. У нас так принято.",
+      "Стоять на месте надоело.",
+      "Короткая прогулка в никуда.",
+    ],
     "blocked.building": [
       "Смело думать, что я хожу сквозь стены.",
       "Это архитектура. Я её уважаю.",
@@ -715,6 +822,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "О, {landmark}. Пойду поглазею.",
       "Замечено: {landmark}. Любопытство включено.",
       "{landmark} никуда не денется. А я — да.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Остановка. Развитие персонажа.",
+      "{landmark} — короткий крюк. Без сожалений.",
+      "{landmark}. Да, посмотреть пришлось.",
     ],
     "landmark.studied": [
       "{landmark}: осмотрено. Мнения позже.",
@@ -759,6 +871,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Обновляю своё местоположение…",
       "Дорогу, я при параде.",
     ],
+    stroll: [
+      "Немного пройдусь тут.",
+      "Маленький круг — разносить туфли.",
+      "Не стоять же просто так. Время прогулки.",
+    ],
     "blocked.building": [
       "Не сквозь стену, дорогой.",
       "Эта дверь не моего размера.",
@@ -779,6 +896,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Это {landmark}? Время для фото!",
       "{landmark}. Должна увидеть вблизи.",
       "Находка: {landmark}. Теперь иду я.",
+    ],
+    "landmark.glanced": [
+      "{landmark}. Отличный фон.",
+      "{landmark} — конечно, я остановилась.",
+      "{landmark} подходит к образу.",
     ],
     "landmark.studied": [
       "{landmark}. В архиве, как удачный образ.",
@@ -905,6 +1027,7 @@ export function blockedLineKind(
 export function lineCue(kind: AvaiaLineKind): SoundCue | undefined {
   switch (kind) {
     case "walk":
+    case "stroll":
     case "fog.reveal":
       return "walk";
     case "blocked.building":
@@ -913,6 +1036,7 @@ export function lineCue(kind: AvaiaLineKind): SoundCue | undefined {
     case "fog.busy":
       return "refuse";
     case "landmark.spotted":
+    case "landmark.glanced":
     case "landmark.longing":
       return "spot";
     case "landmark.studied":
