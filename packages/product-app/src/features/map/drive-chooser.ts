@@ -49,12 +49,12 @@ export function createDriveChooser({
   retryMs = CHOOSER_RETRY_MS,
   now = () => Date.now(),
 }: {
-  readonly open: (signal: AbortSignal) => Promise<LocalModelEngine>;
+  readonly open: (signal: AbortSignal) => Promise<LocalModelEngine | null>;
   readonly idleMs?: number;
   readonly retryMs?: number;
   readonly now?: () => number;
 }): DriveChooser {
-  let engine: Promise<LocalModelEngine> | undefined;
+  let engine: Promise<LocalModelEngine | null> | undefined;
   let opening: AbortController | undefined;
   let idle: ReturnType<typeof setTimeout> | undefined;
   let failedAt: number | undefined;
@@ -68,16 +68,25 @@ export function createDriveChooser({
     controller?.abort();
     if (idle !== undefined) globalThis.clearTimeout(idle);
     idle = undefined;
-    await loaded?.then((it) => it.unload()).catch(() => undefined);
+    await loaded?.then((it) => it?.unload()).catch(() => undefined);
   };
 
-  const loaded = (): Promise<LocalModelEngine> | undefined => {
+  const loaded = (): Promise<LocalModelEngine | null> | undefined => {
     if (disposed) return undefined;
     if (failedAt !== undefined && now() - failedAt < retryMs) return undefined;
     if (engine === undefined) {
       const controller = new AbortController();
       opening = controller;
       engine = open(controller.signal)
+        .then((model) => {
+          // Cache disappearance is not a load failure and must not start the
+          // ten-minute retry backoff. Re-check on the next choice instead.
+          if (model === null && opening === controller) {
+            opening = undefined;
+            engine = undefined;
+          }
+          return model;
+        })
         .catch((error: unknown) => {
           if (!controller.signal.aborted) failedAt = now();
           if (opening === controller) {
@@ -102,7 +111,7 @@ export function createDriveChooser({
       if (pending === undefined) return null;
       try {
         const model = await pending;
-        if (model.complete === undefined) return null;
+        if (model === null || model.complete === undefined) return null;
         const said = await model.complete({
           system: CHOICE_SYSTEM_PROMPT,
           user: choicePrompt(choose),
@@ -148,7 +157,7 @@ export function useDriveChooser(
                 .isCached(modelId)
                 .catch(() => false);
               signal.throwIfAborted();
-              if (!cached) throw new Error("local model is no longer cached");
+              if (!cached) return null;
               return localModel.host.open(modelId, () => undefined, signal);
             },
           }),
