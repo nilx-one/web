@@ -66,8 +66,27 @@ export const WANDER_MAX_METERS = 400;
 /** An outing never plans further than this, however rested the Avaia is. */
 export const MAX_OUTING_METERS = 3_000;
 
+/**
+ * How long a settled Avaia stands before it strolls about on its own: after a
+ * stand at point B, a visit, a study. Each stroll in a row doubles the wait,
+ * up to `STROLL_MAX_IDLE_MS`, so it potters less the longer it potters.
+ */
+export const STROLL_IDLE_MS = 30_000;
+export const STROLL_MAX_IDLE_MS = 5 * 60 * 1000;
+
+/** A stroll goes this far along the paths: a few steps, not an outing. */
+export const STROLL_MIN_METERS = 30;
+export const STROLL_MAX_METERS = 120;
+
+/** A stroll never takes the Avaia further than this from where it settled. */
+export const STROLL_LEASH_METERS = 200;
+
+/** How long it looks around where a stroll took it. */
+export const STROLL_LOOK_MS = 8_000;
+
 /** What a walk is for. A tap is the owner pointing; the rest are the drive's. */
-export type WalkPurpose = "tap" | "curiosity" | "outing" | "wander" | "home";
+export type WalkPurpose =
+  "tap" | "curiosity" | "outing" | "wander" | "home" | "stroll";
 
 export type DriveActivity =
   | { readonly kind: "idle"; readonly since: number }
@@ -79,12 +98,20 @@ export type DriveActivity =
     }
   | {
       readonly kind: "standing";
-      readonly reason: "point_b" | "visit";
+      readonly reason: "point_b" | "visit" | "look";
       readonly until: number;
     };
 
 export interface DriveState {
   readonly activity: DriveActivity;
+  /**
+   * When the Avaia last settled after something it set out to do: a walk
+   * arrived, a stand or a visit over. Strolling about does not settle it, so
+   * restlessness keeps growing while it potters.
+   */
+  readonly settledAt: number;
+  /** Strolls since it last settled; each one makes the next wait longer. */
+  readonly strolls: number;
   /** 0 to 1. */
   readonly energy: number;
   /** When the last outing was decided, whatever it turned out to be. */
@@ -105,6 +132,8 @@ export type DriveEvent =
     }
   /** The drive was asked and chose to stay. */
   | { readonly type: "stayed"; readonly at: number }
+  /** A stroll was due but found nowhere to go: it waits for the next one. */
+  | { readonly type: "lingered"; readonly at: number }
   /**
    * The walk under way arrived, `meters` after it set off. A visit lasts
    * `stayMs` when the place says how long, `VISIT_MS` otherwise.
@@ -128,6 +157,8 @@ export function initialDrive(
 ): DriveState {
   return {
     activity: { kind: "idle", since: now },
+    settledAt: now,
+    strolls: 0,
     energy: 1,
     lastOutingAt,
     visited: {},
@@ -143,8 +174,12 @@ export function initialDrive(
  * - arriving at a tapped point B stands there `POINT_B_STAND_MS`, then idles
  *   there: autonomy carries on from B, not from home;
  * - arriving at a target looks around it for `VISIT_MS`; arriving home
- *   recharges; arriving anywhere else idles there;
- * - a walk or a stand cut short idles where the body is.
+ *   recharges; a stroll looks around for `STROLL_LOOK_MS`; arriving anywhere
+ *   else idles there;
+ * - a walk or a stand cut short idles where the body is;
+ * - whatever ends in idle settles the Avaia there, unless it was a stroll
+ *   that arrived or the look around after one: pottering about is not
+ *   settling, being stopped is.
  */
 export function stepDrive(state: DriveState, event: DriveEvent): DriveState {
   const { activity } = state;
@@ -156,9 +191,11 @@ export function stepDrive(state: DriveState, event: DriveEvent): DriveState {
       };
     case "set_off": {
       if (activity.kind !== "idle") return state;
-      const outing = event.purpose !== "curiosity";
+      const outing =
+        event.purpose !== "curiosity" && event.purpose !== "stroll";
       return {
         ...state,
+        strolls: event.purpose === "stroll" ? state.strolls + 1 : state.strolls,
         activity: {
           kind: "walking",
           purpose: event.purpose,
@@ -176,11 +213,29 @@ export function stepDrive(state: DriveState, event: DriveEvent): DriveState {
             lastOutingAt: event.at,
           }
         : state;
+    case "lingered":
+      return activity.kind === "idle"
+        ? {
+            ...state,
+            activity: { kind: "idle", since: event.at },
+            strolls: state.strolls + 1,
+          }
+        : state;
     case "arrived": {
       if (activity.kind !== "walking") return state;
       const spent = Math.max(0, event.meters / 1000) * ENERGY_PER_KM;
       const energy = clamp01(state.energy - spent);
       switch (activity.purpose) {
+        case "stroll":
+          return {
+            ...state,
+            energy,
+            activity: {
+              kind: "standing",
+              reason: "look",
+              until: event.at + STROLL_LOOK_MS,
+            },
+          };
         case "tap":
           return {
             ...state,
@@ -206,34 +261,54 @@ export function stepDrive(state: DriveState, event: DriveEvent): DriveState {
                 : { ...state.visited, [activity.targetId]: event.at },
           };
         case "home":
-          return {
-            ...state,
-            energy: 1,
-            activity: { kind: "idle", since: event.at },
-          };
+          return settle(
+            { ...state, energy: 1 },
+            { kind: "idle", since: event.at },
+          );
         default:
-          return {
-            ...state,
-            energy,
-            activity: { kind: "idle", since: event.at },
-          };
+          return settle(
+            { ...state, energy },
+            { kind: "idle", since: event.at },
+          );
       }
     }
     case "stopped":
       return activity.kind === "idle"
         ? state
-        : { ...state, activity: { kind: "idle", since: event.at } };
+        : settle(state, { kind: "idle", since: event.at });
     case "tick":
-      return activity.kind === "standing" && event.at >= activity.until
+      if (activity.kind !== "standing" || event.at < activity.until) {
+        return state;
+      }
+      return pottering(activity)
         ? { ...state, activity: { kind: "idle", since: activity.until } }
-        : state;
+        : settle(state, { kind: "idle", since: activity.until });
   }
 }
 
-/** 0 while doing anything; climbs to 1 over `RESTLESS_MS` of standing idle. */
+/** Whether the Avaia is only strolling about, or looking around after it. */
+function pottering(activity: DriveActivity): boolean {
+  return (
+    (activity.kind === "walking" && activity.purpose === "stroll") ||
+    (activity.kind === "standing" && activity.reason === "look")
+  );
+}
+
+/** Idle where it is, settled: restlessness and strolls start over. */
+function settle(
+  state: DriveState,
+  idle: Extract<DriveActivity, { kind: "idle" }>,
+): DriveState {
+  return { ...state, activity: idle, settledAt: idle.since, strolls: 0 };
+}
+
+/**
+ * 0 while doing anything; climbs to 1 over `RESTLESS_MS` since it settled.
+ * Strolling about does not calm it: it is restless all the same.
+ */
 export function restlessness(state: DriveState, now: number): number {
-  if (state.activity.kind !== "idle") return 0;
-  return clamp01((now - state.activity.since) / RESTLESS_MS);
+  if (state.activity.kind !== "idle" && !pottering(state.activity)) return 0;
+  return clamp01((now - state.settledAt) / RESTLESS_MS);
 }
 
 /**
@@ -242,12 +317,33 @@ export function restlessness(state: DriveState, now: number): number {
  */
 export function nextOutingAt(state: DriveState): number | null {
   if (state.activity.kind !== "idle") return null;
-  const restless = state.activity.since + RESTLESS_MS;
+  const restless = state.settledAt + RESTLESS_MS;
   const rested =
     state.lastOutingAt === null
       ? -Infinity
       : state.lastOutingAt + OUTING_INTERVAL_MS;
   return Math.max(restless, rested);
+}
+
+/**
+ * When an idle Avaia next strolls about on its own, or `null` when it will
+ * not: busy, too tired, or an outing due first. A stroll is not an outing: it
+ * goes a few steps and back to standing, never touches the interval between
+ * outings, and keeps the Avaia from freezing in place between them. Each
+ * stroll in a row waits twice as long as the one before, up to
+ * `STROLL_MAX_IDLE_MS`, and twice as long again in the evening and at night
+ * (20:00 to 07:00 local).
+ */
+export function nextStrollAt(state: DriveState, hour: number): number | null {
+  const { activity } = state;
+  if (activity.kind !== "idle" || state.energy < LOW_ENERGY) return null;
+  const evening = hour >= 20 || hour < 7;
+  const wait =
+    Math.min(STROLL_MAX_IDLE_MS, STROLL_IDLE_MS * 2 ** state.strolls) *
+    (evening ? 2 : 1);
+  const at = activity.since + wait;
+  const outing = nextOutingAt(state);
+  return outing !== null && outing <= at ? null : at;
 }
 
 /** How far out an outing may plan: a there-and-back on what energy is left. */
@@ -384,6 +480,61 @@ export function wanderPoint(
   }
   if (candidates.length === 0) return undefined;
   return graph.nodes[candidates[mix(seed) % candidates.length]!];
+}
+
+/**
+ * Where a stroll goes: a graph node `STROLL_MIN_METERS` to
+ * `STROLL_MAX_METERS` away along the paths that is still within
+ * `STROLL_LEASH_METERS` of where the Avaia settled, picked by `seed`. The
+ * same graph, reach, anchor and seed pick the same node.
+ */
+export function strollPoint(
+  graph: WalkGraph,
+  reach: Reach,
+  anchor: LonLat,
+  seed: number,
+): LonLat | undefined {
+  const candidates: number[] = [];
+  for (let node = 0; node < graph.nodes.length; node++) {
+    const meters = reach.lengthM[node]!;
+    if (
+      meters >= STROLL_MIN_METERS &&
+      meters <= STROLL_MAX_METERS &&
+      distanceM(graph.nodes[node]!, anchor) <= STROLL_LEASH_METERS
+    ) {
+      candidates.push(node);
+    }
+  }
+  if (candidates.length === 0) return undefined;
+  return graph.nodes[candidates[mix(seed) % candidates.length]!];
+}
+
+/**
+ * The way back to the paths for an Avaia left off them, on the grass of a
+ * point B say: the nearest graph node within `STROLL_MAX_METERS`, or
+ * `undefined` when none is. An Avaia on its own keeps to the paths, so with
+ * none in reach it stays where it is rather than roam the grass.
+ */
+export function strollBack(
+  graph: WalkGraph,
+  from: LonLat,
+  canEnter?: (point: LonLat) => boolean,
+): LonLat | undefined {
+  let best: LonLat | undefined;
+  let bestMeters = STROLL_MAX_METERS;
+  for (const node of graph.nodes) {
+    const meters = distanceM(node, from);
+    if (meters <= bestMeters && (canEnter?.(node) ?? true)) {
+      best = node;
+      bestMeters = meters;
+    }
+  }
+  return best;
+}
+
+/** The seed for the stroll the drive is at: one per settling and stroll. */
+export function strollSeed(state: DriveState): number {
+  return Math.floor(state.settledAt / 1000) + state.strolls;
 }
 
 /** The seed for a wander decided at `now`: one per outing window. */

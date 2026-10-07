@@ -70,7 +70,7 @@ Grass is dear, so the Avaia does not go onto it without a reason, and the four r
 ### 0.4 Point B: the person's tap
 
 - A tap on passable ground gives the Avaia a target B. It goes there by the cheapest way, and grass is allowed the whole way, because the person decided.
-- On arrival the Avaia **stands** for about 20 s (`turn_in_place`, looking around), and then **returns to autonomy from point B**, not from home. Whether to go home is the drive's decision (§2).
+- On arrival the Avaia **stands** for about 20 s (`turn_in_place`, looking around), and then **returns to autonomy from point B**, not from home: it strolls about near B on its own (§2.4, "Strolls") until the drive takes it out. Whether to go home is the drive's decision (§2).
 - A new tap while walking or standing picks the movement up from wherever the Avaia is now. This matches the current rule in [Avaia walks the world](avaia-walk.md).
 - A tap on a building, water or fog is refused the same way as today (`building`, `water`, `fog`), with the same refusal line.
 - During a walk the person sent it on, finds are rolled the same way as on its own (§3). Manual walking does not get round the rarity rules.
@@ -263,7 +263,7 @@ What the Avaia actually does is decided by **code**. The model only talks and, b
 
 ### 2.1 State
 
-- `restlessness` grows while the Avaia stands still. An outing resets it.
+- `restlessness` grows while the Avaia stands still or only strolls about. An outing resets it.
 - `curiosity` grows while there are unvisited targets nearby. It drops after a visit.
 - `energy` is spent on kilometres and restored at home.
 - Time of day and season weigh the choice (a park by day, a short walk in the evening).
@@ -295,7 +295,7 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
 
 `outing-drive.ts` in `product-app` is a pure, deterministic state machine. The walk hook feeds it events and asks what to do next.
 
-- **States:** `idle`, `walking` (purpose: `tap`, `curiosity`, `outing`, `wander`, `home`) and `standing` (`point_b` or `visit`).
+- **States:** `idle`, `walking` (purpose: `tap`, `curiosity`, `outing`, `wander`, `home`, `stroll`) and `standing` (`point_b`, `visit` or `look`).
 - **Transitions:**
   - a tap, in any state, starts a walk there from wherever the Avaia is;
   - a drive walk starts only from `idle` and never cuts short a walk, a stand at B or a visit;
@@ -307,6 +307,7 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
 - **Energy:** 0.2 per kilometre, so a full charge lasts 5 km. An outing's budget is a there-and-back on what is left, but never beyond 3 km.
 - **Choice** (`chooseOuting`): tired and far from home, go home. In the evening and at night (20:00–07:00), only a target within 1 km, or wander. By day, the nearest target, otherwise wander, otherwise stay. A target visited less than a week ago stays off the menu. With the Avaia's feelings at hand, the most wanted target wins instead of the nearest, a loved one waits a day rather than a week, and a visit lasts by what is done there ([Favourite places](avaia-walk.md#favourite-places)).
 - **Wandering:** a graph node 150–400 m away along the paths, over open ground. It is picked deterministically per outing window.
+- **Strolls** (`walking`, purpose `stroll`, then `standing`, reason `look`): between outings an idle Avaia does not freeze. `nextStrollAt` sends it a few steps on its own 30 s after it settled (a stand at B, a visit, a study, an arrival), to a graph node 30–120 m away along the paths and within 200 m of where it settled (`strollPoint`), where it looks around for 8 s. Each stroll in a row doubles the next wait, up to 5 min; in the evening and at night the wait is doubled. A stroll is not an outing: it never sets `lastOutingAt`, and it does not settle the Avaia, so restlessness counts from `settledAt` through it and an outing comes on time. No stroll below `LOW_ENERGY`, while busy, or when an outing is due first. Off the paths it first walks back to the nearest node within 120 m (`strollBack`); with none, it stays put. Only the first stroll after settling says a line (`stroll`).
 - **Home** is the cell this device dwelt in longest, by closed visits in its own presence journal, once that is at least an hour (`HOME_MIN_DWELL_MS`); ties go to the smallest cell id. The fog field computes it inside `map-shade` and hands the application one point, the cell's centre (`MapFogField.home`); no visit, duration or other cell leaves the presence boundary. Until the journal loads, or with no cell dwelt in long enough, home is the device's last observed position.
 - **Lines:** for an outing the Avaia uses the existing `walk` line. There are no "I'll go for a walk" lines yet, because they need to be recorded.
 - The mapper (#306) supplies candidates from the landmarks the map has loaded: museums, viewpoints, castles, forts, ruins, archaeological sites and significant monuments. It supplies parks, reserves, beaches and lakes as areas too, from the `landuse` and `water` polygons and their labels. All of these rows wait on the archive inspection ([Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md#implemented)).

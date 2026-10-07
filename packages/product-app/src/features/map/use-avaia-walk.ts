@@ -69,10 +69,17 @@ import {
   chooseOuting,
   initialDrive,
   nextOutingAt,
+  nextStrollAt,
   outingBudgetMeters,
   POINT_B_STAND_MS,
   recentlyVisited,
   stepDrive,
+  STROLL_LEASH_METERS,
+  STROLL_LOOK_MS,
+  STROLL_MAX_METERS,
+  strollBack,
+  strollPoint,
+  strollSeed,
   VISIT_MS,
   WANDER_MAX_METERS,
   wanderPoint,
@@ -189,7 +196,10 @@ export interface AvaiaWalkInput {
   readonly outingCandidates?: readonly OutingCandidate[];
 }
 
-/** Standing somewhere and looking around: at a tapped point B, or a target. */
+/**
+ * Standing somewhere and looking around: at a tapped point B, a target, or
+ * wherever a stroll took it.
+ */
 interface Pause {
   readonly at: MapPointSelection;
   readonly bearingDeg: number;
@@ -308,8 +318,9 @@ export interface AvaiaWalkState {
  *
  * Commanded walks come from a tap on open ground. Curiosity comes from the
  * notebook: a landmark the person's own device passed close to, which the
- * Avaia has not studied yet. A command always outranks curiosity, and leaving
- * the wheel ends both — there is no walking in the background.
+ * Avaia has not studied yet. Left to itself it strolls about where it
+ * settled, and now and then goes out. A command always outranks the rest, and
+ * leaving the wheel ends all of it — there is no walking in the background.
  */
 export function useAvaiaWalk({
   renderer,
@@ -342,6 +353,11 @@ export function useAvaiaWalk({
   // The outing target a walk under way is headed for, so arriving knows what
   // it is visiting.
   const walkTarget = useRef<OutingTarget | undefined>(undefined);
+  // Where the Avaia settled, the point its strolls keep near, and the
+  // settling it belongs to.
+  const strollAnchor = useRef<
+    { readonly settledAt: number; readonly point: LonLat } | undefined
+  >(undefined);
   const dispatch = useCallback(
     (event: DriveEvent) => {
       const before = drive.current;
@@ -627,8 +643,9 @@ export function useAvaiaWalk({
   }, [active, goTo, renderer, say]);
 
   // A walk ends on its own. Arriving at a landmark turns into looking at it;
-  // arriving at a tapped point B or an outing's target is standing there a
-  // while, looking around; arriving anywhere else is simply standing there.
+  // arriving at a tapped point B, an outing's target or the end of a stroll is
+  // standing there a while, looking around; arriving anywhere else is simply
+  // standing there.
   useEffect(() => {
     if (walk === undefined) return;
     const remaining = Math.max(
@@ -672,13 +689,17 @@ export function useAvaiaWalk({
         return;
       }
       setRest({ point: walk.to, bearingDeg: walk.arrivalBearingDeg });
-      if (purpose === "tap" || purpose === "outing") {
+      if (purpose === "tap" || purpose === "outing" || purpose === "stroll") {
         setPause({
           at: walk.to,
           bearingDeg: walk.arrivalBearingDeg,
           startedMs: nowMs,
           durationMs:
-            purpose === "tap" ? POINT_B_STAND_MS : (stayMs ?? VISIT_MS),
+            purpose === "tap"
+              ? POINT_B_STAND_MS
+              : purpose === "stroll"
+                ? STROLL_LOOK_MS
+                : (stayMs ?? VISIT_MS),
           ...(visiting === undefined ? {} : { visiting }),
         });
       }
@@ -1043,6 +1064,70 @@ export function useAvaiaWalk({
       cancelled = true;
       globalThis.clearTimeout(outing);
     };
+  }, [currentPoint, dispatch, driveVersion, goTo, idle, renderer, say]);
+
+  // Between outings an idle Avaia does not freeze where it was left: after a
+  // stand at point B, a visit or a study it strolls a few steps along the
+  // paths now and then, looks around, and stands again, never far from where
+  // it settled. The pauses grow while it potters; a tired Avaia rests, an
+  // outing due first wins, and a tap or curiosity always comes before it.
+  useEffect(() => {
+    if (!idle) return;
+    const when = nextStrollAt(drive.current, new Date().getHours());
+    if (when === null) return;
+    const stroll = globalThis.setTimeout(
+      () => {
+        const nowMs = globalThis.performance.now();
+        const from = currentPoint(nowMs);
+        if (from === undefined) return;
+        const state = drive.current;
+        const at: LonLat = [from.longitude, from.latitude];
+        // The first stroll after settling is taken from where it settled.
+        if (strollAnchor.current?.settledAt !== state.settledAt) {
+          strollAnchor.current = { settledAt: state.settledAt, point: at };
+        }
+        const anchor = strollAnchor.current.point;
+        const area = boundsAround(
+          from,
+          STROLL_LEASH_METERS + STROLL_MAX_METERS,
+        );
+        const graph = buildWalkGraph(renderer.roadsWithin?.(area) ?? []);
+        const open = openGround({
+          fog: renderer.fog,
+          device: latest.current.observed,
+          body: from,
+          nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
+        });
+        const canEnter =
+          open === undefined
+            ? undefined
+            : ([longitude, latitude]: readonly [number, number]) =>
+                open({ longitude, latitude });
+        const seed = strollSeed(state);
+        const start = snapToGraph(graph, at, canEnter ? { canEnter } : {});
+        const there =
+          start === null
+            ? strollBack(graph, at, canEnter)
+            : strollPoint(
+                graph,
+                reachFrom(graph, start, {
+                  maxCost: STROLL_MAX_METERS * 3,
+                  ...(canEnter ? { canEnter } : {}),
+                }),
+                anchor,
+                seed,
+              );
+        const went =
+          there !== undefined &&
+          goTo({ longitude: there[0], latitude: there[1] }, nowMs, {
+            purpose: "stroll",
+          }) === "walking";
+        if (!went) dispatch({ type: "lingered", at: Date.now() });
+        else if (state.strolls === 0) say("stroll");
+      },
+      Math.max(0, when - Date.now()),
+    );
+    return () => globalThis.clearTimeout(stroll);
   }, [currentPoint, dispatch, driveVersion, goTo, idle, renderer, say]);
 
   const stance = useCallback(

@@ -24,6 +24,7 @@ import type { ProductLocale } from "../../shell/localization";
  */
 export type AvaiaLineKind =
   | "walk"
+  | "stroll"
   | "blocked.building"
   | "blocked.water"
   | "blocked.fog"
@@ -48,6 +49,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "I'll take a look over there.",
       "On my way. The horizon can wait.",
       "Good spot. Going.",
+    ],
+    stroll: [
+      "Stretching my legs.",
+      "A few steps. Nothing far.",
+      "Just checking the air around here.",
     ],
     "blocked.building": [
       "That's a wall, not a path.",
@@ -113,6 +119,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Just a peek, I promise.",
       "Going, going…",
     ],
+    stroll: [
+      "I'll just wander about a little.",
+      "Ooh, what's round the corner?",
+      "Can't stand still. A tiny stroll!",
+    ],
     "blocked.building": [
       "That's somebody's house!",
       "Walls. Not my style.",
@@ -177,6 +188,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "Fine, I'll go look. For science.",
       "Relocating one (1) Avaia.",
     ],
+    stroll: [
+      "Pacing. It's what we do.",
+      "Standing still was getting old.",
+      "A short walk to nowhere in particular.",
+    ],
     "blocked.building": [
       "Bold of you to assume I phase through walls.",
       "That's architecture. I respect it.",
@@ -240,6 +256,11 @@ const EN: Readonly<Record<AvatarModelId, Voice>> = {
       "A little stroll to show off the fit.",
       "Updating my location…",
       "Coming through, in style.",
+    ],
+    stroll: [
+      "Strutting about a bit.",
+      "A little lap to break in the shoes.",
+      "Can't just stand there. Stroll time.",
     ],
     "blocked.building": [
       "Not through a wall, darling.",
@@ -308,6 +329,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Іду. Горизонт почекає.",
       "Добре місце. Рушаю.",
     ],
+    stroll: [
+      "Розімну ноги.",
+      "Кілька кроків. Недалеко.",
+      "Перевірю повітря поблизу.",
+    ],
     "blocked.building": [
       "Це стіна, а не стежка.",
       "Навіть небо оминає будинки.",
@@ -371,6 +397,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Там гарно. Біжу!",
       "Лише одним оком, чесно.",
       "Іду-іду…",
+    ],
+    stroll: [
+      "Трохи поблукаю тут.",
+      "Ой, а що там за рогом?",
+      "Не можу стояти на місці. Маленька прогулянка!",
     ],
     "blocked.building": [
       "Це ж чийсь дім!",
@@ -436,6 +467,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Гаразд, гляну. Заради науки.",
       "Переміщую одну (1) Avaia.",
     ],
+    stroll: [
+      "Походжу. Це в нас таке.",
+      "Стояти на місці набридло.",
+      "Коротка прогулянка в нікуди.",
+    ],
     "blocked.building": [
       "Сміливо думати, що я ходжу крізь стіни.",
       "Це архітектура. Я її поважаю.",
@@ -499,6 +535,11 @@ const UK: Readonly<Record<AvatarModelId, Voice>> = {
       "Коротка прогулянка — показати образ.",
       "Оновлюю свою локацію…",
       "Дайте дорогу, я стильно.",
+    ],
+    stroll: [
+      "Трохи пройдуся тут.",
+      "Маленьке коло — розносити туфлі.",
+      "Не стоятиму ж я просто так. Час прогулянки.",
     ],
     "blocked.building": [
       "Не крізь стіну, любий.",
@@ -567,6 +608,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Иду. Горизонт подождёт.",
       "Хорошее место. Выдвигаюсь.",
     ],
+    stroll: [
+      "Разомну ноги.",
+      "Пара шагов. Недалеко.",
+      "Проверю воздух поблизости.",
+    ],
     "blocked.building": [
       "Это стена, а не тропа.",
       "Даже небо обходит дома.",
@@ -630,6 +676,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Там красиво. Бегу!",
       "Только одним глазком, честно.",
       "Иду-иду…",
+    ],
+    stroll: [
+      "Немножко поброжу тут.",
+      "Ой, а что там за углом?",
+      "Не могу стоять на месте. Маленькая прогулка!",
     ],
     "blocked.building": [
       "Это же чей-то дом!",
@@ -695,6 +746,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Ладно, гляну. Ради науки.",
       "Перемещаю одну (1) Avaia.",
     ],
+    stroll: [
+      "Похожу. У нас так принято.",
+      "Стоять на месте надоело.",
+      "Короткая прогулка в никуда.",
+    ],
     "blocked.building": [
       "Смело думать, что я хожу сквозь стены.",
       "Это архитектура. Я её уважаю.",
@@ -758,6 +814,11 @@ const RU: Readonly<Record<AvatarModelId, Voice>> = {
       "Короткая прогулка — показать образ.",
       "Обновляю своё местоположение…",
       "Дорогу, я при параде.",
+    ],
+    stroll: [
+      "Немного пройдусь тут.",
+      "Маленький круг — разносить туфли.",
+      "Не стоять же просто так. Время прогулки.",
     ],
     "blocked.building": [
       "Не сквозь стену, дорогой.",
@@ -905,6 +966,7 @@ export function blockedLineKind(
 export function lineCue(kind: AvaiaLineKind): SoundCue | undefined {
   switch (kind) {
     case "walk":
+    case "stroll":
     case "fog.reveal":
       return "walk";
     case "blocked.building":

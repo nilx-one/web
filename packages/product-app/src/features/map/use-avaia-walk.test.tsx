@@ -19,6 +19,11 @@ import {
   OUTING_INTERVAL_MS,
   POINT_B_STAND_MS,
   RESTLESS_MS,
+  STROLL_IDLE_MS,
+  STROLL_LEASH_METERS,
+  STROLL_LOOK_MS,
+  STROLL_MAX_METERS,
+  STROLL_MIN_METERS,
   WANDER_MAX_METERS,
   WANDER_MIN_METERS,
 } from "./outing-drive";
@@ -87,10 +92,17 @@ function render(renderer: MapRenderer) {
   });
 }
 
+/**
+ * Lets `ms` pass a second at a time, rendering in between, the way a page
+ * does: a body that strolls off and back within one long jump of the clock
+ * would otherwise only render the jump's first step.
+ */
 const advance = async (ms: number) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
+  for (let left = ms; left > 0; left -= 1_000) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(Math.min(1_000, left));
+    });
+  }
 };
 
 beforeEach(() => {
@@ -153,30 +165,130 @@ describe("an Avaia sent to a point B", () => {
   });
 });
 
+describe("an Avaia back on its own after point B", () => {
+  it("strolls off a few steps by itself once the stand is over, and says so", async () => {
+    const { renderer, tap } = walkRenderer();
+    const lines: string[] = [];
+    const { result, rerender } = render(renderer);
+    rerender({
+      renderer,
+      active: true,
+      observed: { ...ORIGIN, accuracyMeters: 10 },
+      model: "sky-study",
+      locale: "en",
+      avaiaAddress: "avaia:test",
+      owner: "0x0sky",
+      zoom: 17,
+      reducedMotion: true,
+      onLine: ({ kind }) => lines.push(kind),
+    });
+    const b = at(300, 0);
+
+    tap(b);
+    await advance(POINT_B_STAND_MS + STROLL_IDLE_MS - 1_000);
+    expect(
+      mapDistanceMeters(result.current.stance(performance.now())!.point, b),
+    ).toBeLessThan(1);
+
+    await advance(2_000);
+    const strolled = result.current.stance(performance.now());
+    expect(strolled?.clipId).toBe("turn_in_place");
+    const steps = mapDistanceMeters(b, strolled!.point);
+    expect(steps).toBeGreaterThanOrEqual(STROLL_MIN_METERS - 1);
+    expect(steps).toBeLessThanOrEqual(STROLL_MAX_METERS + 1);
+    expect(lines).toEqual(["walk", "stroll"]);
+    // A stroll is not an outing: the interval between outings is untouched.
+    expect(readWorldMemory("0x0sky").lastOutingAt).toBeUndefined();
+
+    // Until it is restless enough to go out, it keeps pottering about,
+    // quietly, and never strays far from B.
+    await advance(RESTLESS_MS - STROLL_IDLE_MS - 10_000);
+    expect(lines).toEqual(["walk", "stroll"]);
+    expect(
+      mapDistanceMeters(result.current.stance(performance.now())!.point, b),
+    ).toBeLessThanOrEqual(STROLL_LEASH_METERS + 1);
+  });
+
+  it("lets a tap outrank a stroll under way", async () => {
+    const { renderer, tap } = walkRenderer();
+    const { result } = render(renderer);
+
+    await advance(STROLL_IDLE_MS + 1_000);
+    expect(result.current.stance(performance.now())?.clipId).toBe(
+      "turn_in_place",
+    );
+    tap(at(500, 0));
+    await advance(1);
+    const standing = result.current.stance(performance.now());
+    expect(mapDistanceMeters(standing!.point, at(500, 0))).toBeLessThan(1);
+    await advance(STROLL_LOOK_MS);
+    // Still at B: a stand there lasts the full 20 s.
+    expect(
+      mapDistanceMeters(
+        result.current.stance(performance.now())!.point,
+        at(500, 0),
+      ),
+    ).toBeLessThan(1);
+  });
+
+  it("stays put with no path within reach rather than roam the grass", async () => {
+    const { renderer: base } = walkRenderer();
+    const renderer = {
+      ...base,
+      roadsWithin: () => [],
+    } as unknown as MapRenderer;
+    const { result } = render(renderer);
+
+    await advance(RESTLESS_MS - 1_000);
+    expect(result.current.stance(performance.now())).toBeUndefined();
+  });
+});
+
 describe("an Avaia left idle", () => {
-  it("wanders out once restless, and not again within the interval", async () => {
+  it("strolls about while it waits, wanders out once restless, and not again within the interval", async () => {
     const { renderer } = walkRenderer();
     const { result } = render(renderer);
     const start = at(0, 0);
 
-    await advance(RESTLESS_MS - 1_000);
-    expect(result.current.stance(performance.now())).toBeUndefined();
+    // A few steps along the footway and a look around: not an outing.
+    await advance(STROLL_IDLE_MS + 1_000);
+    const strolled = result.current.stance(performance.now());
+    expect(strolled?.clipId).toBe("turn_in_place");
+    const steps = mapDistanceMeters(start, strolled!.point);
+    expect(steps).toBeGreaterThanOrEqual(STROLL_MIN_METERS - 1);
+    expect(steps).toBeLessThanOrEqual(STROLL_MAX_METERS + 1);
+    expect(readWorldMemory("0x0sky").lastOutingAt).toBeUndefined();
+
+    // Pottering about does not calm it: it is restless on time all the same.
+    await advance(RESTLESS_MS - STROLL_IDLE_MS - 2_000);
+    expect(readWorldMemory("0x0sky").lastOutingAt).toBeUndefined();
+    const before = result.current.stance(performance.now());
+    expect(mapDistanceMeters(start, before!.point)).toBeLessThanOrEqual(
+      STROLL_LEASH_METERS + 1,
+    );
 
     await advance(2_000);
     const out = result.current.stance(performance.now());
-    expect(out).toBeDefined();
-    const meters = mapDistanceMeters(start, out!.point);
+    const meters = mapDistanceMeters(before!.point, out!.point);
     expect(meters).toBeGreaterThanOrEqual(WANDER_MIN_METERS - 1);
     expect(meters).toBeLessThanOrEqual(WANDER_MAX_METERS + 1);
-    expect(readWorldMemory("0x0sky").lastOutingAt).toBe(Date.now() - 1_000);
+    const wentAt = readWorldMemory("0x0sky").lastOutingAt;
+    expect(wentAt).toBe(Date.now() - 1_000);
 
-    // Restless again, but the interval is not up: it stays where it went.
+    // Restless again, but the interval is not up: it only strolls about
+    // where it went.
     await advance(RESTLESS_MS * 2);
-    expect(result.current.stance(performance.now())?.point).toEqual(out!.point);
+    expect(readWorldMemory("0x0sky").lastOutingAt).toBe(wentAt);
+    expect(
+      mapDistanceMeters(
+        out!.point,
+        result.current.stance(performance.now())!.point,
+      ),
+    ).toBeLessThanOrEqual(STROLL_LEASH_METERS + 1);
 
     await advance(OUTING_INTERVAL_MS);
-    expect(result.current.stance(performance.now())?.point).not.toEqual(
-      out!.point,
+    expect(readWorldMemory("0x0sky").lastOutingAt).toBeGreaterThan(
+      Date.now() - OUTING_INTERVAL_MS,
     );
   });
 
@@ -282,13 +394,17 @@ describe("an Avaia left idle", () => {
       await advance(25 * 60 * 1000);
       await advance(1);
     }
-    await advance(POINT_B_STAND_MS);
-    await advance(RESTLESS_MS);
-    await advance(60 * 60 * 1000);
+    // Too tired to stroll about out there, it waits out the interval and
+    // goes home; rested at home, it only potters about near it.
+    const tired = result.current.stance(performance.now());
+    expect(mapDistanceMeters(tired!.point, at(2_000, 0))).toBeLessThan(1);
+    await advance(OUTING_INTERVAL_MS);
     await advance(1);
 
     const after = result.current.stance(performance.now());
-    expect(mapDistanceMeters(after!.point, home)).toBeLessThan(5);
+    expect(mapDistanceMeters(after!.point, home)).toBeLessThanOrEqual(
+      STROLL_LEASH_METERS + 1,
+    );
   });
 
   it("still goes out after leaving the wheel mid-stand and taking it back", async () => {
@@ -297,14 +413,16 @@ describe("an Avaia left idle", () => {
     tap(at(300, 0));
     await advance(1_000);
     act(() => result.current.reset());
-    await advance(RESTLESS_MS + 1_000);
+    await advance(RESTLESS_MS - 1_000);
+    const before = result.current.stance(performance.now());
+    await advance(2_000);
     await advance(1);
     const out = result.current.stance(performance.now());
     expect(out).toBeDefined();
     expect(out?.clipId).toBeUndefined();
-    expect(mapDistanceMeters(at(0, 0), out!.point)).toBeGreaterThanOrEqual(
-      WANDER_MIN_METERS - 1,
-    );
+    expect(
+      mapDistanceMeters(before?.point ?? at(0, 0), out!.point),
+    ).toBeGreaterThanOrEqual(WANDER_MIN_METERS - 1);
     expect(readWorldMemory("0x0sky").lastOutingAt).toBeDefined();
   });
 

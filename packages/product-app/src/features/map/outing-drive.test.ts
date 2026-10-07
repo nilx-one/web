@@ -24,6 +24,16 @@ import {
   RESTLESS_MS,
   REVISIT_MS,
   stepDrive,
+  STROLL_IDLE_MS,
+  STROLL_LEASH_METERS,
+  STROLL_LOOK_MS,
+  STROLL_MAX_IDLE_MS,
+  STROLL_MAX_METERS,
+  STROLL_MIN_METERS,
+  strollBack,
+  strollPoint,
+  strollSeed,
+  nextStrollAt,
   VISIT_MS,
   WANDER_MAX_METERS,
   WANDER_MIN_METERS,
@@ -399,5 +409,151 @@ describe("wanderPoint", () => {
     ]);
     const near = reachFrom(short, snapToGraph(short, at(0, 0))!);
     expect(wanderPoint(short, near, 1)).toBeUndefined();
+  });
+});
+
+describe("strolling about between outings", () => {
+  const stroll = (at: number): DriveEvent => ({
+    type: "set_off",
+    at,
+    purpose: "stroll",
+  });
+
+  it("strolls, looks around, and stands again without settling or going out", () => {
+    const settled = play(
+      initialDrive(T0),
+      { type: "tap", at: T0 },
+      { type: "arrived", at: T0 + 10, meters: 100 },
+      { type: "tick", at: T0 + 10 + POINT_B_STAND_MS },
+    );
+    const settledAt = T0 + 10 + POINT_B_STAND_MS;
+    expect(settled.settledAt).toBe(settledAt);
+    expect(nextStrollAt(settled, 13)).toBe(settledAt + STROLL_IDLE_MS);
+
+    const walked = play(settled, stroll(settledAt + STROLL_IDLE_MS), {
+      type: "arrived",
+      at: settledAt + STROLL_IDLE_MS + 50,
+      meters: 70,
+    });
+    expect(walked.activity).toEqual({
+      kind: "standing",
+      reason: "look",
+      until: settledAt + STROLL_IDLE_MS + 50 + STROLL_LOOK_MS,
+    });
+    expect(walked.lastOutingAt).toBeNull();
+    expect(walked.energy).toBeCloseTo(1 - 0.17 * ENERGY_PER_KM, 6);
+
+    const done = settledAt + STROLL_IDLE_MS + 50 + STROLL_LOOK_MS;
+    const again = play(walked, { type: "tick", at: done });
+    expect(again.activity).toEqual({ kind: "idle", since: done });
+    // Still settled where B was: pottering about is not settling.
+    expect(again.settledAt).toBe(settledAt);
+    expect(again.strolls).toBe(1);
+    expect(nextOutingAt(again)).toBe(settledAt + RESTLESS_MS);
+  });
+
+  it("stays restless while it potters", () => {
+    const strolling = play(initialDrive(T0), stroll(T0 + STROLL_IDLE_MS));
+    expect(restlessness(strolling, T0 + RESTLESS_MS / 2)).toBeCloseTo(0.5, 6);
+    expect(
+      restlessness(play(initialDrive(T0), { type: "tap", at: T0 }), T0 + 1),
+    ).toBe(0);
+  });
+
+  it("waits twice as long after each stroll in a row, up to a cap", () => {
+    // Out just now, so no outing comes due while it potters.
+    let state = initialDrive(T0, T0);
+    const waits: number[] = [];
+    let now = T0;
+    for (let i = 0; i < 6; i++) {
+      const at = nextStrollAt(state, 13)!;
+      waits.push(at - now);
+      state = play(state, stroll(at), { type: "arrived", at, meters: 50 });
+      now = at + STROLL_LOOK_MS;
+      state = play(state, { type: "tick", at: now });
+    }
+    expect(waits).toEqual([
+      STROLL_IDLE_MS,
+      STROLL_IDLE_MS * 2,
+      STROLL_IDLE_MS * 4,
+      STROLL_IDLE_MS * 8,
+      STROLL_MAX_IDLE_MS,
+      STROLL_MAX_IDLE_MS,
+    ]);
+    // A stroll that found nowhere to go counts too, and a tap starts over.
+    const lingered = play(state, { type: "lingered", at: now });
+    expect(lingered.strolls).toBe(state.strolls + 1);
+    const tapped = play(
+      lingered,
+      { type: "tap", at: now + 1 },
+      { type: "arrived", at: now + 2, meters: 10 },
+      { type: "tick", at: now + 2 + POINT_B_STAND_MS },
+    );
+    expect(tapped.strolls).toBe(0);
+    expect(nextStrollAt(tapped, 13)).toBe(
+      now + 2 + POINT_B_STAND_MS + STROLL_IDLE_MS,
+    );
+  });
+
+  it("strolls less at night, never when tired or busy, and not before an outing due", () => {
+    const fresh = initialDrive(T0);
+    expect(nextStrollAt(fresh, 23)).toBe(T0 + STROLL_IDLE_MS * 2);
+    expect(
+      nextStrollAt({ ...fresh, energy: LOW_ENERGY - 0.01 }, 13),
+    ).toBeNull();
+    expect(nextStrollAt(play(fresh, { type: "tap", at: T0 }), 13)).toBeNull();
+    // Restless already and rested since the last outing: the outing goes first.
+    const restless = { ...fresh, settledAt: T0 - RESTLESS_MS };
+    expect(nextStrollAt(restless, 13)).toBeNull();
+  });
+
+  it("settles where a stroll was cut short", () => {
+    const stopped = play(initialDrive(T0), stroll(T0 + STROLL_IDLE_MS), {
+      type: "stopped",
+      at: T0 + STROLL_IDLE_MS + 5,
+    });
+    expect(stopped.settledAt).toBe(T0 + STROLL_IDLE_MS + 5);
+    expect(stopped.strolls).toBe(0);
+  });
+
+  const graph = buildWalkGraph([
+    {
+      kind: "path",
+      kindDetail: "footway",
+      lines: [
+        [at(0, 0), at(50, 0), at(100, 0), at(150, 0), at(200, 0), at(250, 0)],
+      ],
+    },
+  ]);
+
+  it("goes a few steps along the paths, within the leash, the same for the same seed", () => {
+    const from = at(150, 0);
+    const reach = reachFrom(graph, snapToGraph(graph, from)!);
+    const anchor = at(0, 0);
+    const xs = new Set<number>();
+    for (let seed = 0; seed < 40; seed++) {
+      const point = strollPoint(graph, reach, anchor, seed)!;
+      const x = Math.round((point[0] - ORIGIN[0]) / M_LON);
+      const steps = Math.abs(x - 150);
+      expect(steps).toBeGreaterThanOrEqual(STROLL_MIN_METERS - 1);
+      expect(steps).toBeLessThanOrEqual(STROLL_MAX_METERS + 1);
+      expect(x).toBeLessThanOrEqual(STROLL_LEASH_METERS + 1);
+      expect(strollPoint(graph, reach, anchor, seed)).toEqual(point);
+      xs.add(x);
+    }
+    // 250 is in step but past the leash; the rest are all taken some time.
+    expect([...xs].sort((a, b) => a - b)).toEqual([50, 100, 200]);
+  });
+
+  it("finds its way back to a path nearby, and stays put with none", () => {
+    const back = strollBack(graph, at(100, 60))!;
+    expect(Math.round((back[0] - ORIGIN[0]) / M_LON)).toBe(100);
+    expect(strollBack(graph, at(100, STROLL_MAX_METERS + 10))).toBeUndefined();
+    expect(strollBack(graph, at(100, 60), () => false)).toBeUndefined();
+  });
+
+  it("seeds each stroll of a settling apart", () => {
+    const state = initialDrive(T0);
+    expect(strollSeed({ ...state, strolls: 1 })).not.toBe(strollSeed(state));
   });
 });

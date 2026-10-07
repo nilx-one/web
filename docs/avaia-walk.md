@@ -63,6 +63,25 @@ Arriving where a tap sent it, the Avaia stands there looking around
 (`turn_in_place`) for 20 seconds, then carries on from that point B: it does
 not walk back home. A tap during the stand walks on from where it stands.
 
+### Back on its own
+
+Once the stand at B is over, the Avaia is its own again. It does not freeze
+where it was left until the next outing: 30 seconds later it strolls off on
+its own, saying so once (`stroll`), a few steps (30 to 120 m) along the
+paths, looks around for 8 seconds, and stands again. It keeps pottering about
+like that, never further than 200 m from where it settled, and each stroll in
+a row waits twice as long as the one before, up to five minutes, so it
+potters less the longer it potters; in the evening and at night every wait is
+doubled. The same happens after an outing's visit, a study, or a walk home.
+
+A stroll is not an outing. It keeps to the paths (left off them, on the grass
+of a point B, it first finds its way back to a line within 120 m, and with
+none in reach it stays put rather than roam the grass), it never touches the
+interval between outings, and pottering about does not calm the Avaia: it is
+restless after ten minutes all the same, and goes out on time. A tired Avaia
+(below 30 % energy) does not stroll, a tap or curiosity always comes first,
+and leaving the wheel ends a stroll like anything else.
+
 ### Going out on its own
 
 An Avaia left idle at the wheel gets restless after ten minutes and goes out,
@@ -118,8 +137,9 @@ assistive technology, so the same line is announced in a polite live region.
 
 The voice belongs to the study, not the address. Each of the four studies has
 its own voice (`avaia-lines.ts`), in English and Ukrainian. Each voice has
-eight walking lines and three for each refusal, plus four lines for spotting a
-landmark and four for having studied one. Ukrainian keeps the grammatical
+eight walking lines, three for strolling off on its own and three for each
+refusal, plus four lines for spotting a landmark and four for having studied
+one. Ukrainian keeps the grammatical
 gender of whoever is speaking:
 
 | Study     | Voice                               | Ukrainian forms   |
@@ -131,7 +151,8 @@ gender of whoever is speaking:
 
 The fixed lines can also be heard, when Character voices is at Everything:
 each study says them aloud in a recorded voice of its own, in English and Ukrainian ([Character voices](avaia-voice.md)). Lines
-about a landmark carry its name and stay written only.
+about a landmark carry its name and stay written only. The strolling lines are
+not recorded yet, so they are written only too.
 
 A line is never the one said just before it when another is available.
 

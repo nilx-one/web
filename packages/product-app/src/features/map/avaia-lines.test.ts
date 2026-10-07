@@ -16,6 +16,7 @@ import {
 
 const KINDS: readonly AvaiaLineKind[] = [
   "walk",
+  "stroll",
   "blocked.building",
   "blocked.water",
   "blocked.fog",
@@ -130,6 +131,7 @@ describe("what an Avaia says to itself", () => {
 
   it("marks what it says with a cue, and leaves a reveal to its own", () => {
     expect(lineCue("walk")).toBe("walk");
+    expect(lineCue("stroll")).toBe("walk");
     expect(lineCue("fog.reveal")).toBe("walk");
     for (const ground of ["building", "water", "fog"] as const) {
       expect(lineCue(blockedLineKind(ground))).toBe("refuse");
