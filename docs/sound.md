@@ -32,7 +32,7 @@ browsers play Web Audio, so their compositions hand over the same
 | Cue           | When                                          | What it sounds like                         |
 | ------------- | --------------------------------------------- | ------------------------------------------- |
 | `tap`         | a press on the Dock                           | a soft glass click                          |
-| `step`        | every 600 ms while the Avaia walks            | a scuff and a low thump, never twice alike  |
+| `step`        | each footfall while the Avaia walks           | a scuff and a low thump, never twice alike  |
 | `walk`        | it sets off, or heads for a cell to reveal    | a rising fourth                             |
 | `refuse`      | building, water, fog, or already revealing    | "uh-uh": two muffled falling notes          |
 | `spot`        | it noticed a landmark it wants to see         | three notes up, the last one a bell         |

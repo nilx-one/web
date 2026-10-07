@@ -41,7 +41,7 @@ import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
   approachPoint,
-  locomotionStepMs,
+  nextFootfallMs,
   startWalk,
   studyStance,
   STUDY_CLIP_MS,
@@ -1194,25 +1194,24 @@ export function useAvaiaWalk({
     return () => globalThis.clearTimeout(done);
   }, [pause, setPause]);
 
-  // A walking body is heard walking. A walk with no duration — reduced
-  // motion, which arrives without walking — makes no footfall at all.
+  // A walking body is heard walking, each footfall when a foot is seen to
+  // land. A walk with no duration — reduced motion, which arrives without
+  // walking — makes no footfall at all.
   useEffect(() => {
     if (walk === undefined || walk.durationMs <= 0) return;
-    const steps = globalThis.setInterval(() => {
-      latest.current.onCue?.("step");
-    }, locomotionStepMs(walk.mode));
-    const remaining = Math.max(
-      0,
-      walk.startedMs + walk.durationMs - globalThis.performance.now(),
-    );
-    const stops = globalThis.setTimeout(
-      () => globalThis.clearInterval(steps),
-      remaining,
-    );
-    return () => {
-      globalThis.clearInterval(steps);
-      globalThis.clearTimeout(stops);
+    const arrives = walk.startedMs + walk.durationMs;
+    let landing: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const nextStep = () => {
+      const nowMs = globalThis.performance.now();
+      const wait = nextFootfallMs(walk, nowMs, latest.current.model);
+      if (nowMs + wait > arrives) return;
+      landing = globalThis.setTimeout(() => {
+        latest.current.onCue?.("step");
+        nextStep();
+      }, wait);
     };
+    nextStep();
+    return () => globalThis.clearTimeout(landing);
   }, [walk]);
 
   // Looking a landmark over takes a moment; then it goes in the notebook and
@@ -1340,7 +1339,8 @@ export function useAvaiaWalk({
 
   const stance = useCallback(
     (nowMs: number): BodyStance | undefined => {
-      if (walk !== undefined) return walkStance(walk, nowMs);
+      if (walk !== undefined)
+        return walkStance(walk, nowMs, latest.current.model);
       if (study !== undefined) return studyStance(study, nowMs);
       if (pause !== undefined) {
         const since = Math.max(0, nowMs - pause.startedMs);

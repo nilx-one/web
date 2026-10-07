@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "footfallPhases": [0.25, 0.75],
+  "studies": {
+    "sky-study": { "legMeters": 1.036, "stepMeters": 0.481 },
+    "dasha-study": { "legMeters": 0.942, "stepMeters": 0.441 },
+    "kai-study": { "legMeters": 1.042, "stepMeters": 0.472 },
+    "dasha-v2-study": { "legMeters": 0.99, "stepMeters": 0.438 }
+  }
+}
