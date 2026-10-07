@@ -1,6 +1,12 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type {
+  AvaiaDriveCommand,
+  AvaiaDriveInput,
+  AvaiaDriveLifeIntent,
+  CoreRuntimePort,
+} from "@nilx-one/application";
 import type { SoundCue } from "@nilx-one/host-contract";
 import {
   mapCompassBearing,
@@ -13,6 +19,7 @@ import {
   type MapPointSelection,
   type MapRenderer,
 } from "@nilx-one/map-contract";
+import { buildWalkGraph, type LonLat } from "@nilx-one/walk-graph";
 import {
   useCallback,
   useEffect,
@@ -23,19 +30,13 @@ import {
 } from "react";
 
 import type { ProductLocale } from "../../shell/localization";
+import type { AwardRecord } from "../progression/commitment";
 import {
   blockedLineKind,
   lineCue,
   pickAvaiaLine,
   type AvaiaLineKind,
 } from "./avaia-lines";
-import {
-  buildWalkGraph,
-  reachFrom,
-  snapToGraph,
-  type LonLat,
-} from "@nilx-one/walk-graph";
-
 import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
@@ -44,6 +45,7 @@ import {
   startWalk,
   studyStance,
   STUDY_CLIP_MS,
+  walkedSoFar,
   walkPosition,
   walkStance,
   STUDY_MS,
@@ -51,6 +53,18 @@ import {
   type AvaiaWalk,
 } from "./avaia-walk";
 import type { BodyStance } from "./avatar-presence";
+import type { DriveChoose } from "./drive-choice";
+import {
+  DriveRefs,
+  findsAlong,
+  outingTarget,
+  passingThings,
+  strollNodes,
+  wanderNodes,
+  wayAhead,
+  wholeMeters,
+  type DriveRefEntry,
+} from "./drive-world";
 import {
   EMPTY_NOTEBOOK,
   nextLandmarkToStudy,
@@ -64,22 +78,6 @@ import {
   CURIOSITY_REACH_METERS,
   type LandmarkNotebook,
 } from "./landmark-notebook";
-import type { AwardRecord } from "../progression/commitment";
-import {
-  chooseOuting,
-  initialDrive,
-  nextOutingAt,
-  outingBudgetMeters,
-  POINT_B_STAND_MS,
-  recentlyVisited,
-  stepDrive,
-  VISIT_MS,
-  WANDER_MAX_METERS,
-  wanderPoint,
-  wanderSeed,
-  type DriveEvent,
-  type WalkPurpose,
-} from "./outing-drive";
 import { landmarksFromArchive } from "./landmark-mapper";
 import {
   outingCandidates as walkTargets,
@@ -91,14 +89,13 @@ import {
   affinitySnapshot,
   emptyAffinity,
   favourites,
-  lingerMs,
   nextFavouriteChange,
   placeToReturnTo,
   recordVisit,
+  returnAfterMs,
   subscribeAffinities,
   updateAffinity,
   type FondPlace,
-  type PlaceAffinity,
   type VisitedPlace,
 } from "./place-affinity";
 import { readWorldMemory, rememberWorld } from "./world-memory";
@@ -109,17 +106,23 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 /** How long a line stays on the card before it closes again. */
 export const SPEECH_MS = 10_000;
 
-/** How long an Avaia that just took the wheel looks around before it goes. */
-export const FIRST_LOOK_MS = 1_500;
-
-/** How long an Avaia stands idle before curiosity moves it again. */
-export const IDLE_CURIOSITY_MS = 15_000;
-
 /**
  * The ground right around the person is theirs to send a body onto even
  * before its cell has lit: they are standing on it.
  */
 export const NEAR_DEVICE_OPEN_METERS = 50;
+
+/** How often a walk looks around for what it passes. */
+export const PASSING_EVERY_MS = 1_000;
+
+/** How long a stand at a point B lasts when Core has no drive to say. */
+export const POINT_B_STAND_MS = 20_000;
+
+/** A target visited this recently is left off the menu, unless it is dear. */
+const REVISIT_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** How long a model is given to choose; Core's own pick stands after that. */
+const CHOOSE_MS = 3_500;
 
 export interface AvaiaSpeech {
   readonly id: number;
@@ -129,6 +132,14 @@ export interface AvaiaSpeech {
 interface Rest {
   readonly point: MapPointSelection;
   readonly bearingDeg: number;
+}
+
+/** What Avaia life (`docs/avaia-life.md` in core) last said its needs ask. */
+export interface AvaiaLifeSignal {
+  readonly intent: AvaiaDriveLifeIntent;
+  /** 0 to 10000. */
+  readonly energy: number;
+  readonly home?: MapPointSelection | undefined;
 }
 
 export interface AvaiaWalkInput {
@@ -156,6 +167,20 @@ export interface AvaiaWalkInput {
   readonly zoom: number;
   readonly reducedMotion: boolean;
   /**
+   * Core, whose drive decides what the Avaia does next
+   * (`docs/avaia-drive.md` in core). Absent, or a runtime built before the
+   * drive, and the Avaia only walks where its owner taps.
+   */
+  readonly core?: Pick<CoreRuntimePort, "avaiaDriveStep"> | undefined;
+  /**
+   * Puts a choice the drive offers to a local model and answers with the
+   * option it picked, or `null`. Absent, the drive's own pick stands.
+   */
+  readonly chooser?:
+    ((choose: DriveChoose) => Promise<number | null>) | undefined;
+  /** What the Avaia's needs ask of it, from Core's Avaia life. */
+  readonly life?: AvaiaLifeSignal | undefined;
+  /**
    * A tap into the fog, offered to whoever can reveal it before the Avaia
    * refuses it. `true` means it was taken and the Avaia says nothing of its
    * own; `"busy"` means the Avaia is already revealing all it can and says so.
@@ -172,8 +197,9 @@ export interface AvaiaWalkInput {
     readonly text: string;
   }) => void;
   /**
-   * A route is evidence for chance finds only once the body actually reaches
-   * its end. Interrupted/replanned routes never report their unwalked tail.
+   * A route is evidence for chance finds only as far as the body actually
+   * walked it: a route that arrived, or the part of one walked before it was
+   * cut short. The unwalked tail is never reported.
    */
   readonly onWalkCompleted?: (walk: AvaiaWalk) => void;
   /**
@@ -182,21 +208,19 @@ export interface AvaiaWalkInput {
    */
   readonly onAward?: (record: AwardRecord) => void;
   /**
-   * Normalized walk targets the drive may take the Avaia out to. Absent, the
-   * drive maps the landmarks the renderer has loaded within the outing's
-   * budget (docs/avaia-osm-landmarks.md); with none it wanders or goes home.
+   * Normalized walk targets an outing may go to. Absent, the landmarks the
+   * renderer has loaded within the outing's budget are mapped
+   * (docs/avaia-osm-landmarks.md).
    */
   readonly outingCandidates?: readonly OutingCandidate[];
 }
 
-/** Standing somewhere and looking around: at a tapped point B, or a target. */
+/** Standing somewhere and looking around, for as long as the drive says. */
 interface Pause {
   readonly at: MapPointSelection;
   readonly bearingDeg: number;
   readonly startedMs: number;
   readonly durationMs: number;
-  /** The outing target being visited, felt once the visit is over. */
-  readonly visiting?: OutingTarget;
 }
 
 /** An outing target as a landmark a line can name. */
@@ -209,6 +233,22 @@ function targetLandmark(target: OutingTarget): MapLandmark {
     latitude: target.anchor[1],
     facts: {},
   };
+}
+
+/** What a ref names, as a landmark a line can name, when it names one. */
+function refLandmark(
+  entry: DriveRefEntry | undefined,
+): MapLandmark | undefined {
+  if (entry === undefined) return undefined;
+  switch (entry.kind) {
+    case "landmark":
+    case "area":
+      return entry.landmark;
+    case "target":
+      return targetLandmark(entry.target);
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -224,11 +264,6 @@ function notebookLandmarks(
     landmarks.set(landmark.id, landmark);
   }
   return landmarks;
-}
-
-/** Whether an outing goes back somewhere dear rather than somewhere new. */
-function wantsBack(affinity: PlaceAffinity, id: string): boolean {
-  return favourites(affinity, Date.now()).some((place) => place.id === id);
 }
 
 function visitedPlace(landmark: MapLandmark): VisitedPlace {
@@ -264,7 +299,7 @@ function touchesOpen(
   return false;
 }
 
-/** How far around the Avaia the roads are read for planning an outing. */
+/** How far around a point the roads are read for planning. */
 function boundsAround(point: MapPointSelection, meters: number) {
   const dLat = (meters / 6_371_008.8) * (180 / Math.PI);
   const dLng =
@@ -275,6 +310,28 @@ function boundsAround(point: MapPointSelection, meters: number) {
     south: point.latitude - dLat,
     north: point.latitude + dLat,
   };
+}
+
+/**
+ * What the Avaia does with no drive in Core to ask: it walks where its owner
+ * taps and stands there a while. Nothing of its own.
+ */
+function tapOnly(input: AvaiaDriveInput): AvaiaDriveCommand[] {
+  switch (input.type) {
+    case "tap":
+      return [
+        { do: "walk", to: input.to, purpose: "tap", grass: true },
+        { do: "say", line: "walk" },
+      ];
+    case "arrived":
+      return [{ do: "look", ms: POINT_B_STAND_MS }];
+    case "blocked":
+      return input.by === undefined
+        ? []
+        : [{ do: "say", line: `blocked.${input.by}` }];
+    default:
+      return [];
+  }
 }
 
 export interface AvaiaWalkState {
@@ -293,9 +350,9 @@ export interface AvaiaWalkState {
   /** Back to the device, silent and still: what taking the wheel starts from. */
   reset(): void;
   /**
-   * Sends the body somewhere the application chose rather than a tap —
-   * a fog cell it was asked to reveal — fog or not. False when the body has
-   * nowhere to start from, or buildings and water leave no way there.
+   * Sends the body somewhere the application chose rather than a tap — a fog
+   * cell it was asked to reveal — as its owner's point B. False when the body
+   * has nowhere to start from.
    */
   walkTo(point: MapPointSelection): boolean;
   /** Says one line in this Avaia's voice. */
@@ -303,13 +360,17 @@ export interface AvaiaWalkState {
 }
 
 /**
- * An Avaia at the wheel, walking where its owner points and wandering up to
- * what its owner walked past.
+ * An Avaia at the wheel: a body this device draws, carrying out what the
+ * drive in Core decides.
  *
- * Commanded walks come from a tap on open ground. Curiosity comes from the
- * notebook: a landmark the person's own device passed close to, which the
- * Avaia has not studied yet. A command always outranks curiosity, and leaving
- * the wheel ends both — there is no walking in the background.
+ * Core decides what it does next — strolling about after a point B, going
+ * out, stepping aside for something on the way — and where a choice is the
+ * Avaia's own, a local model may pick from the menu Core offers. This hook
+ * is the drive's hands and eyes: it tells the drive what happened, resolves
+ * the ground into refs when the drive asks what is around, and walks,
+ * stands, studies and speaks as the drive says. A tap is its owner's point B
+ * and always comes first, and leaving the wheel ends all of it — there is no
+ * walking in the background.
  */
 export function useAvaiaWalk({
   renderer,
@@ -321,6 +382,9 @@ export function useAvaiaWalk({
   owner,
   zoom,
   reducedMotion,
+  core,
+  chooser,
+  life,
   onFogTap,
   onCue,
   onLine,
@@ -328,39 +392,12 @@ export function useAvaiaWalk({
   onAward,
   outingCandidates,
 }: AvaiaWalkInput): AvaiaWalkState {
-  const [walk, setWalk] = useState<AvaiaWalk | undefined>(undefined);
-  const [study, setStudy] = useState<AvaiaStudy | undefined>(undefined);
-  const [pause, setPause] = useState<Pause | undefined>(undefined);
-  // The drive's own state, and a version that changes with it so effects that
-  // read it run again. What a walk under way is for, for when it arrives.
-  const [firstDrive] = useState(() =>
-    initialDrive(Date.now(), readWorldMemory(owner).lastOutingAt ?? null),
-  );
-  const drive = useRef(firstDrive);
-  const [driveVersion, setDriveVersion] = useState(0);
-  const walkPurpose = useRef<WalkPurpose>("tap");
-  // The outing target a walk under way is headed for, so arriving knows what
-  // it is visiting.
-  const walkTarget = useRef<OutingTarget | undefined>(undefined);
-  const dispatch = useCallback(
-    (event: DriveEvent) => {
-      const before = drive.current;
-      const after = stepDrive(before, event);
-      if (after === before) return;
-      drive.current = after;
-      if (
-        after.lastOutingAt !== null &&
-        after.lastOutingAt !== before.lastOutingAt
-      ) {
-        rememberWorld(owner, { lastOutingAt: after.lastOutingAt });
-      }
-      setDriveVersion((version) => version + 1);
-    },
-    [owner],
-  );
+  const [walk, setWalkState] = useState<AvaiaWalk | undefined>(undefined);
+  const [study, setStudyState] = useState<AvaiaStudy | undefined>(undefined);
+  const [pause, setPauseState] = useState<Pause | undefined>(undefined);
   // A world opened again finds its Avaia where it was left, not back at its
   // owner's feet: where it stood, or where it was headed when the page went.
-  const [rest, setRest] = useState<Rest | undefined>(() => {
+  const [rest, setRestState] = useState<Rest | undefined>(() => {
     const remembered = readWorldMemory(owner).avaia;
     return remembered === undefined
       ? undefined
@@ -373,9 +410,6 @@ export function useAvaiaWalk({
         };
   });
   const [speech, setSpeech] = useState<AvaiaSpeech | undefined>(undefined);
-  // Whether anything has happened since the wheel changed hands, which is what
-  // decides between a first look around and an idle wander.
-  const [acted, setActed] = useState(false);
   const notebook = useSyncExternalStore(
     subscribeNotebooks,
     () => notebookSnapshot(owner),
@@ -394,16 +428,29 @@ export function useAvaiaWalk({
   const speechCount = useRef(0);
   const lastLine = useRef<string | undefined>(undefined);
 
+  // The drive's stored state, opaque here, and the refs it was handed.
+  const driveState = useRef<string>(readWorldMemory(owner).drive ?? "");
+  const refs = useRef(new DriveRefs());
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const wake = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Bumped whenever the wheel changes hands, so a step answered for the
+  // Avaia that left is not carried out by the one that took over.
+  const era = useRef(0);
+  const lastPassing = useRef("");
+
   const observedLongitude = observed?.longitude;
   const observedLatitude = observed?.latitude;
   const observedAccuracy = observed?.accuracyMeters;
   const observedDeclared = observed?.declared === true;
 
   // Everything a callback needs to read "now", kept current without tearing
-  // down the renderer subscription on every frame's worth of change.
+  // down the renderer subscription on every frame's worth of change. What the
+  // body does is written here the moment it changes too, so a command that
+  // follows another in the same answer starts from where the first left it.
   const latest = useRef({
     walk,
     study,
+    pause,
     rest,
     observed,
     model,
@@ -412,6 +459,8 @@ export function useAvaiaWalk({
     reducedMotion,
     avaiaAddress,
     owner,
+    core,
+    chooser,
     onFogTap,
     onCue,
     onLine,
@@ -421,8 +470,10 @@ export function useAvaiaWalk({
   });
   useEffect(() => {
     latest.current = {
+      ...latest.current,
       walk,
       study,
+      pause,
       rest,
       observed,
       model,
@@ -431,6 +482,8 @@ export function useAvaiaWalk({
       reducedMotion,
       avaiaAddress,
       owner,
+      core,
+      chooser,
       onFogTap,
       onCue,
       onLine,
@@ -439,6 +492,22 @@ export function useAvaiaWalk({
       outingCandidates,
     };
   });
+  const setWalk = useCallback((next: AvaiaWalk | undefined) => {
+    latest.current = { ...latest.current, walk: next };
+    setWalkState(next);
+  }, []);
+  const setStudy = useCallback((next: AvaiaStudy | undefined) => {
+    latest.current = { ...latest.current, study: next };
+    setStudyState(next);
+  }, []);
+  const setPause = useCallback((next: Pause | undefined) => {
+    latest.current = { ...latest.current, pause: next };
+    setPauseState(next);
+  }, []);
+  const setRest = useCallback((next: Rest | undefined) => {
+    latest.current = { ...latest.current, rest: next };
+    setRestState(next);
+  }, []);
 
   const say = useCallback(
     (kind: AvaiaLineKind, landmark?: MapLandmark): void => {
@@ -493,6 +562,7 @@ export function useAvaiaWalk({
       const now = latest.current;
       if (now.walk !== undefined) return walkPosition(now.walk, nowMs);
       if (now.study !== undefined) return now.study.at;
+      if (now.pause !== undefined) return now.pause.at;
       if (now.rest !== undefined) return now.rest.point;
       return now.observed === undefined
         ? undefined
@@ -504,27 +574,41 @@ export function useAvaiaWalk({
     [],
   );
 
+  /** Which way the body faces at this instant. */
+  const currentBearing = useCallback((nowMs: number): number => {
+    const now = latest.current;
+    if (now.walk !== undefined) return walkStance(now.walk, nowMs).bearingDeg;
+    if (now.study !== undefined) return now.study.bearingDeg;
+    if (now.pause !== undefined) return now.pause.bearingDeg;
+    return now.rest?.bearingDeg ?? 0;
+  }, []);
+
+  /** Open ground around the body, under R1. */
+  const openAround = useCallback(
+    (body: MapPointSelection) =>
+      openGround({
+        fog: renderer.fog,
+        device: latest.current.observed,
+        body,
+        nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
+      }),
+    [renderer],
+  );
+
   /**
    * Sends the body to `to` along the paths the map has loaded between here and
    * there, and around its buildings and water where it crosses open ground.
-   * `purpose` says who picked `to`: a tap is the owner, who may send it across
-   * the grass; everything else is the Avaia's drive, which keeps to the paths.
-   * Answers whether it set off, or what stood in the way when no way round was
-   * found. Setting off is reported to the drive.
+   * `grass` is the owner's: a tap may cross the grass the whole way; the
+   * Avaia's own walks keep to the paths. A walk under way that is cut short
+   * reports what of it was walked. Answers whether it set off, or what stood
+   * in the way.
    */
   const goTo = useCallback(
     (
       to: MapPointSelection,
       nowMs: number,
-      how: {
-        readonly purpose: WalkPurpose;
-        readonly targetId?: string;
-        readonly target?: OutingTarget;
-        readonly landmark?: MapLandmark;
-      },
+      grass: boolean,
     ): "walking" | "nowhere" | MapObstacle["kind"] | "fog" => {
-      const { purpose, target, landmark } = how;
-      const targetId = how.targetId ?? target?.id;
       const from = currentPoint(nowMs);
       if (from === undefined) return "nowhere";
       const bounds = routeBounds(from, to);
@@ -533,13 +617,8 @@ export function useAvaiaWalk({
         to,
         roads: renderer.roadsWithin?.(bounds) ?? [],
         obstacles: renderer.obstaclesWithin?.(bounds) ?? [],
-        chooser: purpose === "tap" ? "tap" : "own",
-        open: openGround({
-          fog: renderer.fog,
-          device: latest.current.observed,
-          body: from,
-          nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
-        }),
+        chooser: grass ? "tap" : "own",
+        open: openAround(from),
       });
       if (route.kind === "blocked") return route.by;
       const next = startWalk({
@@ -549,39 +628,421 @@ export function useAvaiaWalk({
         nowMs,
         zoom: latest.current.zoom,
         maxLocomotion: route.maxLocomotion,
-        landmark,
       });
+      const under = latest.current.walk;
+      if (under !== undefined) {
+        const walked = walkedSoFar(under, nowMs);
+        if (walked !== undefined) latest.current.onWalkCompleted?.(walked);
+      }
       setStudy(undefined);
       setPause(undefined);
-      setActed(true);
-      walkPurpose.current = purpose;
-      walkTarget.current = target;
-      dispatch(
-        purpose === "tap"
-          ? { type: "tap", at: Date.now() }
-          : {
-              type: "set_off",
-              at: Date.now(),
-              purpose,
-              ...(targetId === undefined ? {} : { targetId }),
-            },
-      );
+      lastPassing.current = "";
       // Reduced motion still goes where it was sent; it just arrives.
       setWalk(latest.current.reducedMotion ? { ...next, durationMs: 0 } : next);
       return "walking";
     },
-    [currentPoint, dispatch, renderer],
+    [currentPoint, openAround, renderer, setPause, setStudy, setWalk],
   );
 
-  // A tap on the world is the owner pointing. Open ground is a walk; anything
-  // else is the Avaia saying why not, in its own words.
+  const stand = useCallback(
+    (ms: number) => {
+      const nowMs = globalThis.performance.now();
+      const at = currentPoint(nowMs);
+      if (at === undefined) return;
+      const bearingDeg = currentBearing(nowMs);
+      if (latest.current.walk !== undefined) setWalk(undefined);
+      setRest({ point: at, bearingDeg });
+      setPause({ at, bearingDeg, startedMs: nowMs, durationMs: ms });
+    },
+    [currentBearing, currentPoint, setPause, setRest, setWalk],
+  );
+
+  // The executor: one drive step at a time, in order, and every command it
+  // answers carried out before the next step is asked.
+  const stepRef = useRef<(input: AvaiaDriveInput) => void>(() => undefined);
+
+  /** What curiosity may go to: a fresh landmark, else one it misses. */
+  const resolveCuriosity = useCallback((): AvaiaDriveInput => {
+    const from = currentPoint(globalThis.performance.now());
+    if (from === undefined) return { type: "curiosity_options", to: [] };
+    const { owner: book, avaiaAddress: by } = latest.current;
+    const open = openAround(from);
+    const known = notebookSnapshot(book);
+    const fresh = nextLandmarkToStudy(
+      known,
+      by,
+      from,
+      CURIOSITY_REACH_METERS,
+      open,
+    );
+    if (fresh !== undefined) {
+      return {
+        type: "curiosity_options",
+        to: [{ ref: refs.current.landmark(fresh) }],
+      };
+    }
+    const inBook = notebookLandmarks(known);
+    const mine = affinitySnapshot(book, by);
+    const dear = placeToReturnTo(
+      { ...mine, places: mine.places.filter((place) => inBook.has(place.id)) },
+      from,
+      CURIOSITY_REACH_METERS,
+      Date.now(),
+      open,
+    );
+    const landmark = dear === undefined ? undefined : inBook.get(dear.id);
+    return {
+      type: "curiosity_options",
+      to:
+        landmark === undefined
+          ? []
+          : [{ ref: refs.current.landmark(landmark), longing: true }],
+    };
+  }, [currentPoint, openAround]);
+
+  /** Where a stroll may go, kept near where the Avaia settled. */
+  const resolveStroll = useCallback(
+    (command: Extract<AvaiaDriveCommand, { do: "resolve" }>) => {
+      const from = currentPoint(globalThis.performance.now());
+      if (from === undefined)
+        return { type: "stroll_options", to: [] } as const;
+      const anchor =
+        (command.anchor === undefined
+          ? undefined
+          : refs.current.get(command.anchor)?.point) ?? from;
+      const leash = command.leash_m ?? command.max_m;
+      const area = boundsAround(from, leash + command.max_m);
+      const open = openAround(from);
+      const nodes = strollNodes({
+        graph: buildWalkGraph(renderer.roadsWithin?.(area) ?? []),
+        from,
+        anchor,
+        minM: command.min_m,
+        maxM: command.max_m,
+        leashM: leash,
+        canEnter:
+          open === undefined
+            ? undefined
+            : ([longitude, latitude]: LonLat) => open({ longitude, latitude }),
+      });
+      return {
+        type: "stroll_options",
+        to: nodes.map((node) => refs.current.point(node)),
+      } as const;
+    },
+    [currentPoint, openAround, renderer],
+  );
+
+  /**
+   * What an outing may go to: the walk targets within the budget, read ahead
+   * from the tiles of the whole area but not one that is all fog, a few
+   * nodes to wander to, and home.
+   */
+  const resolveOuting = useCallback(
+    async (
+      command: Extract<AvaiaDriveCommand, { do: "resolve" }>,
+    ): Promise<AvaiaDriveInput> => {
+      const empty = {
+        type: "outing_options",
+        targets: [],
+        wander: [],
+      } as const;
+      const from = currentPoint(globalThis.performance.now());
+      if (from === undefined) return empty;
+      const budget = command.max_m;
+      const area = boundsAround(from, Math.max(budget, 1));
+      const open = openAround(from);
+      const accept =
+        open === undefined
+          ? undefined
+          : (tile: MapBounds) => touchesOpen(tile, open);
+      await Promise.all([
+        renderer.preloadRoads?.call(renderer, area, accept),
+        renderer.preloadLandmarks?.call(renderer, area, accept),
+      ]);
+      const wall = Date.now();
+      const graph = buildWalkGraph(renderer.roadsWithin?.(area) ?? []);
+      const canEnter =
+        open === undefined
+          ? undefined
+          : ([longitude, latitude]: readonly [number, number]) =>
+              open({ longitude, latitude });
+      const at: LonLat = [from.longitude, from.latitude];
+      const mine = affinitySnapshot(
+        latest.current.owner,
+        latest.current.avaiaAddress,
+      );
+      const recent = new Set(
+        mine.places
+          .filter(
+            (place) =>
+              wall - place.lastAt < returnAfterMs(mine, place.id, REVISIT_MS),
+          )
+          .map((place) => place.id),
+      );
+      const menu = outingMenu({
+        candidates:
+          latest.current.outingCandidates ??
+          walkTargets(
+            landmarksFromArchive(
+              renderer.landmarksNear?.call(renderer, from, budget) ?? [],
+              renderer.areasNear?.call(renderer, from, budget) ?? [],
+            ),
+          ),
+        graph,
+        from: at,
+        open: canEnter,
+        budgetMeters: budget,
+        exclude: recent,
+        obstacles: renderer.obstaclesWithin?.(area) ?? [],
+      });
+      const targets = menu.options.flatMap((option) =>
+        option.kind === "target"
+          ? [
+              outingTarget(
+                refs.current.target(option.target),
+                option.target,
+                mine,
+                wall,
+                budget,
+                REVISIT_MS,
+              ),
+            ]
+          : [],
+      );
+      const wander = wanderNodes({
+        graph,
+        from,
+        range: command.wander_m ?? [150, 400],
+        canEnter,
+      }).map((node) => refs.current.point(node));
+      // Home is where this device dwelt longest, by its own journal; until
+      // the journal can say, where the device was last observed.
+      const home = renderer.fog?.home?.() ?? latest.current.observed;
+      return {
+        type: "outing_options",
+        targets,
+        wander,
+        ...(home === undefined
+          ? {}
+          : {
+              home: {
+                ref: refs.current.point(
+                  { longitude: home.longitude, latitude: home.latitude },
+                  "home",
+                ),
+                meters: wholeMeters(from, home),
+              },
+            }),
+      };
+    },
+    [currentPoint, openAround, renderer],
+  );
+
+  /**
+   * Carries one command out. A walk with no way there answers what stood in
+   * it instead of stepping the drive at once: the rest of the answer is
+   * carried out first, without the line that would have set it off.
+   */
+  const carryOut = useCallback(
+    (command: AvaiaDriveCommand, from: number): AvaiaDriveInput | undefined => {
+      const step = (input: AvaiaDriveInput) => {
+        if (era.current === from) stepRef.current(input);
+      };
+      switch (command.do) {
+        case "walk": {
+          const entry = refs.current.get(command.to);
+          if (entry === undefined) return { type: "blocked" };
+          const nowMs = globalThis.performance.now();
+          const body = currentPoint(nowMs);
+          // A landmark is looked at from in front of it, not from inside it.
+          const there =
+            entry.kind === "landmark" && body !== undefined
+              ? approachPoint(body, entry.point)
+              : entry.point;
+          const went = goTo(there, nowMs, command.grass);
+          if (went === "walking") return undefined;
+          return went === "nowhere"
+            ? { type: "blocked" }
+            : { type: "blocked", by: went };
+        }
+        case "look":
+          stand(command.ms);
+          return;
+        case "study": {
+          const landmark = refLandmark(refs.current.get(command.at));
+          const nowMs = globalThis.performance.now();
+          const at = currentPoint(nowMs);
+          if (landmark === undefined || at === undefined) return;
+          if (latest.current.walk !== undefined) setWalk(undefined);
+          setPause(undefined);
+          setRest(undefined);
+          setStudy({
+            landmark,
+            at,
+            bearingDeg: mapCompassBearing(at, landmark),
+            startedMs: nowMs,
+          });
+          return;
+        }
+        case "glance": {
+          const entry = refs.current.get(command.at);
+          stand(6_000);
+          const landmark = refLandmark(entry);
+          if (landmark !== undefined) say("landmark.glanced", landmark);
+          return;
+        }
+        case "pick_up":
+          // The find is the walk's: the detour that came to it reports it,
+          // through the same rolls as any walk. Bending for it is this.
+          stand(2_400);
+          return;
+        case "visited": {
+          const landmark = refLandmark(refs.current.get(command.at));
+          if (landmark !== undefined) feel(landmark);
+          return;
+        }
+        case "say": {
+          const kind = command.line as AvaiaLineKind;
+          const landmark =
+            command.about === undefined
+              ? undefined
+              : refLandmark(refs.current.get(command.about));
+          // A line about a place says nothing when the place is gone.
+          if (command.about !== undefined && landmark === undefined) return;
+          say(kind, landmark);
+          return;
+        }
+        case "resolve":
+          if (command.what === "curiosity") step(resolveCuriosity());
+          else if (command.what === "stroll") step(resolveStroll(command));
+          else {
+            void resolveOuting(command).then(step, () =>
+              step({ type: "outing_options", targets: [], wander: [] }),
+            );
+          }
+          return;
+        case "choose": {
+          const ask = latest.current.chooser;
+          if (ask === undefined) {
+            step({ type: "chosen", index: null });
+            return;
+          }
+          let answered = false;
+          const answer = (index: number | null) => {
+            if (answered) return;
+            answered = true;
+            step({ type: "chosen", index });
+          };
+          const late = globalThis.setTimeout(() => answer(null), CHOOSE_MS);
+          void ask(command).then(
+            (index) => {
+              globalThis.clearTimeout(late);
+              answer(index);
+            },
+            () => {
+              globalThis.clearTimeout(late);
+              answer(null);
+            },
+          );
+          return;
+        }
+        case "wake_at": {
+          if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
+          wake.current = globalThis.setTimeout(
+            () => {
+              wake.current = undefined;
+              step({ type: "tick" });
+            },
+            Math.min(MAX_TIMER_MS, Math.max(0, command.ms - Date.now())),
+          );
+          return;
+        }
+      }
+    },
+    [
+      currentPoint,
+      feel,
+      goTo,
+      resolveCuriosity,
+      resolveOuting,
+      resolveStroll,
+      say,
+      setPause,
+      setRest,
+      setStudy,
+      setWalk,
+      stand,
+    ],
+  );
+
+  /** Carries out one answer, then tells the drive what a walk ran into. */
+  const carryOutAll = useCallback(
+    (commands: readonly AvaiaDriveCommand[], from: number) => {
+      let blocked: AvaiaDriveInput | undefined;
+      for (const command of commands) {
+        if (blocked !== undefined && command.do === "say") continue;
+        blocked = carryOut(command, from) ?? blocked;
+      }
+      if (blocked !== undefined && era.current === from) {
+        stepRef.current(blocked);
+      }
+    },
+    [carryOut],
+  );
+
+  const step = useCallback(
+    (input: AvaiaDriveInput) => {
+      const from = era.current;
+      // With no drive to ask there is nothing to wait for: a tap is carried
+      // out as it lands, as it always was.
+      if (latest.current.core?.avaiaDriveStep === undefined) {
+        carryOutAll(tapOnly(input), from);
+        return;
+      }
+      queue.current = queue.current
+        .then(async () => {
+          if (era.current !== from) return;
+          const port = latest.current.core;
+          let commands: readonly AvaiaDriveCommand[];
+          if (port?.avaiaDriveStep === undefined) {
+            commands = tapOnly(input);
+          } else {
+            const wall = Date.now();
+            const answer = await port
+              .avaiaDriveStep(
+                driveState.current,
+                input,
+                wall,
+                new Date(wall).getHours(),
+              )
+              .catch(() => undefined);
+            // A refused or unreadable step leaves the drive as it was.
+            if (answer === undefined || !answer.ok || era.current !== from) {
+              return;
+            }
+            driveState.current = answer.state;
+            rememberWorld(latest.current.owner, { drive: answer.state });
+            commands = answer.commands;
+          }
+          carryOutAll(commands, from);
+        })
+        .catch(() => undefined);
+    },
+    [carryOutAll],
+  );
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
+
+  // A tap on the world is the owner setting a point B. Open ground goes to
+  // the drive; anything else is the Avaia saying why not, in its own words.
   useEffect(() => {
     if (!active) return;
     const subscribe = renderer.subscribeGroundTap;
     if (subscribe === undefined) return;
 
     return subscribe.call(renderer, (tap: MapGroundTap) => {
-      const nowMs = globalThis.performance.now();
       const { observed: device } = latest.current;
       const nearDevice =
         device !== undefined &&
@@ -595,40 +1056,71 @@ export function useAvaiaWalk({
           latitude: tap.latitude,
         });
         if (taken === "busy") {
-          setActed(true);
           say("fog.busy");
           return;
         }
-        if (taken === true) {
-          setActed(true);
-          return;
-        }
+        if (taken === true) return;
       }
       const ground = tap.ground === "fog" && nearDevice ? "open" : tap.ground;
       if (ground !== "open") {
-        setActed(true);
         say(blockedLineKind(ground));
         return;
       }
-      const went = goTo(
-        { longitude: tap.longitude, latitude: tap.latitude },
-        nowMs,
-        { purpose: "tap" },
-      );
-      if (went === "walking") {
-        say("walk");
-      } else if (went !== "nowhere") {
-        // Open ground with no way to it: it is behind what the body cannot
-        // walk through, so that is what the Avaia names.
-        setActed(true);
-        say(blockedLineKind(went));
-      }
+      step({
+        type: "tap",
+        to: refs.current.tap({
+          longitude: tap.longitude,
+          latitude: tap.latitude,
+        }),
+      });
     });
-  }, [active, goTo, renderer, say]);
+  }, [active, renderer, say, step]);
 
-  // A walk ends on its own. Arriving at a landmark turns into looking at it;
-  // arriving at a tapped point B or an outing's target is standing there a
-  // while, looking around; arriving anywhere else is simply standing there.
+  // Taking the wheel settles the drive where the Avaia is, which starts its
+  // clocks; leaving it ends whatever it was doing.
+  useEffect(() => {
+    if (!active) return;
+    step({ type: "stopped" });
+    return () => {
+      era.current += 1;
+      if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
+      wake.current = undefined;
+    };
+  }, [active, step]);
+
+  // What its needs ask, passed on whenever it changes.
+  const lifeIntent = life?.intent;
+  const lifeEnergy = life === undefined ? undefined : Math.round(life.energy);
+  const lifeHomeLongitude = life?.home?.longitude;
+  const lifeHomeLatitude = life?.home?.latitude;
+  useEffect(() => {
+    if (!active || lifeIntent === undefined || lifeEnergy === undefined) {
+      return;
+    }
+    const home =
+      lifeHomeLongitude === undefined || lifeHomeLatitude === undefined
+        ? undefined
+        : refs.current.point(
+            { longitude: lifeHomeLongitude, latitude: lifeHomeLatitude },
+            "home",
+          );
+    step({
+      type: "life",
+      intent: lifeIntent,
+      energy: String(Math.min(10_000, Math.max(0, lifeEnergy))),
+      ...(home === undefined ? {} : { home }),
+    });
+  }, [
+    active,
+    lifeEnergy,
+    lifeHomeLatitude,
+    lifeHomeLongitude,
+    lifeIntent,
+    step,
+  ]);
+
+  // A walk ends on its own: what was walked is reported, and the drive is
+  // told it arrived.
   useEffect(() => {
     if (walk === undefined) return;
     const remaining = Math.max(
@@ -636,78 +1128,71 @@ export function useAvaiaWalk({
       walk.startedMs + walk.durationMs - globalThis.performance.now(),
     );
     const arrived = globalThis.setTimeout(() => {
-      const nowMs = globalThis.performance.now();
-      const purpose = walkPurpose.current;
       latest.current.onWalkCompleted?.(walk);
-      const visiting = purpose === "outing" ? walkTarget.current : undefined;
-      const wall = Date.now();
-      // A dear place is lingered in: rested in, gazed from or studied for
-      // longer the fonder the Avaia is of it.
-      const stayMs =
-        visiting === undefined
-          ? undefined
-          : lingerMs(
-              affinitySnapshot(
-                latest.current.owner,
-                latest.current.avaiaAddress,
-              ),
-              visiting,
-              wall,
-            );
       setWalk(undefined);
-      dispatch({
-        type: "arrived",
-        at: wall,
-        meters: walk.along[walk.along.length - 1] ?? 0,
-        ...(stayMs === undefined ? {} : { stayMs }),
-      });
-      if (walk.landmark !== undefined) {
-        setStudy({
-          landmark: walk.landmark,
-          at: walk.to,
-          bearingDeg: mapCompassBearing(walk.to, walk.landmark),
-          startedMs: nowMs,
-        });
-        setRest(undefined);
-        return;
-      }
       setRest({ point: walk.to, bearingDeg: walk.arrivalBearingDeg });
-      if (purpose === "tap" || purpose === "outing") {
-        setPause({
-          at: walk.to,
-          bearingDeg: walk.arrivalBearingDeg,
-          startedMs: nowMs,
-          durationMs:
-            purpose === "tap" ? POINT_B_STAND_MS : (stayMs ?? VISIT_MS),
-          ...(visiting === undefined ? {} : { visiting }),
-        });
-      }
+      step({ type: "arrived" });
     }, remaining);
     return () => globalThis.clearTimeout(arrived);
-  }, [dispatch, walk]);
+  }, [setRest, setWalk, step, walk]);
 
-  // A stand ends on its own too, and the Avaia carries on from where it
-  // stands: from point B, not from home.
+  // What a walk passes: finds laid on it, and the sights and areas the map
+  // draws ahead, told to the drive as the body comes within reach of them.
+  const drives = core?.avaiaDriveStep !== undefined;
+  useEffect(() => {
+    if (!active || !drives || walk === undefined || walk.durationMs <= 0) {
+      return;
+    }
+    // The finds this walk passes are the same all the way along it.
+    const placedFinds = findsAlong(walk.path, Date.now());
+    const look = () => {
+      const nowMs = globalThis.performance.now();
+      const body = walkPosition(walk, nowMs);
+      const total = walk.along[walk.along.length - 1] ?? 0;
+      const walked =
+        total *
+        Math.min(1, Math.max(0, (nowMs - walk.startedMs) / walk.durationMs));
+      const ahead = wayAhead(walk.path, walk.along, walked, body);
+      const { owner: book, avaiaAddress: by } = latest.current;
+      const known = notebookSnapshot(book);
+      const studied = new Set(
+        known.studied
+          .filter((entry) => entry.by === by)
+          .map((entry) => entry.landmark.id),
+      );
+      const studyable = new Set(
+        known.noticed
+          .map((entry) => entry.landmark.id)
+          .filter((id) => !studied.has(id)),
+      );
+      const things = passingThings({
+        refs: refs.current,
+        ahead,
+        landmarks: renderer.landmarksNear?.call(renderer, body, 60) ?? [],
+        areas: renderer.areasNear?.call(renderer, body, 400) ?? [],
+        finds: placedFinds,
+        studyable,
+      });
+      const key = things.map((thing) => thing.ref).join("|");
+      if (things.length === 0 || key === lastPassing.current) return;
+      lastPassing.current = key;
+      step({ type: "passing", things });
+    };
+    look();
+    const every = globalThis.setInterval(look, PASSING_EVERY_MS);
+    return () => globalThis.clearInterval(every);
+  }, [active, drives, renderer, step, walk]);
+
+  // A stand ends on its own; the drive knows when, and ticks itself on.
   useEffect(() => {
     if (pause === undefined) return;
     const remaining = Math.max(
       0,
       pause.startedMs + pause.durationMs - globalThis.performance.now(),
     );
-    const done = globalThis.setTimeout(() => {
-      setPause(undefined);
-      if (pause.visiting !== undefined) feel(targetLandmark(pause.visiting));
-      const { activity } = drive.current;
-      dispatch({
-        type: "tick",
-        at:
-          activity.kind === "standing"
-            ? Math.max(Date.now(), activity.until)
-            : Date.now(),
-      });
-    }, remaining);
+    const done = globalThis.setTimeout(() => setPause(undefined), remaining);
     return () => globalThis.clearTimeout(done);
-  }, [dispatch, feel, pause]);
+  }, [pause, setPause]);
 
   // A walking body is heard walking. A walk with no duration — reduced
   // motion, which arrives without walking — makes no footfall at all.
@@ -764,7 +1249,7 @@ export function useAvaiaWalk({
       }
     }, remaining);
     return () => globalThis.clearTimeout(done);
-  }, [feel, say, study]);
+  }, [feel, say, setRest, setStudy, study]);
 
   // Where the body will be once what it is doing ends is what this device
   // keeps, so a page dropped mid-walk comes back with the Avaia arrived.
@@ -853,198 +1338,6 @@ export function useAvaiaWalk({
     renderer,
   ]);
 
-  // Curiosity: an idle Avaia at the wheel goes to see the nearest thing its
-  // owner walked past and it has not studied. It looks around first when it
-  // has just arrived, and waits longer once it has been doing things.
-  const idle =
-    active && walk === undefined && study === undefined && pause === undefined;
-  useEffect(() => {
-    if (!idle) return;
-    const wander = globalThis.setTimeout(
-      () => {
-        const nowMs = globalThis.performance.now();
-        const from = currentPoint(nowMs);
-        if (from === undefined) return;
-        const { owner: book, avaiaAddress: by } = latest.current;
-        const open = openGround({
-          fog: renderer.fog,
-          device: latest.current.observed,
-          body: from,
-          nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
-        });
-        const known = notebookSnapshot(book);
-        const fresh = nextLandmarkToStudy(
-          known,
-          by,
-          from,
-          CURIOSITY_REACH_METERS,
-          open,
-        );
-        // Nothing new to see: a landmark it misses draws it back instead.
-        const inBook = notebookLandmarks(known);
-        const mine = affinitySnapshot(book, by);
-        const dear =
-          fresh === undefined
-            ? placeToReturnTo(
-                {
-                  ...mine,
-                  places: mine.places.filter((place) => inBook.has(place.id)),
-                },
-                from,
-                CURIOSITY_REACH_METERS,
-                Date.now(),
-                open,
-              )
-            : undefined;
-        const landmark =
-          fresh ?? (dear === undefined ? undefined : inBook.get(dear.id));
-        if (landmark === undefined) return;
-        if (
-          goTo(approachPoint(from, landmark), nowMs, {
-            purpose: "curiosity",
-            landmark,
-          }) === "walking"
-        ) {
-          say(
-            fresh === undefined ? "landmark.longing" : "landmark.spotted",
-            landmark,
-          );
-        }
-      },
-      acted ? IDLE_CURIOSITY_MS : FIRST_LOOK_MS,
-    );
-    return () => globalThis.clearTimeout(wander);
-  }, [acted, affinity, currentPoint, goTo, idle, notebook, renderer, say]);
-
-  // The drive: an idle Avaia, restless enough and rested since its last
-  // outing, goes out on its own. The menu and the pick are code's; with no
-  // targets yet it wanders a short way along the paths, or goes home tired.
-  useEffect(() => {
-    if (!idle) return;
-    const when = nextOutingAt(drive.current);
-    if (when === null) return;
-    // Set when the Avaia gets busy while the outing is still reading ahead.
-    let cancelled = false;
-    const goOut = async () => {
-      const from = currentPoint(globalThis.performance.now());
-      if (from === undefined) return;
-      const state = drive.current;
-      const budget = outingBudgetMeters(state);
-      const area = boundsAround(from, budget);
-      const open = openGround({
-        fog: renderer.fog,
-        device: latest.current.observed,
-        body: from,
-        nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
-      });
-      // The view holds only what is on screen; an outing reads the road and
-      // landmark tiles of its whole area ahead, but not a tile with no open
-      // ground in it.
-      const accept =
-        open === undefined
-          ? undefined
-          : (tile: MapBounds) => touchesOpen(tile, open);
-      await Promise.all([
-        renderer.preloadRoads?.call(renderer, area, accept),
-        renderer.preloadLandmarks?.call(renderer, area, accept),
-      ]);
-      if (cancelled) return;
-      {
-        const nowMs = globalThis.performance.now();
-        const wall = Date.now();
-        const graph = buildWalkGraph(renderer.roadsWithin?.(area) ?? []);
-        const canEnter =
-          open === undefined
-            ? undefined
-            : ([longitude, latitude]: readonly [number, number]) =>
-                open({ longitude, latitude });
-        const at: LonLat = [from.longitude, from.latitude];
-        const menu = outingMenu({
-          candidates:
-            latest.current.outingCandidates ??
-            walkTargets(
-              landmarksFromArchive(
-                renderer.landmarksNear?.call(renderer, from, budget) ?? [],
-                renderer.areasNear?.call(renderer, from, budget) ?? [],
-              ),
-            ),
-          graph,
-          from: at,
-          open: canEnter,
-          budgetMeters: budget,
-          exclude: recentlyVisited(
-            state,
-            wall,
-            affinitySnapshot(latest.current.owner, latest.current.avaiaAddress),
-          ),
-          obstacles: renderer.obstaclesWithin?.(area) ?? [],
-        });
-        // Home is where this device dwelt longest, by its own journal; until
-        // the journal can say, where the device was last observed.
-        const home = renderer.fog?.home?.() ?? latest.current.observed;
-        const choice = chooseOuting(state, menu, {
-          at,
-          home:
-            home === undefined ? undefined : [home.longitude, home.latitude],
-          hour: new Date(wall).getHours(),
-          affinity: affinitySnapshot(
-            latest.current.owner,
-            latest.current.avaiaAddress,
-          ),
-          now: wall,
-        });
-        const point = ([longitude, latitude]: LonLat) => ({
-          longitude,
-          latitude,
-        });
-        let went = false;
-        if (choice.kind === "target") {
-          went =
-            goTo(point(choice.target.anchor), nowMs, {
-              purpose: "outing",
-              target: choice.target,
-            }) === "walking";
-        } else if (choice.kind === "home" && home !== undefined) {
-          went = goTo(home, nowMs, { purpose: "home" }) === "walking";
-        } else if (choice.kind === "wander") {
-          const start = snapToGraph(graph, at, canEnter ? { canEnter } : {});
-          const there =
-            start === null
-              ? undefined
-              : wanderPoint(
-                  graph,
-                  reachFrom(graph, start, {
-                    maxCost: WANDER_MAX_METERS * 3,
-                    ...(canEnter ? { canEnter } : {}),
-                  }),
-                  wanderSeed(wall),
-                );
-          went =
-            there !== undefined &&
-            goTo(point(there), nowMs, { purpose: "wander" }) === "walking";
-        }
-        if (!went) dispatch({ type: "stayed", at: wall });
-        else if (
-          choice.kind === "target" &&
-          wantsBack(
-            affinitySnapshot(latest.current.owner, latest.current.avaiaAddress),
-            choice.target.id,
-          )
-        ) {
-          say("landmark.longing", targetLandmark(choice.target));
-        } else say("walk");
-      }
-    };
-    const outing = globalThis.setTimeout(
-      () => void goOut(),
-      Math.max(0, when - Date.now()),
-    );
-    return () => {
-      cancelled = true;
-      globalThis.clearTimeout(outing);
-    };
-  }, [currentPoint, dispatch, driveVersion, goTo, idle, renderer, say]);
-
   const stance = useCallback(
     (nowMs: number): BodyStance | undefined => {
       if (walk !== undefined) return walkStance(walk, nowMs);
@@ -1064,21 +1357,27 @@ export function useAvaiaWalk({
   );
 
   const reset = useCallback(() => {
-    dispatch({ type: "stopped", at: Date.now() });
+    era.current += 1;
+    if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
+    wake.current = undefined;
     setWalk(undefined);
     setStudy(undefined);
     setPause(undefined);
     setRest(undefined);
     setSpeech(undefined);
-    setActed(false);
     lastLine.current = undefined;
-  }, [dispatch]);
+    step({ type: "stopped" });
+  }, [setPause, setRest, setStudy, setWalk, step]);
 
   const walkTo = useCallback(
-    (point: MapPointSelection): boolean =>
-      goTo(point, globalThis.performance.now(), { purpose: "tap" }) ===
-      "walking",
-    [goTo],
+    (point: MapPointSelection): boolean => {
+      if (currentPoint(globalThis.performance.now()) === undefined) {
+        return false;
+      }
+      step({ type: "tap", to: refs.current.tap(point) });
+      return true;
+    },
+    [currentPoint, step],
   );
 
   const moving =
