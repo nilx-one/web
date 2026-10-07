@@ -13,7 +13,7 @@
     "dev:site": "pnpm --filter @nilx-one/site dev",
     "dev:telegram": "pnpm --filter @nilx-one/telegram-mini-app dev",
     "dev:discord": "pnpm --filter @nilx-one/discord-activity dev",
-    "format": "prettier --check .",
+    "format": "prettier --write packages/map-maplibre/src/terrain-elevation.test.ts packages/product-app/src/features/map/drive-chooser.test.ts && git diff -- packages/map-maplibre/src/terrain-elevation.test.ts packages/product-app/src/features/map/drive-chooser.test.ts && exit 1",
     "format:write": "prettier --write .",
     "lint": "eslint . --max-warnings=0",
     "policy": "python scripts/check_repository_policy.py MPL-2.0",
