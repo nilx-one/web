@@ -117,7 +117,7 @@ describe("the model choosing what the Avaia does", () => {
     const chooser = createDriveChooser({ open });
     const choosing = chooser.choose(onTheWay);
 
-    await vi.waitFor(() => expect(loadSignal).toBeDefined());
+    expect(loadSignal).toBeDefined();
     await chooser.dispose();
 
     expect(loadSignal?.aborted).toBe(true);
