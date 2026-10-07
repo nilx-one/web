@@ -176,6 +176,7 @@ import { useNearbySpeech } from "./use-nearby-speech";
 import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
 import { useLocalModelReadiness } from "./use-local-model-readiness";
+import { useAvaiaLife, type LifeBody } from "./use-avaia-life";
 import { useReadinessFrameVisible } from "./use-readiness-frame";
 import { createWorldReadiness } from "./world-readiness";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
@@ -244,6 +245,8 @@ export interface AuthenticatedMapHomeViewProps {
     | "economyCatalog"
     | "applyInventoryCommand"
     | "backpackGiftDue"
+    | "avaiaDriveStep"
+    | "applyAvaiaLife"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -975,6 +978,18 @@ export function AuthenticatedMapHomeView({
   // The Avaia answers fog taps through the reveal below, which in turn talks
   // in the Avaia's voice: the ref is what lets the two hooks meet.
   const fogRevealRef = useRef<FogRevealState | undefined>(undefined);
+  // Its needs are Core's: this device reports where the body is and whether
+  // it walks, and the drive hears what they ask. The walk hook is created
+  // below, so the body is read through a ref it fills.
+  const avaiaBody = useRef<() => LifeBody | undefined>(() => undefined);
+  const avaiaLife = useAvaiaLife({
+    core: findItems,
+    owner: pubDress,
+    subject: avaiaAddress,
+    active: wheel === "avaia" && handover === undefined,
+    body: () => avaiaBody.current(),
+    home: renderer.fog?.home?.() ?? observedPosition,
+  });
   const avaiaWalk = useAvaiaWalk({
     renderer,
     active: wheel === "avaia" && handover === undefined,
@@ -990,6 +1005,8 @@ export function AuthenticatedMapHomeView({
       if (outcome === "busy") return "busy";
       return outcome === "offered" || outcome === "revealing";
     },
+    core: findItems,
+    life: avaiaLife,
     onCue: cue,
     onWalkCompleted: findLoop.completedAvaiaWalk,
     onAward: (record) => {
@@ -1004,6 +1021,17 @@ export function AuthenticatedMapHomeView({
       if (url !== undefined) speak({ url });
     },
   });
+  useEffect(() => {
+    avaiaBody.current = () => {
+      const stance = avaiaWalk.stance(globalThis.performance.now());
+      const point = stance?.point ?? observedPosition;
+      if (point === undefined) return undefined;
+      return {
+        point: { longitude: point.longitude, latitude: point.latitude },
+        motion: stance?.clipId === "walk" ? "walking" : "idle",
+      };
+    };
+  }, [avaiaWalk, observedPosition]);
   const [fogAnnouncement, setFogAnnouncement] = useState("");
   const fogReveal = useFogReveal({
     renderer,

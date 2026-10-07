@@ -35,7 +35,10 @@ import {
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
-import { loadedTerrainElevationMeters } from "./terrain-elevation";
+import {
+  loadedTerrainElevationMeters,
+  terrainBodyPitchRadians,
+} from "./terrain-elevation";
 
 export const AVATAR_LAYER_ID = "nilx-one-local-avatars";
 export { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
@@ -247,7 +250,16 @@ export function createAvatarLayer(
     // The studies face glTF +Z, which lands on Mercator north; Mercator's y
     // grows southward, so a positive turn about its Z axis is clockwise on the
     // ground — the same sense a compass bearing turns in.
-    root.rotation.set(Math.PI / 2, 0, (bearingDeg * Math.PI) / 180, "ZXY");
+    const terrainPitch =
+      instance.handle.altitudeMeters === undefined
+        ? terrainBodyPitchRadians(map, lngLat, bearingDeg)
+        : 0;
+    root.rotation.set(
+      Math.PI / 2 + terrainPitch,
+      0,
+      (bearingDeg * Math.PI) / 180,
+      "ZXY",
+    );
     root.visible = instance.handle.visible;
     root.updateMatrixWorld(true);
   }

@@ -1,12 +1,15 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type {
+  AvaiaDriveAnswer,
+  AvaiaDriveCommand,
+  AvaiaDriveInput,
+} from "@nilx-one/application";
 import {
   mapDistanceMeters,
   type MapBounds,
-  type MapFogField,
   type MapGroundTap,
-  type MapArea,
   type MapLandmark,
   type MapPointSelection,
   type MapRenderer,
@@ -15,13 +18,7 @@ import {
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  OUTING_INTERVAL_MS,
-  POINT_B_STAND_MS,
-  RESTLESS_MS,
-  WANDER_MAX_METERS,
-  WANDER_MIN_METERS,
-} from "./outing-drive";
+import type { AvaiaWalk } from "./avaia-walk";
 import {
   FOND_AT,
   FONDNESS_HALF_LIFE_MS,
@@ -29,8 +26,12 @@ import {
   writeAffinity,
   type FondPlace,
 } from "./place-affinity";
-import { forgetNotebookCache } from "./landmark-notebook";
-import { useAvaiaWalk, type AvaiaWalkInput } from "./use-avaia-walk";
+import { forgetNotebookCache, updateNotebook } from "./landmark-notebook";
+import {
+  POINT_B_STAND_MS,
+  useAvaiaWalk,
+  type AvaiaWalkInput,
+} from "./use-avaia-walk";
 import { readWorldMemory } from "./world-memory";
 
 const ORIGIN = { longitude: 30.5234, latitude: 50.4501 };
@@ -42,7 +43,7 @@ const at = (x: number, y: number): MapPointSelection => ({
 });
 
 /** A renderer with one long footway east of the origin, and taps on demand. */
-function walkRenderer() {
+function walkRenderer(extra: Partial<MapRenderer> = {}) {
   let listener: ((tap: MapGroundTap) => void) | undefined;
   const footway: MapRoad = {
     kind: "path",
@@ -63,6 +64,7 @@ function walkRenderer() {
     },
     roadsWithin: () => [footway],
     obstaclesWithin: () => [],
+    ...extra,
   } as unknown as MapRenderer;
   return {
     renderer,
@@ -71,27 +73,72 @@ function walkRenderer() {
   };
 }
 
-function render(renderer: MapRenderer) {
-  return renderHook((props: AvaiaWalkInput) => useAvaiaWalk(props), {
-    initialProps: {
-      renderer,
-      active: true,
-      observed: { ...ORIGIN, accuracyMeters: 10 },
-      model: undefined,
-      locale: "en",
-      avaiaAddress: "avaia:test",
-      owner: "0x0sky",
-      zoom: 17,
-      reducedMotion: true,
+/**
+ * A stand-in for Core's drive: it records every input and answers with what
+ * `script` says. The drive's own decisions are Core's and tested there; this
+ * is how the hook carries them out.
+ */
+function scriptedCore(
+  script: (input: AvaiaDriveInput) => AvaiaDriveCommand[] = () => [],
+) {
+  const inputs: AvaiaDriveInput[] = [];
+  let count = 0;
+  const avaiaDriveStep = vi.fn(
+    async (
+      _state: string,
+      input: AvaiaDriveInput,
+    ): Promise<AvaiaDriveAnswer> => {
+      inputs.push(input);
+      count += 1;
+      return { ok: true, state: `{"step":${count}}`, commands: script(input) };
     },
+  );
+  return { core: { avaiaDriveStep }, inputs };
+}
+
+const props = (
+  renderer: MapRenderer,
+  extra: Partial<AvaiaWalkInput> = {},
+): AvaiaWalkInput => ({
+  renderer,
+  active: true,
+  observed: { ...ORIGIN, accuracyMeters: 10 },
+  model: undefined,
+  locale: "en",
+  avaiaAddress: "avaia:test",
+  owner: "0x0sky",
+  zoom: 17,
+  reducedMotion: true,
+  ...extra,
+});
+
+function render(renderer: MapRenderer, extra: Partial<AvaiaWalkInput> = {}) {
+  return renderHook((input: AvaiaWalkInput) => useAvaiaWalk(input), {
+    initialProps: props(renderer, extra),
   });
 }
 
+/**
+ * Lets `ms` pass a second at a time, rendering in between, the way a page
+ * does: a body that walks off and back within one long jump of the clock
+ * would otherwise only render the jump's first step.
+ */
 const advance = async (ms: number) => {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(ms);
-  });
+  for (let left = ms; left > 0; left -= 1_000) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(Math.min(1_000, left));
+    });
+  }
 };
+
+/** Lets queued drive steps settle without moving the clock. */
+const settle = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+const types = (inputs: readonly AvaiaDriveInput[]) =>
+  inputs.map((input) => input.type);
 
 beforeEach(() => {
   vi.useFakeTimers({
@@ -114,294 +161,156 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("an Avaia sent to a point B", () => {
-  it("stands there looking around, then carries on from B", async () => {
+describe("an Avaia with no drive in Core", () => {
+  it("walks where its owner taps, stands there, and does nothing of its own", async () => {
     const { renderer, tap } = walkRenderer();
     const { result } = render(renderer);
     const b = at(300, 0);
 
     tap(b);
+    await settle();
     await advance(1);
+    await settle();
     const standing = result.current.stance(performance.now());
     expect(standing?.clipId).toBe("turn_in_place");
     expect(mapDistanceMeters(standing!.point, b)).toBeLessThan(1);
-    expect(result.current.moving).toBe(true);
 
-    await advance(POINT_B_STAND_MS - 100);
-    expect(result.current.stance(performance.now())?.clipId).toBe(
-      "turn_in_place",
-    );
-
-    await advance(200);
+    await advance(POINT_B_STAND_MS + 60 * 60 * 1000);
     const after = result.current.stance(performance.now());
     expect(after?.clipId).toBeUndefined();
     expect(mapDistanceMeters(after!.point, b)).toBeLessThan(1);
-    expect(result.current.moving).toBe(false);
-  });
-
-  it("lets a new tap during the stand walk on from where it stands", async () => {
-    const { renderer, tap } = walkRenderer();
-    const { result } = render(renderer);
-
-    tap(at(300, 0));
-    await advance(1_000);
-    tap(at(500, 0));
-    await advance(1);
-    const standing = result.current.stance(performance.now());
-    expect(standing?.clipId).toBe("turn_in_place");
-    expect(mapDistanceMeters(standing!.point, at(500, 0))).toBeLessThan(1);
   });
 });
 
-describe("an Avaia left idle", () => {
-  it("wanders out once restless, and not again within the interval", async () => {
+describe("an Avaia carrying out Core's drive", () => {
+  it("settles the drive on taking the wheel, and hands a tap over as a point B", async () => {
+    const { renderer, tap } = walkRenderer();
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "tap"
+        ? [
+            { do: "walk", to: input.to, purpose: "tap", grass: true },
+            { do: "say", line: "walk" },
+          ]
+        : input.type === "arrived"
+          ? [{ do: "look", ms: 20_000 }]
+          : [],
+    );
+    const { result } = render(renderer, { core });
+    await settle();
+    expect(types(inputs)).toEqual(["stopped"]);
+
+    tap(at(300, 0));
+    await settle();
+    expect(inputs[1]).toEqual({ type: "tap", to: "b:1" });
+    await advance(1);
+    expect(types(inputs)).toEqual(["stopped", "tap", "arrived"]);
+    const standing = result.current.stance(performance.now());
+    expect(standing?.clipId).toBe("turn_in_place");
+    expect(mapDistanceMeters(standing!.point, at(300, 0))).toBeLessThan(1);
+    // What Core answered is what this device keeps.
+    expect(readWorldMemory("0x0sky").drive).toBe('{"step":3}');
+  });
+
+  it("ticks the drive when it asks to be woken, not before", async () => {
     const { renderer } = walkRenderer();
-    const { result } = render(renderer);
-    const start = at(0, 0);
-
-    await advance(RESTLESS_MS - 1_000);
-    expect(result.current.stance(performance.now())).toBeUndefined();
-
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "stopped"
+        ? [{ do: "wake_at", ms: Date.now() + 30_000 }]
+        : [],
+    );
+    render(renderer, { core });
+    await advance(29_000);
+    expect(types(inputs)).toEqual(["stopped"]);
     await advance(2_000);
-    const out = result.current.stance(performance.now());
-    expect(out).toBeDefined();
-    const meters = mapDistanceMeters(start, out!.point);
-    expect(meters).toBeGreaterThanOrEqual(WANDER_MIN_METERS - 1);
-    expect(meters).toBeLessThanOrEqual(WANDER_MAX_METERS + 1);
-    expect(readWorldMemory("0x0sky").lastOutingAt).toBe(Date.now() - 1_000);
-
-    // Restless again, but the interval is not up: it stays where it went.
-    await advance(RESTLESS_MS * 2);
-    expect(result.current.stance(performance.now())?.point).toEqual(out!.point);
-
-    await advance(OUTING_INTERVAL_MS);
-    expect(result.current.stance(performance.now())?.point).not.toEqual(
-      out!.point,
-    );
+    expect(types(inputs)).toEqual(["stopped", "tick"]);
   });
 
-  it("goes out to a named walk target the map has loaded", async () => {
-    const { renderer: base } = walkRenderer();
-    const museum = at(550, 10);
-    const near = (
-      kind: string,
-      point: MapPointSelection,
-      name?: string,
-    ): MapLandmark => ({
-      id: `${kind}:${point.longitude}`,
-      kind,
-      ...point,
-      ...(name === undefined ? {} : { name }),
-      facts: {},
-    });
-    const loaded = [
-      near("museum", museum, "City museum"),
-      // Neither an unnamed walk target nor a route landmark is somewhere to go.
-      near("viewpoint", at(250, 10)),
-      near("statue", at(300, 10), "Statue"),
-    ];
-    const landmarksNear = vi.fn((point: MapPointSelection, radius: number) =>
-      loaded.filter((landmark) => mapDistanceMeters(point, landmark) <= radius),
-    );
-    const renderer = { ...base, landmarksNear } as unknown as MapRenderer;
-    const { result } = render(renderer);
-
-    await advance(RESTLESS_MS + 1_000);
-    const out = result.current.stance(performance.now());
-    expect(out).toBeDefined();
-    expect(mapDistanceMeters(out!.point, at(550, 0))).toBeLessThan(15);
-    // Asked for the outing's whole budget, not only what is near the body.
-    const radii = landmarksNear.mock.calls.map(([, radius]) => radius);
-    expect(Math.max(...radii)).toBeGreaterThan(2_000);
-  });
-
-  it("goes out to a named park the map draws", async () => {
-    const { renderer: base } = walkRenderer();
-    // A 200 m park whose west edge is 500 m down the footway.
-    const corner = (x: number, y: number) => {
-      const p = at(x, y);
-      return [p.longitude, p.latitude] as [number, number];
-    };
-    const park: MapArea = {
-      id: "poi:5",
-      layer: "landuse",
-      kind: "park",
-      name: "City park",
-      label: at(600, 50),
-      polygons: [
-        [
-          [
-            corner(500, -100),
-            corner(700, -100),
-            corner(700, 100),
-            corner(500, 100),
-            corner(500, -100),
-          ],
-        ],
-      ],
-    };
-    const areasNear = vi.fn(() => [park]);
-    const renderer = {
-      ...base,
-      areasNear,
-      landmarksNear: () => [],
-    } as unknown as MapRenderer;
-    const { result } = render(renderer);
-
-    await advance(RESTLESS_MS + 1_000);
-    expect(areasNear).toHaveBeenCalled();
-    const out = result.current.stance(performance.now());
-    // Arrived inside the park or at its edge, on the footway: not a wander.
-    expect(out!.point.longitude).toBeGreaterThanOrEqual(at(470, 0).longitude);
-    expect(out!.point.longitude).toBeLessThanOrEqual(at(600, 0).longitude);
-  });
-
-  it("goes home tired to where the journal says it lives, not to the device", async () => {
-    const { renderer: base, tap } = walkRenderer();
-    const home = at(-800, 0);
-    const renderer = {
-      ...base,
+  it("tells the drive a walk had no way there", async () => {
+    const { renderer, tap } = walkRenderer({
+      roadsWithin: () => [],
       fog: {
         isActive: () => true,
         cellAt: (point: MapPointSelection) => ({
-          id: "open",
+          id: point.longitude > at(150, 0).longitude ? "far" : "near",
           center: point,
           boundary: [],
         }),
-        isRevealed: () => true,
+        isRevealed: () => false,
         frontier: () => [],
         reveal: () => undefined,
         subscribe: () => () => undefined,
-        home: () => home,
-      } as unknown as MapFogField,
-    } as unknown as MapRenderer;
-    const { result } = render(renderer);
-
-    for (const x of [2_000, 0, 2_000]) {
-      tap(at(x, 0));
-      await advance(25 * 60 * 1000);
-      await advance(1);
-    }
-    await advance(POINT_B_STAND_MS);
-    await advance(RESTLESS_MS);
-    await advance(60 * 60 * 1000);
-    await advance(1);
-
-    const after = result.current.stance(performance.now());
-    expect(mapDistanceMeters(after!.point, home)).toBeLessThan(5);
-  });
-
-  it("still goes out after leaving the wheel mid-stand and taking it back", async () => {
-    const { renderer, tap } = walkRenderer();
-    const { result } = render(renderer);
+      },
+    } as unknown as Partial<MapRenderer>);
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "tap"
+        ? [{ do: "walk", to: input.to, purpose: "tap", grass: true }]
+        : [],
+    );
+    render(renderer, { core, observed: undefined });
+    // Somewhere the body stands, then a tap past the fog line.
+    await settle();
     tap(at(300, 0));
-    await advance(1_000);
-    act(() => result.current.reset());
-    await advance(RESTLESS_MS + 1_000);
     await advance(1);
-    const out = result.current.stance(performance.now());
-    expect(out).toBeDefined();
-    expect(out?.clipId).toBeUndefined();
-    expect(mapDistanceMeters(at(0, 0), out!.point)).toBeGreaterThanOrEqual(
-      WANDER_MIN_METERS - 1,
-    );
-    expect(readWorldMemory("0x0sky").lastOutingAt).toBeDefined();
+    expect(inputs.at(-1)?.type).toBe("blocked");
   });
 
-  it("does not go out while someone else is at the wheel", async () => {
+  it("answers a stroll with paths near where it settled", async () => {
     const { renderer } = walkRenderer();
-    const { result, rerender } = render(renderer);
-    rerender({
-      renderer,
-      active: false,
-      observed: { ...ORIGIN, accuracyMeters: 10 },
-      model: undefined,
-      locale: "en",
-      avaiaAddress: "avaia:test",
-      owner: "0x0sky",
-      zoom: 17,
-      reducedMotion: true,
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "stopped"
+        ? [
+            {
+              do: "resolve",
+              what: "stroll",
+              min_m: 30,
+              max_m: 120,
+              leash_m: 200,
+            },
+          ]
+        : [],
+    );
+    render(renderer, { core });
+    await settle();
+    const options = inputs.find((input) => input.type === "stroll_options");
+    expect(options).toEqual({
+      type: "stroll_options",
+      to: [expect.any(String)],
     });
-    await advance(RESTLESS_MS * 2);
-    expect(result.current.stance(performance.now())).toBeUndefined();
-    expect(readWorldMemory("0x0sky").lastOutingAt).toBeUndefined();
-  });
-});
-
-describe("an outing reading ahead", () => {
-  /**
-   * A renderer whose view holds no roads at all: the footway only exists once
-   * `preloadRoads` has read it, and that read resolves when `release` is called.
-   */
-  function readAheadRenderer(fog?: MapFogField) {
-    const { renderer: base, tap } = walkRenderer();
-    const footway = base.roadsWithin!({
-      west: -180,
-      east: 180,
-      south: -90,
-      north: 90,
-    });
-    let loaded = false;
-    let release: () => void = () => undefined;
-    const preloadRoads = vi.fn(
-      (_area: MapBounds, _accept?: (tile: MapBounds) => boolean) =>
-        new Promise<{
-          covering: number;
-          refused: number;
-          skipped: number;
-          cached: number;
-          fetched: number;
-          failed: number;
-        }>((resolve) => {
-          release = () => {
-            loaded = true;
-            resolve({
-              covering: 1,
-              refused: 0,
-              skipped: 0,
-              cached: 0,
-              fetched: 1,
-              failed: 0,
-            });
-          };
-        }),
-    );
-    const renderer = {
-      ...base,
-      roadsWithin: () => (loaded ? footway : []),
-      preloadRoads,
-      ...(fog === undefined ? {} : { fog }),
-    } as unknown as MapRenderer;
-    return { renderer, tap, preloadRoads, release: () => release() };
-  }
-
-  it("reads the outing's area ahead, then goes out along what it read", async () => {
-    const { renderer, preloadRoads, release } = readAheadRenderer();
-    const { result } = render(renderer);
-
-    await advance(RESTLESS_MS + 1_000);
-    expect(preloadRoads).toHaveBeenCalledTimes(1);
-    const [area] = preloadRoads.mock.calls[0]!;
-    // A there-and-back on a full charge: 2.5 km each way around the Avaia.
-    const across = mapDistanceMeters(
-      { longitude: area.west, latitude: ORIGIN.latitude },
-      { longitude: area.east, latitude: ORIGIN.latitude },
-    );
-    expect(across).toBeGreaterThan(4_900);
-    expect(across).toBeLessThan(5_100);
-    expect(result.current.stance(performance.now())).toBeUndefined();
-
-    release();
-    await advance(1);
-    const out = result.current.stance(performance.now());
-    expect(out).toBeDefined();
-    expect(mapDistanceMeters(at(0, 0), out!.point)).toBeGreaterThanOrEqual(
-      WANDER_MIN_METERS - 1,
-    );
+    // The only node 30-120 m along the footway from the origin is at 100 m.
+    const ref = (options as { readonly to: readonly string[] }).to[0]!;
+    const [lon] = ref.slice(2).split(",").map(Number);
+    expect(Math.round((lon! - ORIGIN.longitude) / M_LON)).toBe(100);
   });
 
-  it("reads landmarks ahead too, and goes to one only the read found", async () => {
-    const { renderer: base, release } = readAheadRenderer();
+  it("counts a walk cut short as far as it went", async () => {
+    const { renderer, tap } = walkRenderer();
+    const walked: AvaiaWalk[] = [];
+    const { core } = scriptedCore((input) =>
+      input.type === "tap"
+        ? [{ do: "walk", to: input.to, purpose: "tap", grass: true }]
+        : [],
+    );
+    const onWalkCompleted = (walk: AvaiaWalk) => walked.push(walk);
+    const { result } = render(renderer, {
+      core,
+      reducedMotion: false,
+      onWalkCompleted,
+    });
+    await settle();
+    // Under 400 m it is a walk, at 1.4 m/s.
+    tap(at(380, 0));
+    await advance(100_000);
+    // Partway there, a new walk cuts it short: 100 s at 1.4 m/s is 140 m.
+    tap(at(0, 0));
+    await settle();
+    expect(walked).toHaveLength(1);
+    const meters = walked[0]!.along.at(-1)!;
+    expect(meters).toBeGreaterThan(130);
+    expect(meters).toBeLessThan(150);
+    expect(result.current.stance(performance.now())?.clipId).toBe("walk");
+  });
+
+  it("reads an outing's area ahead and answers with its targets, wanders and home", async () => {
     const museum: MapLandmark = {
       id: "poi:1",
       ...at(550, 10),
@@ -409,83 +318,259 @@ describe("an outing reading ahead", () => {
       name: "City museum",
       facts: {},
     };
-    let read = false;
-    const preloadLandmarks = vi.fn(async () => {
-      read = true;
-      return {
-        covering: 1,
-        refused: 0,
-        skipped: 0,
-        cached: 0,
-        fetched: 1,
-        failed: 0,
-      };
-    });
-    const renderer = {
-      ...base,
-      preloadLandmarks,
+    const preloadRoads = vi.fn(async () => undefined);
+    const { renderer } = walkRenderer({
+      preloadRoads,
       landmarksNear: (point: MapPointSelection, radius: number) =>
-        read && mapDistanceMeters(point, museum) <= radius ? [museum] : [],
-    } as unknown as MapRenderer;
-    const { result } = render(renderer);
-
-    await advance(RESTLESS_MS + 1_000);
-    expect(preloadLandmarks).toHaveBeenCalledTimes(1);
-    // The same area as the roads, and the same tiles turned down.
-    expect(preloadLandmarks.mock.calls[0]).toEqual(
-      (base.preloadRoads as ReturnType<typeof vi.fn>).mock.calls[0],
+        mapDistanceMeters(point, museum) <= radius ? [museum] : [],
+      areasNear: () => [],
+    } as unknown as Partial<MapRenderer>);
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "stopped"
+        ? [
+            {
+              do: "resolve",
+              what: "outing",
+              min_m: 0,
+              max_m: 2_500,
+              wander_m: [150, 400],
+            },
+          ]
+        : [],
     );
-    release();
-    await advance(1);
-    const out = result.current.stance(performance.now());
-    expect(mapDistanceMeters(out!.point, at(550, 0))).toBeLessThan(15);
+    render(renderer, { core });
+    await settle();
+    await settle();
+    expect(preloadRoads).toHaveBeenCalledTimes(1);
+    const [area] = preloadRoads.mock.calls[0] as unknown as [MapBounds];
+    expect(
+      mapDistanceMeters(
+        { longitude: area.west, latitude: ORIGIN.latitude },
+        { longitude: area.east, latitude: ORIGIN.latitude },
+      ),
+    ).toBeGreaterThan(4_900);
+    const options = inputs.find((input) => input.type === "outing_options");
+    expect(options).toMatchObject({
+      type: "outing_options",
+      targets: [
+        {
+          ref: expect.stringMatching(/^t:/),
+          kind: "museum",
+          feeling: "new",
+          stay_ms: expect.any(String),
+          revisit_ms: String(7 * 24 * 60 * 60 * 1000),
+        },
+      ],
+      home: { ref: "home", meters: 0 },
+    });
+    const { targets, wander } = options as {
+      readonly targets: readonly { meters: number; appeal: number }[];
+      readonly wander: readonly string[];
+    };
+    expect(targets[0]!.meters).toBeGreaterThan(500);
+    expect(targets[0]!.appeal).toBeGreaterThan(0);
+    expect(wander.length).toBeGreaterThan(0);
   });
 
-  it("gives up the outing when a tap comes while it is reading ahead", async () => {
-    const { renderer, tap, release } = readAheadRenderer();
-    const { result } = render(renderer);
+  it("puts a choice to its model, and answers nothing when there is none or it is slow", async () => {
+    const choose: AvaiaDriveCommand = {
+      do: "choose",
+      what: "outing",
+      menu: [
+        { index: 0, action: "stay" },
+        { index: 1, action: "wander" },
+      ],
+      default: 1,
+    };
+    const run = async (
+      chooser: AvaiaWalkInput["chooser"],
+      wait = 0,
+    ): Promise<AvaiaDriveInput | undefined> => {
+      const { renderer } = walkRenderer();
+      const { core, inputs } = scriptedCore((input) =>
+        input.type === "stopped" ? [choose] : [],
+      );
+      const view = render(renderer, { core, chooser });
+      await settle();
+      await settle();
+      await advance(wait);
+      view.unmount();
+      return inputs.find((input) => input.type === "chosen");
+    };
 
-    await advance(RESTLESS_MS + 1_000);
-    tap(at(100, 0));
-    release();
-    await advance(1);
+    expect(await run(undefined)).toEqual({ type: "chosen", index: null });
+    expect(await run(async () => 0)).toEqual({ type: "chosen", index: 0 });
+    const asked = vi.fn(async (command: unknown) => {
+      expect(command).toEqual(choose);
+      return 1;
+    });
+    expect(await run(asked)).toEqual({ type: "chosen", index: 1 });
+    expect(
+      await run(() => new Promise<number>(() => undefined), 4_000),
+    ).toEqual({ type: "chosen", index: null });
+  });
+
+  it("tells the drive what a walk passes, and steps aside to look when told", async () => {
+    const statue: MapLandmark = {
+      id: "poi:9",
+      ...at(150, 12),
+      kind: "statue",
+      name: "Statue",
+      facts: {},
+    };
+    const { renderer, tap } = walkRenderer({
+      landmarksNear: (point: MapPointSelection, radius: number) =>
+        mapDistanceMeters(point, statue) <= radius ? [statue] : [],
+      areasNear: () => [],
+    } as unknown as Partial<MapRenderer>);
+    const lines: string[] = [];
+    let detoured = false;
+    const { core, inputs } = scriptedCore((input) => {
+      if (input.type === "tap") {
+        return [{ do: "walk", to: input.to, purpose: "tap", grass: true }];
+      }
+      if (input.type === "passing" && !detoured) {
+        detoured = true;
+        return [
+          {
+            do: "walk",
+            to: input.things[0]!.ref,
+            purpose: "detour",
+            grass: false,
+          },
+        ];
+      }
+      return input.type === "arrived" ? [{ do: "glance", at: "lm:poi:9" }] : [];
+    });
+    const { result } = render(renderer, {
+      core,
+      reducedMotion: false,
+      model: "sky-study",
+      onLine: ({ kind }) => lines.push(kind),
+    });
+    await settle();
+    tap(at(500, 0));
+    // A second at a time until it has looked: then it is standing there.
+    for (let s = 0; s < 120 && !lines.includes("landmark.glanced"); s++) {
+      await advance(1_000);
+    }
+
+    const passing = inputs.find((input) => input.type === "passing");
+    expect(passing).toEqual({
+      type: "passing",
+      things: [
+        { ref: "lm:poi:9", kind: "statue", group: "landmark", off_route_m: 12 },
+      ],
+    });
+    // It stood in front of the statue, not on it, and said what it saw.
     const standing = result.current.stance(performance.now());
     expect(standing?.clipId).toBe("turn_in_place");
-    expect(mapDistanceMeters(standing!.point, at(100, 0))).toBeLessThan(1);
-    expect(readWorldMemory("0x0sky").lastOutingAt).toBeUndefined();
+    const fromStatue = mapDistanceMeters(standing!.point, statue);
+    expect(fromStatue).toBeGreaterThan(2);
+    expect(fromStatue).toBeLessThan(6);
+    expect(lines).toContain("landmark.glanced");
   });
 
-  it("turns down tiles that are all fog", async () => {
-    // Open within 600 m of the origin, fog everywhere else.
-    const fog = {
-      isActive: () => true,
-      cellAt: (point: MapPointSelection) => ({
-        id: mapDistanceMeters(point, ORIGIN) <= 600 ? "open" : "fog",
-        center: point,
-        boundary: [],
-      }),
-      isRevealed: (id: string) => id === "open",
-      frontier: () => [],
-      reveal: () => undefined,
-      subscribe: () => () => undefined,
-    } as unknown as MapFogField;
-    const { renderer, preloadRoads } = readAheadRenderer(fog);
-    render(renderer);
-
-    await advance(RESTLESS_MS + 1_000);
-    const [, accept] = preloadRoads.mock.calls[0]!;
-    const box = (x: number, size = 100): MapBounds => {
-      const a = at(x, 0);
-      const b = at(x + size, size);
-      return {
-        west: a.longitude,
-        east: b.longitude,
-        south: a.latitude,
-        north: b.latitude,
-      };
+  it("marks a landmark its owner walked past as one to study", async () => {
+    const statue: MapLandmark = {
+      id: "poi:9",
+      ...at(150, 12),
+      kind: "statue",
+      name: "Statue",
+      facts: {},
     };
-    expect(accept?.(box(0))).toBe(true);
-    expect(accept?.(box(2_000))).toBe(false);
+    updateNotebook("0x0sky", () => ({
+      noticed: [{ landmark: statue, noticedAt: Date.now() }],
+      studied: [],
+    }));
+    const { renderer, tap } = walkRenderer({
+      landmarksNear: (point: MapPointSelection, radius: number) =>
+        mapDistanceMeters(point, statue) <= radius ? [statue] : [],
+      areasNear: () => [],
+    } as unknown as Partial<MapRenderer>);
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "tap"
+        ? [{ do: "walk", to: input.to, purpose: "tap", grass: true }]
+        : [],
+    );
+    render(renderer, { core, reducedMotion: false });
+    await settle();
+    tap(at(500, 0));
+    await advance(60_000);
+    expect(inputs.find((input) => input.type === "passing")).toMatchObject({
+      things: [{ ref: "lm:poi:9", studyable: true }],
+    });
+  });
+
+  it("says a line about a place only when it knows the place", async () => {
+    const { renderer } = walkRenderer();
+    const lines: string[] = [];
+    const { core } = scriptedCore((input) =>
+      input.type === "stopped"
+        ? [
+            { do: "say", line: "landmark.spotted", about: "lm:gone" },
+            { do: "say", line: "stroll" },
+          ]
+        : [],
+    );
+    render(renderer, {
+      core,
+      model: "kai-study",
+      onLine: ({ kind }) => lines.push(kind),
+    });
+    await settle();
+    expect(lines).toEqual(["stroll"]);
+  });
+
+  it("passes on what its needs ask, with home", async () => {
+    const { renderer } = walkRenderer();
+    const { core, inputs } = scriptedCore();
+    render(renderer, {
+      core,
+      life: { intent: "return_home", energy: 2_500.4, home: at(-800, 0) },
+    });
+    await settle();
+    expect(inputs).toContainEqual({
+      type: "life",
+      intent: "return_home",
+      energy: "2500",
+      home: "home",
+    });
+  });
+
+  it("keeps the drive as it was when Core refuses a step", async () => {
+    const { renderer } = walkRenderer();
+    const avaiaDriveStep = vi.fn(async (): Promise<AvaiaDriveAnswer> => ({
+      ok: false,
+      error: "invalid",
+    }));
+    window.localStorage.setItem(
+      "nilx-one.world-memory.v1.0x0sky",
+      JSON.stringify({ drive: '{"kept":true}' }),
+    );
+    render(renderer, { core: { avaiaDriveStep } });
+    await settle();
+    expect(avaiaDriveStep).toHaveBeenCalledWith(
+      '{"kept":true}',
+      { type: "stopped" },
+      expect.any(Number),
+      13,
+    );
+    expect(readWorldMemory("0x0sky").drive).toBe('{"kept":true}');
+  });
+
+  it("stops the drive while someone else is at the wheel", async () => {
+    const { renderer } = walkRenderer();
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "stopped"
+        ? [{ do: "wake_at", ms: Date.now() + 5_000 }]
+        : [],
+    );
+    const { rerender } = render(renderer, { core });
+    await settle();
+    rerender(props(renderer, { core, active: false }));
+    await advance(10_000);
+    expect(types(inputs)).toEqual(["stopped"]);
   });
 });
 

@@ -13,6 +13,8 @@ import numpy as np
 from rig import TOPOLOGY, INDEX, weights_for
 
 ASSETS = Path(__file__).resolve().parents[2] / "deploy/web/avatars/0.1.0"
+GAIT = (Path(__file__).resolve().parents[2]
+        / "packages/product-app/src/features/map/avatar-gait.json")
 
 
 def read_glb(path):
@@ -32,7 +34,67 @@ def read_glb(path):
     return doc, accessor
 
 
+def rotation(q):
+    x, y, z, w = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                     [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                     [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+
+def joint_positions(doc, rotations):
+    """Where every joint stands with the given local rotations applied."""
+    position, orientation = [], []
+    for i, (_, parent) in enumerate(TOPOLOGY):
+        local = rotations.get(i, np.eye(3))
+        offset = np.asarray(doc["nodes"][i]["translation"])
+        if parent < 0:
+            position.append(offset)
+            orientation.append(local)
+        else:
+            position.append(position[parent] + orientation[parent] @ offset)
+            orientation.append(orientation[parent] @ local)
+    return np.array(position)
+
+
+def measure_gait(doc, read):
+    """A study's legs as its walk clip moves them: leg, step, and footfalls.
+
+    The step is how far one foot sweeps fore and aft under the hips over a
+    cycle, which is the ground a planted foot covers in one step. A foot lands
+    where it reaches furthest forward; the studies face glTF +Z.
+    """
+    ground = min(read(primitive["attributes"]["POSITION"])[:, 1].min()
+                 for mesh in doc["meshes"] for primitive in mesh["primitives"])
+    rest = joint_positions(doc, {})
+    walk = next(a for a in doc["animations"] if a["name"] == "walk")
+    times = read(walk["samplers"][0]["input"]).reshape(-1)
+    tracks = {channel["target"]["node"]: read(walk["samplers"][channel["sampler"]]["output"])
+              for channel in walk["channels"]}
+    reach = {"L": [], "R": []}
+    for k in range(len(times)):
+        joints = joint_positions(doc, {node: rotation(q[k]) for node, q in tracks.items()})
+        for side in reach:
+            reach[side].append(joints[INDEX["foot_" + side]][2] - joints[INDEX["hips"]][2])
+    phases = sorted(float(times[int(np.argmax(reach[side]))] / times[-1]) for side in reach)
+    step = max(np.ptp(reach[side]) for side in reach)
+    return {"legMeters": float(rest[INDEX["thigh_L"]][1] - ground),
+            "stepMeters": float(step)}, phases
+
+
 class RigTests(unittest.TestCase):
+    def test_client_walks_each_study_on_its_own_measured_legs(self):
+        # The client paces every stride from these numbers; a rebuilt body
+        # whose legs moved must move them too.
+        gait = json.loads(GAIT.read_text())
+        for model in ("sky", "dasha", "kai", "dasha-v2"):
+            with self.subTest(model=model):
+                directory = ASSETS if model != "dasha-v2" else ASSETS.parent / "0.3.0"
+                measured, footfalls = measure_gait(*read_glb(directory / (model + "-study.glb")))
+                recorded = gait["studies"][model + "-study"]
+                for key, value in measured.items():
+                    self.assertAlmostEqual(recorded[key], value, delta=1.5e-3, msg=key)
+                np.testing.assert_allclose(footfalls, gait["footfallPhases"], atol=1e-6)
+
     def test_exported_assets(self):
         for model in ("sky", "dasha", "kai", "dasha-v2"):
             with self.subTest(model=model):
