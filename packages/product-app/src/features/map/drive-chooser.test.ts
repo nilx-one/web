@@ -156,8 +156,8 @@ describe("the model choosing what the Avaia does", () => {
 describe("the chooser in the world", () => {
   const dependency = (
     openCached?: NonNullable<LocalModelDependency["host"]["openCached"]>,
-    open: LocalModelDependency["host"]["open"] = vi.fn(async () =>
-      engine("download").model,
+    open: LocalModelDependency["host"]["open"] = vi.fn(
+      async () => engine("download").model,
     ),
   ) =>
     ({
