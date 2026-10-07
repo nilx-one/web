@@ -244,6 +244,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "economyCatalog"
     | "applyInventoryCommand"
     | "backpackGiftDue"
+    | "avaiaDriveStep"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -990,6 +991,7 @@ export function AuthenticatedMapHomeView({
       if (outcome === "busy") return "busy";
       return outcome === "offered" || outcome === "revealing";
     },
+    core: findItems,
     onCue: cue,
     onWalkCompleted: findLoop.completedAvaiaWalk,
     onAward: (record) => {

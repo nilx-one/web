@@ -2,7 +2,7 @@
 
 Implementation plan, version 2. It replaces `avaia_finds — phase 1`, in which walking only served the finds and the finds came first. Here it is the other way round: **first the Avaia learns to walk around the city, and only then, along the way, does it find things.** Its walking today is described in [Avaia walks the world](avaia-walk.md): moving on a tap and curiosity about landmarks already noticed. This document adds outings of its own, routes and finds.
 
-Status: **plan**, partly built. The walking graph and router (§0.6), walking along paths (§0.7), the outing menu (§1.3), the drive (§2.4), the find rolls (§3.3a), reading road tiles ahead (§0.5) and the landmark mapper for the `pois` point kinds (§1, its archive confirmation still open) are implemented, and R1 and R2 are decided; the rest is not yet. The values in the tables are starting values, tuned on live walking.
+Status: **plan**, partly built. The walking graph and router (§0.6), walking along paths (§0.7), the outing menu (§1.3), the drive (§2.4, now in Core), the find rolls (§3.3a), reading road tiles ahead (§0.5) and the landmark mapper for the `pois` point kinds (§1, its archive confirmation still open) are implemented, and R1 and R2 are decided; the rest is not yet. The values in the tables are starting values, tuned on live walking.
 
 ## Goal
 
@@ -291,25 +291,19 @@ code computes the menu: [stay, park A, lake B, church C, wander nearby] with wei
 - **While the page is closed, the Avaia does not walk.** This keeps today's "Nothing walks in the background". An option for later: on opening, run a deterministic route and show the outcome ("it already went out and came back"), the way the fog reveal does on the wall clock. Not part of this plan.
 - Each walk starts from where the Avaia is now. If it went to a point B, the next outing starts from there.
 
-### 2.4 Already built: the drive
+### 2.4 Already built: the drive, in Core
 
-`outing-drive.ts` in `product-app` is a pure, deterministic state machine. The walk hook feeds it events and asks what to do next.
+The drive is no longer this repository's. It is the deterministic Avaia drive in `nilx-one/core` (`docs/avaia-drive.md` there), exported over Wasm as `avaia_drive_step(state, input, now_ms, hour)` and pinned like the rest of the Core runtime. Core decides; this repository is its world layer and its executor (`use-avaia-walk.ts`, `drive-world.ts`):
 
-- **States:** `idle`, `walking` (purpose: `tap`, `curiosity`, `outing`, `wander`, `home`) and `standing` (`point_b` or `visit`).
-- **Transitions:**
-  - a tap, in any state, starts a walk there from wherever the Avaia is;
-  - a drive walk starts only from `idle` and never cuts short a walk, a stand at B or a visit;
-  - arriving at B is a 20 s stand, then `idle` at B; the Avaia does not go home;
-  - arriving at a target is a 30 s look around and a "visited" mark;
-  - arriving home restores full energy;
-  - a walk that did not arrive, or a stand cut short because the Avaia left the wheel, becomes `idle` where it stands.
-- **When to go out:** `restlessness` builds over 10 min of idling, and an outing comes no more often than once in 4 h (`nextOutingAt`). The time of the last outing is kept in `world-memory`, so a reload does not reset the interval.
-- **Energy:** 0.2 per kilometre, so a full charge lasts 5 km. An outing's budget is a there-and-back on what is left, but never beyond 3 km.
-- **Choice** (`chooseOuting`): tired and far from home, go home. In the evening and at night (20:00–07:00), only a target within 1 km, or wander. By day, the nearest target, otherwise wander, otherwise stay. A target visited less than a week ago stays off the menu. With the Avaia's feelings at hand, the most wanted target wins instead of the nearest, a loved one waits a day rather than a week, and a visit lasts by what is done there ([Favourite places](avaia-walk.md#favourite-places)).
-- **Wandering:** a graph node 150–400 m away along the paths, over open ground. It is picked deterministically per outing window.
-- **Home** is the cell this device dwelt in longest, by closed visits in its own presence journal, once that is at least an hour (`HOME_MIN_DWELL_MS`); ties go to the smallest cell id. The fog field computes it inside `map-shade` and hands the application one point, the cell's centre (`MapFogField.home`); no visit, duration or other cell leaves the presence boundary. Until the journal loads, or with no cell dwelt in long enough, home is the device's last observed position.
-- **Lines:** for an outing the Avaia uses the existing `walk` line. There are no "I'll go for a walk" lines yet, because they need to be recorded.
-- The mapper (#306) supplies candidates from the landmarks the map has loaded: museums, viewpoints, castles, forts, ruins, archaeological sites and significant monuments. It supplies parks, reserves, beaches and lakes as areas too, from the `landuse` and `water` polygons and their labels. All of these rows wait on the archive inspection ([Avaia landmarks from OpenStreetMap](avaia-osm-landmarks.md#implemented)).
+- **What Web tells it:** a tap (a point B), a walk arriving or blocked, leaving or taking the wheel, time passing when the drive asked to be woken, things a walk passes, the options it was asked to resolve, a model's pick from a menu, and what Avaia life says its needs ask (`life`).
+- **What it answers:** walk, look, study, glance, pick up, visited, say a line, resolve what is around, choose from a menu, wake at. Web carries each out as it is told.
+- **No place crosses over.** Web mints opaque refs (`b:3` for a point B, `lm:<id>` for a landmark, `t:<id>` for an outing target, `a:<id>` for an area, `f:<artifactId>` for a find, `n:<lon>,<lat>` for a graph node, `home`) and gives whole metres. The drive hands only those refs back.
+- **Back on its own after B, outings, wandering, going home, the evening rule, the 4 h interval, lingering and revisits** are Core's rules now; Web supplies the targets with their kind, metres and what the record of places says (appeal, feeling, how long to stay, how soon to go back), wander nodes, stroll nodes near where it settled, and home.
+- **Distractions on the way** (a point B's included) are Core's too: Web reports landmarks and areas within 30 m of the rest of the way and up to 40 m ahead, and the finds rolled along the walk that the Avaia sees and may pick up, laid on the ground (`findsAlong`). Core decides whether to step aside, then Web walks there, glances (`landmark.glanced`), studies a noticed landmark, or bends for the find, and the walk carries on.
+- **A walk cut short** by a detour or a new tap reports what was walked of it (`walkedSoFar`), so the finds on it are rolled exactly as far as the body went.
+- **Choices** go to a model when one is wired (`chooser`), through the port of `nilx-one/ai`'s `src/choice.rs` (`drive-choice.ts`, held to its fixture); otherwise, late or off the menu, Core's own pick stands.
+- **Without the drive** (no Core runtime, or one built before it), the Avaia only walks where it is tapped and stands there.
+- The drive's state is kept with where the Avaia stands (`world-memory`), so a reload does not send it out again early. **Home** is still the cell this device dwelt in longest (`MapFogField.home`), and the mapper (#306) still supplies the outing candidates.
 
 ## §3 Finds
 

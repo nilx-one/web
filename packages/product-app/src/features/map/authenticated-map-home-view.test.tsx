@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  AvaiaDriveAnswer,
+  AvaiaDriveCommand,
+  AvaiaDriveInput,
   AvatarModel,
   AvatarModelResult,
   BondProviderConnections,
+  CoreRuntimePort,
   NearbySpeechAccessPort,
 } from "@nilx-one/application";
 import {
@@ -67,7 +71,48 @@ function renderer(status: MapRendererStatus = { kind: "ready" }): MapRenderer {
   return createMapRendererDouble(status);
 }
 
+/**
+ * A stand-in for Core's drive that is only curious: on every idle moment it
+ * asks for something to go and see, goes, studies it, and asks again in a
+ * while when there was nothing. The drive itself is Core's and tested there.
+ */
+function curiousCore(): Pick<CoreRuntimePort, "avaiaDriveStep"> {
+  const script = (input: AvaiaDriveInput): AvaiaDriveCommand[] => {
+    switch (input.type) {
+      case "stopped":
+      case "tick":
+        return [{ do: "resolve", what: "curiosity", min_m: 0, max_m: 3_000 }];
+      case "curiosity_options": {
+        const first = input.to[0];
+        return first === undefined
+          ? [{ do: "wake_at", ms: Date.now() + 5_000 }]
+          : [
+              { do: "walk", to: first.ref, purpose: "curiosity", grass: false },
+              { do: "say", line: "landmark.spotted", about: first.ref },
+            ];
+      }
+      default:
+        return [];
+    }
+  };
+  let studying: string | undefined;
+  return {
+    avaiaDriveStep: async (
+      _state: string,
+      input: AvaiaDriveInput,
+    ): Promise<AvaiaDriveAnswer> => {
+      if (input.type === "curiosity_options") studying = input.to[0]?.ref;
+      const commands: AvaiaDriveCommand[] =
+        input.type === "arrived" && studying !== undefined
+          ? [{ do: "study", at: studying }]
+          : script(input);
+      return { ok: true, state: "{}", commands };
+    },
+  };
+}
+
 interface ViewOverrides {
+  findItems?: Pick<CoreRuntimePort, "avaiaDriveStep">;
   nearbySpeech?: NearbySpeechAccessPort;
   sound?: SoundCapability;
   avaiaPubDress?: string;
@@ -95,6 +140,9 @@ interface ViewOverrides {
 function renderView(overrides: ViewOverrides = {}) {
   const optionalProps = {
     connectedProviders: overrides.connectedProviders ?? [],
+    ...(overrides.findItems === undefined
+      ? {}
+      : { findItems: overrides.findItems }),
     ...(overrides.nearbySpeech === undefined
       ? {}
       : { nearbySpeech: overrides.nearbySpeech }),
@@ -1776,6 +1824,7 @@ describe("AuthenticatedMapHomeView", () => {
         mapRenderer,
         geolocation: createGeolocationDouble({ position: here }),
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+        findItems: curiousCore(),
       });
       await vi.waitFor(() =>
         expect(
@@ -1783,15 +1832,19 @@ describe("AuthenticatedMapHomeView", () => {
         ).toBeVisible(),
       );
 
-      // It looks around first, then sets off with a word about what it saw.
-      act(() => vi.advanceTimersByTime(2_000));
+      // The drive asks what is around; it sets off with a word about it.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
       expect(lastLabel(mapRenderer)?.speech).toContain("Volodymyr the Great");
       expect(lastAvaia(mapRenderer)).toMatchObject({ clipId: "walk" });
 
       // It arrives, looks the monument over, and says what it learned. Time
       // moves in steps so each thing it does gets to start before the next.
       for (let step = 0; step < 6; step += 1) {
-        act(() => vi.advanceTimersByTime(5_000));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5_000);
+        });
       }
       const studied = avaiaLines("en", voice, "landmark.studied").map((line) =>
         line.replace("{landmark}", "“Volodymyr the Great”"),
@@ -1816,6 +1869,7 @@ describe("AuthenticatedMapHomeView", () => {
         mapRenderer,
         geolocation: createGeolocationDouble({ position: here }),
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+        findItems: curiousCore(),
       });
       await vi.waitFor(() =>
         expect(
@@ -1823,7 +1877,9 @@ describe("AuthenticatedMapHomeView", () => {
         ).toBeVisible(),
       );
       // The position is known, but the tile carrying the monument is not yet.
-      act(() => vi.advanceTimersByTime(2_000));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
       expect(lastLabel(mapRenderer)?.speech).toBeUndefined();
 
       // The person has not moved; the map finishes loading around them.
@@ -1840,7 +1896,9 @@ describe("AuthenticatedMapHomeView", () => {
         ]),
       );
       for (let step = 0; step < 4; step += 1) {
-        act(() => vi.advanceTimersByTime(5_000));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5_000);
+        });
       }
 
       expect(
