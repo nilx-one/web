@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   approachPoint,
+  avatarLocomotionCycleMs,
+  avatarLocomotionStepMs,
   JOG_AFTER_METERS,
   JOG_SPEED_MPS,
   locomotionMode,
@@ -121,6 +123,21 @@ describe("Avaia walking", () => {
     expect(RUN_SPEED_MPS * (locomotionStepMs("run") / 1_000)).toBeCloseTo(
       1.296,
       2,
+    );
+  });
+
+  it("gives each published study a distinct walking rhythm", () => {
+    const sky = avatarLocomotionCycleMs("walk", "sky-study");
+    const dasha = avatarLocomotionCycleMs("walk", "dasha-study");
+    const kai = avatarLocomotionCycleMs("walk", "kai-study");
+    const dasha2 = avatarLocomotionCycleMs("walk", "dasha-v2-study");
+
+    expect(new Set([sky, dasha, kai, dasha2]).size).toBe(4);
+    expect(sky).toBeGreaterThan(kai);
+    expect(dasha).toBeLessThan(kai);
+    expect(avatarLocomotionStepMs("walk", "sky-study")).toBe(sky / 2);
+    expect(avatarLocomotionCycleMs("walk", undefined)).toBe(
+      avatarLocomotionCycleMs("walk", "kai-study"),
     );
   });
 
