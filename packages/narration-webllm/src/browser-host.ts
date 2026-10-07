@@ -285,6 +285,30 @@ export function createBrowserHost(
   // has its own mirror manifest, and `isCached`, `open` and `remove` for one entry have to
   // agree on the same source or they answer about two places.
   const resolved = new Map<string, Promise<WebLlmBrowserHost>>();
+
+  // A cached-only acquisition and eviction of the same entry are one cache operation.
+  // This closes the check/open race: removal either finishes first (and the acquisition
+  // sees no cache) or waits until an engine has been created entirely from that cache.
+  const cacheTails = new Map<string, Promise<void>>();
+  async function withCacheLease<T>(
+    modelId: string,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    const previous = cacheTails.get(modelId) ?? Promise.resolve();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => held);
+    cacheTails.set(modelId, tail);
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+      if (cacheTails.get(modelId) === tail) cacheTails.delete(modelId);
+    }
+  }
   function hostOptions(
     source: Pick<WebLlmBrowserHostOptions, "appConfig" | "catalog">,
   ): WebLlmBrowserHostOptions {
@@ -333,7 +357,41 @@ export function createBrowserHost(
     },
 
     async remove(id: string): Promise<void> {
-      await (await resolveHost(id)).evictModel(id);
+      await withCacheLease(id, async () => {
+        await (await resolveHost(id)).evictModel(id);
+      });
+    },
+
+    async openCached(
+      id: string,
+      onProgress: (progress: LoadProgress) => void,
+      signal?: AbortSignal,
+    ): Promise<LocalEngine | null> {
+      return withCacheLease(id, async () => {
+        signal?.throwIfAborted();
+        const host = await resolveHost(id);
+        if (!(await host.hasModelInCache(id))) return null;
+        signal?.throwIfAborted();
+        const engine = await host.createEngine(
+          id,
+          (progress) =>
+            onProgress({ ratio: progress.progress, text: progress.text }),
+          signal,
+        );
+        return {
+          rephrase: (system, user, generation) =>
+            complete(engine, system, user, generation),
+          complete: (request: CompletionRequest) =>
+            complete(
+              engine,
+              request.system,
+              request.user,
+              request,
+              request.grammar,
+            ),
+          unload: () => engine.unload(),
+        };
+      });
     },
 
     async open(
