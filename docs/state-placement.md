@@ -134,11 +134,16 @@ Local-first. Eligible, not transported.
   [Avaia walks the world](avaia-walk.md)), and the places the Avaia grew
   fond of (`nilx-one.avaia.affinity.v1.<owner>`; same page, "Favourite
   places");
-- **position** — where the Bond and its Avaia were last seen, and when the
-  Avaia last went out on its own (`nilx-one.world-memory.v1.<owner>`), and the artificial presentation
+- **position** — where the Bond and its Avaia were last seen, and the
+  Avaia's drive as Core last answered it, so a reload does not send it out
+  again early (`nilx-one.world-memory.v1.<owner>`), and the artificial presentation
   positions an owner declared for counterparts
   (`nilx-one.bond-location-overrides.v1:<owner>`). A remembered position is
   not a `Bond.location`;
+- **needs** — the Avaia's hunger, energy, home and where it stands, as Core's
+  Avaia life keeps them (`nilx-one.avaia.life.v1.<owner>.<avaia>`;
+  [Avaia walks the world](avaia-walk.md)). Simulated product needs, never
+  presence evidence;
 - **scenes played** — whether xSasha's introduction was played through or
   skipped (`nilx-one.guide.v1.<owner>`; [xSasha](guide.md)).
 

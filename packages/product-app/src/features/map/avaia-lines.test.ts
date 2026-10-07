@@ -16,10 +16,12 @@ import {
 
 const KINDS: readonly AvaiaLineKind[] = [
   "walk",
+  "stroll",
   "blocked.building",
   "blocked.water",
   "blocked.fog",
   "landmark.spotted",
+  "landmark.glanced",
   "landmark.studied",
   "landmark.loved",
   "landmark.longing",

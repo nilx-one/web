@@ -353,6 +353,35 @@ export function walkPosition(
   };
 }
 
+/**
+ * The part of a walk the body has actually walked by `nowMs`, as a walk of its
+ * own from `from` to where the body is, or `undefined` when it has not got
+ * anywhere yet. What is still ahead is never in it.
+ */
+export function walkedSoFar(
+  walk: AvaiaWalk,
+  nowMs: number,
+): AvaiaWalk | undefined {
+  const t = walkProgress(walk, nowMs);
+  const total = walk.along[walk.along.length - 1] ?? 0;
+  const reached = total * t;
+  if (reached < MIN_WALK_METERS) return undefined;
+  if (t >= 1) return walk;
+  const at = walkPosition(walk, nowMs);
+  const path = [
+    ...walk.path.filter((_, index) => (walk.along[index] ?? 0) < reached),
+    at,
+  ];
+  const along = [...walk.along.filter((meters) => meters < reached), reached];
+  return {
+    ...walk,
+    to: at,
+    path,
+    along,
+    durationMs: walk.durationMs * t,
+  };
+}
+
 function walkProgress(walk: AvaiaWalk, nowMs: number): number {
   if (walk.durationMs <= 0) return 1;
   return Math.min(1, Math.max(0, (nowMs - walk.startedMs) / walk.durationMs));

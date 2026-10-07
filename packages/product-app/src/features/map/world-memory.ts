@@ -28,6 +28,11 @@ export interface WorldMemory {
    * reload does not send it out again before the interval is up.
    */
   readonly lastOutingAt?: number;
+  /**
+   * The Avaia's drive as Core last answered it (`docs/avaia-drive.md` in
+   * core), opaque here: only Core reads it.
+   */
+  readonly drive?: string;
 }
 
 export interface WorldMemoryStorage {
@@ -96,10 +101,15 @@ export function readWorldMemory(
       Number.isFinite(parsed.lastOutingAt)
         ? parsed.lastOutingAt
         : undefined;
+    const drive =
+      typeof parsed.drive === "string" && parsed.drive.length > 0
+        ? parsed.drive
+        : undefined;
     return {
       ...(bond === undefined ? {} : { bond }),
       ...(avaia === undefined ? {} : { avaia }),
       ...(lastOutingAt === undefined ? {} : { lastOutingAt }),
+      ...(drive === undefined ? {} : { drive }),
     };
   } catch {
     return EMPTY;
@@ -116,11 +126,15 @@ export function rememberWorld(
     bond?: MapPointSelection;
     avaia?: RememberedPoint | undefined;
     lastOutingAt?: number;
+    drive?: string;
   },
   storage: WorldMemoryStorage | undefined = defaultStorage(),
 ): void {
   try {
-    const { bond, avaia, lastOutingAt } = readWorldMemory(owner, storage);
+    const { bond, avaia, lastOutingAt, drive } = readWorldMemory(
+      owner,
+      storage,
+    );
     const nextBond = change.bond ?? bond;
     const nextAvaia = "avaia" in change ? change.avaia : avaia;
     const nextOuting = change.lastOutingAt ?? lastOutingAt;
@@ -143,6 +157,9 @@ export function rememberWorld(
             },
           }),
       ...(nextOuting === undefined ? {} : { lastOutingAt: nextOuting }),
+      ...((change.drive ?? drive) === undefined
+        ? {}
+        : { drive: change.drive ?? drive }),
     };
     storage?.setItem(STORAGE_PREFIX + owner, JSON.stringify(next));
   } catch {

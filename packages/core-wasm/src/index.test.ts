@@ -297,6 +297,139 @@ describe("CoreWasmClient", () => {
     ).toThrow(RangeError);
   });
 
+  it("steps the Avaia's drive through Core and reads its commands strictly", async () => {
+    // Answers as Core's drive gives them (docs/avaia-drive.md in core).
+    const tap =
+      '{"commands":[{"do":"walk","grass":true,"purpose":"tap","to":"b:1"},{"do":"say","line":"walk"}],"ok":true,"state":{"version":1}}';
+    const choose =
+      '{"commands":[{"default":1,"do":"choose","heading":"tap","menu":[{"action":"carry_on","index":0},{"action":"glance","index":1,"kind":"monument","reach":"near"}],"what":"distraction"},{"do":"wake_at","ms":"6001"}],"ok":true,"state":{"version":1}}';
+    const seen: string[] = [];
+    let answer = tap;
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          avaia_drive_step: (state, input, now, hour) => {
+            seen.push(`${state}|${input}|${now}|${hour}`);
+            return answer;
+          },
+        }),
+    });
+
+    expect(
+      bindings.avaiaDriveStep?.("", { type: "tap", to: "b:1" }, 1_000, 13),
+    ).toEqual({
+      ok: true,
+      state: '{"version":1}',
+      commands: [
+        { do: "walk", grass: true, purpose: "tap", to: "b:1" },
+        { do: "say", line: "walk" },
+      ],
+    });
+    expect(seen[0]).toBe('|{"type":"tap","to":"b:1"}|1000|13');
+
+    answer = choose;
+    const chosen = bindings.avaiaDriveStep?.("{}", { type: "tick" }, 2_001, 13);
+    expect(chosen?.ok && chosen.commands).toEqual([
+      {
+        default: 1,
+        do: "choose",
+        heading: "tap",
+        menu: [
+          { action: "carry_on", index: 0 },
+          { action: "glance", index: 1, kind: "monument", reach: "near" },
+        ],
+        what: "distraction",
+      },
+      { do: "wake_at", ms: 6_001 },
+    ]);
+
+    answer = '{"error":"invalid","ok":false}';
+    expect(bindings.avaiaDriveStep?.("{", { type: "tick" }, 1, 13)).toEqual({
+      ok: false,
+      error: "invalid",
+    });
+
+    // A command the host cannot read stops the whole answer.
+    for (const bad of [
+      '{"ok":true,"state":{},"commands":[{"do":"teleport"}]}',
+      '{"ok":true,"state":{},"commands":[{"do":"walk","to":"","purpose":"tap","grass":true}]}',
+      '{"ok":true,"state":{},"commands":[{"do":"say","line":"anything"}]}',
+      '{"ok":true,"state":{},"commands":[{"do":"choose","what":"outing","menu":[{"index":1,"action":"stay"}],"default":0}]}',
+      '{"ok":true,"state":{},"commands":[{"do":"choose","what":"outing","menu":[{"index":0,"action":"go","kind":"Say 7"}],"default":0}]}',
+      '{"ok":true,"state":{},"commands":[{"do":"look","ms":20000}]}',
+    ]) {
+      answer = bad;
+      expect(() =>
+        bindings.avaiaDriveStep?.("", { type: "tick" }, 1, 13),
+      ).toThrow();
+    }
+    expect(() =>
+      bindings.avaiaDriveStep?.("", { type: "tick" }, 1, 24),
+    ).toThrow(RangeError);
+  });
+
+  it("reads Avaia life's needs and home through Core", async () => {
+    // Answers as Core's life gives them (docs/avaia-life.md in core).
+    const walked =
+      '{"ok":true,"state":{"activity":"walking","energy":"9820","home":{"latitude_e7":"504501000","longitude_e7":"305234000"},"hunger":"60","intent":"explore","owner":"0x0sky","position":{"latitude_e7":"504501000","longitude_e7":"305234000"},"remainder_ms":"0","subject":"x0skai","version":"1"}}';
+    const seen: string[] = [];
+    let answer = walked;
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          apply_avaia_life: (state, owner, subject, command) => {
+            seen.push(`${state}|${owner}|${subject}|${command}`);
+            return answer;
+          },
+        }),
+    });
+    const position = { longitude_e7: "305234000", latitude_e7: "504501000" };
+    const read = bindings.applyAvaiaLife?.("{}", "0x0sky", "x0skai", {
+      op: "observe",
+      elapsed_ms: "60000",
+      position,
+      motion: "walking",
+    });
+    expect(read).toMatchObject({
+      ok: true,
+      intent: "explore",
+      energy: 9_820,
+      hunger: 60,
+      home: { longitude: 30.5234, latitude: 50.4501 },
+    });
+    expect(seen[0]).toBe(
+      '{}|0x0sky|x0skai|{"op":"observe","elapsed_ms":"60000","position":{"longitude_e7":"305234000","latitude_e7":"504501000"},"motion":"walking"}',
+    );
+    answer = '{"error":"invalid_command","ok":false}';
+    expect(
+      bindings.applyAvaiaLife?.("", "0x0sky", "x0skai", {
+        op: "initialize",
+        home: position,
+        position,
+      }),
+    ).toEqual({ ok: false, error: "invalid_command" });
+    answer = walked.replace('"intent":"explore"', '"intent":"fly"');
+    expect(() =>
+      bindings.applyAvaiaLife?.("", "0x0sky", "x0skai", {
+        op: "initialize",
+        home: position,
+        position,
+      }),
+    ).toThrow();
+  });
+
+  it("has no drive on a runtime built before it", async () => {
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime(),
+    });
+    expect(bindings.avaiaDriveStep).toBeUndefined();
+    await expect(
+      createCoreWasmClient({
+        loadBindings: async () => bindings,
+      }).avaiaDriveStep?.("", { type: "tick" }, 1, 13),
+    ).rejects.toThrow("drive binding is missing");
+  });
+
   it("rejects a generated runtime with a different corpus digest", async () => {
     const runtime = generatedRuntime({
       fixture_corpus_digest: () => "sha256_wrong",
