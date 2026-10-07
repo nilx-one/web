@@ -40,7 +40,7 @@ import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
   approachPoint,
-  locomotionStepMs,
+  avatarLocomotionStepMs,
   startWalk,
   studyStance,
   STUDY_CLIP_MS,
@@ -715,7 +715,7 @@ export function useAvaiaWalk({
     if (walk === undefined || walk.durationMs <= 0) return;
     const steps = globalThis.setInterval(() => {
       latest.current.onCue?.("step");
-    }, locomotionStepMs(walk.mode));
+    }, avatarLocomotionStepMs(walk.mode, latest.current.model));
     const remaining = Math.max(
       0,
       walk.startedMs + walk.durationMs - globalThis.performance.now(),
@@ -1047,7 +1047,8 @@ export function useAvaiaWalk({
 
   const stance = useCallback(
     (nowMs: number): BodyStance | undefined => {
-      if (walk !== undefined) return walkStance(walk, nowMs);
+      if (walk !== undefined)
+        return walkStance(walk, nowMs, latest.current.model);
       if (study !== undefined) return studyStance(study, nowMs);
       if (pause !== undefined) {
         const since = Math.max(0, nowMs - pause.startedMs);
