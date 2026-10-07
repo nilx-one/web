@@ -49,12 +49,13 @@ export function createDriveChooser({
   retryMs = CHOOSER_RETRY_MS,
   now = () => Date.now(),
 }: {
-  readonly open: () => Promise<LocalModelEngine>;
+  readonly open: (signal: AbortSignal) => Promise<LocalModelEngine>;
   readonly idleMs?: number;
   readonly retryMs?: number;
   readonly now?: () => number;
 }): DriveChooser {
   let engine: Promise<LocalModelEngine> | undefined;
+  let opening: AbortController | undefined;
   let idle: ReturnType<typeof setTimeout> | undefined;
   let failedAt: number | undefined;
   let disposed = false;
@@ -62,6 +63,9 @@ export function createDriveChooser({
   const release = async () => {
     const loaded = engine;
     engine = undefined;
+    const controller = opening;
+    opening = undefined;
+    controller?.abort();
     if (idle !== undefined) globalThis.clearTimeout(idle);
     idle = undefined;
     await loaded?.then((it) => it.unload()).catch(() => undefined);
@@ -70,11 +74,22 @@ export function createDriveChooser({
   const loaded = (): Promise<LocalModelEngine> | undefined => {
     if (disposed) return undefined;
     if (failedAt !== undefined && now() - failedAt < retryMs) return undefined;
-    engine ??= open().catch((error: unknown) => {
-      failedAt = now();
-      engine = undefined;
-      throw error;
-    });
+    if (engine === undefined) {
+      const controller = new AbortController();
+      opening = controller;
+      engine = open(controller.signal)
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted) failedAt = now();
+          if (opening === controller) {
+            opening = undefined;
+            engine = undefined;
+          }
+          throw error;
+        })
+        .finally(() => {
+          if (opening === controller) opening = undefined;
+        });
+    }
     if (idle !== undefined) globalThis.clearTimeout(idle);
     idle = globalThis.setTimeout(() => void release(), idleMs);
     return engine;
@@ -126,7 +141,16 @@ export function useDriveChooser(
       localModel === undefined || modelId === undefined
         ? undefined
         : createDriveChooser({
-            open: () => localModel.host.open(modelId, () => undefined),
+            open: async (signal) => {
+              // A `present` readiness is a snapshot. Settings may have removed the
+              // model since it was read, so confirm the cache at acquisition time.
+              const cached = await localModel.host
+                .isCached(modelId)
+                .catch(() => false);
+              signal.throwIfAborted();
+              if (!cached) throw new Error("local model is no longer cached");
+              return localModel.host.open(modelId, () => undefined, signal);
+            },
           }),
     [localModel, modelId],
   );
