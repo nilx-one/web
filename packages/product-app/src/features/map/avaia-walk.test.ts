@@ -6,12 +6,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   approachPoint,
+  AVATAR_GAIT,
   avatarLocomotionCycleMs,
   avatarLocomotionStepMs,
+  FOOTFALL_PHASES,
+  gaitCycleMs,
+  gaitFootSlip,
   JOG_AFTER_METERS,
   JOG_SPEED_MPS,
   locomotionMode,
+  locomotionCycleMs,
   locomotionStepMs,
+  nextFootfallMs,
   MIN_WALK_SPEED_MPS,
   RUN_AFTER_METERS,
   RUN_SPEED_MPS,
@@ -24,7 +30,6 @@ import {
   walkPosition,
   walkSpeedMetersPerSecond,
   walkStance,
-  WALK_CLIP_MS,
 } from "./avaia-walk";
 
 const here = { longitude: 30.5234, latitude: 50.4501 };
@@ -112,32 +117,75 @@ describe("Avaia walking", () => {
   });
 
   it("keeps footfalls in human-scale ground distance for every gait", () => {
-    expect(MIN_WALK_SPEED_MPS * (locomotionStepMs("walk") / 1_000)).toBeCloseTo(
-      0.84,
-      2,
+    // About 0.39 of the reference body's height per walking step, and longer
+    // the faster it goes, the way a person's steps lengthen into a run.
+    const walk = MIN_WALK_SPEED_MPS * (locomotionStepMs("walk") / 1_000);
+    const jog = JOG_SPEED_MPS * (locomotionStepMs("jog") / 1_000);
+    const run = RUN_SPEED_MPS * (locomotionStepMs("run") / 1_000);
+    expect(walk).toBeCloseTo(0.7, 2);
+    expect(jog).toBeGreaterThan(walk);
+    expect(run).toBeGreaterThan(jog);
+    expect(run).toBeLessThan(1.3);
+  });
+
+  it("lets longer legs take a slower stride at the same speed", () => {
+    const byLeg = (
+      Object.keys(AVATAR_GAIT) as (keyof typeof AVATAR_GAIT)[]
+    ).sort((a, b) => AVATAR_GAIT[a].legMeters - AVATAR_GAIT[b].legMeters);
+    for (const mode of ["walk", "jog", "run"] as const) {
+      const cycles = byLeg.map((model) => avatarLocomotionCycleMs(mode, model));
+      expect(cycles).toEqual([...cycles].sort((a, b) => a - b));
+    }
+    expect(avatarLocomotionStepMs("walk", "sky-study")).toBe(
+      avatarLocomotionCycleMs("walk", "sky-study") / 2,
     );
-    expect(JOG_SPEED_MPS * (locomotionStepMs("jog") / 1_000)).toBeCloseTo(
-      1.08,
-      2,
-    );
-    expect(RUN_SPEED_MPS * (locomotionStepMs("run") / 1_000)).toBeCloseTo(
-      1.296,
-      2,
+    // A body drawn without a study walks on the reference legs.
+    expect(avatarLocomotionCycleMs("walk", undefined)).toBe(
+      locomotionCycleMs("walk"),
     );
   });
 
-  it("gives each published study a distinct walking rhythm", () => {
-    const sky = avatarLocomotionCycleMs("walk", "sky-study");
-    const dasha = avatarLocomotionCycleMs("walk", "dasha-study");
-    const kai = avatarLocomotionCycleMs("walk", "kai-study");
-    const dasha2 = avatarLocomotionCycleMs("walk", "dasha-v2-study");
+  it("slides a planted foot less than pacing the clip by the clock did", () => {
+    // The old pacing: 1.2 s, 0.9 s and 0.72 s a stride whatever the body.
+    const clock = { walk: 1_200, jog: 900, run: 720 } as const;
+    const speed = {
+      walk: MIN_WALK_SPEED_MPS,
+      jog: JOG_SPEED_MPS,
+      run: RUN_SPEED_MPS,
+    } as const;
+    for (const gait of Object.values(AVATAR_GAIT)) {
+      for (const mode of ["walk", "jog", "run"] as const) {
+        const before =
+          (speed[mode] * (clock[mode] / 1_000)) / (2 * gait.stepMeters);
+        expect(gaitFootSlip(mode, gait)).toBeLessThan(before);
+        expect(gaitFootSlip(mode, gait)).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
 
-    expect(new Set([sky, dasha, kai, dasha2]).size).toBe(4);
-    expect(sky).toBeGreaterThan(kai);
-    expect(dasha).toBeLessThan(kai);
-    expect(avatarLocomotionStepMs("walk", "sky-study")).toBe(sky / 2);
-    expect(avatarLocomotionCycleMs("walk", undefined)).toBe(
-      avatarLocomotionCycleMs("walk", "kai-study"),
+  it("keeps a planted foot planted when the legs can cover the ground", () => {
+    const strider = { legMeters: 0.942, stepMeters: 0.9 };
+    expect(gaitFootSlip("walk", strider)).toBeCloseTo(1, 6);
+    expect(gaitCycleMs("walk", strider)).toBeCloseTo(
+      ((2 * 0.9) / MIN_WALK_SPEED_MPS) * 1_000,
+      6,
+    );
+  });
+
+  it("hears each footfall when a foot lands, not on a clock of its own", () => {
+    const walk = startWalk({ from: here, to: east, nowMs: 0, zoom: 17 });
+    const cycle = avatarLocomotionCycleMs("walk", "kai-study");
+
+    expect(FOOTFALL_PHASES).toEqual([0.25, 0.75]);
+    expect(nextFootfallMs(walk, 0, "kai-study")).toBeCloseTo(cycle * 0.25, 6);
+    // A timer firing on the footfall it was set for finds the next one.
+    expect(nextFootfallMs(walk, cycle * 0.25, "kai-study")).toBeCloseTo(
+      cycle * 0.5,
+      6,
+    );
+    expect(nextFootfallMs(walk, cycle * 0.8, "kai-study")).toBeCloseTo(
+      cycle * 0.45,
+      6,
     );
   });
 
@@ -175,10 +223,10 @@ describe("Avaia walking", () => {
 
   it("moves about one human step between footfalls", () => {
     const walk = startWalk({ from: here, to: east, nowMs: 0, zoom: 17 });
-    const afterOneStep = walkPosition(walk, WALK_CLIP_MS / 2);
+    const afterOneStep = walkPosition(walk, locomotionStepMs("walk"));
 
     expect(mapDistanceMeters(here, afterOneStep)).toBeCloseTo(
-      MIN_WALK_SPEED_MPS * (WALK_CLIP_MS / 2 / 1_000),
+      MIN_WALK_SPEED_MPS * (locomotionStepMs("walk") / 1_000),
       1,
     );
   });
@@ -194,14 +242,18 @@ describe("Avaia walking", () => {
     expect(walkPosition(walk, walk.durationMs * 3)).toEqual(east);
   });
 
-  it("loops the stride at the length the asset authored", () => {
+  it("loops the stride at the body's own cycle", () => {
     const walk = startWalk({ from: here, to: east, nowMs: 0, zoom: 17 });
+    const cycle = avatarLocomotionCycleMs("walk", "sky-study");
 
-    expect(walkStance(walk, WALK_CLIP_MS / 4)).toMatchObject({
+    expect(walkStance(walk, cycle / 4, "sky-study")).toMatchObject({
       clipId: "walk",
       clipPhase: 0.25,
     });
-    expect(walkStance(walk, WALK_CLIP_MS * 2).clipPhase).toBe(0);
+    expect(walkStance(walk, cycle * 2, "sky-study").clipPhase).toBe(0);
+    expect(walkStance(walk, locomotionCycleMs("walk") / 4).clipPhase).toBe(
+      0.25,
+    );
   });
 
   it("turns on the spot rather than walking nowhere", () => {

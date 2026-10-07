@@ -98,12 +98,27 @@ A connector over unspecified open ground is treated as cross-country ground:
 it may jog, but is not enough evidence to claim a full running surface. Thus a
 long distance never makes the Avaia sprint up stairs or along a major road.
 
-The authored in-place `walk` clip is paced to the selected gait rather than
-moving the body by screen pixels: 1.2 s per walking cycle, 0.9 s while jogging,
-0.72 s while running, with two footfalls per cycle. That corresponds to about
-0.84 m, 1.08 m and 1.30 m per footfall respectively. World translation remains
-continuous in metres, so the feet and the ground stay in the same scale instead
-of the body sliding over the map. The body faces the compass bearing it is
+The authored in-place `walk` clip is paced by the body walking it, never by
+screen pixels and never by one clock for every study. Each study's legs are
+measured from its own published walk clip (`avatar-gait.json`, checked against
+the built assets by `tools/avatars/test_rig.py`): how high its hips stand, and
+how far one foot sweeps under them in a step. A body would take exactly that
+step, so a planted foot stays planted; but legs swing like pendulums, and no
+stride is quicker than the cadence a person settles into, which falls with the
+square root of leg length. The reference 1.8 m body settles at 120 steps a
+minute walking, 165 jogging and 180 running — about 0.70 m, 0.87 m and 1.20 m
+per footfall — and a longer-legged study steps a little slower and further at
+the same speed.
+
+The published clip swings the thigh about 12.6° either way, so its foot covers
+0.44–0.48 m a step: less than the ground a human cadence crosses. The feet slip
+by the difference — about 1.6× walking, 2× jogging, 2.7× running — rather than
+the body scurrying to keep them planted. Only a clip authored with a longer
+stride removes that slip, and the same measurement will then keep it planted
+without another number changing here. World translation stays continuous in
+metres throughout. A footfall is heard when a foot is seen to land — at a
+quarter and three quarters of the clip — not on a clock of its own. The body
+faces the compass bearing it is
 moving along. A new tap in the middle of a route picks it up from wherever the
 body is. With reduced motion the body arrives where it was sent without moving
 through the intermediate animation.

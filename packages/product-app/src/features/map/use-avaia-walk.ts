@@ -40,7 +40,7 @@ import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
   approachPoint,
-  avatarLocomotionStepMs,
+  nextFootfallMs,
   startWalk,
   studyStance,
   STUDY_CLIP_MS,
@@ -709,25 +709,24 @@ export function useAvaiaWalk({
     return () => globalThis.clearTimeout(done);
   }, [dispatch, feel, pause]);
 
-  // A walking body is heard walking. A walk with no duration — reduced
-  // motion, which arrives without walking — makes no footfall at all.
+  // A walking body is heard walking, each footfall when a foot is seen to
+  // land. A walk with no duration — reduced motion, which arrives without
+  // walking — makes no footfall at all.
   useEffect(() => {
     if (walk === undefined || walk.durationMs <= 0) return;
-    const steps = globalThis.setInterval(() => {
-      latest.current.onCue?.("step");
-    }, avatarLocomotionStepMs(walk.mode, latest.current.model));
-    const remaining = Math.max(
-      0,
-      walk.startedMs + walk.durationMs - globalThis.performance.now(),
-    );
-    const stops = globalThis.setTimeout(
-      () => globalThis.clearInterval(steps),
-      remaining,
-    );
-    return () => {
-      globalThis.clearInterval(steps);
-      globalThis.clearTimeout(stops);
+    const arrives = walk.startedMs + walk.durationMs;
+    let landing: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const nextStep = () => {
+      const nowMs = globalThis.performance.now();
+      const wait = nextFootfallMs(walk, nowMs, latest.current.model);
+      if (nowMs + wait > arrives) return;
+      landing = globalThis.setTimeout(() => {
+        latest.current.onCue?.("step");
+        nextStep();
+      }, wait);
     };
+    nextStep();
+    return () => globalThis.clearTimeout(landing);
   }, [walk]);
 
   // Looking a landmark over takes a moment; then it goes in the notebook and
