@@ -98,5 +98,4 @@ describe("terrain elevation", () => {
       terrainBodyPitchRadians(steep as never, [30.5234, 50.4501], 0),
     ).toBeCloseTo((25 * Math.PI) / 180);
   });
-
 });
