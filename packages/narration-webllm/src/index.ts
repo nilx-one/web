@@ -100,6 +100,15 @@ export interface WebLlmRuntimeHost {
     onProgress: (progress: LoadProgress) => void,
     signal?: AbortSignal,
   ): Promise<LocalEngine>;
+  /**
+   * Opens an already-cached model without permission to fetch missing artifacts.
+   * Returns `null` when the cache is absent. Hosts without this capability omit it.
+   */
+  readonly openCached?: (
+    modelId: string,
+    onProgress: (progress: LoadProgress) => void,
+    signal?: AbortSignal,
+  ) => Promise<LocalEngine | null>;
   /** Evicts a cached model an owner asked to reclaim, in full: config, weights, and library. */
   remove(modelId: string): Promise<void>;
 }
