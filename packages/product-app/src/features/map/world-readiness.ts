@@ -19,7 +19,11 @@ export type LocalModelReadiness =
   /** WebGPU can run it; the model is not on this device yet. */
   | { readonly kind: "available" }
   /** WebGPU can run it and the model is cached here: WebLLM has what it needs. */
-  | { readonly kind: "present" }
+  | {
+      readonly kind: "present";
+      /** The entry in effect, the one a choice would load. */
+      readonly modelId?: string;
+    }
   /** The probe itself threw; nothing can be said about this device. */
   | { readonly kind: "error" };
 

@@ -40,7 +40,7 @@ import {
   mirrorCatalog,
   type MirrorManifest,
 } from "./mirror";
-import type { RephraseOptions } from "./rephrase";
+import type { CompletionRequest, RephraseOptions } from "./rephrase";
 
 /** The pinned runtime's configuration, named through the foundation rather than beside it. */
 export type AppConfig = NonNullable<WebLlmBrowserHostOptions["appConfig"]>;
@@ -351,17 +351,30 @@ export function createBrowserHost(
       return {
         rephrase: (system, user, generation) =>
           complete(engine, system, user, generation),
+        complete: (request: CompletionRequest) =>
+          complete(
+            engine,
+            request.system,
+            request.user,
+            request,
+            request.grammar,
+          ),
         unload: () => engine.unload(),
       };
     },
   };
 }
 
-async function complete(
-  engine: LocalTextEngine,
+/**
+ * Streams one completion out of a loaded engine and gathers it. With `grammar`, the decode
+ * is constrained to it: a model choosing among options cannot answer outside them.
+ */
+export async function complete(
+  engine: Pick<LocalTextEngine, "stream">,
   system: string,
   user: string,
   generation: RephraseOptions,
+  grammar?: string,
 ): Promise<string> {
   let said = "";
   for await (const chunk of engine.stream(
@@ -373,7 +386,9 @@ async function complete(
       maxTokens: generation.maxNewTokens,
       temperature: generation.temperature,
       topP: generation.topP,
-      responseFormat: undefined,
+      // A choice is constrained to the options it offers; talk is not.
+      responseFormat:
+        grammar === undefined ? undefined : { type: "grammar", grammar },
     },
   )) {
     said += chunk;

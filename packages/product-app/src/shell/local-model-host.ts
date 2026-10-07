@@ -61,7 +61,22 @@ export type LocalModelDescription =
     }
   | { readonly bytes: null; readonly source: "mirror" | "upstream" };
 
+/**
+ * One completion asked of a loaded model: a system and a user turn, its bounds, and the EBNF
+ * grammar a constrained decode must match when the answer is one of a closed set.
+ */
+export interface LocalModelCompletion {
+  readonly system: string;
+  readonly user: string;
+  readonly grammar?: string | undefined;
+  readonly maxNewTokens: number;
+  readonly temperature: number;
+  readonly topP: number;
+}
+
 export interface LocalModelEngine {
+  /** Absent from a host that only prefetches: such an engine answers nothing. */
+  complete?(request: LocalModelCompletion): Promise<string>;
   unload(): Promise<void>;
 }
 

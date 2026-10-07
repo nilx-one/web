@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  complete,
   describeDownload,
   describeLocalModelDownload,
   narrationAppConfig,
@@ -230,5 +231,50 @@ describe("describing the download regardless of where it comes from", () => {
       reason: "manifest_unreachable",
       source: "upstream",
     });
+  });
+});
+
+describe("a completion out of a loaded engine", () => {
+  it("is constrained to a grammar when one is given, and free otherwise", async () => {
+    const asked: unknown[] = [];
+    const engine = {
+      async *stream(messages: unknown, options: unknown) {
+        asked.push({ messages, options });
+        yield "1";
+        yield "\n";
+      },
+    } as unknown as Parameters<typeof complete>[0];
+    const bounds = { maxNewTokens: 4, temperature: 0, topP: 1 };
+
+    await expect(
+      complete(engine, "system", "user", bounds, 'root ::= "0" | "1"\n'),
+    ).resolves.toBe("1\n");
+    await complete(engine, "system", "user", bounds);
+    expect(asked).toEqual([
+      {
+        messages: [
+          { role: "system", content: "system" },
+          { role: "user", content: "user" },
+        ],
+        options: {
+          maxTokens: 4,
+          temperature: 0,
+          topP: 1,
+          responseFormat: { type: "grammar", grammar: 'root ::= "0" | "1"\n' },
+        },
+      },
+      {
+        messages: [
+          { role: "system", content: "system" },
+          { role: "user", content: "user" },
+        ],
+        options: {
+          maxTokens: 4,
+          temperature: 0,
+          topP: 1,
+          responseFormat: undefined,
+        },
+      },
+    ]);
   });
 });

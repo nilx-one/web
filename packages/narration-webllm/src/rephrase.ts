@@ -19,6 +19,16 @@ export interface RephraseOptions {
   readonly topP: number;
 }
 
+/**
+ * One completion a product asks for: a system and a user turn, its bounds, and when the
+ * answer must be one of a closed set, the EBNF grammar a constrained decode must match.
+ */
+export interface CompletionRequest extends RephraseOptions {
+  readonly system: string;
+  readonly user: string;
+  readonly grammar?: string | undefined;
+}
+
 /** The engine surface narration needs, kept injectable so tests need no GPU. */
 export interface LocalEngine {
   rephrase(
@@ -26,6 +36,11 @@ export interface LocalEngine {
     user: string,
     options: RephraseOptions,
   ): Promise<string>;
+  /**
+   * The same engine answering one request, constrained to `grammar` when one is given:
+   * what choosing needs rather than what talking does.
+   */
+  complete?(request: CompletionRequest): Promise<string>;
   unload(): Promise<void>;
 }
 

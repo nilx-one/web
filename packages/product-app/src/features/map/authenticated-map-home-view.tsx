@@ -176,6 +176,7 @@ import { useNearbySpeech } from "./use-nearby-speech";
 import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
 import { useLocalModelReadiness } from "./use-local-model-readiness";
+import { useDriveChooser } from "./drive-chooser";
 import { useReadinessFrameVisible } from "./use-readiness-frame";
 import { createWorldReadiness } from "./world-readiness";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
@@ -976,6 +977,9 @@ export function AuthenticatedMapHomeView({
   // The Avaia answers fog taps through the reveal below, which in turn talks
   // in the Avaia's voice: the ref is what lets the two hooks meet.
   const fogRevealRef = useRef<FogRevealState | undefined>(undefined);
+  // Where a choice is the Avaia's own, the model on this device makes it,
+  // once the person has it here.
+  const driveChooser = useDriveChooser(localModel, localModelReadiness);
   const avaiaWalk = useAvaiaWalk({
     renderer,
     active: wheel === "avaia" && handover === undefined,
@@ -992,6 +996,7 @@ export function AuthenticatedMapHomeView({
       return outcome === "offered" || outcome === "revealing";
     },
     core: findItems,
+    chooser: driveChooser,
     onCue: cue,
     onWalkCompleted: findLoop.completedAvaiaWalk,
     onAward: (record) => {

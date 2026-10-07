@@ -69,7 +69,11 @@ export {
   UKRAINIAN_TOKEN_DENSITY,
 } from "./profiles";
 export type { GenerationProfile, UkrainianTokenDensity } from "./profiles";
-export type { LocalEngine, RephraseOptions } from "./rephrase";
+export type {
+  CompletionRequest,
+  LocalEngine,
+  RephraseOptions,
+} from "./rephrase";
 
 const ADAPTER_ID = "webllm-local";
 
