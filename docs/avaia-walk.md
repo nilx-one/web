@@ -63,21 +63,17 @@ Arriving where a tap sent it, the Avaia stands there looking around
 (`turn_in_place`) for 20 seconds, then carries on from that point B: it does
 not walk back home. A tap during the stand walks on from where it stands.
 
-### Going out on its own
+### Back on its own, and going out
 
-An Avaia left idle at the wheel gets restless after ten minutes and goes out,
-never more than once in four hours. The drive (`outing-drive.ts`) decides
-where, in code: a target from the outing menu, looked around for 30 seconds on
-arrival; a short wander of 150 to 400 m along the paths; home, to the device,
-when its energy (5 km on a full charge) runs low; or staying put. In the
-evening and at night it only takes a near target or a wander. Its targets are
-the named museums, viewpoints, castles, forts, ruins and significant monuments
-within its reach ([landmarks from OpenStreetMap](avaia-osm-landmarks.md)). Before
-it plans, it reads the road and landmark tiles of its area ahead, so the paths
-and the places past the edge of the screen are known; it gives the outing up if a tap comes meanwhile. When
-it last went out is kept with where it stands, so a reload does not send it out
-again early. A tap always outranks the drive, and nothing walks while the page
-is closed. See [Avaia walks on its own](avaia-outings.md) §2.
+What the Avaia does next on its own is decided by the Avaia drive in Core (`docs/avaia-drive.md` in `nilx-one/core`); this device carries it out ([Avaia walks on its own](avaia-outings.md) §2.4):
+
+- **After a point B** it stands 20 s, then is its own again. It goes to see a landmark its owner walked past, or one it misses. Otherwise it strolls off a few steps (30–120 m) along the paths, never further than 200 m from where it settled, looks around for 8 s, and stands again. The pauses grow while it potters, up to five minutes, and are longer at night. It says so once (`stroll`).
+- **On the way anywhere**, a point B included, it may step aside for something it passes: a sight or a lake shore within 25 m of the way, which it looks at and names (`landmark.glanced`), or studies when its owner walked past it before; or a find within 15 m, which it bends for. It does this at most twice a walk, then carries on to where it was going.
+- **Going out**: restless after ten minutes, never more than once in four hours, it goes to a target from the outing menu, wanders 150–400 m along the paths, goes home, or stays. In the evening and at night it only takes a near target. Before it plans, this device reads the road and landmark tiles of the area ahead, but not tiles that are all fog.
+- **Its needs come first**: hunger and energy are Core's Avaia life (`docs/avaia-life.md` in `nilx-one/core`). While it is at the wheel, this device reports every ten seconds where the body is and whether it walks, and only that time counts: time away from the wheel or with the page closed is never reported. When life says it must go home or rest, the drive takes it home and nothing of its own competes; a point B its owner set is finished first.
+- **A choice is the Avaia's**: where to go out to, and whether to step aside, go to the model on this device as a closed numbered menu, once the person has downloaded it ([local models](local-models.md)). Without one, or when it answers late or off the menu, the drive's own pick stands.
+
+A tap always comes first, and nothing walks while the page is closed. Without a Core runtime that carries the drive, the Avaia only walks where it is tapped.
 
 ### Pace
 
@@ -98,12 +94,27 @@ A connector over unspecified open ground is treated as cross-country ground:
 it may jog, but is not enough evidence to claim a full running surface. Thus a
 long distance never makes the Avaia sprint up stairs or along a major road.
 
-The authored in-place `walk` clip is paced to the selected gait rather than
-moving the body by screen pixels: 1.2 s per walking cycle, 0.9 s while jogging,
-0.72 s while running, with two footfalls per cycle. That corresponds to about
-0.84 m, 1.08 m and 1.30 m per footfall respectively. World translation remains
-continuous in metres, so the feet and the ground stay in the same scale instead
-of the body sliding over the map. The body faces the compass bearing it is
+The authored in-place `walk` clip is paced by the body walking it, never by
+screen pixels and never by one clock for every study. Each study's legs are
+measured from its own published walk clip (`avatar-gait.json`, checked against
+the built assets by `tools/avatars/test_rig.py`): how high its hips stand, and
+how far one foot sweeps under them in a step. A body would take exactly that
+step, so a planted foot stays planted; but legs swing like pendulums, and no
+stride is quicker than the cadence a person settles into, which falls with the
+square root of leg length. The reference 1.8 m body settles at 120 steps a
+minute walking, 165 jogging and 180 running — about 0.70 m, 0.87 m and 1.20 m
+per footfall — and a longer-legged study steps a little slower and further at
+the same speed.
+
+The published clip swings the thigh about 12.6° either way, so its foot covers
+0.44–0.48 m a step: less than the ground a human cadence crosses. The feet slip
+by the difference — about 1.6× walking, 2× jogging, 2.7× running — rather than
+the body scurrying to keep them planted. Only a clip authored with a longer
+stride removes that slip, and the same measurement will then keep it planted
+without another number changing here. World translation stays continuous in
+metres throughout. A footfall is heard when a foot is seen to land — at a
+quarter and three quarters of the clip — not on a clock of its own. The body
+faces the compass bearing it is
 moving along. A new tap in the middle of a route picks it up from wherever the
 body is. With reduced motion the body arrives where it was sent without moving
 through the intermediate animation.
@@ -118,8 +129,9 @@ assistive technology, so the same line is announced in a polite live region.
 
 The voice belongs to the study, not the address. Each of the four studies has
 its own voice (`avaia-lines.ts`), in English and Ukrainian. Each voice has
-eight walking lines and three for each refusal, plus four lines for spotting a
-landmark and four for having studied one. Ukrainian keeps the grammatical
+eight walking lines, three for strolling off on its own and three for each
+refusal, plus four lines for spotting a landmark, three for stopping to look at
+one on the way, and four for having studied one. Ukrainian keeps the grammatical
 gender of whoever is speaking:
 
 | Study     | Voice                               | Ukrainian forms   |
@@ -131,7 +143,8 @@ gender of whoever is speaking:
 
 The fixed lines can also be heard, when Character voices is at Everything:
 each study says them aloud in a recorded voice of its own, in English and Ukrainian ([Character voices](avaia-voice.md)). Lines
-about a landmark carry its name and stay written only.
+about a landmark carry its name and stay written only. The strolling lines are
+not recorded yet, so they are written only too.
 
 A line is never the one said just before it when another is available.
 
@@ -306,13 +319,9 @@ where its owner is. Nothing walks in the background.
 
 ## Not yet
 
-- **Model-driven choice.** Curiosity picks the nearest landmark it has not
-  studied, or the dear place it misses most, which is a rule, not a decision. Routing the choice through `DecisionMenu` and the
-  loaded model is the next step, and the candidates would stay what they are
-  here: landmarks the person already passed.
-- **Outings and finds.** Walks go where they are sent or to a noticed
-  landmark. Outings of its own, preloading the tiles they need, and chance
-  finds are planned in [Avaia walks on its own](avaia-outings.md).
+- **Curiosity by model.** Outings and distractions are the model's to choose
+  ([local models](local-models.md)); curiosity is still a rule: the nearest
+  landmark the person passed, or the dear place the Avaia misses most.
 - **The raw presence journal.** A tap now belongs to the Avaia, so the hosts
   no longer open the phase-1 journal panel on a lit cell. The panel itself
   (`createRawJournalPresenter`) and the shade layer's `onCellTap` stay in

@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   loadedTerrainElevationMeters,
+  loadedTerrainSlopeRadians,
+  terrainBodyPitchRadians,
   terrainElevationMeters,
+  terrainSamplePoint,
 } from "./terrain-elevation";
 
 describe("terrain elevation", () => {
@@ -50,5 +53,45 @@ describe("terrain elevation", () => {
         [30.5234, 50.4501],
       ),
     ).toBe(0);
+  });
+  it("samples a human-stride span along the body's bearing", () => {
+    const origin = [30.5234, 50.4501] as const;
+    const north = terrainSamplePoint(origin, 0, 1);
+    const east = terrainSamplePoint(origin, 90, 1);
+
+    expect(north[1]).toBeGreaterThan(origin[1]);
+    expect(Math.abs(north[0] - origin[0])).toBeLessThan(1e-9);
+    expect(east[0]).toBeGreaterThan(origin[0]);
+    expect(Math.abs(east[1] - origin[1])).toBeLessThan(1e-9);
+  });
+
+  it("reads uphill and downhill grade from the loaded DEM", () => {
+    const origin = [30.5234, 50.4501] as const;
+    const queryTerrainElevation = vi.fn(([lng]: [number, number]) =>
+      lng < origin[0] ? 100 : 101.5,
+    );
+
+    expect(
+      loadedTerrainSlopeRadians({ queryTerrainElevation } as never, origin, 90),
+    ).toBeCloseTo(Math.PI / 4, 2);
+    expect(
+      loadedTerrainSlopeRadians(
+        { queryTerrainElevation } as never,
+        origin,
+        270,
+      ),
+    ).toBeCloseTo(-Math.PI / 4, 2);
+  });
+
+  it("clamps body pitch without inventing a slope when DEM is missing", () => {
+    expect(terrainBodyPitchRadians(undefined, [30.5234, 50.4501], 0)).toBe(0);
+
+    const steep = {
+      queryTerrainElevation: ([, lat]: [number, number]) =>
+        lat < 50.4501 ? 0 : 100,
+    };
+    expect(
+      terrainBodyPitchRadians(steep as never, [30.5234, 50.4501], 0),
+    ).toBeCloseTo((25 * Math.PI) / 180);
   });
 });

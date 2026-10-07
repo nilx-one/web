@@ -179,7 +179,7 @@ describe("reading the on-device model's readiness", () => {
         dependency({ isCached: () => Promise.resolve(true) }),
         undefined,
       ),
-    ).resolves.toEqual({ kind: "present" });
+    ).resolves.toMatchObject({ kind: "present", modelId: expect.any(String) });
   });
 
   it("reads an unreadable cache as a model not here yet", async () => {

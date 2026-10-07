@@ -134,6 +134,23 @@ export {
   type FailureNoticeTone,
   type FailureReport,
 } from "./failure-notice";
+export type {
+  AvaiaDriveAction,
+  AvaiaDriveAnswer,
+  AvaiaDriveCommand,
+  AvaiaDriveFeeling,
+  AvaiaDriveGroup,
+  AvaiaDriveInput,
+  AvaiaDriveLifeIntent,
+  AvaiaDriveLine,
+  AvaiaDriveMenuOption,
+  AvaiaDrivePassing,
+  AvaiaDrivePurpose,
+  AvaiaDriveTarget,
+  AvaiaLifeAnswer,
+  AvaiaLifeCommand,
+  CoreGeoCoordinate,
+} from "./avaia-drive";
 export {
   ReadRuntimeReadiness,
   type CoreCarry,

@@ -69,7 +69,11 @@ export {
   UKRAINIAN_TOKEN_DENSITY,
 } from "./profiles";
 export type { GenerationProfile, UkrainianTokenDensity } from "./profiles";
-export type { LocalEngine, RephraseOptions } from "./rephrase";
+export type {
+  CompletionRequest,
+  LocalEngine,
+  RephraseOptions,
+} from "./rephrase";
 
 const ADAPTER_ID = "webllm-local";
 
@@ -96,6 +100,15 @@ export interface WebLlmRuntimeHost {
     onProgress: (progress: LoadProgress) => void,
     signal?: AbortSignal,
   ): Promise<LocalEngine>;
+  /**
+   * Opens an already-cached model without permission to fetch missing artifacts.
+   * Returns `null` when the cache is absent. Hosts without this capability omit it.
+   */
+  readonly openCached?: (
+    modelId: string,
+    onProgress: (progress: LoadProgress) => void,
+    signal?: AbortSignal,
+  ) => Promise<LocalEngine | null>;
   /** Evicts a cached model an owner asked to reclaim, in full: config, weights, and library. */
   remove(modelId: string): Promise<void>;
 }
