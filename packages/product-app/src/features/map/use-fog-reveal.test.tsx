@@ -357,10 +357,73 @@ describe("revealing the fog around a Bond", () => {
     });
     act(() => void result.current.handleFogTap(NEXT_DOOR));
     const asked = result.current.prompt!;
-    expect(durations).toEqual([asked.landmarks]);
+    expect(durations.length).toBeGreaterThan(0);
+    expect(new Set(durations)).toEqual(new Set([asked.landmarks]));
     expect(asked.durationMs).toBe(90_000 + asked.landmarks * 1_000);
     act(() => void result.current.confirm());
     expect(result.current.jobs[0]?.durationMs).toBe(asked.durationMs);
+  });
+
+  it("starts on Core's quote at the moment of the yes, not the one from the tap", () => {
+    const fog = createFogFieldDouble(0.01);
+    const quoting = (ms: number | null): AvaiaProximitySnapshot => ({
+      ...allowed(2_000),
+      durationFor: () => ms,
+    });
+    const base: FogRevealInput = {
+      renderer: fogRenderer(fog),
+      bondPoint: BOND,
+      observed: undefined,
+      owner: "0x0sky",
+      enforceProximity: true,
+      proximity: quoting(60_000),
+    };
+    const { result, rerender } = renderHook(
+      (props: FogRevealInput) => useFogReveal(props),
+      { initialProps: base },
+    );
+    act(() => void result.current.handleFogTap(NEXT_DOOR));
+    expect(result.current.prompt?.durationMs).toBe(60_000);
+
+    // Avaia walks away while the question is open: the prompt follows Core.
+    rerender({ ...base, proximity: quoting(180_000) });
+    expect(result.current.prompt?.durationMs).toBe(180_000);
+    let job: FogRevealJob | undefined;
+    act(() => {
+      job = result.current.confirm();
+    });
+    expect(job?.durationMs).toBe(180_000);
+  });
+
+  it("closes the question and starts nothing once Core's quote is gone", () => {
+    const fog = createFogFieldDouble(0.01);
+    const quoting = (ms: number | null): AvaiaProximitySnapshot => ({
+      ...allowed(2_000),
+      durationFor: () => ms,
+    });
+    const base: FogRevealInput = {
+      renderer: fogRenderer(fog),
+      bondPoint: BOND,
+      observed: undefined,
+      owner: "0x0sky",
+      enforceProximity: true,
+      proximity: quoting(60_000),
+    };
+    const { result, rerender } = renderHook(
+      (props: FogRevealInput) => useFogReveal(props),
+      { initialProps: base },
+    );
+    act(() => void result.current.handleFogTap(NEXT_DOOR));
+    expect(result.current.prompt).toBeDefined();
+    // Still "can reveal", but no quote for this cell any more.
+    rerender({ ...base, proximity: quoting(null) });
+    expect(result.current.prompt).toBeUndefined();
+    let job: FogRevealJob | undefined;
+    act(() => {
+      job = result.current.confirm();
+    });
+    expect(job).toBeUndefined();
+    expect(result.current.jobs).toHaveLength(0);
   });
 
   it("offers nothing when Core quotes no duration, whatever its table says", () => {

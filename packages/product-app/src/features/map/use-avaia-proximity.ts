@@ -57,7 +57,13 @@ export function useAvaiaProximity({
   getAvaiaPoint,
 }: AvaiaProximityInput): AvaiaProximitySnapshot | undefined {
   const [state, setState] = useState<
-    { owner: string; snapshot: AvaiaProximitySnapshot } | undefined
+    | {
+        owner: string;
+        snapshot: AvaiaProximitySnapshot;
+        /** Where the Avaia stood when Core was asked. */
+        avaia: MapPointSelection;
+      }
+    | undefined
   >(undefined);
   const latest = useRef({ bondPoint, getAvaiaPoint });
   useEffect(() => {
@@ -70,25 +76,36 @@ export function useAvaiaProximity({
     let live = true;
     let busy = false;
     let again = false;
+    // Every request and every loss of history is numbered, so an answer that
+    // comes back after either is recognised as belonging to a world that is
+    // gone and is dropped, never published.
+    let requested = 0;
+    let epoch = 0;
     let previouslyBlocked = true;
     let remembered:
       { key: string; snapshot: AvaiaProximitySnapshot } | undefined;
     let expiry: ReturnType<typeof globalThis.setTimeout> | undefined;
 
     const forget = (): void => {
+      epoch += 1;
       previouslyBlocked = true;
       remembered = undefined;
       if (expiry !== undefined) globalThis.clearTimeout(expiry);
       expiry = undefined;
       if (live) setState(undefined);
     };
-    const publish = (snapshot: AvaiaProximitySnapshot): void => {
+    const publish = (
+      snapshot: AvaiaProximitySnapshot,
+      avaia: MapPointSelection,
+    ): void => {
       if (expiry !== undefined) globalThis.clearTimeout(expiry);
       expiry = globalThis.setTimeout(forget, PROXIMITY_STALE_MS);
-      if (live) setState({ owner, snapshot });
+      if (live) setState({ owner, snapshot, avaia });
     };
 
     const measure = async (): Promise<void> => {
+      const request = requested;
+      const era = epoch;
       const { bondPoint, getAvaiaPoint } = latest.current;
       const avaiaPoint = getAvaiaPoint();
       if (
@@ -111,7 +128,7 @@ export function useAvaiaProximity({
       // standing still is not a reason to ask Core again.
       const key = `${meters}|${previouslyBlocked}`;
       if (remembered?.key === key) {
-        publish(remembered.snapshot);
+        publish(remembered.snapshot, avaiaPoint);
         return;
       }
       try {
@@ -121,6 +138,10 @@ export function useAvaiaProximity({
             evaluate.call(core, meters, artifacts, asked),
           ),
         );
+        // A position moved, or the history was lost, while Core was being
+        // asked: this answer is about somewhere the bodies no longer are, and
+        // a fresh question is already queued (or the expiry has spoken).
+        if (!live || request !== requested || era !== epoch) return;
         const first = values[0];
         if (
           first === undefined ||
@@ -150,7 +171,7 @@ export function useAvaiaProximity({
         // Keyed by what was asked: the next question carries the new bit, and
         // is answered from here again only if it is the same question.
         remembered = { key: `${meters}|${asked}`, snapshot };
-        publish(snapshot);
+        publish(snapshot, avaiaPoint);
       } catch {
         // Older Wasm artifacts or a failing call cannot authorize work, and
         // the history they would have continued is gone.
@@ -158,7 +179,10 @@ export function useAvaiaProximity({
       }
     };
 
-    const refresh = (): void => {
+    // `moved`: a position changed, so whatever is in flight is superseded.
+    // The beat only renews; it must not strand a slow answer forever.
+    const refresh = (moved: boolean): void => {
+      if (moved) requested += 1;
       if (busy) {
         again = true;
         return;
@@ -175,10 +199,13 @@ export function useAvaiaProximity({
         }
       })();
     };
-    sample.current = refresh;
+    sample.current = () => refresh(true);
 
-    refresh();
-    const timer = globalThis.setInterval(refresh, PROXIMITY_REFRESH_MS);
+    refresh(false);
+    const timer = globalThis.setInterval(
+      () => refresh(false),
+      PROXIMITY_REFRESH_MS,
+    );
     return () => {
       live = false;
       sample.current = undefined;
@@ -192,9 +219,29 @@ export function useAvaiaProximity({
   // and a fast walker must not outrun the sample.
   const bondLongitude = bondPoint?.longitude;
   const bondLatitude = bondPoint?.latitude;
+  const measured = useRef({ bondLongitude, bondLatitude });
   useEffect(() => {
+    // The mount already measures; only a position that differs asks again.
+    if (
+      measured.current.bondLongitude === bondLongitude &&
+      measured.current.bondLatitude === bondLatitude
+    ) {
+      return;
+    }
+    measured.current = { bondLongitude, bondLatitude };
     sample.current?.();
   }, [bondLongitude, bondLatitude]);
 
-  return state?.owner === owner ? state.snapshot : undefined;
+  if (state?.owner !== owner || bondPoint === undefined) return undefined;
+  // An open decision does not outlive the Bond walking out to the red line
+  // while its replacement is still being asked: Core's hysteresis only opens
+  // the band for work that was already allowed, and nothing is allowed at red.
+  // Pure on purpose — the Bond's latest point against where Avaia was sampled.
+  if (
+    state.snapshot.policy.can_reveal &&
+    mapDistanceMeters(bondPoint, state.avaia) >= state.snapshot.policy.red_m
+  ) {
+    return undefined;
+  }
+  return state.snapshot;
 }

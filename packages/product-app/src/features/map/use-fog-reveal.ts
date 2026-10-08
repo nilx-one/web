@@ -353,12 +353,30 @@ export function useFogReveal({
 
   // A prompt for a cell that left reach — the Bond moved, or the fog lifted
   // there some other way — is no longer a question anyone can answer.
-  const livePrompt =
-    canReveal &&
-    prompt !== undefined &&
-    frontier.some((cell) => cell.id === prompt.cell.id)
-      ? prompt
-      : undefined;
+  //
+  // Under Core's authority the duration shown, and started on a yes, is Core's
+  // quote *now*: Avaia can walk while the question is open, and the minute
+  // quoted beside her is not the quarter hour at the far end of the town. A
+  // quote that is gone closes the question rather than starting on the old one.
+  const quotedMs =
+    prompt === undefined
+      ? undefined
+      : enforceProximity
+        ? (proximity?.durationFor(prompt.landmarks) ?? null)
+        : prompt.durationMs;
+  const livePrompt = useMemo(
+    () =>
+      canReveal &&
+      prompt !== undefined &&
+      quotedMs !== null &&
+      quotedMs !== undefined &&
+      frontier.some((cell) => cell.id === prompt.cell.id)
+        ? prompt.durationMs === quotedMs
+          ? prompt
+          : { ...prompt, durationMs: quotedMs }
+        : undefined,
+    [canReveal, frontier, prompt, quotedMs],
+  );
 
   const handleFogTap = useCallback(
     (point: MapPointSelection): FogTapOutcome => {

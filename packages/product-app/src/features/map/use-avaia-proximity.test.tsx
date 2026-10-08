@@ -267,6 +267,120 @@ describe("the Bond–Avaia proximity", () => {
     expect(port.asked.length).toBe(settled);
   });
 
+  describe("while Core is still being asked", () => {
+    /** A Core that answers only when told to, per distance. */
+    function held() {
+      const waiting: {
+        distance: number;
+        asked: boolean;
+        answer: () => void;
+      }[] = [];
+      const answers = core();
+      const port: Pick<CoreRuntimePort, "avaiaProximity"> = {
+        avaiaProximity: (distance, artifacts, previouslyBlocked) =>
+          new Promise((resolve) => {
+            waiting.push({
+              distance,
+              asked: previouslyBlocked,
+              answer: () =>
+                void answers.avaiaProximity!(
+                  distance,
+                  artifacts,
+                  previouslyBlocked,
+                ).then(resolve),
+            });
+          }),
+      };
+      return {
+        port,
+        waiting,
+        /** Answer everything asked about `distance` (±200 m: `east` is a flat-earth guess) so far. */
+        async release(distance: number) {
+          for (const call of waiting.splice(0)) {
+            if (Math.abs(call.distance - distance) <= 200) call.answer();
+          }
+          await settle();
+        },
+      };
+    }
+
+    it("never lets an open decision outlive the Bond reaching the red line", async () => {
+      const c = held();
+      const { result, rerender, props } = setup({ core: c.port });
+      await c.release(0);
+      expect(result.current?.policy.can_reveal).toBe(true);
+
+      // The Bond is suddenly 6 km out; the fresh question is not answered yet.
+      rerender({ ...props, core: c.port, bondPoint: east(6_000) });
+      await settle();
+      expect(result.current).toBeUndefined();
+
+      // The old open answer has nothing to say about 6 km; the new one does.
+      await c.release(6_000);
+      expect(result.current?.policy).toMatchObject({
+        level: "red",
+        can_reveal: false,
+      });
+    });
+
+    it("drops an answer that a later move has superseded", async () => {
+      const c = held();
+      const { result, rerender, props } = setup({ core: c.port });
+      await c.release(0);
+      rerender({ ...props, core: c.port, bondPoint: east(3_000) });
+      await settle();
+      const early = c.waiting.splice(0); // the 3 km question, kept back
+      rerender({ ...props, core: c.port, bondPoint: east(6_000) });
+      await settle();
+
+      // The 3 km answer comes back late, after the Bond is already at 6 km.
+      for (const call of early) call.answer();
+      await settle();
+      expect(result.current).toBeUndefined();
+
+      await c.release(6_000);
+      expect(result.current?.policy.can_reveal).toBe(false);
+    });
+
+    it("drops an answer that arrives after the history was lost, and stays fail-closed", async () => {
+      const c = held();
+      const { result, rerender, props } = setup({ core: c.port });
+      await c.release(0);
+      expect(result.current).toBeDefined();
+      rerender({ ...props, core: c.port, bondPoint: east(4_600) });
+      await settle();
+      const slow = c.waiting.splice(0);
+
+      // Nobody renews the decision: it expires and with it the history.
+      await settle(PROXIMITY_STALE_MS + 1);
+      expect(result.current).toBeUndefined();
+      for (const call of slow) call.answer();
+      await settle();
+      // The late "restricted but open" answer was asked with the old history
+      // and is not allowed to revive an authorization.
+      expect(result.current).toBeUndefined();
+
+      // The next question starts from "blocked".
+      await settle(PROXIMITY_REFRESH_MS);
+      expect(c.waiting.length).toBeGreaterThan(0);
+      expect(c.waiting.every((call) => call.asked)).toBe(true);
+      await c.release(4_600);
+      expect(result.current?.policy).toMatchObject({
+        level: "restricted",
+        can_reveal: false,
+      });
+    });
+
+    it("lets a slow answer land when only the beat, not a move, came in between", async () => {
+      const c = held();
+      const { result } = setup({ core: c.port });
+      await settle(PROXIMITY_REFRESH_MS * 2);
+      expect(result.current).toBeUndefined();
+      await c.release(0);
+      expect(result.current?.policy.can_reveal).toBe(true);
+    });
+  });
+
   it("keeps one Bond's answer from another's", async () => {
     const { result, rerender, props } = setup();
     await settle();
