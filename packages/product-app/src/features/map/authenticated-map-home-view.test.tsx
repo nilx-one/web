@@ -2300,17 +2300,19 @@ describe("AuthenticatedMapHomeView", () => {
       );
     });
 
-    it("holds fog work, and says so, while Avaia has no place of her own", async () => {
+    it("puts a fresh Avaia down where the device first located its Bond, once", async () => {
       vi.useFakeTimers();
       const fog = createFogFieldDouble();
       const mapRenderer = Object.assign(
         createMapRendererDouble({ kind: "ready" }),
         { fog, setFogMarks: vi.fn() },
       );
+      expect(readWorldMemory("0x0sky").avaia).toBeUndefined();
+      const geolocation = createGeolocationDouble({ position: here });
       renderView({
         mapRenderer,
         findItems: nearbyProximityCore(),
-        geolocation: createGeolocationDouble({ position: here }),
+        geolocation,
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
       });
       await vi.waitFor(() =>
@@ -2318,20 +2320,50 @@ describe("AuthenticatedMapHomeView", () => {
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
       );
-      // Not at 0m: nobody has said where she is, so the face says so.
-      expect(screen.getByText("?")).toBeVisible();
-      expect(screen.queryByText("0m")).toBeNull();
-      expect(
-        screen.getByText(/Where Avaia is isn't known yet, so fog work waits\./),
-      ).toBeInTheDocument();
+      // She has a place now, so there is a distance to speak of.
+      await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject({
+        longitude: here.longitude,
+        latitude: here.latitude,
+      });
+
+      // The Bond walks on; she is not carried along by being fresh.
       act(() =>
-        mapRenderer.tapGround({
-          longitude: there.longitude,
-          latitude: there.latitude,
-          ground: "fog",
+        geolocation.publish({
+          kind: "observed",
+          position: {
+            ...here,
+            longitude: here.longitude + 0.09,
+            observedAt: here.observedAt + 60_000,
+          },
         }),
       );
-      expect(screen.queryByRole("dialog")).toBeNull();
+      await vi.waitFor(() => expect(screen.getByText(/km$/)).toBeVisible());
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject({
+        longitude: here.longitude,
+      });
+      expect(screen.getByText(/too far to reveal fog/)).toBeInTheDocument();
+    });
+
+    it("does not move an Avaia who already has a place", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks: vi.fn() },
+      );
+      const left = { ...here, longitude: here.longitude + 0.002 };
+      avaiaStandsAt(left);
+      renderView({
+        mapRenderer,
+        findItems: nearbyProximityCore(),
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() => expect(screen.getByText(/m$/)).toBeVisible());
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject({
+        longitude: left.longitude,
+      });
     });
 
     it("holds fog work, and says so, once Avaia is beyond the red line", async () => {

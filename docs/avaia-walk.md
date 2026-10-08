@@ -346,9 +346,12 @@ is measured between the two bodies — her own place, never the camera and
 never the wheel — and Core, not the client, says what it allows
 (`avaia_proximity` in core: [Avaia proximity](https://github.com/nilx-one/core/blob/master/docs/avaia-proximity.md)).
 
-- Her place is where she stands or was left. Until she has one the label is
-  `?` in a dashed ring and fog work waits; a missing place is never taken to
-  be the Bond's.
+- Her place is where she stands or was left. A fresh Avaia, who has been
+  nowhere, is put down once, where this device first located its Bond; after
+  that she leaves only by walking or being given the wheel, so a Bond who
+  walks on and forgets her will find fog work held beyond 5 km. When her place
+  cannot be read, the label is `?` in a dashed ring and fog work waits; it is
+  never taken to be the Bond's.
 - Core's answer is renewed whenever the Bond moves and on a short beat, and
   an answer nobody renewed stops counting. Core keeps no state, so the client
   carries the one bit it needs — whether the last answer held fog work — and
