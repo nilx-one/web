@@ -252,6 +252,62 @@ describe("revealing the fog around a Bond", () => {
     expect(fog.cellAt(stand).id).toBe("strip:3052");
   });
 
+  it("fails closed without Core and pauses work when Avaia exceeds the distance boundary", () => {
+    const fog = createFogFieldDouble(0.01);
+    const renderer = fogRenderer(fog);
+    const near = {
+      policy: {
+        distance_m: 15,
+        red_m: 5000,
+        restore_below_m: 4500,
+        level: "near" as const,
+        can_reveal: true,
+        duration_ms: 60_000,
+      },
+      durationsMs: [60_000, 60_000, 60_000, 60_000, 60_000, 60_000],
+    };
+    const red = {
+      policy: {
+        distance_m: 5000,
+        red_m: 5000,
+        restore_below_m: 4500,
+        level: "red" as const,
+        can_reveal: false,
+        duration_ms: null,
+      },
+      durationsMs: [null, null, null, null, null, null],
+    };
+    const base = {
+      renderer,
+      bondPoint: BOND,
+      observed: undefined,
+      owner: "0x0sky",
+      enforceProximity: true,
+    };
+    const { result, rerender } = renderHook((props: FogRevealInput) => useFogReveal(props), {
+      initialProps: base,
+    });
+    expect(result.current.handleFogTap(NEXT_DOOR)).toBe("out-of-reach");
+    rerender({ ...base, proximity: near });
+    act(() => void result.current.handleFogTap(NEXT_DOOR));
+    expect(result.current.prompt?.durationMs).toBe(60_000);
+    act(() => void result.current.confirm());
+    expect(result.current.jobs).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(10_000));
+
+    rerender({ ...base, proximity: red });
+    expect(result.current.handleFogTap(ACROSS)).toBe("out-of-reach");
+    expect(result.current.jobs[0]?.pausedAt).toBeDefined();
+    act(() => vi.advanceTimersByTime(3_600_000));
+    expect(fog.isRevealed("strip:3053")).toBe(false);
+    rerender({ ...base, proximity: near });
+    expect(result.current.jobs[0]?.pausedAt).toBeUndefined();
+    act(() => vi.advanceTimersByTime(49_999));
+    expect(fog.isRevealed("strip:3053")).toBe(false);
+    act(() => vi.advanceTimersByTime(1));
+    expect(fog.isRevealed("strip:3053")).toBe(true);
+  });
+
   it("offers nothing where no fog is drawn", () => {
     const { result } = render({ renderer: {} as MapRenderer });
 
