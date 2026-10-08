@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  epochOf,
+  FIND_PACK_ID,
+  rollSegment,
+  ROLL_TABLE,
+  segmentsWithin,
+} from "@nilx-one/artifact-contract";
+import {
   mapDistanceMeters,
   type MapFogCell,
   type MapFogField,
@@ -27,6 +34,8 @@ export interface FogRevealJob {
   readonly durationMs: number;
   /** How many landmarks the archive drew in the cell when the reveal began. */
   readonly landmarks: number;
+  /** Timer is frozen at this wall-clock instant when Core blocks reveal. */
+  readonly pausedAt?: number | undefined;
 }
 
 /** How many cells an Avaia works open at the same time. */
@@ -130,30 +139,55 @@ export function landmarksInCell(
   ).length;
 }
 
+/**
+ * The artifacts lying in a fog cell this week: the finds rolled for the
+ * 50 m segments the cell holds, by the same public roll every client and the
+ * identity server agree on. This is the count Core's proximity policy takes;
+ * it is not the archive's landmarks, and no walk is needed to know it.
+ */
+export function artifactsInCell(cell: MapFogCell, nowMs: number): number {
+  const epoch = epochOf(nowMs);
+  let found = 0;
+  for (const segment of segmentsWithin(cell.boundary)) {
+    const roll = rollSegment({
+      packId: FIND_PACK_ID,
+      packVersion: ROLL_TABLE.version,
+      epoch,
+      segment,
+    });
+    if (roll !== null) found += 1;
+  }
+  return found;
+}
+
 export function startReveal(
   cell: MapFogCell,
   landmarks: number,
   nowMs: number,
+  durationMs = revealDurationMs(landmarks),
 ): FogRevealJob {
   return {
     cell,
     startedAt: nowMs,
-    durationMs: revealDurationMs(landmarks),
+    durationMs,
     landmarks,
   };
 }
 
 export function revealProgress(job: FogRevealJob, nowMs: number): number {
   if (job.durationMs <= 0) return 1;
-  return Math.min(1, Math.max(0, (nowMs - job.startedAt) / job.durationMs));
+  return Math.min(
+    1,
+    Math.max(0, ((job.pausedAt ?? nowMs) - job.startedAt) / job.durationMs),
+  );
 }
 
 export function revealFinished(job: FogRevealJob, nowMs: number): boolean {
-  return nowMs - job.startedAt >= job.durationMs;
+  return job.pausedAt === undefined && nowMs - job.startedAt >= job.durationMs;
 }
 
 export function revealRemainingMs(job: FogRevealJob, nowMs: number): number {
-  return Math.max(0, job.startedAt + job.durationMs - nowMs);
+  return Math.max(0, job.startedAt + job.durationMs - (job.pausedAt ?? nowMs));
 }
 
 /**
@@ -205,6 +239,9 @@ export interface FogRevealStorage {
 }
 
 const STORAGE_PREFIX = "nilx-one.fog.jobs.v1.";
+const AUTHORIZED_PREFIX = "nilx-one.fog.authorized.v1.";
+/** A sanity ceiling on a stored job, not policy: Core owns the durations. */
+const STORED_JOB_MAX_MS = 10 * 60_000;
 
 function defaultStorage(): FogRevealStorage | undefined {
   try {
@@ -231,7 +268,11 @@ function isJob(value: unknown): value is FogRevealJob {
     typeof job.startedAt === "number" &&
     typeof job.durationMs === "number" &&
     job.durationMs >= 0 &&
-    job.durationMs <= FOG_REVEAL_MAX_MS &&
+    job.durationMs <= STORED_JOB_MAX_MS &&
+    (job.pausedAt === undefined ||
+      (typeof job.pausedAt === "number" &&
+        Number.isFinite(job.pausedAt) &&
+        job.pausedAt >= job.startedAt)) &&
     typeof job.landmarks === "number" &&
     typeof cell?.id === "string" &&
     typeof center?.longitude === "number" &&
@@ -268,4 +309,59 @@ export function writeRevealJobs(
   } catch {
     // Best-effort: a reveal that is forgotten simply has to be asked for again.
   }
+}
+
+/**
+ * The last wall-clock instant at which Core allowed this Bond's Avaia to work
+ * while a reveal ran. It is what lets a reopened page tell time it was
+ * authorized from time nobody was watching.
+ */
+export function readAuthorizedAt(
+  owner: string,
+  storage: FogRevealStorage | undefined = defaultStorage(),
+): number | undefined {
+  try {
+    const raw = storage?.getItem(AUTHORIZED_PREFIX + owner);
+    if (raw === null || raw === undefined) return undefined;
+    if (!/^\d{1,16}$/.test(raw)) return undefined;
+    return Number(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeAuthorizedAt(
+  owner: string,
+  nowMs: number,
+  storage: FogRevealStorage | undefined = defaultStorage(),
+): void {
+  try {
+    storage?.setItem(AUTHORIZED_PREFIX + owner, String(Math.trunc(nowMs)));
+  } catch {
+    // Best-effort: with no heartbeat a reopened page counts no time at all.
+  }
+}
+
+/**
+ * Jobs as a reopened page finds them: anything still running was last known
+ * to be authorized at `authorizedAt`, so it stops there, and the time since —
+ * closed, unobserved, or simply not known to be allowed — is never worked.
+ * With no heartbeat to go by nothing is credited beyond its own start.
+ */
+export function freezeUnattended(
+  jobs: readonly FogRevealJob[],
+  authorizedAt: number | undefined,
+  nowMs: number,
+): readonly FogRevealJob[] {
+  return jobs.map((job) =>
+    job.pausedAt !== undefined
+      ? job
+      : {
+          ...job,
+          pausedAt: Math.min(
+            nowMs,
+            Math.max(job.startedAt, authorizedAt ?? job.startedAt),
+          ),
+        },
+  );
 }

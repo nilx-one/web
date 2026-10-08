@@ -149,6 +149,8 @@ export type {
   AvaiaDriveTarget,
   AvaiaLifeAnswer,
   AvaiaLifeCommand,
+  AvaiaProximityLevel,
+  AvaiaProximityPolicy,
   CoreGeoCoordinate,
 } from "./avaia-drive";
 export {

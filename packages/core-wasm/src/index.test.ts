@@ -436,6 +436,94 @@ describe("CoreWasmClient", () => {
     ).toThrow();
   });
 
+  it("hands the previous blocked bit to Core's proximity policy and decodes strictly", async () => {
+    // Answers as Core's avaia_proximity gives them (docs/avaia-proximity.md).
+    const wire = (over: Record<string, unknown> = {}): string =>
+      JSON.stringify({
+        distance_m: 4_600,
+        red_m: 5_000,
+        restore_below_m: 4_500,
+        level: "restricted",
+        can_reveal: true,
+        duration_ms: 600_000,
+        ...over,
+      });
+    const seen: string[] = [];
+    let answer = wire();
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          avaia_proximity: (distance, artifacts, blocked) => {
+            seen.push(`${distance}|${artifacts}|${blocked}`);
+            return answer;
+          },
+        }),
+    });
+    expect(bindings.avaiaProximity?.(4_600, 5, false)).toMatchObject({
+      can_reveal: true,
+      level: "restricted",
+    });
+    expect(seen).toEqual(["4600|5|false"]);
+    answer = wire({ can_reveal: false, duration_ms: null });
+    expect(bindings.avaiaProximity?.(4_600, 5, true)?.can_reveal).toBe(false);
+    expect(seen[1]).toBe("4600|5|true");
+
+    const refused: Record<string, unknown>[] = [
+      { level: "fly" },
+      { level: "near" }, // inside the restore band
+      { level: "red" }, // red is not below the red line
+      { distance_m: 5_000, level: "restricted" },
+      { distance_m: 5_000, level: "red" }, // red can never reveal
+      {
+        distance_m: 100,
+        level: "working",
+        can_reveal: false,
+        duration_ms: null,
+      },
+      { distance_m: 100, level: "red" },
+      { can_reveal: true, duration_ms: null },
+      { can_reveal: false, duration_ms: 60_000 },
+      { duration_ms: 59_999 },
+      { duration_ms: 600_001 },
+      { duration_ms: 90_000.5 },
+      { distance_m: -1 },
+      { distance_m: 4_600.5 },
+      { restore_below_m: 5_000 },
+      { red_m: 0 },
+    ];
+    for (const change of refused) {
+      answer = wire(change);
+      expect(
+        () => bindings.avaiaProximity?.(4_600, 0, false),
+        wire(change),
+      ).toThrow();
+    }
+    // An empty answer (Core's refusal to serialize) authorizes nothing either.
+    answer = "";
+    expect(() => bindings.avaiaProximity?.(1, 0, false)).toThrow();
+    // Inputs outside what a u32 and a boolean can carry never reach Core.
+    for (const bad of [-1, 1.5, 0x1_0000_0000, Number.NaN]) {
+      expect(() => bindings.avaiaProximity?.(bad, 0, false)).toThrow(
+        RangeError,
+      );
+      expect(() => bindings.avaiaProximity?.(1, bad, false)).toThrow(
+        RangeError,
+      );
+    }
+  });
+
+  it("has no proximity on a runtime built before it", async () => {
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime(),
+    });
+    expect(bindings.avaiaProximity).toBeUndefined();
+    await expect(
+      createCoreWasmClient({
+        loadBindings: async () => bindings,
+      }).avaiaProximity?.(1, 0, true),
+    ).rejects.toThrow("proximity binding is missing");
+  });
+
   it("has no drive on a runtime built before it", async () => {
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () => generatedRuntime(),

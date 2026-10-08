@@ -180,6 +180,7 @@ import { useWorldAmbience } from "./world-ambience";
 import { useLocalModelReadiness } from "./use-local-model-readiness";
 import { useDriveChooser } from "./drive-chooser";
 import { useAvaiaLife, type LifeBody } from "./use-avaia-life";
+import { useAvaiaProximity } from "./use-avaia-proximity";
 import { useReadinessFrameVisible } from "./use-readiness-frame";
 import { createWorldReadiness } from "./world-readiness";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
@@ -250,6 +251,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "backpackGiftDue"
     | "avaiaDriveStep"
     | "applyAvaiaLife"
+    | "avaiaProximity"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -1098,10 +1100,61 @@ export function AuthenticatedMapHomeView({
       };
     };
   }, [avaiaWalk, observedPosition]);
+  // An Avaia who has never been anywhere is put down once, where this device
+  // first located its Bond: from then on she has a place of her own, and
+  // leaves it only by walking or being given the wheel. Without this, a fresh
+  // Avaia would have no place at all and nothing could measure how far she is.
+  // Only her remembered place is written: what she is doing is left alone.
+  const avaiaWalkRef = useRef(avaiaWalk);
+  useEffect(() => {
+    avaiaWalkRef.current = avaiaWalk;
+  });
+  const avaiaPlacedFor = useRef<string | undefined>(undefined);
+  const firstFixLongitude = observedPosition?.longitude;
+  const firstFixLatitude = observedPosition?.latitude;
+  useEffect(() => {
+    if (firstFixLongitude === undefined || firstFixLatitude === undefined) {
+      return;
+    }
+    if (avaiaPlacedFor.current === pubDress) return;
+    avaiaPlacedFor.current = pubDress;
+    const placed =
+      avaiaWalkRef.current.stance(globalThis.performance.now()) !== undefined ||
+      readWorldMemory(pubDress).avaia !== undefined;
+    if (!placed) {
+      rememberWorld(pubDress, {
+        avaia: {
+          longitude: firstFixLongitude,
+          latitude: firstFixLatitude,
+          bearingDeg: 0,
+        },
+      });
+    }
+  }, [firstFixLatitude, firstFixLongitude, pubDress]);
+  // Camera and handover never define proximity; measure independent bodies.
+  // Her place is what she stands at or was left at — never assumed to be the
+  // Bond's device after that first putting-down, and unknown (not near)
+  // whenever it cannot be read.
+  const avaiaProximity = useAvaiaProximity({
+    core: findItems,
+    owner: pubDress,
+    bondPoint: observedPosition,
+    getAvaiaPoint: () =>
+      avaiaWalk.stance(globalThis.performance.now())?.point ??
+      readWorldMemory(pubDress).avaia,
+  });
+  // The avatar's true animation-frame position can cross the red boundary
+  // between Core polling beats; feed those frames to the proximity guard.
+  const proximityObserver = useRef(avaiaProximity?.observeAvaiaPoint);
+  useEffect(() => {
+    proximityObserver.current = avaiaProximity?.observeAvaiaPoint;
+  }, [avaiaProximity]);
   const [fogAnnouncement, setFogAnnouncement] = useState("");
   const fogReveal = useFogReveal({
     renderer,
     bondPoint: observedPosition,
+    enforceProximity: true,
+    proximity: avaiaProximity,
     observed: deviceObservation,
     owner: pubDress,
     onRevealed: (cell, via) => {
@@ -1667,6 +1720,7 @@ export function AuthenticatedMapHomeView({
       const body = wheelBody(wheel, handover, nowMs);
       const stance =
         body.seat === "avaia" ? avaiaWalk.stance(nowMs) : undefined;
+      if (stance !== undefined) proximityObserver.current?.(stance.point);
       const handle = createWheelBodyHandle({
         body,
         address: address(body.seat),
@@ -2791,6 +2845,11 @@ export function AuthenticatedMapHomeView({
         <>
           <LocationControl
             viewModel={locationControl}
+            proximity={
+              findItems?.avaiaProximity === undefined
+                ? undefined
+                : (avaiaProximity?.policy ?? "unknown")
+            }
             onActivate={activateLocationControl}
           />
           <FogRevealPrompt

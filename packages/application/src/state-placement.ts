@@ -266,6 +266,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     perOwner: true,
     what: "Reveals this device's Avaia has in flight. The revealed cell is what may travel; the timer that opens it is this device's work.",
   },
+  {
+    id: "fog.authorized",
+    placement: "device",
+    mobility: "resident",
+    medium: "local-storage",
+    key: "nilx-one.fog.authorized.v1",
+    perOwner: true,
+    what: "The last instant Core allowed a reveal to run on this device. It is the only evidence that time a closed page missed was authorized, so none of it is worked.",
+  },
 
   // ─── transport-eligible: interface preferences ─────────────────────────
   {

@@ -86,3 +86,49 @@
     animation: none;
   }
 }
+
+/* The face wears the Bond–Avaia distance. A full cyan circle when she is
+   close; the outward arc bleeds toward red as she goes. The number carries
+   the meaning: it is underlined while Core holds fog work, and `?` inside a
+   dashed ring when her place is not known, so neither colour nor motion is
+   needed to read the state. It never moves the camera. */
+.location-control__button {
+  position: relative;
+}
+
+.location-control__proximity-ring {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--proximity-color) 0deg var(--proximity-angle),
+    #45d5e8 var(--proximity-angle) 360deg
+  );
+  -webkit-mask: radial-gradient(circle, transparent 57%, #000 63%);
+  mask: radial-gradient(circle, transparent 57%, #000 63%);
+}
+
+.location-control[data-proximity="unknown"] .location-control__proximity-ring {
+  background: none;
+  -webkit-mask: none;
+  mask: none;
+  border: 2px dashed var(--proximity-color);
+}
+
+.location-control__distance {
+  position: relative;
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--proximity-color);
+}
+
+.location-control[data-reveal="held"] .location-control__distance {
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}

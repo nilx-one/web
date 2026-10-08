@@ -6,20 +6,33 @@ import type {
   MapFogField,
   MapLandmark,
 } from "@nilx-one/map-contract";
+import {
+  epochOf,
+  FIND_PACK_ID,
+  rollSegment,
+  ROLL_TABLE,
+  segmentAt,
+  segmentsWithin,
+} from "@nilx-one/artifact-contract";
 import { describe, expect, it } from "vitest";
 
 import {
+  artifactsInCell,
   FOG_REVEAL_CONCURRENCY,
   FOG_REVEAL_MAX_MS,
   FOG_REVEAL_MIN_MS,
   fogMarks,
+  freezeUnattended,
   landmarksInCell,
   offerFor,
+  readAuthorizedAt,
   readRevealJobs,
   revealDurationMs,
   revealFinished,
   revealProgress,
+  revealRemainingMs,
   startReveal,
+  writeAuthorizedAt,
   writeRevealJobs,
   type FogRevealStorage,
 } from "./fog-reveal";
@@ -86,6 +99,27 @@ describe("revealing a fog cell", () => {
     expect(revealProgress(job, 1_000 + 999_999)).toBe(1);
   });
 
+  it("pauses a distant reveal without accumulating blocked time", () => {
+    const job = startReveal(cell("a"), 4, 1_000, 600_000);
+    const paused = { ...job, pausedAt: 61_000 };
+    expect(revealProgress(paused, 2_000_000)).toBe(0.1);
+    expect(revealRemainingMs(paused, 2_000_000)).toBe(540_000);
+    expect(revealFinished(paused, 2_000_000)).toBe(false);
+
+    const resumedAt = 121_000;
+    const resumed = {
+      ...paused,
+      startedAt: paused.startedAt + resumedAt - paused.pausedAt,
+      pausedAt: undefined,
+    };
+    expect(revealRemainingMs(resumed, resumedAt)).toBe(540_000);
+    expect(revealFinished(resumed, resumedAt + 539_999)).toBe(false);
+    expect(revealFinished(resumed, resumedAt + 540_000)).toBe(true);
+    const storage = memoryStorage();
+    writeRevealJobs("0x0sky", [paused], storage);
+    expect(readRevealJobs("0x0sky", storage)).toEqual([paused]);
+  });
+
   it("offers a cell in reach, and no more than three at once", () => {
     const frontier = [cell("a"), cell("b"), cell("c"), cell("d")];
     const jobs = frontier.slice(0, 2).map((value) => startReveal(value, 0, 0));
@@ -125,5 +159,113 @@ describe("revealing a fog cell", () => {
     expect(readRevealJobs("0x0sky", storage)).toEqual(jobs);
     storage.setItem("nilx-one.fog.jobs.v1.0x0sky", "{");
     expect(readRevealJobs("0x0sky", storage)).toEqual([]);
+  });
+
+  it("keeps the evidence that time was authorized, per Bond, and distrusts the rest", () => {
+    const storage = memoryStorage();
+    expect(readAuthorizedAt("0x0sky", storage)).toBeUndefined();
+    writeAuthorizedAt("0x0sky", 42_000.9, storage);
+    expect(readAuthorizedAt("0x0sky", storage)).toBe(42_000);
+    expect(readAuthorizedAt("0x0alice", storage)).toBeUndefined();
+    for (const bad of ["x", "-5", "NaN", "Infinity", ""]) {
+      storage.setItem("nilx-one.fog.authorized.v1.0x0sky", bad);
+      expect(readAuthorizedAt("0x0sky", storage)).toBeUndefined();
+    }
+  });
+
+  describe("a job found running by a reopened page", () => {
+    const running = startReveal(cell("a"), 0, 10_000, 600_000);
+
+    it("stops where Core last allowed it, never at the reopening", () => {
+      const [frozen] = freezeUnattended([running], 130_000, 9_000_000);
+      expect(frozen?.pausedAt).toBe(130_000);
+      expect(revealRemainingMs(frozen!, 9_000_000)).toBe(480_000);
+      expect(revealFinished(frozen!, 9_000_000)).toBe(false);
+    });
+
+    it("is never credited past now or before its own start", () => {
+      expect(freezeUnattended([running], 99_999_999, 50_000)[0]?.pausedAt).toBe(
+        50_000,
+      );
+      expect(freezeUnattended([running], 1, 50_000)[0]?.pausedAt).toBe(10_000);
+    });
+
+    it("gets nothing at all when there is no evidence", () => {
+      const [frozen] = freezeUnattended([running], undefined, 9_000_000);
+      expect(frozen?.pausedAt).toBe(10_000);
+      expect(revealRemainingMs(frozen!, 9_000_000)).toBe(600_000);
+    });
+
+    it("leaves a job that is already paused exactly as it was", () => {
+      const paused = { ...running, pausedAt: 70_000 };
+      expect(freezeUnattended([paused], 130_000, 9_000_000)).toEqual([paused]);
+    });
+  });
+
+  describe("the artifacts lying in a cell", () => {
+    const NOW = Date.UTC(2026, 9, 8);
+    const rolled = (segment: ReturnType<typeof segmentAt>): boolean =>
+      rollSegment({
+        packId: FIND_PACK_ID,
+        packVersion: ROLL_TABLE.version,
+        epoch: epochOf(NOW),
+        segment,
+      }) !== null;
+    /** A cell about 8 m across, so it holds exactly the segment it stands in. */
+    const tiny = (longitude: number, latitude: number): MapFogCell => ({
+      id: `tiny:${longitude}:${latitude}`,
+      center: { longitude, latitude },
+      boundary: [
+        [longitude - 0.00005, latitude - 0.00004],
+        [longitude + 0.00005, latitude - 0.00004],
+        [longitude + 0.00005, latitude + 0.00004],
+        [longitude - 0.00005, latitude + 0.00004],
+      ],
+    });
+    /** Walk the Kyiv grid for a segment that holds a find and one that does not. */
+    function pointsFor() {
+      let withFind: [number, number] | undefined;
+      let bare: [number, number] | undefined;
+      for (let i = 0; i < 4_000 && (!withFind || !bare); i++) {
+        const point: [number, number] = [
+          30.5 + i * 0.0006,
+          50.4 + (i % 7) * 0.0005,
+        ];
+        if (rolled(segmentAt(point))) withFind ??= point;
+        else bare ??= point;
+      }
+      return { withFind: withFind!, bare: bare! };
+    }
+
+    it("counts the find a segment rolls, and nothing for bare ground", () => {
+      const { withFind, bare } = pointsFor();
+      expect(artifactsInCell(tiny(...withFind), NOW)).toBe(1);
+      expect(artifactsInCell(tiny(...bare), NOW)).toBe(0);
+    });
+
+    it("is the rolls of the segments the cell holds, whole cell or not", () => {
+      const cellAcross = (longitude: number, latitude: number): MapFogCell => ({
+        id: "wide",
+        center: { longitude, latitude },
+        boundary: [
+          [longitude - 0.006, latitude - 0.004],
+          [longitude + 0.006, latitude - 0.004],
+          [longitude + 0.006, latitude + 0.004],
+          [longitude - 0.006, latitude + 0.004],
+        ],
+      });
+      const wide = cellAcross(30.5234, 50.4501);
+      const expected = segmentsWithin(wide.boundary).filter(rolled).length;
+      expect(artifactsInCell(wide, NOW)).toBe(expected);
+      // About a hundred segments at 2.4% each: a few, never the whole lot.
+      expect(expected).toBeLessThan(20);
+    });
+
+    it("answers the same for everyone on the same day", () => {
+      const cell = tiny(30.5234, 50.4501);
+      expect(artifactsInCell(cell, NOW)).toBe(
+        artifactsInCell(cell, NOW + 3_600_000),
+      );
+    });
   });
 });

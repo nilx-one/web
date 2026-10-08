@@ -19,24 +19,36 @@ import {
   approachPoint,
   FOG_APPROACH_ACCURACY_METERS,
   FOG_FRONTIER_RINGS,
+  artifactsInCell,
   fogMarks,
+  freezeUnattended,
   landmarksInCell,
   offerFor,
+  readAuthorizedAt,
   readRevealJobs,
   revealDurationMs,
   revealFinished,
   revealRemainingMs,
   startReveal,
+  writeAuthorizedAt,
   writeRevealJobs,
   type FogRevealJob,
 } from "./fog-reveal";
+import type { AvaiaProximitySnapshot } from "./use-avaia-proximity";
 
 /** How often a cell being revealed repaints its progress. */
 export const FOG_PROGRESS_REFRESH_MS = 2_000;
+/**
+ * How often a running reveal records that Core still allows it. A page that
+ * closes loses at most this much authorized time; it never gains any.
+ */
+export const FOG_AUTHORIZED_HEARTBEAT_MS = 5_000;
 
 export interface FogRevealPrompt {
   readonly cell: MapFogCell;
   readonly landmarks: number;
+  /** The finds lying in the cell this week: what Core prices the work by. */
+  readonly artifacts: number;
   readonly durationMs: number;
   /** The Avaia already works as many cells as it can. */
   readonly busy: boolean;
@@ -63,6 +75,9 @@ export interface FogRevealInput {
     (MapPointSelection & { readonly accuracyMeters: number }) | undefined;
   /** The Bond whose Avaia does the work: whose reveals these are. */
   readonly owner: string;
+  /** Required in production; old isolated hook tests can omit it. */
+  readonly enforceProximity?: boolean;
+  readonly proximity?: AvaiaProximitySnapshot | undefined;
   readonly onRevealed?: (cell: MapFogCell, via: FogRevealVia) => void;
 }
 
@@ -102,6 +117,8 @@ export function useFogReveal({
   bondPoint,
   observed,
   owner,
+  enforceProximity = false,
+  proximity,
   onRevealed,
 }: FogRevealInput): FogRevealState {
   const fog = renderer.fog;
@@ -122,6 +139,7 @@ export function useFogReveal({
     () => 0,
   );
   const active = fog !== undefined && fog.isActive();
+  const canReveal = !enforceProximity || proximity?.policy.can_reveal === true;
 
   // Whatever this field persists is this Bond's alone: bound first, before
   // anything below can read or write a reveal under it.
@@ -140,15 +158,28 @@ export function useFogReveal({
     return () => fog?.setOccupied?.(undefined);
   }, [fog, owner, occupiedLongitude, occupiedLatitude]);
 
+  // Jobs as this page finds them. Under Core's authority a job still running
+  // when the page was last seen stops where Core last allowed it, so the time
+  // it was closed is never worked (`freezeUnattended`).
+  const loadJobs = useCallback(
+    (): readonly FogRevealJob[] =>
+      enforceProximity
+        ? freezeUnattended(
+            readRevealJobs(owner),
+            readAuthorizedAt(owner),
+            Date.now(),
+          )
+        : readRevealJobs(owner),
+    [enforceProximity, owner],
+  );
   const [jobsState, setJobsState] = useState<{
     readonly owner: string;
     readonly jobs: readonly FogRevealJob[];
-  }>(() => ({ owner, jobs: readRevealJobs(owner) }));
+  }>(() => ({ owner, jobs: loadJobs() }));
   // A different Bond has its own reveals; they are read, not carried over.
   // A cell whose fog lifted some other way — its Bond walked into it — is no
   // longer being worked on, whatever the stored list still says.
-  const storedJobs =
-    jobsState.owner === owner ? jobsState.jobs : readRevealJobs(owner);
+  const storedJobs = jobsState.owner === owner ? jobsState.jobs : loadJobs();
   const jobs = useMemo(
     () =>
       fog === undefined || !active
@@ -167,8 +198,7 @@ export function useFogReveal({
   const updateJobs = useCallback(
     (change: (current: readonly FogRevealJob[]) => readonly FogRevealJob[]) => {
       setJobsState((current) => {
-        const stored =
-          current.owner === owner ? current.jobs : readRevealJobs(owner);
+        const stored = current.owner === owner ? current.jobs : loadJobs();
         const base =
           fog === undefined || !fog.isActive()
             ? stored
@@ -179,7 +209,7 @@ export function useFogReveal({
         return { owner, jobs: next };
       });
     },
-    [fog, owner],
+    [fog, loadJobs, owner],
   );
 
   const bondCell =
@@ -228,10 +258,59 @@ export function useFogReveal({
 
   useEffect(() => () => renderer.setFogMarks?.([]), [renderer]);
 
+  // While Core allows running work, say so now and on a beat: this is the
+  // only evidence a reopened page has that the time before it was authorized.
+  const running =
+    enforceProximity && jobs.some((job) => job.pausedAt === undefined);
+  useEffect(() => {
+    if (!running || !canReveal) return;
+    writeAuthorizedAt(owner, Date.now());
+    const beat = globalThis.setInterval(
+      () => writeAuthorizedAt(owner, Date.now()),
+      FOG_AUTHORIZED_HEARTBEAT_MS,
+    );
+    return () => globalThis.clearInterval(beat);
+  }, [canReveal, owner, running]);
+
+  // A disabled Core capability freezes running work; resuming shifts the
+  // start so blocked wall-clock time never counts toward completed work.
+  // Persist from an asynchronous effect callback to avoid render cascades.
+  useEffect(() => {
+    if (!enforceProximity || jobs.length === 0) return;
+    const needsPause =
+      !canReveal && jobs.some((job) => job.pausedAt === undefined);
+    const needsResume =
+      canReveal && jobs.some((job) => job.pausedAt !== undefined);
+    if (!needsPause && !needsResume) return;
+    const now = Date.now();
+    let cancelled = false;
+    globalThis.queueMicrotask(() => {
+      if (cancelled) return;
+      updateJobs((current) =>
+        current.map((job) => {
+          if (needsPause && job.pausedAt === undefined) {
+            return { ...job, pausedAt: now };
+          }
+          if (needsResume && job.pausedAt !== undefined) {
+            return {
+              ...job,
+              startedAt: job.startedAt + now - job.pausedAt,
+              pausedAt: undefined,
+            };
+          }
+          return job;
+        }),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enforceProximity, canReveal, jobs, updateJobs]);
+
   // A reveal ends on the wall clock, so one that finished while the page was
   // closed lands the moment it is open again.
   useEffect(() => {
-    if (fog === undefined || jobs.length === 0) return;
+    if (fog === undefined || jobs.length === 0 || !canReveal) return;
     const finish = (): void => {
       const now = Date.now();
       const done = jobs.filter((job) => revealFinished(job, now));
@@ -247,7 +326,7 @@ export function useFogReveal({
     );
     const timer = globalThis.setTimeout(finish, next);
     return () => globalThis.clearTimeout(timer);
-  }, [fog, jobs, updateJobs]);
+  }, [canReveal, fog, jobs, updateJobs]);
 
   // Standing in a fogged cell reveals it: no Avaia, no wait, one cell.
   const observedLongitude = observed?.longitude;
@@ -277,14 +356,35 @@ export function useFogReveal({
 
   // A prompt for a cell that left reach — the Bond moved, or the fog lifted
   // there some other way — is no longer a question anyone can answer.
-  const livePrompt =
-    prompt !== undefined && frontier.some((cell) => cell.id === prompt.cell.id)
-      ? prompt
-      : undefined;
+  //
+  // Under Core's authority the duration shown, and started on a yes, is Core's
+  // quote *now*: Avaia can walk while the question is open, and the minute
+  // quoted beside her is not the quarter hour at the far end of the town. A
+  // quote that is gone closes the question rather than starting on the old one.
+  const quotedMs =
+    prompt === undefined
+      ? undefined
+      : enforceProximity
+        ? (proximity?.durationFor(prompt.artifacts) ?? null)
+        : prompt.durationMs;
+  const livePrompt = useMemo(
+    () =>
+      canReveal &&
+      prompt !== undefined &&
+      quotedMs !== null &&
+      quotedMs !== undefined &&
+      frontier.some((cell) => cell.id === prompt.cell.id)
+        ? prompt.durationMs === quotedMs
+          ? prompt
+          : { ...prompt, durationMs: quotedMs }
+        : undefined,
+    [canReveal, frontier, prompt, quotedMs],
+  );
 
   const handleFogTap = useCallback(
     (point: MapPointSelection): FogTapOutcome => {
       if (fog === undefined || !fog.isActive()) return "no-fog";
+      if (!canReveal) return "out-of-reach";
       const cell = fog.cellAt(point);
       const offer = offerFor(cell.id, frontier, jobs);
       switch (offer.kind) {
@@ -299,28 +399,44 @@ export function useFogReveal({
             offer.cell,
             (at, radius) => renderer.landmarksNear?.(at, radius) ?? [],
           );
+          // Core prices the work by the artifacts lying in the cell, counted
+          // by the public roll; landmarks only colour the story and the
+          // isolated-test fallback below.
+          const artifacts = artifactsInCell(offer.cell, Date.now());
+          const coreDuration = proximity?.durationFor(artifacts) ?? null;
+          if (enforceProximity && coreDuration === null) return "out-of-reach";
           setPrompt({
             cell: offer.cell,
             landmarks,
-            durationMs: revealDurationMs(landmarks),
+            artifacts,
+            // Core's duration is the only one under enforcement; the Web table
+            // is for isolated tests that run without a Core.
+            durationMs: coreDuration ?? revealDurationMs(landmarks),
             busy: offer.kind === "busy",
           });
           return offer.kind === "busy" ? "busy" : "offered";
         }
       }
     },
-    [fog, frontier, jobs, renderer],
+    [canReveal, enforceProximity, fog, frontier, jobs, proximity, renderer],
   );
 
   const confirm = useCallback((): FogRevealJob | undefined => {
-    if (livePrompt === undefined || livePrompt.busy) return undefined;
+    if (!canReveal || livePrompt === undefined || livePrompt.busy) {
+      return undefined;
+    }
     const offer = offerFor(livePrompt.cell.id, frontier, jobs);
     setPrompt(undefined);
     if (offer.kind !== "offer") return undefined;
-    const job = startReveal(offer.cell, livePrompt.landmarks, Date.now());
+    const job = startReveal(
+      offer.cell,
+      livePrompt.landmarks,
+      Date.now(),
+      livePrompt.durationMs,
+    );
     updateJobs((current) => [...current, job]);
     return job;
-  }, [frontier, jobs, livePrompt, updateJobs]);
+  }, [canReveal, frontier, jobs, livePrompt, updateJobs]);
 
   const dismiss = useCallback(() => setPrompt(undefined), []);
 
