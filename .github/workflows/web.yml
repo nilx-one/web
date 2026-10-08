@@ -119,13 +119,13 @@ jobs:
             apps/site/public/core/0.1.0
             apps/telegram-mini-app/public/core/0.1.0
             apps/discord-activity/public/core/0.1.0
-          key: core-wasm-v1-${{ runner.os }}-40d1cb19f241b851be82f2b9a3ccbf7bd2e48c6d-wbg-0.2.127-${{ hashFiles('scripts/prepare_core_wasm_runtime.sh', 'scripts/core-wasm.Cargo.lock') }}
+          key: core-wasm-v1-${{ runner.os }}-b1e988edb86cc51a8e1599ece978390bd768779c-wbg-0.2.127-${{ hashFiles('scripts/prepare_core_wasm_runtime.sh', 'scripts/core-wasm.Cargo.lock') }}
       - name: Checkout pinned Core runtime source
         if: steps.core-runtime-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: nilx-one/core
-          ref: 40d1cb19f241b851be82f2b9a3ccbf7bd2e48c6d
+          ref: b1e988edb86cc51a8e1599ece978390bd768779c
           path: .core-source
           persist-credentials: false
       - name: Install matching wasm-bindgen CLI
@@ -139,8 +139,8 @@ jobs:
       - name: Verify pinned Core Wasm runtime
         run: |
           set -Eeuo pipefail
-          expected_core=40d1cb19f241b851be82f2b9a3ccbf7bd2e48c6d
-          expected_wasm=951cad9d33e5131660d84c78291bfb40baef2d70cda6669abea10d68c3ec5b65
+          expected_core=b1e988edb86cc51a8e1599ece978390bd768779c
+          expected_wasm=cdf9216a8313b2b93aad3a5f21eede99520658016bf8e42cc5236199d9c05db0
           for host in site telegram-mini-app discord-activity; do
             runtime="apps/$host/public/core/0.1.0"
             test -f "$runtime/index.js"
@@ -158,7 +158,7 @@ jobs:
         run: pnpm build
       - name: Verify Core runtime in every host artifact
         run: |
-          expected=951cad9d33e5131660d84c78291bfb40baef2d70cda6669abea10d68c3ec5b65
+          expected=cdf9216a8313b2b93aad3a5f21eede99520658016bf8e42cc5236199d9c05db0
           for host in site telegram-mini-app discord-activity; do
             runtime="apps/$host/dist/core/0.1.0/index_bg.wasm"
             test -f "$runtime"
