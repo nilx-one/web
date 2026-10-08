@@ -7,8 +7,11 @@ import {
   type MapOptions,
   type StyleSpecification,
   type CanvasSource,
+  type GeoJSONSource,
   type MapMouseEvent,
 } from "maplibre-gl";
+
+import { fogFloorCss } from "./fog-material";
 
 import {
   FOG_PALETTES,
@@ -18,6 +21,7 @@ import {
   type FogPalette,
   type FogZone,
 } from "./fog-palette";
+import { atlasBounds, beyondAtlas, worldFog } from "./fog-world";
 import { cellAtLngLat, createTapHandler, type CellTap } from "./pick";
 import { createShadeLayer, type PageVisibility } from "./shade-layer";
 
@@ -84,6 +88,7 @@ export function createShadeMapFactory(
         if (runtime === null || removed) return;
         try {
           const sourceId = "nilx-one-presence-shade-canvas";
+          const worldId = "nilx-one-presence-shade-world";
           let publishing = false;
           const pause = () => {
             (map.getSource(sourceId) as CanvasSource | undefined)?.pause();
@@ -127,6 +132,45 @@ export function createShadeMapFactory(
               if (!removed) map.fire("error", { error });
             },
           });
+          // The atlas draws mist over a fixed square; the rest of the Earth
+          // wears flat mist of the same floor colour, holed only where ground
+          // was revealed wholly beyond the square. It changes only when such
+          // ground does, never with the drift.
+          const bounds = atlasBounds(layer.coordinates);
+          let worldKey: string | undefined;
+          const worldData = () => {
+            const beyond = runtime.source
+              .litCells()
+              .filter((cell) => beyondAtlas(cell, bounds))
+              .sort();
+            const key = beyond.join();
+            if (key === worldKey) return undefined;
+            worldKey = key;
+            return worldFog(bounds, beyond);
+          };
+          let worldTimer: ReturnType<typeof setTimeout> | undefined;
+          const refreshWorld = () => {
+            if (worldTimer !== undefined) return;
+            worldTimer = setTimeout(() => {
+              worldTimer = undefined;
+              if (removed) return;
+              const world = map.getSource(worldId) as GeoJSONSource | undefined;
+              const data = world === undefined ? undefined : worldData();
+              if (data !== undefined) world?.setData(data);
+            }, 0);
+          };
+          const touchesWorld = (cell: string) => {
+            if (beyondAtlas(cell, bounds)) refreshWorld();
+          };
+          const unsubscribeWorld = [
+            runtime.source.onCellLit(touchesWorld),
+            runtime.source.onCellUnlit?.(touchesWorld),
+            runtime.source.onReset?.(() => {
+              worldKey = undefined;
+              refreshWorld();
+            }),
+          ];
+          let worldPalette: FogPalette | undefined;
           const tap = createTapHandler({
             source: runtime.source,
             store: runtime.store,
@@ -151,9 +195,16 @@ export function createShadeMapFactory(
             ensuring = true;
             try {
               const style = map.getStyle() as StyleSpecification | undefined;
-              if (style !== undefined)
-                layer.setPalette(palettes[styleAppearance(style)]);
+              const palette = palettes[styleAppearance(style)];
+              if (style !== undefined) layer.setPalette(palette);
               if (!map.isStyleLoaded()) return;
+              if (map.getSource(worldId) === undefined) {
+                worldKey = undefined;
+                map.addSource(worldId, {
+                  type: "geojson",
+                  data: worldData() ?? worldFog(bounds, []),
+                });
+              }
               if (map.getSource(sourceId) === undefined) {
                 map.addSource(sourceId, {
                   type: "canvas",
@@ -162,10 +213,36 @@ export function createShadeMapFactory(
                   animate: false,
                 });
               }
-              if (map.getLayer(layer.id) !== undefined) return;
               const firstSymbol = style?.layers?.find(
                 (candidate) => candidate.type === "symbol",
               )?.id;
+              if (map.getLayer(worldId) === undefined) {
+                worldPalette = palette;
+                map.addLayer(
+                  {
+                    id: worldId,
+                    type: "fill",
+                    source: worldId,
+                    paint: {
+                      "fill-color": fogFloorCss(palette),
+                      // Opaque, as the atlas is along its edge: the two overlap
+                      // there without a seam. Unexplored ground stays hidden.
+                      "fill-opacity": 1,
+                      // An antialiased edge would draw the seam back as a line.
+                      "fill-antialias": false,
+                    },
+                  },
+                  firstSymbol,
+                );
+              } else if (worldPalette !== palette) {
+                worldPalette = palette;
+                map.setPaintProperty(
+                  worldId,
+                  "fill-color",
+                  fogFloorCss(palette),
+                );
+              }
+              if (map.getLayer(layer.id) !== undefined) return;
               map.addLayer(
                 {
                   id: layer.id,
@@ -188,6 +265,8 @@ export function createShadeMapFactory(
             map.off("load", ensureLayer);
             map.off("click", onClick);
             map.off("render", pause);
+            clearTimeout(worldTimer);
+            for (const unsubscribe of unsubscribeWorld) unsubscribe?.();
             layer.dispose();
           };
           ensureLayer();

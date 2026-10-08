@@ -10,6 +10,7 @@ import type * as MapLibreModule from "maplibre-gl";
 import type { MapOptions } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { fogFloorCss } from "./fog-material";
 import { DARK_FOG_PALETTE, LIGHT_FOG_PALETTE } from "./fog-palette";
 import {
   createGroundRevealed,
@@ -54,13 +55,37 @@ const { FakeMap } = vi.hoisted(() => {
     }[] = [];
     readonly sources = new globalThis.Map<
       string,
-      { canvas: HTMLCanvasElement; play: () => void; pause: () => void }
+      {
+        canvas: HTMLCanvasElement;
+        data?: unknown;
+        play: () => void;
+        pause: () => void;
+        setData: (data: unknown) => void;
+      }
     >();
+    readonly paint: [string, string, unknown][] = [];
     getSource(id: string) {
       return this.sources.get(id);
     }
     addSource(id: string, value: { canvas: HTMLCanvasElement }) {
-      this.sources.set(id, { ...value, play: vi.fn(), pause: vi.fn() });
+      const source: {
+        canvas: HTMLCanvasElement;
+        data?: unknown;
+        play: () => void;
+        pause: () => void;
+        setData: (data: unknown) => void;
+      } = {
+        ...value,
+        play: vi.fn(),
+        pause: vi.fn(),
+        setData: vi.fn((data: unknown) => {
+          source.data = data;
+        }),
+      };
+      this.sources.set(id, source);
+    }
+    setPaintProperty(id: string, name: string, value: unknown) {
+      this.paint.push([id, name, value]);
     }
     once(event: string, listener: () => void) {
       return this.on(event, listener);
@@ -151,6 +176,7 @@ function fakeRuntime(lit: readonly CellIndex[]): ShadeRuntime {
 const MAP_OPTIONS = { container: "map" } as unknown as MapOptions;
 const ANCHOR = { lng: 30.5234, lat: 50.4501 };
 const SHADE_LAYER_ID = "nilx-one-presence-shade";
+const WORLD_LAYER_ID = "nilx-one-presence-shade-world";
 
 /** The factory wires the layer from a promise, so let that microtask land. */
 async function settle(): Promise<void> {
@@ -231,8 +257,54 @@ describe("shade map factory", () => {
     await settle();
 
     expect(map.addLayerCalls).toEqual([
+      { id: WORLD_LAYER_ID, before: "place-labels" },
       { id: SHADE_LAYER_ID, before: "place-labels" },
     ]);
+  });
+
+  it("fogs the whole Earth beyond the atlas, holed only where it was revealed", async () => {
+    vi.useFakeTimers();
+    try {
+      // The mocked atlas spans lng 0..1, lat 0..1; this cell is far outside.
+      const far = cellAtLngLat({ lng: 30.5234, lat: 50.4501 });
+      let light: (cell: CellIndex) => void = () => undefined;
+      const lit = new Set<CellIndex>();
+      const runtime = fakeRuntime([]);
+      const source: ShadeSource = {
+        ...runtime.source,
+        litCells: () => [...lit],
+        isLit: (cell) => lit.has(cell),
+        onCellLit: (listener) => {
+          light = listener;
+          return () => undefined;
+        },
+      };
+      const map = build({ ...runtime, source });
+      await settle();
+      const world = () =>
+        map.sources.get(WORLD_LAYER_ID)?.data as {
+          geometry: { coordinates: [number, number][][][] };
+        };
+      // The Earth, holed by the atlas square alone.
+      expect(world().geometry.coordinates).toHaveLength(1);
+      expect(world().geometry.coordinates[0]).toHaveLength(2);
+
+      lit.add(far);
+      light(far);
+      await vi.runAllTimersAsync();
+      expect(world().geometry.coordinates[0]).toHaveLength(3);
+
+      // Ground inside the atlas is the atlas's own; the world is untouched.
+      const setData = map.sources.get(WORLD_LAYER_ID)!.setData;
+      vi.mocked(setData).mockClear();
+      const inside = cellAtLngLat({ lng: 0.5, lat: 0.5 });
+      lit.add(inside);
+      light(inside);
+      await vi.runAllTimersAsync();
+      expect(setData).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("redrapes terrain with every new fog frame", async () => {
@@ -261,7 +333,7 @@ describe("shade map factory", () => {
     map.emit("load");
     map.emit("styledata");
 
-    expect(map.addLayerCalls).toHaveLength(1);
+    expect(map.addLayerCalls).toHaveLength(2);
   });
 
   it("waits for the style before adding the layer", async () => {
@@ -272,7 +344,7 @@ describe("shade map factory", () => {
 
     map.styleLoaded = true;
     map.emit("styledata");
-    expect(map.addLayerCalls).toHaveLength(1);
+    expect(map.addLayerCalls).toHaveLength(2);
   });
 
   it("lights the fog for the appearance the style declares, and relights on a swap", async () => {
@@ -288,8 +360,14 @@ describe("shade map factory", () => {
     map.styleMetadata = { "nilx-one:appearance": "light" };
     map.emit("styledata");
     expect(setPalette).toHaveBeenLastCalledWith(LIGHT_FOG_PALETTE);
-    // A swap relights the layer already on the map; it never adds a second.
-    expect(map.addLayerCalls).toHaveLength(1);
+    // The world fog relights with it, in the atlas's floor colour.
+    expect(map.paint.at(-1)).toEqual([
+      WORLD_LAYER_ID,
+      "fill-color",
+      fogFloorCss(LIGHT_FOG_PALETTE),
+    ]);
+    // A swap relights the layers already on the map; it never adds more.
+    expect(map.addLayerCalls).toHaveLength(2);
   });
 
   it("lets a host supply its own palettes per appearance", async () => {
