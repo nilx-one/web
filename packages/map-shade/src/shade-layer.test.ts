@@ -45,6 +45,7 @@ function backend(kind: FogBackend["kind"]): FogBackend {
 function source(initial = [cell]) {
   let cells = new Set(initial);
   const added = new Set<(cell: string) => void>();
+  const removed = new Set<(cell: string) => void>();
   const resets = new Set<() => void>();
   return {
     litCells: () => [...cells],
@@ -53,6 +54,12 @@ function source(initial = [cell]) {
       added.add(fn);
       return () => {
         added.delete(fn);
+      };
+    },
+    onCellUnlit(fn) {
+      removed.add(fn);
+      return () => {
+        removed.delete(fn);
       };
     },
     onReset(fn) {
@@ -65,15 +72,20 @@ function source(initial = [cell]) {
       cells.add(cell);
       for (const fn of added) fn(cell);
     },
+    remove(cell: string) {
+      cells.delete(cell);
+      for (const fn of removed) fn(cell);
+    },
     reset(next: string[]) {
       cells = new Set(next);
       for (const fn of resets) fn();
     },
     get listeners() {
-      return added.size + resets.size;
+      return added.size + removed.size + resets.size;
     },
   } satisfies ShadeSource & {
     add(cell: string): void;
+    remove(cell: string): void;
     reset(next: string[]): void;
     readonly listeners: number;
   };
@@ -244,6 +256,21 @@ describe("geographic fog surface", () => {
     await vi.runAllTimersAsync();
     expect(context.fill).toHaveBeenCalledOnce();
     expect(vi.mocked(gpu.render).mock.calls.at(-1)![2]).toBe(true);
+  });
+  it("closes one cell without veiling or rebuilding the surface", async () => {
+    const neighbour = gridDisk(cell, 1).find((next) => next !== cell)!;
+    const cells = source([cell, neighbour]);
+    const { onFrame } = mount({ source: cells });
+    await vi.runAllTimersAsync();
+    filled.length = 0;
+    vi.mocked(context.fill).mockClear();
+    cells.remove(cell);
+    await vi.runAllTimersAsync();
+    // Black over the closed cell, then its still-open neighbour redrawn.
+    expect(fills()).not.toContain(MIST);
+    expect(context.fill).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(gpu.render).mock.calls.at(-1)![2]).toBe(true);
+    expect(onFrame).toHaveBeenCalledTimes(2);
   });
   it("does not publish a half-loaded cold journal", async () => {
     const cells = gridDisk(cell, 14);

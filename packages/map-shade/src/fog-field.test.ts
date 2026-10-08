@@ -339,8 +339,13 @@ describe("transient occupied ground", () => {
     field.bindOwner?.("owner");
     const resolved = (await runtime)!;
     const reset = vi.fn();
+    const lit = vi.fn();
+    const unlit = vi.fn();
     resolved.source.onReset?.(reset);
+    resolved.source.onCellLit(lit);
+    resolved.source.onCellUnlit?.(unlit);
     field.setOccupied?.(HERE);
+    expect(lit).toHaveBeenCalledWith(HERE_CELL);
     expect(field.isRevealed(HERE_CELL)).toBe(true);
     expect(resolved.source.isLit(HERE_CELL)).toBe(true);
     expect(resolved.source.litCells()).toContain(HERE_CELL);
@@ -348,7 +353,25 @@ describe("transient occupied ground", () => {
     expect(storage.values.size).toBe(0);
     field.setOccupied?.(undefined);
     expect(field.isRevealed(HERE_CELL)).toBe(false);
-    expect(reset).toHaveBeenCalledTimes(2);
+    expect(unlit).toHaveBeenCalledWith(HERE_CELL);
+    // Walking opens and closes single cells; it never rebuilds the surface.
+    expect(reset).not.toHaveBeenCalled();
+  });
+  it("keeps a revealed cell open when the Bond walks off it", async () => {
+    const local = journal([]);
+    const { field, runtime } = createFogField(local.runtime, memoryStorage());
+    field.bindOwner?.("owner");
+    const resolved = (await runtime)!;
+    field.reveal(HERE_CELL);
+    const lit = vi.fn();
+    const unlit = vi.fn();
+    resolved.source.onCellLit(lit);
+    resolved.source.onCellUnlit?.(unlit);
+    field.setOccupied?.(HERE);
+    field.setOccupied?.(undefined);
+    expect(lit).not.toHaveBeenCalled();
+    expect(unlit).not.toHaveBeenCalled();
+    expect(resolved.source.isLit(HERE_CELL)).toBe(true);
   });
   it("notifies the renderer to replace the old owner's mask", async () => {
     const { field, runtime } = createFogField(
