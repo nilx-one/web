@@ -113,6 +113,23 @@ function curiousCore(): Pick<CoreRuntimePort, "avaiaDriveStep"> {
   };
 }
 
+/** Contract-compatible stub for map tests that explicitly exercise fog work. */
+function nearbyProximityCore(): Pick<CoreRuntimePort, "avaiaProximity"> {
+  return {
+    avaiaProximity: async (distanceMeters, artifacts) => {
+      const canReveal = distanceMeters < 4_500;
+      return {
+        distance_m: distanceMeters,
+        red_m: 5_000,
+        restore_below_m: 4_500,
+        level: distanceMeters <= 15 ? "near" : "working",
+        can_reveal: canReveal,
+        duration_ms: canReveal ? 60_000 + artifacts * 0 : null,
+      };
+    },
+  };
+}
+
 interface ViewOverrides {
   findItems?: Partial<CoreRuntimePort>;
   committedAwards?: CommittedAwardAccessPort;
@@ -2117,6 +2134,7 @@ describe("AuthenticatedMapHomeView", () => {
       );
       renderView({
         mapRenderer,
+        findItems: nearbyProximityCore(),
         geolocation: createGeolocationDouble({ position: here }),
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
       });
@@ -2124,6 +2142,9 @@ describe("AuthenticatedMapHomeView", () => {
         expect(
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
+      );
+      await vi.waitFor(() =>
+        expect(screen.getByText("0m")).toBeVisible(),
       );
       // Standing in a cell is enough to lift it: the person is there.
       expect(fog.isRevealed(fog.cellAt(here).id)).toBe(true);
@@ -2171,6 +2192,7 @@ describe("AuthenticatedMapHomeView", () => {
       );
       renderView({
         mapRenderer,
+        findItems: nearbyProximityCore(),
         geolocation: createGeolocationDouble({ position: here }),
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
       });
@@ -2178,6 +2200,9 @@ describe("AuthenticatedMapHomeView", () => {
         expect(
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
+      );
+      await vi.waitFor(() =>
+        expect(screen.getByText("0m")).toBeVisible(),
       );
 
       act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
@@ -2202,6 +2227,7 @@ describe("AuthenticatedMapHomeView", () => {
       );
       renderView({
         mapRenderer,
+        findItems: nearbyProximityCore(),
         geolocation: createGeolocationDouble({ position: here }),
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
       });
@@ -2209,6 +2235,9 @@ describe("AuthenticatedMapHomeView", () => {
         expect(
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
+      );
+      await vi.waitFor(() =>
+        expect(screen.getByText("0m")).toBeVisible(),
       );
 
       act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
@@ -2229,6 +2258,7 @@ describe("AuthenticatedMapHomeView", () => {
       );
       renderView({
         mapRenderer,
+        findItems: nearbyProximityCore(),
         geolocation: createGeolocationDouble({ position: here }),
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
       });
@@ -2236,6 +2266,9 @@ describe("AuthenticatedMapHomeView", () => {
         expect(
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
+      );
+      await vi.waitFor(() =>
+        expect(screen.getByText("0m")).toBeVisible(),
       );
 
       act(() =>
