@@ -237,28 +237,37 @@ export function useFogReveal({
 
   // A disabled Core capability freezes running work; resuming shifts the
   // start so blocked wall-clock time never counts toward completed work.
+  // Persist from an asynchronous effect callback to avoid render cascades.
   useEffect(() => {
     if (!enforceProximity || jobs.length === 0) return;
+    const needsPause =
+      !canReveal && jobs.some((job) => job.pausedAt === undefined);
+    const needsResume =
+      canReveal && jobs.some((job) => job.pausedAt !== undefined);
+    if (!needsPause && !needsResume) return;
     const now = Date.now();
-    if (!canReveal && jobs.some((job) => job.pausedAt === undefined)) {
+    let cancelled = false;
+    globalThis.queueMicrotask(() => {
+      if (cancelled) return;
       updateJobs((current) =>
-        current.map((job) =>
-          job.pausedAt === undefined ? { ...job, pausedAt: now } : job,
-        ),
+        current.map((job) => {
+          if (needsPause && job.pausedAt === undefined) {
+            return { ...job, pausedAt: now };
+          }
+          if (needsResume && job.pausedAt !== undefined) {
+            return {
+              ...job,
+              startedAt: job.startedAt + now - job.pausedAt,
+              pausedAt: undefined,
+            };
+          }
+          return job;
+        }),
       );
-    } else if (canReveal && jobs.some((job) => job.pausedAt !== undefined)) {
-      updateJobs((current) =>
-        current.map((job) =>
-          job.pausedAt === undefined
-            ? job
-            : {
-                ...job,
-                startedAt: job.startedAt + now - job.pausedAt,
-                pausedAt: undefined,
-              },
-        ),
-      );
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [enforceProximity, canReveal, jobs, updateJobs]);
 
   // A reveal ends on the wall clock, so one that finished while the page was
