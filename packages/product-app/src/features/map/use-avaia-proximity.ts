@@ -81,9 +81,9 @@ export function useAvaiaProximity({
     latest.current = { bondPoint, getAvaiaPoint };
   });
   const sample = useRef<(() => void) | undefined>(undefined);
-  const observeAvaia = useRef<
-    ((point: MapPointSelection) => void) | undefined
-  >(undefined);
+  const observeAvaia = useRef<((point: MapPointSelection) => void) | undefined>(
+    undefined,
+  );
 
   const evaluate = core?.avaiaProximity;
   useEffect(() => {
