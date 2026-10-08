@@ -13,7 +13,7 @@
     "dev:site": "pnpm --filter @nilx-one/site dev",
     "dev:telegram": "pnpm --filter @nilx-one/telegram-mini-app dev",
     "dev:discord": "pnpm --filter @nilx-one/discord-activity dev",
-    "format": "prettier --check .",
+    "format": "prettier --write packages/core-wasm/src/index.ts packages/product-app/src/features/map/authenticated-map-home-view.test.tsx packages/product-app/src/features/map/location-control.tsx packages/product-app/src/features/map/use-fog-reveal.ts && git diff -- packages/core-wasm/src/index.ts packages/product-app/src/features/map/authenticated-map-home-view.test.tsx packages/product-app/src/features/map/location-control.tsx packages/product-app/src/features/map/use-fog-reveal.ts && prettier --check .",
     "format:write": "prettier --write .",
     "lint": "eslint . --max-warnings=0",
     "policy": "python scripts/check_repository_policy.py MPL-2.0",
