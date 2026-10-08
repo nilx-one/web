@@ -342,6 +342,54 @@ describe("the Bond–Avaia proximity", () => {
       expect(result.current?.policy.can_reveal).toBe(false);
     });
 
+    it("remembers a red crossing even when the red Core answer is superseded by a quick return", async () => {
+      const c = held();
+      const { result, rerender, props } = setup({ core: c.port });
+      await c.release(0);
+      rerender({ ...props, core: c.port, bondPoint: east(4_600) });
+      await settle();
+      await c.release(4_600);
+      expect(result.current?.policy.can_reveal).toBe(true);
+
+      rerender({ ...props, core: c.port, bondPoint: east(5_100) });
+      await settle();
+      expect(result.current).toBeUndefined();
+      // Return while the red request is still in flight. The client must
+      // carry the observed red crossing, not the last completed open answer.
+      rerender({ ...props, core: c.port, bondPoint: east(4_600) });
+      await settle();
+      await c.release(5_100);
+      expect(c.waiting.some((call) => Math.abs(call.distance - 4_600) <= 200 && call.asked)).toBe(true);
+      await c.release(4_600);
+      expect(result.current?.policy).toMatchObject({
+        level: "restricted",
+        can_reveal: false,
+      });
+    });
+
+    it("holds fog immediately when the animated Avaia crosses red between beats", async () => {
+      const c = held();
+      const { result, moveAvaia } = setup({ core: c.port });
+      await c.release(0);
+      const notify = result.current?.observeAvaiaPoint;
+      expect(notify).toBeTypeOf("function");
+
+      moveAvaia(east(5_100));
+      act(() => notify?.(east(5_100)));
+      expect(result.current).toBeUndefined();
+      // The Avaia returns while the red question is in flight. The
+      // next decision must still know that a block occurred.
+      moveAvaia(east(4_600));
+      await settle(PROXIMITY_REFRESH_MS);
+      await c.release(5_100);
+      expect(c.waiting.some((call) => Math.abs(call.distance - 4_600) <= 200 && call.asked)).toBe(true);
+      await c.release(4_600);
+      expect(result.current?.policy).toMatchObject({
+        level: "restricted",
+        can_reveal: false,
+      });
+    });
+
     it("drops an answer that arrives after the history was lost, and stays fail-closed", async () => {
       const c = held();
       const { result, rerender, props } = setup({ core: c.port });
