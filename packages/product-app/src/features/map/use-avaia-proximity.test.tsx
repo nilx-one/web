@@ -359,7 +359,11 @@ describe("the Bond–Avaia proximity", () => {
       rerender({ ...props, core: c.port, bondPoint: east(4_600) });
       await settle();
       await c.release(5_100);
-      expect(c.waiting.some((call) => Math.abs(call.distance - 4_600) <= 200 && call.asked)).toBe(true);
+      expect(
+        c.waiting.some(
+          (call) => Math.abs(call.distance - 4_600) <= 200 && call.asked,
+        ),
+      ).toBe(true);
       await c.release(4_600);
       expect(result.current?.policy).toMatchObject({
         level: "restricted",
@@ -382,7 +386,11 @@ describe("the Bond–Avaia proximity", () => {
       moveAvaia(east(4_600));
       await settle(PROXIMITY_REFRESH_MS);
       await c.release(5_100);
-      expect(c.waiting.some((call) => Math.abs(call.distance - 4_600) <= 200 && call.asked)).toBe(true);
+      expect(
+        c.waiting.some(
+          (call) => Math.abs(call.distance - 4_600) <= 200 && call.asked,
+        ),
+      ).toBe(true);
       await c.release(4_600);
       expect(result.current?.policy).toMatchObject({
         level: "restricted",
