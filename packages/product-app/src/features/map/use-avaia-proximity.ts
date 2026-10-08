@@ -22,12 +22,23 @@ export const PROXIMITY_STALE_MS = 3 * PROXIMITY_REFRESH_MS;
  */
 const QUOTED_ARTIFACTS = [0, 1, 2, 3, 4, 5] as const;
 
+function measuredMeters(
+  bond: MapPointSelection | undefined,
+  avaia: MapPointSelection | undefined,
+): number | undefined {
+  if (bond === undefined || avaia === undefined) return undefined;
+  const meters = Math.max(0, Math.floor(mapDistanceMeters(bond, avaia)));
+  return Number.isSafeInteger(meters) ? meters : undefined;
+}
+
 /** Snapshot of Core's decision for a single observed Bond/Avaia distance. */
 export interface AvaiaProximitySnapshot {
   /** Core's answer for the distance, with no artifacts: the capability. */
   readonly policy: AvaiaProximityPolicy;
   /** Core's reveal duration for a cell with `artifacts`; `null` when blocked. */
   durationFor(artifacts: number): number | null;
+  /** Report the body actually drawn by the animation loop, including a red crossing between polling beats. */
+  observeAvaiaPoint?(point: MapPointSelection): void;
 }
 
 export interface AvaiaProximityInput {
@@ -70,6 +81,7 @@ export function useAvaiaProximity({
     latest.current = { bondPoint, getAvaiaPoint };
   });
   const sample = useRef<(() => void) | undefined>(undefined);
+  const observeAvaia = useRef<((point: MapPointSelection) => void) | undefined>(undefined);
 
   const evaluate = core?.avaiaProximity;
   useEffect(() => {
@@ -82,6 +94,9 @@ export function useAvaiaProximity({
     let requested = 0;
     let epoch = 0;
     let previouslyBlocked = true;
+    let observedMeters: number | undefined;
+    // Red is taken from a validated Core answer; Web never sets a competing threshold.
+    let redMeters: number | undefined;
     let remembered:
       { key: string; snapshot: AvaiaProximitySnapshot } | undefined;
     let expiry: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -116,11 +131,8 @@ export function useAvaiaProximity({
         forget();
         return;
       }
-      const meters = Math.max(
-        0,
-        Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)),
-      );
-      if (!Number.isSafeInteger(meters)) {
+      const meters = measuredMeters(bondPoint, avaiaPoint);
+      if (meters === undefined) {
         forget();
         return;
       }
@@ -159,6 +171,7 @@ export function useAvaiaProximity({
         const durations = values.map((p) => p.duration_ms);
         const snapshot: AvaiaProximitySnapshot = {
           policy: first,
+          observeAvaiaPoint: (point) => observeAvaia.current?.(point),
           durationFor: (artifacts) =>
             durations[
               Math.min(
@@ -168,6 +181,7 @@ export function useAvaiaProximity({
             ] ?? null,
         };
         previouslyBlocked = !first.can_reveal;
+        redMeters = first.red_m;
         // Keyed by what was asked: the next question carries the new bit, and
         // is answered from here again only if it is the same question.
         remembered = { key: `${meters}|${asked}`, snapshot };
@@ -179,10 +193,34 @@ export function useAvaiaProximity({
       }
     };
 
-    // `moved`: a position changed, so whatever is in flight is superseded.
-    // The beat only renews; it must not strand a slow answer forever.
-    const refresh = (moved: boolean): void => {
-      if (moved) requested += 1;
+    // Red is an unconditional Core boundary: record it before any async
+    // evaluation, including while an older call is still unresolved. Never
+    // drop that observed transition just because the body returns to the band.
+    const holdAtRed = (meters: number | undefined): boolean => {
+      if (
+        redMeters === undefined ||
+        meters === undefined ||
+        meters < redMeters ||
+        previouslyBlocked
+      ) return false;
+      previouslyBlocked = true;
+      remembered = undefined;
+      requested += 1; // invalidate the old, open in-flight answer
+      if (live) setState(undefined);
+      return true;
+    };
+
+    // Observe BOTH bodies on the regular beat. An Avaia moving independently
+    // supersedes an in-flight answer just like an observed Bond movement.
+    const refresh = (): void => {
+      const { bondPoint, getAvaiaPoint } = latest.current;
+      const meters = measuredMeters(bondPoint, getAvaiaPoint());
+      if (meters !== observedMeters) {
+        observedMeters = meters;
+        requested += 1;
+      }
+      holdAtRed(meters);
+      if (meters === undefined) forget();
       if (busy) {
         again = true;
         return;
@@ -199,16 +237,19 @@ export function useAvaiaProximity({
         }
       })();
     };
-    sample.current = () => refresh(true);
+    // Animation frames are already produced for the walking Avaia. Only the
+    // red crossing is urgent; ordinary changes still use the 2 s beat.
+    observeAvaia.current = (point) => {
+      if (holdAtRed(measuredMeters(latest.current.bondPoint, point))) refresh();
+    };
+    sample.current = refresh;
 
-    refresh(false);
-    const timer = globalThis.setInterval(
-      () => refresh(false),
-      PROXIMITY_REFRESH_MS,
-    );
+    refresh();
+    const timer = globalThis.setInterval(refresh, PROXIMITY_REFRESH_MS);
     return () => {
       live = false;
       sample.current = undefined;
+      observeAvaia.current = undefined;
       globalThis.clearInterval(timer);
       if (expiry !== undefined) globalThis.clearTimeout(expiry);
     };
