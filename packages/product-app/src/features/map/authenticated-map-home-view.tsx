@@ -1340,7 +1340,7 @@ export function AuthenticatedMapHomeView({
       accuracyMeters: observedPosition.accuracyMeters,
     });
     const stance =
-      wheel === "avaia" && handover === undefined
+      wheel === "avaia"
         ? avaiaWalk.stance(globalThis.performance.now())
         : undefined;
     renderer.setObservedPositionLabel(wheelLabelRef.current(stance?.point));

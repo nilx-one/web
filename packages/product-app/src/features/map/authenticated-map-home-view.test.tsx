@@ -1624,6 +1624,10 @@ describe("AuthenticatedMapHomeView", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
       );
+      expect(lastLabel(mapRenderer)?.at).toEqual([
+        there.longitude,
+        there.latitude,
+      ]);
       const camera = vi.mocked(mapRenderer.setCamera).mock.lastCall?.[0];
       expect(camera?.center).toEqual([there.longitude, there.latitude]);
       act(() => vi.advanceTimersByTime(2_000));
