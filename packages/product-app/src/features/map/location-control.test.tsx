@@ -60,7 +60,7 @@ describe("LocationControl localization", () => {
     );
     expect(container.querySelector("[data-proximity='near']")).not.toBeNull();
     expect(screen.getByText("15m")).toBeVisible();
-    screen.getByRole("button", { name: "Recenter map on this device" }).click();
+    screen.getByRole("button", { name: "Recenter on this device" }).click();
     expect(onActivate).toHaveBeenCalledTimes(1);
     rerender(
       <LocationControl
