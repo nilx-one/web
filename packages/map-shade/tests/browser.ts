@@ -46,11 +46,18 @@ async function main() {
   const frames: Uint8ClampedArray[] = [];
   let display: HTMLCanvasElement | undefined;
   for (const backend of backends) {
-    await backend.render(
-      atlas.mask,
-      fogParameters(atlas, DARK_FOG_PALETTE, [], 0, 0.97),
-      true,
-    );
+    try {
+      await backend.render(
+        atlas.mask,
+        fogParameters(atlas, DARK_FOG_PALETTE, [], 0, 0.97),
+        true,
+      );
+    } catch (error) {
+      if (backend.kind !== "webgpu") throw error;
+      report.webgpuUnavailable = String(error);
+      backend.dispose();
+      continue;
+    }
     const first = copy(backend);
     display = first.canvas;
     frames.push(first.pixels);
