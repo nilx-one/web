@@ -39,11 +39,18 @@ const copy = (backend: FogBackend) => {
 
 async function main() {
   const backends: FogBackend[] = [createWebGlFog(atlas.size, () => {})];
-  try {
-    backends.push(await createWebGpuFog(atlas.size, () => {}));
-  } catch (error) {
-    report.webgpuUnavailable = String(error);
-  }
+  // `?webgpu=0` keeps WebGPU out of the page: where a failed WebGPU attempt
+  // drops the GPU instance (headless SwiftShader), it blanks every 2D canvas
+  // in the page, MapLibre's drape included. The checker reads parity from one
+  // page and geography from another.
+  const webgpu = new URLSearchParams(location.search).get("webgpu") !== "0";
+  if (webgpu)
+    try {
+      backends.push(await createWebGpuFog(atlas.size, () => {}));
+    } catch (error) {
+      report.webgpuUnavailable = String(error);
+    }
+  else report.webgpuSkipped = true;
   const frames: Uint8ClampedArray[] = [];
   for (const backend of backends) {
     try {

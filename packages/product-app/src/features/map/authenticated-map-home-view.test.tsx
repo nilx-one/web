@@ -65,6 +65,7 @@ import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import {
   AuthenticatedMapHomeView,
+  levelFill,
   type ConnectedProvider,
 } from "./authenticated-map-home-view";
 
@@ -527,6 +528,29 @@ describe("AuthenticatedMapHomeView", () => {
   });
 
   describe("the Dock's inventory action", () => {
+    it.each([
+      {
+        seat: "bond" as const,
+        standing: { level: 1, xp: 225, nextLevelXp: 400 },
+        expected: 0.5,
+      },
+      {
+        seat: "avaia" as const,
+        standing: { level: 3, xp: 375, nextLevelXp: 450 },
+        expected: 0.5,
+      },
+      {
+        seat: "avaia" as const,
+        standing: { level: 0, xp: 0, nextLevelXp: 0 },
+        expected: 0,
+      },
+    ])(
+      "fills by progress within the current $seat level",
+      ({ seat, standing, expected }) => {
+        expect(levelFill(standing, seat)).toBe(expected);
+      },
+    );
+
     const pending = () => new Promise<never>(() => undefined);
     const inventoryHost = {
       findItems: {
@@ -542,7 +566,9 @@ describe("AuthenticatedMapHomeView", () => {
     it("sits left of edit only where the inventory can be kept", () => {
       const { unmount } = renderView();
       expect(
-        screen.queryByRole("button", { name: "Inventory of x0skai" }),
+        screen.queryByRole("button", {
+          name: "Status and inventory of x0skai",
+        }),
       ).not.toBeInTheDocument();
       unmount();
 
@@ -550,14 +576,22 @@ describe("AuthenticatedMapHomeView", () => {
       const actions = [
         ...document.querySelectorAll(".bond-dock__header-actions button"),
       ].map((button) => button.getAttribute("aria-label"));
-      expect(actions).toEqual(["Inventory of x0skai", "Edit x0skai"]);
+      expect(actions).toEqual([
+        "Status and inventory of x0skai",
+        "Edit x0skai",
+      ]);
+      const glyph = screen.getByRole("button", {
+        name: "Status and inventory of x0skai",
+      });
+      expect(glyph).toHaveTextContent("");
+      expect(glyph.querySelector("svg")).not.toBeNull();
     });
 
     it("opens what the driving Avaia carries, under its own state", () => {
       const { container } = renderView(inventoryHost);
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Inventory of x0skai" }),
+        screen.getByRole("button", { name: "Status and inventory of x0skai" }),
       );
 
       const header = container.querySelector(".bond-dock__detail-header");
@@ -578,7 +612,7 @@ describe("AuthenticatedMapHomeView", () => {
       );
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Inventory of 0x0sky" }),
+        screen.getByRole("button", { name: "Status and inventory of 0x0sky" }),
       );
 
       expect(
