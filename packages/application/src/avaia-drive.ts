@@ -194,3 +194,13 @@ export type AvaiaLifeAnswer =
       readonly home: { readonly longitude: number; readonly latitude: number };
     }
   | { readonly ok: false; readonly error: string };
+
+/** Core's distance-derived capability projection, independent of camera and wheel. */
+export interface AvaiaProximityPolicy {
+  readonly distance_m: number;
+  readonly red_m: number;
+  readonly restore_below_m: number;
+  readonly level: "near" | "working" | "restricted" | "red";
+  readonly can_reveal: boolean;
+  readonly duration_ms: number | null;
+}
