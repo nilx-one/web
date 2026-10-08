@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { cellToLatLng, gridDisk, latLngToCell } from "h3-js";
-import { Map as MapLibreMap, addProtocol, type CanvasSource } from "maplibre-gl";
+import {
+  Map as MapLibreMap,
+  addProtocol,
+  type CanvasSource,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { createFogAtlas } from "../src/fog-atlas";
