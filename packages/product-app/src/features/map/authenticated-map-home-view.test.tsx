@@ -65,6 +65,7 @@ import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import {
   AuthenticatedMapHomeView,
+  levelFill,
   type ConnectedProvider,
 } from "./authenticated-map-home-view";
 
@@ -527,6 +528,30 @@ describe("AuthenticatedMapHomeView", () => {
   });
 
   describe("the Dock's inventory action", () => {
+    it.each([
+      {
+        seat: "bond" as const,
+        standing: { level: 1, xp: 225, nextLevelXp: 400 },
+        expected: 0.5,
+      },
+      {
+        seat: "avaia" as const,
+        standing: { level: 3, xp: 375, nextLevelXp: 450 },
+        expected: 0.5,
+      },
+      {
+        seat: "avaia" as const,
+        standing: { level: 0, xp: 0, nextLevelXp: 0 },
+        expected: 0,
+      },
+    ])("fills by progress within the current $seat level", ({
+      seat,
+      standing,
+      expected,
+    }) => {
+      expect(levelFill(standing, seat)).toBe(expected);
+    });
+
     const pending = () => new Promise<never>(() => undefined);
     const inventoryHost = {
       findItems: {

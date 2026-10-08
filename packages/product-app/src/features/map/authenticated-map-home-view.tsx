@@ -151,6 +151,8 @@ import { studiedBy } from "./landmark-notebook";
 import { placeLandmark } from "./place-affinity";
 import {
   ACHIEVEMENTS,
+  avaiaExperienceForLevel,
+  bondExperienceForLevel,
   earnDeviceAchievement,
   markSettingsHintSeen,
   progressionSnapshot,
@@ -393,8 +395,13 @@ const FIND_TOAST_MS = 6_000;
  */
 export const GUIDE_INTRO_DELAY_MS = 1_800;
 
-function levelFill(standing: LevelStanding): number {
-  return standing.nextLevelXp > 0 ? standing.xp / standing.nextLevelXp : 0;
+export function levelFill(standing: LevelStanding, seat: DockSeat): number {
+  const currentLevelXp =
+    seat === "avaia"
+      ? avaiaExperienceForLevel(standing.level)
+      : bondExperienceForLevel(standing.level);
+  const levelSpan = standing.nextLevelXp - currentLevelXp;
+  return levelSpan > 0 ? (standing.xp - currentLevelXp) / levelSpan : 0;
 }
 
 /**
@@ -1833,6 +1840,7 @@ export function AuthenticatedMapHomeView({
       ? avaiaLife.energy / 10_000
       : levelFill(
           dock.configure.seat === "avaia" ? standing.avaia : standing.bond,
+          dock.configure.seat,
         );
 
   /**
