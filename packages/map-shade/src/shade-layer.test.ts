@@ -18,6 +18,7 @@ import {
   fogColor,
   type FogZone,
 } from "./fog-palette";
+import { FOG_FRAGMENT_SHADER } from "./fog-shader";
 import {
   createShadeLayer,
   documentVisibility,
@@ -744,5 +745,19 @@ describe("document visibility", () => {
     document.dispatchEvent(new Event("visibilitychange"));
 
     expect(heard).toEqual([false, true]);
+  });
+});
+
+// Shader contract: perspective haze may use screen height, but the mist's
+// directional illumination must belong to the ground across camera changes.
+describe("fog world lighting", () => {
+  it("anchors shafts and relief to ground coordinates", () => {
+    // Only aerial perspective can read a framebuffer coordinate. Directional
+    // relief may differentiate screen samples only to recover a ground slope.
+    expect(FOG_FRAGMENT_SHADER.match(/gl_FragCoord/g)).toHaveLength(1);
+    expect(FOG_FRAGMENT_SHADER).toMatch(/float screenY = gl_FragCoord\.y/);
+    expect(FOG_FRAGMENT_SHADER).not.toContain(
+      "vec2(dFdx(cloud), dFdy(cloud)) *",
+    );
   });
 });
