@@ -15,7 +15,7 @@ A find goes into its finder's grid when its pick-up award is **kept**, that is, 
 
 ## What a person does with them
 
-**Inventory** (Ukrainian: «Рюкзак»), on the Bond's screen in the Dock, shows both grids and the balance. Tap a thing to:
+**Inventory** (Ukrainian: «Рюкзак») opens from the Dock's header, the button left of «змінити»: for whoever is driving, the Bond or its Avaia, it shows their state (level, and the Avaia's energy) and their grid first, then the other's and the balance. The Bond's screen in the Dock opens it too. Tap a thing to:
 
 - **sell** it from the Bond's grid, for Core's price. Things nobody buys say so;
 - **hand it across**: from the Avaia to the Bond, or back.
