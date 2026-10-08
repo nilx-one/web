@@ -284,9 +284,12 @@ describe("revealing the fog around a Bond", () => {
       owner: "0x0sky",
       enforceProximity: true,
     };
-    const { result, rerender } = renderHook((props: FogRevealInput) => useFogReveal(props), {
-      initialProps: base,
-    });
+    const { result, rerender } = renderHook(
+      (props: FogRevealInput) => useFogReveal(props),
+      {
+        initialProps: base,
+      },
+    );
     expect(result.current.handleFogTap(NEXT_DOOR)).toBe("out-of-reach");
     rerender({ ...base, proximity: near });
     act(() => void result.current.handleFogTap(NEXT_DOOR));
