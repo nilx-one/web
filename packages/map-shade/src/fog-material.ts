@@ -7,11 +7,28 @@ import type { FogAtlas } from "./fog-atlas";
 import {
   DEFAULT_FOG_ZONE_FEATHER_M,
   MAX_FOG_ZONES,
+  type FogColor,
   type FogPalette,
   type FogZone,
 } from "./fog-palette";
 
 export const FOG_PARAMETER_VECTORS = 4 + MAX_FOG_ZONES * 4;
+
+/**
+ * The mist's mean colour: what its clouds average to, and what they settle
+ * into at the atlas edge, where the flat world fog takes over seamlessly.
+ */
+export function fogFloor(palette: FogPalette): FogColor {
+  return [0, 1, 2].map(
+    (channel) => (palette.shadow[channel]! + palette.light[channel]!) / 2,
+  ) as unknown as FogColor;
+}
+
+/** `fogFloor` as a CSS colour, for the canvas veil and the world fog. */
+export function fogFloorCss(palette: FogPalette, alpha = 1): string {
+  const [r, g, b] = fogFloor(palette).map((value) => Math.round(value * 255));
+  return `rgb(${r} ${g} ${b} / ${alpha})`;
+}
 
 /** Shared ABI for both GPU backends; all distances are world metres. */
 export function fogParameters(
@@ -48,6 +65,9 @@ export function fogParameters(
 
 // Mask sampling, wavelengths, colour and animation agree across these two
 // shader dialects. Coverage is tested FIRST, and never displaced by noise.
+// Over the outer tenth of the atlas the clouds and zones settle into the
+// palette's opaque floor colour, which the flat world fog beyond it wears:
+// where the two overlap, opaque over opaque leaves no seam.
 export const ATLAS_GLSL = `#version 300 es
 precision highp float;
 uniform sampler2D u_mask;
@@ -62,17 +82,20 @@ void main() {
   vec2 m = (uv - 0.5) * p[0].x;
   vec2 wind = vec2(p[0].y * 0.7, p[0].y * -0.3);
   float cloud = 0.5 + 0.22 * noise2((m + wind) / 80.0) + 0.16 * noise2((m - wind * 0.4) / 210.0) + 0.1 * noise2(m / 530.0);
+  float edge = smoothstep(0.4 * p[0].x, 0.5 * p[0].x, max(abs(m.x), abs(m.y)));
+  cloud = mix(cloud, 0.5, edge);
   vec3 shadow = p[1].rgb; vec3 light = p[2].rgb; vec3 glow = p[3].rgb;
   for (int i = 0; i < ${MAX_FOG_ZONES}; i++) {
     if (float(i) >= p[0].w) break;
     int j = 4 + i * 4;
-    float w = 1.0 - smoothstep(p[j].z, p[j].z + p[j].w, distance(m, p[j].xy));
+    float w = (1.0 - smoothstep(p[j].z, p[j].z + p[j].w, distance(m, p[j].xy))) * (1.0 - edge);
     shadow = mix(shadow, p[j+1].rgb, w); light = mix(light, p[j+2].rgb, w); glow = mix(glow, p[j+3].rgb, w);
   }
   vec2 d = vec2(60.0 / p[0].x, 0.0);
   float rim = (texture(u_mask, uv+d).r + texture(u_mask, uv-d).r + texture(u_mask, uv+d.yx).r + texture(u_mask, uv-d.yx).r) * 0.25;
   vec3 rgb = mix(mix(shadow, light, cloud), glow, rim * 0.65);
-  color = vec4(rgb * p[0].z, p[0].z);
+  float alpha = mix(p[0].z, 1.0, edge);
+  color = vec4(rgb * alpha, alpha);
 }`;
 
 export const ATLAS_WGSL = `
@@ -97,16 +120,18 @@ fn noise2(q: vec2f) -> f32 {
   if (textureSampleLevel(mask, sampleMask, uv, 0).r > 0.001) { return vec4f(0); }
   let m = (uv - 0.5) * p[0].x;
   let wind = vec2f(p[0].y * 0.7, p[0].y * -0.3);
-  let cloud = 0.5 + 0.22 * noise2((m + wind) / 80.0) + 0.16 * noise2((m - wind * 0.4) / 210.0) + 0.1 * noise2(m / 530.0);
+  let edge = smoothstep(0.4 * p[0].x, 0.5 * p[0].x, max(abs(m.x), abs(m.y)));
+  let cloud = mix(0.5 + 0.22 * noise2((m + wind) / 80.0) + 0.16 * noise2((m - wind * 0.4) / 210.0) + 0.1 * noise2(m / 530.0), 0.5, edge);
   var shadow = p[1].rgb; var light = p[2].rgb; var glow = p[3].rgb;
   for (var i = 0u; i < ${MAX_FOG_ZONES}u; i++) {
     if (f32(i) >= p[0].w) { break; }
     let j = 4u + i * 4u;
-    let w = 1 - smoothstep(p[j].z, p[j].z + p[j].w, distance(m, p[j].xy));
+    let w = (1 - smoothstep(p[j].z, p[j].z + p[j].w, distance(m, p[j].xy))) * (1 - edge);
     shadow = mix(shadow, p[j+1].rgb, w); light = mix(light, p[j+2].rgb, w); glow = mix(glow, p[j+3].rgb, w);
   }
   let d = vec2f(60 / p[0].x, 0);
   let rim = (textureSampleLevel(mask, sampleMask, uv+d, 0).r + textureSampleLevel(mask, sampleMask, uv-d, 0).r + textureSampleLevel(mask, sampleMask, uv+d.yx, 0).r + textureSampleLevel(mask, sampleMask, uv-d.yx, 0).r) * 0.25;
   let rgb = mix(mix(shadow, light, cloud), glow, rim * 0.65);
-  return vec4f(rgb * p[0].z, p[0].z);
+  let alpha = mix(p[0].z, 1, edge);
+  return vec4f(rgb * alpha, alpha);
 }`;

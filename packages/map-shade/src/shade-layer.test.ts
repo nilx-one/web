@@ -10,6 +10,8 @@ import {
   createWebGpuFog,
   type FogBackend,
 } from "./fog-backend";
+import { fogFloorCss } from "./fog-material";
+import { LIGHT_FOG_PALETTE } from "./fog-palette";
 import {
   createShadeLayer,
   type PageVisibility,
@@ -29,8 +31,8 @@ let gl: FogBackend;
 let context: CanvasRenderingContext2D;
 let filled: string[];
 const fills = () => filled;
-// LIGHT_FOG_PALETTE's shadow, the colour of fog that has drawn no frame yet.
-const MIST = "rgb(144 175 195)";
+// LIGHT_FOG_PALETTE's opaque floor: fog with no frame yet.
+const MIST = fogFloorCss(LIGHT_FOG_PALETTE);
 function backend(kind: FogBackend["kind"]): FogBackend {
   const canvas = document.createElement("canvas");
   return {

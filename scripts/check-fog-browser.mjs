@@ -131,10 +131,44 @@ try {
             }
           }
     }
+    // Far beyond the atlas there is no atlas canvas: the world fog alone
+    // must cover the ground there, with and without terrain.
+    const [lat, lng] = cellToLatLng(cell);
+    for (const terrain of [false, true]) {
+      map.setTerrain(terrain ? { source: "dem", exaggeration: 1 } : null);
+      map.jumpTo({ center: [lng + 0.4, lat], zoom: 14, pitch: 0, bearing: 0 });
+      await idle();
+      context.clearRect(0, 0, 900, 900);
+      context.drawImage(map.getCanvas(), 0, 0, 900, 900);
+      const rgb = Array.from(context.getImageData(450, 450, 1, 1).data);
+      checks.push({
+        terrain,
+        zoom: 14,
+        pitch: 0,
+        bearing: 0,
+        revealed: false,
+        clear: rgb[0] > 245 && rgb[1] > 245 && rgb[2] > 245,
+        inside: true,
+        rgb,
+        beyondAtlas: true,
+      });
+    }
     return checks;
   });
   await mkdir("test-results/fog", { recursive: true });
   await page.screenshot({ path: "test-results/fog/terrain.png" });
+  // The atlas edge, zoomed out: its mist settles into the world fog.
+  await page.evaluate(async () => {
+    const { map, cell, cellToLatLng } = window.fogTest;
+    const [lat, lng] = cellToLatLng(cell);
+    map.setTerrain(null);
+    map.jumpTo({ center: [lng + 0.14, lat], zoom: 11, pitch: 0, bearing: 0 });
+    await new Promise((resolve) => {
+      map.once("idle", resolve);
+      map.triggerRepaint();
+    });
+  });
+  await page.screenshot({ path: "test-results/fog/atlas-edge.png" });
   assert.equal(
     samples.filter(
       (sample) => !sample.inside || sample.clear !== sample.revealed,

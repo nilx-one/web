@@ -10,7 +10,7 @@ import {
   createWebGpuFog,
   type FogBackend,
 } from "./fog-backend";
-import { fogParameters } from "./fog-material";
+import { fogFloorCss, fogParameters } from "./fog-material";
 import {
   LIGHT_FOG_PALETTE,
   requireFogPalette,
@@ -98,9 +98,10 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   // Fog is the default: until a frame proves which ground is open, the
   // surface is solid mist, never a transparent hole onto the map.
   const veil = () => {
-    context.globalCompositeOperation = "source-over";
-    context.fillStyle = `rgb(${palette.shadow.map((value) => Math.round(value * 255)).join(" ")})`;
+    context.globalCompositeOperation = "copy";
+    context.fillStyle = fogFloorCss(palette);
     context.fillRect(0, 0, canvas.width, canvas.height);
+    context.globalCompositeOperation = "source-over";
   };
   veil();
   const present = (frame: HTMLCanvasElement) => {
