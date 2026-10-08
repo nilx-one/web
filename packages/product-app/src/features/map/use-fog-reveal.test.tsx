@@ -277,7 +277,7 @@ describe("revealing the fog around a Bond", () => {
       },
       durationsMs: [null, null, null, null, null, null],
     };
-    const base = {
+    const base: FogRevealInput = {
       renderer,
       bondPoint: BOND,
       observed: undefined,
