@@ -431,6 +431,8 @@ export interface MapFogField {
   isActive(): boolean;
   cellAt(point: MapPointSelection): MapFogCell;
   isRevealed(cellId: string): boolean;
+  /** Transient open ground under this Bond; never a visit or persisted reveal. */
+  setOccupied?(point: MapPointSelection | undefined): void;
   /**
    * The unrevealed cells a Bond standing at `point` can reach into: every
    * cell within `rings` of it that touches open ground — revealed, or the

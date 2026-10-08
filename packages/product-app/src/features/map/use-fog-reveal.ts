@@ -129,6 +129,17 @@ export function useFogReveal({
     fog?.bindOwner?.(owner);
   }, [fog, owner]);
 
+  const occupiedLongitude = bondPoint?.longitude;
+  const occupiedLatitude = bondPoint?.latitude;
+  useEffect(() => {
+    fog?.setOccupied?.(
+      occupiedLongitude === undefined || occupiedLatitude === undefined
+        ? undefined
+        : { longitude: occupiedLongitude, latitude: occupiedLatitude },
+    );
+    return () => fog?.setOccupied?.(undefined);
+  }, [fog, owner, occupiedLongitude, occupiedLatitude]);
+
   const [jobsState, setJobsState] = useState<{
     readonly owner: string;
     readonly jobs: readonly FogRevealJob[];

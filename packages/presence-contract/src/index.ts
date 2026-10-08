@@ -41,6 +41,8 @@ export interface ShadeSource {
   litCells(): readonly CellIndex[];
   isLit(cell: CellIndex): boolean;
   onCellLit(listener: (cell: CellIndex) => void): () => void;
+  /** Membership was replaced (owner or transient occupied cell changed). */
+  onReset?(listener: () => void): () => void;
 }
 
 /** Host observation copied into the zero-dependency presence boundary. */

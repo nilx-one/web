@@ -6,6 +6,8 @@ import {
   Map as MapLibreMap,
   type MapOptions,
   type StyleSpecification,
+  type CanvasSource,
+  type MapMouseEvent,
 } from "maplibre-gl";
 
 import {
@@ -16,7 +18,7 @@ import {
   type FogPalette,
   type FogZone,
 } from "./fog-palette";
-import { cellAtLngLat, type CellTap } from "./pick";
+import { cellAtLngLat, createTapHandler, type CellTap } from "./pick";
 import { createShadeLayer, type PageVisibility } from "./shade-layer";
 
 export interface ShadeRuntime {
@@ -76,55 +78,133 @@ export function createShadeMapFactory(
     const map = new MapLibreMap(mapOptions);
     let removed = false;
 
-    void options.runtime.then((runtime) => {
-      if (runtime === null || removed) return;
-      const layer = createShadeLayer({
-        source: runtime.source,
-        store: runtime.store,
-        anchor: options.anchor,
-        // Keep unrevealed geography as fog rather than a translucent wash:
-        // basemap details must not remain readable through the veil. A pale
-        // mist over dark building faces gives them away sooner than the old
-        // black veil did, so it is denser than the 0.92 that veil needed.
-        shadeAlpha: 0.97,
-        palette:
-          palettes[
-            styleAppearance(map.getStyle() as StyleSpecification | undefined)
-          ],
-        zones,
-        motion: stillness() ? "still" : "drift",
-        ...(options.pageVisibility === undefined
-          ? {}
-          : { visibility: options.pageVisibility }),
-        ...(options.onCellTap === undefined
-          ? {}
-          : { onCellTap: options.onCellTap }),
-      });
-      const ensureLayer = (): void => {
-        if (removed) return;
-        // A style swap is an appearance swap: the fog takes its light from
-        // whichever style it now sits in. Before a style has loaded MapLibre
-        // has none to answer with.
-        const style = map.getStyle() as StyleSpecification | undefined;
-        if (style !== undefined) {
-          layer.setPalette(palettes[styleAppearance(style)]);
+    let dispose: (() => void) | undefined;
+    void options.runtime.then(
+      (runtime) => {
+        if (runtime === null || removed) return;
+        try {
+          const sourceId = "nilx-one-presence-shade-canvas";
+          let publishing = false;
+          const pause = () => {
+            (map.getSource(sourceId) as CanvasSource | undefined)?.pause();
+            publishing = false;
+          };
+          const publish = () => {
+            if (removed) return;
+            const source = map.getSource(sourceId) as CanvasSource | undefined;
+            if (source === undefined) return;
+            // Keep the canvas active through one render so terrain's drape cache
+            // sees the update. Static fog never drives an endless map repaint.
+            source.play();
+            if (!publishing) {
+              publishing = true;
+              map.once("render", pause);
+            }
+          };
+          const layer = createShadeLayer({
+            source: runtime.source,
+            store: runtime.store,
+            anchor: options.anchor,
+            shadeAlpha: 0.97,
+            palette:
+              palettes[
+                styleAppearance(
+                  map.getStyle() as StyleSpecification | undefined,
+                )
+              ],
+            zones,
+            motion: stillness() ? "still" : "drift",
+            ...(options.pageVisibility === undefined
+              ? {}
+              : { visibility: options.pageVisibility }),
+            onFrame: publish,
+            onError: (error) => {
+              if (!removed) map.fire("error", { error });
+            },
+          });
+          const tap = createTapHandler({
+            source: runtime.source,
+            store: runtime.store,
+          });
+          const onClick = (event: MapMouseEvent) => {
+            if (options.onCellTap === undefined) return;
+            void tap(event.lngLat)
+              .then((hit) => {
+                if (hit !== null) return options.onCellTap?.(hit);
+                return undefined;
+              })
+              .catch(() => {
+                if (!removed)
+                  map.fire("error", {
+                    error: new Error("Presence cell could not be opened"),
+                  });
+              });
+          };
+          let ensuring = false;
+          const ensureLayer = () => {
+            if (removed || ensuring) return;
+            ensuring = true;
+            try {
+              const style = map.getStyle() as StyleSpecification | undefined;
+              if (style !== undefined)
+                layer.setPalette(palettes[styleAppearance(style)]);
+              if (!map.isStyleLoaded()) return;
+              if (map.getSource(sourceId) === undefined) {
+                map.addSource(sourceId, {
+                  type: "canvas",
+                  canvas: layer.canvas,
+                  coordinates: layer.coordinates,
+                  animate: false,
+                });
+              }
+              if (map.getLayer(layer.id) !== undefined) return;
+              const firstSymbol = style?.layers?.find(
+                (candidate) => candidate.type === "symbol",
+              )?.id;
+              map.addLayer(
+                {
+                  id: layer.id,
+                  type: "raster",
+                  source: sourceId,
+                  paint: { "raster-fade-duration": 0 },
+                },
+                firstSymbol,
+              );
+              publish();
+            } finally {
+              ensuring = false;
+            }
+          };
+          map.on("styledata", ensureLayer);
+          map.on("load", ensureLayer);
+          map.on("click", onClick);
+          dispose = () => {
+            map.off("styledata", ensureLayer);
+            map.off("load", ensureLayer);
+            map.off("click", onClick);
+            map.off("render", pause);
+            layer.dispose();
+          };
+          ensureLayer();
+        } catch (error) {
+          dispose?.();
+          map.fire("error", {
+            error:
+              error instanceof Error
+                ? error
+                : new Error("Fog initialization failed"),
+          });
         }
-        if (!map.isStyleLoaded() || map.getLayer(layer.id) !== undefined) {
-          return;
-        }
-        const firstSymbol = map
-          .getStyle()
-          .layers?.find((candidate) => candidate.type === "symbol")?.id;
-        map.addLayer(layer, firstSymbol);
-      };
-
-      map.on("styledata", ensureLayer);
-      map.on("load", ensureLayer);
-      ensureLayer();
-    });
+      },
+      () => {
+        if (!removed)
+          map.fire("error", { error: new Error("Fog runtime unavailable") });
+      },
+    );
 
     map.on("remove", () => {
       removed = true;
+      dispose?.();
     });
 
     return map;

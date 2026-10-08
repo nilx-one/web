@@ -19,7 +19,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2024",
-    "types": ["node", "vite/client", "vitest/globals"],
+    "types": ["node", "vite/client", "vitest/globals", "@webgpu/types"],
     "useDefineForClassFields": true,
     "verbatimModuleSyntax": true
   },
