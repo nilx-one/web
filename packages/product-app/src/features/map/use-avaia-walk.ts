@@ -347,8 +347,8 @@ export interface AvaiaWalkState {
   readonly notebook: LandmarkNotebook;
   /** The places this Avaia grew fond of, loved ones first. */
   readonly favourites: readonly FondPlace[];
-  /** Back to the device, silent and still: what taking the wheel starts from. */
-  reset(): void;
+  /** Stop at the current point, preserving the Avaia's own position. */
+  stop(): void;
   /**
    * Sends the body somewhere the application chose rather than a tap — a fog
    * cell it was asked to reveal — as its owner's point B. False when the body
@@ -1356,18 +1356,25 @@ export function useAvaiaWalk({
     [pause, rest, study, walk],
   );
 
-  const reset = useCallback(() => {
+  const stop = useCallback(() => {
+    const nowMs = globalThis.performance.now();
+    const point = currentPoint(nowMs);
+    const bearingDeg = currentBearing(nowMs);
+    const under = latest.current.walk;
+    if (under !== undefined) {
+      const walked = walkedSoFar(under, nowMs);
+      if (walked !== undefined) latest.current.onWalkCompleted?.(walked);
+    }
     era.current += 1;
     if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
     wake.current = undefined;
     setWalk(undefined);
     setStudy(undefined);
     setPause(undefined);
-    setRest(undefined);
+    setRest(point === undefined ? undefined : { point, bearingDeg });
     setSpeech(undefined);
     lastLine.current = undefined;
-    step({ type: "stopped" });
-  }, [setPause, setRest, setStudy, setWalk, step]);
+  }, [currentBearing, currentPoint, setPause, setRest, setStudy, setWalk]);
 
   const walkTo = useCallback(
     (point: MapPointSelection): boolean => {
@@ -1403,10 +1410,10 @@ export function useAvaiaWalk({
       speech,
       notebook,
       favourites: fond,
-      reset,
+      stop,
       walkTo,
       announce: say,
     }),
-    [fond, moving, notebook, reset, say, speech, stance, walkTo],
+    [fond, moving, notebook, stop, say, speech, stance, walkTo],
   );
 }

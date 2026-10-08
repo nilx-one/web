@@ -61,7 +61,7 @@ import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
 import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
-import { rememberWorld } from "./world-memory";
+import { readWorldMemory, rememberWorld } from "./world-memory";
 import {
   AuthenticatedMapHomeView,
   type ConnectedProvider,
@@ -1590,7 +1590,7 @@ describe("AuthenticatedMapHomeView", () => {
       });
       await vi.waitFor(() =>
         expect(
-          screen.getByRole("button", { name: "Map centred on this device" }),
+          screen.getByRole("button", { name: "Focus the world on x0skai" }),
         ).toBeVisible(),
       );
       return mapRenderer;
@@ -1604,6 +1604,35 @@ describe("AuthenticatedMapHomeView", () => {
         .mocked(mapRenderer.avatars!.upsert)
         .mock.calls.map(([handle]) => handle)
         .findLast((handle) => handle.id === "avaia");
+
+    it("keeps Avaia at A through a Bond-at-B round trip and handover", async () => {
+      rememberWorld("0x0sky", { avaia: { ...there, bearingDeg: 90 } });
+      const mapRenderer = await renderWorld();
+      expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+        there.longitude,
+        there.latitude,
+      ]);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      );
+      // The departing Avaia also retains A during its handover animation.
+      expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+        there.longitude,
+        there.latitude,
+      ]);
+      act(() => vi.advanceTimersByTime(2_000));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
+      );
+      const camera = vi.mocked(mapRenderer.setCamera).mock.lastCall?.[0];
+      expect(camera?.center).toEqual([there.longitude, there.latitude]);
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+        there.longitude,
+        there.latitude,
+      ]);
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(there);
+    });
 
     it("walks where its owner taps, and says so on its card", async () => {
       const mapRenderer = await renderWorld();
