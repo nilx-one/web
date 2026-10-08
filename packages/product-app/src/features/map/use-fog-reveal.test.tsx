@@ -252,7 +252,7 @@ describe("revealing the fog around a Bond", () => {
     expect(fog.cellAt(stand).id).toBe("strip:3052");
   });
 
-  it("fails closed without Core and pauses work when Avaia exceeds the distance boundary", () => {
+  it("fails closed without Core and pauses work when Avaia exceeds the distance boundary", async () => {
     const fog = createFogFieldDouble(0.01);
     const renderer = fogRenderer(fog);
     const near = {
@@ -298,12 +298,16 @@ describe("revealing the fog around a Bond", () => {
     expect(result.current.jobs).toHaveLength(1);
     act(() => vi.advanceTimersByTime(10_000));
 
-    rerender({ ...base, proximity: red });
+    await act(async () => {
+      rerender({ ...base, proximity: red });
+    });
     expect(result.current.handleFogTap(ACROSS)).toBe("out-of-reach");
     expect(result.current.jobs[0]?.pausedAt).toBeDefined();
     act(() => vi.advanceTimersByTime(3_600_000));
     expect(fog.isRevealed("strip:3053")).toBe(false);
-    rerender({ ...base, proximity: near });
+    await act(async () => {
+      rerender({ ...base, proximity: near });
+    });
     expect(result.current.jobs[0]?.pausedAt).toBeUndefined();
     act(() => vi.advanceTimersByTime(49_999));
     expect(fog.isRevealed("strip:3053")).toBe(false);
