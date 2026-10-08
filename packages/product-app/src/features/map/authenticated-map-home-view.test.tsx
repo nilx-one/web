@@ -1588,10 +1588,13 @@ describe("AuthenticatedMapHomeView", () => {
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
         ...overrides,
       });
+      // A remembered Avaia can centre the camera away from the Bond. Readiness
+      // means the observation reached the renderer, not a centred camera button.
       await vi.waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: "Focus the world on x0skai" }),
-        ).toBeVisible(),
+        expect(mapRenderer.setObservedPosition).toHaveBeenCalledWith({
+          center: [here.longitude, here.latitude],
+          accuracyMeters: here.accuracyMeters,
+        }),
       );
       return mapRenderer;
     }
@@ -1636,6 +1639,45 @@ describe("AuthenticatedMapHomeView", () => {
         there.latitude,
       ]);
       expect(readWorldMemory("0x0sky").avaia).toMatchObject(there);
+    });
+
+    it("uses the frozen mid-walk point for the returning body, label and camera", async () => {
+      const mapRenderer = await renderWorld();
+      act(() =>
+        (
+          mapRenderer as ReturnType<typeof renderer> & {
+            tapGround: (tap: object) => void;
+          }
+        ).tapGround({ ...there, ground: "open" }),
+      );
+      act(() => vi.advanceTimersByTime(10_000));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      );
+      const frozen = readWorldMemory("0x0sky").avaia!;
+      expect(frozen.longitude).toBeGreaterThan(here.longitude);
+      expect(frozen.longitude).toBeLessThan(there.longitude);
+      expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+        frozen.longitude,
+        frozen.latitude,
+      ]);
+      act(() => vi.advanceTimersByTime(2_000));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
+      );
+      expect(
+        vi.mocked(mapRenderer.setCamera).mock.lastCall?.[0].center,
+      ).toEqual([frozen.longitude, frozen.latitude]);
+      expect(lastLabel(mapRenderer)?.at).toEqual([
+        frozen.longitude,
+        frozen.latitude,
+      ]);
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
+        frozen.longitude,
+        frozen.latitude,
+      ]);
+      expect(readWorldMemory("0x0sky").avaia).toEqual(frozen);
     });
 
     it("walks where its owner taps, and says so on its card", async () => {

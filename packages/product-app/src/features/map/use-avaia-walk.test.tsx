@@ -624,6 +624,32 @@ describe("the favourites on the Avaia's screen", () => {
 });
 
 describe("stopping for a wheel handover", () => {
+  it("gives an ambient Avaia its own anchor at the first switch", () => {
+    const { renderer } = walkRenderer();
+    const { result, rerender } = render(renderer);
+    expect(result.current.stance(performance.now())).toBeUndefined();
+    let frozen: MapPointSelection | undefined;
+    act(() => {
+      frozen = result.current.stop();
+    });
+    expect(frozen).toEqual(ORIGIN);
+    rerender(
+      props(renderer, {
+        active: false,
+        observed: { ...at(300, 0), accuracyMeters: 10 },
+      }),
+    );
+    expect(result.current.stance(performance.now())?.point).toEqual(ORIGIN);
+    expect(readWorldMemory("0x0sky").avaia).toMatchObject(ORIGIN);
+    rerender(
+      props(renderer, {
+        active: true,
+        observed: { ...at(300, 0), accuracyMeters: 10 },
+      }),
+    );
+    expect(result.current.stance(performance.now())?.point).toEqual(ORIGIN);
+  });
+
   it("freezes a walk at its actual position and reports only the walked part", async () => {
     const { renderer, tap } = walkRenderer();
     const completed = vi.fn();

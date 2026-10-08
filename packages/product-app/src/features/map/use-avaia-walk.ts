@@ -347,8 +347,11 @@ export interface AvaiaWalkState {
   readonly notebook: LandmarkNotebook;
   /** The places this Avaia grew fond of, loved ones first. */
   readonly favourites: readonly FondPlace[];
-  /** Stop at the current point, preserving the Avaia's own position. */
-  stop(): void;
+  /**
+   * Freeze at and return the same point. An ambient Avaia's first stop takes
+   * its own anchor from the current observation; later Bond fixes do not move it.
+   */
+  stop(): MapPointSelection | undefined;
   /**
    * Sends the body somewhere the application chose rather than a tap — a fog
    * cell it was asked to reveal — as its owner's point B. False when the body
@@ -1374,6 +1377,7 @@ export function useAvaiaWalk({
     setRest(point === undefined ? undefined : { point, bearingDeg });
     setSpeech(undefined);
     lastLine.current = undefined;
+    return point;
   }, [currentBearing, currentPoint, setPause, setRest, setStudy, setWalk]);
 
   const walkTo = useCallback(

@@ -1871,8 +1871,7 @@ export function AuthenticatedMapHomeView({
   function handWheel(to: DockSeat): void {
     // Switching control changes neither identity's position. Freeze an
     // interrupted walk where the Avaia actually stands, including handover.
-    const avaiaPoint = avaiaWalk.stance(globalThis.performance.now())?.point;
-    avaiaWalk.stop();
+    const avaiaPoint = avaiaWalk.stop();
     setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
     setChosenWheel(to);
 
