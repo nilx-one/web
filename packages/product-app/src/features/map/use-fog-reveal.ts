@@ -1,7 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AvaiaProximitySnapshot } from "./use-avaia-proximity";
 import type {
   MapFogCell,
   MapPointSelection,
@@ -31,6 +30,7 @@ import {
   writeRevealJobs,
   type FogRevealJob,
 } from "./fog-reveal";
+import type { AvaiaProximitySnapshot } from "./use-avaia-proximity";
 
 /** How often a cell being revealed repaints its progress. */
 export const FOG_PROGRESS_REFRESH_MS = 2_000;
@@ -128,7 +128,8 @@ export function useFogReveal({
     () => 0,
   );
   const active = fog !== undefined && fog.isActive();
-  const canReveal = !enforceProximity || proximity?.policy.can_reveal === true;
+  const canReveal =
+    !enforceProximity || proximity?.policy.can_reveal === true;
 
   // Whatever this field persists is this Bond's alone: bound first, before
   // anything below can read or write a reveal under it.
@@ -241,15 +242,23 @@ export function useFogReveal({
     if (!enforceProximity || jobs.length === 0) return;
     const now = Date.now();
     if (!canReveal && jobs.some((job) => job.pausedAt === undefined)) {
-      updateJobs((current) => current.map((job) =>
-        job.pausedAt === undefined ? { ...job, pausedAt: now } : job
-      ));
+      updateJobs((current) =>
+        current.map((job) =>
+          job.pausedAt === undefined ? { ...job, pausedAt: now } : job,
+        ),
+      );
     } else if (canReveal && jobs.some((job) => job.pausedAt !== undefined)) {
-      updateJobs((current) => current.map((job) =>
-        job.pausedAt === undefined
-          ? job
-          : { ...job, startedAt: job.startedAt + now - job.pausedAt, pausedAt: undefined }
-      ));
+      updateJobs((current) =>
+        current.map((job) =>
+          job.pausedAt === undefined
+            ? job
+            : {
+                ...job,
+                startedAt: job.startedAt + now - job.pausedAt,
+                pausedAt: undefined,
+              },
+        ),
+      );
     }
   }, [enforceProximity, canReveal, jobs, updateJobs]);
 
@@ -303,7 +312,9 @@ export function useFogReveal({
   // A prompt for a cell that left reach — the Bond moved, or the fog lifted
   // there some other way — is no longer a question anyone can answer.
   const livePrompt =
-    canReveal && prompt !== undefined && frontier.some((cell) => cell.id === prompt.cell.id)
+    canReveal &&
+    prompt !== undefined &&
+    frontier.some((cell) => cell.id === prompt.cell.id)
       ? prompt
       : undefined;
 
@@ -325,7 +336,8 @@ export function useFogReveal({
             offer.cell,
             (at, radius) => renderer.landmarksNear?.(at, radius) ?? [],
           );
-          const coreDuration = proximity?.durationsMs[Math.min(5, landmarks)];
+          const coreDuration =
+            proximity?.durationsMs[Math.min(5, landmarks)];
           if (enforceProximity && coreDuration == null) return "out-of-reach";
           setPrompt({
             cell: offer.cell,
@@ -341,11 +353,18 @@ export function useFogReveal({
   );
 
   const confirm = useCallback((): FogRevealJob | undefined => {
-    if (!canReveal || livePrompt === undefined || livePrompt.busy) return undefined;
+    if (!canReveal || livePrompt === undefined || livePrompt.busy) {
+      return undefined;
+    }
     const offer = offerFor(livePrompt.cell.id, frontier, jobs);
     setPrompt(undefined);
     if (offer.kind !== "offer") return undefined;
-    const job = startReveal(offer.cell, livePrompt.landmarks, Date.now(), livePrompt.durationMs);
+    const job = startReveal(
+      offer.cell,
+      livePrompt.landmarks,
+      Date.now(),
+      livePrompt.durationMs,
+    );
     updateJobs((current) => [...current, job]);
     return job;
   }, [canReveal, frontier, jobs, livePrompt, updateJobs]);
