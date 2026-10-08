@@ -349,7 +349,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let address: PubDress = "0x0небо".parse().expect("pub_dress");
+        let address: PubDress = "0x1небо".parse().expect("pub_dress");
         repository
             .register(&address, &ProviderIdentity::telegram(42), 100)
             .await
@@ -370,7 +370,7 @@ mod tests {
             .oneshot(
                 Request::post("/api/v1/identity/url/resolve")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"label":"xn--0x0-dddt1cj"}"#))
+                    .body(Body::from(r#"{"label":"xn--0x1-dddt1cj"}"#))
                     .expect("request"),
             )
             .await
@@ -378,7 +378,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
         assert_eq!(body["state"], "registered");
-        assert_eq!(body["label"], "xn--0x0-dddt1cj");
+        assert_eq!(body["label"], "xn--0x1-dddt1cj");
     }
 
     #[tokio::test]
@@ -387,7 +387,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::get("/api/v1/identity/public")
-                    .header("host", "xn--0x0-dddt1cj.nilx.one")
+                    .header("host", "xn--0x1-dddt1cj.nilx.one")
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -395,8 +395,8 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
-        assert_eq!(body["pub_dress"], "0x0небо");
-        assert_eq!(body["pub_dress_url"], "https://0x0небо.nilx.one");
+        assert_eq!(body["pub_dress"], "0x1небо");
+        assert_eq!(body["pub_dress_url"], "https://0x1небо.nilx.one");
         // A Bond publishes no Avaia until its owner creates one.
         assert!(body["avaia"].is_null());
         assert_eq!(body["pub_info"]["experience"]["authority"], "client");
@@ -409,12 +409,12 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let address: PubDress = "0x0sky".parse().expect("pub_dress");
+        let address: PubDress = "0x1sky".parse().expect("pub_dress");
         repository
             .register(&address, &ProviderIdentity::telegram(43), 100)
             .await
             .expect("registration");
-        let avaia: crate::AvaiaPubDress = "x0skai".parse().expect("Avaia");
+        let avaia: crate::AvaiaPubDress = "x1skai".parse().expect("Avaia");
         repository
             .configure_owned_avaia(&address, &avaia, 100)
             .await
@@ -432,7 +432,7 @@ mod tests {
         let response = router(repository)
             .oneshot(
                 Request::get("/api/v1/identity/public")
-                    .header("host", "0x0sky.nilx.one")
+                    .header("host", "0x1sky.nilx.one")
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -440,8 +440,8 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
-        assert_eq!(body["pub_dress"], "0x0sky");
-        assert_eq!(body["avaia"]["pub_dress"], "x0skai");
+        assert_eq!(body["pub_dress"], "0x1sky");
+        assert_eq!(body["avaia"]["pub_dress"], "x1skai");
         assert_eq!(
             body["avaia"]["location"]["coordinate"]["longitude_e7"],
             "305234000"
@@ -457,7 +457,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let address: PubDress = "0x0sky".parse().expect("pub_dress");
+        let address: PubDress = "0x1sky".parse().expect("pub_dress");
         repository
             .register(&address, &ProviderIdentity::telegram(44), 100)
             .await
@@ -482,7 +482,7 @@ mod tests {
         let response = router(repository)
             .oneshot(
                 Request::get("/api/v1/identity/public")
-                    .header("host", "0x0sky.nilx.one")
+                    .header("host", "0x1sky.nilx.one")
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -502,7 +502,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::get("/api/v1/identity/public")
-                    .header("host", "XN--0X0-DDDT1CJ.NILX.ONE.")
+                    .header("host", "XN--0X1-DDDT1CJ.NILX.ONE.")
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -510,7 +510,7 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
-        assert_eq!(body["pub_dress"], "0x0небо");
+        assert_eq!(body["pub_dress"], "0x1небо");
     }
 
     #[tokio::test]
@@ -519,7 +519,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::get("/api/v1/identity/public")
-                    .header("host", "0x0other.nilx.one")
+                    .header("host", "0x1other.nilx.one")
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -534,7 +534,7 @@ mod tests {
         let response = app
             .oneshot(
                 Request::get("/api/v1/identity/public")
-                    .header("host", "xn--0x0-dddt1cj.preview.nilx.one")
+                    .header("host", "xn--0x1-dddt1cj.preview.nilx.one")
                     .body(Body::empty())
                     .expect("request"),
             )

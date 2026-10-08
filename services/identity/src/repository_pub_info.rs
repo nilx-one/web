@@ -234,7 +234,7 @@ mod pub_info_tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let owner: PubDress = "0x0sky".parse().expect("owner");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
         repository
             .register(&owner, &ProviderIdentity::telegram(7), 100)
             .await

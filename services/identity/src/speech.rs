@@ -734,6 +734,21 @@ mod tests {
         let identities = IdentityRepository::connect(&database_url)
             .await
             .expect("identity repository");
+        // Speech's historical seed includes a reserved administrator. Restore
+        // that pre-reservation identity rather than publicly registering one.
+        let legacy = sqlx::SqlitePool::connect(&database_url)
+            .await
+            .expect("legacy pool");
+        sqlx::raw_sql(
+            "DROP TRIGGER identities_reserved_admin_prefix_insert;
+             INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES ('0x0sky', 'human', 10);
+             INSERT INTO identity_providers (provider, provider_subject, pub_dress) VALUES ('telegram', '1', '0x0sky');",
+        ).execute(&legacy).await.expect("legacy administrator");
+        sqlx::raw_sql(include_str!("../migrations/0021_reserved_admin_prefix.sql"))
+            .execute(&legacy)
+            .await
+            .expect("restore reservation");
+        legacy.close().await;
         for (pub_dress, telegram) in [("0x0sky", 1), ("0xfrSb", 2)] {
             register(&identities, pub_dress, telegram).await;
         }
@@ -910,8 +925,8 @@ mod tests {
             assert!(harness.speech.is_speaker(&name).await.expect("lookup"));
         }
 
-        register(&harness.identities, "0x0alice", 3).await;
-        let alice: PubDress = "0x0alice".parse().expect("pub_dress");
+        register(&harness.identities, "0x1alice", 3).await;
+        let alice: PubDress = "0x1alice".parse().expect("pub_dress");
         assert!(!harness.speech.is_speaker(&alice).await.expect("lookup"));
         assert!(harness.speech.allow_speaker(&alice).await.expect("allow"));
         assert!(harness.speech.is_speaker(&alice).await.expect("lookup"));
@@ -936,8 +951,8 @@ mod tests {
     #[tokio::test]
     async fn only_a_permitted_registered_bond_may_speak() {
         let harness = harness().await;
-        register(&harness.identities, "0x0alice", 3).await;
-        for speaker in ["0x0alice", "0x0nobody"] {
+        register(&harness.identities, "0x1alice", 3).await;
+        for speaker in ["0x1alice", "0x1nobody"] {
             let (status, body) = ingest(
                 &harness,
                 Some(INGEST_TOKEN),
@@ -977,8 +992,8 @@ mod tests {
         let mut harness = harness().await;
         let now = unix_now();
         place(&harness, "0x0sky", point(0.0, 0.0), now).await;
-        register(&harness.identities, "0x0near", 7).await;
-        place(&harness, "0x0near", point(100.0, 0.0), now).await;
+        register(&harness.identities, "0x1near", 7).await;
+        place(&harness, "0x1near", point(100.0, 0.0), now).await;
 
         let body = ingest_body("sky/9", "0x0sky", "привіт усім", now);
         let (first, first_body) = ingest(&harness, Some(INGEST_TOKEN), body.clone()).await;
@@ -1022,16 +1037,16 @@ mod tests {
         let now = unix_now();
         place(&harness, "0x0sky", point(0.0, 0.0), now).await;
         for (name, telegram, east, updated_at) in [
-            ("0x0near", 10, 200.0, now),
-            ("0x0edge", 11, 480.0, now),
-            ("0x0far", 12, 800.0, now),
-            ("0x0stale", 13, 100.0, now - LOCATION_MAX_AGE_SECONDS - 60),
+            ("0x1near", 10, 200.0, now),
+            ("0x1edge", 11, 480.0, now),
+            ("0x1far", 12, 800.0, now),
+            ("0x1stale", 13, 100.0, now - LOCATION_MAX_AGE_SECONDS - 60),
         ] {
             register(&harness.identities, name, telegram).await;
             place(&harness, name, point(east, 0.0), updated_at).await;
         }
         // Registered and nearby, but never placed anywhere: hears nothing.
-        register(&harness.identities, "0x0unplaced", 14).await;
+        register(&harness.identities, "0x1unplaced", 14).await;
         // The other permitted speaker is close by; the speaker is never echoed.
         place(&harness, "0xfrSb", point(50.0, 0.0), now).await;
 
@@ -1052,8 +1067,8 @@ mod tests {
     async fn a_speaker_with_no_current_location_is_heard_by_nobody_over_telegram() {
         let mut harness = harness().await;
         let now = unix_now();
-        register(&harness.identities, "0x0near", 7).await;
-        place(&harness, "0x0near", point(0.0, 0.0), now).await;
+        register(&harness.identities, "0x1near", 7).await;
+        place(&harness, "0x1near", point(0.0, 0.0), now).await;
         let (status, body) = ingest(
             &harness,
             Some(INGEST_TOKEN),
@@ -1085,9 +1100,9 @@ mod tests {
         let now = unix_now();
         place(&harness, "0x0sky", point(0.0, 0.0), now).await;
         place(&harness, "0xfrSb", point(3_000.0, 0.0), now).await;
-        register(&harness.identities, "0x0near", 7).await;
-        place(&harness, "0x0near", point(120.0, 0.0), now).await;
-        register(&harness.identities, "0x0lost", 8).await;
+        register(&harness.identities, "0x1near", 7).await;
+        place(&harness, "0x1near", point(120.0, 0.0), now).await;
+        register(&harness.identities, "0x1lost", 8).await;
 
         for (external_id, speaker, text) in [
             ("sky/1", "0x0sky", "я поруч"),

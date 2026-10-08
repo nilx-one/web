@@ -395,7 +395,7 @@ mod pub_info_api_tests {
 
     #[tokio::test]
     async fn publishing_requires_the_owner_and_csrf_and_is_idempotent() {
-        let (app, auth) = app(8810, "0x0sky").await;
+        let (app, auth) = app(8810, "0x1sky").await;
         let anonymous = app
             .clone()
             .oneshot(
@@ -485,7 +485,7 @@ mod pub_info_api_tests {
         let repository = IdentityRepository::connect(&database_url)
             .await
             .expect("repository");
-        for (user_id, owner) in [(8820, "0x0sky"), (8821, "0xfrSb")] {
+        for (user_id, owner) in [(8820, "0x1sky"), (8821, "0xfrSb")] {
             let owner: PubDress = owner.parse().expect("owner pub_dress");
             repository
                 .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
@@ -762,7 +762,7 @@ mod pub_info_api_tests {
 
     #[tokio::test]
     async fn a_located_event_id_or_an_unknown_earner_is_refused() {
-        let (app, auth) = app(8811, "0x0sky").await;
+        let (app, auth) = app(8811, "0x1sky").await;
         let mut session: Option<String> = None;
         for body in [
             r#"{"events":[{"id":"zone:8a2a1072b59ffff:avaia","earner":"avaia","amount":10}]}"#,

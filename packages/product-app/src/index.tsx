@@ -284,7 +284,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const appearance = useAppearance();
   const browserHost = host.kind === "browser";
   const [selection, setSelection] = useState<PubDressSelection>({
-    discriminator: "0",
+    discriminator: "1",
     slug: "",
   });
   const [password, setPassword] = useState("");
@@ -547,7 +547,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       nativeAuthentication.reset();
       recoveryAcknowledgement.reset();
       browserProviderLink.reset();
-      setSelection({ discriminator: "0", slug: "" });
+      setSelection({ discriminator: "1", slug: "" });
       setPassword("");
       setIdempotencyKey(newIdempotencyKey());
       setUseRememberedHint(false);

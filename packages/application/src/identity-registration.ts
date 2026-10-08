@@ -86,7 +86,7 @@ export type PubDressResolutionResult =
   | { kind: "registered"; pubDress: string }
   | {
       kind: "rejected";
-      reason: "invalid-length" | "invalid-character";
+      reason: "invalid-length" | "invalid-character" | "reserved-prefix";
     }
   | { kind: "rate-limited" }
   | { kind: "service-unavailable" };

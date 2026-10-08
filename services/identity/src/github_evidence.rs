@@ -1115,14 +1115,14 @@ mod tests {
     fn transaction_signature_is_bound_to_payload() {
         let signer = EvidenceTransactionSigner::new(auth().secret_digester());
         let transaction = EvidenceTransaction {
-            pub_dress: "0x0sky".to_owned(),
+            pub_dress: "0x1sky".to_owned(),
             state: "state".to_owned(),
             verifier: "verifier".to_owned(),
             expires_at: 100,
         };
         let signed = signer.issue(&transaction).expect("signed transaction");
         let verified: EvidenceTransaction = signer.verify(&signed).expect("verified");
-        assert_eq!(verified.pub_dress, "0x0sky");
+        assert_eq!(verified.pub_dress, "0x1sky");
         let mut tampered = signed.into_bytes();
         tampered[0] = if tampered[0] == b'a' { b'b' } else { b'a' };
         assert!(
@@ -1213,7 +1213,7 @@ mod tests {
         let evidence = GithubEvidenceRepository::connect(&database_url)
             .await
             .expect("evidence");
-        let bond = register_bond(&identities, "0x0sky", "http").await;
+        let bond = register_bond(&identities, "0x1sky", "http").await;
         let auth = auth();
         let session_token = "native-session-token".to_owned();
         let now = now_unix_seconds().expect("clock");
@@ -1545,7 +1545,7 @@ mod tests {
         let evidence = GithubEvidenceRepository::connect(&database_url)
             .await
             .expect("evidence");
-        let bond = register_bond(&identities, "0x0sky", "one").await;
+        let bond = register_bond(&identities, "0x1sky", "one").await;
         links
             .link(&bond, &ProviderIdentity::github(42))
             .await
@@ -1580,8 +1580,8 @@ mod tests {
         let evidence = GithubEvidenceRepository::connect(&database_url)
             .await
             .expect("evidence");
-        let first = register_bond(&identities, "0x0sky", "first").await;
-        let second = register_bond(&identities, "0x1sky", "second").await;
+        let first = register_bond(&identities, "0x1sky", "first").await;
+        let second = register_bond(&identities, "0x2sky", "second").await;
         let github = user(42, "same");
         assert_eq!(
             evidence

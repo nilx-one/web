@@ -279,7 +279,7 @@ mod avaia_lifecycle_repository_tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let owner: PubDress = "0x0sky".parse().expect("owner");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
         repository
             .register(&owner, &ProviderIdentity::telegram(8801), 100)
             .await
@@ -301,12 +301,12 @@ mod avaia_lifecycle_repository_tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let owner: PubDress = "0x0sky".parse().expect("owner");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
         repository
             .register(&owner, &ProviderIdentity::telegram(8802), 100)
             .await
             .expect("registration");
-        let requested: AvaiaPubDress = "x0newai".parse().expect("Avaia");
+        let requested: AvaiaPubDress = "x1newai".parse().expect("Avaia");
 
         let first = repository
             .configure_owned_avaia(&owner, &requested, 101)
@@ -315,7 +315,7 @@ mod avaia_lifecycle_repository_tests {
         assert!(matches!(
             first,
             AvaiaUpdateOutcome::Updated(ref profile)
-                if profile.pub_dress == "x0newai"
+                if profile.pub_dress == "x1newai"
                     && profile.configuration_state == AvaiaConfigurationState::Configured
         ));
 
@@ -340,7 +340,7 @@ mod avaia_lifecycle_repository_tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let owner: PubDress = "0x0sky".parse().expect("owner");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
         repository
             .register(&owner, &ProviderIdentity::telegram(8803), 100)
             .await

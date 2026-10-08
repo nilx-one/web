@@ -235,7 +235,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond: crate::PubDress = "0x0sky".parse().expect("valid Bond");
+        let bond: crate::PubDress = "0x1sky".parse().expect("valid Bond");
         identities
             .register_native(
                 &bond,
@@ -296,7 +296,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond: crate::PubDress = "0x0sky".parse().expect("valid Bond");
+        let bond: crate::PubDress = "0x1sky".parse().expect("valid Bond");
         identities
             .register_native(
                 &bond,

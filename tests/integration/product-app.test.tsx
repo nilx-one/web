@@ -221,6 +221,8 @@ describe("ProductApp identity", () => {
     const discriminator = await screen.findByRole("combobox", {
       name: "pub_dress hexadecimal discriminator",
     });
+    expect(discriminator).toHaveValue("1");
+    expect(discriminator.querySelector('option[value="0"]')).toBeNull();
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
     await screen.findByText(
@@ -392,7 +394,7 @@ describe("ProductApp identity", () => {
       />,
     );
 
-    await user.type(await screen.findByLabelText("pub_dress"), "sky");
+    await user.type(await screen.findByLabelText("pub_dress"), "0x0sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
     await user.keyboard("{Enter}");
     expect(screen.getByLabelText("pub_dress")).toHaveValue("0x0sky");
@@ -859,7 +861,7 @@ describe("ProductApp identity", () => {
       />,
     );
 
-    await user.type(await screen.findByLabelText("pub_dress"), "sky");
+    await user.type(await screen.findByLabelText("pub_dress"), "0x0sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
 
     expect(

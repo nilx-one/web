@@ -561,7 +561,7 @@ mod session_activation_tests {
     #[tokio::test]
     async fn accepted_activation_swaps_which_session_is_active() {
         let (_database, database_url) = test_database();
-        register(&database_url, "0x0alice", 7).await;
+        register(&database_url, "0x1alice", 7).await;
         let app = app_at(&database_url, NOW).await;
         let auth = signed_init_data(7);
 
@@ -673,7 +673,7 @@ mod session_activation_tests {
     #[tokio::test]
     async fn only_the_active_client_may_see_or_resolve_a_pending_request() {
         let (_database, database_url) = test_database();
-        register(&database_url, "0x0bob", 9).await;
+        register(&database_url, "0x1bob", 9).await;
         let app = app_at(&database_url, NOW).await;
         let auth = signed_init_data(9);
 
@@ -733,7 +733,7 @@ mod session_activation_tests {
     #[tokio::test]
     async fn creating_a_request_while_already_active_is_a_conflict() {
         let (_database, database_url) = test_database();
-        register(&database_url, "0x0carl", 11).await;
+        register(&database_url, "0x1carl", 11).await;
         let app = app_at(&database_url, NOW).await;
         let auth = signed_init_data(11);
 
@@ -770,7 +770,7 @@ mod session_activation_tests {
     #[tokio::test]
     async fn a_host_authenticated_request_expires_without_taking_over() {
         let (_database, database_url) = test_database();
-        register(&database_url, "0x0dana", 13).await;
+        register(&database_url, "0x1dana", 13).await;
         let auth = signed_init_data(13);
 
         let app_now = app_at(&database_url, NOW).await;
@@ -852,7 +852,7 @@ mod session_activation_tests {
     #[tokio::test]
     async fn a_second_request_expires_the_first_so_it_cannot_activate_later() {
         let (_database, database_url) = test_database();
-        register(&database_url, "0x0erin", 15).await;
+        register(&database_url, "0x1erin", 15).await;
         let auth = signed_init_data(15);
         let app = app_at(&database_url, NOW).await;
 
@@ -935,7 +935,7 @@ mod session_activation_tests {
     #[tokio::test]
     async fn a_credential_authenticated_request_activates_after_the_objection_window() {
         let (_database, database_url) = test_database();
-        register(&database_url, "0x0fran", 17).await;
+        register(&database_url, "0x1fran", 17).await;
         let auth = signed_init_data(17);
         let app = app_at(&database_url, NOW).await;
 

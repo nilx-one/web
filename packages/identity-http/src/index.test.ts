@@ -13,6 +13,20 @@ function response(status: number, body: unknown): Response {
 }
 
 describe("identity HTTP adapter", () => {
+  it("reports an unallocated reserved prefix without inventing a registered Bond", async () => {
+    const adapter = createIdentityHttpAdapter({
+      fetch: vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValue(
+          response(422, { error: { code: "reserved_pub_dress_prefix" } }),
+        ),
+      getAuthorization: () => undefined,
+    });
+    await expect(
+      adapter.resolvePubDress({ discriminator: "0", slug: "нуль" }),
+    ).resolves.toEqual({ kind: "rejected", reason: "reserved-prefix" });
+  });
+
   it("resolves exact addresses publicly without inventing availability", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {

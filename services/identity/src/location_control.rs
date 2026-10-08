@@ -717,7 +717,7 @@ mod tests {
         let database = tempfile::NamedTempFile::new().expect("temporary database");
         let database_url = format!("sqlite://{}", database.path().display());
         let app = session_test_app(&database_url).await;
-        let pub_dress: PubDress = "0x0alice".parse().expect("valid pub_dress");
+        let pub_dress: PubDress = "0x1alice".parse().expect("valid pub_dress");
         IdentityRepository::connect(&database_url)
             .await
             .expect("identity repository")
@@ -766,7 +766,7 @@ mod tests {
         let database = tempfile::NamedTempFile::new().expect("temporary database");
         let database_url = format!("sqlite://{}", database.path().display());
         let app = test_app(&database_url, Some(discord_oauth().await)).await;
-        let pub_dress: PubDress = "0x0sky".parse().expect("valid pub_dress");
+        let pub_dress: PubDress = "0x1sky".parse().expect("valid pub_dress");
         IdentityRepository::connect(&database_url)
             .await
             .expect("identity repository")
@@ -778,7 +778,7 @@ mod tests {
             .await
             .expect("Bond location repository")
             .write(
-                "0x0sky",
+                "0x1sky",
                 BondLocation::new(manual, BondLocationMode::Manual, DecimalU64::new(30)),
             )
             .await
@@ -881,11 +881,11 @@ mod tests {
     async fn registration_creates_a_user_and_only_a_stored_role_changes_it() {
         let database = tempfile::NamedTempFile::new().expect("temporary database");
         let database_url = format!("sqlite://{}", database.path().display());
-        let identities = registered(&database_url, "0x0alice", 7).await;
-        let alice: PubDress = "0x0alice".parse().expect("valid pub_dress");
+        let identities = registered(&database_url, "0x1alice", 7).await;
+        let alice: PubDress = "0x1alice".parse().expect("valid pub_dress");
 
         assert_eq!(
-            identities.role_for("0x0alice").await.expect("role"),
+            identities.role_for("0x1alice").await.expect("role"),
             BondAccessRole::User
         );
         assert!(
@@ -895,11 +895,11 @@ mod tests {
                 .expect("assign business")
         );
         assert_eq!(
-            identities.role_for("0x0alice").await.expect("role"),
+            identities.role_for("0x1alice").await.expect("role"),
             BondAccessRole::Business
         );
 
-        let unknown: PubDress = "0x0nobody".parse().expect("valid pub_dress");
+        let unknown: PubDress = "0x1nobody".parse().expect("valid pub_dress");
         assert!(
             !identities
                 .set_role(&unknown, BondAccessRole::Admin)
@@ -909,58 +909,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn existing_name_derived_admins_are_carried_over_once() {
-        let database = tempfile::NamedTempFile::new().expect("temporary database");
-        let database_url = format!("sqlite://{}", database.path().display());
-        let identities = registered(&database_url, "0x0sky", 7).await;
-        // A fresh database has no pre-existing admins to carry over.
-        assert_eq!(
-            identities.role_for("0x0sky").await.expect("role"),
-            BondAccessRole::User
-        );
-
-        // Simulate a deployment that predates `bond_roles`.
-        let pool = sqlx::SqlitePool::connect(&database_url)
-            .await
-            .expect("raw pool");
-        sqlx::query("DROP TABLE bond_roles")
-            .execute(&pool)
-            .await
-            .expect("drop roles");
-        pool.close().await;
-
-        let identities = IdentityRepository::connect(&database_url)
-            .await
-            .expect("upgraded repository");
-        assert_eq!(
-            identities.role_for("0x0sky").await.expect("role"),
-            BondAccessRole::Admin
-        );
-
-        // After the upgrade, the name itself grants nothing.
-        let nebo: PubDress = "0x0небо".parse().expect("valid pub_dress");
-        identities
-            .register(&nebo, &ProviderIdentity::telegram(8), 20)
-            .await
-            .expect("registration");
-        let identities = IdentityRepository::connect(&database_url)
-            .await
-            .expect("reopened repository");
-        assert_eq!(
-            identities.role_for("0x0небо").await.expect("role"),
-            BondAccessRole::User
-        );
-        assert_eq!(
-            identities.role_for("0x0sky").await.expect("role"),
-            BondAccessRole::Admin
-        );
-    }
-
-    #[tokio::test]
     async fn background_live_refresh_never_leaves_manual() {
         let database = tempfile::NamedTempFile::new().expect("temporary database");
         let database_url = format!("sqlite://{}", database.path().display());
-        let _identities = registered(&database_url, "0x0sky", 7).await;
+        let _identities = registered(&database_url, "0x1sky", 7).await;
         let locations = BondLocationRepository::connect(&database_url)
             .await
             .expect("Bond location repository");
@@ -968,14 +920,14 @@ mod tests {
         let first = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("first point");
         assert!(
             locations
-                .refresh_live("0x0sky", first, DecimalU64::new(10))
+                .refresh_live("0x1sky", first, DecimalU64::new(10))
                 .await
                 .expect("first live")
         );
         let manual = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("manual point");
         locations
             .write(
-                "0x0sky",
+                "0x1sky",
                 BondLocation::new(manual, BondLocationMode::Manual, DecimalU64::new(20)),
             )
             .await
@@ -984,12 +936,12 @@ mod tests {
         let device = GeoCoordinate::from_degrees(30.5240, 50.4510).expect("device point");
         assert!(
             !locations
-                .refresh_live("0x0sky", device, DecimalU64::new(30))
+                .refresh_live("0x1sky", device, DecimalU64::new(30))
                 .await
                 .expect("refused refresh")
         );
         let kept = locations
-            .read("0x0sky")
+            .read("0x1sky")
             .await
             .expect("read")
             .expect("location");
@@ -999,19 +951,19 @@ mod tests {
 
         locations
             .write(
-                "0x0sky",
+                "0x1sky",
                 BondLocation::new(device, BondLocationMode::Live, DecimalU64::new(40)),
             )
             .await
             .expect("explicit return to live");
         assert!(
             locations
-                .refresh_live("0x0sky", first, DecimalU64::new(50))
+                .refresh_live("0x1sky", first, DecimalU64::new(50))
                 .await
                 .expect("live refresh")
         );
         let refreshed = locations
-            .read("0x0sky")
+            .read("0x1sky")
             .await
             .expect("read")
             .expect("location");
@@ -1037,7 +989,7 @@ mod tests {
         let identities = IdentityRepository::connect(&database_url)
             .await
             .expect("identity repository");
-        let pub_dress: PubDress = "0x0sky".parse().expect("valid pub_dress");
+        let pub_dress: PubDress = "0x1sky".parse().expect("valid pub_dress");
         let registration = identities
             .register(&pub_dress, &ProviderIdentity::telegram(7), 10)
             .await
