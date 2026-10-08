@@ -224,7 +224,9 @@ export function useAvaiaProximity({
         requested += 1;
       }
       holdAtRed(meters);
-      if (meters === undefined) forget();
+      if (meters === undefined) {
+        forget();
+      }
       if (busy) {
         again = true;
         return;
@@ -244,7 +246,9 @@ export function useAvaiaProximity({
     // Animation frames are already produced for the walking Avaia. Only the
     // red crossing is urgent; ordinary changes still use the 2 s beat.
     observeAvaia.current = (point) => {
-      if (holdAtRed(measuredMeters(latest.current.bondPoint, point))) refresh();
+      if (holdAtRed(measuredMeters(latest.current.bondPoint, point))) {
+        refresh();
+      }
     };
     sample.current = refresh;
 
