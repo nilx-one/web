@@ -528,7 +528,7 @@ function decodeProximityPolicy(value: string): AvaiaProximityPolicy {
     parsed.red_m <= 0 ||
     parsed.restore_below_m <= 0 ||
     parsed.restore_below_m >= parsed.red_m ||
-    parsed.can_reveal !== (parsed.distance_m < parsed.restore_below_m) ||
+    parsed.can_reveal !== parsed.distance_m < parsed.restore_below_m ||
     parsed.can_reveal !== (parsed.duration_ms !== null)
   ) {
     throw new Error("0x1 Core returned an invalid proximity policy");
