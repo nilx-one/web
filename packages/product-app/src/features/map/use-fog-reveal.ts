@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvaiaProximitySnapshot } from "./use-avaia-proximity";
 import type {
   MapFogCell,
   MapPointSelection,
@@ -63,6 +64,9 @@ export interface FogRevealInput {
     (MapPointSelection & { readonly accuracyMeters: number }) | undefined;
   /** The Bond whose Avaia does the work: whose reveals these are. */
   readonly owner: string;
+  /** Required in production; old isolated hook tests can omit it. */
+  readonly enforceProximity?: boolean;
+  readonly proximity?: AvaiaProximitySnapshot;
   readonly onRevealed?: (cell: MapFogCell, via: FogRevealVia) => void;
 }
 
@@ -102,6 +106,8 @@ export function useFogReveal({
   bondPoint,
   observed,
   owner,
+  enforceProximity = false,
+  proximity,
   onRevealed,
 }: FogRevealInput): FogRevealState {
   const fog = renderer.fog;
@@ -122,6 +128,7 @@ export function useFogReveal({
     () => 0,
   );
   const active = fog !== undefined && fog.isActive();
+  const canReveal = !enforceProximity || proximity?.policy.can_reveal === true;
 
   // Whatever this field persists is this Bond's alone: bound first, before
   // anything below can read or write a reveal under it.
@@ -228,10 +235,28 @@ export function useFogReveal({
 
   useEffect(() => () => renderer.setFogMarks?.([]), [renderer]);
 
+  // A disabled Core capability freezes running work; resuming shifts the
+  // start so blocked wall-clock time never counts toward completed work.
+  useEffect(() => {
+    if (!enforceProximity || jobs.length === 0) return;
+    const now = Date.now();
+    if (!canReveal && jobs.some((job) => job.pausedAt === undefined)) {
+      updateJobs((current) => current.map((job) =>
+        job.pausedAt === undefined ? { ...job, pausedAt: now } : job
+      ));
+    } else if (canReveal && jobs.some((job) => job.pausedAt !== undefined)) {
+      updateJobs((current) => current.map((job) =>
+        job.pausedAt === undefined
+          ? job
+          : { ...job, startedAt: job.startedAt + now - job.pausedAt, pausedAt: undefined }
+      ));
+    }
+  }, [enforceProximity, canReveal, jobs, updateJobs]);
+
   // A reveal ends on the wall clock, so one that finished while the page was
   // closed lands the moment it is open again.
   useEffect(() => {
-    if (fog === undefined || jobs.length === 0) return;
+    if (fog === undefined || jobs.length === 0 || !canReveal) return;
     const finish = (): void => {
       const now = Date.now();
       const done = jobs.filter((job) => revealFinished(job, now));
@@ -247,7 +272,7 @@ export function useFogReveal({
     );
     const timer = globalThis.setTimeout(finish, next);
     return () => globalThis.clearTimeout(timer);
-  }, [fog, jobs, updateJobs]);
+  }, [canReveal, fog, jobs, updateJobs]);
 
   // Standing in a fogged cell reveals it: no Avaia, no wait, one cell.
   const observedLongitude = observed?.longitude;
