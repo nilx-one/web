@@ -83,8 +83,19 @@ describe("InventoryPanel", () => {
     );
   });
 
-  it("offers what each does not own yet, at Core's price", async () => {
+  it("keeps buying and crafting closed for now", () => {
     render(<InventoryPanel owner="0x0sky" core={core} committed />);
+
+    expect(
+      screen.queryByRole("button", { name: /^Buy / }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Craft")).not.toBeInTheDocument();
+  });
+
+  it("offers what each does not own yet, at Core's price", async () => {
+    render(
+      <InventoryPanel owner="0x0sky" core={core} committed shopAndCraft />,
+    );
 
     expect(
       screen.getAllByRole("button", { name: "Buy a bag · 5000 ₴€£" }),
