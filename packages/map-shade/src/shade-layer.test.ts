@@ -7,7 +7,11 @@ import type {
   ShadeSource,
 } from "@nilx-one/presence-contract";
 import { gridDisk, latLngToCell } from "h3-js";
-import type { CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
+import {
+  MercatorCoordinate,
+  type CustomRenderMethodInput,
+  type Map as MapLibreMap,
+} from "maplibre-gl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -44,6 +48,8 @@ type FakeGl = WebGL2RenderingContext & {
   generateMipmapCallCount: number;
   /** The last value each uniform was set to, by its name in the shader. */
   readonly uniformValues: Map<string, unknown>;
+  /** The fog quad's vertices as uploaded: x, y, u, v for each corner. */
+  quadVertices: Float32Array | undefined;
 };
 
 function fakeGl(): FakeGl {
@@ -116,6 +122,7 @@ function fakeGl(): FakeGl {
     drawArraysCallCount: 0,
     generateMipmapCallCount: 0,
     uniformValues,
+    quadVertices: undefined as Float32Array | undefined,
 
     createShader: () => ({}) as WebGLShader,
     shaderSource: () => undefined,
@@ -135,7 +142,11 @@ function fakeGl(): FakeGl {
     deleteVertexArray: () => undefined,
     bindVertexArray: () => undefined,
     bindBuffer: () => undefined,
-    bufferData: () => undefined,
+    bufferData: (_target: number, data: unknown, usage: number) => {
+      if (usage === gl.STATIC_DRAW && data instanceof Float32Array) {
+        gl.quadVertices = data;
+      }
+    },
     getAttribLocation: () => 0,
     enableVertexAttribArray: () => undefined,
     vertexAttribPointer: () => undefined,
@@ -759,5 +770,76 @@ describe("fog world lighting", () => {
     expect(FOG_FRAGMENT_SHADER).not.toContain(
       "vec2(dFdx(cloud), dFdy(cloud)) *",
     );
+  });
+});
+
+// MapLibre hands a custom layer one matrix for the whole world, whose
+// translation is hundreds of thousands of clip units at street zoom. Uploaded
+// as float32 with absolute mercator vertices it puts the fog several pixels
+// from where the streets are, differently on every frame of a pan.
+describe("fog quad precision", () => {
+  it("lands the region within a fraction of a pixel at street zoom", () => {
+    const layer = createShadeLayer({
+      source: litSource([]),
+      store,
+      anchor: KYIV,
+      motion: "still",
+    });
+    const gl = fakeGl();
+    layer.onAdd!(fakeMap(), gl);
+
+    const center = MercatorCoordinate.fromLngLat(KYIV, 0);
+    // World matrix scale at zoom 18 for a 390 px wide screen, with the camera
+    // a few metres from the region's centre.
+    const scale = (512 * 2 ** 18 * 2) / 390;
+    const camera = { x: center.x + 3.1e-6, y: center.y - 2.3e-6 };
+    const mainMatrix = new Float64Array([
+      scale,
+      0,
+      0,
+      0,
+      0,
+      scale,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      -scale * camera.x,
+      -scale * camera.y,
+      0,
+      1,
+    ]);
+    layer.render!(gl, {
+      defaultProjectionData: { mainMatrix },
+    } as unknown as CustomRenderMethodInput);
+
+    const [, uploaded] = gl.uniformValues.get("u_matrix") as [
+      boolean,
+      Float32Array,
+    ];
+    const quad = gl.quadVertices;
+    expect(quad).toBeDefined();
+    const { x0, y0, x1, y1 } = layer.region;
+    const corners = [
+      [x0, y0],
+      [x1, y0],
+      [x0, y1],
+      [x1, y1],
+    ] as const;
+    const clipUnitsPerPixel = 2 / 390;
+    corners.forEach(([x, y], corner) => {
+      // Exactly what MapLibre's own tiles would draw, in double precision...
+      const exactX = scale * (x - camera.x);
+      const exactY = scale * (y - camera.y);
+      // ...against what the GPU sums from the uploaded float32 matrix and vertex.
+      const vx = quad![corner * 4]!;
+      const vy = quad![corner * 4 + 1]!;
+      const drawnX = uploaded[0]! * vx + uploaded[4]! * vy + uploaded[12]!;
+      const drawnY = uploaded[1]! * vx + uploaded[5]! * vy + uploaded[13]!;
+      expect(Math.abs(drawnX - exactX) / clipUnitsPerPixel).toBeLessThan(0.25);
+      expect(Math.abs(drawnY - exactY) / clipUnitsPerPixel).toBeLessThan(0.25);
+    });
   });
 });

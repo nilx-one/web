@@ -215,6 +215,30 @@ function program(
   return value;
 }
 
+/**
+ * MapLibre's custom-layer matrix maps the whole world, so at street zoom its
+ * translation runs to hundreds of thousands of clip units, and a float32
+ * holds that to several pixels: the fog would slide against the streets as
+ * the camera moves. Folding the region's centre into the matrix here, in
+ * double precision, leaves a small translation and lets the quad's corners be
+ * measured from that centre.
+ */
+function matrixAbout(
+  matrix: ArrayLike<number>,
+  x: number,
+  y: number,
+): Float32Array {
+  const about = new Float32Array(16);
+  for (let index = 0; index < 12; index += 1) about[index] = matrix[index] ?? 0;
+  for (let row = 0; row < 4; row += 1) {
+    about[12 + row] =
+      (matrix[row] ?? 0) * x +
+      (matrix[4 + row] ?? 0) * y +
+      (matrix[12 + row] ?? 0);
+  }
+  return about;
+}
+
 function requireObject<T>(value: T | null, label: string): T {
   if (value === null) throw new Error(`map-shade could not create ${label}`);
   return value;
@@ -522,26 +546,30 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       gl.enableVertexAttribArray(rasterAttribute);
       gl.vertexAttribPointer(rasterAttribute, 2, gl.FLOAT, false, 0, 0);
 
-      const { x0, y0, x1, y1 } = region;
+      // Corners are measured from the region's centre, which `matrixAbout`
+      // puts back at draw time: a float32 mercator coordinate resolves only
+      // about a metre and a half at this latitude.
+      const halfX = spanX / 2;
+      const halfY = spanY / 2;
       gl.bindVertexArray(shadeVertexArray);
       gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
       gl.bufferData(
         gl.ARRAY_BUFFER,
         new Float32Array([
-          x0,
-          y0,
+          -halfX,
+          -halfY,
           0,
           0,
-          x1,
-          y0,
+          halfX,
+          -halfY,
           1,
           0,
-          x0,
-          y1,
+          -halfX,
+          halfY,
           0,
           1,
-          x1,
-          y1,
+          halfX,
+          halfY,
           1,
           1,
         ]),
@@ -696,7 +724,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       gl.uniformMatrix4fv(
         uniforms.u_matrix ?? null,
         false,
-        new Float32Array(frame.defaultProjectionData.mainMatrix),
+        matrixAbout(frame.defaultProjectionData.mainMatrix, center.x, center.y),
       );
       gl.bindTexture(gl.TEXTURE_2D, lightmap);
       gl.uniform1i(uniforms.u_lightmap ?? null, 0);
