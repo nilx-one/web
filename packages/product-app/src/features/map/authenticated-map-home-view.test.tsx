@@ -542,7 +542,9 @@ describe("AuthenticatedMapHomeView", () => {
     it("sits left of edit only where the inventory can be kept", () => {
       const { unmount } = renderView();
       expect(
-        screen.queryByRole("button", { name: "Inventory of x0skai" }),
+        screen.queryByRole("button", {
+          name: "Status and inventory of x0skai",
+        }),
       ).not.toBeInTheDocument();
       unmount();
 
@@ -550,14 +552,22 @@ describe("AuthenticatedMapHomeView", () => {
       const actions = [
         ...document.querySelectorAll(".bond-dock__header-actions button"),
       ].map((button) => button.getAttribute("aria-label"));
-      expect(actions).toEqual(["Inventory of x0skai", "Edit x0skai"]);
+      expect(actions).toEqual([
+        "Status and inventory of x0skai",
+        "Edit x0skai",
+      ]);
+      const glyph = screen.getByRole("button", {
+        name: "Status and inventory of x0skai",
+      });
+      expect(glyph).toHaveTextContent("");
+      expect(glyph.querySelector("svg")).not.toBeNull();
     });
 
     it("opens what the driving Avaia carries, under its own state", () => {
       const { container } = renderView(inventoryHost);
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Inventory of x0skai" }),
+        screen.getByRole("button", { name: "Status and inventory of x0skai" }),
       );
 
       const header = container.querySelector(".bond-dock__detail-header");
@@ -578,7 +588,7 @@ describe("AuthenticatedMapHomeView", () => {
       );
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Inventory of 0x0sky" }),
+        screen.getByRole("button", { name: "Status and inventory of 0x0sky" }),
       );
 
       expect(

@@ -24,6 +24,23 @@
   gap: 0.5rem;
 }
 
+/* Status and inventory in one glyph, in the driver's colour: the Bond cyan,
+   the Avaia violet. */
+.bond-dock__edit.bond-dock__status {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  padding: 0;
+}
+
+.bond-dock__status-fill {
+  fill: #00bfd4;
+}
+
+.bond-dock__status[data-seat="avaia"] .bond-dock__status-fill {
+  fill: #9b6cfa;
+}
+
 .bond-dock__edit,
 .interface-settings__back {
   min-height: 2.5rem;
