@@ -251,6 +251,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "backpackGiftDue"
     | "avaiaDriveStep"
     | "applyAvaiaLife"
+    | "avaiaProximity"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
