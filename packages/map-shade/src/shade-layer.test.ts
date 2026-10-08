@@ -754,8 +754,8 @@ describe("fog world lighting", () => {
   it("anchors shafts and relief to ground coordinates", () => {
     expect(FOG_FRAGMENT_SHADER).toContain("dot(m, vec2(0.94, 0.34))");
     expect(FOG_FRAGMENT_SHADER).not.toContain("gl_FragCoord.xy");
-    expect(FOG_FRAGMENT_SHADER).not.toMatch(/dFd[xy]\(cloud\)/);
-    expect(FOG_FRAGMENT_SHADER).toContain("vec2(reliefStep, 0.0)");
-    expect(FOG_FRAGMENT_SHADER).toContain("vec2(0.0, reliefStep)");
+    expect(FOG_FRAGMENT_SHADER).not.toContain(
+      "vec2(dFdx(cloud), dFdy(cloud)) *",
+    );
   });
 });

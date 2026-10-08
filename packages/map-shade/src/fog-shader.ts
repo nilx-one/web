@@ -174,14 +174,17 @@ void main() {
   float seam = border * fog;
 
   // Relief: mist banked toward the light is brighter, the lee side darker.
-  // Sample a fixed world-space slope: screen derivatives rotate the light
-  // with the camera and make the mist appear attached to the viewport.
-  float reliefStep = exp2(lod);
-  vec2 slope = vec2(
-    mist(m + bend * 0.35 + vec2(reliefStep, 0.0), lod, t),
-    mist(m + bend * 0.35 + vec2(0.0, reliefStep), lod, t)
-  ) - vec2(mist(m + bend * 0.35, lod, t));
-  slope *= 2.34;
+  // Transform the screen derivatives back into a ground gradient. This
+  // keeps the light direction fixed across bearing/pitch changes without
+  // evaluating the expensive mist octaves again for neighbouring points.
+  vec2 dx = dFdx(m);
+  vec2 dy = dFdy(m);
+  vec2 dc = vec2(dFdx(cloud), dFdy(cloud));
+  float determinant = dx.x * dy.y - dx.y * dy.x;
+  vec2 slope = abs(determinant) > 1e-6
+    ? vec2(dc.x * dy.y - dc.y * dx.y, dc.y * dx.x - dc.x * dy.x) / determinant
+    : vec2(0.0);
+  slope *= exp2(lod) * 1.8;
   float relief = clamp(dot(slope, vec2(-0.34, 0.94)), -1.0, 1.0);
 
   vec3 shadow = u_shadow;
