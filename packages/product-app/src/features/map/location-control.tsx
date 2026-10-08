@@ -69,7 +69,10 @@ export function LocationControl({
           <span className="location-control__glyph" aria-hidden="true" />
         ) : (
           <>
-            <span className="location-control__proximity-ring" aria-hidden="true" />
+            <span
+              className="location-control__proximity-ring"
+              aria-hidden="true"
+            />
             <span className="location-control__distance" aria-hidden="true">
               {distanceLabel}
             </span>
