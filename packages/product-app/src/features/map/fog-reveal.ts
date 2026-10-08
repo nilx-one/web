@@ -148,7 +148,10 @@ export function startReveal(
 
 export function revealProgress(job: FogRevealJob, nowMs: number): number {
   if (job.durationMs <= 0) return 1;
-  return Math.min(1, Math.max(0, ((job.pausedAt ?? nowMs) - job.startedAt) / job.durationMs));
+  return Math.min(
+    1,
+    Math.max(0, ((job.pausedAt ?? nowMs) - job.startedAt) / job.durationMs),
+  );
 }
 
 export function revealFinished(job: FogRevealJob, nowMs: number): boolean {
@@ -236,7 +239,9 @@ function isJob(value: unknown): value is FogRevealJob {
     job.durationMs >= 0 &&
     job.durationMs <= 10 * 60_000 &&
     (job.pausedAt === undefined ||
-      (typeof job.pausedAt === "number" && Number.isFinite(job.pausedAt) && job.pausedAt >= job.startedAt)) &&
+      (typeof job.pausedAt === "number" &&
+        Number.isFinite(job.pausedAt) &&
+        job.pausedAt >= job.startedAt)) &&
     typeof job.landmarks === "number" &&
     typeof cell?.id === "string" &&
     typeof center?.longitude === "number" &&
