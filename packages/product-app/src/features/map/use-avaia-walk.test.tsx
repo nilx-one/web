@@ -622,3 +622,69 @@ describe("the favourites on the Avaia's screen", () => {
     expect(result.current.favourites).toEqual([]);
   });
 });
+
+describe("stopping for a wheel handover", () => {
+  it("gives an ambient Avaia its own anchor at the first switch", () => {
+    const { renderer } = walkRenderer();
+    const { result, rerender } = render(renderer);
+    expect(result.current.stance(performance.now())).toBeUndefined();
+    let frozen: MapPointSelection | undefined;
+    act(() => {
+      frozen = result.current.stop();
+    });
+    expect(frozen).toEqual(ORIGIN);
+    rerender(
+      props(renderer, {
+        active: false,
+        observed: { ...at(300, 0), accuracyMeters: 10 },
+      }),
+    );
+    expect(result.current.stance(performance.now())?.point).toEqual(ORIGIN);
+    expect(readWorldMemory("0x0sky").avaia).toMatchObject(ORIGIN);
+    rerender(
+      props(renderer, {
+        active: true,
+        observed: { ...at(300, 0), accuracyMeters: 10 },
+      }),
+    );
+    expect(result.current.stance(performance.now())?.point).toEqual(ORIGIN);
+  });
+
+  it("freezes a walk at its actual position and reports only the walked part", async () => {
+    const { renderer, tap } = walkRenderer();
+    const completed = vi.fn();
+    const { result, rerender } = render(renderer, {
+      reducedMotion: false,
+      onWalkCompleted: completed,
+    });
+    tap(at(100, 0));
+    await advance(1_000);
+    const point = result.current.stance(globalThis.performance.now())!.point;
+    expect(mapDistanceMeters(ORIGIN, point)).toBeGreaterThan(0);
+    expect(mapDistanceMeters(point, at(100, 0))).toBeGreaterThan(0);
+    act(() => result.current.stop());
+    rerender(
+      props(renderer, {
+        active: false,
+        reducedMotion: false,
+        onWalkCompleted: completed,
+      }),
+    );
+    await advance(60_000);
+    expect(result.current.stance(globalThis.performance.now())?.point).toEqual(
+      point,
+    );
+    expect(completed).toHaveBeenCalledTimes(1);
+    expect(completed.mock.calls[0]?.[0].to).toEqual(point);
+    expect(readWorldMemory("0x0sky").avaia).toMatchObject(point);
+    rerender(
+      props(renderer, {
+        active: true,
+        observed: { ...at(300, 0), accuracyMeters: 10 },
+      }),
+    );
+    expect(result.current.stance(globalThis.performance.now())?.point).toEqual(
+      point,
+    );
+  });
+});

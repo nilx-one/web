@@ -1340,7 +1340,7 @@ export function AuthenticatedMapHomeView({
       accuracyMeters: observedPosition.accuracyMeters,
     });
     const stance =
-      wheel === "avaia" && handover === undefined
+      wheel === "avaia"
         ? avaiaWalk.stance(globalThis.performance.now())
         : undefined;
     renderer.setObservedPositionLabel(wheelLabelRef.current(stance?.point));
@@ -1600,9 +1600,7 @@ export function AuthenticatedMapHomeView({
     function draw(nowMs: number): void {
       const body = wheelBody(wheel, handover, nowMs);
       const stance =
-        body.seat === "avaia" && handover === undefined
-          ? avaiaWalk.stance(nowMs)
-          : undefined;
+        body.seat === "avaia" ? avaiaWalk.stance(nowMs) : undefined;
       const handle = createWheelBodyHandle({
         body,
         address: address(body.seat),
@@ -1871,15 +1869,19 @@ export function AuthenticatedMapHomeView({
   }
 
   function handWheel(to: DockSeat): void {
-    // An Avaia taking the wheel starts from where its owner is; one leaving it
-    // stops wherever it was going. Neither walks on in the background.
-    avaiaWalk.reset();
+    // Switching control changes neither identity's position. Freeze an
+    // interrupted walk where the Avaia actually stands, including handover.
+    const avaiaPoint = avaiaWalk.stop();
     setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
     setChosenWheel(to);
 
     if (observedPosition === undefined) return;
     const context = { presentation, dimension, safeArea };
-    renderer.setCamera(bodyVisibleCamera(observedPosition, camera, context), {
+    const target =
+      to === "avaia" && avaiaPoint !== undefined
+        ? { ...observedPosition, ...avaiaPoint }
+        : observedPosition;
+    renderer.setCamera(bodyVisibleCamera(target, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
     });
