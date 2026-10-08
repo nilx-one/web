@@ -31,7 +31,10 @@ export function createFogAtlas(
   });
   const mask = document.createElement("canvas");
   mask.width = mask.height = size;
-  const context = mask.getContext("2d");
+  // The mask is the only record of coverage between journal reads. Keep it in
+  // a software canvas: a failed GPU device can reset the GPU process and wipe
+  // accelerated 2D canvases, which would fog every revealed cell over.
+  const context = mask.getContext("2d", { willReadFrequently: true });
   if (context === null) throw new Error("Fog mask canvas unavailable");
   const project = (lng: number, lat: number): [number, number] => {
     const point = MercatorCoordinate.fromLngLat({ lng, lat });

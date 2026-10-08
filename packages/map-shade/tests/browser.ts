@@ -2,11 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { cellToLatLng, gridDisk, latLngToCell } from "h3-js";
-import {
-  Map as MapLibreMap,
-  addProtocol,
-  type CanvasSource,
-} from "maplibre-gl";
+import { addProtocol, type MapOptions } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { createFogAtlas } from "../src/fog-atlas";
@@ -17,6 +13,7 @@ import {
 } from "../src/fog-backend";
 import { fogParameters } from "../src/fog-material";
 import { DARK_FOG_PALETTE } from "../src/fog-palette";
+import { createShadeMapFactory, type ShadeRuntime } from "../src/map-factory";
 
 // Run with `pnpm exec vite --host 127.0.0.1`, then open this HTML. All
 // geography and terrain are local, deterministic fixtures; no tile service.
@@ -48,7 +45,6 @@ async function main() {
     report.webgpuUnavailable = String(error);
   }
   const frames: Uint8ClampedArray[] = [];
-  let displayPixels: Uint8ClampedArray<ArrayBuffer> | undefined;
   for (const backend of backends) {
     try {
       await backend.render(
@@ -63,7 +59,6 @@ async function main() {
       continue;
     }
     const first = copy(backend);
-    displayPixels = first.pixels;
     frames.push(first.pixels);
     const pixel = (lng: number, lat: number) => {
       const [x, y] = atlas.project(lng, lat);
@@ -112,8 +107,7 @@ async function main() {
   const dem = document.createElement("canvas");
   dem.width = dem.height = 256;
   // A failed WebGPU device can reset the GPU process and wipe accelerated 2D
-  // canvases. Fixtures stay in software canvases, and the fog frame is rebuilt
-  // from pixels read back before any later backend could fail.
+  // canvases; the DEM fixture stays in a software canvas.
   const dc = dem.getContext("2d", { willReadFrequently: true })!;
   dc.fillStyle = "rgb(1, 142, 112)";
   dc.fillRect(0, 0, 256, 256); // 200m, Mapbox RGB
@@ -122,9 +116,32 @@ async function main() {
   );
   const bytes = await blob.arrayBuffer();
   addProtocol("fogdem", async () => ({ data: bytes.slice(0) }));
-  const map = new MapLibreMap({
+  // The geographic samples go through the production composition, under
+  // terrain from the start. As in production, the journal settles after the
+  // map has drawn its terrain, so a drape is cached before any fog frame.
+  // WebGPU parity is checked above. Here a slow handshake that finds no
+  // adapter stands in for a real device: the map keeps drawing its blank fog
+  // canvas meanwhile, as a phone does, and no software device is left to fail
+  // and reset the GPU process (which would redraw every drape and hide a stale
+  // one).
+  Object.defineProperty(navigator, "gpu", {
+    value: {
+      requestAdapter: () =>
+        new Promise((resolve) => setTimeout(() => resolve(null), 1_000)),
+    },
+  });
+  let settle: (runtime: ShadeRuntime) => void = () => undefined;
+  const runtime = new Promise<ShadeRuntime>((resolve) => (settle = resolve));
+  const createMap = createShadeMapFactory({
+    runtime,
+    anchor,
+    fogPalettes: { light: DARK_FOG_PALETTE, dark: DARK_FOG_PALETTE },
+    prefersReducedMotion: () => true,
+  });
+  const map = createMap({
     container: "map",
-    center: anchor,
+    // Start where the stale drape was seen on a phone, 6 km from the anchor.
+    center: { lng: 30.44, lat: 50.475 },
     zoom: 16,
     pitch: 60,
     bearing: 30,
@@ -140,6 +157,7 @@ async function main() {
           encoding: "mapbox",
         },
       },
+      terrain: { source: "dem", exaggeration: 1 },
       layers: [
         {
           id: "ground",
@@ -148,33 +166,58 @@ async function main() {
         },
       ],
     },
-  });
+  } as MapOptions);
   await new Promise<void>((resolve) => map.on("load", () => resolve()));
-  map.setTerrain({ source: "dem", exaggeration: 1 });
-  const display = document.createElement("canvas");
-  display.width = display.height = atlas.size;
-  display
-    .getContext("2d", { willReadFrequently: true })!
-    .putImageData(new ImageData(displayPixels!, atlas.size, atlas.size), 0, 0);
-  map.addSource("fog", {
-    type: "canvas",
-    canvas: display,
-    coordinates: atlas.coordinates,
-    animate: false,
+  await new Promise((resolve) => {
+    map.once("idle", resolve);
+    map.triggerRepaint();
   });
-  map.addLayer({
-    id: "fog",
-    type: "raster",
-    source: "fog",
-    paint: { "raster-fade-duration": 0 },
+  settle({
+    source: {
+      litCells: () => [cell],
+      isLit: (candidate) => candidate === cell,
+      onCellLit: () => () => undefined,
+    },
+    store: {
+      append: async () => undefined,
+      listCells: async () => [cell],
+      recordsForCell: async () => [],
+      subscribe: () => () => undefined,
+    },
   });
-  // Match the production factory: a non-animated CanvasSource still needs
-  // an upload frame before its static pixels can be sampled by MapLibre.
-  const fogSource = map.getSource("fog") as CanvasSource;
-  fogSource.play();
-  map.once("render", () => fogSource.pause());
+  const errors: string[] = [];
+  map.on("error", (event) => errors.push(String(event.error)));
+  // The fog renders asynchronously (WebGPU first, WebGL after). Wait for the
+  // unrevealed screen centre to turn foggy: under terrain this proves a fog
+  // frame published after attachment reaches the already-draped ground.
+  const probe = document.createElement("canvas");
+  probe.width = probe.height = 1;
+  const probeContext = probe.getContext("2d", { willReadFrequently: true })!;
+  const deadline = performance.now() + 20_000;
+  for (;;) {
+    map.triggerRepaint();
+    await new Promise((resolve) => map.once("render", resolve));
+    const point = map.project(map.getCenter());
+    const ratio = map.getCanvas().width / map.getContainer().clientWidth;
+    probeContext.clearRect(0, 0, 1, 1);
+    probeContext.drawImage(
+      map.getCanvas(),
+      Math.round(point.x * ratio),
+      Math.round(point.y * ratio),
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+    );
+    const [r, g, b] = probeContext.getImageData(0, 0, 1, 1).data;
+    if (r! < 200 || g! < 200 || b! < 200) break;
+    check(errors.length === 0, errors.join("; "));
+    check(performance.now() < deadline, "Fog frame never reached the map");
+  }
   Object.assign(window, {
-    fogTest: { report, map, atlas, cell, cellToLatLng, gridDisk },
+    fogTest: { report, map, errors, cell, cellToLatLng, gridDisk },
   });
   result.textContent = JSON.stringify(report, null, 2);
   document.documentElement.dataset.result = "passed";
