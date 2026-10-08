@@ -1541,6 +1541,11 @@ export function AuthenticatedMapHomeView({
     closeAvatarEditor();
   }
 
+  // The inventory needs Core's rules and committed awards to keep it.
+  const inventoryReady =
+    findItems?.applyInventoryCommand !== undefined &&
+    committedAwards !== undefined;
+
   /**
    * The one explicit user-gesture path. It either asks the host — which is
    * also the retry when a platform refuses to prompt without a gesture — or
@@ -1768,6 +1773,14 @@ export function AuthenticatedMapHomeView({
   }
 
   /**
+   * The Dock's other action opens what whoever is driving carries, under
+   * their own state: the Bond's, or the Avaia's.
+   */
+  function activateInventory(): void {
+    openDetail("inventory", dock.configure.seat);
+  }
+
+  /**
    * A save ends on the world. The service answers with what it stored, that
    * answer is what the surface already reads, and only then does the screen
    * close — so nothing here confirms a draft the service never saw. The world
@@ -1954,6 +1967,9 @@ export function AuthenticatedMapHomeView({
       return detailState?.subject === "avaia" ? avaiaLabel : pubDress;
     }
     if (activeDetail === "avaia") return t("dock.ownedAvaia");
+    if (activeDetail === "inventory" && detailState?.subject === "avaia") {
+      return t("dock.ownedAvaia");
+    }
     if (section === "settings") return t("settings.application");
     return t("dock.personalBond");
   }
@@ -2083,18 +2099,35 @@ export function AuthenticatedMapHomeView({
               <>
                 <div className="bond-dock__header">
                   <span className="bond-dock__kicker">Bond</span>
-                  <button
-                    className="bond-dock__edit"
-                    type="button"
-                    aria-label={translateFirst(
-                      t,
-                      dock.configure.label,
-                      DOCK_ACTION_KEYS,
-                    )}
-                    onClick={activateConfigure}
-                  >
-                    {t("dock.edit")}
-                  </button>
+                  <div className="bond-dock__header-actions">
+                    {inventoryReady ? (
+                      <button
+                        className="bond-dock__edit"
+                        type="button"
+                        aria-label={t("inventory.openNamed").replace(
+                          "{name}",
+                          dock.configure.seat === "avaia"
+                            ? avaiaLabel
+                            : pubDress,
+                        )}
+                        onClick={activateInventory}
+                      >
+                        {t("inventory.open")}
+                      </button>
+                    ) : null}
+                    <button
+                      className="bond-dock__edit"
+                      type="button"
+                      aria-label={translateFirst(
+                        t,
+                        dock.configure.label,
+                        DOCK_ACTION_KEYS,
+                      )}
+                      onClick={activateConfigure}
+                    >
+                      {t("dock.edit")}
+                    </button>
+                  </div>
                 </div>
                 <div className="bond-dock__scroll">
                   <div className="bond-dock__pair">
@@ -2194,8 +2227,7 @@ export function AuthenticatedMapHomeView({
                         </p>
                       </section>
                       <dl className="bond-profile__rows">
-                        {findItems?.applyInventoryCommand === undefined ||
-                        committedAwards === undefined ? null : (
+                        {!inventoryReady ? null : (
                           <div>
                             <dt>{t("inventory.open")}</dt>
                             <dd>
@@ -2356,12 +2388,44 @@ export function AuthenticatedMapHomeView({
                   ) : null}
 
                   {activeDetail === "inventory" && findItems !== undefined ? (
-                    <InventoryPanel
-                      owner={pubDress}
-                      core={findItems}
-                      committed={committedAwards !== undefined}
-                      workshop={workshop}
-                    />
+                    <>
+                      <section
+                        className="avaia-notebook"
+                        aria-labelledby="inventory-state-title"
+                      >
+                        <span
+                          className="interface-settings__eyebrow"
+                          id="inventory-state-title"
+                        >
+                          {detailState?.subject === "avaia"
+                            ? avaiaLabel
+                            : pubDress}
+                        </span>
+                        <p className="profile-edit__note">
+                          {detailState?.subject !== "avaia"
+                            ? levelSummary(t, standing.bond)
+                            : avaiaConfiguration === "unconfigured"
+                              ? t("avaia.progression.unconfigured")
+                              : levelSummary(t, standing.avaia)}
+                        </p>
+                        {detailState?.subject === "avaia" &&
+                        avaiaLife !== undefined ? (
+                          <p className="profile-edit__note">
+                            {t("inventory.energy").replace(
+                              "{percent}",
+                              String(Math.round(avaiaLife.energy / 100)),
+                            )}
+                          </p>
+                        ) : null}
+                      </section>
+                      <InventoryPanel
+                        owner={pubDress}
+                        core={findItems}
+                        committed={committedAwards !== undefined}
+                        workshop={workshop}
+                        first={detailState?.subject ?? "bond"}
+                      />
+                    </>
                   ) : null}
 
                   {activeDetail === "avaia" ? (
