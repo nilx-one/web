@@ -6,10 +6,17 @@ import { ATLAS_GLSL, ATLAS_WGSL, FOG_PARAMETER_VECTORS } from "./fog-material";
 export interface FogBackend {
   readonly kind: "webgpu" | "webgl2";
   readonly canvas: HTMLCanvasElement;
+  /**
+   * Draws one frame and hands the backend canvas to `present` in the same
+   * task the frame was drawn in. A WebGPU canvas holds its frame only until
+   * the task ends: read after an await, it is presented and may read back
+   * empty (iOS Safari does), which drops the whole fog for that frame.
+   */
   render(
     mask: HTMLCanvasElement,
     parameters: Float32Array<ArrayBuffer>,
     maskChanged: boolean,
+    present: (frame: HTMLCanvasElement) => void,
   ): Promise<void>;
   dispose(): void;
 }
@@ -75,7 +82,7 @@ export async function createWebGpuFog(
     return {
       kind: "webgpu",
       canvas,
-      async render(mask, parameters, maskChanged) {
+      async render(mask, parameters, maskChanged, present) {
         if (disposed || failed) throw new Error("Fog GPU device lost");
         if (maskChanged)
           device.queue.copyExternalImageToTexture(
@@ -100,6 +107,7 @@ export async function createWebGpuFog(
         pass.draw(3);
         pass.end();
         device.queue.submit([encoder.finish()]);
+        present(canvas);
         await device.queue.onSubmittedWorkDone();
         if (failed || disposed) throw new Error("Fog GPU device lost");
       },
@@ -190,7 +198,7 @@ void main() {
   return {
     kind: "webgl2",
     canvas,
-    async render(mask, parameters, maskChanged) {
+    async render(mask, parameters, maskChanged, present) {
       if (gl.isContextLost()) throw new Error("Fog WebGL context lost");
       gl.viewport(0, 0, size, size);
       gl.useProgram(program);
@@ -210,6 +218,7 @@ void main() {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       if (gl.getError() !== gl.NO_ERROR)
         throw new Error("Fog WebGL render failed");
+      present(canvas);
     },
     dispose() {
       canvas.removeEventListener("webglcontextlost", onLost);
