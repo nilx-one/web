@@ -37,6 +37,49 @@ describe("LocationControl localization", () => {
     expect(screen.getByText("Точність близько 18 m.")).toBeInTheDocument();
   });
 
+  it("shows Core Bond–Avaia distance while keeping the location action", () => {
+    chooseLocale("en");
+    const onActivate = vi.fn();
+    const viewModel = createLocationControlViewModel(
+      { kind: "active", position: observation({ accuracyMeters: 12 }) },
+      false,
+    );
+    const { container, rerender } = render(
+      <LocationControl
+        viewModel={viewModel}
+        onActivate={onActivate}
+        proximity={{
+          distance_m: 15,
+          red_m: 5000,
+          restore_below_m: 4500,
+          level: "near",
+          can_reveal: true,
+          duration_ms: 60_000,
+        }}
+      />,
+    );
+    expect(container.querySelector("[data-proximity='near']")).not.toBeNull();
+    expect(screen.getByText("15m")).toBeVisible();
+    screen.getByRole("button", { name: "Recenter map on this device" }).click();
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    rerender(
+      <LocationControl
+        viewModel={viewModel}
+        onActivate={onActivate}
+        proximity={{
+          distance_m: 5000,
+          red_m: 5000,
+          restore_below_m: 4500,
+          level: "red",
+          can_reveal: false,
+          duration_ms: null,
+        }}
+      />,
+    );
+    expect(container.querySelector("[data-proximity='red']")).not.toBeNull();
+    expect(screen.getByText("5.0km")).toBeVisible();
+  });
+
   it("localizes non-active accessibility copy too", () => {
     chooseLocale("uk-UA");
     const viewModel = createLocationControlViewModel(
