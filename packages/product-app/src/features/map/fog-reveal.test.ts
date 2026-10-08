@@ -19,6 +19,7 @@ import {
   revealDurationMs,
   revealFinished,
   revealProgress,
+  revealRemainingMs,
   startReveal,
   writeRevealJobs,
   type FogRevealStorage,
@@ -84,6 +85,27 @@ describe("revealing a fog cell", () => {
     expect(revealFinished(job, 1_000 + 119_999)).toBe(false);
     expect(revealFinished(job, 1_000 + 120_000)).toBe(true);
     expect(revealProgress(job, 1_000 + 999_999)).toBe(1);
+  });
+
+  it("pauses a distant reveal without accumulating blocked time", () => {
+    const job = startReveal(cell("a"), 4, 1_000, 600_000);
+    const paused = { ...job, pausedAt: 61_000 };
+    expect(revealProgress(paused, 2_000_000)).toBe(0.1);
+    expect(revealRemainingMs(paused, 2_000_000)).toBe(540_000);
+    expect(revealFinished(paused, 2_000_000)).toBe(false);
+
+    const resumedAt = 121_000;
+    const resumed = {
+      ...paused,
+      startedAt: paused.startedAt + resumedAt - paused.pausedAt,
+      pausedAt: undefined,
+    };
+    expect(revealRemainingMs(resumed, resumedAt)).toBe(540_000);
+    expect(revealFinished(resumed, resumedAt + 539_999)).toBe(false);
+    expect(revealFinished(resumed, resumedAt + 540_000)).toBe(true);
+    const storage = memoryStorage();
+    writeRevealJobs("0x0sky", [paused], storage);
+    expect(readRevealJobs("0x0sky", storage)).toEqual([paused]);
   });
 
   it("offers a cell in reach, and no more than three at once", () => {
