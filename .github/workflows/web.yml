@@ -104,7 +104,12 @@ jobs:
       - name: Verify repository policy
         run: pnpm policy
       - name: Verify formatting
-        run: pnpm format
+        run: |
+          pnpm format || {
+            pnpm exec prettier --write packages/product-app/src/features/map/use-avaia-proximity.ts
+            git diff -- packages/product-app/src/features/map/use-avaia-proximity.ts
+            exit 1
+          }
       - name: Lint
         run: pnpm lint
       - name: Typecheck
