@@ -303,13 +303,14 @@ export function useFogReveal({
   // A prompt for a cell that left reach — the Bond moved, or the fog lifted
   // there some other way — is no longer a question anyone can answer.
   const livePrompt =
-    prompt !== undefined && frontier.some((cell) => cell.id === prompt.cell.id)
+    canReveal && prompt !== undefined && frontier.some((cell) => cell.id === prompt.cell.id)
       ? prompt
       : undefined;
 
   const handleFogTap = useCallback(
     (point: MapPointSelection): FogTapOutcome => {
       if (fog === undefined || !fog.isActive()) return "no-fog";
+      if (!canReveal) return "out-of-reach";
       const cell = fog.cellAt(point);
       const offer = offerFor(cell.id, frontier, jobs);
       switch (offer.kind) {
@@ -324,28 +325,30 @@ export function useFogReveal({
             offer.cell,
             (at, radius) => renderer.landmarksNear?.(at, radius) ?? [],
           );
+          const coreDuration = proximity?.durationsMs[Math.min(5, landmarks)];
+          if (enforceProximity && coreDuration == null) return "out-of-reach";
           setPrompt({
             cell: offer.cell,
             landmarks,
-            durationMs: revealDurationMs(landmarks),
+            durationMs: coreDuration ?? revealDurationMs(landmarks),
             busy: offer.kind === "busy",
           });
           return offer.kind === "busy" ? "busy" : "offered";
         }
       }
     },
-    [fog, frontier, jobs, renderer],
+    [canReveal, enforceProximity, fog, frontier, jobs, proximity, renderer],
   );
 
   const confirm = useCallback((): FogRevealJob | undefined => {
-    if (livePrompt === undefined || livePrompt.busy) return undefined;
+    if (!canReveal || livePrompt === undefined || livePrompt.busy) return undefined;
     const offer = offerFor(livePrompt.cell.id, frontier, jobs);
     setPrompt(undefined);
     if (offer.kind !== "offer") return undefined;
-    const job = startReveal(offer.cell, livePrompt.landmarks, Date.now());
+    const job = startReveal(offer.cell, livePrompt.landmarks, Date.now(), livePrompt.durationMs);
     updateJobs((current) => [...current, job]);
     return job;
-  }, [frontier, jobs, livePrompt, updateJobs]);
+  }, [canReveal, frontier, jobs, livePrompt, updateJobs]);
 
   const dismiss = useCallback(() => setPrompt(undefined), []);
 
