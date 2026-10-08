@@ -8,6 +8,9 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 
 const server = await createServer({
+  // MapLibre's worker is a separate module: Vite's dependency optimizer
+  // otherwise rewrites it to a missing node_modules/.vite/deps URL.
+  optimizeDeps: { exclude: ["maplibre-gl"] },
   server: { host: "127.0.0.1", port: 4177, strictPort: true },
 });
 await server.listen();
@@ -20,7 +23,7 @@ try {
       "--enable-unsafe-swiftshader",
     ],
   });
-  const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  let page = await browser.newPage({ viewport: { width: 900, height: 900 } });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(
@@ -43,6 +46,22 @@ try {
   assert.ok(report.webgl2);
   if (report.webgpu) assert.equal(report.parity.alphaMismatch, 0);
   else console.warn("WebGPU parity not verified:", report.webgpuUnavailable);
+  // Geography is read from a fresh page that never touches WebGPU: a failed
+  // WebGPU attempt can blank the page's 2D canvases, the fog drape included.
+  await page.close();
+  page = await browser.newPage({ viewport: { width: 900, height: 900 } });
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(
+    "http://127.0.0.1:4177/packages/map-shade/tests/browser.html?webgpu=0",
+  );
+  await page.waitForFunction(() => document.documentElement.dataset.result, {
+    timeout: 60_000,
+  });
+  assert.equal(
+    await page.locator("html").getAttribute("data-result"),
+    "passed",
+    await page.locator("#result").innerText(),
+  );
   const samples = await page.evaluate(async () => {
     const { map, cell, gridDisk, cellToLatLng } = window.fogTest;
     const checks = [];
@@ -50,8 +69,20 @@ try {
     canvas.width = canvas.height = 900;
     const context = canvas.getContext("2d");
     const idle = () =>
-      new Promise((resolve) => {
-        map.once("idle", resolve);
+      new Promise((resolve, reject) => {
+        const onIdle = () => {
+          window.clearTimeout(timeout);
+          resolve();
+        };
+        const timeout = window.setTimeout(() => {
+          map.off("idle", onIdle);
+          reject(
+            new Error(
+              `MapLibre idle timeout (tiles loaded: ${map.areTilesLoaded()})`,
+            ),
+          );
+        }, 30_000);
+        map.once("idle", onIdle);
         map.triggerRepaint();
       });
     await idle();
