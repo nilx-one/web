@@ -31,19 +31,23 @@ export function LocationControl({
       ? t(viewModel.hintKey)
       : `${t(viewModel.hintKey)} ${viewModel.accuracyMeters} m.`;
 
-
-  const fraction = proximity === undefined
-    ? 0
-    : Math.min(1, proximity.distance_m / proximity.red_m);
-  const ringStyle = proximity === undefined ? undefined : {
-    "--proximity-angle": `${Math.round(fraction * 360)}deg`,
-    "--proximity-color": `hsl(${Math.round(190 * (1 - fraction))} 90% 48%)`,
-  } as CSSProperties;
-  const distanceLabel = proximity === undefined
-    ? undefined
-    : proximity.distance_m < 1_000
-      ? `${proximity.distance_m}m`
-      : `${(proximity.distance_m / 1_000).toFixed(1)}km`;
+  const fraction =
+    proximity === undefined
+      ? 0
+      : Math.min(1, proximity.distance_m / proximity.red_m);
+  const ringStyle =
+    proximity === undefined
+      ? undefined
+      : ({
+          "--proximity-angle": `${Math.round(fraction * 360)}deg`,
+          "--proximity-color": `hsl(${Math.round(190 * (1 - fraction))} 90% 48%)`,
+        } as CSSProperties);
+  const distanceLabel =
+    proximity === undefined
+      ? undefined
+      : proximity.distance_m < 1_000
+        ? `${proximity.distance_m}m`
+        : `${(proximity.distance_m / 1_000).toFixed(1)}km`;
 
   return (
     <div
@@ -74,7 +78,9 @@ export function LocationControl({
       </button>
       <span className="visually-hidden" id="location-control-hint">
         {hint}
-        {proximity === undefined ? "" : ` Bond ↔ Avaia: ${proximity.distance_m} m; ${proximity.can_reveal ? "reveal available" : "reveal unavailable"}.`}
+        {proximity === undefined
+          ? ""
+          : ` Bond ↔ Avaia: ${proximity.distance_m} m.`}
       </span>
     </div>
   );
