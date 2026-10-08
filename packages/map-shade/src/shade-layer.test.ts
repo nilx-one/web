@@ -752,8 +752,10 @@ describe("document visibility", () => {
 // directional illumination must belong to the ground across camera changes.
 describe("fog world lighting", () => {
   it("anchors shafts and relief to ground coordinates", () => {
-    expect(FOG_FRAGMENT_SHADER).toContain("dot(m, vec2(0.94, 0.34))");
-    expect(FOG_FRAGMENT_SHADER).not.toContain("gl_FragCoord.xy");
+    // Only aerial perspective can read a framebuffer coordinate. Directional
+    // relief may differentiate screen samples only to recover a ground slope.
+    expect(FOG_FRAGMENT_SHADER.match(/gl_FragCoord/g)).toHaveLength(1);
+    expect(FOG_FRAGMENT_SHADER).toMatch(/float screenY = gl_FragCoord\.y/);
     expect(FOG_FRAGMENT_SHADER).not.toContain(
       "vec2(dFdx(cloud), dFdy(cloud)) *",
     );

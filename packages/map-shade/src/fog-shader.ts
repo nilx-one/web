@@ -184,8 +184,10 @@ void main() {
   vec2 slope = abs(determinant) > 1e-6
     ? vec2(dc.x * dy.y - dc.y * dx.y, dc.y * dx.x - dc.x * dy.x) / determinant
     : vec2(0.0);
+  // lod is 20 metres-per-pixel; 1.8 preserves the former 36-pixel relief.
+  // Mercator y points south, opposite GL window-up.
   slope *= exp2(lod) * 1.8;
-  float relief = clamp(dot(slope, vec2(-0.34, 0.94)), -1.0, 1.0);
+  float relief = clamp(dot(slope, vec2(-0.34, -0.94)), -1.0, 1.0);
 
   vec3 shadow = u_shadow;
   vec3 light = u_light;
@@ -210,8 +212,17 @@ void main() {
   // the sky, and slow shafts of light fall through it from above.
   float screenY = gl_FragCoord.y / max(u_viewport.y, 1.0);
   float distance01 = smoothstep(0.25, 1.0, screenY) * u_haze;
-  float across = dot(m, vec2(0.94, 0.34)) / 150.0;
-  float shafts = smoothstep(0.08, 0.42, gnoise(vec2(across, t * 0.035)));
+  // Fixed world wavelengths cross-fade with zoom, just like the mist:
+  // the bands keep their grain without sliding their phase across streets.
+  float shaftLod = log2(max(u_mpp, 1e-3) * 150.0);
+  float shaftBase = floor(shaftLod);
+  float across = dot(m, vec2(0.94, -0.34));
+  float shafts = mix(
+    gnoise(vec2(across / exp2(shaftBase), t * 0.035)),
+    gnoise(vec2(across / exp2(shaftBase + 1.0), t * 0.035)),
+    fract(shaftLod)
+  );
+  shafts = smoothstep(0.08, 0.42, shafts);
   shafts *= 0.65;
   color = mix(color, light, distance01 * 0.45 + shafts * 0.16);
 
