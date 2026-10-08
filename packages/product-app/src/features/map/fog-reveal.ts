@@ -28,7 +28,7 @@ export interface FogRevealJob {
   /** How many landmarks the archive drew in the cell when the reveal began. */
   readonly landmarks: number;
   /** Timer is frozen at this wall-clock instant when Core blocks reveal. */
-  readonly pausedAt?: number;
+  readonly pausedAt?: number | undefined;
 }
 
 /** How many cells an Avaia works open at the same time. */
