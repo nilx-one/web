@@ -11,27 +11,51 @@ import {
 } from "@nilx-one/map-contract";
 import { useEffect, useRef, useState } from "react";
 
-const REFRESH_MS = 2_000;
-const ARTIFACT_COUNTS = [0, 1, 2, 3, 4, 5] as const;
+/** Avaia moves on her own, so the bodies are re-measured on this beat... */
+export const PROXIMITY_REFRESH_MS = 2_000;
+/** ...and a decision nobody renewed for this long authorizes nothing. */
+export const PROXIMITY_STALE_MS = 3 * PROXIMITY_REFRESH_MS;
+/**
+ * Core counts at most this many artifacts (`docs/avaia-proximity.md` in
+ * core: more behave as this many). Durations are quoted for each count up to
+ * it, so a caller picks one by `durationFor` and never mirrors the cap.
+ */
+const QUOTED_ARTIFACTS = [0, 1, 2, 3, 4, 5] as const;
 
 /** Snapshot of Core's decision for a single observed Bond/Avaia distance. */
 export interface AvaiaProximitySnapshot {
+  /** Core's answer for the distance, with no artifacts: the capability. */
   readonly policy: AvaiaProximityPolicy;
-  /** Core-computed duration for each artifact count, 5 being the cap. */
-  readonly durationsMs: readonly (number | null)[];
+  /** Core's reveal duration for a cell with `artifacts`; `null` when blocked. */
+  durationFor(artifacts: number): number | null;
 }
 
+export interface AvaiaProximityInput {
+  readonly core: Pick<CoreRuntimePort, "avaiaProximity"> | undefined;
+  readonly owner: string;
+  readonly bondPoint: MapPointSelection | undefined;
+  /**
+   * Where the Avaia's own body is, or `undefined` when nothing says. It is
+   * never defaulted to the Bond: an unknown place is not a near one.
+   */
+  readonly getAvaiaPoint: () => MapPointSelection | undefined;
+}
+
+/**
+ * Measures the Bond and the Avaia as the independent bodies they are and asks
+ * Core what that distance allows. The answer is `undefined` — nothing
+ * authorized — whenever Core, a position, or a fresh sample is missing.
+ *
+ * Core holds no state, so this keeps the one bit it needs: whether the last
+ * answer blocked reveals. It starts blocked and goes back to blocked whenever
+ * the history is lost, so an unknown past never opens the restore band.
+ */
 export function useAvaiaProximity({
   core,
   owner,
   bondPoint,
   getAvaiaPoint,
-}: {
-  readonly core: Pick<CoreRuntimePort, "avaiaProximity"> | undefined;
-  readonly owner: string;
-  readonly bondPoint: MapPointSelection | undefined;
-  readonly getAvaiaPoint: () => MapPointSelection | undefined;
-}): AvaiaProximitySnapshot | undefined {
+}: AvaiaProximityInput): AvaiaProximitySnapshot | undefined {
   const [state, setState] = useState<
     { owner: string; snapshot: AvaiaProximitySnapshot } | undefined
   >(undefined);
@@ -39,39 +63,64 @@ export function useAvaiaProximity({
   useEffect(() => {
     latest.current = { bondPoint, getAvaiaPoint };
   });
+  const sample = useRef<(() => void) | undefined>(undefined);
 
   const evaluate = core?.avaiaProximity;
   useEffect(() => {
     let live = true;
     let busy = false;
-    const refresh = async () => {
-      if (busy) return;
-      busy = true;
+    let again = false;
+    let previouslyBlocked = true;
+    let remembered:
+      { key: string; snapshot: AvaiaProximitySnapshot } | undefined;
+    let expiry: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+    const forget = (): void => {
+      previouslyBlocked = true;
+      remembered = undefined;
+      if (expiry !== undefined) globalThis.clearTimeout(expiry);
+      expiry = undefined;
+      if (live) setState(undefined);
+    };
+    const publish = (snapshot: AvaiaProximitySnapshot): void => {
+      if (expiry !== undefined) globalThis.clearTimeout(expiry);
+      expiry = globalThis.setTimeout(forget, PROXIMITY_STALE_MS);
+      if (live) setState({ owner, snapshot });
+    };
+
+    const measure = async (): Promise<void> => {
+      const { bondPoint, getAvaiaPoint } = latest.current;
+      const avaiaPoint = getAvaiaPoint();
+      if (
+        bondPoint === undefined ||
+        avaiaPoint === undefined ||
+        evaluate === undefined
+      ) {
+        forget();
+        return;
+      }
+      const meters = Math.max(
+        0,
+        Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)),
+      );
+      if (!Number.isSafeInteger(meters)) {
+        forget();
+        return;
+      }
+      // The answer depends only on the metres and the carried bit, so a body
+      // standing still is not a reason to ask Core again.
+      const key = `${meters}|${previouslyBlocked}`;
+      if (remembered?.key === key) {
+        publish(remembered.snapshot);
+        return;
+      }
       try {
-        const { bondPoint, getAvaiaPoint } = latest.current;
-        const avaiaPoint = getAvaiaPoint();
-        if (
-          bondPoint === undefined ||
-          avaiaPoint === undefined ||
-          evaluate === undefined
-        ) {
-          if (live) setState(undefined);
-          return;
-        }
-        const meters = Math.max(
-          0,
-          Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)),
-        );
-        if (!Number.isSafeInteger(meters)) {
-          if (live) setState(undefined);
-          return;
-        }
+        const asked = previouslyBlocked;
         const values = await Promise.all(
-          ARTIFACT_COUNTS.map((artifacts) =>
-            evaluate.call(core, meters, artifacts),
+          QUOTED_ARTIFACTS.map((artifacts) =>
+            evaluate.call(core, meters, artifacts, asked),
           ),
         );
-        if (!live) return;
         const first = values[0];
         if (
           first === undefined ||
@@ -83,47 +132,69 @@ export function useAvaiaProximity({
               p.restore_below_m !== first.restore_below_m,
           )
         ) {
-          setState(undefined);
+          forget();
           return;
         }
-        setState({
-          owner,
-          snapshot: {
-            policy: first,
-            durationsMs: values.map((p) => p.duration_ms),
-          },
-        });
+        const durations = values.map((p) => p.duration_ms);
+        const snapshot: AvaiaProximitySnapshot = {
+          policy: first,
+          durationFor: (artifacts) =>
+            durations[
+              Math.min(
+                QUOTED_ARTIFACTS.length - 1,
+                Math.max(0, Math.trunc(artifacts)),
+              )
+            ] ?? null,
+        };
+        previouslyBlocked = !first.can_reveal;
+        // Keyed by what was asked: the next question carries the new bit, and
+        // is answered from here again only if it is the same question.
+        remembered = { key: `${meters}|${asked}`, snapshot };
+        publish(snapshot);
       } catch {
-        // Older Wasm artifacts, failures or stale coordinates cannot authorize work.
-        if (live) setState(undefined);
-      } finally {
-        busy = false;
+        // Older Wasm artifacts or a failing call cannot authorize work, and
+        // the history they would have continued is gone.
+        forget();
       }
     };
-    void refresh();
-    const timer = globalThis.setInterval(() => void refresh(), REFRESH_MS);
+
+    const refresh = (): void => {
+      if (busy) {
+        again = true;
+        return;
+      }
+      busy = true;
+      void (async () => {
+        try {
+          do {
+            again = false;
+            await measure();
+          } while (again && live);
+        } finally {
+          busy = false;
+        }
+      })();
+    };
+    sample.current = refresh;
+
+    refresh();
+    const timer = globalThis.setInterval(refresh, PROXIMITY_REFRESH_MS);
     return () => {
       live = false;
+      sample.current = undefined;
       globalThis.clearInterval(timer);
+      if (expiry !== undefined) globalThis.clearTimeout(expiry);
     };
   }, [core, evaluate, owner]);
 
-  // A previously sampled near decision must not authorize work after either
-  // body has moved, even while the next asynchronous Core read is pending.
-  if (state?.owner !== owner || bondPoint === undefined) return undefined;
-  const avaiaPoint = getAvaiaPoint();
-  if (avaiaPoint === undefined) return undefined;
-  const currentDistance = Math.max(
-    0,
-    Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)),
-  );
-  const policy = state.snapshot.policy;
-  // A 2s sampled distance may drift by a few metres during an ordinary walk.
-  // Never reuse an authorization after crossing Core's restored-range limit.
-  if (policy.can_reveal && currentDistance >= policy.restore_below_m) {
-    return undefined;
-  }
-  return Math.abs(currentDistance - policy.distance_m) <= 8
-    ? state.snapshot
-    : undefined;
+  // A position that arrives or changes is measured now, not on the next beat:
+  // a cold start must not wait out a whole interval with nothing authorized,
+  // and a fast walker must not outrun the sample.
+  const bondLongitude = bondPoint?.longitude;
+  const bondLatitude = bondPoint?.latitude;
+  useEffect(() => {
+    sample.current?.();
+  }, [bondLongitude, bondLatitude]);
+
+  return state?.owner === owner ? state.snapshot : undefined;
 }

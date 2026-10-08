@@ -61,6 +61,13 @@ const EN_MESSAGES = {
   "location.centered.label": "Map centred on this device",
   "location.recenter.label": "Recenter on this device",
   "location.accuracy.approx": "Accuracy about",
+  "proximity.distance.m": "{value}m",
+  "proximity.distance.km": "{value}km",
+  "proximity.hint.open": "Avaia is {distance} from you.",
+  "proximity.hint.blocked":
+    "Avaia is {distance} from you: too far to reveal fog. Meet her closer.",
+  "proximity.hint.unknown":
+    "Where Avaia is isn't known yet, so fog work waits.",
   "map.card.thisDevice": "This device",
   "map.card.fromThisDevice": "{distance} from this device",
   "map.card.declared": "Manual position",
@@ -375,6 +382,13 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "location.centered.label": "Мапа центрована на цьому пристрої",
   "location.recenter.label": "Центрувати на цьому пристрої",
   "location.accuracy.approx": "Точність близько",
+  "proximity.distance.m": "{value}м",
+  "proximity.distance.km": "{value}км",
+  "proximity.hint.open": "Avaia за {distance} від вас.",
+  "proximity.hint.blocked":
+    "Avaia за {distance} від вас: надто далеко, щоб відкривати туман. Зустріньтеся ближче.",
+  "proximity.hint.unknown":
+    "Де Avaia, поки невідомо, тож робота з туманом чекає.",
   "map.card.thisDevice": "Цей пристрій",
   "map.card.fromThisDevice": "{distance} від цього пристрою",
   "map.card.declared": "Ручна позиція",

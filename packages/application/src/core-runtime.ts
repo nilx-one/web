@@ -182,10 +182,15 @@ export interface CoreRuntimePort {
     subject: string,
     command: AvaiaLifeCommand,
   ): Promise<AvaiaLifeAnswer>;
-  /** Core is the sole authority for fog capability and reveal duration. */
+  /**
+   * Core is the sole authority for fog capability and reveal duration. The
+   * host hands back whether the last answer blocked reveals (`true` when it
+   * has none), which is what makes the restore below 90% of red a transition.
+   */
   avaiaProximity?(
     distanceMeters: number,
     artifacts: number,
+    previouslyBlocked: boolean,
   ): Promise<AvaiaProximityPolicy>;
 }
 

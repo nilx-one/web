@@ -51,6 +51,13 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "location.centered.label": "Карта центрирована на этом устройстве",
   "location.recenter.label": "Центрировать на этом устройстве",
   "location.accuracy.approx": "Точность около",
+  "proximity.distance.m": "{value}м",
+  "proximity.distance.km": "{value}км",
+  "proximity.hint.open": "Avaia в {distance} от вас.",
+  "proximity.hint.blocked":
+    "Avaia в {distance} от вас: слишком далеко, чтобы открывать туман. Встретьтесь ближе.",
+  "proximity.hint.unknown":
+    "Где Avaia, пока неизвестно, поэтому работа с туманом ждёт.",
   "map.card.thisDevice": "Это устройство",
   "map.card.fromThisDevice": "{distance} от этого устройства",
   "map.card.declared": "Ручная позиция",

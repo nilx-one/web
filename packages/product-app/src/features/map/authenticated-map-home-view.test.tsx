@@ -113,21 +113,40 @@ function curiousCore(): Pick<CoreRuntimePort, "avaiaDriveStep"> {
   };
 }
 
-/** Contract-compatible stub for map tests that explicitly exercise fog work. */
+/**
+ * Contract-compatible stub for map tests that exercise fog work: Core's
+ * documented policy, including the carried blocked bit (docs/avaia-proximity.md
+ * in core). Fog work also needs an Avaia with a place of her own, which these
+ * tests give her with `avaiaStandsAt`.
+ */
 function nearbyProximityCore(): Pick<CoreRuntimePort, "avaiaProximity"> {
   return {
-    avaiaProximity: async (distanceMeters) => {
-      const canReveal = distanceMeters < 4_500;
+    avaiaProximity: async (distanceMeters, artifacts, previouslyBlocked) => {
+      const blocked =
+        distanceMeters >= 5_000 ||
+        (previouslyBlocked && distanceMeters >= 4_500);
       return {
         distance_m: distanceMeters,
         red_m: 5_000,
         restore_below_m: 4_500,
-        level: distanceMeters <= 15 ? "near" : "working",
-        can_reveal: canReveal,
-        duration_ms: canReveal ? 60_000 : null,
+        level:
+          distanceMeters >= 5_000
+            ? "red"
+            : distanceMeters >= 4_500
+              ? "restricted"
+              : distanceMeters < 15
+                ? "near"
+                : "working",
+        can_reveal: !blocked,
+        duration_ms: blocked ? null : 60_000 + artifacts * 1_000,
       };
     },
   };
+}
+
+/** Where Avaia was left, so the Bond's distance to her is a measured one. */
+function avaiaStandsAt(point: { longitude: number; latitude: number }): void {
+  rememberWorld("0x0sky", { avaia: { ...point, bearingDeg: 0 } });
 }
 
 interface ViewOverrides {
@@ -2132,6 +2151,7 @@ describe("AuthenticatedMapHomeView", () => {
         createMapRendererDouble({ kind: "ready" }),
         { fog, setFogMarks },
       );
+      avaiaStandsAt(here);
       renderView({
         mapRenderer,
         findItems: nearbyProximityCore(),
@@ -2188,6 +2208,7 @@ describe("AuthenticatedMapHomeView", () => {
         createMapRendererDouble({ kind: "ready" }),
         { fog, setFogMarks: vi.fn() },
       );
+      avaiaStandsAt(here);
       renderView({
         mapRenderer,
         findItems: nearbyProximityCore(),
@@ -2221,6 +2242,7 @@ describe("AuthenticatedMapHomeView", () => {
         createMapRendererDouble({ kind: "ready" }),
         { fog, setFogMarks: vi.fn() },
       );
+      avaiaStandsAt(here);
       renderView({
         mapRenderer,
         findItems: nearbyProximityCore(),
@@ -2250,6 +2272,7 @@ describe("AuthenticatedMapHomeView", () => {
         createMapRendererDouble({ kind: "ready" }),
         { fog, setFogMarks: vi.fn() },
       );
+      avaiaStandsAt(here);
       renderView({
         mapRenderer,
         findItems: nearbyProximityCore(),
@@ -2275,6 +2298,71 @@ describe("AuthenticatedMapHomeView", () => {
       expect(avaiaLines("en", voice, "blocked.fog")).toContain(
         lastLabel(mapRenderer)?.speech,
       );
+    });
+
+    it("holds fog work, and says so, while Avaia has no place of her own", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks: vi.fn() },
+      );
+      renderView({
+        mapRenderer,
+        findItems: nearbyProximityCore(),
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+      // Not at 0m: nobody has said where she is, so the face says so.
+      expect(screen.getByText("?")).toBeVisible();
+      expect(screen.queryByText("0m")).toBeNull();
+      expect(
+        screen.getByText(/Where Avaia is isn't known yet, so fog work waits\./),
+      ).toBeInTheDocument();
+      act(() =>
+        mapRenderer.tapGround({
+          longitude: there.longitude,
+          latitude: there.latitude,
+          ground: "fog",
+        }),
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("holds fog work, and says so, once Avaia is beyond the red line", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks: vi.fn() },
+      );
+      avaiaStandsAt({ ...here, longitude: here.longitude + 0.09 });
+      renderView({
+        mapRenderer,
+        findItems: nearbyProximityCore(),
+        geolocation: createGeolocationDouble({ position: here }),
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Recenter on this device" }),
+        ).toBeVisible(),
+      );
+      await vi.waitFor(() => expect(screen.getByText(/km$/)).toBeVisible());
+      expect(screen.getByText(/too far to reveal fog/)).toBeInTheDocument();
+      act(() =>
+        mapRenderer.tapGround({
+          longitude: there.longitude,
+          latitude: there.latitude,
+          ground: "fog",
+        }),
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
     });
 
     it("does not walk while its Bond is at the wheel", async () => {

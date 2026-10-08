@@ -211,6 +211,9 @@ export interface FogRevealStorage {
 }
 
 const STORAGE_PREFIX = "nilx-one.fog.jobs.v1.";
+const AUTHORIZED_PREFIX = "nilx-one.fog.authorized.v1.";
+/** A sanity ceiling on a stored job, not policy: Core owns the durations. */
+const STORED_JOB_MAX_MS = 10 * 60_000;
 
 function defaultStorage(): FogRevealStorage | undefined {
   try {
@@ -237,7 +240,7 @@ function isJob(value: unknown): value is FogRevealJob {
     typeof job.startedAt === "number" &&
     typeof job.durationMs === "number" &&
     job.durationMs >= 0 &&
-    job.durationMs <= 10 * 60_000 &&
+    job.durationMs <= STORED_JOB_MAX_MS &&
     (job.pausedAt === undefined ||
       (typeof job.pausedAt === "number" &&
         Number.isFinite(job.pausedAt) &&
@@ -278,4 +281,59 @@ export function writeRevealJobs(
   } catch {
     // Best-effort: a reveal that is forgotten simply has to be asked for again.
   }
+}
+
+/**
+ * The last wall-clock instant at which Core allowed this Bond's Avaia to work
+ * while a reveal ran. It is what lets a reopened page tell time it was
+ * authorized from time nobody was watching.
+ */
+export function readAuthorizedAt(
+  owner: string,
+  storage: FogRevealStorage | undefined = defaultStorage(),
+): number | undefined {
+  try {
+    const raw = storage?.getItem(AUTHORIZED_PREFIX + owner);
+    if (raw === null || raw === undefined) return undefined;
+    if (!/^\d{1,16}$/.test(raw)) return undefined;
+    return Number(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeAuthorizedAt(
+  owner: string,
+  nowMs: number,
+  storage: FogRevealStorage | undefined = defaultStorage(),
+): void {
+  try {
+    storage?.setItem(AUTHORIZED_PREFIX + owner, String(Math.trunc(nowMs)));
+  } catch {
+    // Best-effort: with no heartbeat a reopened page counts no time at all.
+  }
+}
+
+/**
+ * Jobs as a reopened page finds them: anything still running was last known
+ * to be authorized at `authorizedAt`, so it stops there, and the time since —
+ * closed, unobserved, or simply not known to be allowed — is never worked.
+ * With no heartbeat to go by nothing is credited beyond its own start.
+ */
+export function freezeUnattended(
+  jobs: readonly FogRevealJob[],
+  authorizedAt: number | undefined,
+  nowMs: number,
+): readonly FogRevealJob[] {
+  return jobs.map((job) =>
+    job.pausedAt !== undefined
+      ? job
+      : {
+          ...job,
+          pausedAt: Math.min(
+            nowMs,
+            Math.max(job.startedAt, authorizedAt ?? job.startedAt),
+          ),
+        },
+  );
 }

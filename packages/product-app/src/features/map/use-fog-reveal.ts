@@ -20,13 +20,16 @@ import {
   FOG_APPROACH_ACCURACY_METERS,
   FOG_FRONTIER_RINGS,
   fogMarks,
+  freezeUnattended,
   landmarksInCell,
   offerFor,
+  readAuthorizedAt,
   readRevealJobs,
   revealDurationMs,
   revealFinished,
   revealRemainingMs,
   startReveal,
+  writeAuthorizedAt,
   writeRevealJobs,
   type FogRevealJob,
 } from "./fog-reveal";
@@ -34,6 +37,11 @@ import type { AvaiaProximitySnapshot } from "./use-avaia-proximity";
 
 /** How often a cell being revealed repaints its progress. */
 export const FOG_PROGRESS_REFRESH_MS = 2_000;
+/**
+ * How often a running reveal records that Core still allows it. A page that
+ * closes loses at most this much authorized time; it never gains any.
+ */
+export const FOG_AUTHORIZED_HEARTBEAT_MS = 5_000;
 
 export interface FogRevealPrompt {
   readonly cell: MapFogCell;
@@ -147,15 +155,28 @@ export function useFogReveal({
     return () => fog?.setOccupied?.(undefined);
   }, [fog, owner, occupiedLongitude, occupiedLatitude]);
 
+  // Jobs as this page finds them. Under Core's authority a job still running
+  // when the page was last seen stops where Core last allowed it, so the time
+  // it was closed is never worked (`freezeUnattended`).
+  const loadJobs = useCallback(
+    (): readonly FogRevealJob[] =>
+      enforceProximity
+        ? freezeUnattended(
+            readRevealJobs(owner),
+            readAuthorizedAt(owner),
+            Date.now(),
+          )
+        : readRevealJobs(owner),
+    [enforceProximity, owner],
+  );
   const [jobsState, setJobsState] = useState<{
     readonly owner: string;
     readonly jobs: readonly FogRevealJob[];
-  }>(() => ({ owner, jobs: readRevealJobs(owner) }));
+  }>(() => ({ owner, jobs: loadJobs() }));
   // A different Bond has its own reveals; they are read, not carried over.
   // A cell whose fog lifted some other way — its Bond walked into it — is no
   // longer being worked on, whatever the stored list still says.
-  const storedJobs =
-    jobsState.owner === owner ? jobsState.jobs : readRevealJobs(owner);
+  const storedJobs = jobsState.owner === owner ? jobsState.jobs : loadJobs();
   const jobs = useMemo(
     () =>
       fog === undefined || !active
@@ -174,8 +195,7 @@ export function useFogReveal({
   const updateJobs = useCallback(
     (change: (current: readonly FogRevealJob[]) => readonly FogRevealJob[]) => {
       setJobsState((current) => {
-        const stored =
-          current.owner === owner ? current.jobs : readRevealJobs(owner);
+        const stored = current.owner === owner ? current.jobs : loadJobs();
         const base =
           fog === undefined || !fog.isActive()
             ? stored
@@ -186,7 +206,7 @@ export function useFogReveal({
         return { owner, jobs: next };
       });
     },
-    [fog, owner],
+    [fog, loadJobs, owner],
   );
 
   const bondCell =
@@ -234,6 +254,20 @@ export function useFogReveal({
   }, [active, frontier, jobs, renderer]);
 
   useEffect(() => () => renderer.setFogMarks?.([]), [renderer]);
+
+  // While Core allows running work, say so now and on a beat: this is the
+  // only evidence a reopened page has that the time before it was authorized.
+  const running =
+    enforceProximity && jobs.some((job) => job.pausedAt === undefined);
+  useEffect(() => {
+    if (!running || !canReveal) return;
+    writeAuthorizedAt(owner, Date.now());
+    const beat = globalThis.setInterval(
+      () => writeAuthorizedAt(owner, Date.now()),
+      FOG_AUTHORIZED_HEARTBEAT_MS,
+    );
+    return () => globalThis.clearInterval(beat);
+  }, [canReveal, owner, running]);
 
   // A disabled Core capability freezes running work; resuming shifts the
   // start so blocked wall-clock time never counts toward completed work.
@@ -344,11 +378,16 @@ export function useFogReveal({
             offer.cell,
             (at, radius) => renderer.landmarksNear?.(at, radius) ?? [],
           );
-          const coreDuration = proximity?.durationsMs[Math.min(5, landmarks)];
-          if (enforceProximity && coreDuration == null) return "out-of-reach";
+          // The archive draws landmarks, not artifacts; until Web can count a
+          // cell's artifacts, the landmark count stands in for them (agreed
+          // gameplay substitution, see docs/avaia-proximity.md in core).
+          const coreDuration = proximity?.durationFor(landmarks) ?? null;
+          if (enforceProximity && coreDuration === null) return "out-of-reach";
           setPrompt({
             cell: offer.cell,
             landmarks,
+            // Core's duration is the only one under enforcement; the Web table
+            // is for isolated tests that run without a Core.
             durationMs: coreDuration ?? revealDurationMs(landmarks),
             busy: offer.kind === "busy",
           });

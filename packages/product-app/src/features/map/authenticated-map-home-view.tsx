@@ -1101,16 +1101,15 @@ export function AuthenticatedMapHomeView({
     };
   }, [avaiaWalk, observedPosition]);
   // Camera and handover never define proximity; measure independent bodies.
-  // If no Avaia position has been stored yet, her ambient starting place is
-  // the Bond's device, until the walk gives her a separate coordinate.
+  // Her place is what she stands at or was left at — never assumed to be the
+  // Bond's device. Until she has one, nothing is authorized (unknown, not near).
   const avaiaProximity = useAvaiaProximity({
     core: findItems,
     owner: pubDress,
     bondPoint: observedPosition,
     getAvaiaPoint: () =>
       avaiaWalk.stance(globalThis.performance.now())?.point ??
-      readWorldMemory(pubDress).avaia ??
-      observedPosition,
+      readWorldMemory(pubDress).avaia,
   });
   const [fogAnnouncement, setFogAnnouncement] = useState("");
   const fogReveal = useFogReveal({
@@ -2807,7 +2806,11 @@ export function AuthenticatedMapHomeView({
         <>
           <LocationControl
             viewModel={locationControl}
-            proximity={avaiaProximity?.policy}
+            proximity={
+              findItems?.avaiaProximity === undefined
+                ? undefined
+                : (avaiaProximity?.policy ?? "unknown")
+            }
             onActivate={activateLocationControl}
           />
           <FogRevealPrompt

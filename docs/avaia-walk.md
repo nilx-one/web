@@ -273,7 +273,8 @@ same device as someone else — swaps in that Bond's own reveals rather than
 merging with the last one's. A reveal is never written into the journal and
 never counts as a visit. Nothing sends it anywhere today. Opened cells are
 transport-eligible, not synced state, and the timers of reveals still in flight
-(`nilx-one.fog.jobs.v1.<pub_dress>`) stay on the device that started them
+(`nilx-one.fog.jobs.v1.<pub_dress>`, with `nilx-one.fog.authorized.v1.<pub_dress>`
+beside them) stay on the device that started them
 (see [State placement](state-placement.md)). The shade layer draws a reveal
 alongside what the journal lit.
 
@@ -284,15 +285,18 @@ alongside what the journal lit.
    ground — revealed, or the Bond's own cell. A tap on one asks first
    (“Reveal this patch of fog?”). A yes sends the Avaia up to the cell's
    edge — just outside it, on open ground, on the side nearest where the
-   Avaia stands — never into the fog. It works the cell open from there,
-   and the cell opens after a minute, plus a minute for each
-   landmark the archive draws inside it, never more than five minutes. An
-   Avaia works on at most three cells at once. A fourth tap gets told to
+   Avaia stands — never into the fog. It works the cell open from there.
+   Core decides whether she may and for how long: one to ten minutes,
+   growing with the distance between the Bond and the Avaia and with the
+   cell's landmarks (standing in for artifacts), and not at all once she is
+   5 km away — new work stays held until she is back within 4.5 km (see
+   _Proximity_ below). An Avaia works on at most three cells at once. A fourth tap gets told to
    wait. While a cell is opening it fills in on the world, and a status chip
    says how many cells are opening and when the next one finishes. A reveal
    runs on the wall clock and is kept per Bond under
    `nilx-one.fog.jobs.v1.<pub_dress>`, so reopening the page does not lose
-   it. With the Bond at the wheel a tap still asks, and the Avaia still does
+   it — but time the page was closed, or Core held the work, is never worked:
+   a held reveal freezes with its remaining time and resumes from it. With the Bond at the wheel a tap still asks, and the Avaia still does
    the work, but nothing walks.
 2. **The person walks in.** When this device observes itself inside a fogged
    cell, with 50 m accuracy or better, that one cell opens at once. There is
@@ -331,3 +335,27 @@ where its owner is. Nothing walks in the background.
   `map-shade` until the journal gets a home of its own.
 
 © 2026 aiaiaiai · aiaiaiai.org
+
+## Proximity
+
+The location control wears the distance between the Bond and the Avaia: a
+cyan circle when she is close, an arc that bleeds toward red as she goes, and
+the distance as its label. A tap still recentres on this device. The distance
+is measured between the two bodies — her own place, never the camera and
+never the wheel — and Core, not the client, says what it allows
+(`avaia_proximity` in core: [Avaia proximity](https://github.com/nilx-one/core/blob/master/docs/avaia-proximity.md)).
+
+- Her place is where she stands or was left. Until she has one the label is
+  `?` in a dashed ring and fog work waits; a missing place is never taken to
+  be the Bond's.
+- Core's answer is renewed whenever the Bond moves and on a short beat, and
+  an answer nobody renewed stops counting. Core keeps no state, so the client
+  carries the one bit it needs — whether the last answer held fog work — and
+  starts, and falls back to, held. Held work resumes only below 4.5 km, but
+  work that is open stays open up to 5 km.
+- When fog work is held the number is underlined and the spoken hint says so;
+  colour is never the only signal.
+
+Not covered here: Avaia choosing and opening cells by herself, and timing a
+reveal from her arrival rather than from the yes. Both build on this and are
+tracked separately.

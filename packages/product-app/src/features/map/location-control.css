@@ -87,9 +87,11 @@
   }
 }
 
-/* A full cyan circle at <=15m; the outward arc moves toward red with
-   distance. Both the number and the red/restricted state remain readable
-   without animation or colour perception. This does not control the camera. */
+/* The face wears the Bond–Avaia distance. A full cyan circle when she is
+   close; the outward arc bleeds toward red as she goes. The number carries
+   the meaning: it is underlined while Core holds fog work, and `?` inside a
+   dashed ring when her place is not known, so neither colour nor motion is
+   needed to read the state. It never moves the camera. */
 .location-control__button {
   position: relative;
 }
@@ -106,10 +108,17 @@
   mask: radial-gradient(circle, transparent 57%, #000 63%);
 }
 
+.location-control[data-proximity="unknown"] .location-control__proximity-ring {
+  background: none;
+  -webkit-mask: none;
+  mask: none;
+  border: 2px dashed var(--proximity-color);
+}
+
 .location-control__distance {
   position: relative;
   z-index: 1;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.03em;
@@ -117,7 +126,9 @@
   color: var(--proximity-color);
 }
 
-.location-control[data-proximity="red"] .location-control__distance,
-.location-control[data-proximity="restricted"] .location-control__distance {
+.location-control[data-reveal="held"] .location-control__distance {
   font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
 }

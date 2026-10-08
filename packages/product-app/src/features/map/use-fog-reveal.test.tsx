@@ -12,8 +12,50 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createFogFieldDouble } from "../../../../../tests/support/doubles";
-import { FOG_REVEAL_MIN_MS } from "./fog-reveal";
-import { useFogReveal, type FogRevealInput } from "./use-fog-reveal";
+import {
+  FOG_REVEAL_MIN_MS,
+  readAuthorizedAt,
+  revealRemainingMs,
+  writeAuthorizedAt,
+  writeRevealJobs,
+  type FogRevealJob,
+} from "./fog-reveal";
+import type { AvaiaProximitySnapshot } from "./use-avaia-proximity";
+import {
+  FOG_AUTHORIZED_HEARTBEAT_MS,
+  useFogReveal,
+  type FogRevealInput,
+} from "./use-fog-reveal";
+
+/** What Core says for an Avaia `distance` metres away and free to work. */
+function allowed(distance: number): AvaiaProximitySnapshot {
+  return {
+    policy: {
+      distance_m: distance,
+      red_m: 5_000,
+      restore_below_m: 4_500,
+      level: distance < 15 ? "near" : "working",
+      can_reveal: true,
+      duration_ms: 60_000,
+    },
+    durationFor: () => 60_000,
+  };
+}
+
+/** What Core says once reveals are held. */
+function blocked(distance: number): AvaiaProximitySnapshot {
+  return {
+    policy: {
+      distance_m: distance,
+      red_m: 5_000,
+      restore_below_m: 4_500,
+      level: distance >= 5_000 ? "red" : "restricted",
+      can_reveal: false,
+      duration_ms: null,
+    },
+    durationFor: () => null,
+  };
+}
 
 function fogRenderer(
   fog: MapFogField,
@@ -255,28 +297,8 @@ describe("revealing the fog around a Bond", () => {
   it("fails closed without Core and pauses work when Avaia exceeds the distance boundary", async () => {
     const fog = createFogFieldDouble(0.01);
     const renderer = fogRenderer(fog);
-    const near = {
-      policy: {
-        distance_m: 15,
-        red_m: 5000,
-        restore_below_m: 4500,
-        level: "near" as const,
-        can_reveal: true,
-        duration_ms: 60_000,
-      },
-      durationsMs: [60_000, 60_000, 60_000, 60_000, 60_000, 60_000],
-    };
-    const red = {
-      policy: {
-        distance_m: 5000,
-        red_m: 5000,
-        restore_below_m: 4500,
-        level: "red" as const,
-        can_reveal: false,
-        duration_ms: null,
-      },
-      durationsMs: [null, null, null, null, null, null],
-    };
+    const near = allowed(15);
+    const red = blocked(5_000);
     const base: FogRevealInput = {
       renderer,
       bondPoint: BOND,
@@ -313,6 +335,137 @@ describe("revealing the fog around a Bond", () => {
     expect(fog.isRevealed("strip:3053")).toBe(false);
     act(() => vi.advanceTimersByTime(1));
     expect(fog.isRevealed("strip:3053")).toBe(true);
+  });
+
+  it("quotes Core's duration for the cell's landmarks, never its own table", () => {
+    const fog = createFogFieldDouble(0.01);
+    const durations: number[] = [];
+    const proximity = {
+      ...allowed(2_000),
+      durationFor: (artifacts: number) => {
+        durations.push(artifacts);
+        return 90_000 + artifacts * 1_000;
+      },
+    };
+    const renderer = fogRenderer(fog, [
+      { id: "a", name: "A", longitude: 30.53, latitude: 50.45 },
+    ] as unknown as MapLandmark[]);
+    const { result } = render({
+      renderer,
+      enforceProximity: true,
+      proximity,
+    });
+    act(() => void result.current.handleFogTap(NEXT_DOOR));
+    const asked = result.current.prompt!;
+    expect(durations).toEqual([asked.landmarks]);
+    expect(asked.durationMs).toBe(90_000 + asked.landmarks * 1_000);
+    act(() => void result.current.confirm());
+    expect(result.current.jobs[0]?.durationMs).toBe(asked.durationMs);
+  });
+
+  it("offers nothing when Core quotes no duration, whatever its table says", () => {
+    const fog = createFogFieldDouble(0.01);
+    const { result } = render({
+      renderer: fogRenderer(fog),
+      enforceProximity: true,
+      proximity: { ...allowed(15), durationFor: () => null },
+    });
+    expect(result.current.handleFogTap(NEXT_DOOR)).toBe("out-of-reach");
+    expect(result.current.prompt).toBeUndefined();
+  });
+
+  describe("when the page is reopened", () => {
+    const OWNER = "0x0sky";
+    const CLOSED = 1_800_000_000_000;
+
+    function stored(job: Partial<FogRevealJob> = {}): FogRevealJob {
+      const cell = createFogFieldDouble(0.01).cellAt(NEXT_DOOR);
+      return {
+        cell,
+        startedAt: CLOSED,
+        durationMs: 600_000,
+        landmarks: 0,
+        ...job,
+      };
+    }
+
+    async function reopen(
+      proximity: ReturnType<typeof allowed> | undefined,
+      hoursClosed: number,
+    ) {
+      vi.setSystemTime(CLOSED + hoursClosed * 3_600_000);
+      const renderer = fogRenderer(createFogFieldDouble(0.01));
+      const hook = renderHook((props: FogRevealInput) => useFogReveal(props), {
+        initialProps: {
+          renderer,
+          bondPoint: BOND,
+          observed: undefined,
+          owner: OWNER,
+          enforceProximity: true,
+          proximity,
+        } as FogRevealInput,
+      });
+      await act(async () => {});
+      return hook;
+    }
+
+    it("never works the hours it was closed, however near Avaia is now", async () => {
+      writeRevealJobs(OWNER, [stored()]);
+      writeAuthorizedAt(OWNER, CLOSED + 120_000); // last allowed 2 min in
+      const { result } = await reopen(allowed(15), 5);
+      const job = result.current.jobs[0]!;
+      expect(job.pausedAt).toBeUndefined();
+      // 10 min asked, 2 min worked: 8 min remain, not zero.
+      expect(revealRemainingMs(job, Date.now())).toBe(480_000);
+      expect(result.current.jobs).toHaveLength(1);
+      act(() => vi.advanceTimersByTime(479_999));
+      expect(result.current.jobs).toHaveLength(1);
+      act(() => vi.advanceTimersByTime(1));
+      expect(result.current.jobs).toHaveLength(0);
+    });
+
+    it("stays frozen while Core is blocked or has not answered", async () => {
+      writeRevealJobs(OWNER, [stored()]);
+      writeAuthorizedAt(OWNER, CLOSED + 120_000);
+      for (const proximity of [undefined, blocked(5_000)]) {
+        const { result, unmount } = await reopen(proximity, 5);
+        expect(result.current.jobs[0]?.pausedAt).toBe(CLOSED + 120_000);
+        act(() => vi.advanceTimersByTime(3_600_000));
+        expect(result.current.jobs).toHaveLength(1);
+        unmount();
+      }
+    });
+
+    it("credits nothing without a heartbeat", async () => {
+      writeRevealJobs(OWNER, [stored()]);
+      const { result } = await reopen(allowed(15), 5);
+      expect(revealRemainingMs(result.current.jobs[0]!, Date.now())).toBe(
+        600_000,
+      );
+    });
+
+    it("records authorization while running, and stops when blocked", async () => {
+      writeRevealJobs(OWNER, [stored()]);
+      writeAuthorizedAt(OWNER, CLOSED);
+      const { result, rerender } = await reopen(allowed(15), 0);
+      act(() => vi.advanceTimersByTime(FOG_AUTHORIZED_HEARTBEAT_MS * 2));
+      const beat = readAuthorizedAt(OWNER)!;
+      expect(beat).toBeGreaterThanOrEqual(
+        CLOSED + FOG_AUTHORIZED_HEARTBEAT_MS * 2,
+      );
+      rerender({
+        renderer: fogRenderer(createFogFieldDouble(0.01)),
+        bondPoint: BOND,
+        observed: undefined,
+        owner: OWNER,
+        enforceProximity: true,
+        proximity: blocked(5_000),
+      });
+      await act(async () => {});
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(readAuthorizedAt(OWNER)).toBe(beat);
+      expect(result.current.jobs[0]?.pausedAt).toBeDefined();
+    });
   });
 
   it("offers nothing where no fog is drawn", () => {

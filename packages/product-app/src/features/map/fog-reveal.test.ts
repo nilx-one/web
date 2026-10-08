@@ -13,14 +13,17 @@ import {
   FOG_REVEAL_MAX_MS,
   FOG_REVEAL_MIN_MS,
   fogMarks,
+  freezeUnattended,
   landmarksInCell,
   offerFor,
+  readAuthorizedAt,
   readRevealJobs,
   revealDurationMs,
   revealFinished,
   revealProgress,
   revealRemainingMs,
   startReveal,
+  writeAuthorizedAt,
   writeRevealJobs,
   type FogRevealStorage,
 } from "./fog-reveal";
@@ -147,5 +150,46 @@ describe("revealing a fog cell", () => {
     expect(readRevealJobs("0x0sky", storage)).toEqual(jobs);
     storage.setItem("nilx-one.fog.jobs.v1.0x0sky", "{");
     expect(readRevealJobs("0x0sky", storage)).toEqual([]);
+  });
+
+  it("keeps the evidence that time was authorized, per Bond, and distrusts the rest", () => {
+    const storage = memoryStorage();
+    expect(readAuthorizedAt("0x0sky", storage)).toBeUndefined();
+    writeAuthorizedAt("0x0sky", 42_000.9, storage);
+    expect(readAuthorizedAt("0x0sky", storage)).toBe(42_000);
+    expect(readAuthorizedAt("0x0alice", storage)).toBeUndefined();
+    for (const bad of ["x", "-5", "NaN", "Infinity", ""]) {
+      storage.setItem("nilx-one.fog.authorized.v1.0x0sky", bad);
+      expect(readAuthorizedAt("0x0sky", storage)).toBeUndefined();
+    }
+  });
+
+  describe("a job found running by a reopened page", () => {
+    const running = startReveal(cell("a"), 0, 10_000, 600_000);
+
+    it("stops where Core last allowed it, never at the reopening", () => {
+      const [frozen] = freezeUnattended([running], 130_000, 9_000_000);
+      expect(frozen?.pausedAt).toBe(130_000);
+      expect(revealRemainingMs(frozen!, 9_000_000)).toBe(480_000);
+      expect(revealFinished(frozen!, 9_000_000)).toBe(false);
+    });
+
+    it("is never credited past now or before its own start", () => {
+      expect(freezeUnattended([running], 99_999_999, 50_000)[0]?.pausedAt).toBe(
+        50_000,
+      );
+      expect(freezeUnattended([running], 1, 50_000)[0]?.pausedAt).toBe(10_000);
+    });
+
+    it("gets nothing at all when there is no evidence", () => {
+      const [frozen] = freezeUnattended([running], undefined, 9_000_000);
+      expect(frozen?.pausedAt).toBe(10_000);
+      expect(revealRemainingMs(frozen!, 9_000_000)).toBe(600_000);
+    });
+
+    it("leaves a job that is already paused exactly as it was", () => {
+      const paused = { ...running, pausedAt: 70_000 };
+      expect(freezeUnattended([paused], 130_000, 9_000_000)).toEqual([paused]);
+    });
   });
 });

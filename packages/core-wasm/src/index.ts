@@ -503,7 +503,23 @@ function decodeLifeAnswer(value: string): AvaiaLifeAnswer {
   throw new Error("0x1 Core returned an invalid life answer");
 }
 
-/** Strict, fail-closed decoding: a missing/older runtime never authorizes work. */
+const PROXIMITY_LEVELS: readonly string[] = [
+  "near",
+  "working",
+  "restricted",
+  "red",
+];
+// Sanity bounds on a decoded duration; Core owns the actual policy.
+const PROXIMITY_MIN_DURATION_MS = 60_000;
+const PROXIMITY_MAX_DURATION_MS = 600_000;
+
+/**
+ * Strict, fail-closed decoding: a missing/older runtime, an empty answer or an
+ * internally inconsistent one never authorizes work. The checks are the
+ * structure Core promises (bands, `can_reveal` against `duration_ms`), not a
+ * second copy of its policy: whether a distance inside the restore band may
+ * work is Core's call, from the previous state the host handed it.
+ */
 function decodeProximityPolicy(value: string): AvaiaProximityPolicy {
   const parsed: unknown = JSON.parse(value);
   if (
@@ -515,21 +531,29 @@ function decodeProximityPolicy(value: string): AvaiaProximityPolicy {
     typeof parsed.restore_below_m !== "number" ||
     !Number.isSafeInteger(parsed.restore_below_m) ||
     typeof parsed.level !== "string" ||
-    !["near", "working", "restricted", "red"].includes(parsed.level) ||
+    !PROXIMITY_LEVELS.includes(parsed.level) ||
     typeof parsed.can_reveal !== "boolean" ||
     !(
       parsed.duration_ms === null ||
       (typeof parsed.duration_ms === "number" &&
         Number.isSafeInteger(parsed.duration_ms) &&
-        parsed.duration_ms >= 60_000 &&
-        parsed.duration_ms <= 600_000)
+        parsed.duration_ms >= PROXIMITY_MIN_DURATION_MS &&
+        parsed.duration_ms <= PROXIMITY_MAX_DURATION_MS)
     ) ||
     parsed.distance_m < 0 ||
     parsed.red_m <= 0 ||
     parsed.restore_below_m <= 0 ||
     parsed.restore_below_m >= parsed.red_m ||
-    parsed.can_reveal !== parsed.distance_m < parsed.restore_below_m ||
-    parsed.can_reveal !== (parsed.duration_ms !== null)
+    // Bands: red is blocked, below the restore line is always open, and the
+    // level names the band the distance is in.
+    parsed.can_reveal !== (parsed.duration_ms !== null) ||
+    (parsed.distance_m >= parsed.red_m
+      ? parsed.level !== "red" || parsed.can_reveal
+      : parsed.distance_m >= parsed.restore_below_m
+        ? parsed.level !== "restricted"
+        : parsed.level === "red" ||
+          parsed.level === "restricted" ||
+          !parsed.can_reveal)
   ) {
     throw new Error("0x1 Core returned an invalid proximity policy");
   }
@@ -562,6 +586,7 @@ export interface CoreWasmBindings {
   avaiaProximity?(
     distanceMeters: number,
     artifacts: number,
+    previouslyBlocked: boolean,
   ): AvaiaProximityPolicy;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
@@ -598,7 +623,11 @@ export interface GeneratedCoreWasmModule {
     command: string,
   ): string;
   /** Absent from a runtime built before Core's Avaia proximity policy. */
-  avaia_proximity?(distance_m: number, artifacts: number): string;
+  avaia_proximity?(
+    distance_m: number,
+    artifacts: number,
+    previously_blocked: boolean,
+  ): string;
   /** Absent from a runtime built before Core's Avaia drive. */
   avaia_drive_step?(
     state: string,
@@ -725,7 +754,11 @@ export async function loadGeneratedCoreWasmBindings(
     ...(runtime.avaia_proximity === undefined
       ? {}
       : {
-          avaiaProximity: (distanceMeters: number, artifacts: number) => {
+          avaiaProximity: (
+            distanceMeters: number,
+            artifacts: number,
+            previouslyBlocked: boolean,
+          ) => {
             if (
               !Number.isSafeInteger(distanceMeters) ||
               distanceMeters < 0 ||
@@ -737,7 +770,11 @@ export async function loadGeneratedCoreWasmBindings(
               throw new RangeError("invalid Avaia proximity input");
             }
             return decodeProximityPolicy(
-              runtime.avaia_proximity!(distanceMeters, artifacts),
+              runtime.avaia_proximity!(
+                distanceMeters,
+                artifacts,
+                previouslyBlocked,
+              ),
             );
           },
         }),
@@ -894,12 +931,17 @@ class CoreWasmClient implements CoreRuntimePort {
   public async avaiaProximity(
     distanceMeters: number,
     artifacts: number,
+    previouslyBlocked: boolean,
   ): Promise<AvaiaProximityPolicy> {
     const bindings = await this.loadBindings();
     if (bindings.avaiaProximity === undefined) {
       throw new Error("0x1 Core Wasm proximity binding is missing");
     }
-    return bindings.avaiaProximity(distanceMeters, artifacts);
+    return bindings.avaiaProximity(
+      distanceMeters,
+      artifacts,
+      previouslyBlocked,
+    );
   }
 
   public async backpackGiftDue(

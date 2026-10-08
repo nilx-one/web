@@ -111,7 +111,10 @@ These are not carried:
   ([Presence journal lifecycle](presence-journal-lifecycle.md));
 - **work this device has in flight** — reveals the Avaia is working on
   (`nilx-one.fog.jobs.v1.<owner>`). The revealed cell is the part that may
-  travel; the timer that opens it is this device's.
+  travel; the timer that opens it is this device's. Beside it,
+  `nilx-one.fog.authorized.v1.<owner>` holds the last instant Core allowed a
+  reveal to run, which is all a reopened page can go on: time since is never
+  worked.
 
 ## What may travel
 
