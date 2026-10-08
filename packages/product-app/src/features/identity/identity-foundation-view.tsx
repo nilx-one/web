@@ -511,7 +511,7 @@ function IdentityForm({
   }>({});
   const credentialAutofillTimer = useRef<number | undefined>(undefined);
   const lastAppliedCredential = useRef<string | undefined>(undefined);
-  const credentialSwitchKey = useRef<string | undefined>(undefined);
+  const [credentialSwitchKey, setCredentialSwitchKey] = useState<string>();
   const [confirmedAddressKey, setConfirmedAddressKey] = useState<string>();
   const [addressSuffix, setAddressSuffix] = useState("");
   const remembered = identity.mode === "remembered";
@@ -520,7 +520,11 @@ function IdentityForm({
     : selection;
   const addressKey = `${displayedSelection.discriminator}\u0000${displayedSelection.slug}`;
   const addressConfirmed = confirmedAddressKey === addressKey;
-  const credentialSwitchActive = credentialSwitchKey.current === addressKey;
+  const credentialSwitchActive =
+    credentialSwitchKey === addressKey &&
+    identity.status.kind !== "invalid" &&
+    identity.status.kind !== "unavailable" &&
+    identity.status.kind !== "service-unavailable";
   const availableKey =
     addressConfirmed &&
     identity.mode === "register" &&
@@ -627,8 +631,8 @@ function IdentityForm({
 
   useEffect(() => {
     if (
-      credentialSwitchKey.current === undefined ||
-      credentialSwitchKey.current !== addressKey
+      credentialSwitchKey === undefined ||
+      credentialSwitchKey !== addressKey
     ) {
       return;
     }
@@ -644,13 +648,13 @@ function IdentityForm({
       identity.status.kind === "unavailable" ||
       identity.status.kind === "service-unavailable"
     ) {
-      credentialSwitchKey.current = undefined;
       credentialAutofill.current = false;
       credentialAutofillSnapshot.current = {};
       onPasswordChange("");
     }
   }, [
     addressKey,
+    credentialSwitchKey,
     identity.mode,
     identity.status.kind,
     onPasswordChange,
@@ -735,7 +739,7 @@ function IdentityForm({
     credentialAutofill.current = false;
     credentialAutofillSnapshot.current = {};
     lastAppliedCredential.current = undefined;
-    credentialSwitchKey.current = undefined;
+    setCredentialSwitchKey(undefined);
     setConfirmedAddressKey(undefined);
     setAvailableTransition(undefined);
     onSelectionChange(next);
@@ -779,7 +783,7 @@ function IdentityForm({
     lastAppliedCredential.current = signature;
     setConfirmedAddressKey(nextCredentialKey);
     setAvailableTransition(undefined);
-    credentialSwitchKey.current = nextCredentialKey;
+    setCredentialSwitchKey(nextCredentialKey);
     onCredentialAutofill(credentialSelection, nextPassword);
   }
 
@@ -862,7 +866,7 @@ function IdentityForm({
     credentialAutofill.current = false;
     credentialAutofillSnapshot.current = {};
     lastAppliedCredential.current = undefined;
-    credentialSwitchKey.current = undefined;
+    setCredentialSwitchKey(undefined);
     editAddressRequested.current = true;
     setConfirmedAddressKey(undefined);
     setAvailableTransition(undefined);
@@ -909,7 +913,9 @@ function IdentityForm({
             spellCheck={false}
             disabled={identity.busy}
             aria-label="pub_dress"
-            onAnimationStart={handleAutofillAnimation("username")}
+            onAnimationStart={(event) =>
+              handleAutofillAnimation("username")(event)
+            }
             onInput={(event) => {
               if (
                 isCredentialReplacement(event.currentTarget, event.nativeEvent)
@@ -919,6 +925,14 @@ function IdentityForm({
             }}
             onChange={(event) => {
               const rawUsername = event.currentTarget.value;
+              const typedAddress = parsePubDress(rawUsername.trim());
+              if (
+                typedAddress !== undefined &&
+                (event.nativeEvent as InputEvent).inputType === "insertText"
+              ) {
+                changeSelection(typedAddress);
+                return;
+              }
               if (
                 credentialAutofillSnapshot.current.username === rawUsername ||
                 isCredentialReplacement(event.currentTarget, event.nativeEvent)
@@ -969,7 +983,12 @@ function IdentityForm({
               }
               disabled={identity.busy}
             >
-              {"0123456789abcdef".split("").map((value) => (
+              {displayedSelection.discriminator === "0" && (
+                <option value="0" disabled>
+                  0
+                </option>
+              )}
+              {"123456789abcdef".split("").map((value) => (
                 <option key={value} value={value}>
                   {value}
                 </option>
@@ -1006,7 +1025,9 @@ function IdentityForm({
             aria-describedby="pub-dress-status"
             onPaste={pastePubDress}
             onKeyDown={confirmAddressFromKeyboard}
-            onAnimationStart={handleAutofillAnimation("username")}
+            onAnimationStart={(event) =>
+              handleAutofillAnimation("username")(event)
+            }
             onInput={(event) => {
               const rawUsername = event.currentTarget.value;
               if (
@@ -1018,6 +1039,14 @@ function IdentityForm({
             }}
             onChange={(event) => {
               const rawUsername = event.currentTarget.value;
+              const typedAddress = parsePubDress(rawUsername.trim());
+              if (
+                typedAddress !== undefined &&
+                (event.nativeEvent as InputEvent).inputType === "insertText"
+              ) {
+                changeSelection(typedAddress);
+                return;
+              }
               if (
                 credentialAutofillSnapshot.current.username === rawUsername ||
                 parsePubDress(rawUsername.trim()) !== undefined ||
@@ -1109,7 +1138,9 @@ function IdentityForm({
               ? { opacity: 0, pointerEvents: "none" }
               : undefined
           }
-          onAnimationStart={handleAutofillAnimation("password")}
+          onAnimationStart={(event) =>
+            handleAutofillAnimation("password")(event)
+          }
           onInput={(event) => {
             if (
               !showsPassword ||

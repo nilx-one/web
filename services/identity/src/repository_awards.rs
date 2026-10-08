@@ -282,7 +282,7 @@ mod award_tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let sky: PubDress = "0x0sky".parse().expect("owner");
+        let sky: PubDress = "0x1sky".parse().expect("owner");
         let other: PubDress = "0xfrSb".parse().expect("other");
         repository
             .register(&sky, &ProviderIdentity::telegram(7), 100)
@@ -432,7 +432,7 @@ mod award_tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let url = format!("sqlite://{}", directory.path().join("identity.sqlite").display());
         let repository = IdentityRepository::connect(&url).await.expect("repository");
-        let sky: PubDress = "0x0sky".parse().expect("owner");
+        let sky: PubDress = "0x1sky".parse().expect("owner");
         let other: PubDress = "0xfrSb".parse().expect("other");
         for (bond, id) in [(&sky, 7), (&other, 8)] {
             repository

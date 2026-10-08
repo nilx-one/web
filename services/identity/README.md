@@ -67,10 +67,25 @@ Availability is advisory. The database insert remains the only collision boundar
 
 ## Bond roles and location modes
 
-A human Bond's role lives in `bond_roles` and is optional: no row means `user`, the only role registration creates. Known roles are `user`, `admin`, and `business`. There is no API that assigns a role; it is set out of band:
+The `0x0` namespace is reserved for existing human administrators. On upgrade,
+all existing human `0x0…` Bonds receive `admin` in `bond_roles`; role lookup
+also enforces that policy independently of a stored override. Unknown addresses
+and Avaia never gain admin rights from this prefix.
+
+Public native and provider registration accepts discriminators `1`–`f` only.
+The Web form starts at `1`; existing `0x0…` credentials still resolve for sign-in,
+recovery and provider linking. An unallocated `0x0…` address resolves with
+`reserved_pub_dress_prefix`, never as an available or registered Bond.
+Registration checks and database triggers prevent allocating a new human
+`0x0…` identity. Human discriminators are immutable at the repository and
+storage boundaries; existing administrators can still rename their slug.
+
+Other human Bonds default to `user`; known stored roles are `user`, `admin`,
+and `business`. Non-reserved roles remain assignable out of band, with no
+public role-assignment API:
 
 ```sql
-INSERT INTO bond_roles (pub_dress, role) VALUES ('0x0sky', 'admin')
+INSERT INTO bond_roles (pub_dress, role) VALUES ('0x1example', 'business')
 ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role;
 ```
 

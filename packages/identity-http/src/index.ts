@@ -223,6 +223,8 @@ class IdentityHttpAdapter
       return { kind: body.state, pubDress: body.pub_dress };
     }
     switch (parseErrorCode(body)) {
+      case "reserved_pub_dress_prefix":
+        return { kind: "rejected", reason: "reserved-prefix" };
       case "invalid_pub_dress_length":
         return { kind: "rejected", reason: "invalid-length" };
       case "invalid_pub_dress_discriminator":

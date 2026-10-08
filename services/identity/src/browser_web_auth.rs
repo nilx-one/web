@@ -1483,7 +1483,7 @@ mod tests {
             intent: BrowserAuthIntent::Connect,
             state: "state".to_owned(),
             code_verifier: "verifier".to_owned(),
-            connect_pub_dress: Some("0x0sky".to_owned()),
+            connect_pub_dress: Some("0x1sky".to_owned()),
             expires_at: 500,
         };
         let value = signer
@@ -1493,7 +1493,7 @@ mod tests {
             .verify::<OAuthTransaction>("browser-oauth-transaction", &value)
             .expect("valid signed transaction");
         assert_eq!(parsed.intent, BrowserAuthIntent::Connect);
-        assert_eq!(parsed.connect_pub_dress.as_deref(), Some("0x0sky"));
+        assert_eq!(parsed.connect_pub_dress.as_deref(), Some("0x1sky"));
     }
 
     #[test]

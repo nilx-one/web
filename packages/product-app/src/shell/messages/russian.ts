@@ -347,6 +347,8 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.password.handoffDone": "Пароль создан",
   "identity.status.idle": "С учётом регистра · 2–32 символа",
   "identity.status.invalidLength": "Неверно — нужно 2–32 символа",
+  "identity.status.reservedPrefix":
+    "0x0 зарезервирован — для регистрации выберите 1–f",
   "identity.status.invalidCharacter": "Неверно — этот символ не поддерживается",
   "identity.status.checking": "Проверяем доступность…",
   "identity.status.available": "Доступно — создайте эту идентичность",

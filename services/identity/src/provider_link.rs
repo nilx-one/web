@@ -292,7 +292,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond = register_bond(&identities, "0x0sky", "first").await;
+        let bond = register_bond(&identities, "0x1sky", "first").await;
 
         assert_eq!(
             links
@@ -315,7 +315,7 @@ mod tests {
                 .expect("provider lookup")
                 .expect("bound identity")
                 .pub_dress,
-            "0x0sky"
+            "0x1sky"
         );
         assert_eq!(
             links
@@ -341,7 +341,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond = register_bond(&identities, "0x0sky", "one-provider").await;
+        let bond = register_bond(&identities, "0x1sky", "one-provider").await;
 
         assert_eq!(
             links
@@ -390,8 +390,8 @@ mod tests {
         let _evidence = GithubEvidenceRepository::connect(&database_url)
             .await
             .expect("GitHub evidence repository");
-        let first = register_bond(&identities, "0x0sky", "evidence-first").await;
-        let second = register_bond(&identities, "0x1sky", "evidence-second").await;
+        let first = register_bond(&identities, "0x1sky", "evidence-first").await;
+        let second = register_bond(&identities, "0x2sky", "evidence-second").await;
 
         sqlx::query(
             "INSERT INTO github_evidence_connections \
@@ -437,7 +437,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond = register_bond(&identities, "0x0sky", "db-boundary").await;
+        let bond = register_bond(&identities, "0x1sky", "db-boundary").await;
 
         links
             .link(&bond, &ProviderIdentity::github(1))
@@ -466,8 +466,8 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let first = register_bond(&identities, "0x0sky", "first").await;
-        let second = register_bond(&identities, "0x1sky", "second").await;
+        let first = register_bond(&identities, "0x1sky", "first").await;
+        let second = register_bond(&identities, "0x2sky", "second").await;
         let provider = ProviderIdentity::discord("42");
 
         assert_eq!(
@@ -491,7 +491,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond = register_bond(&identities, "0x0sky", "self-disconnect-other-provider").await;
+        let bond = register_bond(&identities, "0x1sky", "self-disconnect-other-provider").await;
         links
             .link(&bond, &ProviderIdentity::telegram(42))
             .await
@@ -528,7 +528,7 @@ mod tests {
         // register_native leaves the native credential inactive until a
         // recovery-key acknowledgement, so this Bond starts with no active
         // password — exactly the state a Telegram-only registration is in.
-        let bond = register_bond(&identities, "0x0sky", "self-disconnect-sole-path").await;
+        let bond = register_bond(&identities, "0x1sky", "self-disconnect-sole-path").await;
         links
             .link(&bond, &ProviderIdentity::telegram(42))
             .await
@@ -558,7 +558,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond = register_bond(&identities, "0x0sky", "self-disconnect-active-password").await;
+        let bond = register_bond(&identities, "0x1sky", "self-disconnect-active-password").await;
         identities
             .activate_native_registration(b"challenge-self-disconnect-active-password", 150)
             .await
@@ -590,7 +590,7 @@ mod tests {
         let links = ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider link repository");
-        let bond = register_bond(&identities, "0x0sky", "self-disconnect-not-linked").await;
+        let bond = register_bond(&identities, "0x1sky", "self-disconnect-not-linked").await;
 
         assert_eq!(
             links

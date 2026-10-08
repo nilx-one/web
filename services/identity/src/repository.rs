@@ -219,6 +219,11 @@ impl IdentityRepository {
             .await?;
         self.migrate_avaia_prefix().await?;
         self.migrate_bond_roles().await?;
+        let mut reserved_transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        sqlx::raw_sql(include_str!("../migrations/0021_reserved_admin_prefix.sql"))
+            .execute(&mut *reserved_transaction)
+            .await?;
+        reserved_transaction.commit().await?;
         if !self.has_native_sessions_column("active").await? {
             sqlx::raw_sql(include_str!("../migrations/0016_session_activation.sql"))
                 .execute(&self.pool)
@@ -247,13 +252,17 @@ impl IdentityRepository {
         Ok(())
     }
 
-    /// The application role of a human Bond; no stored role means `user`.
+    /// Existing human Bonds in the reserved `0x0` namespace are always admins.
+    /// Other Bonds use their stored role, defaulting to `user`.
     pub async fn role_for(&self, pub_dress: &str) -> Result<BondAccessRole, RepositoryError> {
-        let stored =
-            sqlx::query_scalar::<_, String>("SELECT role FROM bond_roles WHERE pub_dress = ?")
-                .bind(pub_dress)
-                .fetch_optional(&self.pool)
-                .await?;
+        let stored = sqlx::query_scalar::<_, String>(
+            "SELECT CASE WHEN i.identity_kind = 'human' AND substr(i.pub_dress, 1, 3) = '0x0' \
+                 THEN 'admin' ELSE COALESCE(r.role, 'user') END FROM identities i \
+                 LEFT JOIN bond_roles r ON r.pub_dress = i.pub_dress WHERE i.pub_dress = ?",
+        )
+        .bind(pub_dress)
+        .fetch_optional(&self.pool)
+        .await?;
         match stored {
             None => Ok(BondAccessRole::default()),
             Some(value) => {
@@ -263,7 +272,7 @@ impl IdentityRepository {
     }
 
     /// Assigns a role to an existing human Bond. There is no public route to
-    /// this: registration only ever creates `user` Bonds.
+    /// this: public registration only ever creates `user` Bonds outside `0x0`.
     pub async fn set_role(
         &self,
         pub_dress: &PubDress,
@@ -494,6 +503,9 @@ impl IdentityRepository {
         current: &PubDress,
         next: &PubDress,
     ) -> Result<PubDressRenameOutcome, RepositoryError> {
+        if current.discriminator() != next.discriminator() {
+            return Ok(PubDressRenameOutcome::Unavailable);
+        }
         let mut transaction = self.pool.begin().await?;
         // `identities.owner_pub_dress` is the one reference without
         // ON UPDATE CASCADE, so the owned Avaia row is re-pointed by the second
@@ -1322,9 +1334,13 @@ impl IdentityRepository {
             return Ok(false);
         }
         if activate_requester {
-            let activated =
-                activate_session_in(&mut transaction, pub_dress, &request.requester_token_hash, now)
-                    .await?;
+            let activated = activate_session_in(
+                &mut transaction,
+                pub_dress,
+                &request.requester_token_hash,
+                now,
+            )
+            .await?;
             if !activated {
                 sqlx::query(
                     "UPDATE session_activation_requests SET status = 'expired', resolved_at = ? \
@@ -1436,6 +1452,9 @@ async fn insert_human_with_public_label_in(
     pub_dress: &PubDress,
     now: u64,
 ) -> Result<HumanIdentityInsertOutcome, RepositoryError> {
+    if pub_dress.discriminator() == '0' {
+        return Ok(HumanIdentityInsertOutcome::PubDressUnavailable);
+    }
     let stem = match PubDressLabel::stem(pub_dress) {
         Ok(stem) => stem,
         Err(_) => {
@@ -1688,7 +1707,9 @@ async fn expire_open_activation_requests(
     Ok(())
 }
 
-fn decode_activation_request(row: &sqlx::sqlite::SqliteRow) -> Result<ActivationRequest, RepositoryError> {
+fn decode_activation_request(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<ActivationRequest, RepositoryError> {
     let status = match row.get::<String, _>("status").as_str() {
         "pending" => ActivationRequestStatus::Pending,
         "objectable" => ActivationRequestStatus::Objectable,
@@ -1985,6 +2006,146 @@ mod tests {
     use crate::{AvaiaPubDress, PubDress, PubDressLabel};
 
     #[tokio::test]
+    async fn reserved_prefix_upgrade_promotes_existing_humans_and_preserves_renames() {
+        let database = tempfile::NamedTempFile::new().expect("database");
+        let url = format!("sqlite://{}", database.path().display());
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        // Seed the shape of an existing deployment before the reservation.
+        sqlx::query("DROP TRIGGER identities_reserved_admin_prefix_insert")
+            .execute(&repository.pool)
+            .await
+            .expect("legacy schema");
+        for address in ["0x0нуль", "0x0other"] {
+            sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES (?, 'human', 1)")
+                .bind(address).execute(&repository.pool).await.expect("legacy human");
+        }
+        sqlx::query("INSERT INTO bond_roles (pub_dress, role) VALUES ('0x0нуль', 'business')")
+            .execute(&repository.pool)
+            .await
+            .expect("legacy role");
+        repository.pool.close().await;
+
+        let upgraded = IdentityRepository::connect(&url).await.expect("upgrade");
+        for address in ["0x0нуль", "0x0other"] {
+            assert_eq!(
+                upgraded.role_for(address).await.expect("role"),
+                crate::BondAccessRole::Admin
+            );
+            let stored: String =
+                sqlx::query_scalar("SELECT role FROM bond_roles WHERE pub_dress = ?")
+                    .bind(address)
+                    .fetch_one(&upgraded.pool)
+                    .await
+                    .expect("stored role");
+            assert_eq!(stored, "admin");
+        }
+        assert_eq!(
+            upgraded.role_for("0x0unknown").await.expect("role"),
+            crate::BondAccessRole::User
+        );
+        assert_eq!(
+            upgraded.role_for("x0нульai").await.expect("role"),
+            crate::BondAccessRole::User
+        );
+        let old: PubDress = "0x0нуль".parse().expect("old");
+        let new: PubDress = "0x0renamed".parse().expect("new");
+        assert!(matches!(
+            upgraded.rename_pub_dress(&old, &new).await.expect("rename"),
+            PubDressRenameOutcome::Renamed(_)
+        ));
+        assert_eq!(
+            upgraded.role_for(new.as_str()).await.expect("renamed role"),
+            crate::BondAccessRole::Admin
+        );
+        // A stored override cannot accidentally demote the reserved namespace.
+        upgraded
+            .set_role(&new, crate::BondAccessRole::Business)
+            .await
+            .expect("stored override");
+        assert_eq!(
+            upgraded
+                .role_for(new.as_str())
+                .await
+                .expect("effective role"),
+            crate::BondAccessRole::Admin
+        );
+        upgraded.pool.close().await;
+        let reopened = IdentityRepository::connect(&url).await.expect("reopen");
+        assert_eq!(
+            reopened
+                .role_for(new.as_str())
+                .await
+                .expect("reopened role"),
+            crate::BondAccessRole::Admin
+        );
+    }
+
+    #[tokio::test]
+    async fn reserved_prefix_cannot_be_claimed_by_any_registration_path() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let reserved: PubDress = "0x0нуль".parse().expect("reserved");
+        assert!(matches!(
+            repository
+                .register(&reserved, &ProviderIdentity::telegram(7), 1)
+                .await
+                .expect("provider result"),
+            RegistrationOutcome::HandleUnavailable
+        ));
+        assert!(matches!(
+            repository
+                .register_native(
+                    &reserved,
+                    "hash",
+                    1,
+                    b"recovery",
+                    b"challenge",
+                    b"idempotency",
+                    1,
+                    60
+                )
+                .await
+                .expect("native result"),
+            NativeRegistrationOutcome::HandleUnavailable
+        ));
+        assert!(sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES ('0x0direct', 'human', 1)").execute(&repository.pool).await.is_err());
+        let ordinary: PubDress = "0x1ordinary".parse().expect("ordinary");
+        assert!(matches!(
+            repository
+                .register(&ordinary, &ProviderIdentity::telegram(7), 1)
+                .await
+                .expect("ordinary registration"),
+            RegistrationOutcome::Registered(_)
+        ));
+        assert_eq!(
+            repository.role_for(ordinary.as_str()).await.expect("role"),
+            crate::BondAccessRole::User
+        );
+        assert!(matches!(
+            repository
+                .rename_pub_dress(&ordinary, &reserved)
+                .await
+                .expect("rename result"),
+            PubDressRenameOutcome::Unavailable
+        ));
+        assert!(
+            sqlx::query(
+                "UPDATE identities SET pub_dress = '0x0elevated' WHERE pub_dress = '0x1ordinary'"
+            )
+            .execute(&repository.pool)
+            .await
+            .is_err()
+        );
+        assert!(
+            repository
+                .is_pub_dress_available(&reserved)
+                .await
+                .expect("unallocated")
+        );
+    }
+
+    #[tokio::test]
     async fn fourth_avatar_upgrade_preserves_existing_identities_and_provider_bindings() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let database = directory.path().join("legacy-avatars.sqlite");
@@ -2012,18 +2173,18 @@ mod tests {
                 .expect("historical migration");
         }
         sqlx::raw_sql(
-            "INSERT INTO identities (pub_dress, avatar_model) VALUES ('0x0Sky', 'dasha-study');
+            "INSERT INTO identities (pub_dress, avatar_model) VALUES ('0x1Sky', 'dasha-study');
              INSERT INTO identities (pub_dress, identity_kind, owner_pub_dress)
-                 VALUES ('0Skai', 'avaia', '0x0Sky');
+                 VALUES ('1Skai', 'avaia', '0x1Sky');
              INSERT INTO identity_providers (provider, provider_subject, pub_dress)
-                 VALUES ('telegram', '12345', '0x0Sky');",
+                 VALUES ('telegram', '12345', '0x1Sky');",
         )
         .execute(&legacy)
         .await
         .expect("legacy data");
         legacy.close().await;
 
-        let address = "0x0Sky";
+        let address = "0x1Sky";
         let repository = IdentityRepository::connect(&database_url)
             .await
             .expect("upgrade");
@@ -2050,20 +2211,19 @@ mod tests {
             reopened.avatar_model(address).await.expect("new choice"),
             Some("dasha-v2-study".to_owned())
         );
-        let owner: String = sqlx::query_scalar(
-            "SELECT owner_pub_dress FROM identities WHERE pub_dress = 'x0Skai'",
-        )
-        .fetch_one(&reopened.pool)
-        .await
-        .expect("owned identity survives");
-        assert_eq!(owner, "0x0Sky");
+        let owner: String =
+            sqlx::query_scalar("SELECT owner_pub_dress FROM identities WHERE pub_dress = 'x1Skai'")
+                .fetch_one(&reopened.pool)
+                .await
+                .expect("owned identity survives");
+        assert_eq!(owner, "0x1Sky");
         let provider: String = sqlx::query_scalar(
             "SELECT pub_dress FROM identity_providers WHERE provider_subject = '12345'",
         )
         .fetch_one(&reopened.pool)
         .await
         .expect("provider survives");
-        assert_eq!(provider, "0x0Sky");
+        assert_eq!(provider, "0x1Sky");
         assert!(
             sqlx::query("PRAGMA foreign_key_check")
                 .fetch_all(&reopened.pool)
@@ -2112,7 +2272,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let address = PubDress::from_str("0x0небо").expect("valid pub_dress");
+        let address = PubDress::from_str("0x1небо").expect("valid pub_dress");
         let registered = match repository
             .register(&address, &ProviderIdentity::telegram(10), 100)
             .await
@@ -2123,12 +2283,12 @@ mod tests {
         };
 
         let label = PubDressLabel::stem(&address).expect("label");
-        assert_eq!(label.as_str(), "xn--0x0-dddt1cj");
+        assert_eq!(label.as_str(), "xn--0x1-dddt1cj");
         assert_eq!(registered.pub_dress_label.as_deref(), Some(label.as_str()));
         assert_eq!(registered.pub_dress_label_suffix, "");
         assert_eq!(
             registered.readable_url("nilx.one").as_deref(),
-            Some("https://0x0небо.nilx.one")
+            Some("https://0x1небо.nilx.one")
         );
         let record = repository
             .find_by_pub_dress_label(
@@ -2137,8 +2297,8 @@ mod tests {
             .await
             .expect("lookup")
             .expect("allocated Bond");
-        assert_eq!(record.identity.pub_dress, "0x0небо");
-        assert_eq!(record.readable_url("nilx.one"), "https://0x0небо.nilx.one");
+        assert_eq!(record.identity.pub_dress, "0x1небо");
+        assert_eq!(record.readable_url("nilx.one"), "https://0x1небо.nilx.one");
     }
 
     #[tokio::test]
@@ -2146,8 +2306,8 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let lower = PubDress::from_str("0x0небо").expect("lower");
-        let title = PubDress::from_str("0x0Небо").expect("title");
+        let lower = PubDress::from_str("0x1небо").expect("lower");
+        let title = PubDress::from_str("0x1Небо").expect("title");
         let first = match repository
             .register(&lower, &ProviderIdentity::telegram(10), 100)
             .await
@@ -2169,7 +2329,7 @@ mod tests {
         assert_ne!(first.pub_dress_label, second.pub_dress_label);
         assert_eq!(
             second.readable_url("nilx.one").as_deref(),
-            Some("https://0x0Небо2.nilx.one")
+            Some("https://0x1Небо2.nilx.one")
         );
     }
 
@@ -2183,8 +2343,8 @@ mod tests {
             .expect("repository must initialize");
         let first_repository = repository.clone();
         let second_repository = repository.clone();
-        let lower = PubDress::from_str("0x0небо").expect("lower");
-        let title = PubDress::from_str("0x0Небо").expect("title");
+        let lower = PubDress::from_str("0x1небо").expect("lower");
+        let title = PubDress::from_str("0x1Небо").expect("title");
         let telegram = ProviderIdentity::telegram(10);
         let discord = ProviderIdentity::discord("20");
 
@@ -2215,7 +2375,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let candidate = PubDress::from_str("0x0Sky").expect("candidate");
+        let candidate = PubDress::from_str("0x1Sky").expect("candidate");
         let stem = PubDressLabel::stem(&candidate).expect("stem");
         for suffix in core::iter::once("").chain(super::PUBLIC_LABEL_RETRY_SUFFIXES) {
             let label = PubDressLabel::compose(&stem, suffix).expect("candidate label");
@@ -2226,7 +2386,7 @@ mod tests {
             )
             .bind(format!(
                 "0x{}fixture{}",
-                suffix.len(),
+                suffix.len() + 1,
                 if suffix.is_empty() { "aa" } else { suffix }
             ))
             .bind(label.as_str())
@@ -2263,7 +2423,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let occupying_owner = PubDress::from_str("0x0sky").expect("valid first owner");
+        let occupying_owner = PubDress::from_str("0x1sky").expect("valid first owner");
         repository
             .register(&occupying_owner, &ProviderIdentity::telegram(10), 100)
             .await
@@ -2277,7 +2437,7 @@ mod tests {
         // Core deliberately maps both `sky` and `sk` to the same default
         // Avaia stem. Registration creates no Avaia, so that collision is no
         // longer a reason to refuse the human Bond.
-        let candidate_owner = PubDress::from_str("0x0sk").expect("valid second owner");
+        let candidate_owner = PubDress::from_str("0x1sk").expect("valid second owner");
         assert_eq!(occupied, AvaiaPubDress::derive_default(&candidate_owner));
         let registered = repository
             .register(&candidate_owner, &ProviderIdentity::discord("20"), 101)
@@ -2294,7 +2454,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let owner = PubDress::from_str("0x0sky").expect("valid owner");
+        let owner = PubDress::from_str("0x1sky").expect("valid owner");
         repository
             .register(&owner, &ProviderIdentity::telegram(11), 100)
             .await
@@ -2318,8 +2478,8 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let current = PubDress::from_str("0x0sky").expect("valid owner");
-        let next = PubDress::from_str("0x0mira").expect("valid next");
+        let current = PubDress::from_str("0x1sky").expect("valid owner");
+        let next = PubDress::from_str("0x1mira").expect("valid next");
         repository
             .register(&current, &ProviderIdentity::telegram(12), 100)
             .await
@@ -2339,12 +2499,12 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let owner = PubDress::from_str("0x0sky").expect("valid owner");
+        let owner = PubDress::from_str("0x1sky").expect("valid owner");
         repository
             .register(&owner, &ProviderIdentity::telegram(13), 100)
             .await
             .expect("registration");
-        let next = AvaiaPubDress::from_str("x0newai").expect("valid Avaia");
+        let next = AvaiaPubDress::from_str("x1newai").expect("valid Avaia");
         assert_eq!(
             repository
                 .rename_owned_avaia(&owner, &next)
@@ -2390,7 +2550,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let telegram_address = PubDress::from_str("0x0sky").expect("valid pub_dress");
+        let telegram_address = PubDress::from_str("0x1sky").expect("valid pub_dress");
         let discord_address = PubDress::from_str("0x7sky").expect("valid pub_dress");
 
         repository
@@ -2410,7 +2570,7 @@ mod tests {
         assert_eq!(telegram.avaia_pub_dress, None);
         assert_eq!(
             telegram.readable_url("nilx.one").as_deref(),
-            Some("https://0x0sky.nilx.one")
+            Some("https://0x1sky.nilx.one")
         );
         assert!(matches!(
             repository
@@ -2426,8 +2586,8 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let lower = PubDress::from_str("0x0sky").expect("valid pub_dress");
-        let title = PubDress::from_str("0x0Sky").expect("valid pub_dress");
+        let lower = PubDress::from_str("0x1sky").expect("valid pub_dress");
+        let title = PubDress::from_str("0x1Sky").expect("valid pub_dress");
 
         assert!(
             repository
@@ -2458,7 +2618,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let address = PubDress::from_str("0x0sky").expect("valid pub_dress");
+        let address = PubDress::from_str("0x1sky").expect("valid pub_dress");
 
         let outcome = repository
             .register_native(
@@ -2477,7 +2637,7 @@ mod tests {
             outcome,
             NativeRegistrationOutcome::Registered(record)
                 if record.avaia_pub_dress.is_none()
-                    && record.readable_url("nilx.one").as_deref() == Some("https://0x0sky.nilx.one")
+                    && record.readable_url("nilx.one").as_deref() == Some("https://0x1sky.nilx.one")
         ));
         assert!(
             !repository
@@ -2503,7 +2663,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let address = PubDress::from_str("0x0sky").expect("valid pub_dress");
+        let address = PubDress::from_str("0x1sky").expect("valid pub_dress");
 
         repository
             .register_native(
@@ -2533,10 +2693,10 @@ mod tests {
                 .await,
             Ok(NativeRegistrationOutcome::IdempotentReplay(record))
                 if record.avaia_pub_dress.is_none()
-                    && record.pub_dress_label.as_deref() == Some("0x0sky")
+                    && record.pub_dress_label.as_deref() == Some("0x1sky")
         ));
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia' AND owner_pub_dress = '0x0sky'",
+            "SELECT COUNT(*) FROM identities WHERE identity_kind = 'avaia' AND owner_pub_dress = '0x1sky'",
         )
         .fetch_one(&repository.pool)
         .await
@@ -2549,7 +2709,7 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let address = PubDress::from_str("0x0sky").expect("valid pub_dress");
+        let address = PubDress::from_str("0x1sky").expect("valid pub_dress");
         repository
             .register_native(
                 &address,
@@ -2567,13 +2727,13 @@ mod tests {
             .activate_native_registration(b"challenge", 101)
             .await
             .expect("activation");
-        let avaia = AvaiaPubDress::from_str("x0skai").expect("valid Avaia");
+        let avaia = AvaiaPubDress::from_str("x1skai").expect("valid Avaia");
         repository
             .configure_owned_avaia(&address, &avaia, 101)
             .await
             .expect("explicit Avaia creation");
         repository
-            .create_native_session(b"session", "0x0sky", 101, 200, "test", false, None)
+            .create_native_session(b"session", "0x1sky", 101, 200, "test", false, None)
             .await
             .expect("session");
         let session = repository
@@ -2581,10 +2741,10 @@ mod tests {
             .await
             .expect("session lookup")
             .expect("active session");
-        assert_eq!(session.avaia_pub_dress.as_deref(), Some("x0skai"));
+        assert_eq!(session.avaia_pub_dress.as_deref(), Some("x1skai"));
         assert_eq!(
             session.readable_url("nilx.one").as_deref(),
-            Some("https://0x0sky.nilx.one")
+            Some("https://0x1sky.nilx.one")
         );
         assert_eq!(
             repository
@@ -2640,7 +2800,7 @@ mod tests {
         let repository = registered_repository().await;
         assert!(
             repository
-                .create_native_session(b"first", "0x0sky", 101, 10_000, "Mac · Safari", true, None)
+                .create_native_session(b"first", "0x1sky", 101, 10_000, "Mac · Safari", true, None)
                 .await
                 .expect("first session")
         );
@@ -2648,7 +2808,7 @@ mod tests {
             repository
                 .create_native_session(
                     b"second",
-                    "0x0sky",
+                    "0x1sky",
                     102,
                     10_000,
                     "Mac · Safari",
@@ -2678,18 +2838,18 @@ mod tests {
         let repository = registered_repository().await;
         assert!(
             repository
-                .create_native_session(b"active", "0x0sky", 101, 10_000, "A", false, None)
+                .create_native_session(b"active", "0x1sky", 101, 10_000, "A", false, None)
                 .await
                 .expect("active session")
         );
         assert!(
             !repository
-                .create_native_session(b"inactive", "0x0sky", 102, 10_000, "B", false, None)
+                .create_native_session(b"inactive", "0x1sky", 102, 10_000, "B", false, None)
                 .await
                 .expect("inactive session")
         );
         repository
-            .create_activation_request(b"req", "0x0sky", b"inactive", "B", 102, 500)
+            .create_activation_request(b"req", "0x1sky", b"inactive", "B", 102, 500)
             .await
             .expect("request");
         repository
@@ -2698,7 +2858,7 @@ mod tests {
             .expect("revoke requester");
         assert!(
             !repository
-                .accept_activation_request(b"req", "0x0sky", 150, 86_400)
+                .accept_activation_request(b"req", "0x1sky", 150, 86_400)
                 .await
                 .expect("accept")
         );
@@ -2714,7 +2874,7 @@ mod tests {
         let repository = super::IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository must initialize");
-        let address = PubDress::from_str("0x0sky").expect("valid pub_dress");
+        let address = PubDress::from_str("0x1sky").expect("valid pub_dress");
         repository
             .register_native(
                 &address,

@@ -77,6 +77,7 @@ export const IDENTITY_EN = {
   "identity.status.invalidLength": "Incorrect — use 2–32 characters",
   "identity.status.invalidCharacter":
     "Incorrect — this character isn’t supported",
+  "identity.status.reservedPrefix": "0x0 is reserved — choose 1–f to register",
   "identity.status.checking": "Checking availability…",
   "identity.status.available": "Available — create this identity",
   "identity.status.registered": "Bond found — sign in",
@@ -250,6 +251,8 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.status.invalidLength": "Неправильно — потрібно 2–32 символи",
   "identity.status.invalidCharacter":
     "Неправильно — цей символ не підтримується",
+  "identity.status.reservedPrefix":
+    "0x0 зарезервовано — для реєстрації оберіть 1–f",
   "identity.status.checking": "Перевіряємо доступність…",
   "identity.status.available": "Доступно — створіть цю ідентичність",
   "identity.status.registered": "Bond знайдено — увійдіть",

@@ -428,7 +428,7 @@ mod avaia_lifecycle_api_tests {
 
     #[tokio::test]
     async fn read_is_observational_and_returns_derived_suggestion() {
-        let (app, auth) = app(8901, "0x0sky").await;
+        let (app, auth) = app(8901, "0x1sky").await;
         let response = app
             .oneshot(
                 Request::get("/api/v1/identity/avaia")
@@ -440,14 +440,14 @@ mod avaia_lifecycle_api_tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
-        assert_eq!(body["pub_dress"], "x0skai");
-        assert_eq!(body["owner_pub_dress"], "0x0sky");
+        assert_eq!(body["pub_dress"], "x1skai");
+        assert_eq!(body["owner_pub_dress"], "0x1sky");
         assert_eq!(body["configuration_state"], "unconfigured");
     }
 
     #[tokio::test]
     async fn location_requires_existing_avaia() {
-        let (app, auth) = app(8902, "0x0sky").await;
+        let (app, auth) = app(8902, "0x1sky").await;
         let response = app
             .oneshot(
                 Request::post("/api/v1/identity/avaia/location")
@@ -465,13 +465,13 @@ mod avaia_lifecycle_api_tests {
 
     #[tokio::test]
     async fn explicit_create_is_idempotent() {
-        let (app, auth) = app(8903, "0x0sky").await;
+        let (app, auth) = app(8903, "0x1sky").await;
         let create = |credential: (axum::http::HeaderName, String)| {
             Request::post("/api/v1/identity/avaia")
                 .header(credential.0, credential.1)
                 .header("x-0x1-csrf", "1")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"pub_dress":"x0newai"}"#))
+                .body(Body::from(r#"{"pub_dress":"x1newai"}"#))
                 .expect("request")
         };
         let first = app
@@ -501,7 +501,7 @@ mod avaia_lifecycle_api_tests {
             .expect("response");
         assert_eq!(replay.status(), StatusCode::OK);
         let body = json(replay).await;
-        assert_eq!(body["pub_dress"], "x0newai");
+        assert_eq!(body["pub_dress"], "x1newai");
         assert_eq!(body["configuration_state"], "configured");
     }
 }

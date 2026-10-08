@@ -9,7 +9,7 @@
       "compatEdgeAlias": "nilxone-web",
       "composeProject": "nilx-one-web",
       "publicPath": "/",
-      "requiresIdentityContract": 11
+      "requiresIdentityContract": 12
     },
     "telegram": {
       "app": "telegram-mini-app",

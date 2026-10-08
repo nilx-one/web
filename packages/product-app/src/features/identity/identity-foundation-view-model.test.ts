@@ -109,6 +109,24 @@ describe("identity foundation view state", () => {
 describe("pub_dress status", () => {
   const selection = { discriminator: "0", slug: "sky" };
 
+  it("explains reserved registration while retaining legacy sign-in", () => {
+    expect(
+      createPubDressStatusViewState(selection, false, {
+        kind: "rejected",
+        reason: "reserved-prefix",
+      }),
+    ).toEqual({
+      kind: "invalid",
+      detail: "0x0 is reserved — choose 1–f to register",
+    });
+    expect(
+      createPubDressStatusViewState(selection, false, {
+        kind: "registered",
+        pubDress: "0x0sky",
+      }),
+    ).toMatchObject({ kind: "registered" });
+  });
+
   it("never claims availability before an exact server result", () => {
     expect(createPubDressStatusViewState(selection, true, undefined)).toEqual({
       kind: "checking",

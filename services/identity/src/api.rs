@@ -187,6 +187,11 @@ async fn resolve_pub_dress(
     };
 
     match state.repository.is_pub_dress_available(&pub_dress).await {
+        Ok(true) if pub_dress.discriminator() == '0' => no_store_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "reserved_pub_dress_prefix",
+            "0x0 is reserved. Choose a discriminator from 1 to f for registration.",
+        ),
         Ok(available) => no_store_json(
             StatusCode::OK,
             PubDressResolutionResponse {
@@ -552,15 +557,13 @@ async fn link_telegram_provider_response(
     };
 
     match state.provider_links.link(&pub_dress, &provider).await {
-        Ok(ProviderLinkOutcome::Linked | ProviderLinkOutcome::AlreadyLinked) => {
-            no_store_json(
-                StatusCode::OK,
-                TelegramProviderLinkResponse {
-                    state: "linked",
-                    provider: "telegram",
-                },
-            )
-        }
+        Ok(ProviderLinkOutcome::Linked | ProviderLinkOutcome::AlreadyLinked) => no_store_json(
+            StatusCode::OK,
+            TelegramProviderLinkResponse {
+                state: "linked",
+                provider: "telegram",
+            },
+        ),
         Ok(ProviderLinkOutcome::ProviderAlreadyLinked) => no_store_error(
             StatusCode::CONFLICT,
             "provider_already_linked",
@@ -1010,7 +1013,7 @@ async fn check_pub_dress_availability(
             [(CACHE_CONTROL, "no-store")],
             Json(AvailabilityResponse {
                 pub_dress: pub_dress.to_string(),
-                available,
+                available: available && pub_dress.discriminator() != '0',
             }),
         )
             .into_response(),
@@ -1361,12 +1364,7 @@ async fn rename_pub_dress_response(
 
 /// The published avatar studies. A body is chosen, never assigned: an address
 /// with no choice recorded carries no model at all.
-const AVATAR_MODELS: [&str; 4] = [
-    "sky-study",
-    "dasha-study",
-    "kai-study",
-    "dasha-v2-study",
-];
+const AVATAR_MODELS: [&str; 4] = ["sky-study", "dasha-study", "kai-study", "dasha-v2-study"];
 
 async fn choose_avatar_model(
     State(state): State<ApiState>,
@@ -2118,7 +2116,10 @@ struct ApiError {
 mod tests {
     use std::{
         collections::BTreeMap,
-        sync::{Arc, atomic::{AtomicU64, Ordering}},
+        sync::{
+            Arc,
+            atomic::{AtomicU64, Ordering},
+        },
     };
 
     use axum::{
@@ -2295,13 +2296,61 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reserved_prefix_is_not_offered_or_registered_by_public_apis() {
+        let app = app().await;
+        let resolve = Request::post("/api/v1/identity/resolve")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"pub_dress":"0x0нуль"}"#))
+            .expect("resolve");
+        let response = app.clone().oneshot(resolve).await.expect("response");
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            json_body(response).await["error"]["code"],
+            "reserved_pub_dress_prefix"
+        );
+        let availability =
+            Request::get("/api/v1/identity/availability?discriminator=0&slug=reserved")
+                .header(AUTHORIZATION, format!("tma {}", signed_init_data(7)))
+                .body(Body::empty())
+                .expect("availability");
+        let response = app.clone().oneshot(availability).await.expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json_body(response).await["available"], false);
+        let provider = Request::post("/api/v1/identity/registration")
+            .header(AUTHORIZATION, format!("tma {}", signed_init_data(7)))
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"discriminator":"0","slug":"reserved"}"#))
+            .expect("provider");
+        assert_eq!(
+            app.clone()
+                .oneshot(provider)
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::CONFLICT
+        );
+        let native = Request::post("/api/v1/auth/native/registration")
+            .header("content-type", "application/json")
+            .header("idempotency-key", "reserved-prefix-test")
+            .header(super::CSRF_HEADER, "1")
+            .body(Body::from(
+                r#"{"pub_dress":"0x0reserved","password":"a deliberately long password"}"#,
+            ))
+            .expect("native");
+        assert_eq!(
+            app.oneshot(native).await.expect("response").status(),
+            StatusCode::CONFLICT
+        );
+    }
+
+    #[tokio::test]
     async fn identity_read_mints_a_session_the_next_read_can_reuse_without_init_data() {
         let app = app().await;
         let authorization = format!("tma {}", signed_init_data(42));
         let register = Request::post("/api/v1/identity/registration")
             .header(AUTHORIZATION, &authorization)
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .body(Body::from(r#"{"discriminator":"1","slug":"sky"}"#))
             .expect("valid request");
         assert_eq!(
             app.clone().oneshot(register).await.expect("response").status(),
@@ -2346,7 +2395,7 @@ mod tests {
             .expect("response");
         assert_eq!(second.status(), StatusCode::OK);
         let body = json_body(second).await;
-        assert_eq!(body["pub_dress"], "0x0sky");
+        assert_eq!(body["pub_dress"], "0x1sky");
     }
 
     #[tokio::test]
@@ -2357,7 +2406,7 @@ mod tests {
             Request::post("/api/v1/identity/registration")
                 .header(AUTHORIZATION, &authorization)
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+                .body(Body::from(r#"{"discriminator":"1","slug":"sky"}"#))
                 .expect("valid request")
         };
 
@@ -2367,10 +2416,10 @@ mod tests {
         assert_eq!(second.status(), StatusCode::OK);
         let body = to_bytes(second.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
-        assert_eq!(body["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(body["identity"]["pub_dress"], "0x1sky");
         // Registration creates the human Bond only.
         assert!(body["identity"]["avaia_pub_dress"].is_null());
-        assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
+        assert_eq!(body["identity"]["pub_dress_url"], "https://0x1sky.nilx.one");
         assert!(body.to_string().find("provider_subject").is_none());
     }
 
@@ -2379,7 +2428,7 @@ mod tests {
         let app = app().await;
         let authorization = format!("tma {}", signed_init_data(42));
         let availability = || {
-            Request::get("/api/v1/identity/availability?discriminator=0&slug=Sky")
+            Request::get("/api/v1/identity/availability?discriminator=1&slug=Sky")
                 .header(AUTHORIZATION, &authorization)
                 .body(Body::empty())
                 .expect("valid request")
@@ -2396,13 +2445,13 @@ mod tests {
         );
         let body = to_bytes(first.into_body(), 4096).await.expect("body");
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
-        assert_eq!(body["pub_dress"], "0x0Sky");
+        assert_eq!(body["pub_dress"], "0x1Sky");
         assert_eq!(body["available"], true);
 
         let registration = Request::post("/api/v1/identity/registration")
             .header(AUTHORIZATION, &authorization)
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"discriminator":"0","slug":"Sky"}"#))
+            .body(Body::from(r#"{"discriminator":"1","slug":"Sky"}"#))
             .expect("valid request");
         assert_eq!(
             app.clone()
@@ -2424,7 +2473,7 @@ mod tests {
         let app = app().await;
         let unsigned = Request::post("/api/v1/identity/registration")
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .body(Body::from(r#"{"discriminator":"1","slug":"sky"}"#))
             .expect("request");
         let response = app.clone().oneshot(unsigned).await.expect("response");
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -2463,7 +2512,7 @@ mod tests {
         let app = app().await;
         let resolve = Request::post("/api/v1/identity/resolve")
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"pub_dress":"0x0Sky"}"#))
+            .body(Body::from(r#"{"pub_dress":"0x1Sky"}"#))
             .expect("resolve request");
         let response = app.clone().oneshot(resolve).await.expect("resolve");
         assert_eq!(response.status(), StatusCode::OK);
@@ -2476,7 +2525,7 @@ mod tests {
             .header("idempotency-key", "native-registration-test-0001")
             .header(super::CSRF_HEADER, "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x0Sky","password":"a deliberately long password"}"#,
+                r#"{"pub_dress":"0x1Sky","password":"a deliberately long password"}"#,
             ))
             .expect("registration request");
         let response = app
@@ -2490,7 +2539,7 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).expect("JSON body");
         assert_eq!(body["state"], "recovery_key_required");
         assert!(body["identity"]["avaia_pub_dress"].is_null());
-        assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
+        assert_eq!(body["identity"]["pub_dress_url"], "https://0x1sky.nilx.one");
         assert!(
             body["recovery_key"]
                 .as_str()
@@ -2542,11 +2591,11 @@ mod tests {
         let authenticated_context: Value =
             serde_json::from_slice(&authenticated_context).expect("JSON body");
         assert_eq!(authenticated_context["state"], "authenticated");
-        assert_eq!(authenticated_context["identity"]["pub_dress"], "0x0Sky");
+        assert_eq!(authenticated_context["identity"]["pub_dress"], "0x1Sky");
         assert!(authenticated_context["identity"]["avaia_pub_dress"].is_null());
         assert_eq!(
             authenticated_context["identity"]["pub_dress_url"],
-            "https://0x0sky.nilx.one"
+            "https://0x1sky.nilx.one"
         );
     }
 
@@ -2558,7 +2607,7 @@ mod tests {
             .header("idempotency-key", "native-registration-test-0002")
             .header(super::CSRF_HEADER, "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x0sky","password":"another deliberate password"}"#,
+                r#"{"pub_dress":"0x1sky","password":"another deliberate password"}"#,
             ))
             .expect("registration request");
         let response = app
@@ -2620,13 +2669,13 @@ mod tests {
         let remembered_context: Value =
             serde_json::from_slice(&remembered_context).expect("JSON body");
         assert_eq!(remembered_context["state"], "remembered");
-        assert_eq!(remembered_context["remembered_pub_dress"], "0x0sky");
+        assert_eq!(remembered_context["remembered_pub_dress"], "0x1sky");
 
         let wrong_password = Request::post("/api/v1/auth/native/session")
             .header("content-type", "application/json")
             .header(super::CSRF_HEADER, "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x0sky","password":"this password is incorrect"}"#,
+                r#"{"pub_dress":"0x1sky","password":"this password is incorrect"}"#,
             ))
             .expect("login request");
         let wrong_password = app
@@ -2657,7 +2706,7 @@ mod tests {
         let request = Request::post("/api/v1/identity/registration")
             .header(AUTHORIZATION, format!("tma {}", signed_init_data(42)))
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .body(Body::from(r#"{"discriminator":"1","slug":"sky"}"#))
             .expect("request");
         assert_eq!(
             app.clone()
@@ -2689,7 +2738,7 @@ mod tests {
         assert_eq!(setup.status(), StatusCode::CREATED);
         assert_eq!(setup.headers()[CACHE_CONTROL], "no-store");
         let setup = json_body(setup).await;
-        assert_eq!(setup["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(setup["identity"]["pub_dress"], "0x1sky");
         assert_eq!(setup["state"], "recovery_key_required");
         assert!(setup.get("password_hash").is_none());
         let sign_in = || {
@@ -2697,7 +2746,7 @@ mod tests {
                 .header("content-type", "application/json")
                 .header("x-0x1-csrf", "1")
                 .body(Body::from(
-                    r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+                    r#"{"pub_dress":"0x1sky","password":"a deliberately long password"}"#,
                 ))
                 .expect("request")
         };
@@ -2751,8 +2800,8 @@ mod tests {
             .expect("request");
         let identity = json_body(app.oneshot(read).await.expect("response")).await;
         assert_eq!(identity["password_required"], false);
-        assert_eq!(identity["pub_dress"], "0x0sky");
-        assert_eq!(identity["pub_dress_url"], "https://0x0sky.nilx.one");
+        assert_eq!(identity["pub_dress"], "0x1sky");
+        assert_eq!(identity["pub_dress_url"], "https://0x1sky.nilx.one");
     }
 
     #[tokio::test]
@@ -2790,7 +2839,7 @@ mod tests {
         );
         let selected_owner = telegram_password_request(
             42,
-            r#"{"password":"a deliberately long password","pub_dress":"0x0other"}"#,
+            r#"{"password":"a deliberately long password","pub_dress":"0x1other"}"#,
         );
         assert_eq!(
             app.clone()
@@ -2888,7 +2937,7 @@ mod tests {
             .header("content-type", "application/json")
             .header("x-0x1-csrf", "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+                r#"{"pub_dress":"0x1sky","password":"a deliberately long password"}"#,
             ))
             .expect("request");
         assert_eq!(
@@ -2910,7 +2959,7 @@ mod tests {
         let request = Request::post("/api/v1/identity/registration")
             .header(AUTHORIZATION, "discord access-42")
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"discriminator":"0","slug":"sky"}"#))
+            .body(Body::from(r#"{"discriminator":"1","slug":"sky"}"#))
             .expect("request");
         assert_eq!(
             app.clone()
@@ -2937,7 +2986,7 @@ mod tests {
         assert_eq!(setup.status(), StatusCode::CREATED);
         assert_eq!(setup.headers()[CACHE_CONTROL], "no-store");
         let setup = json_body(setup).await;
-        assert_eq!(setup["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(setup["identity"]["pub_dress"], "0x1sky");
         assert_eq!(setup["state"], "recovery_key_required");
         assert!(setup.get("password_hash").is_none());
         let sign_in = || {
@@ -2945,7 +2994,7 @@ mod tests {
                 .header("content-type", "application/json")
                 .header("x-0x1-csrf", "1")
                 .body(Body::from(
-                    r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+                    r#"{"pub_dress":"0x1sky","password":"a deliberately long password"}"#,
                 ))
                 .expect("request")
         };
@@ -2991,8 +3040,8 @@ mod tests {
             .expect("request");
         let identity = json_body(app.oneshot(read).await.expect("response")).await;
         assert_eq!(identity["password_required"], false);
-        assert_eq!(identity["pub_dress"], "0x0sky");
-        assert_eq!(identity["pub_dress_url"], "https://0x0sky.nilx.one");
+        assert_eq!(identity["pub_dress"], "0x1sky");
+        assert_eq!(identity["pub_dress_url"], "https://0x1sky.nilx.one");
     }
 
     #[tokio::test]
@@ -3059,7 +3108,7 @@ mod tests {
         );
         let selected_owner = discord_password_request(
             "42",
-            r#"{"password":"a deliberately long password","pub_dress":"0x0other"}"#,
+            r#"{"password":"a deliberately long password","pub_dress":"0x1other"}"#,
         );
         assert_eq!(
             app.clone()
@@ -3095,7 +3144,7 @@ mod tests {
             .header("content-type", "application/json")
             .header("x-0x1-csrf", "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x0sky","password":"a deliberately long password"}"#,
+                r#"{"pub_dress":"0x1sky","password":"a deliberately long password"}"#,
             ))
             .expect("request");
         assert_eq!(
@@ -3104,7 +3153,10 @@ mod tests {
         );
     }
 
-    fn discord_handoff_password_request(cookie: Option<&str>, authorization: &str) -> Request<Body> {
+    fn discord_handoff_password_request(
+        cookie: Option<&str>,
+        authorization: &str,
+    ) -> Request<Body> {
         let mut request = Request::post("/api/v1/auth/discord/password")
             .header(AUTHORIZATION, authorization)
             .header("content-type", "application/json")
@@ -3142,7 +3194,7 @@ mod tests {
             .expect("response");
         assert_eq!(setup.status(), StatusCode::CREATED);
         let body = json_body(setup).await;
-        assert_eq!(body["identity"]["pub_dress"], "0x0sky");
+        assert_eq!(body["identity"]["pub_dress"], "0x1sky");
     }
 
     #[tokio::test]
@@ -3159,7 +3211,10 @@ mod tests {
         );
         for (cookie, authorization) in [
             (None, super::DISCORD_HANDOFF_AUTHORIZATION),
-            (Some(format!("{cookie}x")), super::DISCORD_HANDOFF_AUTHORIZATION),
+            (
+                Some(format!("{cookie}x")),
+                super::DISCORD_HANDOFF_AUTHORIZATION,
+            ),
             (Some(expired), super::DISCORD_HANDOFF_AUTHORIZATION),
             (Some(cookie.clone()), "discord "),
             (Some(cookie), "Bearer x"),
@@ -3254,8 +3309,8 @@ mod tests {
     #[tokio::test]
     async fn rename_moves_the_bond_its_avaia_and_its_session_to_the_new_address() {
         let app = app().await;
-        let cookies = native_session_cookies(&app, "0x0Sky", "rename-test-0001").await;
-        create_avaia(&app, &cookies, "x0Skai").await;
+        let cookies = native_session_cookies(&app, "0x1Sky", "rename-test-0001").await;
+        create_avaia(&app, &cookies, "x1Skai").await;
         let mut rename = rename_request("Rain");
         rename
             .headers_mut()
@@ -3264,10 +3319,10 @@ mod tests {
         assert_eq!(renamed.status(), StatusCode::OK);
         assert_eq!(renamed.headers()[CACHE_CONTROL], "no-store");
         let renamed = json_body(renamed).await;
-        assert_eq!(renamed["pub_dress"], "0x0Rain");
-        assert_eq!(renamed["pub_dress_url"], "https://0x0rain.nilx.one");
+        assert_eq!(renamed["pub_dress"], "0x1Rain");
+        assert_eq!(renamed["pub_dress_url"], "https://0x1rain.nilx.one");
         // The owned Avaia is a derivation of its owner's address, so it moved too.
-        assert_eq!(renamed["avaia_pub_dress"], "x0Rainai");
+        assert_eq!(renamed["avaia_pub_dress"], "x1Rainai");
 
         let context = Request::get("/api/v1/auth/native/context")
             .header("cookie", cookies.clone())
@@ -3275,10 +3330,10 @@ mod tests {
             .expect("context request");
         let context = json_body(app.clone().oneshot(context).await.expect("context")).await;
         assert_eq!(context["state"], "authenticated");
-        assert_eq!(context["identity"]["pub_dress"], "0x0Rain");
+        assert_eq!(context["identity"]["pub_dress"], "0x1Rain");
         assert_eq!(
             context["identity"]["pub_dress_url"],
-            "https://0x0rain.nilx.one"
+            "https://0x1rain.nilx.one"
         );
 
         // The credential followed the Bond: the same password signs in under the
@@ -3298,7 +3353,7 @@ mod tests {
         };
         assert_eq!(
             app.clone()
-                .oneshot(sign_in("0x0Rain"))
+                .oneshot(sign_in("0x1Rain"))
                 .await
                 .expect("response")
                 .status(),
@@ -3306,7 +3361,7 @@ mod tests {
         );
         assert_eq!(
             app.clone()
-                .oneshot(sign_in("0x0Sky"))
+                .oneshot(sign_in("0x1Sky"))
                 .await
                 .expect("response")
                 .status(),
@@ -3325,7 +3380,7 @@ mod tests {
         assert_eq!(
             json_body(
                 app.clone()
-                    .oneshot(availability("0x0Sky"))
+                    .oneshot(availability("0x1Sky"))
                     .await
                     .expect("response")
             )
@@ -3334,7 +3389,7 @@ mod tests {
         );
         assert_eq!(
             json_body(
-                app.oneshot(availability("0x0Rain"))
+                app.oneshot(availability("0x1Rain"))
                     .await
                     .expect("response")
             )
@@ -3361,7 +3416,7 @@ mod tests {
                 .expect("response"),
         )
         .await;
-        assert_eq!(renamed["pub_dress"], "0x0rain");
+        assert_eq!(renamed["pub_dress"], "0x1rain");
 
         let read = Request::get("/api/v1/identity")
             .header(AUTHORIZATION, format!("tma {}", signed_init_data(42)))
@@ -3369,7 +3424,7 @@ mod tests {
             .expect("request");
         assert_eq!(
             json_body(app.clone().oneshot(read).await.expect("response")).await["pub_dress"],
-            "0x0rain"
+            "0x1rain"
         );
 
         assert_eq!(
@@ -3397,9 +3452,9 @@ mod tests {
     #[tokio::test]
     async fn rename_refuses_an_occupied_address_an_invalid_slug_and_a_selected_discriminator() {
         let app = app().await;
-        let taken = native_session_cookies(&app, "0x0Rain", "rename-test-0002").await;
+        let taken = native_session_cookies(&app, "0x1Rain", "rename-test-0002").await;
         drop(taken);
-        let cookies = native_session_cookies(&app, "0x0Sky", "rename-test-0003").await;
+        let cookies = native_session_cookies(&app, "0x1Sky", "rename-test-0003").await;
         let with_session = |slug: &str| {
             let mut request = rename_request(slug);
             request
@@ -3441,7 +3496,7 @@ mod tests {
                 .header("content-type", "application/json")
                 .header(super::CSRF_HEADER, "1")
                 .body(Body::from(
-                    r#"{"slug":"Rainy","pub_dress":"0x0other"}"#.to_owned(),
+                    r#"{"slug":"Rainy","pub_dress":"0x1other"}"#.to_owned(),
                 ))
                 .expect("request");
             request
@@ -3465,19 +3520,19 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(unchanged.status(), StatusCode::OK);
-        assert_eq!(json_body(unchanged).await["pub_dress"], "0x0Sky");
+        assert_eq!(json_body(unchanged).await["pub_dress"], "0x1Sky");
 
         // A slug cannot smuggle a discriminator: whatever it starts with stays
         // part of the slug, and the Bond keeps the discriminator it registered.
         let smuggled = app.oneshot(with_session("1Rain")).await.expect("response");
         assert_eq!(smuggled.status(), StatusCode::OK);
-        assert_eq!(json_body(smuggled).await["pub_dress"], "0x01Rain");
+        assert_eq!(json_body(smuggled).await["pub_dress"], "0x11Rain");
     }
 
     #[tokio::test]
     async fn rename_is_rate_limited_per_bond() {
         let app = app().await;
-        let cookies = native_session_cookies(&app, "0x0Sky", "rename-test-0004").await;
+        let cookies = native_session_cookies(&app, "0x1Sky", "rename-test-0004").await;
         let with_session = |slug: &str| {
             let mut request = rename_request(slug);
             request
@@ -3515,7 +3570,7 @@ mod tests {
     #[tokio::test]
     async fn avaia_rename_names_the_owned_avaia_and_survives_an_owner_rename() {
         let app = app().await;
-        let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0001").await;
+        let cookies = native_session_cookies(&app, "0x1Sky", "avaia-rename-test-0001").await;
         let with_session = |mut request: Request<Body>| {
             request
                 .headers_mut()
@@ -3530,8 +3585,11 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(missing.status(), StatusCode::CONFLICT);
-        assert_eq!(json_body(missing).await["error"]["code"], "avaia_unavailable");
-        create_avaia(&app, &cookies, "x0Skai").await;
+        assert_eq!(
+            json_body(missing).await["error"]["code"],
+            "avaia_unavailable"
+        );
+        create_avaia(&app, &cookies, "x1Skai").await;
 
         let named = app
             .clone()
@@ -3540,8 +3598,8 @@ mod tests {
             .expect("response");
         assert_eq!(named.status(), StatusCode::OK);
         let named = json_body(named).await;
-        assert_eq!(named["pub_dress"], "0x0Sky");
-        assert_eq!(named["avaia_pub_dress"], "x0Vesnai");
+        assert_eq!(named["pub_dress"], "0x1Sky");
+        assert_eq!(named["avaia_pub_dress"], "x1Vesnai");
 
         // A chosen Avaia name is not a derivation, so renaming its owner keeps
         // it: only the owner's own address changes.
@@ -3552,24 +3610,24 @@ mod tests {
                 .expect("response"),
         )
         .await;
-        assert_eq!(renamed["pub_dress"], "0x0Rain");
-        assert_eq!(renamed["avaia_pub_dress"], "x0Vesnai");
+        assert_eq!(renamed["pub_dress"], "0x1Rain");
+        assert_eq!(renamed["avaia_pub_dress"], "x1Vesnai");
 
         let context = Request::get("/api/v1/auth/native/context")
             .header("cookie", cookies.clone())
             .body(Body::empty())
             .expect("request");
         let context = json_body(app.oneshot(context).await.expect("response")).await;
-        assert_eq!(context["identity"]["avaia_pub_dress"], "x0Vesnai");
+        assert_eq!(context["identity"]["avaia_pub_dress"], "x1Vesnai");
     }
 
     #[tokio::test]
     async fn avaia_rename_requires_the_canonical_suffix_and_a_free_address() {
         let app = app().await;
-        let neighbour = native_session_cookies(&app, "0x0Rain", "avaia-rename-test-0002").await;
-        create_avaia(&app, &neighbour, "x0Rainai").await;
-        let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0003").await;
-        create_avaia(&app, &cookies, "x0Skai").await;
+        let neighbour = native_session_cookies(&app, "0x1Rain", "avaia-rename-test-0002").await;
+        create_avaia(&app, &neighbour, "x1Rainai").await;
+        let cookies = native_session_cookies(&app, "0x1Sky", "avaia-rename-test-0003").await;
+        create_avaia(&app, &cookies, "x1Skai").await;
         let with_session = |slug: &str| {
             let mut request = avaia_rename_request(slug);
             request
@@ -3618,21 +3676,21 @@ mod tests {
     #[tokio::test]
     async fn owner_rename_still_moves_an_avaia_it_derived() {
         let app = app().await;
-        let cookies = native_session_cookies(&app, "0x0Sky", "avaia-rename-test-0004").await;
-        create_avaia(&app, &cookies, "x0Skai").await;
+        let cookies = native_session_cookies(&app, "0x1Sky", "avaia-rename-test-0004").await;
+        create_avaia(&app, &cookies, "x1Skai").await;
         let mut rename = rename_request("Rain");
         rename
             .headers_mut()
             .insert("cookie", cookies.parse().expect("header"));
         let renamed = json_body(app.oneshot(rename).await.expect("response")).await;
-        assert_eq!(renamed["pub_dress"], "0x0Rain");
-        assert_eq!(renamed["avaia_pub_dress"], "x0Rainai");
+        assert_eq!(renamed["pub_dress"], "0x1Rain");
+        assert_eq!(renamed["avaia_pub_dress"], "x1Rainai");
     }
 
     #[tokio::test]
     async fn avatar_model_is_chosen_by_the_bond_and_read_back_with_its_identity() {
         let app = app().await;
-        let cookies = native_session_cookies(&app, "0x0Sky", "avatar-choice-test-0001").await;
+        let cookies = native_session_cookies(&app, "0x1Sky", "avatar-choice-test-0001").await;
         let choose = |model: &str| {
             let mut request = Request::post("/api/v1/identity/avatar")
                 .header("content-type", "application/json")
@@ -3680,7 +3738,7 @@ mod tests {
             .expect("response");
         let chosen = json_body(chosen).await;
         assert_eq!(chosen["avatar_model"], "dasha-v2-study");
-        assert_eq!(chosen["pub_dress"], "0x0Sky");
+        assert_eq!(chosen["pub_dress"], "0x1Sky");
 
         let unknown = app
             .clone()
