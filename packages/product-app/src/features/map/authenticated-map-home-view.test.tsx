@@ -2143,9 +2143,7 @@ describe("AuthenticatedMapHomeView", () => {
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
       );
-      await vi.waitFor(() =>
-        expect(screen.getByText("0m")).toBeVisible(),
-      );
+      await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
       // Standing in a cell is enough to lift it: the person is there.
       expect(fog.isRevealed(fog.cellAt(here).id)).toBe(true);
       const next = fog.cellAt(there).id;
@@ -2201,9 +2199,7 @@ describe("AuthenticatedMapHomeView", () => {
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
       );
-      await vi.waitFor(() =>
-        expect(screen.getByText("0m")).toBeVisible(),
-      );
+      await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
 
       act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
       expect(
@@ -2236,9 +2232,7 @@ describe("AuthenticatedMapHomeView", () => {
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
       );
-      await vi.waitFor(() =>
-        expect(screen.getByText("0m")).toBeVisible(),
-      );
+      await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
 
       act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
       expect(
@@ -2267,9 +2261,7 @@ describe("AuthenticatedMapHomeView", () => {
           screen.getByRole("button", { name: "Map centred on this device" }),
         ).toBeVisible(),
       );
-      await vi.waitFor(() =>
-        expect(screen.getByText("0m")).toBeVisible(),
-      );
+      await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
 
       act(() =>
         mapRenderer.tapGround({
