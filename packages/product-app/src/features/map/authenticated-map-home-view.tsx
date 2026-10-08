@@ -151,6 +151,8 @@ import { studiedBy } from "./landmark-notebook";
 import { placeLandmark } from "./place-affinity";
 import {
   ACHIEVEMENTS,
+  avaiaExperienceForLevel,
+  bondExperienceForLevel,
   earnDeviceAchievement,
   markSettingsHintSeen,
   progressionSnapshot,
@@ -392,6 +394,65 @@ const FIND_TOAST_MS = 6_000;
  * xSasha walks up, so her arrival is not lost in the camera finding its feet.
  */
 export const GUIDE_INTRO_DELAY_MS = 1_800;
+
+export function levelFill(standing: LevelStanding, seat: DockSeat): number {
+  const currentLevelXp =
+    seat === "avaia"
+      ? avaiaExperienceForLevel(standing.level)
+      : bondExperienceForLevel(standing.level);
+  const levelSpan = standing.nextLevelXp - currentLevelXp;
+  return levelSpan > 0 ? (standing.xp - currentLevelXp) / levelSpan : 0;
+}
+
+/**
+ * The Dock's status and inventory in one mark: a bag, filled as far as the
+ * driver's state goes. `fill` runs from 0 to 1.
+ */
+function StatusGlyph({ fill }: { readonly fill: number }) {
+  const level = Math.min(1, Math.max(0, fill));
+  const height = 5.5 * level;
+  return (
+    <svg
+      className="bond-dock__status-glyph"
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      aria-hidden="true"
+    >
+      <path
+        d="M7.5 6V4.5a2.5 2.5 0 0 1 5 0V6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <rect
+        x="3.75"
+        y="6"
+        width="12.5"
+        height="12"
+        rx="3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M3.75 9.5h12.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <rect
+        className="bond-dock__status-fill"
+        x="6"
+        y={16 - height}
+        width="8"
+        height={height}
+        rx="1"
+      />
+    </svg>
+  );
+}
 
 function levelSummary(t: Translate, standing: LevelStanding): string {
   return t("progression.summaryNext")
@@ -1772,6 +1833,16 @@ export function AuthenticatedMapHomeView({
     navigate(IDENTITY_ROUTE);
   }
 
+  // How full the driver's state is, drawn inside the bag: the Avaia's energy
+  // while Core reports it, else how far the driver is towards the next level.
+  const statusFill =
+    dock.configure.seat === "avaia" && avaiaLife !== undefined
+      ? avaiaLife.energy / 10_000
+      : levelFill(
+          dock.configure.seat === "avaia" ? standing.avaia : standing.bond,
+          dock.configure.seat,
+        );
+
   /**
    * The Dock's other action opens what whoever is driving carries, under
    * their own state: the Bond's, or the Avaia's.
@@ -2102,8 +2173,9 @@ export function AuthenticatedMapHomeView({
                   <div className="bond-dock__header-actions">
                     {inventoryReady ? (
                       <button
-                        className="bond-dock__edit"
+                        className="bond-dock__edit bond-dock__status"
                         type="button"
+                        data-seat={dock.configure.seat}
                         aria-label={t("inventory.openNamed").replace(
                           "{name}",
                           dock.configure.seat === "avaia"
@@ -2112,7 +2184,7 @@ export function AuthenticatedMapHomeView({
                         )}
                         onClick={activateInventory}
                       >
-                        {t("inventory.open")}
+                        <StatusGlyph fill={statusFill} />
                       </button>
                     ) : null}
                     <button
