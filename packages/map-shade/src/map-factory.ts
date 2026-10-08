@@ -93,8 +93,13 @@ export function createShadeMapFactory(
             if (removed) return;
             const source = map.getSource(sourceId) as CanvasSource | undefined;
             if (source === undefined) return;
-            // Keep the canvas active through one render so terrain's drape cache
-            // sees the update. Static fog never drives an endless map repaint.
+            // Terrain drapes the fog through cached per-tile textures keyed by
+            // tile coverage, not by canvas content: a canvas upload alone never
+            // reaches them, and the ground keeps whatever fog (often none) was
+            // there on first draw. Drop that cache with every new fog frame.
+            map.terrain?.tileManager.releaseAllRTT();
+            // Keep the canvas active through one render so the new frame is
+            // uploaded. Static fog never drives an endless map repaint.
             source.play();
             if (!publishing) {
               publishing = true;

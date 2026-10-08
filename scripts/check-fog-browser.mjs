@@ -105,6 +105,8 @@ try {
               });
               await idle();
               const point = map.project([lng, lat]);
+              const inside =
+                point.x >= 0 && point.y >= 0 && point.x < 900 && point.y < 900;
               context.clearRect(0, 0, 900, 900);
               context.drawImage(map.getCanvas(), 0, 0, 900, 900);
               const rgb = Array.from(
@@ -123,6 +125,7 @@ try {
                 bearing,
                 revealed,
                 clear,
+                inside,
                 rgb,
               });
             }
@@ -133,11 +136,14 @@ try {
   await mkdir("test-results/fog", { recursive: true });
   await page.screenshot({ path: "test-results/fog/terrain.png" });
   assert.equal(
-    samples.filter((sample) => sample.clear !== sample.revealed).length,
+    samples.filter(
+      (sample) => !sample.inside || sample.clear !== sample.revealed,
+    ).length,
     0,
     JSON.stringify(samples),
   );
   assert.deepEqual(errors, []);
+  assert.deepEqual(await page.evaluate(() => window.fogTest.errors), []);
   console.log(
     JSON.stringify({ ...report, geographicSamples: samples.length }, null, 2),
   );
