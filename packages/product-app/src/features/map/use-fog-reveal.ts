@@ -128,8 +128,7 @@ export function useFogReveal({
     () => 0,
   );
   const active = fog !== undefined && fog.isActive();
-  const canReveal =
-    !enforceProximity || proximity?.policy.can_reveal === true;
+  const canReveal = !enforceProximity || proximity?.policy.can_reveal === true;
 
   // Whatever this field persists is this Bond's alone: bound first, before
   // anything below can read or write a reveal under it.
@@ -336,8 +335,7 @@ export function useFogReveal({
             offer.cell,
             (at, radius) => renderer.landmarksNear?.(at, radius) ?? [],
           );
-          const coreDuration =
-            proximity?.durationsMs[Math.min(5, landmarks)];
+          const coreDuration = proximity?.durationsMs[Math.min(5, landmarks)];
           if (enforceProximity && coreDuration == null) return "out-of-reach";
           setPrompt({
             cell: offer.cell,
