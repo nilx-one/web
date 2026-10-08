@@ -44,7 +44,7 @@ async function main() {
     report.webgpuUnavailable = String(error);
   }
   const frames: Uint8ClampedArray[] = [];
-  let display: HTMLCanvasElement | undefined;
+  let displayPixels: Uint8ClampedArray<ArrayBuffer> | undefined;
   for (const backend of backends) {
     try {
       await backend.render(
@@ -59,7 +59,7 @@ async function main() {
       continue;
     }
     const first = copy(backend);
-    display = first.canvas;
+    displayPixels = first.pixels;
     frames.push(first.pixels);
     const pixel = (lng: number, lat: number) => {
       const [x, y] = atlas.project(lng, lat);
@@ -107,7 +107,10 @@ async function main() {
   }
   const dem = document.createElement("canvas");
   dem.width = dem.height = 256;
-  const dc = dem.getContext("2d")!;
+  // A failed WebGPU device can reset the GPU process and wipe accelerated 2D
+  // canvases. Fixtures stay in software canvases, and the fog frame is rebuilt
+  // from pixels read back before any later backend could fail.
+  const dc = dem.getContext("2d", { willReadFrequently: true })!;
   dc.fillStyle = "rgb(1, 142, 112)";
   dc.fillRect(0, 0, 256, 256); // 200m, Mapbox RGB
   const blob = await new Promise<Blob>((resolve) =>
@@ -144,9 +147,14 @@ async function main() {
   });
   await new Promise<void>((resolve) => map.on("load", () => resolve()));
   map.setTerrain({ source: "dem", exaggeration: 1 });
+  const display = document.createElement("canvas");
+  display.width = display.height = atlas.size;
+  display
+    .getContext("2d", { willReadFrequently: true })!
+    .putImageData(new ImageData(displayPixels!, atlas.size, atlas.size), 0, 0);
   map.addSource("fog", {
     type: "canvas",
-    canvas: display!,
+    canvas: display,
     coordinates: atlas.coordinates,
     animate: false,
   });
