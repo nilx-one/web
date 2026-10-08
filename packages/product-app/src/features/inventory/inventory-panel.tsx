@@ -23,6 +23,11 @@ export interface InventoryPanelProps {
   readonly committed: boolean;
   /** The repair workshop this device stands at, if any. */
   readonly workshop?: { readonly name?: string | undefined } | undefined;
+  /**
+   * Buying carries and crafting. Off for now: carries will change only at
+   * home, and both come back together later.
+   */
+  readonly shopAndCraft?: boolean;
   /** Whose grid comes first: the one the screen was opened for. */
   readonly first?: CoreHolder | undefined;
 }
@@ -67,6 +72,7 @@ export function InventoryPanel({
   committed,
   workshop,
   first = "bond",
+  shopAndCraft = false,
 }: InventoryPanelProps) {
   const { t } = useLocalization();
   const { model, catalog } = useInventory(owner, core);
@@ -114,42 +120,44 @@ export function InventoryPanel({
           </strong>
           <small>{t(`inventory.carry.${carried.carry}`)}</small>
         </div>
-        <div className="inventory__actions">
-          {(["backpack", "bag"] as const).map((carry) => {
-            const name = t(`inventory.carryName.${carry}`);
-            if (carried.owned.includes(carry)) {
-              return carried.carry === carry ? null : (
+        {shopAndCraft ? (
+          <div className="inventory__actions">
+            {(["backpack", "bag"] as const).map((carry) => {
+              const name = t(`inventory.carryName.${carry}`);
+              if (carried.owned.includes(carry)) {
+                return carried.carry === carry ? null : (
+                  <button
+                    key={carry}
+                    type="button"
+                    onClick={() =>
+                      void run({ op: "switch_carry", holder, carry })
+                    }
+                  >
+                    {t("inventory.wear").replace("{carry}", name)}
+                  </button>
+                );
+              }
+              const price = catalog?.carries.find(
+                (candidate) => candidate.id === carry,
+              )?.price;
+              return price === undefined || price === null ? null : (
                 <button
                   key={carry}
                   type="button"
                   onClick={() =>
-                    void run({ op: "switch_carry", holder, carry })
+                    void run({ op: "buy_carry", holder, carry }, () =>
+                      t("inventory.bought").replace("{carry}", name),
+                    )
                   }
                 >
-                  {t("inventory.wear").replace("{carry}", name)}
+                  {t("inventory.buy")
+                    .replace("{carry}", name)
+                    .replace("{price}", String(price))}
                 </button>
               );
-            }
-            const price = catalog?.carries.find(
-              (candidate) => candidate.id === carry,
-            )?.price;
-            return price === undefined || price === null ? null : (
-              <button
-                key={carry}
-                type="button"
-                onClick={() =>
-                  void run({ op: "buy_carry", holder, carry }, () =>
-                    t("inventory.bought").replace("{carry}", name),
-                  )
-                }
-              >
-                {t("inventory.buy")
-                  .replace("{carry}", name)
-                  .replace("{price}", String(price))}
-              </button>
-            );
-          })}
-        </div>
+            })}
+          </div>
+        ) : null}
         <div className="inventory__grid-scroll">
           <div
             className="inventory__grid"
@@ -268,15 +276,17 @@ export function InventoryPanel({
           {note}
         </p>
       )}
-      <CraftSection
-        owner={owner}
-        core={core}
-        model={model}
-        catalog={catalog}
-        committed={committed}
-        place={workshop === undefined ? "anywhere" : "repair_workshop"}
-        workshopName={workshop?.name}
-      />
+      {shopAndCraft ? (
+        <CraftSection
+          owner={owner}
+          core={core}
+          model={model}
+          catalog={catalog}
+          committed={committed}
+          place={workshop === undefined ? "anywhere" : "repair_workshop"}
+          workshopName={workshop?.name}
+        />
+      ) : null}
     </div>
   );
 }

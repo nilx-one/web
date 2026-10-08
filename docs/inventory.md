@@ -7,7 +7,7 @@ What the Bond and its Avaia carry, and the Bond's Seeds ₴€£. Every rule is 
 The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (5 cells), a backpack (40) or a bag (120). Every thing takes its own rectangle. Both **start with pockets**. Anything bigger has to be owned before it can be worn:
 
 - **xSasha's gift**: once, a backpack each for the Bond and its Avaia, when the Bond's pockets have 4 of 5 cells taken or by Bond level 3 at the latest. She says so in a scene ([xSasha](guide.md), "Backpacks"), and the gift is given whether the scene plays or not.
-- **Buying**, under each grid: a backpack for **1,500** and a bag for **5,000** Seeds ₴€£, from the Bond's Seeds, for either of them. Something owned but not worn can be worn again from there. Real money for them comes later, through 0xda-market. On screen the Bond's grid is marked blue and the Avaia's purple, the colours of their experience.
+- **Buying** (closed for now: carries will change only at home, later), under each grid: a backpack for **1,500** and a bag for **5,000** Seeds ₴€£, from the Bond's Seeds, for either of them. Something owned but not worn can be worn again from there. Real money for them comes later, through 0xda-market. On screen the Bond's grid is marked blue and the Avaia's purple, the colours of their experience.
 
 ## How things get in
 
@@ -23,6 +23,8 @@ A find goes into its finder's grid when its pick-up award is **kept**, that is, 
 A change Core refuses (no room, not for sale) changes nothing, and the screen says why.
 
 ## Crafting
+
+Closed for now, together with buying carries: the screen shows neither, and both return later. A craft already running still finishes in the background.
 
 Under the grids, **Craft** lists Core's recipes: what each uses and needs, how long it takes, what it costs and what it pays. Starting one **asks first**: what it uses goes at once, and the thing comes when its time is up (15 to 45 minutes; a legendary craft takes a week). One craft runs at a time, in the background, like a cell opening: it finishes on its own wherever the person is in the app, the thing goes into the Bond's grid, and a toast says so. A craft with no room to land waits until room is made.
 
