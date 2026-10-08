@@ -78,7 +78,11 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   const density = options.shadeAlpha ?? 0.97;
   if (!Number.isFinite(density) || density < 0 || density > 1)
     throw new Error("Invalid fog density");
-  const interval = options.frameIntervalMs ?? 125;
+  // The mist drifts under a metre a second over ~10 m texels: a frame a
+  // second already moves it by a fraction of a texel. Every frame re-uploads
+  // the whole atlas and redrapes terrain, so a faster clock only costs a
+  // phone frames (and shows up as flicker) without moving anything visibly.
+  const interval = options.frameIntervalMs ?? 1_000;
   if (!Number.isFinite(interval) || interval <= 0)
     throw new Error("Invalid fog frame interval");
   const atlas = createFogAtlas(
@@ -90,6 +94,20 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   canvas.width = canvas.height = atlas.size;
   const context = canvas.getContext("2d");
   if (context === null) throw new Error("Fog presentation canvas unavailable");
+  // Fog is the default: until a frame proves which ground is open, the
+  // surface is solid mist, never a transparent hole onto the map.
+  const veil = () => {
+    context.globalCompositeOperation = "source-over";
+    context.fillStyle = `rgb(${palette.shadow.map((value) => Math.round(value * 255)).join(" ")})`;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  };
+  veil();
+  const present = (frame: HTMLCanvasElement) => {
+    // Replace, never blend: a frame is the whole surface.
+    context.globalCompositeOperation = "copy";
+    context.drawImage(frame, 0, 0);
+    context.globalCompositeOperation = "source-over";
+  };
   const motion = options.motion ?? "still";
   const visibility = options.visibility ?? documentVisibility();
   let visible = visibility.isVisible();
@@ -192,20 +210,22 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
         atlas.mask,
         fogParameters(atlas, palette, zones, seconds, density),
         maskChanged,
+        // Copied in the task it was drawn in, so it always matches the mask
+        // of that moment; a reset during the submission paints over it.
+        present,
       );
       if (disposed || version !== revision) {
         schedule();
         return;
       }
       maskChanged = false;
-      // Stable canvas identity survives device loss and never shows a frame
-      // rendered from an old owner's mask after an asynchronous submission.
-      context!.clearRect(0, 0, canvas.width, canvas.height);
-      context!.drawImage(backend.canvas, 0, 0);
       options.onFrame();
       if (motion === "drift") schedule(interval);
     } catch (error) {
       if (disposed) return;
+      // A failed frame may have presented nothing; fall back to mist so a
+      // later upload never shows the map through a broken frame.
+      veil();
       if (backend?.kind === "webgpu") {
         backend.dispose();
         backend = undefined;
@@ -233,8 +253,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     maskChanged = true;
     revision += 1;
     // Clear a previous owner's revealed geography immediately, then rebuild.
-    context.fillStyle = `rgb(${palette.shadow.map((value) => Math.round(value * 255)).join(" ")})`;
-    context.fillRect(0, 0, canvas.width, canvas.height);
+    veil();
     options.onFrame();
     schedule();
   });

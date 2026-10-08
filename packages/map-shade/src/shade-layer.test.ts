@@ -27,11 +27,18 @@ let layers: ShadeLayer[];
 let gpu: FogBackend;
 let gl: FogBackend;
 let context: CanvasRenderingContext2D;
+let filled: string[];
+const fills = () => filled;
+// LIGHT_FOG_PALETTE's shadow, the colour of fog that has drawn no frame yet.
+const MIST = "rgb(144 175 195)";
 function backend(kind: FogBackend["kind"]): FogBackend {
+  const canvas = document.createElement("canvas");
   return {
     kind,
-    canvas: document.createElement("canvas"),
-    render: vi.fn(async () => {}),
+    canvas,
+    render: vi.fn(async (_mask, _parameters, _changed, present) => {
+      present(canvas);
+    }),
     dispose: vi.fn(),
   };
 }
@@ -88,8 +95,11 @@ function mount(options: Partial<Parameters<typeof createShadeLayer>[0]> = {}) {
 beforeEach(() => {
   vi.useFakeTimers();
   layers = [];
+  filled = [];
   context = {
-    fillRect: vi.fn(),
+    fillRect: vi.fn(function (this: CanvasRenderingContext2D) {
+      filled.push(String(this.fillStyle));
+    }),
     clearRect: vi.fn(),
     drawImage: vi.fn(),
     beginPath: vi.fn(),
@@ -157,11 +167,12 @@ describe("geographic fog surface", () => {
       mask,
       expect.any(Float32Array),
       true,
+      expect.any(Function),
     );
   });
   it("keeps opacity and mask fixed while only the material clock advances", async () => {
     mount({ motion: "drift" });
-    await vi.advanceTimersByTimeAsync(260);
+    await vi.advanceTimersByTimeAsync(2_100);
     const calls = vi.mocked(gpu.render).mock.calls;
     expect(calls.length).toBeGreaterThan(1);
     expect(calls[0]![0]).toBe(calls[1]![0]);
@@ -179,7 +190,7 @@ describe("geographic fog surface", () => {
       },
     };
     mount({ motion: "drift", visibility });
-    await vi.advanceTimersByTimeAsync(130);
+    await vi.advanceTimersByTimeAsync(1_010);
     const before = vi.mocked(gpu.render).mock.calls.at(-1)![1][1]!;
     notify(false);
     const count = vi.mocked(gpu.render).mock.calls.length;
@@ -190,6 +201,40 @@ describe("geographic fog surface", () => {
     expect(vi.mocked(gpu.render).mock.calls.at(-1)![1][1]!).toBeLessThan(
       before + 0.02,
     );
+  });
+  it("starts as solid mist before any frame is drawn", async () => {
+    let resolve!: (backend: FogBackend) => void;
+    vi.mocked(createWebGpuFog).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const { onFrame } = mount();
+    expect(fills()).toContain(MIST);
+    expect(context.drawImage).not.toHaveBeenCalled();
+    resolve(gpu);
+    await vi.runAllTimersAsync();
+    expect(context.drawImage).toHaveBeenCalledOnce();
+    expect(onFrame).toHaveBeenCalledOnce();
+  });
+  it("drifts at a frame a second, not as fast as the map can draw", async () => {
+    mount({ motion: "drift" });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(vi.mocked(gpu.render).mock.calls.length).toBeLessThanOrEqual(11);
+  });
+  it("falls back to mist when a frame fails after presenting", async () => {
+    vi.mocked(gpu.render).mockImplementationOnce(
+      async (_mask, _parameters, _changed, present) => {
+        present(gpu.canvas);
+        throw new Error("device lost");
+      },
+    );
+    const { onFrame } = mount();
+    await vi.runAllTimersAsync();
+    // Initial mist, then mist again over the broken frame.
+    expect(fills().filter((style) => style === MIST)).toHaveLength(2);
+    expect(gl.render).toHaveBeenCalledOnce();
+    expect(onFrame).toHaveBeenCalledOnce();
   });
   it("adds newly revealed cells even with reduced motion", async () => {
     const cells = source([]);

@@ -26,11 +26,11 @@ const report: Record<string, unknown> = {};
 const check = (condition: boolean, message: string) => {
   if (!condition) throw new Error(message);
 };
-const copy = (backend: FogBackend) => {
+const copy = (frame: HTMLCanvasElement) => {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = atlas.size;
   const context = canvas.getContext("2d")!;
-  context.drawImage(backend.canvas, 0, 0);
+  context.drawImage(frame, 0, 0);
   return {
     canvas,
     pixels: context.getImageData(0, 0, atlas.size, atlas.size).data,
@@ -53,11 +53,17 @@ async function main() {
   else report.webgpuSkipped = true;
   const frames: Uint8ClampedArray[] = [];
   for (const backend of backends) {
+    // Read each frame where production does: in the task it was drawn in.
+    let presented: ReturnType<typeof copy> | undefined;
+    const present = (frame: HTMLCanvasElement) => {
+      presented = copy(frame);
+    };
     try {
       await backend.render(
         atlas.mask,
         fogParameters(atlas, DARK_FOG_PALETTE, [], 0, 0.97),
         true,
+        present,
       );
     } catch (error) {
       if (backend.kind !== "webgpu") throw error;
@@ -65,7 +71,7 @@ async function main() {
       backend.dispose();
       continue;
     }
-    const first = copy(backend);
+    const first = presented!;
     frames.push(first.pixels);
     const pixel = (lng: number, lat: number) => {
       const [x, y] = atlas.project(lng, lat);
@@ -86,8 +92,9 @@ async function main() {
       atlas.mask,
       fogParameters(atlas, DARK_FOG_PALETTE, [], 120, 0.97),
       false,
+      present,
     );
-    const later = copy(backend).pixels;
+    const later = presented!.pixels;
     let changedCoverage = 0;
     for (let index = 3; index < later.length; index += 4)
       if (later[index] !== first.pixels[index]) changedCoverage++;
