@@ -81,7 +81,9 @@ export function useAvaiaProximity({
     latest.current = { bondPoint, getAvaiaPoint };
   });
   const sample = useRef<(() => void) | undefined>(undefined);
-  const observeAvaia = useRef<((point: MapPointSelection) => void) | undefined>(undefined);
+  const observeAvaia = useRef<
+    ((point: MapPointSelection) => void) | undefined
+  >(undefined);
 
   const evaluate = core?.avaiaProximity;
   useEffect(() => {
@@ -202,7 +204,9 @@ export function useAvaiaProximity({
         meters === undefined ||
         meters < redMeters ||
         previouslyBlocked
-      ) return false;
+      ) {
+        return false;
+      }
       previouslyBlocked = true;
       remembered = undefined;
       requested += 1; // invalidate the old, open in-flight answer
