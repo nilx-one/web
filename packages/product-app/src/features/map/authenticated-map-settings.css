@@ -18,6 +18,12 @@
   margin-bottom: 0;
 }
 
+.bond-dock__header-actions {
+  display: flex;
+  flex: none;
+  gap: 0.5rem;
+}
+
 .bond-dock__edit,
 .interface-settings__back {
   min-height: 2.5rem;

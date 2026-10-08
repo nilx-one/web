@@ -8,6 +8,7 @@ import type {
   AvatarModel,
   AvatarModelResult,
   BondProviderConnections,
+  CommittedAwardAccessPort,
   CoreRuntimePort,
   NearbySpeechAccessPort,
 } from "@nilx-one/application";
@@ -112,7 +113,8 @@ function curiousCore(): Pick<CoreRuntimePort, "avaiaDriveStep"> {
 }
 
 interface ViewOverrides {
-  findItems?: Pick<CoreRuntimePort, "avaiaDriveStep">;
+  findItems?: Partial<CoreRuntimePort>;
+  committedAwards?: CommittedAwardAccessPort;
   nearbySpeech?: NearbySpeechAccessPort;
   sound?: SoundCapability;
   avaiaPubDress?: string;
@@ -143,6 +145,9 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.findItems === undefined
       ? {}
       : { findItems: overrides.findItems }),
+    ...(overrides.committedAwards === undefined
+      ? {}
+      : { committedAwards: overrides.committedAwards }),
     ...(overrides.nearbySpeech === undefined
       ? {}
       : { nearbySpeech: overrides.nearbySpeech }),
@@ -519,6 +524,72 @@ describe("AuthenticatedMapHomeView", () => {
     fireEvent.click(edit);
 
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
+  });
+
+  describe("the Dock's inventory action", () => {
+    const pending = () => new Promise<never>(() => undefined);
+    const inventoryHost = {
+      findItems: {
+        applyInventoryCommand: vi.fn(pending),
+        economyCatalog: vi.fn(pending),
+      },
+      committedAwards: {
+        commitAwards: vi.fn(pending),
+        readClaims: vi.fn(pending),
+      },
+    };
+
+    it("sits left of edit only where the inventory can be kept", () => {
+      const { unmount } = renderView();
+      expect(
+        screen.queryByRole("button", { name: "Inventory of x0skai" }),
+      ).not.toBeInTheDocument();
+      unmount();
+
+      renderView(inventoryHost);
+      const actions = [
+        ...document.querySelectorAll(".bond-dock__header-actions button"),
+      ].map((button) => button.getAttribute("aria-label"));
+      expect(actions).toEqual(["Inventory of x0skai", "Edit x0skai"]);
+    });
+
+    it("opens what the driving Avaia carries, under its own state", () => {
+      const { container } = renderView(inventoryHost);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Inventory of x0skai" }),
+      );
+
+      const header = container.querySelector(".bond-dock__detail-header");
+      expect(header).toHaveTextContent("Owned Avaia");
+      expect(header?.querySelector("h2")).toHaveTextContent("Inventory");
+      const state = screen.getByRole("region", { name: "x0skai" });
+      expect(state).toHaveTextContent(/Level/);
+      const grids = [
+        ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
+      ].map((grid) => grid.dataset.holder);
+      expect(grids).toEqual(["avaia", "bond"]);
+    });
+
+    it("opens the Bond's own when the Bond drives", () => {
+      const { container } = renderView(inventoryHost);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Inventory of 0x0sky" }),
+      );
+
+      expect(
+        container.querySelector(".bond-dock__detail-header"),
+      ).toHaveTextContent("Personal Bond");
+      expect(screen.getByRole("region", { name: "0x0sky" })).toBeDefined();
+      const grids = [
+        ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
+      ].map((grid) => grid.dataset.holder);
+      expect(grids).toEqual(["bond", "avaia"]);
+    });
   });
 
   it("keeps the edit action to the world, where the Dock names the Bond", () => {

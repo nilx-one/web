@@ -23,6 +23,8 @@ export interface InventoryPanelProps {
   readonly committed: boolean;
   /** The repair workshop this device stands at, if any. */
   readonly workshop?: { readonly name?: string | undefined } | undefined;
+  /** Whose grid comes first: the one the screen was opened for. */
+  readonly first?: CoreHolder | undefined;
 }
 
 const GRIDS: Readonly<
@@ -64,6 +66,7 @@ export function InventoryPanel({
   core,
   committed,
   workshop,
+  first = "bond",
 }: InventoryPanelProps) {
   const { t } = useLocalization();
   const { model, catalog } = useInventory(owner, core);
@@ -209,8 +212,17 @@ export function InventoryPanel({
       {empty ? (
         <p className="profile-edit__note">{t("inventory.empty")}</p>
       ) : null}
-      {holderGrid("bond", model.bond)}
-      {holderGrid("avaia", model.avaia)}
+      {first === "avaia" ? (
+        <>
+          {holderGrid("avaia", model.avaia)}
+          {holderGrid("bond", model.bond)}
+        </>
+      ) : (
+        <>
+          {holderGrid("bond", model.bond)}
+          {holderGrid("avaia", model.avaia)}
+        </>
+      )}
       {selected === undefined ? null : (
         <div className="inventory__actions">
           <strong>{thingName(t, selected.thing.id)}</strong>
