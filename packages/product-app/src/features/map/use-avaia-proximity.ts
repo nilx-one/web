@@ -117,7 +117,13 @@ export function useAvaiaProximity({
     0,
     Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)),
   );
-  return currentDistance === state.snapshot.policy.distance_m
+  const policy = state.snapshot.policy;
+  // A 2s sampled distance may drift by a few metres during an ordinary walk.
+  // Never reuse an authorization after crossing Core's restored-range limit.
+  if (policy.can_reveal && currentDistance >= policy.restore_below_m) {
+    return undefined;
+  }
+  return Math.abs(currentDistance - policy.distance_m) <= 8
     ? state.snapshot
     : undefined;
 }
