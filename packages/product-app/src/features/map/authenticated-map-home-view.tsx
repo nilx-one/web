@@ -180,6 +180,7 @@ import { useWorldAmbience } from "./world-ambience";
 import { useLocalModelReadiness } from "./use-local-model-readiness";
 import { useDriveChooser } from "./drive-chooser";
 import { useAvaiaLife, type LifeBody } from "./use-avaia-life";
+import { useAvaiaProximity } from "./use-avaia-proximity";
 import { useReadinessFrameVisible } from "./use-readiness-frame";
 import { createWorldReadiness } from "./world-readiness";
 import { AvaiaSetupView } from "../avaia/avaia-setup-view";
@@ -1098,10 +1099,24 @@ export function AuthenticatedMapHomeView({
       };
     };
   }, [avaiaWalk, observedPosition]);
+  // Camera and handover never define proximity; measure independent bodies.
+  // If no Avaia position has been stored yet, her ambient starting place is
+  // the Bond's device, until the walk gives her a separate coordinate.
+  const avaiaProximity = useAvaiaProximity({
+    core: findItems,
+    owner: pubDress,
+    bondPoint: observedPosition,
+    getAvaiaPoint: () =>
+      avaiaWalk.stance(globalThis.performance.now())?.point ??
+      readWorldMemory(pubDress).avaia ??
+      observedPosition,
+  });
   const [fogAnnouncement, setFogAnnouncement] = useState("");
   const fogReveal = useFogReveal({
     renderer,
     bondPoint: observedPosition,
+    enforceProximity: true,
+    proximity: avaiaProximity,
     observed: deviceObservation,
     owner: pubDress,
     onRevealed: (cell, via) => {
@@ -2791,6 +2806,7 @@ export function AuthenticatedMapHomeView({
         <>
           <LocationControl
             viewModel={locationControl}
+            proximity={avaiaProximity?.policy}
             onActivate={activateLocationControl}
           />
           <FogRevealPrompt
