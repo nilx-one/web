@@ -119,6 +119,45 @@
         "3\n": 3
       },
       "refuses": ["6", "10", "05", "go home", "2, because I love it"]
+    },
+    {
+      "name": "curiosity: a monument, a park she misses, a landmark of no kind",
+      "command": {
+        "do": "choose",
+        "what": "curiosity",
+        "menu": [
+          {
+            "index": 0,
+            "action": "stay"
+          },
+          {
+            "index": 1,
+            "action": "study",
+            "kind": "monument",
+            "reach": "near"
+          },
+          {
+            "index": 2,
+            "action": "study",
+            "kind": "park",
+            "reach": "far",
+            "feeling": "fond"
+          },
+          {
+            "index": 3,
+            "action": "study"
+          }
+        ],
+        "default": 1
+      },
+      "prompt": "You are standing with time to spare, and landmarks from your notebook come to mind.\nOptions:\n0: stay here\n1: go and study a monument (near)\n2: go and study a park (far, you are fond of it)\n3: go and study a landmark\nAnswer with one number.",
+      "grammar": "root ::= \"0\" | \"1\" | \"2\" | \"3\"\n",
+      "accepts": {
+        "2": 2,
+        "0": 0,
+        " 3\n": 3
+      },
+      "refuses": ["4", "02", "study the park", "2 because I miss it"]
     }
   ],
   "refused_menus": [
@@ -245,6 +284,25 @@
           }
         ],
         "default": 0
+      }
+    },
+    {
+      "name": "a curiosity menu that goes out",
+      "command": {
+        "do": "choose",
+        "what": "curiosity",
+        "menu": [
+          {
+            "index": 0,
+            "action": "stay"
+          },
+          {
+            "index": 1,
+            "action": "go",
+            "kind": "park"
+          }
+        ],
+        "default": 1
       }
     }
   ]

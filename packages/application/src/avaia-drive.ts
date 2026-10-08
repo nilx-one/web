@@ -21,7 +21,14 @@ export type AvaiaDriveFeeling = "new" | "known" | "fond" | "loved";
 export type AvaiaDriveLifeIntent = "explore" | "return_home" | "recover";
 
 export type AvaiaDriveAction =
-  "carry_on" | "glance" | "pick_up" | "stay" | "go" | "wander" | "home";
+  | "carry_on"
+  | "glance"
+  | "pick_up"
+  | "stay"
+  | "go"
+  | "wander"
+  | "home"
+  | "study";
 
 export type AvaiaDriveLine =
   | "walk"
@@ -69,6 +76,10 @@ export type AvaiaDriveInput =
       readonly to: readonly {
         readonly ref: string;
         readonly longing?: boolean;
+        /** For a model's menu; the drive's own pick does not read them. */
+        readonly kind?: string;
+        readonly meters?: number;
+        readonly feeling?: AvaiaDriveFeeling;
       }[];
     }
   | { readonly type: "stroll_options"; readonly to: readonly string[] }
@@ -124,7 +135,7 @@ export type AvaiaDriveCommand =
     }
   | {
       readonly do: "choose";
-      readonly what: "distraction" | "outing";
+      readonly what: "distraction" | "outing" | "curiosity";
       readonly heading?: AvaiaDrivePurpose;
       readonly menu: readonly AvaiaDriveMenuOption[];
       readonly default: number;

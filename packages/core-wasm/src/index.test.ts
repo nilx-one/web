@@ -343,6 +343,24 @@ describe("CoreWasmClient", () => {
       { do: "wake_at", ms: 6_001 },
     ]);
 
+    // Curiosity's menu: stay, or go and study a landmark from the notebook.
+    answer =
+      '{"commands":[{"default":1,"do":"choose","menu":[{"action":"stay","index":0},{"action":"study","index":1,"kind":"monument","reach":"near","feeling":"new"}],"what":"curiosity"}],"ok":true,"state":{"version":1}}';
+    const curious = bindings.avaiaDriveStep?.(
+      "{}",
+      {
+        type: "curiosity_options",
+        to: [{ ref: "l:1", kind: "monument", meters: 400, feeling: "new" }],
+      },
+      2_002,
+      13,
+    );
+    expect(curious?.ok && curious.commands[0]).toMatchObject({
+      do: "choose",
+      what: "curiosity",
+      default: 1,
+    });
+
     answer = '{"error":"invalid","ok":false}';
     expect(bindings.avaiaDriveStep?.("{", { type: "tick" }, 1, 13)).toEqual({
       ok: false,

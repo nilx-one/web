@@ -67,7 +67,7 @@ import {
 } from "./drive-world";
 import {
   EMPTY_NOTEBOOK,
-  nextLandmarkToStudy,
+  landmarksToStudy,
   noticeLandmarks,
   notebookSnapshot,
   studyLandmark,
@@ -90,7 +90,8 @@ import {
   emptyAffinity,
   favourites,
   nextFavouriteChange,
-  placeToReturnTo,
+  feelingFor,
+  placesToReturnTo,
   recordVisit,
   returnAfterMs,
   subscribeAffinities,
@@ -123,6 +124,13 @@ const REVISIT_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** How long a model is given to choose; Core's own pick stands after that. */
 const CHOOSE_MS = 3_500;
+
+/** Curiosity offers at most this many landmarks, the drive's own cap. */
+const CURIOSITY_OPTIONS = 6;
+/** Of which fresh ones, nearest first, leaving room for dear places. */
+const CURIOSITY_FRESH = 4;
+/** A kind the drive accepts; any other is left off rather than refused. */
+const DRIVE_KIND = /^[a-z][a-z_]{0,31}$/;
 
 export interface AvaiaSpeech {
   readonly id: number;
@@ -664,42 +672,59 @@ export function useAvaiaWalk({
   // answers carried out before the next step is asked.
   const stepRef = useRef<(input: AvaiaDriveInput) => void>(() => undefined);
 
-  /** What curiosity may go to: a fresh landmark, else one it misses. */
+  /**
+   * What curiosity may go to, for the drive to put to a model: fresh
+   * landmarks nearest first, then the dear ones it misses most. The first is
+   * the drive's own pick, as before: the nearest fresh landmark, else the
+   * place it longs for most.
+   */
   const resolveCuriosity = useCallback((): AvaiaDriveInput => {
     const from = currentPoint(globalThis.performance.now());
     if (from === undefined) return { type: "curiosity_options", to: [] };
     const { owner: book, avaiaAddress: by } = latest.current;
     const open = openAround(from);
     const known = notebookSnapshot(book);
-    const fresh = nextLandmarkToStudy(
+    const now = Date.now();
+    const mine = affinitySnapshot(book, by);
+    const fresh = landmarksToStudy(
       known,
       by,
       from,
       CURIOSITY_REACH_METERS,
       open,
-    );
-    if (fresh !== undefined) {
-      return {
-        type: "curiosity_options",
-        to: [{ ref: refs.current.landmark(fresh) }],
-      };
-    }
+    ).slice(0, CURIOSITY_FRESH);
     const inBook = notebookLandmarks(known);
-    const mine = affinitySnapshot(book, by);
-    const dear = placeToReturnTo(
+    const dear = placesToReturnTo(
       { ...mine, places: mine.places.filter((place) => inBook.has(place.id)) },
       from,
       CURIOSITY_REACH_METERS,
-      Date.now(),
+      now,
       open,
-    );
-    const landmark = dear === undefined ? undefined : inBook.get(dear.id);
+    )
+      .flatMap((place) => {
+        const landmark = inBook.get(place.id);
+        return landmark === undefined ||
+          fresh.some((near) => near.landmark.id === landmark.id)
+          ? []
+          : [{ landmark, meters: mapDistanceMeters(from, landmark) }];
+      })
+      .slice(0, CURIOSITY_OPTIONS - fresh.length);
+    const option = (
+      { landmark, meters }: { landmark: MapLandmark; meters: number },
+      longing: boolean,
+    ) => ({
+      ref: refs.current.landmark(landmark),
+      ...(longing ? { longing } : {}),
+      ...(DRIVE_KIND.test(landmark.kind) ? { kind: landmark.kind } : {}),
+      meters: Math.round(meters),
+      feeling: feelingFor(mine, landmark.id, now),
+    });
     return {
       type: "curiosity_options",
-      to:
-        landmark === undefined
-          ? []
-          : [{ ref: refs.current.landmark(landmark), longing: true }],
+      to: [
+        ...fresh.map((near) => option(near, false)),
+        ...dear.map((near) => option(near, true)),
+      ],
     };
   }, [currentPoint, openAround]);
 

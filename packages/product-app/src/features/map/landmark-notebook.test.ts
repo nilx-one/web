@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_NOTEBOOK,
+  landmarksToStudy,
   nextLandmarkToStudy,
   noticeLandmarks,
   readNotebook,
@@ -34,6 +35,26 @@ const beyond = landmark("poi:beyond", 31.5);
 const from = { longitude: 30.5234, latitude: 50.45 };
 
 describe("the landmark notebook", () => {
+  it("lists every landmark still to study, nearest first, for curiosity's menu", () => {
+    const notebook = noticeLandmarks(EMPTY_NOTEBOOK, [far, beyond, near], 1);
+    expect(
+      landmarksToStudy(notebook, "x0skai", from).map(
+        ({ landmark }) => landmark.id,
+      ),
+    ).toEqual(["poi:near", "poi:far"]);
+    const [first] = landmarksToStudy(notebook, "x0skai", from);
+    expect(first?.meters).toBeGreaterThan(0);
+    expect(first?.landmark.id).toBe(
+      nextLandmarkToStudy(notebook, "x0skai", from)?.id,
+    );
+    const studied = studyLandmark(notebook, near, "x0skai", 2);
+    expect(
+      landmarksToStudy(studied, "x0skai", from).map(
+        ({ landmark }) => landmark.id,
+      ),
+    ).toEqual(["poi:far"]);
+  });
+
   it("keeps the first time each landmark was noticed", () => {
     const once = noticeLandmarks(EMPTY_NOTEBOOK, [near], 1);
     const twice = noticeLandmarks(once, [near, far], 2);

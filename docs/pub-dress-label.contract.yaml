@@ -17,7 +17,7 @@ contract:
   companion_of: PubDress
   consumers:
     - repository: nilx-one/web
-      pinned_at: b1e988edb86cc51a8e1599ece978390bd768779c
+      pinned_at: 662bca43af4cf548b629854dbf71ba2f3e2eec56
       uses:
         - services/identity # allocation, resolution endpoint
         - packages/application/src/pub-dress-url.ts # presentation of Core-owned labels

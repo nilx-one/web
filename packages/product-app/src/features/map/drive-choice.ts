@@ -24,6 +24,7 @@ export const CHOICE_SYSTEM_PROMPT =
 
 const DISTRACTION = new Set(["carry_on", "glance", "pick_up"]);
 const OUTING = new Set(["stay", "go", "wander", "home"]);
+const CURIOSITY = new Set(["stay", "study"]);
 const KIND = /^[a-z][a-z_]{0,31}$/;
 
 /**
@@ -32,7 +33,12 @@ const KIND = /^[a-z][a-z_]{0,31}$/;
  * kind a code. Nothing else is ever put into a prompt.
  */
 export function isWordable(choose: DriveChoose): boolean {
-  const actions = choose.what === "distraction" ? DISTRACTION : OUTING;
+  const actions =
+    choose.what === "distraction"
+      ? DISTRACTION
+      : choose.what === "curiosity"
+        ? CURIOSITY
+        : OUTING;
   return (
     choose.menu.length >= 2 &&
     Number.isInteger(choose.default) &&
@@ -78,6 +84,9 @@ function wording(option: AvaiaDriveMenuOption): string {
     case "home":
       words = "go home";
       break;
+    case "study":
+      words = `go and study ${thing ?? "a landmark"}`;
+      break;
   }
   const notes: string[] = [];
   if (option.action !== "glance" && option.reach !== undefined) {
@@ -101,11 +110,13 @@ export function choicePrompt(choose: DriveChoose): string {
   const situation =
     choose.what === "outing"
       ? "You are standing, rested enough to go out."
-      : choose.heading === "tap"
-        ? "You are walking to a place your owner chose for you, and you pass something."
-        : choose.heading === "home"
-          ? "You are walking home, tired, and you pass something."
-          : "You are walking on your own, and you pass something.";
+      : choose.what === "curiosity"
+        ? "You are standing with time to spare, and landmarks from your notebook come to mind."
+        : choose.heading === "tap"
+          ? "You are walking to a place your owner chose for you, and you pass something."
+          : choose.heading === "home"
+            ? "You are walking home, tired, and you pass something."
+            : "You are walking on your own, and you pass something.";
   return [
     situation,
     "Options:",

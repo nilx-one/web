@@ -169,21 +169,33 @@ export function nextLandmarkToStudy(
   /** Ground the Avaia may walk on; a landmark standing in the fog waits. */
   open: (point: MapPointSelection) => boolean = () => true,
 ): MapLandmark | undefined {
+  return landmarksToStudy(notebook, by, from, reachMeters, open)[0]?.landmark;
+}
+
+/**
+ * Every landmark one Avaia noticed and has not studied, within reach and on
+ * open ground, nearest first; equally near ones keep the notebook's order.
+ */
+export function landmarksToStudy(
+  notebook: LandmarkNotebook,
+  by: string,
+  from: MapPointSelection,
+  reachMeters = CURIOSITY_REACH_METERS,
+  open: (point: MapPointSelection) => boolean = () => true,
+): readonly { readonly landmark: MapLandmark; readonly meters: number }[] {
   const done = new Set(
     notebook.studied
       .filter((entry) => entry.by === by)
       .map((entry) => entry.landmark.id),
   );
-  let best: { landmark: MapLandmark; distance: number } | undefined;
+  const near: { landmark: MapLandmark; meters: number }[] = [];
   for (const { landmark } of notebook.noticed) {
     if (done.has(landmark.id)) continue;
-    const distance = mapDistanceMeters(from, landmark);
-    if (distance > reachMeters || !open(landmark)) continue;
-    if (best === undefined || distance < best.distance) {
-      best = { landmark, distance };
-    }
+    const meters = mapDistanceMeters(from, landmark);
+    if (meters > reachMeters || !open(landmark)) continue;
+    near.push({ landmark, meters });
   }
-  return best?.landmark;
+  return near.toSorted((a, b) => a.meters - b.meters);
 }
 
 /** What one Avaia has studied, most recent first. */

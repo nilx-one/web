@@ -53,8 +53,8 @@ rephrasings at about 85 characters.
 
 ## What a model is allowed to choose
 
-Where a choice is the Avaia's own — where to go out to, whether to step aside for something
-on the way — the drive in Core offers a closed numbered menu and its own pick
+Where a choice is the Avaia's own — where to go out to, which landmark from its notebook to
+go and study, whether to step aside for something on the way — the drive in Core offers a closed numbered menu and its own pick
 ([Avaia walks on its own](avaia-outings.md) §2.4). The model on this device answers it
 (`drive-chooser.ts`), and only once the person has that model here: nothing in the world ever
 starts a download. It is loaded the first time a choice comes, kept while choices keep coming,
