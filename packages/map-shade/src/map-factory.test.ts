@@ -66,6 +66,7 @@ const { FakeMap } = vi.hoisted(() => {
       return this.on(event, listener);
     }
     fire() {}
+    terrain: { tileManager: { releaseAllRTT: () => void } } | null = null;
     styleLoaded = true;
     styleMetadata: Record<string, unknown> | undefined = undefined;
     styleLayers: { id: string; type: string }[] = [
@@ -232,6 +233,25 @@ describe("shade map factory", () => {
     expect(map.addLayerCalls).toEqual([
       { id: SHADE_LAYER_ID, before: "place-labels" },
     ]);
+  });
+
+  it("redrapes terrain with every new fog frame", async () => {
+    // Terrain caches its draped ground per tile and never notices a canvas
+    // upload; without a release the ground keeps the fog of its first draw.
+    const map = build(fakeRuntime([]));
+    const releaseAllRTT = vi.fn();
+    map.terrain = { tileManager: { releaseAllRTT } };
+    await settle();
+    const { onFrame } = vi.mocked(createShadeLayer).mock.calls[0]![0];
+    releaseAllRTT.mockClear();
+
+    onFrame();
+    onFrame();
+
+    expect(releaseAllRTT).toHaveBeenCalledTimes(2);
+    expect(
+      map.sources.get("nilx-one-presence-shade-canvas")?.play,
+    ).toHaveBeenCalled();
   });
 
   it("adds the layer once across repeated style events", async () => {
