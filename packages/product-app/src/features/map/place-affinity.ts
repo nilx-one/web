@@ -434,7 +434,22 @@ export function placeToReturnTo(
   now: number,
   open: (point: MapPointSelection) => boolean = () => true,
 ): FondPlace | undefined {
-  let best: { place: FondPlace; want: number } | undefined;
+  return placesToReturnTo(affinity, from, reachMeters, now, open)[0];
+}
+
+/**
+ * Every dear place an idle Avaia longs enough to go back to, within reach,
+ * on open ground and past its return window: most longed for first, equal
+ * longing by id.
+ */
+export function placesToReturnTo(
+  affinity: PlaceAffinity,
+  from: MapPointSelection,
+  reachMeters: number,
+  now: number,
+  open: (point: MapPointSelection) => boolean = () => true,
+): readonly FondPlace[] {
+  const dear: { place: FondPlace; want: number }[] = [];
   for (const place of affinity.places) {
     if (now - place.lastAt < returnAfterMs(affinity, place.id, Infinity)) {
       continue;
@@ -442,15 +457,15 @@ export function placeToReturnTo(
     const want = longing(place, now);
     if (want < RETURN_LONGING) continue;
     if (mapDistanceMeters(from, place) > reachMeters || !open(place)) continue;
-    if (
-      best === undefined ||
-      want > best.want ||
-      (want === best.want && place.id < best.place.id)
-    ) {
-      best = { place, want };
-    }
+    dear.push({ place, want });
   }
-  return best?.place;
+  return dear
+    .toSorted(
+      (a, b) =>
+        b.want - a.want ||
+        (a.place.id < b.place.id ? -1 : a.place.id > b.place.id ? 1 : 0),
+    )
+    .map(({ place }) => place);
 }
 
 /**

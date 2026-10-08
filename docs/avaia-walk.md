@@ -163,9 +163,15 @@ The second half is curiosity, and it runs in two steps.
    never makes a request for it. A landmark is a `pois` feature whose `kind`
    is on the list in `LANDMARK_KINDS` (monument, memorial, artwork, statue,
    museum, ruins and so on).
-2. **The Avaia studies.** An Avaia at the wheel with nothing to do goes to the
-   nearest noticed landmark it has not studied, within 3 km. That happens 1.5 s
-   after it takes the wheel, or after 15 s idle once it has been doing things.
+2. **The Avaia studies.** An Avaia at the wheel with nothing to do thinks of
+   landmarks within 3 km: up to four noticed ones it has not studied, nearest
+   first, then the dear places it misses most, six at most. Each goes to Core's
+   drive with its kind, distance and how the Avaia feels about it, and the
+   model on this device chooses one to study, or to stay
+   ([local models](local-models.md)). With no model, or no answer in time, it
+   goes to the first: the nearest fresh landmark, else the place it longs for
+   most. That happens 1.5 s after it takes the wheel, or after 15 s idle once
+   it has been doing things.
    It says something about what it saw, walks up to a spot 4 m in front of the
    landmark, and looks it over (`turn_in_place`, 3.2 s). Then it says what it
    learned. A tap always outranks curiosity.
@@ -319,9 +325,6 @@ where its owner is. Nothing walks in the background.
 
 ## Not yet
 
-- **Curiosity by model.** Outings and distractions are the model's to choose
-  ([local models](local-models.md)); curiosity is still a rule: the nearest
-  landmark the person passed, or the dear place the Avaia misses most.
 - **The raw presence journal.** A tap now belongs to the Avaia, so the hosts
   no longer open the phase-1 journal panel on a lit cell. The panel itself
   (`createRawJournalPresenter`) and the shade layer's `onCellTap` stay in

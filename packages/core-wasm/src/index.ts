@@ -322,6 +322,7 @@ const ACTIONS = new Set([
   "go",
   "wander",
   "home",
+  "study",
 ]);
 const FEELINGS = new Set(["new", "known", "fond", "loved"]);
 
@@ -401,7 +402,9 @@ function decodeDriveCommand(value: unknown): AvaiaDriveCommand {
       break;
     case "choose":
       if (
-        (value.what === "distraction" || value.what === "outing") &&
+        (value.what === "distraction" ||
+          value.what === "outing" ||
+          value.what === "curiosity") &&
         (value.heading === undefined ||
           (typeof value.heading === "string" && PURPOSES.has(value.heading))) &&
         Array.isArray(value.menu) &&

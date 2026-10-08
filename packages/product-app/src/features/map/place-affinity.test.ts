@@ -25,6 +25,7 @@ import {
   placeActivity,
   placeFamily,
   placeToReturnTo,
+  placesToReturnTo,
   readAffinity,
   recordVisit,
   returnAfterMs,
@@ -181,6 +182,16 @@ describe("going back", () => {
     );
     expect(placeToReturnTo(affinity, here, 3_000, lastAt + 2 * DAY)?.id).toBe(
       id,
+    );
+  });
+
+  it("lists the dear places it longs for, the one placeToReturnTo picks first", () => {
+    const now = lastAt + 2 * DAY;
+    expect(
+      placesToReturnTo(affinity, here, 3_000, now).map((p) => p.id),
+    ).toEqual([id]);
+    expect(placesToReturnTo(affinity, here, 3_000, lastAt + DAY / 2)).toEqual(
+      [],
     );
   });
 
