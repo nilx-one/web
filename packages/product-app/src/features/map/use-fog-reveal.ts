@@ -66,7 +66,7 @@ export interface FogRevealInput {
   readonly owner: string;
   /** Required in production; old isolated hook tests can omit it. */
   readonly enforceProximity?: boolean;
-  readonly proximity?: AvaiaProximitySnapshot;
+  readonly proximity?: AvaiaProximitySnapshot | undefined;
   readonly onRevealed?: (cell: MapFogCell, via: FogRevealVia) => void;
 }
 
