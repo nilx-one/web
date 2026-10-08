@@ -508,23 +508,28 @@ function decodeProximityPolicy(value: string): AvaiaProximityPolicy {
   const parsed: unknown = JSON.parse(value);
   if (
     !isRecord(parsed) ||
+    typeof parsed.distance_m !== "number" ||
     !Number.isSafeInteger(parsed.distance_m) ||
+    typeof parsed.red_m !== "number" ||
     !Number.isSafeInteger(parsed.red_m) ||
+    typeof parsed.restore_below_m !== "number" ||
     !Number.isSafeInteger(parsed.restore_below_m) ||
     typeof parsed.level !== "string" ||
     !["near", "working", "restricted", "red"].includes(parsed.level) ||
     typeof parsed.can_reveal !== "boolean" ||
-    !(parsed.duration_ms === null ||
-      (Number.isSafeInteger(parsed.duration_ms) &&
-       typeof parsed.duration_ms === "number" &&
-       parsed.duration_ms >= 60_000 &&
-       parsed.duration_ms <= 600_000)) ||
+    !(
+      parsed.duration_ms === null ||
+      (typeof parsed.duration_ms === "number" &&
+        Number.isSafeInteger(parsed.duration_ms) &&
+        parsed.duration_ms >= 60_000 &&
+        parsed.duration_ms <= 600_000)
+    ) ||
     parsed.distance_m < 0 ||
     parsed.red_m <= 0 ||
     parsed.restore_below_m <= 0 ||
     parsed.restore_below_m >= parsed.red_m ||
     parsed.can_reveal !== (parsed.distance_m < parsed.restore_below_m) ||
-    (parsed.can_reveal !== (parsed.duration_ms !== null))
+    parsed.can_reveal !== (parsed.duration_ms !== null)
   ) {
     throw new Error("0x1 Core returned an invalid proximity policy");
   }
@@ -554,7 +559,10 @@ export interface CoreWasmBindings {
     subject: string,
     command: AvaiaLifeCommand,
   ): AvaiaLifeAnswer;
-  avaiaProximity?(distanceMeters: number, artifacts: number): AvaiaProximityPolicy;
+  avaiaProximity?(
+    distanceMeters: number,
+    artifacts: number,
+  ): AvaiaProximityPolicy;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
