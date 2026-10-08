@@ -27,6 +27,8 @@ export interface FogRevealJob {
   readonly durationMs: number;
   /** How many landmarks the archive drew in the cell when the reveal began. */
   readonly landmarks: number;
+  /** Timer is frozen at this wall-clock instant when Core blocks reveal. */
+  readonly pausedAt?: number;
 }
 
 /** How many cells an Avaia works open at the same time. */
@@ -134,26 +136,27 @@ export function startReveal(
   cell: MapFogCell,
   landmarks: number,
   nowMs: number,
+  durationMs = revealDurationMs(landmarks),
 ): FogRevealJob {
   return {
     cell,
     startedAt: nowMs,
-    durationMs: revealDurationMs(landmarks),
+    durationMs,
     landmarks,
   };
 }
 
 export function revealProgress(job: FogRevealJob, nowMs: number): number {
   if (job.durationMs <= 0) return 1;
-  return Math.min(1, Math.max(0, (nowMs - job.startedAt) / job.durationMs));
+  return Math.min(1, Math.max(0, ((job.pausedAt ?? nowMs) - job.startedAt) / job.durationMs));
 }
 
 export function revealFinished(job: FogRevealJob, nowMs: number): boolean {
-  return nowMs - job.startedAt >= job.durationMs;
+  return job.pausedAt === undefined && nowMs - job.startedAt >= job.durationMs;
 }
 
 export function revealRemainingMs(job: FogRevealJob, nowMs: number): number {
-  return Math.max(0, job.startedAt + job.durationMs - nowMs);
+  return Math.max(0, job.startedAt + job.durationMs - (job.pausedAt ?? nowMs));
 }
 
 /**
@@ -231,7 +234,9 @@ function isJob(value: unknown): value is FogRevealJob {
     typeof job.startedAt === "number" &&
     typeof job.durationMs === "number" &&
     job.durationMs >= 0 &&
-    job.durationMs <= FOG_REVEAL_MAX_MS &&
+    job.durationMs <= 10 * 60_000 &&
+    (job.pausedAt === undefined ||
+      (typeof job.pausedAt === "number" && Number.isFinite(job.pausedAt) && job.pausedAt >= job.startedAt)) &&
     typeof job.landmarks === "number" &&
     typeof cell?.id === "string" &&
     typeof center?.longitude === "number" &&
