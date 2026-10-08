@@ -11,7 +11,7 @@ import type { LocationControlViewModel } from "./location-control-view-model";
 export interface LocationControlProps {
   readonly viewModel: LocationControlViewModel;
   readonly onActivate: () => void;
-  readonly proximity?: AvaiaProximityPolicy;
+  readonly proximity?: AvaiaProximityPolicy | undefined;
 }
 
 /**
