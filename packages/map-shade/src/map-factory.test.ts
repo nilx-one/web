@@ -17,7 +17,28 @@ import {
   type ShadeRuntime,
 } from "./map-factory";
 import { cellAtLngLat } from "./pick";
-import type { ShadeLayer } from "./shade-layer";
+import {
+  createShadeLayer,
+  type ShadeLayer,
+  type ShadeLayerOptions,
+} from "./shade-layer";
+
+vi.mock("./shade-layer", () => ({
+  createShadeLayer: vi.fn((options: ShadeLayerOptions) => ({
+    id: "nilx-one-presence-shade",
+    canvas: document.createElement("canvas"),
+    coordinates: [
+      [0, 1],
+      [1, 1],
+      [1, 0],
+      [0, 0],
+    ],
+    motion: options.motion,
+    setPalette: vi.fn(),
+    setZones: vi.fn(),
+    dispose: vi.fn(),
+  })),
+}));
 
 // Declared through vi.hoisted so the mock factory below, which vitest lifts to
 // the top of the module, can still reference it.
@@ -31,6 +52,20 @@ const { FakeMap } = vi.hoisted(() => {
       readonly id: string;
       readonly before: string | undefined;
     }[] = [];
+    readonly sources = new globalThis.Map<
+      string,
+      { canvas: HTMLCanvasElement; play: () => void; pause: () => void }
+    >();
+    getSource(id: string) {
+      return this.sources.get(id);
+    }
+    addSource(id: string, value: { canvas: HTMLCanvasElement }) {
+      this.sources.set(id, { ...value, play: vi.fn(), pause: vi.fn() });
+    }
+    once(event: string, listener: () => void) {
+      return this.on(event, listener);
+    }
+    fire() {}
     styleLoaded = true;
     styleMetadata: Record<string, unknown> | undefined = undefined;
     styleLayers: { id: string; type: string }[] = [
@@ -158,13 +193,18 @@ function build(
 }
 
 function shadeLayerOf(map: FakeMapInstance): ShadeLayer {
-  const layer = map.layers.get(SHADE_LAYER_ID);
+  const canvas = map.sources.get("nilx-one-presence-shade-canvas")?.canvas;
+  const layer = vi
+    .mocked(createShadeLayer)
+    .mock.results.map((result) => result.value as ShadeLayer)
+    .find((surface) => surface.canvas === canvas);
   expect(layer, "the shade layer is on the map").toBeDefined();
   return layer as unknown as ShadeLayer;
 }
 
 beforeEach(() => {
   FakeMap.instances = [];
+  vi.mocked(createShadeLayer).mockClear();
 });
 
 describe("shade map factory", () => {

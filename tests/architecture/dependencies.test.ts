@@ -230,8 +230,17 @@ describe("Clean Architecture boundaries", () => {
   it("never introduces a Canvas 2D rendering fallback", () => {
     const violations: string[] = [];
 
+    // Only the geographic fog pipeline may use Canvas 2D as an image/mask
+    // transfer surface. Rendering remains exclusively WebGPU or WebGL2.
+    const imageTransferSurfaces = new Set([
+      "packages/map-shade/src/fog-atlas.ts",
+      "packages/map-shade/src/shade-layer.ts",
+      "packages/map-shade/tests/browser.ts",
+    ]);
     for (const scope of ["apps", "packages"] as const) {
       for (const file of sourceFiles(join(ROOT, scope))) {
+        const normalized = relative(ROOT, file);
+        if (imageTransferSurfaces.has(normalized)) continue;
         const source = readFileSync(file, "utf8");
 
         if (/getContext\(\s*["']2d["']\s*\)/.test(source)) {

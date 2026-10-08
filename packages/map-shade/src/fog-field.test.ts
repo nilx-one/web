@@ -330,3 +330,39 @@ describe("home", () => {
     expect(field.home?.()).toBeUndefined();
   });
 });
+
+describe("transient occupied ground", () => {
+  it("opens the Bond cell in the same renderer source without fabricating a visit or persisted reveal", async () => {
+    const storage = memoryStorage();
+    const local = journal([]);
+    const { field, runtime } = createFogField(local.runtime, storage);
+    field.bindOwner?.("owner");
+    const resolved = (await runtime)!;
+    const reset = vi.fn();
+    resolved.source.onReset?.(reset);
+    field.setOccupied?.(HERE);
+    expect(field.isRevealed(HERE_CELL)).toBe(true);
+    expect(resolved.source.isLit(HERE_CELL)).toBe(true);
+    expect(resolved.source.litCells()).toContain(HERE_CELL);
+    expect(await resolved.store.listCells()).toEqual([]);
+    expect(storage.values.size).toBe(0);
+    field.setOccupied?.(undefined);
+    expect(field.isRevealed(HERE_CELL)).toBe(false);
+    expect(reset).toHaveBeenCalledTimes(2);
+  });
+  it("notifies the renderer to replace the old owner's mask", async () => {
+    const { field, runtime } = createFogField(
+      journal([]).runtime,
+      memoryStorage(),
+    );
+    const resolved = (await runtime)!;
+    field.bindOwner?.("alice");
+    field.reveal(HERE_CELL);
+    field.setOccupied?.(HERE);
+    const reset = vi.fn();
+    resolved.source.onReset?.(reset);
+    field.bindOwner?.("bob");
+    expect(resolved.source.litCells()).toEqual([]);
+    expect(reset).toHaveBeenCalledOnce();
+  });
+});

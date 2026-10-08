@@ -122,10 +122,20 @@ function unionShadeSource(
   journal: ShadeSource,
   reveals: Set<CellIndex>,
   subscribeReveals: (listener: (cell: CellIndex) => void) => () => void,
+  occupied: () => CellIndex | undefined,
+  subscribeReset: (listener: () => void) => () => void,
 ): ShadeSource {
   return {
-    litCells: () => [...new Set([...journal.litCells(), ...reveals])],
-    isLit: (cell) => reveals.has(cell) || journal.isLit(cell),
+    litCells: () => [
+      ...new Set([
+        ...journal.litCells(),
+        ...reveals,
+        ...[occupied()].filter((cell): cell is CellIndex => cell !== undefined),
+      ]),
+    ],
+    onReset: subscribeReset,
+    isLit: (cell) =>
+      cell === occupied() || reveals.has(cell) || journal.isLit(cell),
     onCellLit(listener) {
       const fromJournal = journal.onCellLit((cell) => {
         if (!reveals.has(cell)) listener(cell);
@@ -180,6 +190,11 @@ export function createFogField(
 ): FogFieldComposition {
   const reveals = new Set<CellIndex>();
   let owner: string | undefined;
+  let occupied: CellIndex | undefined;
+  const resetListeners = new Set<() => void>();
+  const reset = () => {
+    for (const listener of [...resetListeners]) listener();
+  };
   const cellListeners = new Set<(cell: CellIndex) => void>();
   const listeners = new Set<() => void>();
   let source: ShadeSource | undefined;
@@ -215,7 +230,16 @@ export function createFogField(
       resolved.store.subscribe((record) => {
         if (record.leftAt !== null) void measure(resolved.store, record.cell);
       });
-      source = unionShadeSource(resolved.source, reveals, subscribeReveals);
+      source = unionShadeSource(
+        resolved.source,
+        reveals,
+        subscribeReveals,
+        () => occupied,
+        (listener) => {
+          resetListeners.add(listener);
+          return () => resetListeners.delete(listener);
+        },
+      );
       // A cell the journal lights is revealed ground too, and whoever is
       // working out the frontier needs to hear about it.
       resolved.source.onCellLit(() => {
@@ -240,6 +264,17 @@ export function createFogField(
     },
 
     isRevealed,
+
+    setOccupied(point) {
+      const next =
+        point === undefined
+          ? undefined
+          : cellAtLngLat({ lng: point.longitude, lat: point.latitude });
+      if (next === occupied) return;
+      occupied = next;
+      reset();
+      for (const listener of [...listeners]) listener();
+    },
 
     frontier(point, rings) {
       if (source === undefined) return [];
@@ -290,8 +325,10 @@ export function createFogField(
       // A different Bond signed in on this device: its own reveals replace
       // whatever the previous owner's were, never merge with them.
       owner = nextOwner;
+      occupied = undefined;
       reveals.clear();
       for (const cell of readFogReveals(nextOwner, storage)) reveals.add(cell);
+      reset();
       for (const listener of [...listeners]) listener();
     },
   };

@@ -10,3 +10,5 @@ deploy/web/monuments/
 services/identity/target/
 
 tools/voices/.cache/
+
+test-results/
