@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { cellToLatLng, gridDisk, latLngToCell } from "h3-js";
-import { Map as MapLibreMap, addProtocol } from "maplibre-gl";
+import {
+  Map as MapLibreMap,
+  addProtocol,
+  type CanvasSource,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { createFogAtlas } from "../src/fog-atlas";
@@ -156,6 +160,11 @@ async function main() {
     source: "fog",
     paint: { "raster-fade-duration": 0 },
   });
+  // Match the production factory: a non-animated CanvasSource still needs
+  // an upload frame before its static pixels can be sampled by MapLibre.
+  const fogSource = map.getSource("fog") as CanvasSource;
+  fogSource.play();
+  map.once("render", () => fogSource.pause());
   Object.assign(window, {
     fogTest: { report, map, atlas, cell, cellToLatLng, gridDisk },
   });
