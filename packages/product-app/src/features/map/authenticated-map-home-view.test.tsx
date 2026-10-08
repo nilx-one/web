@@ -544,13 +544,12 @@ describe("AuthenticatedMapHomeView", () => {
         standing: { level: 0, xp: 0, nextLevelXp: 0 },
         expected: 0,
       },
-    ])("fills by progress within the current $seat level", ({
-      seat,
-      standing,
-      expected,
-    }) => {
-      expect(levelFill(standing, seat)).toBe(expected);
-    });
+    ])(
+      "fills by progress within the current $seat level",
+      ({ seat, standing, expected }) => {
+        expect(levelFill(standing, seat)).toBe(expected);
+      },
+    );
 
     const pending = () => new Promise<never>(() => undefined);
     const inventoryHost = {
