@@ -288,7 +288,8 @@ alongside what the journal lit.
    Avaia stands — never into the fog. It works the cell open from there.
    Core decides whether she may and for how long: one to ten minutes,
    growing with the distance between the Bond and the Avaia and with the
-   cell's landmarks (standing in for artifacts), and not at all once she is
+   finds lying in the cell this week (the artifacts, rolled by the same public
+   function as everywhere else), and not at all once she is
    5 km away — new work stays held until she is back within 4.5 km (see
    _Proximity_ below). An Avaia works on at most three cells at once. A fourth tap gets told to
    wait. While a cell is opening it fills in on the world, and a status chip

@@ -81,11 +81,11 @@ export function FogRevealPrompt({
                     String(Math.round(prompt.durationMs / 60_000)),
                   )}
           </p>
-          {prompt.busy || prompt.landmarks === 0 ? null : (
+          {prompt.busy || prompt.artifacts === 0 ? null : (
             <p className="fog-reveal__note">
-              {t("fog.prompt.landmarks").replace(
+              {t("fog.prompt.finds").replace(
                 "{count}",
-                String(prompt.landmarks),
+                String(prompt.artifacts),
               )}
             </p>
           )}

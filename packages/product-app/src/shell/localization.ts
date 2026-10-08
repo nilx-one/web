@@ -90,8 +90,8 @@ const EN_MESSAGES = {
   "fog.prompt.title": "Reveal this patch of fog?",
   "fog.prompt.detail":
     "{avaia} will go there and reveal it in about {minutes} min.",
-  "fog.prompt.landmarks":
-    "Landmarks here: {count}. Each one takes longer to look over.",
+  "fog.prompt.finds":
+    "Finds lying here: {count}. Each one takes longer to look over.",
   "fog.prompt.busy":
     "{avaia} is already revealing {limit} cells. Wait for one to clear.",
   "fog.prompt.confirm": "Reveal",
@@ -411,7 +411,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "fog.prompt.title": "Відкрити цю клітинку туману?",
   "fog.prompt.detail":
     "{avaia} піде туди й відкриє її приблизно за {minutes} хв.",
-  "fog.prompt.landmarks": "Пам’яток тут: {count}. Кожна додає часу на огляд.",
+  "fog.prompt.finds": "Знахідок тут: {count}. Кожна додає часу на огляд.",
   "fog.prompt.busy":
     "{avaia} вже відкриває {limit} клітинки. Зачекайте, поки одна відкриється.",
   "fog.prompt.confirm": "Відкрити",

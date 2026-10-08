@@ -19,6 +19,7 @@ import {
   approachPoint,
   FOG_APPROACH_ACCURACY_METERS,
   FOG_FRONTIER_RINGS,
+  artifactsInCell,
   fogMarks,
   freezeUnattended,
   landmarksInCell,
@@ -46,6 +47,8 @@ export const FOG_AUTHORIZED_HEARTBEAT_MS = 5_000;
 export interface FogRevealPrompt {
   readonly cell: MapFogCell;
   readonly landmarks: number;
+  /** The finds lying in the cell this week: what Core prices the work by. */
+  readonly artifacts: number;
   readonly durationMs: number;
   /** The Avaia already works as many cells as it can. */
   readonly busy: boolean;
@@ -362,7 +365,7 @@ export function useFogReveal({
     prompt === undefined
       ? undefined
       : enforceProximity
-        ? (proximity?.durationFor(prompt.landmarks) ?? null)
+        ? (proximity?.durationFor(prompt.artifacts) ?? null)
         : prompt.durationMs;
   const livePrompt = useMemo(
     () =>
@@ -396,14 +399,16 @@ export function useFogReveal({
             offer.cell,
             (at, radius) => renderer.landmarksNear?.(at, radius) ?? [],
           );
-          // The archive draws landmarks, not artifacts; until Web can count a
-          // cell's artifacts, the landmark count stands in for them (agreed
-          // gameplay substitution, see docs/avaia-proximity.md in core).
-          const coreDuration = proximity?.durationFor(landmarks) ?? null;
+          // Core prices the work by the artifacts lying in the cell, counted
+          // by the public roll; landmarks only colour the story and the
+          // isolated-test fallback below.
+          const artifacts = artifactsInCell(offer.cell, Date.now());
+          const coreDuration = proximity?.durationFor(artifacts) ?? null;
           if (enforceProximity && coreDuration === null) return "out-of-reach";
           setPrompt({
             cell: offer.cell,
             landmarks,
+            artifacts,
             // Core's duration is the only one under enforcement; the Web table
             // is for isolated tests that run without a Core.
             durationMs: coreDuration ?? revealDurationMs(landmarks),

@@ -6,9 +6,18 @@ import type {
   MapFogField,
   MapLandmark,
 } from "@nilx-one/map-contract";
+import {
+  epochOf,
+  FIND_PACK_ID,
+  rollSegment,
+  ROLL_TABLE,
+  segmentAt,
+  segmentsWithin,
+} from "@nilx-one/artifact-contract";
 import { describe, expect, it } from "vitest";
 
 import {
+  artifactsInCell,
   FOG_REVEAL_CONCURRENCY,
   FOG_REVEAL_MAX_MS,
   FOG_REVEAL_MIN_MS,
@@ -190,6 +199,73 @@ describe("revealing a fog cell", () => {
     it("leaves a job that is already paused exactly as it was", () => {
       const paused = { ...running, pausedAt: 70_000 };
       expect(freezeUnattended([paused], 130_000, 9_000_000)).toEqual([paused]);
+    });
+  });
+
+  describe("the artifacts lying in a cell", () => {
+    const NOW = Date.UTC(2026, 9, 8);
+    const rolled = (segment: ReturnType<typeof segmentAt>): boolean =>
+      rollSegment({
+        packId: FIND_PACK_ID,
+        packVersion: ROLL_TABLE.version,
+        epoch: epochOf(NOW),
+        segment,
+      }) !== null;
+    /** A cell about 8 m across, so it holds exactly the segment it stands in. */
+    const tiny = (longitude: number, latitude: number): MapFogCell => ({
+      id: `tiny:${longitude}:${latitude}`,
+      center: { longitude, latitude },
+      boundary: [
+        [longitude - 0.00005, latitude - 0.00004],
+        [longitude + 0.00005, latitude - 0.00004],
+        [longitude + 0.00005, latitude + 0.00004],
+        [longitude - 0.00005, latitude + 0.00004],
+      ],
+    });
+    /** Walk the Kyiv grid for a segment that holds a find and one that does not. */
+    function pointsFor() {
+      let withFind: [number, number] | undefined;
+      let bare: [number, number] | undefined;
+      for (let i = 0; i < 4_000 && (!withFind || !bare); i++) {
+        const point: [number, number] = [
+          30.5 + i * 0.0006,
+          50.4 + (i % 7) * 0.0005,
+        ];
+        if (rolled(segmentAt(point))) withFind ??= point;
+        else bare ??= point;
+      }
+      return { withFind: withFind!, bare: bare! };
+    }
+
+    it("counts the find a segment rolls, and nothing for bare ground", () => {
+      const { withFind, bare } = pointsFor();
+      expect(artifactsInCell(tiny(...withFind), NOW)).toBe(1);
+      expect(artifactsInCell(tiny(...bare), NOW)).toBe(0);
+    });
+
+    it("is the rolls of the segments the cell holds, whole cell or not", () => {
+      const cellAcross = (longitude: number, latitude: number): MapFogCell => ({
+        id: "wide",
+        center: { longitude, latitude },
+        boundary: [
+          [longitude - 0.006, latitude - 0.004],
+          [longitude + 0.006, latitude - 0.004],
+          [longitude + 0.006, latitude + 0.004],
+          [longitude - 0.006, latitude + 0.004],
+        ],
+      });
+      const wide = cellAcross(30.5234, 50.4501);
+      const expected = segmentsWithin(wide.boundary).filter(rolled).length;
+      expect(artifactsInCell(wide, NOW)).toBe(expected);
+      // About a hundred segments at 2.4% each: a few, never the whole lot.
+      expect(expected).toBeLessThan(20);
+    });
+
+    it("answers the same for everyone on the same day", () => {
+      const cell = tiny(30.5234, 50.4501);
+      expect(artifactsInCell(cell, NOW)).toBe(
+        artifactsInCell(cell, NOW + 3_600_000),
+      );
     });
   });
 });

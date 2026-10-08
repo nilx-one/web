@@ -80,8 +80,8 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "fog.prompt.title": "Открыть эту клетку тумана?",
   "fog.prompt.detail":
     "{avaia} отправится туда и откроет её примерно за {minutes} мин.",
-  "fog.prompt.landmarks":
-    "Достопримечательностей здесь: {count}. Каждая добавляет времени на осмотр.",
+  "fog.prompt.finds":
+    "Находок здесь: {count}. Каждая добавляет времени на осмотр.",
   "fog.prompt.busy":
     "{avaia} уже открывает клеток: {limit}. Подождите, пока одна откроется.",
   "fog.prompt.confirm": "Открыть",

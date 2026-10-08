@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  epochOf,
+  FIND_PACK_ID,
+  rollSegment,
+  ROLL_TABLE,
+  segmentsWithin,
+} from "@nilx-one/artifact-contract";
+import {
   mapDistanceMeters,
   type MapFogCell,
   type MapFogField,
@@ -130,6 +137,27 @@ export function landmarksInCell(
   return near(cell.center, FOG_CELL_LANDMARK_RADIUS_METERS).filter(
     (landmark) => fog.cellAt(landmark).id === cell.id,
   ).length;
+}
+
+/**
+ * The artifacts lying in a fog cell this week: the finds rolled for the
+ * 50 m segments the cell holds, by the same public roll every client and the
+ * identity server agree on. This is the count Core's proximity policy takes;
+ * it is not the archive's landmarks, and no walk is needed to know it.
+ */
+export function artifactsInCell(cell: MapFogCell, nowMs: number): number {
+  const epoch = epochOf(nowMs);
+  let found = 0;
+  for (const segment of segmentsWithin(cell.boundary)) {
+    const roll = rollSegment({
+      packId: FIND_PACK_ID,
+      packVersion: ROLL_TABLE.version,
+      epoch,
+      segment,
+    });
+    if (roll !== null) found += 1;
+  }
+  return found;
 }
 
 export function startReveal(

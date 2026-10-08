@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createFogFieldDouble } from "../../../../../tests/support/doubles";
 import {
+  artifactsInCell,
   FOG_REVEAL_MIN_MS,
   readAuthorizedAt,
   revealRemainingMs,
@@ -337,7 +338,7 @@ describe("revealing the fog around a Bond", () => {
     expect(fog.isRevealed("strip:3053")).toBe(true);
   });
 
-  it("quotes Core's duration for the cell's landmarks, never its own table", () => {
+  it("quotes Core's duration for the cell's artifacts, never its own table", () => {
     const fog = createFogFieldDouble(0.01);
     const durations: number[] = [];
     const proximity = {
@@ -358,8 +359,9 @@ describe("revealing the fog around a Bond", () => {
     act(() => void result.current.handleFogTap(NEXT_DOOR));
     const asked = result.current.prompt!;
     expect(durations.length).toBeGreaterThan(0);
-    expect(new Set(durations)).toEqual(new Set([asked.landmarks]));
-    expect(asked.durationMs).toBe(90_000 + asked.landmarks * 1_000);
+    expect(new Set(durations)).toEqual(new Set([asked.artifacts]));
+    expect(asked.artifacts).toBe(artifactsInCell(asked.cell, Date.now()));
+    expect(asked.durationMs).toBe(90_000 + asked.artifacts * 1_000);
     act(() => void result.current.confirm());
     expect(result.current.jobs[0]?.durationMs).toBe(asked.durationMs);
   });

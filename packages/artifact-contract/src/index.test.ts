@@ -14,6 +14,7 @@ import {
   SEGMENT_METERS,
   segmentAt,
   segmentsAlong,
+  segmentsWithin,
   type EpochId,
   type FindRoll,
   type LonLat,
@@ -364,5 +365,87 @@ describe("epochOf", () => {
     expect(epochOf(saturday)).toBe(epochOf(sundayNight));
     expect(epochOf(monday)).not.toBe(epochOf(sundayNight));
     expect(epochOf(monday)).toBe("e2961");
+  });
+});
+
+describe("the segments an area holds", () => {
+  const square = (
+    halfWidthMeters: number,
+    centre: LonLat = ORIGIN,
+  ): LonLat[] => [
+    [centre[0] - halfWidthMeters * M_LON, centre[1] - halfWidthMeters * M_LAT],
+    [centre[0] + halfWidthMeters * M_LON, centre[1] - halfWidthMeters * M_LAT],
+    [centre[0] + halfWidthMeters * M_LON, centre[1] + halfWidthMeters * M_LAT],
+    [centre[0] - halfWidthMeters * M_LON, centre[1] + halfWidthMeters * M_LAT],
+  ];
+
+  it("holds the segment under an area smaller than one", () => {
+    expect(segmentsWithin(square(5))).toEqual([segmentAt(ORIGIN)]);
+  });
+
+  it("holds about one segment per fifty-metre square, whole and without repeats", () => {
+    const area = segmentsWithin(square(250)); // 500 m a side ≈ 100 segments
+    expect(new Set(area).size).toBe(area.length);
+    expect(area.length).toBeGreaterThan(85);
+    expect(area.length).toBeLessThan(115);
+    // The middle of the area is one of them.
+    expect(area).toContain(segmentAt(ORIGIN));
+  });
+
+  it("names the segments a walk through the middle of the area crosses", () => {
+    const area = new Set(segmentsWithin(square(100)));
+    const across = segmentsAlong([at(-60, 0), at(60, 0)]);
+    for (const segment of across) expect(area.has(segment)).toBe(true);
+  });
+
+  it("does not name segments outside the ring", () => {
+    const area = new Set(segmentsWithin(square(100)));
+    expect(area.has(segmentAt(at(400, 0)))).toBe(false);
+    expect(area.has(segmentAt(at(0, -400)))).toBe(false);
+  });
+
+  it("treats a hexagon like a fog cell, and a degenerate ring as nothing", () => {
+    const hexagon: LonLat[] = Array.from({ length: 6 }, (_, i) => {
+      const angle = (Math.PI / 3) * i;
+      return [
+        ORIGIN[0] + 90 * Math.cos(angle) * M_LON,
+        ORIGIN[1] + 90 * Math.sin(angle) * M_LAT,
+      ];
+    });
+    const cells = segmentsWithin(hexagon);
+    // ≈ 6·(√3/4)·90² / 50² ≈ 8.4 segments of area; edges give or take a few.
+    expect(cells.length).toBeGreaterThan(5);
+    expect(cells.length).toBeLessThan(14);
+    expect(segmentsWithin([ORIGIN, ORIGIN])).toEqual([]);
+  });
+
+  it("refuses an area that is not a cell", () => {
+    expect(() => segmentsWithin(square(20_000))).toThrow(RangeError);
+    expect(() =>
+      segmentsWithin([
+        [Number.NaN, 0],
+        [1, 0],
+        [0, 1],
+      ]),
+    ).toThrow(RangeError);
+  });
+
+  it("agrees with the roll: the finds of an area are the finds of its segments", () => {
+    const area = segmentsWithin(square(250));
+    const rolled = area.flatMap((segment) => {
+      const found = rollSegment({ ...PACK, epoch: EPOCH, segment });
+      return found === null ? [] : [found.artifactId];
+    });
+    // Reproducible, and each id belongs to a segment of the area.
+    const again = area.flatMap((segment) => {
+      const found = rollSegment({ ...PACK, epoch: EPOCH, segment });
+      return found === null ? [] : [found.artifactId];
+    });
+    expect(rolled).toEqual(again);
+    for (const id of rolled) {
+      expect(area.some((segment) => id.startsWith(`art:${segment}:`))).toBe(
+        true,
+      );
+    }
   });
 });

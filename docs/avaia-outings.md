@@ -346,7 +346,7 @@ The vocabulary, validator and template narrator from phase 1 are taken unchanged
 
 ### 3.3a Already built: rolls (`artifact-contract`)
 
-`packages/artifact-contract` is a pure function with no dependencies: `rollSegment`, `rollAlong`, `segmentsAlong`, `epochOf`, and the `ROLL_TABLE` (version 1, the tiers and rates from 3.2).
+`packages/artifact-contract` is a pure function with no dependencies: `rollSegment`, `rollAlong`, `segmentsAlong`, `segmentsWithin` (the segments an area holds, so a fog cell's finds can be counted without a walk), `epochOf`, and the `ROLL_TABLE` (version 1, the tiers and rates from 3.2).
 
 - **A segment is a cell of a fixed ~50 m grid, not a graph edge.** Edges depend on which tiles are loaded: buffer clipping adds nodes, and the same stretch of street would be cut differently on different devices. The grid is defined in degrees without trigonometry, so every device cuts it the same way. Columns are scaled for Kyiv's latitude.
 - One uniform draw per segment, from the rarest tier down: a tier's chance = its rate × 0.05 km. One find per segment, `Slot` = 0.

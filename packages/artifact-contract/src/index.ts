@@ -106,6 +106,69 @@ export function segmentAt(point: LonLat): SegmentId {
   return `seg:${Math.floor(y)}:${Math.floor(x)}`;
 }
 
+/** The most segments one area may span; a larger ring is a caller's mistake. */
+const MAX_SEGMENTS_WITHIN = 10_000;
+
+/**
+ * The segments whose centre lies inside `ring` (even-odd, one ring), row by
+ * row; an area smaller than a segment still holds the segment under its
+ * middle. Arithmetic only, like the rest of the grid, so every engine names
+ * the same segments. The count a cell "holds" is this list rolled: the same
+ * public function of pack, epoch and segment every client and the server
+ * already agree on.
+ */
+export function segmentsWithin(ring: readonly LonLat[]): SegmentId[] {
+  if (ring.length < 3) return [];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const point of ring) {
+    const [x, y] = gridOf(point);
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const columns = Math.floor(maxX) - Math.floor(minX) + 1;
+  const rows = Math.floor(maxY) - Math.floor(minY) + 1;
+  if (!(columns * rows <= MAX_SEGMENTS_WITHIN)) {
+    throw new RangeError(
+      `area spans more than ${MAX_SEGMENTS_WITHIN} segments`,
+    );
+  }
+  const inside = (longitude: number, latitude: number): boolean => {
+    let within = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!;
+      const [xj, yj] = ring[j]!;
+      if (
+        yi > latitude !== yj > latitude &&
+        longitude < ((xj - xi) * (latitude - yi)) / (yj - yi) + xi
+      ) {
+        within = !within;
+      }
+    }
+    return within;
+  };
+  const segments: SegmentId[] = [];
+  for (let row = Math.floor(minY); row <= Math.floor(maxY); row++) {
+    for (let column = Math.floor(minX); column <= Math.floor(maxX); column++) {
+      const longitude = (column + 0.5) * COLUMN_DEGREES - 180;
+      const latitude = (row + 0.5) * ROW_DEGREES - 90;
+      if (inside(longitude, latitude)) segments.push(`seg:${row}:${column}`);
+    }
+  }
+  if (segments.length === 0) {
+    const middle: LonLat = [
+      ring.reduce((sum, [longitude]) => sum + longitude, 0) / ring.length,
+      ring.reduce((sum, [, latitude]) => sum + latitude, 0) / ring.length,
+    ];
+    segments.push(segmentAt(middle));
+  }
+  return segments;
+}
+
 /**
  * The segments a walk passes through, in the order it first enters each. A
  * tap-sent walk and one the Avaia chose go through the same function, so the
