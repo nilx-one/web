@@ -116,7 +116,7 @@ function curiousCore(): Pick<CoreRuntimePort, "avaiaDriveStep"> {
 /** Contract-compatible stub for map tests that explicitly exercise fog work. */
 function nearbyProximityCore(): Pick<CoreRuntimePort, "avaiaProximity"> {
   return {
-    avaiaProximity: async (distanceMeters, artifacts) => {
+    avaiaProximity: async (distanceMeters) => {
       const canReveal = distanceMeters < 4_500;
       return {
         distance_m: distanceMeters,
@@ -124,7 +124,7 @@ function nearbyProximityCore(): Pick<CoreRuntimePort, "avaiaProximity"> {
         restore_below_m: 4_500,
         level: distanceMeters <= 15 ? "near" : "working",
         can_reveal: canReveal,
-        duration_ms: canReveal ? 60_000 + artifacts * 0 : null,
+        duration_ms: canReveal ? 60_000 : null,
       };
     },
   };
