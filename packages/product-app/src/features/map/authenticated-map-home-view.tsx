@@ -1143,6 +1143,12 @@ export function AuthenticatedMapHomeView({
       avaiaWalk.stance(globalThis.performance.now())?.point ??
       readWorldMemory(pubDress).avaia,
   });
+  // The avatar's true animation-frame position can cross the red boundary
+  // between Core polling beats; feed those frames to the proximity guard.
+  const proximityObserver = useRef(avaiaProximity?.observeAvaiaPoint);
+  useEffect(() => {
+    proximityObserver.current = avaiaProximity?.observeAvaiaPoint;
+  }, [avaiaProximity]);
   const [fogAnnouncement, setFogAnnouncement] = useState("");
   const fogReveal = useFogReveal({
     renderer,
@@ -1714,6 +1720,7 @@ export function AuthenticatedMapHomeView({
       const body = wheelBody(wheel, handover, nowMs);
       const stance =
         body.seat === "avaia" ? avaiaWalk.stance(nowMs) : undefined;
+      if (stance !== undefined) proximityObserver.current?.(stance.point);
       const handle = createWheelBodyHandle({
         body,
         address: address(body.seat),
