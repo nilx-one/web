@@ -6,6 +6,7 @@ import type {
   AvaiaDriveInput,
   AvaiaLifeAnswer,
   AvaiaLifeCommand,
+  AvaiaProximityPolicy,
 } from "./avaia-drive";
 
 export type CoreUnavailableReason =
@@ -181,6 +182,11 @@ export interface CoreRuntimePort {
     subject: string,
     command: AvaiaLifeCommand,
   ): Promise<AvaiaLifeAnswer>;
+  /** Core is the sole authority for fog capability and reveal duration. */
+  avaiaProximity?(
+    distanceMeters: number,
+    artifacts: number,
+  ): Promise<AvaiaProximityPolicy>;
 }
 
 export type CoreHolder = "bond" | "avaia";
