@@ -174,7 +174,14 @@ void main() {
   float seam = border * fog;
 
   // Relief: mist banked toward the light is brighter, the lee side darker.
-  vec2 slope = vec2(dFdx(cloud), dFdy(cloud)) * u_pixel_ratio * 36.0;
+  // Sample a fixed world-space slope: screen derivatives rotate the light
+  // with the camera and make the mist appear attached to the viewport.
+  float reliefStep = exp2(lod);
+  vec2 slope = vec2(
+    mist(m + bend * 0.35 + vec2(reliefStep, 0.0), lod, t),
+    mist(m + bend * 0.35 + vec2(0.0, reliefStep), lod, t)
+  ) - vec2(mist(m + bend * 0.35, lod, t));
+  slope *= 2.34;
   float relief = clamp(dot(slope, vec2(-0.34, 0.94)), -1.0, 1.0);
 
   vec3 shadow = u_shadow;
@@ -200,10 +207,9 @@ void main() {
   // the sky, and slow shafts of light fall through it from above.
   float screenY = gl_FragCoord.y / max(u_viewport.y, 1.0);
   float distance01 = smoothstep(0.25, 1.0, screenY) * u_haze;
-  vec2 css = gl_FragCoord.xy / max(u_pixel_ratio, 1.0);
-  float across = dot(css, vec2(0.94, 0.34)) / 150.0;
+  float across = dot(m, vec2(0.94, 0.34)) / 150.0;
   float shafts = smoothstep(0.08, 0.42, gnoise(vec2(across, t * 0.035)));
-  shafts *= 0.3 + 0.7 * screenY;
+  shafts *= 0.65;
   color = mix(color, light, distance01 * 0.45 + shafts * 0.16);
 
   // Open ground throws its light into the mist beside it.
