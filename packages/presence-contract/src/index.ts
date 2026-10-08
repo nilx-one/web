@@ -41,7 +41,12 @@ export interface ShadeSource {
   litCells(): readonly CellIndex[];
   isLit(cell: CellIndex): boolean;
   onCellLit(listener: (cell: CellIndex) => void): () => void;
-  /** Membership was replaced (owner or transient occupied cell changed). */
+  /**
+   * One cell left membership without the rest changing: the transient
+   * occupied cell moved on. A renderer closes that cell alone.
+   */
+  onCellUnlit?(listener: (cell: CellIndex) => void): () => void;
+  /** Membership was replaced: a different owner's ground, rebuilt whole. */
   onReset?(listener: () => void): () => void;
 }
 

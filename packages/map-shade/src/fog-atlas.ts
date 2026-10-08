@@ -47,6 +47,17 @@ export function createFogAtlas(
     context.fillRect(0, 0, size, size);
   };
   reset();
+  const trace = (cell: CellIndex) => {
+    const points = cellToBoundary(cell, true).map(([lng, lat]) =>
+      project(lng, lat),
+    );
+    context.beginPath();
+    points.forEach(([x, y], index) => {
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.closePath();
+  };
   return {
     mask,
     size,
@@ -62,19 +73,22 @@ export function createFogAtlas(
     ],
     reset,
     add(cell: CellIndex) {
-      const points = cellToBoundary(cell, true).map(([lng, lat]) =>
-        project(lng, lat),
-      );
-      context.beginPath();
-      points.forEach(([x, y], index) => {
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-      context.closePath();
+      trace(cell);
       context.fillStyle = context.strokeStyle = "white";
       context.fill();
       // One texel guard against the compositor's bilinear filtering bringing
       // opaque neighbours back into a revealed cell. Never animate this edge.
+      context.lineWidth = 2;
+      context.stroke();
+    },
+    /**
+     * Closes one cell. Its guard stroke reaches into its neighbours, so the
+     * caller re-adds whichever of them are still open.
+     */
+    remove(cell: CellIndex) {
+      trace(cell);
+      context.fillStyle = context.strokeStyle = "black";
+      context.fill();
       context.lineWidth = 2;
       context.stroke();
     },

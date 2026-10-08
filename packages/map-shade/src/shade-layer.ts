@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { PresenceStore, ShadeSource } from "@nilx-one/presence-contract";
+import { gridDisk } from "h3-js";
 
 import { createFogAtlas, type FogAtlas } from "./fog-atlas";
 import {
@@ -247,6 +248,17 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     revision += 1;
     schedule();
   });
+  const unsubscribeUnlit = options.source.onCellUnlit?.((cell) => {
+    pending.delete(cell);
+    if (rebuild) return; // the rebuild draws current membership anyway
+    atlas.remove(cell);
+    // The closed cell's guard stroke bit into open neighbours: reopen them.
+    for (const next of gridDisk(cell, 1))
+      if (next !== cell && options.source.isLit(next)) pending.add(next);
+    maskChanged = true;
+    revision += 1;
+    schedule();
+  });
   const reset = options.source.onReset?.(() => {
     pending = new Set(options.source.litCells());
     rebuild = true;
@@ -289,6 +301,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       disposed = true;
       clearTimeout(timer);
       unsubscribe();
+      unsubscribeUnlit?.();
       reset?.();
       unsubscribeVisibility();
       backend?.dispose();

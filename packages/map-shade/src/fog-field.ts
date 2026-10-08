@@ -123,6 +123,7 @@ function unionShadeSource(
   reveals: Set<CellIndex>,
   subscribeReveals: (listener: (cell: CellIndex) => void) => () => void,
   occupied: () => CellIndex | undefined,
+  subscribeUnlit: (listener: (cell: CellIndex) => void) => () => void,
   subscribeReset: (listener: () => void) => () => void,
 ): ShadeSource {
   return {
@@ -134,6 +135,7 @@ function unionShadeSource(
       ]),
     ],
     onReset: subscribeReset,
+    onCellUnlit: subscribeUnlit,
     isLit: (cell) =>
       cell === occupied() || reveals.has(cell) || journal.isLit(cell),
     onCellLit(listener) {
@@ -196,6 +198,7 @@ export function createFogField(
     for (const listener of [...resetListeners]) listener();
   };
   const cellListeners = new Set<(cell: CellIndex) => void>();
+  const unlitListeners = new Set<(cell: CellIndex) => void>();
   const listeners = new Set<() => void>();
   let source: ShadeSource | undefined;
 
@@ -236,6 +239,10 @@ export function createFogField(
         subscribeReveals,
         () => occupied,
         (listener) => {
+          unlitListeners.add(listener);
+          return () => unlitListeners.delete(listener);
+        },
+        (listener) => {
           resetListeners.add(listener);
           return () => resetListeners.delete(listener);
         },
@@ -271,8 +278,19 @@ export function createFogField(
           ? undefined
           : cellAtLngLat({ lng: point.longitude, lat: point.latitude });
       if (next === occupied) return;
+      const previous = occupied;
       occupied = next;
-      reset();
+      // The Bond walks: one cell closes, one opens, and the rest of the
+      // ground stays as it is. Never a reset here — a reset rebuilds the
+      // whole surface and is drawn as solid mist until the rebuild lands,
+      // which flashed the map on every step and kept it veiled while the
+      // Bond kept moving.
+      if (source !== undefined) {
+        if (previous !== undefined && !source.isLit(previous))
+          for (const listener of [...unlitListeners]) listener(previous);
+        if (next !== undefined && !reveals.has(next))
+          for (const listener of [...cellListeners]) listener(next);
+      }
       for (const listener of [...listeners]) listener();
     },
 
