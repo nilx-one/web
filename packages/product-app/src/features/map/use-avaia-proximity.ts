@@ -1,8 +1,14 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { AvaiaProximityPolicy, CoreRuntimePort } from "@nilx-one/application";
-import { mapDistanceMeters, type MapPointSelection } from "@nilx-one/map-contract";
+import type {
+  AvaiaProximityPolicy,
+  CoreRuntimePort,
+} from "@nilx-one/application";
+import {
+  mapDistanceMeters,
+  type MapPointSelection,
+} from "@nilx-one/map-contract";
 import { useEffect, useRef, useState } from "react";
 
 const REFRESH_MS = 2_000;
@@ -44,11 +50,18 @@ export function useAvaiaProximity({
       try {
         const { bondPoint, getAvaiaPoint } = latest.current;
         const avaiaPoint = getAvaiaPoint();
-        if (bondPoint === undefined || avaiaPoint === undefined || evaluate === undefined) {
+        if (
+          bondPoint === undefined ||
+          avaiaPoint === undefined ||
+          evaluate === undefined
+        ) {
           if (live) setState(undefined);
           return;
         }
-        const meters = Math.max(0, Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)));
+        const meters = Math.max(
+          0,
+          Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)),
+        );
         if (!Number.isSafeInteger(meters)) {
           if (live) setState(undefined);
           return;
@@ -75,7 +88,10 @@ export function useAvaiaProximity({
         }
         setState({
           owner,
-          snapshot: { policy: first, durationsMs: values.map((p) => p.duration_ms) },
+          snapshot: {
+            policy: first,
+            durationsMs: values.map((p) => p.duration_ms),
+          },
         });
       } catch {
         // Older Wasm artifacts, failures or stale coordinates cannot authorize work.
@@ -92,5 +108,16 @@ export function useAvaiaProximity({
     };
   }, [core, evaluate, owner]);
 
-  return state?.owner === owner ? state.snapshot : undefined;
+  // A previously sampled near decision must not authorize work after either
+  // body has moved, even while the next asynchronous Core read is pending.
+  if (state?.owner !== owner || bondPoint === undefined) return undefined;
+  const avaiaPoint = getAvaiaPoint();
+  if (avaiaPoint === undefined) return undefined;
+  const currentDistance = Math.max(
+    0,
+    Math.floor(mapDistanceMeters(bondPoint, avaiaPoint)),
+  );
+  return currentDistance === state.snapshot.policy.distance_m
+    ? state.snapshot
+    : undefined;
 }
