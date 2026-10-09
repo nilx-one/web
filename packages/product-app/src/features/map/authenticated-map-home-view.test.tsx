@@ -1437,7 +1437,8 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByText("Застосунок")).toBeVisible();
     expect(screen.getByText("Вигляд")).toBeVisible();
     expect(screen.getByRole("slider", { name: "Вигляд" })).toHaveAttribute(
-      "aria-valuetext", "Автоматично",
+      "aria-valuetext",
+      "Автоматично",
     );
     expect(screen.getByText("Глибина")).toBeVisible();
     expect(screen.getByText("Піднімати будівлі при наближенні")).toBeVisible();
@@ -1486,7 +1487,10 @@ describe("AuthenticatedMapHomeView", () => {
     expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects");
 
     fireEvent.change(soundLevel, { target: { value: "2" } });
-    expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects and world");
+    expect(soundLevel).toHaveAttribute(
+      "aria-valuetext",
+      "Effects and world",
+    );
 
     expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
     // Character voices default to cutscenes: the middle of three stops.

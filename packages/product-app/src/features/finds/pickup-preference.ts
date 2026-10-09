@@ -60,7 +60,11 @@ export function pickupThresholdLevel(wire: string): number | null {
   const picked = pickedUpRarities(wire);
   for (let level = 0; level <= RARITIES.length; level++) {
     const enabled = RARITIES.slice(RARITIES.length - level);
-    if (RARITIES.every((rarity) => picked.has(rarity) === enabled.includes(rarity))) {
+    if (
+      RARITIES.every(
+        (rarity) => picked.has(rarity) === enabled.includes(rarity),
+      )
+    ) {
       return level;
     }
   }

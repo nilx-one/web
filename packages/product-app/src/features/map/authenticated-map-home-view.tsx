@@ -2600,9 +2600,21 @@ export function AuthenticatedMapHomeView({
                           label={t("settings.appearance.legend")}
                           options={(
                             [
-                              ["light", "settings.appearance.light", "settings.appearance.lightDetail"],
-                              ["auto", "settings.appearance.auto", "settings.appearance.autoDetail"],
-                              ["dark", "settings.appearance.dark", "settings.appearance.darkDetail"],
+                              [
+                                "light",
+                                "settings.appearance.light",
+                                "settings.appearance.lightDetail",
+                              ],
+                              [
+                                "auto",
+                                "settings.appearance.auto",
+                                "settings.appearance.autoDetail",
+                              ],
+                              [
+                                "dark",
+                                "settings.appearance.dark",
+                                "settings.appearance.darkDetail",
+                              ],
                             ] as const
                           ).map(([value, label, detail]) => ({
                             value,
@@ -2620,8 +2632,16 @@ export function AuthenticatedMapHomeView({
                           label={t("settings.depth.legend")}
                           options={(
                             [
-                              ["flat", "settings.depth.twoD", "settings.depth.twoDDetail"],
-                              ["volumetric", "settings.depth.threeD", "settings.depth.threeDDetail"],
+                              [
+                                "flat",
+                                "settings.depth.twoD",
+                                "settings.depth.twoDDetail",
+                              ],
+                              [
+                                "volumetric",
+                                "settings.depth.threeD",
+                                "settings.depth.threeDDetail",
+                              ],
                             ] as const
                           ).map(([value, label, detail]) => ({
                             value,

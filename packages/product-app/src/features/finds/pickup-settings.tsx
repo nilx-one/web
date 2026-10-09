@@ -10,7 +10,10 @@ import {
 } from "./pickup-preference";
 
 /** Moving right includes every rarer tier; the last stop picks up all four. */
-const STOPS: readonly { readonly value: number; readonly key: TranslationKey }[] = [
+const STOPS: readonly {
+  readonly value: number;
+  readonly key: TranslationKey;
+}[] = [
   { value: 0, key: "settings.pickup.off" },
   { value: 1, key: "settings.pickup.legendary" },
   { value: 2, key: "settings.pickup.rare" },
@@ -26,7 +29,9 @@ export function PickupSettings() {
   return (
     <fieldset className="interface-settings__appearance">
       <legend>{t("settings.pickup.legend")}</legend>
-      <small className="interface-settings__note">{t("settings.pickup.detail")}</small>
+      <small className="interface-settings__note">
+        {t("settings.pickup.detail")}
+      </small>
       <SettingsSlider
         id="pickup-level"
         label={t("settings.pickup.legend")}
