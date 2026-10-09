@@ -64,6 +64,11 @@ export interface ShadeLayer {
   readonly motion: "drift" | "still";
   setPalette(palette: FogPalette): void;
   setZones(zones: readonly FogZone[]): void;
+  /**
+   * How much ground one screen pixel covers, in metres. Quantized to powers
+   * of two, so only a whole zoom level's change redraws the fog.
+   */
+  setDetail(metresPerPixel: number): void;
   dispose(): void;
 }
 
@@ -123,6 +128,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
   let fallback = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let seconds = 0;
+  let footprint = 0;
   let previousTime = performance.now();
 
   function schedule(delay = 0) {
@@ -210,7 +216,7 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
       previousTime = performance.now();
       await backend.render(
         atlas.mask,
-        fogParameters(atlas, palette, zones, seconds, density),
+        fogParameters(atlas, palette, zones, seconds, density, footprint),
         maskChanged,
         // Copied in the task it was drawn in, so it always matches the mask
         // of that moment; a reset during the submission paints over it.
@@ -294,6 +300,14 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     setZones(next) {
       requireFogZones(next);
       zones = next;
+      revision += 1;
+      schedule();
+    },
+    setDetail(metresPerPixel) {
+      if (!Number.isFinite(metresPerPixel) || metresPerPixel <= 0) return;
+      const next = 2 ** Math.round(Math.log2(metresPerPixel));
+      if (next === footprint) return;
+      footprint = next;
       revision += 1;
       schedule();
     },

@@ -50,6 +50,9 @@ export interface ShadeMapFactoryOptions {
   readonly pageVisibility?: PageVisibility;
 }
 
+/** Web Mercator's equator, which a 512-pixel tile spans at zoom 0. */
+const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
+
 function defaultPrefersReducedMotion(): boolean {
   try {
     return (
@@ -257,10 +260,24 @@ export function createShadeMapFactory(
               ensuring = false;
             }
           };
+          // The clouds keep only what reads as mist at this scale. Measured
+          // once a zoom settles, never mid-gesture, and quantized in the
+          // layer: only a whole zoom level's change redraws the fog.
+          const measureDetail = () => {
+            if (removed) return;
+            const latitude = (map.getCenter().lat * Math.PI) / 180;
+            layer.setDetail(
+              (EARTH_CIRCUMFERENCE_M * Math.cos(latitude)) /
+                (512 * 2 ** map.getZoom()),
+            );
+          };
+          measureDetail();
+          map.on("zoomend", measureDetail);
           map.on("styledata", ensureLayer);
           map.on("load", ensureLayer);
           map.on("click", onClick);
           dispose = () => {
+            map.off("zoomend", measureDetail);
             map.off("styledata", ensureLayer);
             map.off("load", ensureLayer);
             map.off("click", onClick);
