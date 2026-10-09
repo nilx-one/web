@@ -2241,7 +2241,7 @@ describe("AuthenticatedMapHomeView", () => {
         ]),
       );
       expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
-      expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
+      expect(lastLabel(mapRenderer)?.detail).toContain("from the manual position");
     });
 
     it("measures declared Bond position against Avaia, not GPS", async () => {
@@ -2276,7 +2276,7 @@ describe("AuthenticatedMapHomeView", () => {
       const distance = asked.mock.calls[0]?.[0] ?? 0;
       expect(distance).toBeGreaterThan(5_000);
       expect(distance).toBeLessThan(8_000);
-      expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
+      expect(lastLabel(mapRenderer)?.detail).toContain("from the manual position");
       expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
       expect(device.readPermission).not.toHaveBeenCalled();
       expect(device.requestPosition).not.toHaveBeenCalled();
