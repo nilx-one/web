@@ -44,6 +44,8 @@ pub enum AvaiaUpdateOutcome {
 pub struct AvaiaLocation {
     pub coordinate: GeoCoordinate,
     pub updated_at: DecimalU64,
+    /// Increments only when an administrator explicitly travels with Avaia.
+    pub travel_revision: u64,
 }
 
 impl AvaiaLocation {
@@ -52,8 +54,16 @@ impl AvaiaLocation {
         Self {
             coordinate,
             updated_at,
+            travel_revision: 0,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AvaiaTravelOutcome {
+    Arrived,
+    AdminRequired,
+    AvaiaUnavailable,
 }
 
 impl IdentityRepository {
@@ -192,7 +202,7 @@ impl IdentityRepository {
         owner: &PubDress,
     ) -> Result<Option<AvaiaLocation>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT longitude_e7, latitude_e7, updated_at \
+            "SELECT longitude_e7, latitude_e7, updated_at, travel_revision \
              FROM avaia_locations WHERE owner_pub_dress = ?",
         )
         .bind(owner.as_str())
@@ -210,10 +220,13 @@ impl IdentityRepository {
             .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
         let updated_at = u64::try_from(row.get::<i64, _>("updated_at"))
             .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
-        Ok(Some(AvaiaLocation::new(
+        let travel_revision = u64::try_from(row.get::<i64, _>("travel_revision"))
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        Ok(Some(AvaiaLocation {
             coordinate,
-            DecimalU64::new(updated_at),
-        )))
+            updated_at: DecimalU64::new(updated_at),
+            travel_revision,
+        }))
     }
 
     pub async fn write_avaia_location(
@@ -239,6 +252,78 @@ impl IdentityRepository {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// One explicit admin action sets two independent positions atomically.
+    /// It is not a BondChain interaction and does not bind future movements.
+    pub async fn travel_with_avaia(
+        &self,
+        owner: &PubDress,
+        coordinate: GeoCoordinate,
+        at: DecimalU64,
+    ) -> Result<AvaiaTravelOutcome, RepositoryError> {
+        self.initialize_avaia_configuration().await?;
+        let at = i64::try_from(at.get())
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+
+        // Recheck the effective stored role INSIDE the write transaction.
+        let role = sqlx::query_scalar::<_, String>(
+            "SELECT CASE WHEN i.identity_kind = 'human' AND substr(i.pub_dress, 1, 3) = '0x0' \
+             THEN 'admin' ELSE COALESCE(r.role, 'user') END \
+             FROM identities i LEFT JOIN bond_roles r ON r.pub_dress = i.pub_dress \
+             WHERE i.pub_dress = ? AND i.identity_kind = 'human'",
+        )
+        .bind(owner.as_str())
+        .fetch_optional(&mut *tx)
+        .await?;
+        if role.as_deref() != Some("admin") {
+            return Ok(AvaiaTravelOutcome::AdminRequired);
+        }
+        let has_avaia = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM avaia_configuration c \
+             JOIN identities a ON a.pub_dress = c.avaia_pub_dress \
+             WHERE c.owner_pub_dress = ? AND a.identity_kind = 'avaia')",
+        )
+        .bind(owner.as_str())
+        .fetch_one(&mut *tx)
+        .await?;
+        if !has_avaia {
+            return Ok(AvaiaTravelOutcome::AvaiaUnavailable);
+        }
+
+        sqlx::query(
+            "INSERT INTO bond_locations \
+             (pub_dress, mode, longitude_e7, latitude_e7, updated_at) \
+             VALUES (?, 'manual', ?, ?, ?) \
+             ON CONFLICT(pub_dress) DO UPDATE SET mode = 'manual', \
+             longitude_e7 = excluded.longitude_e7, latitude_e7 = excluded.latitude_e7, \
+             updated_at = excluded.updated_at",
+        )
+        .bind(owner.as_str())
+        .bind(i64::from(coordinate.longitude_e7()))
+        .bind(i64::from(coordinate.latitude_e7()))
+        .bind(at)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO avaia_locations \
+             (owner_pub_dress, longitude_e7, latitude_e7, updated_at, travel_revision) \
+             VALUES (?, ?, ?, ?, 1) \
+             ON CONFLICT(owner_pub_dress) DO UPDATE SET \
+             longitude_e7 = excluded.longitude_e7, latitude_e7 = excluded.latitude_e7, \
+             updated_at = excluded.updated_at, \
+             travel_revision = avaia_locations.travel_revision + 1",
+        )
+        .bind(owner.as_str())
+        .bind(i64::from(coordinate.longitude_e7()))
+        .bind(i64::from(coordinate.latitude_e7()))
+        .bind(at)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(AvaiaTravelOutcome::Arrived)
     }
 }
 

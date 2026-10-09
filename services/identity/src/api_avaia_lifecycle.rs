@@ -209,6 +209,7 @@ struct AvaiaIdentityProjection {
 #[derive(Debug, Serialize)]
 struct AvaiaLocationProjection {
     coordinate: GeoCoordinate,
+    travel_revision: String,
 }
 
 fn avaia_identity_projection(
@@ -222,6 +223,7 @@ fn avaia_identity_projection(
         model_ref: None,
         location: location.map(|location| AvaiaLocationProjection {
             coordinate: location.coordinate,
+            travel_revision: location.travel_revision.to_string(),
         }),
     }
 }
