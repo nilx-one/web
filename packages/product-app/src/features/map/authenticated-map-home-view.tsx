@@ -1674,16 +1674,22 @@ export function AuthenticatedMapHomeView({
   // Where this device last observed itself is kept on this device alone, so
   // the next opening of the world starts there. A declared point is the
   // service's to hold and is not copied here.
-  const observedLongitude = deviceObservation?.longitude;
-  const observedLatitude = deviceObservation?.latitude;
+  const observedDeviceLongitude = deviceObservation?.longitude;
+  const observedDeviceLatitude = deviceObservation?.latitude;
   useEffect(() => {
-    if (observedLongitude === undefined || observedLatitude === undefined) {
+    if (
+      observedDeviceLongitude === undefined ||
+      observedDeviceLatitude === undefined
+    ) {
       return;
     }
     rememberWorld(pubDress, {
-      bond: { longitude: observedLongitude, latitude: observedLatitude },
+      bond: {
+        longitude: observedDeviceLongitude,
+        latitude: observedDeviceLatitude,
+      },
     });
-  }, [observedLatitude, observedLongitude, pubDress]);
+  }, [observedDeviceLatitude, observedDeviceLongitude, pubDress]);
 
   useEffect(() => {
     try {
