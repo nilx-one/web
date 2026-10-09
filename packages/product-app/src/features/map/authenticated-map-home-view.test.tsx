@@ -1487,10 +1487,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects");
 
     fireEvent.change(soundLevel, { target: { value: "2" } });
-    expect(soundLevel).toHaveAttribute(
-      "aria-valuetext",
-      "Effects and world",
-    );
+    expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects and world");
 
     expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
     // Character voices default to cutscenes: the middle of three stops.
