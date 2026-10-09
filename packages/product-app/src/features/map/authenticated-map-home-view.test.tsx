@@ -354,7 +354,12 @@ describe("AuthenticatedMapHomeView", () => {
       },
       pending: false,
     });
-    renderView({ mapRenderer, geolocation, avaiaSetup: profile, onBringAvaia });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: profile,
+      onBringAvaia,
+    });
     await screen.findByRole("dialog", { name: "Travel together?" });
     fireEvent.click(screen.getByRole("button", { name: "No" }));
     expect(onBringAvaia).not.toHaveBeenCalled();
@@ -393,7 +398,12 @@ describe("AuthenticatedMapHomeView", () => {
       load: { kind: "available", profile },
       pending: false,
     });
-    renderView({ mapRenderer, geolocation, avaiaSetup: setup, onBringAvaia });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: setup,
+      onBringAvaia,
+    });
     await screen.findByRole("dialog", { name: "Travel together?" });
     fireEvent.click(screen.getByRole("button", { name: "Yes, bring Avaia" }));
     await act(async () => {
@@ -2234,10 +2244,13 @@ describe("AuthenticatedMapHomeView", () => {
       expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
     });
 
-    it("measures manual Bond location against Avaia's independent place, never real device GPS", async () => {
+    it("measures declared Bond position against Avaia, not GPS", async () => {
       vi.useFakeTimers();
       const manual = { longitude: 30.5234, latitude: 50.4501 };
-      const avaia = { longitude: manual.longitude + 0.09, latitude: manual.latitude };
+      const avaia = {
+        longitude: manual.longitude + 0.09,
+        latitude: manual.latitude,
+      };
       avaiaStandsAt(avaia);
       const device = {
         readPermission: vi.fn(async () => "granted" as const),
@@ -2259,9 +2272,7 @@ describe("AuthenticatedMapHomeView", () => {
         findItems: { avaiaProximity: asked },
         avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
       });
-      await vi.waitFor(() =>
-        expect(asked).toHaveBeenCalled(),
-      );
+      await vi.waitFor(() => expect(asked).toHaveBeenCalled());
       const distance = asked.mock.calls[0]?.[0] ?? 0;
       expect(distance).toBeGreaterThan(5_000);
       expect(distance).toBeLessThan(8_000);

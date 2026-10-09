@@ -1232,8 +1232,12 @@ export function AuthenticatedMapHomeView({
   const avaiaPlacedFor = useRef<string | undefined>(undefined);
   // A manually declared Bond position cannot become Avaia's first
   // whereabouts: /set_position moves only Bond, never Avaia.
-  const firstFixLongitude = declaredPosition ? undefined : observedPosition?.longitude;
-  const firstFixLatitude = declaredPosition ? undefined : observedPosition?.latitude;
+  const firstFixLongitude = declaredPosition
+    ? undefined
+    : observedPosition?.longitude;
+  const firstFixLatitude = declaredPosition
+    ? undefined
+    : observedPosition?.latitude;
   useEffect(() => {
     if (firstFixLongitude === undefined || firstFixLatitude === undefined) {
       return;

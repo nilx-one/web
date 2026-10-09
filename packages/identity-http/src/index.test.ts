@@ -380,7 +380,8 @@ describe("Avaia profile transport", () => {
       getAuthorization: () => "tma signed",
     });
     const position = { longitude: 30.5234, latitude: 50.4501 };
-    await expect(adapter.travelAvaiaToBond?.(position)).resolves.toMatchObject({
+    const result = await adapter.travelAvaiaToBond?.(position);
+    expect(result).toMatchObject({
       kind: "arrived",
       profile: { canTravel: true, location: { travelRevision: "2" } },
     });
