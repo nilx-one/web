@@ -1853,16 +1853,16 @@ export function AuthenticatedMapHomeView({
         body.seat === "avaia" && stance === undefined && declaredPosition
           ? null
           : createWheelBodyHandle({
-        body,
-        address: address(body.seat),
-        study: study(body.seat),
-        appearance: worn(body.seat),
-        location: location.state,
-        zoom: cameraZoom,
-        timeMs: nowMs,
-        reducedMotion,
-        stance,
-      });
+              body,
+              address: address(body.seat),
+              study: study(body.seat),
+              appearance: worn(body.seat),
+              location: location.state,
+              zoom: cameraZoom,
+              timeMs: nowMs,
+              reducedMotion,
+              stance,
+            });
       if (handle !== null) avatarLayer.upsert(handle);
       else avatarLayer.remove(BODY_HANDLE_IDS[body.seat]);
       // A walking body carries its card with it, frame by frame.
