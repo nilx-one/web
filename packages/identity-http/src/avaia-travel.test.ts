@@ -67,9 +67,6 @@ describe("confirmed Avaia GPS travel", () => {
 
     const position = { longitude: 30.5234, latitude: 50.4501 };
     const result = await adapter.travelAvaiaToBond?.(position);
-    expect(result).toEqual({
-      kind: "rejected",
-      reason: "admin-required",
-    });
+    expect(result).toEqual({ kind: "rejected", reason: "admin-required" });
   });
 });
