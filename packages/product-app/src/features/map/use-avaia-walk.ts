@@ -605,7 +605,9 @@ export function useAvaiaWalk({
     (body: MapPointSelection) =>
       openGround({
         fog: renderer.fog,
-        device: latest.current.observed,
+        device: latest.current.observed?.declared === true
+          ? undefined
+          : latest.current.observed,
         body,
         nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
       }),
@@ -852,7 +854,12 @@ export function useAvaiaWalk({
       }).map((node) => refs.current.point(node));
       // Home is where this device dwelt longest, by its own journal; until
       // the journal can say, where the device was last observed.
-      const home = renderer.fog?.home?.() ?? latest.current.observed;
+      // A manually declared Bond coordinate is not Avaia's home evidence.
+      const home =
+        renderer.fog?.home?.() ??
+        (latest.current.observed?.declared === true
+          ? undefined
+          : latest.current.observed);
       return {
         type: "outing_options",
         targets,

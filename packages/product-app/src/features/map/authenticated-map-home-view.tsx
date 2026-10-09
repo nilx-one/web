@@ -1172,7 +1172,7 @@ export function AuthenticatedMapHomeView({
     subject: avaiaAddress,
     active: wheel === "avaia" && handover === undefined,
     body: () => avaiaBody.current(),
-    home: renderer.fog?.home?.() ?? observedPosition,
+    home: renderer.fog?.home?.() ?? deviceObservation,
   });
   const avaiaWalk = useAvaiaWalk({
     renderer,
