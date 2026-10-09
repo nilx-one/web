@@ -539,7 +539,10 @@ export function createMapLibreRenderer(
     }
   }
 
-  function completeFirstPaint(mountedMap: MapLibreMap, container: HTMLElement): void {
+  function completeFirstPaint(
+    mountedMap: MapLibreMap,
+    container: HTMLElement,
+  ): void {
     if (firstPaintDone) return;
     // A late visible frame may recover a timeout, not an actual renderer
     // failure (including missing WebGL and failed basemap resources).
