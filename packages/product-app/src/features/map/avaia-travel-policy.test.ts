@@ -24,7 +24,7 @@ describe("Avaia physical travel consent", () => {
     ).toBe("hold");
   });
 
-  it("does not treat a manual coordinate, old fix, inaccurate fix or unknown home as arrival", () => {
+  it("does not ask for manual, stale, inaccurate or unknown observations", () => {
     for (const observation of [
       { ...fix, declared: true as const },
       { ...fix, observedAt: nowMs - 200_000 },

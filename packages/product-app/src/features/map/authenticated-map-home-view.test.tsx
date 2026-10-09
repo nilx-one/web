@@ -171,7 +171,10 @@ interface ViewOverrides {
     model: "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study",
   ) => Promise<AvatarModelResult | undefined>;
   avaiaSetup?: AvaiaSetupViewState;
-  onBringAvaia?: (position: { longitude: number; latitude: number }) => Promise<AvaiaTravelResult>;
+  onBringAvaia?: (position: {
+    longitude: number;
+    latitude: number;
+  }) => Promise<AvaiaTravelResult>;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -360,10 +363,12 @@ describe("AuthenticatedMapHomeView", () => {
         position: observation({ latitude: 50.481, observedAt: Date.now() }),
       });
     });
-    expect(screen.queryByRole("dialog", { name: "Travel together?" })).toBeNull();
+    expect(
+      screen.queryByRole("dialog", { name: "Travel together?" }),
+    ).toBeNull();
   });
 
-  it("moves Avaia only when admin confirms fresh GPS, not on an absent role", async () => {
+  it("moves Avaia only after an admin confirms fresh GPS", async () => {
     chooseLocale("en");
     const mapRenderer = Object.assign(renderer(), {
       fog: Object.assign(createFogFieldDouble(), {
@@ -398,7 +403,9 @@ describe("AuthenticatedMapHomeView", () => {
       longitude: 30.5234,
       latitude: 50.48,
     });
-    expect(screen.queryByRole("dialog", { name: "Travel together?" })).toBeNull();
+    expect(
+      screen.queryByRole("dialog", { name: "Travel together?" }),
+    ).toBeNull();
   });
 
   it("presents the compact Bond pair without inventing reciprocity", () => {

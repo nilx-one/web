@@ -359,7 +359,7 @@ describe("Provider password setup transport", () => {
 });
 
 describe("Avaia profile transport", () => {
-  it("sends explicitly confirmed coordinates with CSRF protection and parses arrival", async () => {
+  it("sends confirmed coordinates with CSRF and parses arrival", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
         pub_dress: "x0skai",
@@ -397,7 +397,7 @@ describe("Avaia profile transport", () => {
     });
   });
 
-  it("returns a typed authorization refusal without inventing a move", async () => {
+  it("returns a typed authorization refusal without a move", async () => {
     const adapter = createIdentityHttpAdapter({
       fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
         response(403, { error: { code: "admin_required" } }),
@@ -409,7 +409,7 @@ describe("Avaia profile transport", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "admin-required" });
   });
 
-  it("reads an admin journey revision without treating ordinary positions as trips", async () => {
+  it("reads a journey revision separately from ordinary positions", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
       response(200, {
         pub_dress: "x0skai",

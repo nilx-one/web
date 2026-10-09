@@ -175,7 +175,10 @@ import { useFindLoop } from "./use-find-loop";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { AvaiaTravelPrompt } from "./avaia-travel-prompt";
-import { avaiaTravelDecision, AVAIA_TRAVEL_MAX_FIX_AGE_MS } from "./avaia-travel-policy";
+import {
+  avaiaTravelDecision,
+  AVAIA_TRAVEL_MAX_FIX_AGE_MS,
+} from "./avaia-travel-policy";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { useNearbySpeech } from "./use-nearby-speech";
 import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
@@ -292,7 +295,9 @@ export interface AuthenticatedMapHomeViewProps {
   readonly avaiaSetup?: AvaiaSetupViewState;
   readonly onAvaiaSetupChange?: (pubDress: string) => void;
   /** Explicitly consented physical arrival, never a declared Bond position. */
-  readonly onBringAvaia?: (position: MapPointSelection) => Promise<AvaiaTravelResult>;
+  readonly onBringAvaia?: (
+    position: MapPointSelection,
+  ) => Promise<AvaiaTravelResult>;
   /**
    * Saves the whole address and answers with what the service stored. The
    * answer is what closes the screen, so a return to the world is never a guess
@@ -784,7 +789,12 @@ export function AuthenticatedMapHomeView({
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
   const [travelPrompt, setTravelPrompt] = useState<
-    { readonly longitude: number; readonly latitude: number; readonly observedAt: number } | undefined
+    | {
+        readonly longitude: number;
+        readonly latitude: number;
+        readonly observedAt: number;
+      }
+    | undefined
   >(undefined);
   const [travelBusy, setTravelBusy] = useState(false);
   const [travelError, setTravelError] = useState(false);
@@ -827,11 +837,11 @@ export function AuthenticatedMapHomeView({
       return;
     }
     if (decision !== "ask" || observation === undefined) return;
-    askedAway.current.value = true;
     let current = true;
     // Avoid a synchronous React state write inside the observation effect.
     void Promise.resolve().then(() => {
       if (!current) return;
+      askedAway.current.value = true;
       setTravelError(false);
       setTravelPrompt({
         longitude: observation.longitude,
@@ -855,7 +865,13 @@ export function AuthenticatedMapHomeView({
   ]);
 
   async function confirmBringAvaia(): Promise<void> {
-    if (travelPrompt === undefined || travelBusy || onBringAvaia === undefined) return;
+    if (
+      travelPrompt === undefined ||
+      travelBusy ||
+      onBringAvaia === undefined
+    ) {
+      return;
+    }
     if (Date.now() - travelPrompt.observedAt > AVAIA_TRAVEL_MAX_FIX_AGE_MS) {
       setTravelError(true);
       return;
@@ -2956,22 +2972,26 @@ export function AuthenticatedMapHomeView({
             }
             onActivate={activateLocationControl}
           />
-          {travelPrompt === undefined ? <FogRevealPrompt
-            prompt={fogReveal.prompt}
-            jobs={fogReveal.jobs}
-            avaia={avaiaLabel}
-            onConfirm={confirmFogReveal}
-            onDismiss={fogReveal.dismiss}
-          /> : <AvaiaTravelPrompt
-            avaia={avaiaLabel}
-            busy={travelBusy}
-            error={travelError}
-            onConfirm={() => void confirmBringAvaia()}
-            onDismiss={() => {
-              setTravelPrompt(undefined);
-              setTravelError(false);
-            }}
-          />}
+          {travelPrompt === undefined ? (
+            <FogRevealPrompt
+              prompt={fogReveal.prompt}
+              jobs={fogReveal.jobs}
+              avaia={avaiaLabel}
+              onConfirm={confirmFogReveal}
+              onDismiss={fogReveal.dismiss}
+            />
+          ) : (
+            <AvaiaTravelPrompt
+              avaia={avaiaLabel}
+              busy={travelBusy}
+              error={travelError}
+              onConfirm={() => void confirmBringAvaia()}
+              onDismiss={() => {
+                setTravelPrompt(undefined);
+                setTravelError(false);
+              }}
+            />
+          )}
           {guide.state === undefined ? null : (
             <GuideCutsceneView
               state={guide.state}
