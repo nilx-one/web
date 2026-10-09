@@ -69,6 +69,8 @@ export interface AvaiaSetupViewState {
   readonly address: string;
   /** Persisted owner decision. Absent while nothing has been read. */
   readonly configuration?: AvaiaConfigurationState;
+  /** Read from authenticated service; no prefix-based admin inference. */
+  readonly canTravel: boolean;
   /** Service-authoritative teleport, separate from local walking position. */
   readonly travelArrival?: {
     readonly coordinate: {
@@ -175,6 +177,7 @@ export function createAvaiaSetupViewState(
 
   return {
     address,
+    canTravel: profile?.canTravel === true,
     ...(profile === undefined
       ? {}
       : { configuration: profile.configurationState }),

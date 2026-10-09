@@ -23,6 +23,7 @@ import {
   type ProviderSelfDisconnectResult,
   type TelegramProviderLinkResult,
   type AvaiaLocationPublishResult,
+  type AvaiaTravelResult,
   type AvaiaProfileAccessPort,
   type AvaiaProfileProjection,
   type AvaiaProfileReadResult,
@@ -142,6 +143,9 @@ function parseAvaiaProfile(value: unknown): AvaiaProfileProjection | undefined {
     pubDress: value.pub_dress,
     ownerPubDress: value.owner_pub_dress,
     configurationState: value.configuration_state,
+    ...(typeof value.can_travel !== "boolean"
+      ? {}
+      : { canTravel: value.can_travel }),
     ...(location === undefined ? {} : { location }),
   };
 }
@@ -673,6 +677,46 @@ class IdentityHttpAdapter
     switch (parseErrorCode(body)) {
       case "provider_authentication_required":
         return { kind: "rejected", reason: "authentication-required" };
+      case "invalid_avaia_location":
+        return { kind: "rejected", reason: "invalid-location" };
+      case "rate_limited":
+        return { kind: "rejected", reason: "rate-limited" };
+      default:
+        return { kind: "service-unavailable" };
+    }
+  }
+
+  public async travelAvaiaToBond(position: {
+    longitude: number;
+    latitude: number;
+  }): Promise<AvaiaTravelResult> {
+    const authorization = this.authorization();
+    const response = await this.fetch("/api/v1/identity/avaia/travel", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        ...(authorization === undefined ? {} : { authorization }),
+        "content-type": "application/json",
+        "x-0x1-csrf": "1",
+      },
+      body: JSON.stringify({
+        longitude: position.longitude,
+        latitude: position.latitude,
+      }),
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const profile = parseAvaiaProfile(body);
+      if (profile !== undefined) return { kind: "arrived", profile };
+    }
+    switch (parseErrorCode(body)) {
+      case "provider_authentication_required":
+        return { kind: "rejected", reason: "authentication-required" };
+      case "admin_required":
+        return { kind: "rejected", reason: "admin-required" };
+      case "avaia_unavailable":
+        return { kind: "rejected", reason: "avaia-unavailable" };
       case "invalid_avaia_location":
         return { kind: "rejected", reason: "invalid-location" };
       case "rate_limited":
