@@ -150,7 +150,6 @@ async function main() {
     runtime,
     anchor,
     fogPalettes: { light: DARK_FOG_PALETTE, dark: DARK_FOG_PALETTE },
-    prefersReducedMotion: () => true,
   });
   const map = createMap({
     container: "map",
