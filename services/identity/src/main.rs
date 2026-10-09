@@ -12,12 +12,13 @@ use std::{
 };
 
 use identity_bot::{
-    AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository, BrowserOAuthConfig,
-    DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig, GithubEvidenceRepository,
-    IdentityProvider, IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,
-    PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
-    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, github_evidence,
-    location_control_router, provider_self_service_router, public_api,
+    AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository,
+    BrowserOAuthConfig, DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig,
+    GithubEvidenceRepository, IdentityProvider, IdentityRecord, IdentityRepository,
+    NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,
+    ProviderSecretCipher, SelfDisconnectOutcome, TelegramInitDataVerifier, TelegramLocationIntents,
+    api, browser_web_auth, github_evidence, location_control_router, provider_self_service_router,
+    public_api,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
@@ -832,21 +833,31 @@ async fn handle_travel_point(
         Ok(owner) => owner,
         Err(error) => {
             error!(%error, "stored travel owner pub_dress invalid");
-            bot.send_message(message.chat.id, "Bond тимчасово недоступний.").await?;
+            bot.send_message(message.chat.id, "Bond тимчасово недоступний.")
+                .await?;
             return Ok(());
         }
     };
     let at = match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(now) => DecimalU64::new(now.as_secs()),
         Err(_) => {
-            bot.send_message(message.chat.id, "Подорож тимчасово недоступна.").await?;
+            bot.send_message(message.chat.id, "Подорож тимчасово недоступна.")
+                .await?;
             return Ok(());
         }
     };
-    let response = match state.repository.travel_with_avaia(&owner, coordinate, at).await {
-        Ok(AvaiaTravelOutcome::Arrived) => "Подорож розпочато! Bond і Avaia телепортовані у вибрану точку. Позиції збережено окремо; Avaia далі рухається самостійно.",
+    let response = match state
+        .repository
+        .travel_with_avaia(&owner, coordinate, at)
+        .await
+    {
+        Ok(AvaiaTravelOutcome::Arrived) => {
+            "Подорож розпочато! Bond і Avaia телепортовані у вибрану точку. Позиції збережено окремо; Avaia далі рухається самостійно."
+        }
         Ok(AvaiaTravelOutcome::AdminRequired) => "Подорожі з Avaia доступні лише admin.",
-        Ok(AvaiaTravelOutcome::AvaiaUnavailable) => "Спочатку створіть Avaia в 0x1. Позиція Bond не змінена.",
+        Ok(AvaiaTravelOutcome::AvaiaUnavailable) => {
+            "Спочатку створіть Avaia в 0x1. Позиція Bond не змінена."
+        }
         Err(error) => {
             error!(%error, "atomic Bond/Avaia travel failed");
             "Подорож не вдалася; позиції Bond і Avaia не змінено."
@@ -874,7 +885,10 @@ async fn begin_travel(
             .await?;
         return Ok(());
     }
-    state.intents.begin(telegram_user_id, PendingLocationIntent::Travel).await;
+    state
+        .intents
+        .begin(telegram_user_id, PendingLocationIntent::Travel)
+        .await;
     bot.send_message(
         message.chat.id,
         "Відкрийте Telegram Location та надішліть звичайну точку на карті протягом 5 хвилин. Bond і створена Avaia перемістяться туди разом (manual mode).",
