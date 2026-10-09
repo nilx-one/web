@@ -1904,6 +1904,7 @@ export function AuthenticatedMapHomeView({
     avaiaWalk,
     bondAvatar?.appearance,
     cameraZoom,
+    declaredPosition,
     handover,
     location.state,
     observedPosition,
