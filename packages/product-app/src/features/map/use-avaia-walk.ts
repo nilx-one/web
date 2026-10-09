@@ -165,6 +165,11 @@ export interface AvaiaWalkInput {
         readonly declared?: true;
       })
     | undefined;
+  /** Authoritative admin trip, delivered only when the service revision changed. */
+  readonly travelArrival?: {
+    readonly coordinate: MapPointSelection;
+    readonly revision: string;
+  };
   /** The study the Avaia is drawn in, whose voice it speaks with. */
   readonly model: AvatarModelId | undefined;
   readonly locale: ProductLocale;
@@ -387,6 +392,7 @@ export function useAvaiaWalk({
   renderer,
   active,
   observed,
+  travelArrival,
   model,
   locale,
   avaiaAddress,
@@ -575,12 +581,13 @@ export function useAvaiaWalk({
       if (now.study !== undefined) return now.study.at;
       if (now.pause !== undefined) return now.pause.at;
       if (now.rest !== undefined) return now.rest.point;
-      return now.observed === undefined
-        ? undefined
-        : {
-            longitude: now.observed.longitude,
-            latitude: now.observed.latitude,
-          };
+      if (now.observed === undefined || now.observed.declared === true) {
+        return undefined;
+      }
+      return {
+        longitude: now.observed.longitude,
+        latitude: now.observed.latitude,
+      };
     },
     [],
   );
@@ -599,7 +606,10 @@ export function useAvaiaWalk({
     (body: MapPointSelection) =>
       openGround({
         fog: renderer.fog,
-        device: latest.current.observed,
+        device:
+          latest.current.observed?.declared === true
+            ? undefined
+            : latest.current.observed,
         body,
         nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
       }),
@@ -846,7 +856,12 @@ export function useAvaiaWalk({
       }).map((node) => refs.current.point(node));
       // Home is where this device dwelt longest, by its own journal; until
       // the journal can say, where the device was last observed.
-      const home = renderer.fog?.home?.() ?? latest.current.observed;
+      // A manually declared Bond coordinate is not Avaia's home evidence.
+      const home =
+        renderer.fog?.home?.() ??
+        (latest.current.observed?.declared === true
+          ? undefined
+          : latest.current.observed);
       return {
         type: "outing_options",
         targets,
@@ -1303,6 +1318,58 @@ export function useAvaiaWalk({
             },
     });
   }, [owner, settledBearing, settledLatitude, settledLongitude]);
+
+  // A travel revision is an explicit one-off admin teleport. It overrides
+  // this device's older local walk once; future movement remains Avaia's own.
+  const arrivalRevision = travelArrival?.revision;
+  const arrivalLongitude = travelArrival?.coordinate.longitude;
+  const arrivalLatitude = travelArrival?.coordinate.latitude;
+  useEffect(() => {
+    if (
+      arrivalRevision === undefined ||
+      arrivalLongitude === undefined ||
+      arrivalLatitude === undefined ||
+      readWorldMemory(owner).travelRevision === arrivalRevision
+    ) {
+      return;
+    }
+    // Profile receipt is external input: handle the new arrival in a
+    // microtask rather than dispatching React state synchronously from effect
+    // setup. A superseded render/unmount cancels its pending application.
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (
+        cancelled ||
+        readWorldMemory(owner).travelRevision === arrivalRevision
+      ) {
+        return;
+      }
+      const point = { longitude: arrivalLongitude, latitude: arrivalLatitude };
+      era.current += 1;
+      if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
+      wake.current = undefined;
+      setWalk(undefined);
+      setStudy(undefined);
+      setPause(undefined);
+      setRest({ point, bearingDeg: 0 });
+      rememberWorld(owner, {
+        avaia: { ...point, bearingDeg: 0 },
+        travelRevision: arrivalRevision,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    owner,
+    arrivalRevision,
+    arrivalLongitude,
+    arrivalLatitude,
+    setWalk,
+    setStudy,
+    setPause,
+    setRest,
+  ]);
 
   // A line is on the card for as long as a person needs to read it.
   useEffect(() => {

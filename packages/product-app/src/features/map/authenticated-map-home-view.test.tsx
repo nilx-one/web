@@ -7,12 +7,14 @@ import type {
   AvaiaDriveInput,
   AvatarModel,
   AvatarModelResult,
+  AvaiaTravelResult,
   BondProviderConnections,
   CommittedAwardAccessPort,
   CoreRuntimePort,
   NearbySpeechAccessPort,
 } from "@nilx-one/application";
 import {
+  createBondLocationGeolocation,
   createDeclaredGeolocation,
   type GeolocationCapability,
   type SoundCapability,
@@ -170,6 +172,10 @@ interface ViewOverrides {
     model: "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study",
   ) => Promise<AvatarModelResult | undefined>;
   avaiaSetup?: AvaiaSetupViewState;
+  onBringAvaia?: (position: {
+    longitude: number;
+    latitude: number;
+  }) => Promise<AvaiaTravelResult>;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -222,6 +228,9 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.avaiaSetup === undefined
       ? {}
       : { avaiaSetup: overrides.avaiaSetup }),
+    ...(overrides.onBringAvaia === undefined
+      ? {}
+      : { onBringAvaia: overrides.onBringAvaia }),
     ...(overrides.onSlugChange === undefined
       ? {}
       : { onSlugChange: overrides.onSlugChange }),
@@ -320,6 +329,96 @@ describe("AuthenticatedMapHomeView spoken lines", () => {
 });
 
 describe("AuthenticatedMapHomeView", () => {
+  it("offers an admin one GPS-only trip with Avaia and honours No", async () => {
+    chooseLocale("en");
+    const mapRenderer = Object.assign(renderer(), {
+      fog: Object.assign(createFogFieldDouble(), {
+        home: () => ({ longitude: 30.5234, latitude: 50.4501 }),
+      }),
+    });
+    const geolocation = createGeolocationDouble({
+      position: observation({ latitude: 50.48, observedAt: Date.now() }),
+    });
+    const onBringAvaia = vi.fn(async () => ({
+      kind: "service-unavailable" as const,
+    }));
+    const profile = createAvaiaSetupViewState({
+      load: {
+        kind: "available",
+        profile: {
+          pubDress: "x0skai",
+          ownerPubDress: "0x0sky",
+          configurationState: "configured",
+          canTravel: true,
+        },
+      },
+      pending: false,
+    });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: profile,
+      onBringAvaia,
+    });
+    await screen.findByRole("dialog", { name: "Travel together?" });
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(onBringAvaia).not.toHaveBeenCalled();
+    act(() => {
+      geolocation.publish({
+        kind: "observed",
+        position: observation({ latitude: 50.481, observedAt: Date.now() }),
+      });
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Travel together?" }),
+    ).toBeNull();
+  });
+
+  it("moves Avaia only after an admin confirms fresh GPS", async () => {
+    chooseLocale("en");
+    const mapRenderer = Object.assign(renderer(), {
+      fog: Object.assign(createFogFieldDouble(), {
+        home: () => ({ longitude: 30.5234, latitude: 50.4501 }),
+      }),
+    });
+    const geolocation = createGeolocationDouble({
+      position: observation({ latitude: 50.48, observedAt: Date.now() }),
+    });
+    const profile = {
+      pubDress: "x0skai",
+      ownerPubDress: "0x0sky",
+      configurationState: "configured" as const,
+      canTravel: true,
+    };
+    const onBringAvaia = vi.fn(async (): Promise<AvaiaTravelResult> => ({
+      kind: "arrived",
+      profile,
+    }));
+    const setup = createAvaiaSetupViewState({
+      load: { kind: "available", profile },
+      pending: false,
+    });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: setup,
+      onBringAvaia,
+    });
+    await screen.findByRole("dialog", { name: "Travel together?" });
+    fireEvent.click(screen.getByRole("button", { name: "Yes, bring Avaia" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onBringAvaia).toHaveBeenCalledOnce();
+    expect(onBringAvaia).toHaveBeenCalledWith({
+      longitude: 30.5234,
+      latitude: 50.48,
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Travel together?" }),
+    ).toBeNull();
+  });
+
   it("presents the compact Bond pair without inventing reciprocity", () => {
     const mapRenderer = renderer();
 
@@ -2128,6 +2227,8 @@ describe("AuthenticatedMapHomeView", () => {
       vi.useFakeTimers();
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
       const declared = { longitude: 30.563, latitude: 50.4265 };
+      const avaia = { longitude: 30.5234, latitude: 50.4501 };
+      avaiaStandsAt(avaia);
       renderView({
         mapRenderer,
         geolocation: createDeclaredGeolocation(declared),
@@ -2135,12 +2236,55 @@ describe("AuthenticatedMapHomeView", () => {
       });
       await vi.waitFor(() =>
         expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
-          declared.longitude,
-          declared.latitude,
+          avaia.longitude,
+          avaia.latitude,
         ]),
       );
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
+      expect(lastLabel(mapRenderer)?.detail).toContain(
+        "from the manual position",
+      );
+    });
 
-      expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
+    it("measures declared Bond position against Avaia, not GPS", async () => {
+      vi.useFakeTimers();
+      const manual = { longitude: 30.5234, latitude: 50.4501 };
+      const avaia = {
+        longitude: manual.longitude + 0.09,
+        latitude: manual.latitude,
+      };
+      avaiaStandsAt(avaia);
+      const device = {
+        readPermission: vi.fn(async () => "granted" as const),
+        requestPosition: vi.fn(async () => ({
+          kind: "failed" as const,
+          reason: "host-failed" as const,
+        })),
+        watchPosition: vi.fn(() => () => undefined),
+      };
+      const geolocation = createBondLocationGeolocation({
+        device,
+        readLocation: async () => ({ kind: "manual", position: manual }),
+      });
+      const asked = vi.fn(nearbyProximityCore().avaiaProximity);
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      renderView({
+        mapRenderer,
+        geolocation,
+        findItems: { avaiaProximity: asked },
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() => expect(asked).toHaveBeenCalled());
+      const distance = asked.mock.calls[0]?.[0] ?? 0;
+      expect(distance).toBeGreaterThan(5_000);
+      expect(distance).toBeLessThan(8_000);
+      expect(lastLabel(mapRenderer)?.detail).toContain(
+        "from the manual position",
+      );
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
+      expect(device.readPermission).not.toHaveBeenCalled();
+      expect(device.requestPosition).not.toHaveBeenCalled();
+      expect(device.watchPosition).not.toHaveBeenCalled();
     });
 
     it("asks before revealing fog, then sends the Avaia to reveal it", async () => {

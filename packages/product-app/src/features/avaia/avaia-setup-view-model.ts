@@ -69,6 +69,16 @@ export interface AvaiaSetupViewState {
   readonly address: string;
   /** Persisted owner decision. Absent while nothing has been read. */
   readonly configuration?: AvaiaConfigurationState;
+  /** Read from authenticated service; no prefix-based admin inference. */
+  readonly canTravel: boolean;
+  /** Service-authoritative teleport, separate from local walking position. */
+  readonly travelArrival?: {
+    readonly coordinate: {
+      readonly longitude: number;
+      readonly latitude: number;
+    };
+    readonly revision: string;
+  };
   readonly configurationLabel: string;
   /** Contract-owned address text rendered outside the editable control. */
   readonly prefix: string;
@@ -167,9 +177,18 @@ export function createAvaiaSetupViewState(
 
   return {
     address,
+    canTravel: profile?.canTravel === true,
     ...(profile === undefined
       ? {}
       : { configuration: profile.configurationState }),
+    ...(profile?.location?.travelRevision === undefined
+      ? {}
+      : {
+          travelArrival: {
+            coordinate: profile.location.coordinate,
+            revision: profile.location.travelRevision,
+          },
+        }),
     configurationLabel: configurationLabel(profile?.configurationState),
     prefix: storedParts?.prefix ?? "",
     suffix: AVAIA_ADDRESS_SUFFIX,

@@ -132,3 +132,8 @@
     animation: none;
   }
 }
+
+/* The travel question and fog question occupy the same reserved overlay slot. */
+.avaia-travel-prompt {
+  z-index: 3;
+}

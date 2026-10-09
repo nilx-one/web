@@ -4,6 +4,7 @@
 import {
   AVATAR_CATALOG,
   type AvaiaProfileUpdateResult,
+  type AvaiaTravelResult,
   type AvatarModelResult,
   type AvatarSelection,
   type BondProviderConnections,
@@ -173,6 +174,11 @@ import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFindLoop } from "./use-find-loop";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
+import { AvaiaTravelPrompt } from "./avaia-travel-prompt";
+import {
+  avaiaTravelDecision,
+  AVAIA_TRAVEL_MAX_FIX_AGE_MS,
+} from "./avaia-travel-policy";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
 import { useNearbySpeech } from "./use-nearby-speech";
 import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
@@ -288,6 +294,10 @@ export interface AuthenticatedMapHomeViewProps {
    */
   readonly avaiaSetup?: AvaiaSetupViewState;
   readonly onAvaiaSetupChange?: (pubDress: string) => void;
+  /** Explicitly consented physical arrival, never a declared Bond position. */
+  readonly onBringAvaia?: (
+    position: MapPointSelection,
+  ) => Promise<AvaiaTravelResult>;
   /**
    * Saves the whole address and answers with what the service stored. The
    * answer is what closes the screen, so a return to the world is never a guess
@@ -704,6 +714,7 @@ export function AuthenticatedMapHomeView({
   avaiaSetup,
   onAvaiaSetupChange,
   onAvaiaSetupSubmit,
+  onBringAvaia,
   avatarChoice,
   onAvatarChoice,
   onSlugChange,
@@ -777,6 +788,112 @@ export function AuthenticatedMapHomeView({
   const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
+  const [travelPrompt, setTravelPrompt] = useState<
+    | {
+        readonly longitude: number;
+        readonly latitude: number;
+        readonly observedAt: number;
+      }
+    | undefined
+  >(undefined);
+  const [travelBusy, setTravelBusy] = useState(false);
+  const [travelError, setTravelError] = useState(false);
+  const askedAway = useRef({ owner: pubDress, value: false });
+  if (askedAway.current.owner !== pubDress) {
+    askedAway.current = { owner: pubDress, value: false };
+  }
+  const canOfferTravel =
+    avaiaSetup?.canTravel === true &&
+    avaiaSetup.configuration === "configured" &&
+    onBringAvaia !== undefined;
+  const observedLongitude = observedPosition?.longitude;
+  const observedLatitude = observedPosition?.latitude;
+  const observedAccuracy = observedPosition?.accuracyMeters;
+  const observedAt = observedPosition?.observedAt;
+  const isDeclared = observedPosition?.declared === true;
+  useEffect(() => {
+    if (!canOfferTravel || travelBusy) return;
+    const observation =
+      observedLongitude === undefined ||
+      observedLatitude === undefined ||
+      observedAccuracy === undefined ||
+      observedAt === undefined
+        ? undefined
+        : {
+            longitude: observedLongitude,
+            latitude: observedLatitude,
+            accuracyMeters: observedAccuracy,
+            observedAt,
+            ...(isDeclared ? { declared: true as const } : {}),
+          };
+    const decision = avaiaTravelDecision({
+      home: renderer.fog?.home?.(),
+      observation,
+      askedAway: askedAway.current.value,
+      nowMs: Date.now(),
+    });
+    if (decision === "reset") {
+      askedAway.current.value = false;
+      return;
+    }
+    if (decision !== "ask" || observation === undefined) return;
+    let current = true;
+    // Avoid a synchronous React state write inside the observation effect.
+    void Promise.resolve().then(() => {
+      if (!current) return;
+      askedAway.current.value = true;
+      setTravelError(false);
+      setTravelPrompt({
+        longitude: observation.longitude,
+        latitude: observation.latitude,
+        observedAt: observation.observedAt,
+      });
+    });
+    return () => {
+      current = false;
+    };
+  }, [
+    canOfferTravel,
+    isDeclared,
+    observedAccuracy,
+    observedAt,
+    observedLatitude,
+    observedLongitude,
+    renderer,
+    travelBusy,
+    mapStatus.kind,
+  ]);
+
+  async function confirmBringAvaia(): Promise<void> {
+    if (
+      travelPrompt === undefined ||
+      travelBusy ||
+      onBringAvaia === undefined
+    ) {
+      return;
+    }
+    if (Date.now() - travelPrompt.observedAt > AVAIA_TRAVEL_MAX_FIX_AGE_MS) {
+      setTravelError(true);
+      return;
+    }
+    setTravelBusy(true);
+    setTravelError(false);
+    try {
+      const result = await onBringAvaia({
+        longitude: travelPrompt.longitude,
+        latitude: travelPrompt.latitude,
+      });
+      if (result.kind === "arrived") {
+        setTravelPrompt(undefined);
+      } else {
+        setTravelError(true);
+      }
+    } catch {
+      setTravelError(true);
+    } finally {
+      setTravelBusy(false);
+    }
+  }
   const cameraCentered =
     observedPosition !== undefined &&
     cameraFramesPosition(camera, observedPosition);
@@ -1055,12 +1172,15 @@ export function AuthenticatedMapHomeView({
     subject: avaiaAddress,
     active: wheel === "avaia" && handover === undefined,
     body: () => avaiaBody.current(),
-    home: renderer.fog?.home?.() ?? observedPosition,
+    home: renderer.fog?.home?.() ?? deviceObservation,
   });
   const avaiaWalk = useAvaiaWalk({
     renderer,
     active: wheel === "avaia" && handover === undefined,
     observed: observedPosition,
+    ...(avaiaSetup?.travelArrival === undefined
+      ? {}
+      : { travelArrival: avaiaSetup.travelArrival }),
     model: avaiaVoice,
     locale,
     avaiaAddress,
@@ -1110,8 +1230,14 @@ export function AuthenticatedMapHomeView({
     avaiaWalkRef.current = avaiaWalk;
   });
   const avaiaPlacedFor = useRef<string | undefined>(undefined);
-  const firstFixLongitude = observedPosition?.longitude;
-  const firstFixLatitude = observedPosition?.latitude;
+  // A manually declared Bond position cannot become Avaia's first
+  // whereabouts: /set_position moves only Bond, never Avaia.
+  const firstFixLongitude = declaredPosition
+    ? undefined
+    : observedPosition?.longitude;
+  const firstFixLatitude = declaredPosition
+    ? undefined
+    : observedPosition?.latitude;
   useEffect(() => {
     if (firstFixLongitude === undefined || firstFixLatitude === undefined) {
       return;
@@ -1548,16 +1674,22 @@ export function AuthenticatedMapHomeView({
   // Where this device last observed itself is kept on this device alone, so
   // the next opening of the world starts there. A declared point is the
   // service's to hold and is not copied here.
-  const observedLongitude = deviceObservation?.longitude;
-  const observedLatitude = deviceObservation?.latitude;
+  const observedDeviceLongitude = deviceObservation?.longitude;
+  const observedDeviceLatitude = deviceObservation?.latitude;
   useEffect(() => {
-    if (observedLongitude === undefined || observedLatitude === undefined) {
+    if (
+      observedDeviceLongitude === undefined ||
+      observedDeviceLatitude === undefined
+    ) {
       return;
     }
     rememberWorld(pubDress, {
-      bond: { longitude: observedLongitude, latitude: observedLatitude },
+      bond: {
+        longitude: observedDeviceLongitude,
+        latitude: observedDeviceLatitude,
+      },
     });
-  }, [observedLatitude, observedLongitude, pubDress]);
+  }, [observedDeviceLatitude, observedDeviceLongitude, pubDress]);
 
   useEffect(() => {
     try {
@@ -1721,18 +1853,24 @@ export function AuthenticatedMapHomeView({
       const stance =
         body.seat === "avaia" ? avaiaWalk.stance(nowMs) : undefined;
       if (stance !== undefined) proximityObserver.current?.(stance.point);
-      const handle = createWheelBodyHandle({
-        body,
-        address: address(body.seat),
-        study: study(body.seat),
-        appearance: worn(body.seat),
-        location: location.state,
-        zoom: cameraZoom,
-        timeMs: nowMs,
-        reducedMotion,
-        stance,
-      });
+      // A manual Bond coordinate is not Avaia's location. Without an
+      // independent Avaia stance, do not draw her at the Bond's declared spot.
+      const handle =
+        body.seat === "avaia" && stance === undefined && declaredPosition
+          ? null
+          : createWheelBodyHandle({
+              body,
+              address: address(body.seat),
+              study: study(body.seat),
+              appearance: worn(body.seat),
+              location: location.state,
+              zoom: cameraZoom,
+              timeMs: nowMs,
+              reducedMotion,
+              stance,
+            });
       if (handle !== null) avatarLayer.upsert(handle);
+      else avatarLayer.remove(BODY_HANDLE_IDS[body.seat]);
       // A walking body carries its card with it, frame by frame.
       if (avaiaWalk.moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
@@ -1772,6 +1910,7 @@ export function AuthenticatedMapHomeView({
     avaiaWalk,
     bondAvatar?.appearance,
     cameraZoom,
+    declaredPosition,
     handover,
     location.state,
     observedPosition,
@@ -2852,13 +2991,26 @@ export function AuthenticatedMapHomeView({
             }
             onActivate={activateLocationControl}
           />
-          <FogRevealPrompt
-            prompt={fogReveal.prompt}
-            jobs={fogReveal.jobs}
-            avaia={avaiaLabel}
-            onConfirm={confirmFogReveal}
-            onDismiss={fogReveal.dismiss}
-          />
+          {travelPrompt === undefined ? (
+            <FogRevealPrompt
+              prompt={fogReveal.prompt}
+              jobs={fogReveal.jobs}
+              avaia={avaiaLabel}
+              onConfirm={confirmFogReveal}
+              onDismiss={fogReveal.dismiss}
+            />
+          ) : (
+            <AvaiaTravelPrompt
+              avaia={avaiaLabel}
+              busy={travelBusy}
+              error={travelError}
+              onConfirm={() => void confirmBringAvaia()}
+              onDismiss={() => {
+                setTravelPrompt(undefined);
+                setTravelError(false);
+              }}
+            />
+          )}
           {guide.state === undefined ? null : (
             <GuideCutsceneView
               state={guide.state}

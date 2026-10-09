@@ -44,6 +44,8 @@ pub enum AvaiaUpdateOutcome {
 pub struct AvaiaLocation {
     pub coordinate: GeoCoordinate,
     pub updated_at: DecimalU64,
+    /// Increments only when an administrator explicitly travels with Avaia.
+    pub travel_revision: u64,
 }
 
 impl AvaiaLocation {
@@ -52,8 +54,16 @@ impl AvaiaLocation {
         Self {
             coordinate,
             updated_at,
+            travel_revision: 0,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AvaiaTravelOutcome {
+    Arrived,
+    AdminRequired,
+    AvaiaUnavailable,
 }
 
 impl IdentityRepository {
@@ -192,7 +202,7 @@ impl IdentityRepository {
         owner: &PubDress,
     ) -> Result<Option<AvaiaLocation>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT longitude_e7, latitude_e7, updated_at \
+            "SELECT longitude_e7, latitude_e7, updated_at, travel_revision \
              FROM avaia_locations WHERE owner_pub_dress = ?",
         )
         .bind(owner.as_str())
@@ -210,10 +220,13 @@ impl IdentityRepository {
             .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
         let updated_at = u64::try_from(row.get::<i64, _>("updated_at"))
             .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
-        Ok(Some(AvaiaLocation::new(
+        let travel_revision = u64::try_from(row.get::<i64, _>("travel_revision"))
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        Ok(Some(AvaiaLocation {
             coordinate,
-            DecimalU64::new(updated_at),
-        )))
+            updated_at: DecimalU64::new(updated_at),
+            travel_revision,
+        }))
     }
 
     pub async fn write_avaia_location(
@@ -239,6 +252,100 @@ impl IdentityRepository {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    /// Manual Telegram travel declares both positions atomically.
+    pub async fn travel_with_avaia(
+        &self,
+        owner: &PubDress,
+        coordinate: GeoCoordinate,
+        at: DecimalU64,
+    ) -> Result<AvaiaTravelOutcome, RepositoryError> {
+        self.travel_avaia(owner, coordinate, at, true).await
+    }
+
+    /// A Bond physically present at the GPS fix only brings its Avaia.
+    /// No declared/manual Bond position is written.
+    pub async fn bring_avaia_to_bond(
+        &self,
+        owner: &PubDress,
+        coordinate: GeoCoordinate,
+        at: DecimalU64,
+    ) -> Result<AvaiaTravelOutcome, RepositoryError> {
+        self.travel_avaia(owner, coordinate, at, false).await
+    }
+
+    async fn travel_avaia(
+        &self,
+        owner: &PubDress,
+        coordinate: GeoCoordinate,
+        at: DecimalU64,
+        declare_bond: bool,
+    ) -> Result<AvaiaTravelOutcome, RepositoryError> {
+        self.initialize_avaia_configuration().await?;
+        let at = i64::try_from(at.get())
+            .map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+
+        // Recheck the effective stored role INSIDE the write transaction.
+        let role = sqlx::query_scalar::<_, String>(
+            "SELECT CASE WHEN i.identity_kind = 'human' AND substr(i.pub_dress, 1, 3) = '0x0' \
+             THEN 'admin' ELSE COALESCE(r.role, 'user') END \
+             FROM identities i LEFT JOIN bond_roles r ON r.pub_dress = i.pub_dress \
+             WHERE i.pub_dress = ? AND i.identity_kind = 'human'",
+        )
+        .bind(owner.as_str())
+        .fetch_optional(&mut *tx)
+        .await?;
+        if role.as_deref() != Some("admin") {
+            return Ok(AvaiaTravelOutcome::AdminRequired);
+        }
+        let has_avaia = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM avaia_configuration c \
+             JOIN identities a ON a.pub_dress = c.avaia_pub_dress \
+             WHERE c.owner_pub_dress = ? AND a.identity_kind = 'avaia')",
+        )
+        .bind(owner.as_str())
+        .fetch_one(&mut *tx)
+        .await?;
+        if !has_avaia {
+            return Ok(AvaiaTravelOutcome::AvaiaUnavailable);
+        }
+
+        if declare_bond {
+            sqlx::query(
+                "INSERT INTO bond_locations \
+                 (pub_dress, mode, longitude_e7, latitude_e7, updated_at) \
+                 VALUES (?, 'manual', ?, ?, ?) \
+                 ON CONFLICT(pub_dress) DO UPDATE SET mode = 'manual', \
+                 longitude_e7 = excluded.longitude_e7, latitude_e7 = excluded.latitude_e7, \
+                 updated_at = excluded.updated_at",
+            )
+            .bind(owner.as_str())
+            .bind(i64::from(coordinate.longitude_e7()))
+            .bind(i64::from(coordinate.latitude_e7()))
+            .bind(at)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        sqlx::query(
+            "INSERT INTO avaia_locations \
+             (owner_pub_dress, longitude_e7, latitude_e7, updated_at, travel_revision) \
+             VALUES (?, ?, ?, ?, 1) \
+             ON CONFLICT(owner_pub_dress) DO UPDATE SET \
+             longitude_e7 = excluded.longitude_e7, latitude_e7 = excluded.latitude_e7, \
+             updated_at = excluded.updated_at, \
+             travel_revision = avaia_locations.travel_revision + 1",
+        )
+        .bind(owner.as_str())
+        .bind(i64::from(coordinate.longitude_e7()))
+        .bind(i64::from(coordinate.latitude_e7()))
+        .bind(at)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(AvaiaTravelOutcome::Arrived)
     }
 }
 
@@ -351,5 +458,208 @@ mod avaia_lifecycle_repository_tests {
             .await
             .expect("location");
         assert_eq!(repository.owned_avaia_identity(&owner).await.expect("read"), None);
+    }
+
+    #[tokio::test]
+    async fn travel_requires_admin_and_an_existing_avaia_without_partial_writes() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
+        repository
+            .register(&owner, &ProviderIdentity::telegram(8901), 100)
+            .await
+            .expect("registration");
+        let point = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("point");
+
+        assert_eq!(
+            repository
+                .travel_with_avaia(&owner, point, DecimalU64::new(101))
+                .await
+                .expect("travel"),
+            AvaiaTravelOutcome::AdminRequired
+        );
+        repository
+            .set_role(&owner, BondAccessRole::Admin)
+            .await
+            .expect("role");
+        assert_eq!(
+            repository
+                .travel_with_avaia(&owner, point, DecimalU64::new(102))
+                .await
+                .expect("travel"),
+            AvaiaTravelOutcome::AvaiaUnavailable
+        );
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM bond_locations WHERE pub_dress = ?",
+        )
+        .bind(owner.as_str())
+        .fetch_one(&repository.pool)
+        .await
+        .expect("bond count");
+        assert_eq!(count, 0);
+
+        let avaia: AvaiaPubDress = "x1skai".parse().expect("avaia");
+        repository
+            .configure_owned_avaia(&owner, &avaia, 103)
+            .await
+            .expect("create Avaia");
+        assert_eq!(
+            repository
+                .travel_with_avaia(&owner, point, DecimalU64::new(104))
+                .await
+                .expect("travel"),
+            AvaiaTravelOutcome::Arrived
+        );
+        let bond = sqlx::query(
+            "SELECT mode, longitude_e7, latitude_e7 FROM bond_locations WHERE pub_dress = ?",
+        )
+        .bind(owner.as_str())
+        .fetch_one(&repository.pool)
+        .await
+        .expect("Bond coordinate");
+        assert_eq!(bond.get::<String, _>("mode"), "manual");
+        assert_eq!(bond.get::<i64, _>("longitude_e7"), i64::from(point.longitude_e7()));
+        assert_eq!(bond.get::<i64, _>("latitude_e7"), i64::from(point.latitude_e7()));
+        let arrived = repository
+            .read_avaia_location(&owner)
+            .await
+            .expect("Avaia coordinate")
+            .expect("Avaia location");
+        assert_eq!(arrived.coordinate, point);
+        assert_eq!(arrived.travel_revision, 1);
+
+        let next = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("next point");
+        assert_eq!(
+            repository
+                .travel_with_avaia(&owner, next, DecimalU64::new(105))
+                .await
+                .expect("second journey"),
+            AvaiaTravelOutcome::Arrived
+        );
+        assert_eq!(
+            repository.read_avaia_location(&owner).await.expect("read").expect("location").travel_revision,
+            2
+        );
+        repository
+            .write_avaia_location(&owner, AvaiaLocation::new(point, DecimalU64::new(106)))
+            .await
+            .expect("ordinary location publication");
+        assert_eq!(
+            repository.read_avaia_location(&owner).await.expect("read").expect("location").travel_revision,
+            2,
+            "ordinary Avaia location writes do not cause another teleport"
+        );
+        repository
+            .set_role(&owner, BondAccessRole::User)
+            .await
+            .expect("revoke admin");
+        assert_eq!(
+            repository.travel_with_avaia(&owner, point, DecimalU64::new(107)).await.expect("denied"),
+            AvaiaTravelOutcome::AdminRequired
+        );
+    }
+
+    #[tokio::test]
+    async fn confirmed_physical_arrival_only_moves_avaia() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
+        repository
+            .register(&owner, &ProviderIdentity::telegram(8903), 100)
+            .await
+            .expect("registration");
+        let point = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("point");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(101))
+                .await
+                .expect("role denial"),
+            AvaiaTravelOutcome::AdminRequired
+        );
+        repository
+            .set_role(&owner, BondAccessRole::Admin)
+            .await
+            .expect("role");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(102))
+                .await
+                .expect("missing Avaia"),
+            AvaiaTravelOutcome::AvaiaUnavailable
+        );
+        let avaia: AvaiaPubDress = "x1skai".parse().expect("avaia");
+        repository
+            .configure_owned_avaia(&owner, &avaia, 103)
+            .await
+            .expect("configure");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(104))
+                .await
+                .expect("arrival"),
+            AvaiaTravelOutcome::Arrived
+        );
+        let bond_rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM bond_locations WHERE pub_dress = ?")
+                .bind(owner.as_str())
+                .fetch_one(&repository.pool)
+                .await
+                .expect("bond rows");
+        assert_eq!(bond_rows, 0, "GPS travel must not declare a manual Bond position");
+        let arrived = repository
+            .read_avaia_location(&owner)
+            .await
+            .expect("read")
+            .expect("Avaia at destination");
+        assert_eq!(arrived.coordinate, point);
+        assert_eq!(arrived.travel_revision, 1);
+        repository
+            .set_role(&owner, BondAccessRole::User)
+            .await
+            .expect("revoke admin");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(105))
+                .await
+                .expect("denied again"),
+            AvaiaTravelOutcome::AdminRequired
+        );
+        assert_eq!(
+            repository
+                .read_avaia_location(&owner)
+                .await
+                .expect("read")
+                .expect("location")
+                .travel_revision,
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn failing_avaia_write_rolls_back_bond_teleport() {
+        let repository = IdentityRepository::connect("sqlite::memory:").await.expect("repository");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
+        repository.register(&owner, &ProviderIdentity::telegram(8902), 100).await.expect("registration");
+        repository.set_role(&owner, BondAccessRole::Admin).await.expect("admin");
+        let avaia: AvaiaPubDress = "x1skai".parse().expect("avaia");
+        repository.configure_owned_avaia(&owner, &avaia, 101).await.expect("create");
+        sqlx::query(
+            "CREATE TRIGGER block_travel BEFORE INSERT ON avaia_locations \
+             BEGIN SELECT RAISE(ABORT, 'blocked'); END"
+        )
+        .execute(&repository.pool)
+        .await
+        .expect("failure injection");
+        let point = GeoCoordinate::from_degrees(2.3522, 48.8566).expect("point");
+        assert!(repository.travel_with_avaia(&owner, point, DecimalU64::new(102)).await.is_err());
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bond_locations WHERE pub_dress = ?")
+            .bind(owner.as_str())
+            .fetch_one(&repository.pool)
+            .await
+            .expect("bond count");
+        assert_eq!(count, 0, "failed journey never relocates Bond only");
+        assert!(repository.read_avaia_location(&owner).await.expect("read").is_none());
     }
 }

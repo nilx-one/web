@@ -22,6 +22,8 @@ export type AvaiaConfigurationState = "unconfigured" | "configured";
  */
 export interface AvaiaLocationProjection {
   readonly coordinate: WorldPosition;
+  /** Nonzero only after an explicit administrator journey. */
+  readonly travelRevision?: string;
 }
 
 /** The owner-authenticated Avaia the identity service keeps. */
@@ -33,6 +35,8 @@ export interface AvaiaProfileProjection {
   readonly pubDress: string;
   readonly ownerPubDress: string;
   readonly configurationState: AvaiaConfigurationState;
+  /** Service-derived admin capability; never client-guessed. */
+  readonly canTravel?: boolean;
   /** Absent while the owner has not published a location for this Avaia. */
   readonly location?: AvaiaLocationProjection;
 }
@@ -62,6 +66,20 @@ export type AvaiaLocationPublishResult =
   | { kind: "rejected"; reason: AvaiaLocationPublishRejection }
   | { kind: "service-unavailable" };
 
+/** Admin-only arrival after the owner confirms a real GPS observation. */
+export type AvaiaTravelResult =
+  | { kind: "arrived"; profile: AvaiaProfileProjection }
+  | {
+      kind: "rejected";
+      reason:
+        | "authentication-required"
+        | "admin-required"
+        | "avaia-unavailable"
+        | "invalid-location"
+        | "rate-limited";
+    }
+  | { kind: "service-unavailable" };
+
 /**
  * The Avaia profile capability, kept apart from `IdentityAccessPort` so a host
  * that has not reached contract 8 stays a valid identity client instead of
@@ -74,6 +92,8 @@ export interface AvaiaProfileAccessPort {
   publishAvaiaLocation(
     position: WorldPosition,
   ): Promise<AvaiaLocationPublishResult>;
+  /** Optional for older clients, never inferred from the pub_dress prefix. */
+  travelAvaiaToBond?(position: WorldPosition): Promise<AvaiaTravelResult>;
 }
 
 /** Whether an identity client also answers for the Avaia profile. */
