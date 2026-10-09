@@ -13,7 +13,7 @@ function response(status: number, body: unknown): Response {
 }
 
 describe("confirmed Avaia GPS travel", () => {
-  it("sends coordinates with CSRF and reads the arrival revision", async () => {
+  it("posts signed arrival coordinates", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
         pub_dress: "x0skai",
@@ -56,7 +56,7 @@ describe("confirmed Avaia GPS travel", () => {
     });
   });
 
-  it("represents server authorization refusal without success", async () => {
+  it("rejects non-admin travel", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(403, { error: { code: "admin_required" } }),
     );
@@ -65,10 +65,8 @@ describe("confirmed Avaia GPS travel", () => {
       getAuthorization: () => "tma signed",
     });
 
-    const result = await adapter.travelAvaiaToBond?.({
-      longitude: 30.5234,
-      latitude: 50.4501,
-    });
+    const position = { longitude: 30.5234, latitude: 50.4501 };
+    const result = await adapter.travelAvaiaToBond?.(position);
     expect(result).toEqual({
       kind: "rejected",
       reason: "admin-required",
