@@ -22,6 +22,7 @@ import type {
 import {
   avatarPreviewUrl,
   mapDistanceMeters,
+  type AvatarHandle,
   type AvatarModelId,
   type MapDimension,
   type MapObservedPositionLabel,
@@ -1822,16 +1823,40 @@ export function AuthenticatedMapHomeView({
   // body settling and leaving, then the other arriving, so a handover holds
   // both handles for as long as it runs and the arriving study can load while
   // the other one is still going.
+  //
+  // A body that leaves the world — the camera pulled back, the wheel handed
+  // over — is hidden, not removed: its loaded study, skeleton and mixer stay
+  // where they are, so coming back is a flag flip rather than a fresh fetch and
+  // clone. Only the renderer going away drops them.
+  const drawnBodies = useRef<Partial<Record<DockSeat, AvatarHandle>>>({});
+  useEffect(() => {
+    const avatars = renderer.avatars;
+    if (avatars === undefined) return;
+    const drawn = drawnBodies.current;
+    return () => {
+      for (const id of Object.values(BODY_HANDLE_IDS)) avatars.remove(id);
+      for (const seat of Object.keys(drawn) as DockSeat[]) delete drawn[seat];
+    };
+  }, [renderer]);
+
   useEffect(() => {
     const avatars = renderer.avatars;
     const bondStudy = avatarChoice?.rendered;
-    if (avatars === undefined || bondStudy === undefined) return;
-    if (observedPosition === undefined) {
-      for (const id of Object.values(BODY_HANDLE_IDS)) avatars.remove(id);
+    if (avatars === undefined) return;
+    const avatarLayer = avatars;
+    const drawn = drawnBodies.current;
+    function hide(seat: DockSeat): void {
+      const last = drawn[seat];
+      if (last === undefined || !last.visible) return;
+      const hidden = { ...last, visible: false };
+      drawn[seat] = hidden;
+      avatarLayer.upsert(hidden);
+    }
+    if (bondStudy === undefined || observedPosition === undefined) {
+      for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) hide(seat);
       return;
     }
 
-    const avatarLayer = avatars;
     const reducedMotion = prefersReducedMotion();
     // The world draws whatever body was actually chosen for each identity —
     // avaiaAvatar already falls back to the ambient study on its own when
@@ -1869,17 +1894,19 @@ export function AuthenticatedMapHomeView({
               reducedMotion,
               stance,
             });
-      if (handle !== null) avatarLayer.upsert(handle);
-      else avatarLayer.remove(BODY_HANDLE_IDS[body.seat]);
+      if (handle !== null) {
+        drawn[body.seat] = handle;
+        avatarLayer.upsert(handle);
+      } else hide(body.seat);
       // A walking body carries its card with it, frame by frame.
       if (avaiaWalk.moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
       }
 
       // Only the identity in the seat this instant is on the world: the other
-      // handle is dropped rather than left standing behind the one driving.
-      for (const [seat, id] of Object.entries(BODY_HANDLE_IDS)) {
-        if (seat !== body.seat) avatarLayer.remove(id);
+      // body is hidden rather than left standing behind the one driving.
+      for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) {
+        if (seat !== body.seat) hide(seat);
       }
 
       // A handover and a walk are the only things here that need frames, and
@@ -1900,7 +1927,6 @@ export function AuthenticatedMapHomeView({
     return () => {
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       globalThis.clearInterval(ambient);
-      for (const id of Object.values(BODY_HANDLE_IDS)) avatarLayer.remove(id);
     };
   }, [
     avaiaAddress,
