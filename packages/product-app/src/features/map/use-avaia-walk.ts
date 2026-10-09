@@ -606,9 +606,10 @@ export function useAvaiaWalk({
     (body: MapPointSelection) =>
       openGround({
         fog: renderer.fog,
-        device: latest.current.observed?.declared === true
-          ? undefined
-          : latest.current.observed,
+        device:
+          latest.current.observed?.declared === true
+            ? undefined
+            : latest.current.observed,
         body,
         nearDeviceMeters: NEAR_DEVICE_OPEN_METERS,
       }),
