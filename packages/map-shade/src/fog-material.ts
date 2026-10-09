@@ -30,18 +30,23 @@ export function fogFloorCss(palette: FogPalette, alpha = 1): string {
   return `rgb(${r} ${g} ${b} / ${alpha})`;
 }
 
-/** Shared ABI for both GPU backends; all distances are world metres. */
+/**
+ * Shared ABI for both GPU backends; all distances are world metres.
+ * `footprintM` is how much ground one screen pixel covers: the clouds keep
+ * only the octaves wide enough to read as mist at that scale.
+ */
 export function fogParameters(
   atlas: FogAtlas,
   palette: FogPalette,
   zones: readonly FogZone[],
   time: number,
   density: number,
+  footprintM = 0,
 ): Float32Array<ArrayBuffer> {
   const data = new Float32Array(FOG_PARAMETER_VECTORS * 4);
   data.set([atlas.regionM, time, density, zones.length]);
   data.set([...palette.shadow, palette.bloom], 4);
-  data.set(palette.light, 8);
+  data.set([...palette.light, footprintM], 8);
   data.set(palette.glow, 12);
   zones.forEach((zone, index) => {
     const point = MercatorCoordinate.fromLngLat(zone.center);
@@ -65,6 +70,9 @@ export function fogParameters(
 
 // Mask sampling, wavelengths, colour and animation agree across these two
 // shader dialects. Coverage is tested FIRST, and never displaced by noise.
+// noise2(m / s) repeats every 2πs metres, a regular weave: each octave
+// fades out as its period shrinks from 192 to 64 screen pixels (p[2].w is
+// metres per pixel), so a zoomed-out map reads as even mist, not fabric.
 // Over the outer tenth of the atlas the clouds and zones settle into the
 // palette's opaque floor colour, which the flat world fog beyond it wears:
 // where the two overlap, opaque over opaque leaves no seam.
@@ -81,7 +89,8 @@ void main() {
   if (texture(u_mask, uv).r > 0.001) { color = vec4(0.0); return; }
   vec2 m = (uv - 0.5) * p[0].x;
   vec2 wind = vec2(p[0].y * 0.7, p[0].y * -0.3);
-  float cloud = 0.5 + 0.22 * noise2((m + wind) / 80.0) + 0.16 * noise2((m - wind * 0.4) / 210.0) + 0.1 * noise2(m / 530.0);
+  float f = p[2].w / 6.2832;
+  float cloud = 0.5 + 0.22 * (1.0 - smoothstep(80.0 / 192.0, 80.0 / 64.0, f)) * noise2((m + wind) / 80.0) + 0.16 * (1.0 - smoothstep(210.0 / 192.0, 210.0 / 64.0, f)) * noise2((m - wind * 0.4) / 210.0) + 0.1 * (1.0 - smoothstep(530.0 / 192.0, 530.0 / 64.0, f)) * noise2(m / 530.0);
   float edge = smoothstep(0.4 * p[0].x, 0.5 * p[0].x, max(abs(m.x), abs(m.y)));
   cloud = mix(cloud, 0.5, edge);
   vec3 shadow = p[1].rgb; vec3 light = p[2].rgb; vec3 glow = p[3].rgb;
@@ -121,7 +130,8 @@ fn noise2(q: vec2f) -> f32 {
   let m = (uv - 0.5) * p[0].x;
   let wind = vec2f(p[0].y * 0.7, p[0].y * -0.3);
   let edge = smoothstep(0.4 * p[0].x, 0.5 * p[0].x, max(abs(m.x), abs(m.y)));
-  let cloud = mix(0.5 + 0.22 * noise2((m + wind) / 80.0) + 0.16 * noise2((m - wind * 0.4) / 210.0) + 0.1 * noise2(m / 530.0), 0.5, edge);
+  let f = p[2].w / 6.2832;
+  let cloud = mix(0.5 + 0.22 * (1 - smoothstep(80.0 / 192.0, 80.0 / 64.0, f)) * noise2((m + wind) / 80.0) + 0.16 * (1 - smoothstep(210.0 / 192.0, 210.0 / 64.0, f)) * noise2((m - wind * 0.4) / 210.0) + 0.1 * (1 - smoothstep(530.0 / 192.0, 530.0 / 64.0, f)) * noise2(m / 530.0), 0.5, edge);
   var shadow = p[1].rgb; var light = p[2].rgb; var glow = p[3].rgb;
   for (var i = 0u; i < ${MAX_FOG_ZONES}u; i++) {
     if (f32(i) >= p[0].w) { break; }

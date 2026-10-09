@@ -37,6 +37,7 @@ vi.mock("./shade-layer", () => ({
     motion: options.motion,
     setPalette: vi.fn(),
     setZones: vi.fn(),
+    setDetail: vi.fn(),
     dispose: vi.fn(),
   })),
 }));
@@ -140,6 +141,14 @@ const { FakeMap } = vi.hoisted(() => {
     }
 
     triggerRepaint(): void {}
+
+    zoom = 16;
+    getZoom(): number {
+      return this.zoom;
+    }
+    getCenter(): { lng: number; lat: number } {
+      return { lng: 30.5234, lat: 50.4501 };
+    }
 
     addLayer(layer: { readonly id: string }, before?: string): void {
       this.addLayerCalls.push({ id: layer.id, before });
@@ -305,6 +314,17 @@ describe("shade map factory", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("tells the fog how much ground a pixel covers once a zoom settles", async () => {
+    const map = build(fakeRuntime([]));
+    await settle();
+    const { setDetail } = shadeLayerOf(map);
+    // Zoom 16 at Kyiv: about three quarters of a metre per pixel.
+    expect(vi.mocked(setDetail).mock.calls.at(-1)![0]).toBeCloseTo(0.76, 2);
+    map.zoom = 11;
+    map.emit("zoomend");
+    expect(vi.mocked(setDetail).mock.calls.at(-1)![0]).toBeCloseTo(24.3, 1);
   });
 
   it("redrapes terrain with every new fog frame", async () => {

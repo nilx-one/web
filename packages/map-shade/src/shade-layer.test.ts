@@ -250,6 +250,23 @@ describe("geographic fog surface", () => {
     expect(gl.render).toHaveBeenCalledOnce();
     expect(onFrame).toHaveBeenCalledOnce();
   });
+  it("redraws for a new level of detail only across a whole zoom level", async () => {
+    const { layer } = mount();
+    layer.setDetail(1.5);
+    await vi.runAllTimersAsync();
+    const footprint = () => vi.mocked(gpu.render).mock.calls.at(-1)![1][11];
+    expect(footprint()).toBe(2);
+    const count = vi.mocked(gpu.render).mock.calls.length;
+    layer.setDetail(1.9);
+    layer.setDetail(Number.NaN);
+    await vi.runAllTimersAsync();
+    expect(gpu.render).toHaveBeenCalledTimes(count);
+    layer.setDetail(48.7);
+    await vi.runAllTimersAsync();
+    expect(footprint()).toBe(64);
+    // Detail is material only: the mask is not re-uploaded for it.
+    expect(vi.mocked(gpu.render).mock.calls.at(-1)![2]).toBe(false);
+  });
   it("adds newly revealed cells even with reduced motion", async () => {
     const cells = source([]);
     mount({ source: cells });
