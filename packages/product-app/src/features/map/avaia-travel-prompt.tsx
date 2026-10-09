@@ -32,7 +32,11 @@ export function AvaiaTravelPrompt({
         <p className="fog-reveal__detail" id="avaia-travel-description">
           {t("avaia.travel.description").replace("{avaia}", avaia)}
         </p>
-        {error ? <p className="profile-edit__error" role="alert">{t("avaia.travel.error")}</p> : null}
+        {error ? (
+          <p className="profile-edit__error" role="alert">
+            {t("avaia.travel.error")}
+          </p>
+        ) : null}
         <div className="fog-reveal__actions">
           <button
             className="fog-reveal__cancel"

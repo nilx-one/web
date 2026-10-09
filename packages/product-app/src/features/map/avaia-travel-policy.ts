@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { mapDistanceMeters, type MapPointSelection } from "@nilx-one/map-contract";
+import {
+  mapDistanceMeters,
+  type MapPointSelection,
+} from "@nilx-one/map-contract";
 import type { ObservedGeolocation } from "@nilx-one/host-contract";
 
 /** A genuine journey, well beyond GPS jitter and local walks. */

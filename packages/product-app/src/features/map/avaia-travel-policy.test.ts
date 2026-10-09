@@ -16,8 +16,12 @@ const fix = {
 
 describe("Avaia physical travel consent", () => {
   it("asks once when an accurate real GPS fix is far from known home", () => {
-    expect(avaiaTravelDecision({ home, observation: fix, askedAway: false, nowMs })).toBe("ask");
-    expect(avaiaTravelDecision({ home, observation: fix, askedAway: true, nowMs })).toBe("hold");
+    expect(
+      avaiaTravelDecision({ home, observation: fix, askedAway: false, nowMs }),
+    ).toBe("ask");
+    expect(
+      avaiaTravelDecision({ home, observation: fix, askedAway: true, nowMs }),
+    ).toBe("hold");
   });
 
   it("does not treat a manual coordinate, old fix, inaccurate fix or unknown home as arrival", () => {
@@ -26,15 +30,35 @@ describe("Avaia physical travel consent", () => {
       { ...fix, observedAt: nowMs - 200_000 },
       { ...fix, accuracyMeters: 350 },
     ]) {
-      expect(avaiaTravelDecision({ home, observation, askedAway: false, nowMs })).toBe("hold");
+      expect(
+        avaiaTravelDecision({ home, observation, askedAway: false, nowMs }),
+      ).toBe("hold");
     }
-    expect(avaiaTravelDecision({ home: undefined, observation: fix, askedAway: false, nowMs })).toBe("hold");
+    expect(
+      avaiaTravelDecision({
+        home: undefined,
+        observation: fix,
+        askedAway: false,
+        nowMs,
+      }),
+    ).toBe("hold");
   });
 
   it("requires returning close to home before asking about another trip", () => {
     const near = { ...fix, latitude: 50.451 };
-    expect(avaiaTravelDecision({ home, observation: near, askedAway: true, nowMs })).toBe("reset");
-    expect(avaiaTravelDecision({ home, observation: { ...fix, latitude: 50.46 }, askedAway: true, nowMs })).toBe("hold");
-    expect(avaiaTravelDecision({ home, observation: fix, askedAway: false, nowMs })).toBe("ask");
+    expect(
+      avaiaTravelDecision({ home, observation: near, askedAway: true, nowMs }),
+    ).toBe("reset");
+    expect(
+      avaiaTravelDecision({
+        home,
+        observation: { ...fix, latitude: 50.46 },
+        askedAway: true,
+        nowMs,
+      }),
+    ).toBe("hold");
+    expect(
+      avaiaTravelDecision({ home, observation: fix, askedAway: false, nowMs }),
+    ).toBe("ask");
   });
 });

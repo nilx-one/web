@@ -449,7 +449,7 @@ mod avaia_lifecycle_api_tests {
     use url::form_urlencoded;
 
     use super::{Clock, avaia_router_with_clock};
-    use crate::{IdentityRepository, NativeAuthConfig, ProviderIdentity, PubDress, TelegramInitDataVerifier};
+    use crate::{BondAccessRole, IdentityRepository, NativeAuthConfig, ProviderIdentity, PubDress, TelegramInitDataVerifier};
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
@@ -498,6 +498,10 @@ mod avaia_lifecycle_api_tests {
     }
 
     async fn app(user_id: i64, owner: &str) -> (axum::Router, String) {
+        app_with_role(user_id, owner, false).await
+    }
+
+    async fn app_with_role(user_id: i64, owner: &str, is_admin: bool) -> (axum::Router, String) {
         let database_url = test_database_url();
         let repository = IdentityRepository::connect(&database_url).await.expect("repository");
         let owner: PubDress = owner.parse().expect("owner");
@@ -505,6 +509,12 @@ mod avaia_lifecycle_api_tests {
             .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
             .await
             .expect("registration");
+        if is_admin {
+            repository
+                .set_role(&owner, BondAccessRole::Admin)
+                .await
+                .expect("assign admin role");
+        }
         let provider_links = crate::ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider links");
@@ -543,7 +553,7 @@ mod avaia_lifecycle_api_tests {
         assert_eq!(denied.status(), StatusCode::FORBIDDEN);
         assert_eq!(json(denied).await["error"]["code"], "admin_required");
 
-        let (admin_app, admin_auth) = app(8992, "0x0sky").await;
+        let (admin_app, admin_auth) = app_with_role(8992, "0x1sky", true).await;
         let missing = admin_app
             .oneshot(
                 Request::post("/api/v1/identity/avaia/travel")
