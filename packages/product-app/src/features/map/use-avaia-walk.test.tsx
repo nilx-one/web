@@ -169,15 +169,11 @@ describe("admin travel on a device", () => {
     const hook = render(renderer, {
       travelArrival: { coordinate: paris, revision: "1" },
     });
-    expect(hook.result.current.stance(performance.now())?.point).toEqual(
-      paris,
-    );
+    expect(hook.result.current.stance(performance.now())?.point).toEqual(paris);
     expect(readWorldMemory("0x0sky").travelRevision).toBe("1");
 
     hook.rerender(
-      props(renderer, {
-        travelArrival: { coordinate: berlin, revision: "2" },
-      }),
+      props(renderer, { travelArrival: { coordinate: berlin, revision: "2" } }),
     );
     expect(hook.result.current.stance(performance.now())?.point).toEqual(
       berlin,
