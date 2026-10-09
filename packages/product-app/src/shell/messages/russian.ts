@@ -31,6 +31,12 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "header.navigation": "Навигация 0x1",
   "header.settings": "Настройки",
   "header.more": "Ещё",
+  "avaia.travel.title": "Переместиться вместе?",
+  "avaia.travel.description": "Вы далеко от дома. Переместить {avaia} к фактической позиции устройства?",
+  "avaia.travel.no": "Нет",
+  "avaia.travel.yes": "Да, взять Avaia",
+  "avaia.travel.busy": "Перемещение…",
+  "avaia.travel.error": "Не удалось переместить Avaia. Ничего не изменено. Попробуйте ещё раз.",
   "location.unsupported.label": "Геолокация недоступна на этом хосте",
   "location.unsupported.hint":
     "Этот хост не предоставляет геолокацию устройства.",
