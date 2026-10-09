@@ -1,45 +1,45 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { SettingsSlider } from "../../shell/settings-slider";
 import { useLocalization, type TranslationKey } from "../../shell/localization";
 import {
-  RARITIES,
-  choosePickup,
-  pickedUpRarities,
+  choosePickupThreshold,
+  pickupThresholdLevel,
   usePickup,
-  type Rarity,
 } from "./pickup-preference";
 
-const LABELS: Readonly<Record<Rarity, TranslationKey>> = {
-  common: "settings.pickup.common",
-  uncommon: "settings.pickup.uncommon",
-  rare: "settings.pickup.rare",
-  legendary: "settings.pickup.legendary",
-};
+/** Moving right includes every rarer tier; the last stop picks up all four. */
+const STOPS: readonly { readonly value: number; readonly key: TranslationKey }[] = [
+  { value: 0, key: "settings.pickup.off" },
+  { value: 1, key: "settings.pickup.legendary" },
+  { value: 2, key: "settings.pickup.rare" },
+  { value: 3, key: "settings.pickup.uncommon" },
+  { value: 4, key: "settings.pickup.common" },
+];
 
-/** "Pick up": one switch per rarity, as Core groups the tiers. */
 export function PickupSettings() {
   const { t } = useLocalization();
-  const picked = pickedUpRarities(usePickup());
+  const stored = usePickup();
+  const level = pickupThresholdLevel(stored);
 
   return (
     <fieldset className="interface-settings__appearance">
       <legend>{t("settings.pickup.legend")}</legend>
-      <small>{t("settings.pickup.detail")}</small>
-      {RARITIES.map((rarity) => (
-        <label key={rarity} className="interface-settings__option">
-          <span>
-            <strong>{t(LABELS[rarity])}</strong>
-          </span>
-          <input
-            type="checkbox"
-            name="pickup"
-            value={rarity}
-            checked={picked.has(rarity)}
-            onChange={(event) => choosePickup(rarity, event.target.checked)}
-          />
-        </label>
-      ))}
+      <small className="interface-settings__note">{t("settings.pickup.detail")}</small>
+      <SettingsSlider
+        id="pickup-level"
+        label={t("settings.pickup.legend")}
+        options={STOPS.map(({ value, key }) => ({ value, label: t(key) }))}
+        value={level ?? 4}
+        onChange={choosePickupThreshold}
+        {...(level === null
+          ? {
+              titleOverride: t("settings.pickup.custom"),
+              detailOverride: t("settings.pickup.customDetail"),
+            }
+          : {})}
+      />
     </fieldset>
   );
 }

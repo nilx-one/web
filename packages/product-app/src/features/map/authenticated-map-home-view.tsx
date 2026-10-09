@@ -51,6 +51,7 @@ import {
   useVoicePreference,
 } from "../../shell/sound-preference";
 import { SoundSettings } from "../../shell/sound-settings";
+import { SettingsSlider } from "../../shell/settings-slider";
 import { PickupSettings } from "../finds/pickup-settings";
 import { useBackpackGift } from "../inventory/backpack-gift";
 import { useCraftCompletion } from "../inventory/craft";
@@ -2594,76 +2595,42 @@ export function AuthenticatedMapHomeView({
                     */}
                       <fieldset className="interface-settings__appearance">
                         <legend>{t("settings.appearance.legend")}</legend>
-                        {(
-                          [
+                        <SettingsSlider
+                          id="appearance-level"
+                          label={t("settings.appearance.legend")}
+                          options={(
                             [
-                              "light",
-                              "settings.appearance.light",
-                              "settings.appearance.lightDetail",
-                            ],
-                            [
-                              "dark",
-                              "settings.appearance.dark",
-                              "settings.appearance.darkDetail",
-                            ],
-                            [
-                              "auto",
-                              "settings.appearance.auto",
-                              "settings.appearance.autoDetail",
-                            ],
-                          ] as const
-                        ).map(([mode, label, detail]) => (
-                          <label
-                            key={mode}
-                            className="interface-settings__option"
-                          >
-                            <span>
-                              <strong>{t(label)}</strong>
-                              <small>{t(detail)}</small>
-                            </span>
-                            <input
-                              type="radio"
-                              name="appearance"
-                              value={mode}
-                              checked={appearance.preference === mode}
-                              onChange={() => chooseAppearance(mode)}
-                            />
-                          </label>
-                        ))}
+                              ["light", "settings.appearance.light", "settings.appearance.lightDetail"],
+                              ["auto", "settings.appearance.auto", "settings.appearance.autoDetail"],
+                              ["dark", "settings.appearance.dark", "settings.appearance.darkDetail"],
+                            ] as const
+                          ).map(([value, label, detail]) => ({
+                            value,
+                            label: t(label),
+                            detail: t(detail),
+                          }))}
+                          value={appearance.preference}
+                          onChange={chooseAppearance}
+                        />
                       </fieldset>
                       <fieldset className="interface-settings__appearance">
                         <legend>{t("settings.depth.legend")}</legend>
-                        {(
-                          [
+                        <SettingsSlider
+                          id="dimension-level"
+                          label={t("settings.depth.legend")}
+                          options={(
                             [
-                              "volumetric",
-                              "settings.depth.threeD",
-                              "settings.depth.threeDDetail",
-                            ],
-                            [
-                              "flat",
-                              "settings.depth.twoD",
-                              "settings.depth.twoDDetail",
-                            ],
-                          ] as const
-                        ).map(([mode, label, detail]) => (
-                          <label
-                            key={mode}
-                            className="interface-settings__option"
-                          >
-                            <span>
-                              <strong>{t(label)}</strong>
-                              <small>{t(detail)}</small>
-                            </span>
-                            <input
-                              type="radio"
-                              name="dimension"
-                              value={mode}
-                              checked={dimension === mode}
-                              onChange={() => setDimension(mode)}
-                            />
-                          </label>
-                        ))}
+                              ["flat", "settings.depth.twoD", "settings.depth.twoDDetail"],
+                              ["volumetric", "settings.depth.threeD", "settings.depth.threeDDetail"],
+                            ] as const
+                          ).map(([value, label, detail]) => ({
+                            value,
+                            label: t(label),
+                            detail: t(detail),
+                          }))}
+                          value={dimension}
+                          onChange={setDimension}
+                        />
                       </fieldset>
                       {sound === undefined ? null : (
                         <SoundSettings sound={sound} />

@@ -30,6 +30,9 @@ export const FINDS_EN = {
   "item.reel_to_reel": "Reel-to-reel",
   "item.test_pressing": "Test pressing",
   "settings.pickup.legend": "Pick up",
+  "settings.pickup.off": "Off",
+  "settings.pickup.custom": "Custom selection",
+  "settings.pickup.customDetail": "Your previous choices remain active until you move this slider.",
   "settings.pickup.detail":
     "What gets picked up on the way. A find left behind is still seen.",
   "settings.pickup.common": "1–3 · common",
@@ -118,6 +121,9 @@ export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "item.reel_to_reel": "Котушковий магнітофон",
   "item.test_pressing": "Пробний вініл",
   "settings.pickup.legend": "Підбирати",
+  "settings.pickup.off": "Вимкнено",
+  "settings.pickup.custom": "Попередній вибір",
+  "settings.pickup.customDetail": "Попередні категорії діють, доки ти не пересунеш повзунок.",
   "settings.pickup.detail":
     "Що підбирати дорогою. Залишена знахідка однаково зараховується як побачена.",
   "settings.pickup.common": "1–3 · звичайні",
@@ -207,6 +213,9 @@ export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "item.reel_to_reel": "Катушечный магнитофон",
   "item.test_pressing": "Пробный винил",
   "settings.pickup.legend": "Подбирать",
+  "settings.pickup.off": "Выключено",
+  "settings.pickup.custom": "Прежний выбор",
+  "settings.pickup.customDetail": "Прежние категории действуют, пока ты не передвинешь ползунок.",
   "settings.pickup.detail":
     "Что подбирать по дороге. Оставленная находка всё равно засчитывается как замеченная.",
   "settings.pickup.common": "1–3 · обычные",

@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { SettingsSlider } from "./settings-slider";
 import {
   chooseLocale,
   useLocalization,
@@ -38,30 +39,19 @@ export function LanguageSettings() {
   return (
     <fieldset className="interface-settings__appearance">
       <legend>{localization.t("settings.language.legend")}</legend>
-      {options.map((preference) => (
-        <label key={preference} className="interface-settings__option">
-          <span>
-            <strong>{optionLabel(preference)}</strong>
-            {preference === "auto" ? (
-              <small>
-                {localization.t(DETECTED_KEYS[localization.resolved])}
-              </small>
-            ) : null}
-          </span>
-          <input
-            type="radio"
-            name="language"
-            value={preference}
-            checked={localization.preference === preference}
-            aria-label={
-              preference === "auto"
-                ? localization.t("settings.language.autoAction")
-                : undefined
-            }
-            onChange={() => chooseLocale(preference)}
-          />
-        </label>
-      ))}
+      <SettingsSlider
+        id="language-level"
+        label={localization.t("settings.language.legend")}
+        options={options.map((preference) => ({
+          value: preference,
+          label: optionLabel(preference),
+          ...(preference === "auto"
+            ? { detail: localization.t(DETECTED_KEYS[localization.resolved]) }
+            : {}),
+        }))}
+        value={localization.preference}
+        onChange={chooseLocale}
+      />
     </fieldset>
   );
 }

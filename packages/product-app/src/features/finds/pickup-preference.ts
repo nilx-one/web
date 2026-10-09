@@ -46,17 +46,41 @@ export function pickedUpRarities(wire: string): ReadonlySet<Rarity> {
 }
 
 /** Includes or leaves out one rarity, keeping Core's commonest-first order. */
-export function choosePickup(rarity: Rarity, pickedUp: boolean): void {
-  const current = pickedUpRarities(readPickup());
-  const next = RARITIES.filter((code) =>
-    code === rarity ? pickedUp : current.has(code),
-  ).join(",");
+function storePickup(next: string): void {
   try {
     window.localStorage.setItem(PICKUP_STORAGE_KEY, next);
   } catch {
     unstored = next;
   }
   for (const listener of listeners) listener();
+}
+
+/** 0 means pick up nothing; 4 includes every rarity. Null is a legacy custom set. */
+export function pickupThresholdLevel(wire: string): number | null {
+  const picked = pickedUpRarities(wire);
+  for (let level = 0; level <= RARITIES.length; level++) {
+    const enabled = RARITIES.slice(RARITIES.length - level);
+    if (RARITIES.every((rarity) => picked.has(rarity) === enabled.includes(rarity))) {
+      return level;
+    }
+  }
+  return null;
+}
+
+/** Slider steps add progressively more common finds; the Core wire stays ordered. */
+export function choosePickupThreshold(level: number): void {
+  if (!Number.isInteger(level) || level < 0 || level > RARITIES.length) return;
+  storePickup(RARITIES.slice(RARITIES.length - level).join(","));
+}
+
+/** Includes or leaves out one rarity, preserving older explicitly chosen sets. */
+export function choosePickup(rarity: Rarity, pickedUp: boolean): void {
+  const current = pickedUpRarities(readPickup());
+  storePickup(
+    RARITIES.filter((code) =>
+      code === rarity ? pickedUp : current.has(code),
+    ).join(","),
+  );
 }
 
 function subscribe(listener: () => void): () => void {

@@ -265,6 +265,40 @@
   justify-content: space-between;
 }
 
+
+/* Four or five stops need equal columns on a narrow mobile Dock. */
+.interface-settings__slider-stops[data-stop-count="4"],
+.interface-settings__slider-stops[data-stop-count="5"] {
+  display: grid;
+  grid-template-columns: repeat(var(--settings-stop-count), minmax(0, 1fr));
+  gap: 0.25rem;
+  font-size: 0.68rem;
+}
+
+.interface-settings__slider-stops[data-stop-count="4"] {
+  --settings-stop-count: 4;
+}
+
+.interface-settings__slider-stops[data-stop-count="5"] {
+  --settings-stop-count: 5;
+}
+
+.interface-settings__slider-stops[data-stop-count="4"] > span,
+.interface-settings__slider-stops[data-stop-count="5"] > span {
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.interface-settings__slider-stops[data-stop-count="4"] > span:first-child,
+.interface-settings__slider-stops[data-stop-count="5"] > span:first-child {
+  text-align: left;
+}
+
+.interface-settings__slider-stops[data-stop-count="4"] > span:last-child,
+.interface-settings__slider-stops[data-stop-count="5"] > span:last-child {
+  text-align: right;
+}
+
 .interface-settings__slider-stops [data-current="true"] {
   color: #f5f3f7;
   font-weight: 650;
