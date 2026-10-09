@@ -529,6 +529,37 @@ mod avaia_lifecycle_api_tests {
     }
 
     #[tokio::test]
+    async fn travel_rejects_non_admin_and_admin_without_owned_avaia() {
+        let (user_app, user_auth) = app(8991, "0x1sky").await;
+        let request = || {
+            Request::post("/api/v1/identity/avaia/travel")
+                .header(AUTHORIZATION, format!("tma {user_auth}"))
+                .header("x-0x1-csrf", "1")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
+                .expect("request")
+        };
+        let denied = user_app.oneshot(request()).await.expect("denied");
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+        assert_eq!(json(denied).await["error"]["code"], "admin_required");
+
+        let (admin_app, admin_auth) = app(8992, "0x0sky").await;
+        let missing = admin_app
+            .oneshot(
+                Request::post("/api/v1/identity/avaia/travel")
+                    .header(AUTHORIZATION, format!("tma {admin_auth}"))
+                    .header("x-0x1-csrf", "1")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("missing Avaia");
+        assert_eq!(missing.status(), StatusCode::CONFLICT);
+        assert_eq!(json(missing).await["error"]["code"], "avaia_unavailable");
+    }
+
+    #[tokio::test]
     async fn read_is_observational_and_returns_derived_suggestion() {
         let (app, auth) = app(8901, "0x1sky").await;
         let response = app

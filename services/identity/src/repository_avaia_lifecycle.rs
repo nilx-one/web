@@ -561,6 +561,83 @@ mod avaia_lifecycle_repository_tests {
     }
 
     #[tokio::test]
+    async fn confirmed_physical_arrival_only_moves_avaia() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let owner: PubDress = "0x1sky".parse().expect("owner");
+        repository
+            .register(&owner, &ProviderIdentity::telegram(8903), 100)
+            .await
+            .expect("registration");
+        let point = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("point");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(101))
+                .await
+                .expect("role denial"),
+            AvaiaTravelOutcome::AdminRequired
+        );
+        repository
+            .set_role(&owner, BondAccessRole::Admin)
+            .await
+            .expect("role");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(102))
+                .await
+                .expect("missing Avaia"),
+            AvaiaTravelOutcome::AvaiaUnavailable
+        );
+        let avaia: AvaiaPubDress = "x1skai".parse().expect("avaia");
+        repository
+            .configure_owned_avaia(&owner, &avaia, 103)
+            .await
+            .expect("configure");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(104))
+                .await
+                .expect("arrival"),
+            AvaiaTravelOutcome::Arrived
+        );
+        let bond_rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM bond_locations WHERE pub_dress = ?")
+                .bind(owner.as_str())
+                .fetch_one(&repository.pool)
+                .await
+                .expect("bond rows");
+        assert_eq!(bond_rows, 0, "GPS travel must not declare a manual Bond position");
+        let arrived = repository
+            .read_avaia_location(&owner)
+            .await
+            .expect("read")
+            .expect("Avaia at destination");
+        assert_eq!(arrived.coordinate, point);
+        assert_eq!(arrived.travel_revision, 1);
+        repository
+            .set_role(&owner, BondAccessRole::User)
+            .await
+            .expect("revoke admin");
+        assert_eq!(
+            repository
+                .bring_avaia_to_bond(&owner, point, DecimalU64::new(105))
+                .await
+                .expect("denied again"),
+            AvaiaTravelOutcome::AdminRequired
+        );
+        assert_eq!(
+            repository
+                .read_avaia_location(&owner)
+                .await
+                .expect("read")
+                .expect("location")
+                .travel_revision,
+            1
+        );
+    }
+
+    #[tokio::test]
     async fn failing_avaia_write_rolls_back_bond_teleport() {
         let repository = IdentityRepository::connect("sqlite::memory:").await.expect("repository");
         let owner: PubDress = "0x1sky".parse().expect("owner");

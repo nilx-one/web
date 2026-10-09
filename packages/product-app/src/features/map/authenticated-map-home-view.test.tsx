@@ -7,6 +7,7 @@ import type {
   AvaiaDriveInput,
   AvatarModel,
   AvatarModelResult,
+  AvaiaTravelResult,
   BondProviderConnections,
   CommittedAwardAccessPort,
   CoreRuntimePort,
@@ -170,6 +171,7 @@ interface ViewOverrides {
     model: "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study",
   ) => Promise<AvatarModelResult | undefined>;
   avaiaSetup?: AvaiaSetupViewState;
+  onBringAvaia?: (position: { longitude: number; latitude: number }) => Promise<AvaiaTravelResult>;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -222,6 +224,9 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.avaiaSetup === undefined
       ? {}
       : { avaiaSetup: overrides.avaiaSetup }),
+    ...(overrides.onBringAvaia === undefined
+      ? {}
+      : { onBringAvaia: overrides.onBringAvaia }),
     ...(overrides.onSlugChange === undefined
       ? {}
       : { onSlugChange: overrides.onSlugChange }),
@@ -320,6 +325,82 @@ describe("AuthenticatedMapHomeView spoken lines", () => {
 });
 
 describe("AuthenticatedMapHomeView", () => {
+  it("offers an admin one GPS-only trip with Avaia and honours No", async () => {
+    chooseLocale("en");
+    const mapRenderer = Object.assign(renderer(), {
+      fog: Object.assign(createFogFieldDouble(), {
+        home: () => ({ longitude: 30.5234, latitude: 50.4501 }),
+      }),
+    });
+    const geolocation = createGeolocationDouble({
+      position: observation({ latitude: 50.48, observedAt: Date.now() }),
+    });
+    const onBringAvaia = vi.fn(async () => ({
+      kind: "service-unavailable" as const,
+    }));
+    const profile = createAvaiaSetupViewState({
+      load: {
+        kind: "available",
+        profile: {
+          pubDress: "x0skai",
+          ownerPubDress: "0x0sky",
+          configurationState: "configured",
+          canTravel: true,
+        },
+      },
+      pending: false,
+    });
+    renderView({ mapRenderer, geolocation, avaiaSetup: profile, onBringAvaia });
+    await screen.findByRole("dialog", { name: "Travel together?" });
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(onBringAvaia).not.toHaveBeenCalled();
+    act(() => {
+      geolocation.publish({
+        kind: "observed",
+        position: observation({ latitude: 50.481, observedAt: Date.now() }),
+      });
+    });
+    expect(screen.queryByRole("dialog", { name: "Travel together?" })).toBeNull();
+  });
+
+  it("moves Avaia only when admin confirms fresh GPS, not on an absent role", async () => {
+    chooseLocale("en");
+    const mapRenderer = Object.assign(renderer(), {
+      fog: Object.assign(createFogFieldDouble(), {
+        home: () => ({ longitude: 30.5234, latitude: 50.4501 }),
+      }),
+    });
+    const geolocation = createGeolocationDouble({
+      position: observation({ latitude: 50.48, observedAt: Date.now() }),
+    });
+    const profile = {
+      pubDress: "x0skai",
+      ownerPubDress: "0x0sky",
+      configurationState: "configured" as const,
+      canTravel: true,
+    };
+    const onBringAvaia = vi.fn(async (): Promise<AvaiaTravelResult> => ({
+      kind: "arrived",
+      profile,
+    }));
+    const setup = createAvaiaSetupViewState({
+      load: { kind: "available", profile },
+      pending: false,
+    });
+    renderView({ mapRenderer, geolocation, avaiaSetup: setup, onBringAvaia });
+    await screen.findByRole("dialog", { name: "Travel together?" });
+    fireEvent.click(screen.getByRole("button", { name: "Yes, bring Avaia" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onBringAvaia).toHaveBeenCalledOnce();
+    expect(onBringAvaia).toHaveBeenCalledWith({
+      longitude: 30.5234,
+      latitude: 50.48,
+    });
+    expect(screen.queryByRole("dialog", { name: "Travel together?" })).toBeNull();
+  });
+
   it("presents the compact Bond pair without inventing reciprocity", () => {
     const mapRenderer = renderer();
 
