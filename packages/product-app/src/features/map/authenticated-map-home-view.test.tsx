@@ -2217,6 +2217,8 @@ describe("AuthenticatedMapHomeView", () => {
       vi.useFakeTimers();
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
       const declared = { longitude: 30.563, latitude: 50.4265 };
+      const avaia = { longitude: 30.5234, latitude: 50.4501 };
+      avaiaStandsAt(avaia);
       renderView({
         mapRenderer,
         geolocation: createDeclaredGeolocation(declared),
@@ -2224,11 +2226,11 @@ describe("AuthenticatedMapHomeView", () => {
       });
       await vi.waitFor(() =>
         expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
-          declared.longitude,
-          declared.latitude,
+          avaia.longitude,
+          avaia.latitude,
         ]),
       );
-
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
       expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
     });
 

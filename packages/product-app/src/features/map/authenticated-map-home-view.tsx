@@ -1843,7 +1843,12 @@ export function AuthenticatedMapHomeView({
       const stance =
         body.seat === "avaia" ? avaiaWalk.stance(nowMs) : undefined;
       if (stance !== undefined) proximityObserver.current?.(stance.point);
-      const handle = createWheelBodyHandle({
+      // A manual Bond coordinate is not Avaia's location. Without an
+      // independent Avaia stance, do not draw her at the Bond's declared spot.
+      const handle =
+        body.seat === "avaia" && stance === undefined && declaredPosition
+          ? null
+          : createWheelBodyHandle({
         body,
         address: address(body.seat),
         study: study(body.seat),
@@ -1855,6 +1860,7 @@ export function AuthenticatedMapHomeView({
         stance,
       });
       if (handle !== null) avatarLayer.upsert(handle);
+      else avatarLayer.remove(BODY_HANDLE_IDS[body.seat]);
       // A walking body carries its card with it, frame by frame.
       if (avaiaWalk.moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
