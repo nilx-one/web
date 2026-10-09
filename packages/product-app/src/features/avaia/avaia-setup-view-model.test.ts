@@ -28,15 +28,17 @@ describe("Avaia setup surface", () => {
     const original = createAvaiaSetupViewState(input());
     expect(original.travelArrival).toBeUndefined();
     const destination = { longitude: 2.3522, latitude: 48.8566 };
-    const traveled = createAvaiaSetupViewState(input({
-      load: {
-        kind: "available",
-        profile: {
-          ...profile,
-          location: { coordinate: destination, travelRevision: "4" },
+    const traveled = createAvaiaSetupViewState(
+      input({
+        load: {
+          kind: "available",
+          profile: {
+            ...profile,
+            location: { coordinate: destination, travelRevision: "4" },
+          },
         },
-      },
-    }));
+      }),
+    );
     expect(traveled.travelArrival).toEqual({
       coordinate: destination,
       revision: "4",

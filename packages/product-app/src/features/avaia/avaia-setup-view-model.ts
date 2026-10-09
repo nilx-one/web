@@ -71,7 +71,10 @@ export interface AvaiaSetupViewState {
   readonly configuration?: AvaiaConfigurationState;
   /** Service-authoritative teleport, separate from local walking position. */
   readonly travelArrival?: {
-    readonly coordinate: { readonly longitude: number; readonly latitude: number };
+    readonly coordinate: {
+      readonly longitude: number;
+      readonly latitude: number;
+    };
     readonly revision: string;
   };
   readonly configurationLabel: string;
