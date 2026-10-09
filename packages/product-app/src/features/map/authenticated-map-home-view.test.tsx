@@ -1705,6 +1705,8 @@ describe("AuthenticatedMapHomeView", () => {
     });
 
     expect(upsert.mock.lastCall?.[0].visible).toBe(false);
+    // Pulling back hides the body; it does not throw the loaded study away.
+    expect(vi.mocked(mapRenderer.avatars!.remove)).not.toHaveBeenCalled();
   });
 
   // Authentication starts with the Avaia at the wheel, in the study its Bond's
@@ -1728,8 +1730,51 @@ describe("AuthenticatedMapHomeView", () => {
       new Set(["avaia"]),
     );
     expect(drawn.at(-1)?.modelId).toBe(avaiaStudy("x0skai", "dasha-study"));
-    // The seat nobody is in is dropped rather than left standing behind.
-    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("bond");
+  });
+
+  // Handing the wheel over and back hides each body in turn instead of
+  // removing it, so neither study is fetched and cloned again on return.
+  it("hides the body that left the seat instead of removing it", async () => {
+    vi.useFakeTimers();
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "ready",
+    });
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Map centred on this device" }),
+      ).toBeVisible(),
+    );
+    act(() => {
+      mapRenderer.moveCamera(
+        { ...mapRenderer.getCamera(), zoom: MAP_BODY_HANDOVER_ZOOM },
+        true,
+      );
+    });
+
+    const upsert = vi.mocked(mapRenderer.avatars!.upsert);
+    const last = (id: string) =>
+      upsert.mock.calls.map(([handle]) => handle).findLast((h) => h.id === id);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(last("bond")?.visible).toBe(true);
+    expect(last("avaia")?.visible).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
+    );
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(last("avaia")?.visible).toBe(true);
+    expect(last("bond")?.visible).toBe(false);
+
+    expect(vi.mocked(mapRenderer.avatars!.remove)).not.toHaveBeenCalled();
   });
 
   it("settles the leaving body before the arriving one, rather than swapping", async () => {
