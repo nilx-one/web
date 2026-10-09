@@ -162,12 +162,15 @@ afterEach(() => {
 });
 
 describe("admin travel on a device", () => {
-  it("applies a new travel revision and independently keeps Avaia there", () => {
+  it("applies a new travel revision and independently keeps Avaia there", async () => {
     const { renderer } = walkRenderer();
     const paris = { longitude: 2.3522, latitude: 48.8566 };
     const berlin = { longitude: 13.405, latitude: 52.52 };
     const hook = render(renderer, {
       travelArrival: { coordinate: paris, revision: "1" },
+    });
+    await act(async () => {
+      await Promise.resolve();
     });
     expect(hook.result.current.stance(performance.now())?.point).toEqual(paris);
     expect(readWorldMemory("0x0sky").travelRevision).toBe("1");
@@ -175,6 +178,9 @@ describe("admin travel on a device", () => {
     hook.rerender(
       props(renderer, { travelArrival: { coordinate: berlin, revision: "2" } }),
     );
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(hook.result.current.stance(performance.now())?.point).toEqual(
       berlin,
     );

@@ -1324,18 +1324,33 @@ export function useAvaiaWalk({
     ) {
       return;
     }
-    const point = { longitude: arrivalLongitude, latitude: arrivalLatitude };
-    era.current += 1;
-    if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
-    wake.current = undefined;
-    setWalk(undefined);
-    setStudy(undefined);
-    setPause(undefined);
-    setRest({ point, bearingDeg: 0 });
-    rememberWorld(owner, {
-      avaia: { ...point, bearingDeg: 0 },
-      travelRevision: arrivalRevision,
+    // Profile receipt is external input: handle the new arrival in a
+    // microtask rather than dispatching React state synchronously from effect
+    // setup. A superseded render/unmount cancels its pending application.
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (
+        cancelled ||
+        readWorldMemory(owner).travelRevision === arrivalRevision
+      ) {
+        return;
+      }
+      const point = { longitude: arrivalLongitude, latitude: arrivalLatitude };
+      era.current += 1;
+      if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
+      wake.current = undefined;
+      setWalk(undefined);
+      setStudy(undefined);
+      setPause(undefined);
+      setRest({ point, bearingDeg: 0 });
+      rememberWorld(owner, {
+        avaia: { ...point, bearingDeg: 0 },
+        travelRevision: arrivalRevision,
+      });
     });
+    return () => {
+      cancelled = true;
+    };
   }, [
     owner,
     arrivalRevision,
