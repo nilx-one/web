@@ -112,7 +112,14 @@ function parseAvaiaLocation(
     return undefined;
   }
   const coordinate = parseAvaiaCoordinate(value.coordinate);
-  return coordinate === undefined ? undefined : { coordinate };
+  if (coordinate === undefined) return undefined;
+  const revision = value.travel_revision;
+  return {
+    coordinate,
+    ...(typeof revision === "string" && /^[1-9][0-9]*$/.test(revision)
+      ? { travelRevision: revision }
+      : {}),
+  };
 }
 
 /**

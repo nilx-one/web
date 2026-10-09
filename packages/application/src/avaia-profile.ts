@@ -22,6 +22,8 @@ export type AvaiaConfigurationState = "unconfigured" | "configured";
  */
 export interface AvaiaLocationProjection {
   readonly coordinate: WorldPosition;
+  /** Nonzero only after an explicit admin Telegram journey. */
+  readonly travelRevision?: string;
 }
 
 /** The owner-authenticated Avaia the identity service keeps. */

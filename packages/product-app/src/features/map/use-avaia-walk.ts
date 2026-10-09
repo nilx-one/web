@@ -165,6 +165,11 @@ export interface AvaiaWalkInput {
         readonly declared?: true;
       })
     | undefined;
+  /** Authoritative admin trip, delivered only when the service revision changed. */
+  readonly travelArrival?: {
+    readonly coordinate: MapPointSelection;
+    readonly revision: string;
+  };
   /** The study the Avaia is drawn in, whose voice it speaks with. */
   readonly model: AvatarModelId | undefined;
   readonly locale: ProductLocale;
@@ -387,6 +392,7 @@ export function useAvaiaWalk({
   renderer,
   active,
   observed,
+  travelArrival,
   model,
   locale,
   avaiaAddress,
@@ -1303,6 +1309,43 @@ export function useAvaiaWalk({
             },
     });
   }, [owner, settledBearing, settledLatitude, settledLongitude]);
+
+  // A travel revision is an explicit one-off admin teleport. It overrides
+  // this device's older local walk once; future movement remains Avaia's own.
+  const arrivalRevision = travelArrival?.revision;
+  const arrivalLongitude = travelArrival?.coordinate.longitude;
+  const arrivalLatitude = travelArrival?.coordinate.latitude;
+  useEffect(() => {
+    if (
+      arrivalRevision === undefined ||
+      arrivalLongitude === undefined ||
+      arrivalLatitude === undefined ||
+      readWorldMemory(owner).travelRevision === arrivalRevision
+    ) {
+      return;
+    }
+    const point = { longitude: arrivalLongitude, latitude: arrivalLatitude };
+    era.current += 1;
+    if (wake.current !== undefined) globalThis.clearTimeout(wake.current);
+    wake.current = undefined;
+    setWalk(undefined);
+    setStudy(undefined);
+    setPause(undefined);
+    setRest({ point, bearingDeg: 0 });
+    rememberWorld(owner, {
+      avaia: { ...point, bearingDeg: 0 },
+      travelRevision: arrivalRevision,
+    });
+  }, [
+    owner,
+    arrivalRevision,
+    arrivalLongitude,
+    arrivalLatitude,
+    setWalk,
+    setStudy,
+    setPause,
+    setRest,
+  ]);
 
   // A line is on the card for as long as a person needs to read it.
   useEffect(() => {
