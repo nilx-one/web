@@ -13,7 +13,7 @@ export interface FogPalette {
   readonly shadow: FogColor;
   /** The mist's sunlit tops. */
   readonly light: FogColor;
-  /** Light held inside the mist: the frontier's rim and the drifting motes. */
+  /** Light held inside the mist: the frontier's rim and the motes. */
   readonly glow: FogColor;
   /**
    * How much of that glow spills past the mist as added light, 0..1. Added
