@@ -216,6 +216,8 @@ export function createBondLocationGeolocation(
       let stopped = false;
       let current: string | undefined;
       let stopDevice: GeolocationUnsubscribe | undefined;
+      // A slow prior read may not undo a more recent manual declaration.
+      let latestCheck = 0;
 
       const apply = (mode: BondLocationMode): void => {
         if (stopped) return;
@@ -243,7 +245,13 @@ export function createBondLocationGeolocation(
         observer(declaredObservation(mode.position));
       };
       const check = (): void => {
-        void readLocation().then(apply, () => undefined);
+        const checkId = ++latestCheck;
+        void readLocation().then(
+          (mode) => {
+            if (!stopped && checkId === latestCheck) apply(mode);
+          },
+          () => undefined,
+        );
       };
 
       check();

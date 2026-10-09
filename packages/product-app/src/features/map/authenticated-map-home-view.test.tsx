@@ -14,6 +14,7 @@ import type {
   NearbySpeechAccessPort,
 } from "@nilx-one/application";
 import {
+  createBondLocationGeolocation,
   createDeclaredGeolocation,
   type GeolocationCapability,
   type SoundCapability,
@@ -2229,6 +2230,44 @@ describe("AuthenticatedMapHomeView", () => {
       );
 
       expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
+    });
+
+    it("measures manual Bond location against Avaia's independent place, never real device GPS", async () => {
+      vi.useFakeTimers();
+      const manual = { longitude: 30.5234, latitude: 50.4501 };
+      const avaia = { longitude: manual.longitude + 0.09, latitude: manual.latitude };
+      avaiaStandsAt(avaia);
+      const device = {
+        readPermission: vi.fn(async () => "granted" as const),
+        requestPosition: vi.fn(async () => ({
+          kind: "failed" as const,
+          reason: "host-failed" as const,
+        })),
+        watchPosition: vi.fn(() => () => undefined),
+      };
+      const geolocation = createBondLocationGeolocation({
+        device,
+        readLocation: async () => ({ kind: "manual", position: manual }),
+      });
+      const asked = vi.fn(nearbyProximityCore().avaiaProximity);
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      renderView({
+        mapRenderer,
+        geolocation,
+        findItems: { avaiaProximity: asked },
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(asked).toHaveBeenCalled(),
+      );
+      const distance = asked.mock.calls[0]?.[0] ?? 0;
+      expect(distance).toBeGreaterThan(5_000);
+      expect(distance).toBeLessThan(8_000);
+      expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
+      expect(device.readPermission).not.toHaveBeenCalled();
+      expect(device.requestPosition).not.toHaveBeenCalled();
+      expect(device.watchPosition).not.toHaveBeenCalled();
     });
 
     it("asks before revealing fog, then sends the Avaia to reveal it", async () => {

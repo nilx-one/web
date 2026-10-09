@@ -581,7 +581,7 @@ export function useAvaiaWalk({
       if (now.study !== undefined) return now.study.at;
       if (now.pause !== undefined) return now.pause.at;
       if (now.rest !== undefined) return now.rest.point;
-      return now.observed === undefined
+      return now.observed === undefined || now.observed.declared === true
         ? undefined
         : {
             longitude: now.observed.longitude,
