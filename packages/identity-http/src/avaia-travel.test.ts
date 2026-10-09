@@ -14,7 +14,8 @@ function response(status: number, body: unknown): Response {
 
 describe("confirmed Avaia GPS travel", () => {
   it("posts signed arrival coordinates", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    fetch.mockResolvedValue(
       response(200, {
         pub_dress: "x0skai",
         owner_pub_dress: "0x0sky",
@@ -57,7 +58,8 @@ describe("confirmed Avaia GPS travel", () => {
   });
 
   it("rejects non-admin travel", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    fetch.mockResolvedValue(
       response(403, { error: { code: "admin_required" } }),
     );
     const adapter = createIdentityHttpAdapter({
