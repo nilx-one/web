@@ -254,13 +254,33 @@ impl IdentityRepository {
         Ok(())
     }
 
-    /// One explicit admin action sets two independent positions atomically.
-    /// It is not a BondChain interaction and does not bind future movements.
+    /// Manual Telegram travel declares both positions atomically.
     pub async fn travel_with_avaia(
         &self,
         owner: &PubDress,
         coordinate: GeoCoordinate,
         at: DecimalU64,
+    ) -> Result<AvaiaTravelOutcome, RepositoryError> {
+        self.travel_avaia(owner, coordinate, at, true).await
+    }
+
+    /// A Bond physically present at the GPS fix only brings its Avaia.
+    /// No declared/manual Bond position is written.
+    pub async fn bring_avaia_to_bond(
+        &self,
+        owner: &PubDress,
+        coordinate: GeoCoordinate,
+        at: DecimalU64,
+    ) -> Result<AvaiaTravelOutcome, RepositoryError> {
+        self.travel_avaia(owner, coordinate, at, false).await
+    }
+
+    async fn travel_avaia(
+        &self,
+        owner: &PubDress,
+        coordinate: GeoCoordinate,
+        at: DecimalU64,
+        declare_bond: bool,
     ) -> Result<AvaiaTravelOutcome, RepositoryError> {
         self.initialize_avaia_configuration().await?;
         let at = i64::try_from(at.get())
@@ -292,20 +312,22 @@ impl IdentityRepository {
             return Ok(AvaiaTravelOutcome::AvaiaUnavailable);
         }
 
-        sqlx::query(
-            "INSERT INTO bond_locations \
-             (pub_dress, mode, longitude_e7, latitude_e7, updated_at) \
-             VALUES (?, 'manual', ?, ?, ?) \
-             ON CONFLICT(pub_dress) DO UPDATE SET mode = 'manual', \
-             longitude_e7 = excluded.longitude_e7, latitude_e7 = excluded.latitude_e7, \
-             updated_at = excluded.updated_at",
-        )
-        .bind(owner.as_str())
-        .bind(i64::from(coordinate.longitude_e7()))
-        .bind(i64::from(coordinate.latitude_e7()))
-        .bind(at)
-        .execute(&mut *tx)
-        .await?;
+        if declare_bond {
+            sqlx::query(
+                "INSERT INTO bond_locations \
+                 (pub_dress, mode, longitude_e7, latitude_e7, updated_at) \
+                 VALUES (?, 'manual', ?, ?, ?) \
+                 ON CONFLICT(pub_dress) DO UPDATE SET mode = 'manual', \
+                 longitude_e7 = excluded.longitude_e7, latitude_e7 = excluded.latitude_e7, \
+                 updated_at = excluded.updated_at",
+            )
+            .bind(owner.as_str())
+            .bind(i64::from(coordinate.longitude_e7()))
+            .bind(i64::from(coordinate.latitude_e7()))
+            .bind(at)
+            .execute(&mut *tx)
+            .await?;
+        }
 
         sqlx::query(
             "INSERT INTO avaia_locations \
