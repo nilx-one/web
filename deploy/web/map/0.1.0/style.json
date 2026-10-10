@@ -492,7 +492,11 @@
       "source": "basemap",
       "source-layer": "water",
       "minzoom": 11,
-      "filter": ["has", "name"],
+      "filter": [
+        "all",
+        ["has", "name"],
+        ["!in", "kind", "swimming_pool", "fountain", "drain", "ditch"]
+      ],
       "layout": {
         "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
         "text-font": ["Noto Sans Regular"],
@@ -565,7 +569,11 @@
       "source-layer": "places",
       "minzoom": 13,
       "maxzoom": 17.5,
-      "filter": ["==", "kind", "neighbourhood"],
+      "filter": [
+        "all",
+        ["==", "kind", "neighbourhood"],
+        ["==", "kind_detail", "suburb"]
+      ],
       "layout": {
         "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
         "text-font": ["Noto Sans Regular"],
@@ -588,7 +596,7 @@
       "source-layer": "places",
       "minzoom": 10,
       "maxzoom": 15,
-      "filter": ["in", "kind", "macrohood", "borough", "localadmin"],
+      "filter": ["in", "kind", "borough", "localadmin"],
       "layout": {
         "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
         "text-font": ["Noto Sans SemiBold"],
@@ -610,7 +618,11 @@
       "source": "basemap",
       "source-layer": "places",
       "minzoom": 6,
-      "filter": ["==", "kind", "locality"],
+      "filter": [
+        "all",
+        ["==", "kind", "locality"],
+        ["in", "kind_detail", "city", "town", "village", "hamlet"]
+      ],
       "layout": {
         "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
         "text-font": ["Noto Sans SemiBold"],
@@ -639,8 +651,21 @@
       "type": "symbol",
       "source": "basemap",
       "source-layer": "pois",
-      "minzoom": 16.5,
-      "filter": ["has", "name"],
+      "minzoom": 14,
+      "filter": [
+        "all",
+        ["has", "name"],
+        [
+          "in",
+          "kind",
+          "peak",
+          "hill",
+          "park",
+          "forest",
+          "wood",
+          "nature_reserve"
+        ]
+      ],
       "layout": {
         "text-field": ["coalesce", ["get", "name:uk"], ["get", "name"]],
         "text-font": ["Noto Sans Regular"],
