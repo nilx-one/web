@@ -35,6 +35,9 @@ import {
 
 export type { AwardKind };
 
+/** What an orb pays, as Core's `ORB_EXPERIENCE` sets it. */
+export const XP_ORB_PICKED_UP = 10;
+
 /** One award, as this device's history records it. Never sent. */
 export interface AwardRecord {
   readonly kind: AwardKind;
@@ -89,6 +92,11 @@ export function awardAmount(
       if (earner === "avaia" && tier > AVAIA_PICKUP_MAX_TIER) return null;
       return ROLL_TABLE.tiers[tier - 1]?.experience ?? null;
     }
+    // Whoever reached it first, an Avaia or a Bond. Committed only: an orb
+    // has to be claimed, so it is never published the legacy way. Core's
+    // `ORB_EXPERIENCE`, which the service prices it by; shown, never sent.
+    case "orb_picked_up":
+      return XP_ORB_PICKED_UP;
     // Priced by its recipe in Core, by the service: never estimated here,
     // and never published the legacy way.
     case "craft_finished":

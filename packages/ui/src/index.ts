@@ -17,6 +17,7 @@ export {
   StatusToastStack,
   type StatusToastCopy,
   type StatusToastItem,
+  type StatusToastTone,
   type StatusToastKind,
   type StatusToastStackProps,
 } from "./status-toast";

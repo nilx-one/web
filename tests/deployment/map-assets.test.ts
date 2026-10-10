@@ -4,7 +4,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
+import {
+  featureFilter,
+  validateStyleMin,
+} from "@maplibre/maplibre-gl-style-spec";
 import { MAP_SCALE_ZOOM } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
@@ -29,6 +32,7 @@ interface MapStyleLayer {
   readonly maxzoom?: number;
   readonly paint?: Record<string, unknown>;
   readonly layout?: Record<string, unknown>;
+  readonly filter?: unknown;
 }
 
 interface MapStyleLight {
@@ -356,6 +360,67 @@ describe("map deployment assets", () => {
           ).toBe(true);
         }
       }
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "names only streets, districts, settlements, hills, waters, parks and forests (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      // Features as the regional archive carries them around Kyiv.
+      const shown = (
+        id: string,
+        properties: Record<string, string>,
+      ): boolean => {
+        const index = style.layers.findIndex(
+          (candidate) => candidate.id === id,
+        );
+        const filter = featureFilter(
+          style.layers[index]?.filter as never,
+          `layers[${index}].filter`,
+        );
+        return filter.filter({ zoom: 15 }, {
+          type: 1,
+          properties,
+          geometry: [],
+        } as never);
+      };
+      const place = (kind: string, kind_detail: string) => ({
+        name: "x",
+        kind,
+        kind_detail,
+      });
+      const anyPlace = (properties: Record<string, string>) =>
+        ["place-neighbourhood", "place-district", "place-locality"].some((id) =>
+          shown(id, properties),
+        );
+
+      // Kyiv, Vyshneve, Kriukivshchyna; Lukianivka, Podil.
+      for (const detail of ["city", "town", "village", "hamlet"]) {
+        expect(shown("place-locality", place("locality", detail))).toBe(true);
+      }
+      expect(
+        shown("place-neighbourhood", place("neighbourhood", "suburb")),
+      ).toBe(true);
+      expect(shown("place-district", place("borough", "borough"))).toBe(true);
+      // Saperne Pole and Cherepanova Hora are quarters; Navodnytska Balka and
+      // numbered plots are tracts; Sobacha Stezhka a minor neighbourhood;
+      // garden plots are allotments.
+      expect(anyPlace(place("macrohood", "quarter"))).toBe(false);
+      expect(anyPlace(place("locality", "locality"))).toBe(false);
+      expect(anyPlace(place("locality", "allotments"))).toBe(false);
+      expect(anyPlace(place("neighbourhood", "neighbourhood"))).toBe(false);
+
+      for (const kind of ["peak", "hill", "park", "forest", "wood"]) {
+        expect(shown("poi-labels", { name: "x", kind })).toBe(true);
+      }
+      for (const kind of ["cafe", "bus_stop", "memorial", "school"]) {
+        expect(shown("poi-labels", { name: "x", kind })).toBe(false);
+      }
+      expect(shown("water-labels", { name: "x", kind: "water" })).toBe(true);
+      expect(shown("water-labels", { name: "x", kind: "swimming_pool" })).toBe(
+        false,
+      );
     },
   );
 

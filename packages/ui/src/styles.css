@@ -551,6 +551,25 @@ a {
   background: var(--negative);
 }
 
+/* A toast that is someone's wears their experience colour. */
+.status-toast--tone-bond {
+  border-color: color-mix(in srgb, var(--xp-bond) 55%, transparent);
+}
+
+.status-toast--tone-bond .toast__marker {
+  background: var(--xp-bond);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--xp-bond) 18%, transparent);
+}
+
+.status-toast--tone-avaia {
+  border-color: color-mix(in srgb, var(--xp-avaia) 55%, transparent);
+}
+
+.status-toast--tone-avaia .toast__marker {
+  background: var(--xp-avaia);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--xp-avaia) 18%, transparent);
+}
+
 .toast__title {
   font-size: 13px;
   font-weight: 720;

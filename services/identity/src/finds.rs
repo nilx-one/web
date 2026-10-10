@@ -185,6 +185,8 @@ pub enum AwardKind {
     /// A repair or a craft finished (`docs/economy.md` in core): the Bond's
     /// own doing, priced by its recipe.
     CraftFinished,
+    /// One orb of a spill, picked up by whoever reached it first.
+    OrbPickedUp,
 }
 
 impl AwardKind {
@@ -197,6 +199,7 @@ impl AwardKind {
             "find_seen" => Self::FindSeen,
             "find_picked_up" => Self::FindPickedUp,
             "craft_finished" => Self::CraftFinished,
+            "orb_picked_up" => Self::OrbPickedUp,
             _ => return None,
         })
     }
@@ -210,6 +213,7 @@ impl AwardKind {
             Self::FindSeen => "find_seen",
             Self::FindPickedUp => "find_picked_up",
             Self::CraftFinished => "craft_finished",
+            Self::OrbPickedUp => "orb_picked_up",
         }
     }
 }
@@ -235,6 +239,7 @@ pub fn award_amount(kind: AwardKind, earner: Earner, tier: Option<u8>) -> Option
         (AwardKind::LandmarkStudied, Earner::Avaia) => Some(EXPERIENCE_UNIT * 9 / 2),
         (AwardKind::LandmarkNoticed, Earner::Bond) => Some(EXPERIENCE_UNIT * 2),
         (AwardKind::FindSeen, _) => Some(FIND_SEEN_EXPERIENCE),
+        (AwardKind::OrbPickedUp, _) => Some(ORB_EXPERIENCE),
         // Priced by its recipe: `craft_award`.
         (AwardKind::CraftFinished, _) => None,
         (AwardKind::FindPickedUp, earner) => {
@@ -274,6 +279,18 @@ pub fn pick_up_amount(artifact_id: Option<&str>, tier: u8) -> Option<u64> {
     }
 }
 
+/// What one orb pays: Core's `ORB_EXPERIENCE`.
+pub const ORB_EXPERIENCE: u64 = nilxone_contracts::ORB_EXPERIENCE as u64;
+
+/// How long a spill lies on the ground: Core's `ORB_LIFETIME_MS`.
+pub const ORB_LIFETIME_MS: i64 = nilxone_contracts::ORB_LIFETIME_MS as i64;
+
+/// How many orbs a find spills, as Core counts them, or `None` for an id
+/// Core does not read as a find.
+pub fn orb_count(artifact_id: &str) -> Option<u8> {
+    nilxone_contracts::orb_count(artifact_id).ok()
+}
+
 /// The pack the service rolls claimed finds with. A claim cannot choose its
 /// pack: if it could, any segment could be made to roll a rare find. It has
 /// to equal the pack id the client rolls with once finds ship.
@@ -305,6 +322,8 @@ pub fn weekly_cap(kind: AwardKind, tier: Option<u8>) -> u32 {
         // (see `craft_cap_bucket`) allows a few.
         (AwardKind::CraftFinished, Some(LEGENDARY_CRAFT_BUCKET)) => 3,
         (AwardKind::CraftFinished, _) => 300,
+        // Thirty at most per find, and a find spills once a week.
+        (AwardKind::OrbPickedUp, _) => 1_500,
     }
 }
 
@@ -402,6 +421,23 @@ mod tests {
         assert_eq!(pick_up_amount(Some(kyiv), 6), Some(1000));
         assert_eq!(pick_up_amount(Some("art:nope"), 5), None);
         assert_eq!(pick_up_amount(None, 5), Some(400));
+    }
+
+    // Core's golden counts (`orb_spill.rs`): the service claims against them.
+    #[test]
+    fn counts_orbs_as_core_does() {
+        let counts: Vec<Option<u8>> = (0..5)
+            .map(|row| orb_count(&format!("art:seg:{}:298243:e2908:1:0", 312_346 + row)))
+            .collect();
+        assert_eq!(counts, [Some(20), Some(23), Some(14), Some(7), Some(27)]);
+        assert_eq!(
+            award_amount(AwardKind::OrbPickedUp, Earner::Avaia, None),
+            Some(ORB_EXPERIENCE)
+        );
+        assert_eq!(
+            award_amount(AwardKind::OrbPickedUp, Earner::Bond, Some(1)),
+            None
+        );
     }
 
     // The golden snapshot from `artifact-contract`'s index.test.ts.

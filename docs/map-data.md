@@ -169,15 +169,23 @@ layers from same-origin glyph ranges at `/map/0.1.0/fonts/{fontstack}/{range}.pb
 OFL-1.1, see `deploy/web/third_party/noto-sans`). Names read `name:uk` first and
 fall back to `name`. Appearance in zoom follows the scale ladder:
 
-| Layer                 | Kind filter                          | From zoom |
-| --------------------- | ------------------------------------ | --------- |
-| `place-locality`      | `locality`                           | 6         |
-| `place-district`      | `macrohood`, `borough`, `localadmin` | 10–15     |
-| `water-labels`        | named water                          | 11        |
-| `road-labels-major`   | `highway`, `major_road`              | 13        |
-| `place-neighbourhood` | `neighbourhood`                      | 13–17.5   |
-| `road-labels-minor`   | `medium_road`, `minor_road`          | 15        |
-| `poi-labels`          | any named `pois` point               | 16.5      |
+| Layer                 | Filter                                                           | From zoom |
+| --------------------- | ---------------------------------------------------------------- | --------- |
+| `place-locality`      | `locality` that is a `city`, `town`, `village` or `hamlet`       | 6         |
+| `place-district`      | `borough`, `localadmin`                                          | 10–15     |
+| `water-labels`        | named water, not a pool, fountain, drain or ditch                | 11        |
+| `road-labels-major`   | `highway`, `major_road`                                          | 13        |
+| `place-neighbourhood` | `neighbourhood` that is a `suburb` (Lukianivka, Podil)           | 13–17.5   |
+| `poi-labels`          | named `peak`, `hill`, `park`, `forest`, `wood`, `nature_reserve` | 14        |
+| `road-labels-minor`   | `medium_road`, `minor_road`                                      | 15        |
+
+Only streets, districts and sub-districts, settlements, hills, waters, parks
+and forests are named; landmarks are the application's own pins. The archive
+also names OSM quarters (`macrohood`/`quarter`: Saperne Pole, Cherepanova Hora),
+tracts and numbered plots (`locality`/`locality`: Navodnytska Balka), garden
+plots (`allotments`) and minor neighbourhoods (`neighbourhood`/`neighbourhood`);
+none of them is drawn. The archive carries no city-district (raion) points, so
+none is named until one is published.
 
 Districts hand over to neighbourhoods as the camera closes in, and streets
 appear before neighbourhood names fade. The `kind` values are Protomaps v4's;

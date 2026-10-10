@@ -22,6 +22,10 @@ import type {
   CorePubDressLabelResult,
   CoreRuntimePort,
   CoreRuntimeStatus,
+  OrbCoordinate,
+  OrbWorldInput,
+  OrbWorldOrb,
+  OrbWorldView,
 } from "@nilx-one/application";
 
 export const CORE_CONTRACT_VERSION = "0.1.0";
@@ -560,6 +564,72 @@ function decodeProximityPolicy(value: string): AvaiaProximityPolicy {
   return parsed as unknown as AvaiaProximityPolicy;
 }
 
+const DECIMAL = /^(0|[1-9][0-9]*)$/;
+const SIGNED_DECIMAL = /^(0|-?[1-9][0-9]*)$/;
+
+function isOrbCoordinate(value: unknown): value is OrbCoordinate {
+  if (typeof value !== "object" || value === null) return false;
+  const { longitude_e7: longitude, latitude_e7: latitude } = value as Record<
+    string,
+    unknown
+  >;
+  return (
+    typeof longitude === "string" &&
+    SIGNED_DECIMAL.test(longitude) &&
+    typeof latitude === "string" &&
+    SIGNED_DECIMAL.test(latitude)
+  );
+}
+
+function isOrbIdList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((id) => typeof id === "string" && id.startsWith("orb:"))
+  );
+}
+
+/** Core's orb world answer, or a throw for anything that does not read as one. */
+export function decodeOrbWorld(wire: string): OrbWorldView {
+  const parsed = JSON.parse(wire) as Record<string, unknown> | null;
+  const view = parsed?.view as Record<string, unknown> | undefined;
+  if (
+    parsed?.ok !== true ||
+    typeof view !== "object" ||
+    view === null ||
+    !Array.isArray(view.orbs) ||
+    !view.orbs.every((orb: unknown) => {
+      if (typeof orb !== "object" || orb === null) return false;
+      const {
+        id,
+        kind,
+        at,
+        lands_at: landsAt,
+      } = orb as Record<string, unknown>;
+      return (
+        typeof id === "string" &&
+        (kind === "orb" || kind === "goal") &&
+        isOrbCoordinate(at) &&
+        typeof landsAt === "string" &&
+        DECIMAL.test(landsAt)
+      );
+    }) ||
+    !isOrbIdList(view.bond_reach) ||
+    !isOrbIdList(view.avaia_reach) ||
+    !(
+      view.next_expiry === null ||
+      (typeof view.next_expiry === "string" && DECIMAL.test(view.next_expiry))
+    )
+  ) {
+    throw new Error("0x1 Core returned an invalid orb world");
+  }
+  return {
+    orbs: view.orbs as OrbWorldOrb[],
+    bond_reach: view.bond_reach,
+    avaia_reach: view.avaia_reach,
+    next_expiry: view.next_expiry as string | null,
+  };
+}
+
 export interface CoreWasmBindings {
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
@@ -588,6 +658,7 @@ export interface CoreWasmBindings {
     artifacts: number,
     previouslyBlocked: boolean,
   ): AvaiaProximityPolicy;
+  orbWorld?(world: OrbWorldInput, nowMs: number): OrbWorldView;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
@@ -628,6 +699,8 @@ export interface GeneratedCoreWasmModule {
     artifacts: number,
     previously_blocked: boolean,
   ): string;
+  /** Absent from a runtime built before Core's orb spills. */
+  orb_world?(world: string, now_ms: string): string;
   /** Absent from a runtime built before Core's Avaia drive. */
   avaia_drive_step?(
     state: string,
@@ -775,6 +848,18 @@ export async function loadGeneratedCoreWasmBindings(
                 artifacts,
                 previouslyBlocked,
               ),
+            );
+          },
+        }),
+    ...(runtime.orb_world === undefined
+      ? {}
+      : {
+          orbWorld: (world: OrbWorldInput, nowMs: number) => {
+            if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+              throw new RangeError("invalid orb world time");
+            }
+            return decodeOrbWorld(
+              runtime.orb_world!(JSON.stringify(world), String(nowMs)),
             );
           },
         }),
@@ -953,6 +1038,17 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm backpack gift binding is missing");
     }
     return bindings.backpackGiftDue(state, bondLevel);
+  }
+
+  public async orbWorld(
+    world: OrbWorldInput,
+    nowMs: number,
+  ): Promise<OrbWorldView> {
+    const bindings = await this.loadBindings();
+    if (bindings.orbWorld === undefined) {
+      throw new Error("0x1 Core Wasm orb world binding is missing");
+    }
+    return bindings.orbWorld(world, nowMs);
   }
 
   public async picksUp(rarities: string, tier: number): Promise<boolean> {

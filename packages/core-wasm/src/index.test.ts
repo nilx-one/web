@@ -512,6 +512,50 @@ describe("CoreWasmClient", () => {
     }
   });
 
+  it("hands the orb world to Core as its wire and decodes the answer strictly", async () => {
+    const at = { longitude_e7: "304469000", latitude_e7: "504655000" };
+    const view = {
+      orbs: [
+        { id: "orb:art:seg:1:2:e3:1:0:0", kind: "orb", at, lands_at: "1070" },
+      ],
+      bond_reach: [],
+      avaia_reach: ["orb:art:seg:1:2:e3:1:0:0"],
+      next_expiry: "1801000",
+    };
+    const seen: string[] = [];
+    let answer = JSON.stringify({ ok: true, view });
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          orb_world: (world, now) => {
+            seen.push(`${world}|${now}`);
+            return answer;
+          },
+        }),
+    });
+    const world = { spills: [], picked: [], bond: null, avaia: at };
+    expect(bindings.orbWorld?.(world, 1_000)).toEqual(view);
+    expect(seen).toEqual([`${JSON.stringify(world)}|1000`]);
+
+    for (const bad of [
+      { ok: false, error: "invalid" },
+      { ok: true, view: { ...view, next_expiry: 5 } },
+      { ok: true, view: { ...view, avaia_reach: ["art:1"] } },
+      {
+        ok: true,
+        view: { ...view, orbs: [{ ...view.orbs[0], kind: "rock" }] },
+      },
+      {
+        ok: true,
+        view: { ...view, orbs: [{ ...view.orbs[0], lands_at: 1070 }] },
+      },
+    ]) {
+      answer = JSON.stringify(bad);
+      expect(() => bindings.orbWorld?.(world, 1_000)).toThrow();
+    }
+    expect(() => bindings.orbWorld?.(world, -1)).toThrow(RangeError);
+  });
+
   it("has no proximity on a runtime built before it", async () => {
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () => generatedRuntime(),

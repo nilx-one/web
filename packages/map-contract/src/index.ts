@@ -475,6 +475,24 @@ export interface MapFogMark {
   readonly progress?: number;
 }
 
+/**
+ * One orb lying on the world, or the find a trail of them leads to. It is
+ * presentation only: where to draw it and when it fell, never who spilled it
+ * or who may pick it up.
+ */
+export interface MapOrb {
+  /** Stable while it lies, so a redraw does not drop it again. */
+  readonly id: string;
+  readonly longitude: number;
+  readonly latitude: number;
+  readonly kind: "orb" | "goal";
+  /**
+   * Wall-clock milliseconds it lands at. An orb drawn before then is still
+   * falling; one whose time has passed is simply there.
+   */
+  readonly landsAt: number;
+}
+
 export type MapRendererStatus =
   | { readonly kind: "unmounted" }
   | { readonly kind: "loading" }
@@ -610,6 +628,8 @@ export interface MapRenderer {
   setFogMarks?(marks: readonly MapFogMark[]): void;
   /** Pins landmarks on the world; an empty list clears them. */
   setPinnedLandmarks?(landmarks: readonly MapPinnedLandmark[]): void;
+  /** Lays orbs on the world; an empty list clears them. */
+  setOrbs?(orbs: readonly MapOrb[]): void;
 }
 
 /**

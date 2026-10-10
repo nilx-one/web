@@ -71,7 +71,8 @@ export type AwardKind =
   | "landmark_noticed"
   | "find_seen"
   | "find_picked_up"
-  | "craft_finished";
+  | "craft_finished"
+  | "orb_picked_up";
 
 /**
  * One award as the service gets it: its commitment, where it sits on this
@@ -94,6 +95,8 @@ export interface CommittedAward {
   readonly artifactId?: string;
   /** For `craft_finished` only: Core's recipe id, which prices it. */
   readonly recipe?: string;
+  /** For `orb_picked_up` only, with its find's `artifactId`: which orb. */
+  readonly orb?: number;
 }
 
 /**
@@ -165,5 +168,49 @@ export function hasCommittedAwardAccess(
   return (
     typeof candidate.commitAwards === "function" &&
     typeof candidate.readClaims === "function"
+  );
+}
+
+/**
+ * A spill of orbs as the service answers it: the find's public sha, how many
+ * orbs fell, when they are gone (wall-clock milliseconds), and which of them
+ * someone already picked up. It names nobody, neither who spilled nor who
+ * picked up.
+ */
+export interface OrbSpillView {
+  readonly sha: string;
+  readonly count: number;
+  readonly expiresAt: number;
+  readonly taken: readonly number[];
+}
+
+export type OrbSpillResult =
+  | { kind: "spilled"; spill: OrbSpillView }
+  | { kind: "rejected"; reason: PubInfoRejection }
+  | { kind: "service-unavailable" };
+
+export type OrbSpillsReadResult =
+  | { kind: "read"; spills: readonly OrbSpillView[] }
+  | { kind: "rejected"; reason: PubInfoRejection }
+  | { kind: "service-unavailable" };
+
+/**
+ * Spills the orbs of a find whose cell this Bond opened, and reads the live
+ * spills around by sha bucket, as claims are read. Apart from
+ * `CommittedAwardAccessPort` so a service without spills stays a valid host:
+ * its Bonds simply see no orbs.
+ */
+export interface OrbSpillAccessPort {
+  spillOrbs(artifactId: string): Promise<OrbSpillResult>;
+  /** `buckets`: up to sixteen, each two lowercase hex digits. */
+  readOrbSpills(buckets: readonly string[]): Promise<OrbSpillsReadResult>;
+}
+
+export function hasOrbSpillAccess(value: unknown): value is OrbSpillAccessPort {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<OrbSpillAccessPort>;
+  return (
+    typeof candidate.spillOrbs === "function" &&
+    typeof candidate.readOrbSpills === "function"
   );
 }
