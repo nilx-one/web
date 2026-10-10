@@ -189,6 +189,18 @@ its own play record. The code that ends a scene is pinned to exactly that.
 Whether the introduction was played through or skipped is a play record on
 this device, `nilx-one.guide.v1.<owner>`, transport-eligible like the others
 ([State placement](state-placement.md)). "Later" is kept for the session only.
+The same record says whether her word on new ground is owed: from the first
+cell the Bond opens beyond its starting one, by Avaia or on foot.
+
+## New ground
+
+After that first opened cell she explains the reveal timer — each cell takes
+its own time, longer where more lies hidden — and the orbs that spill from
+opened ground: each one picked up makes the Bond or its Avaia more experienced.
+The scene speaks of the Avaia by name, so it is only played once one exists; a
+Bond that skipped creating it hears the scene as soon as it does (after the
+reward scene). It is played once per Bond on this device, and its lines are
+typed out until recorded.
 Nothing she says is sent anywhere.
 
 © 2026 aiaiaiai · aiaiaiai.org

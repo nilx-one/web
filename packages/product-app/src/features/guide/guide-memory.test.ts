@@ -6,9 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   forgetGuideSession,
   guideIntroOwed,
+  guideTerritoryOwed,
   postponeGuideIntro,
   readGuideIntro,
+  rememberFirstCellOpened,
   rememberGuideIntro,
+  rememberGuideTerritory,
   type GuideMemoryStorage,
 } from "./guide-memory";
 
@@ -54,5 +57,19 @@ describe("whether xSasha still has to introduce herself", () => {
     expect(readGuideIntro("0x0sky", storage)).toBeUndefined();
     storage.items.set("nilx-one.guide.v1.0x0sky", '{"intro":"maybe"}');
     expect(readGuideIntro("0x0sky", storage)).toBeUndefined();
+  });
+});
+
+describe("her word on new ground", () => {
+  it("is owed once the first cell is opened, and only until it is said", () => {
+    const storage = memoryStorage();
+    expect(guideTerritoryOwed("0x0sky", storage)).toBe(false);
+    rememberFirstCellOpened("0x0sky", storage);
+    expect(guideTerritoryOwed("0x0sky", storage)).toBe(true);
+    rememberGuideTerritory("0x0sky", storage);
+    expect(guideTerritoryOwed("0x0sky", storage)).toBe(false);
+    rememberFirstCellOpened("0x0sky", storage);
+    expect(guideTerritoryOwed("0x0sky", storage)).toBe(false);
+    expect(guideTerritoryOwed("another", storage)).toBe(false);
   });
 });

@@ -148,7 +148,7 @@ Local-first. Eligible, not transported.
   [Avaia walks the world](avaia-walk.md)). Simulated product needs, never
   presence evidence;
 - **scenes played** — whether xSasha's introduction was played through or
-  skipped (`nilx-one.guide.v1.<owner>`; [xSasha](guide.md)).
+  skipped, and whether her word on new ground is owed or said (`nilx-one.guide.v1.<owner>`; [xSasha](guide.md)).
 
 **Sealed history**, under its own lifecycle and not under this one:
 
