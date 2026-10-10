@@ -42,6 +42,9 @@ export function PickupSettings() {
       <small className="interface-settings__note">
         {t("settings.pickup.detail")}
       </small>
+      <small className="interface-settings__note">
+        {t("settings.pickup.specialPending")}
+      </small>
       <div className="interface-settings__slider interface-settings__pickup-spectrum">
         <label htmlFor="pickup-level">
           <strong>{currentLabel}</strong>
@@ -101,9 +104,6 @@ export function PickupSettings() {
             </span>
           ))}
         </span>
-        <small className="interface-settings__pickup-spectrum-pending">
-          {t("settings.pickup.specialPending")}
-        </small>
       </div>
     </fieldset>
   );

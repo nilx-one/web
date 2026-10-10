@@ -404,10 +404,6 @@
   opacity: 0.5;
 }
 
-.interface-settings__pickup-spectrum-pending {
-  font-size: 0.65rem !important;
-}
-
 .interface-settings__slider-stops [data-current="true"] {
   color: #f5f3f7;
   font-weight: 650;
