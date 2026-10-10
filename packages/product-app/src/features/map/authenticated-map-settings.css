@@ -342,7 +342,12 @@
   cursor: pointer;
 }
 
-.interface-settings__pickup-spectrum input[type="range"]::-webkit-slider-runnable-track,
+.interface-settings__pickup-spectrum
+  input[type="range"]::-webkit-slider-runnable-track {
+  height: 0.43rem;
+  background: transparent;
+}
+
 .interface-settings__pickup-spectrum input[type="range"]::-moz-range-track {
   height: 0.43rem;
   background: transparent;

@@ -32,7 +32,8 @@ export const FINDS_EN = {
   "settings.pickup.legend": "Pick up",
   "settings.pickup.off": "Off",
   "settings.pickup.special": "special",
-  "settings.pickup.specialPending": "Special finds are not supported by Core yet.",
+  "settings.pickup.specialPending":
+    "Special finds are not supported by Core yet.",
   "settings.pickup.custom": "Custom selection",
   "settings.pickup.customDetail":
     "Your previous choices remain active until you move this slider.",
@@ -126,7 +127,8 @@ export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "settings.pickup.legend": "Підбирати",
   "settings.pickup.off": "Вимкнено",
   "settings.pickup.special": "особливі",
-  "settings.pickup.specialPending": "Особливі знахідки поки не підтримуються Core.",
+  "settings.pickup.specialPending":
+    "Особливі знахідки поки не підтримуються Core.",
   "settings.pickup.custom": "Попередній вибір",
   "settings.pickup.customDetail":
     "Попередні категорії діють, доки ти не пересунеш повзунок.",
@@ -221,7 +223,8 @@ export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "settings.pickup.legend": "Подбирать",
   "settings.pickup.off": "Выключено",
   "settings.pickup.special": "особые",
-  "settings.pickup.specialPending": "Особые находки пока не поддерживаются Core.",
+  "settings.pickup.specialPending":
+    "Особые находки пока не поддерживаются Core.",
   "settings.pickup.custom": "Прежний выбор",
   "settings.pickup.customDetail":
     "Прежние категории действуют, пока ты не передвинешь ползунок.",

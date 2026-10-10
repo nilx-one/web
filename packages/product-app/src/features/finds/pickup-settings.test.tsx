@@ -18,7 +18,7 @@ describe("PickupSettings slider", () => {
     chooseLocale("en");
     render(<PickupSettings />);
     const slider = screen.getByRole("slider", { name: "Pick up" });
-    expect(slider).toHaveValue("4");
+    expect(slider).toHaveValue("5");
     expect(slider).toHaveAttribute("aria-valuetext", "common");
     expect(readPickup()).toBe("common,uncommon,rare,legendary");
   });
@@ -27,7 +27,7 @@ describe("PickupSettings slider", () => {
     chooseLocale("en");
     render(<PickupSettings />);
     const slider = screen.getByRole("slider", { name: "Pick up" });
-    fireEvent.change(slider, { target: { value: "3" } });
+    fireEvent.change(slider, { target: { value: "4" } });
     expect(readPickup()).toBe("uncommon,rare,legendary");
     expect(slider).toHaveAttribute("aria-valuetext", "uncommon");
     fireEvent.change(slider, { target: { value: "0" } });
@@ -41,9 +41,13 @@ describe("PickupSettings slider", () => {
     const slider = screen.getByRole("slider", { name: "Pick up" });
     expect(slider).toHaveAttribute("max", "5");
     expect(slider).toHaveValue("5");
-    expect(screen.getByText("special", { selector: "[data-pending]" })).toBeVisible();
+    expect(
+      screen.getByText("special", { selector: "[data-pending]" }),
+    ).toBeVisible();
     expect(screen.getByText(/Special finds are not supported/)).toBeVisible();
-    const fill = document.querySelector(".interface-settings__pickup-spectrum-fill");
+    const fill = document.querySelector(
+      ".interface-settings__pickup-spectrum-fill",
+    );
     expect(fill).toHaveStyle({ clipPath: "inset(0 0% 0 0 round 999px)" });
 
     fireEvent.change(slider, { target: { value: "3" } });
