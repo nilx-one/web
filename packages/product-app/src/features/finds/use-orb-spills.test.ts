@@ -168,7 +168,7 @@ describe("useOrbSpills", () => {
   it.each([
     { mode: "manual position", accuracyMeters: 999, declared: true },
     { mode: "accurate GPS", accuracyMeters: 10, declared: false },
-  ])("lets a driving Bond collect orbs at $mode", async ({ accuracyMeters, declared }) => {
+  ])("Bond collects orbs at $mode", async ({ accuracyMeters, declared }) => {
     const cell = cellWithFind();
     const [roll] = findsWithin(cell.boundary, NOW);
     const sha = await artifactSha(roll!.artifactId);
@@ -192,7 +192,7 @@ describe("useOrbSpills", () => {
           port,
           core,
           renderer: world,
-          near: center,
+          near: undefined,
           bond,
           avaiaPoint: () => undefined,
         }),
@@ -260,7 +260,7 @@ describe("useOrbSpills", () => {
           port,
           core,
           renderer: world,
-          near: center,
+          near: undefined,
           bond,
           avaiaPoint: () => undefined,
         }),
