@@ -53,11 +53,15 @@ export interface OrbSpillsInput {
   /** Where the Bond stands, observed or declared: spills are read around it. */
   readonly near: MapPointSelection | undefined;
   /**
-   * This device's own observation while the Bond drives, and only then: a
-   * declared point never picks anything up.
+   * The driving Bond's gameplay position: observed GPS or a manually declared
+   * virtual position. Manual placement is not evidence of physical presence.
    */
   readonly bond:
-    (MapPointSelection & { readonly accuracyMeters: number }) | undefined;
+    | (MapPointSelection & {
+        readonly accuracyMeters: number;
+        readonly declared?: boolean;
+      })
+    | undefined;
   /** Where the Avaia's body is right now, while it walks the world. */
   avaiaPoint(): MapPointSelection | undefined;
 }
@@ -231,16 +235,19 @@ export function useOrbSpills({
     if (orbWorld === undefined) return;
     const state = latest.current;
     const now = Date.now();
-    const observed =
+    // A declared point is a virtual game position, not an inaccurate GPS fix.
+    // Only actual observations must meet the accuracy threshold.
+    const bondPoint =
       state.bond !== undefined &&
-      state.bond.accuracyMeters <= ORB_OBSERVATION_ACCURACY_METERS
+      (state.bond.declared === true ||
+        state.bond.accuracyMeters <= ORB_OBSERVATION_ACCURACY_METERS)
         ? state.bond
         : undefined;
     void orbWorld(
       orbWorldInput(
         [...state.spills.values()],
         state.picked,
-        observed,
+        bondPoint,
         state.avaiaPoint(),
       ),
       now,
