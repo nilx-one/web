@@ -553,3 +553,5 @@ After step 5 the feature works completely without a model. The model and the com
 - **qwen3 1.7b.** After the WebGPU trial on mobile Safari.
 - **Bond / interaction.** The Avaia's finds never become `bch`.
 - **A training signal** from outings.
+
+<!-- © 2026 aiaiaiai · aiaiaiai.org -->

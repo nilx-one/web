@@ -120,3 +120,5 @@ swaps to dark.
 
 Host adapters may add host-specific actions to the overflow menu. They must not
 fork the canonical routes or redefine these layout semantics.
+
+<!-- © 2026 aiaiaiai · aiaiaiai.org -->

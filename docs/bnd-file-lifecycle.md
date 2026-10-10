@@ -74,3 +74,5 @@ This section previously described a no-quorum "content accretes as counterpartie
 6. recovery has no public counterparty lookup; `counterpart_hint` and a verified `bch_id` come from the requester and the assisting Bond respectively, never from a registry;
 7. `DEVICE-REVOKE` reached through `REC-REQ` does not finalize against an `active` old device without the live-device objection window elapsing;
 8. a `bch` is recovered as an independent, immutable (if terminal) or continuable (if non-terminal and eligible) history — never concatenated into a fabricated relationship chain.
+
+<!-- © 2026 aiaiaiai · aiaiaiai.org -->

@@ -42,3 +42,5 @@ The rule is `features/inventory/workshops.ts`. The map answers through `pointsNe
 ## Where it lives
 
 In the sealed `avaia-finds` journal, as `inventory.state` events: Core's whole stored inventory after each change, plus the find a pick-up put in. The journal's own AES-GCM key seals them, and the wipe that deletes the journal deletes them. Nothing about the inventory reaches the service yet: the Seeds balance and craft times held against a commitment come next.
+
+<!-- © 2026 aiaiaiai · aiaiaiai.org -->

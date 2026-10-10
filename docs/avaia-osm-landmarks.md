@@ -274,3 +274,5 @@ A rule only adds rows to a point the renderer already hands over (every kind it 
 - whether the archive carries benches, camp sites, peaks and shrines at all; rows that it does not support are dropped rather than faked;
 - the numeric significance thresholds, once the real distribution is known;
 - whether the walking graph can be built from `roads` alone for parks, which decides if `park` is a place to wander in or only to reach ([Avaia walks on its own](avaia-outings.md) §0.5).
+
+<!-- © 2026 aiaiaiai · aiaiaiai.org -->
