@@ -14,6 +14,7 @@ import {
   lerpPoint,
   offsetPoint,
 } from "../guide/guide-stage";
+import { PING_DEPARTURE_MS } from "./ping-personality";
 import { useSystemInformer } from "./system-informer";
 
 /** Camera and temporary prop only. Never moves Bond/Avaia or writes presence. */
@@ -22,8 +23,12 @@ export function useSystemDroneScene(
   anchor: MapPointSelection | undefined,
   ready: boolean,
 ): void {
-  const { activeId, showWorld } = useSystemInformer();
+  const { activeId, departing, showWorld } = useSystemInformer();
   const latestAnchor = useRef(anchor);
+  const departureStart = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    departureStart.current = departing ? performance.now() : undefined;
+  }, [departing]);
   useEffect(() => {
     latestAnchor.current = anchor;
   });
@@ -61,7 +66,24 @@ export function useSystemDroneScene(
       const progress = reduced
         ? 1
         : Math.min(1, Math.max(0, (now - started) / 1800));
-      const point = lerpPoint(entry, destination, 1 - (1 - progress) ** 3);
+      const leaving = departureStart.current;
+      const exitProgress =
+        leaving === undefined
+          ? 0
+          : Math.min(1, Math.max(0, (now - leaving) / PING_DEPARTURE_MS));
+      const exitOrigin =
+        leaving === undefined
+          ? destination
+          : lerpPoint(
+              entry,
+              destination,
+              1 -
+                (1 - Math.min(1, Math.max(0, (leaving - started) / 1800))) ** 3,
+            );
+      const point =
+        leaving === undefined || reduced
+          ? lerpPoint(entry, destination, 1 - (1 - progress) ** 3)
+          : lerpPoint(exitOrigin, entry, exitProgress ** 2);
       let visible = false;
       try {
         visible =

@@ -376,6 +376,7 @@ it("announces repeated and retried failures once, refreshing the receipt with ea
   await user.click(screen.getByText("Fail"));
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   await user.click(screen.getByText("Understood"));
+  await user.click(screen.getByText("(skip)"));
   for (const op of [3, 4]) {
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(

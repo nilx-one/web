@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { MapRenderer } from "@nilx-one/map-contract";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { chooseLocale } from "../../shell/localization";
 import { SystemInformerProvider, useSystemInformer } from "./system-informer";
@@ -140,3 +140,41 @@ it.each([false, true])(
     vi.unstubAllGlobals();
   },
 );
+
+it("flies away without restarting the camera and removes the drone only after the aside", () => {
+  chooseLocale("en");
+  vi.useFakeTimers();
+  const base = { center: [30.5, 50.4], zoom: 16, bearing: 20, pitch: 40 };
+  const renderer = {
+    systemDrone: { upsert: vi.fn(() => true), remove: vi.fn() },
+    getCamera: () => base,
+    setCamera: vi.fn(),
+  } as unknown as MapRenderer;
+  try {
+    const view = render(
+      <SystemInformerProvider>
+        <World renderer={renderer} />
+      </SystemInformerProvider>,
+    );
+    fireEvent.click(screen.getByText("Report"));
+    act(() => vi.advanceTimersByTime(2000));
+    const before = vi.mocked(renderer.systemDrone!.upsert).mock.calls.at(-1)![0]
+      .lngLat;
+    fireEvent.click(screen.getByText("Understood"));
+    act(() => vi.advanceTimersByTime(3000));
+    expect(
+      vi.mocked(renderer.systemDrone!.upsert).mock.calls.at(-1)![0].lngLat,
+    ).not.toEqual(before);
+    expect(renderer.setCamera).toHaveBeenCalledTimes(1);
+    expect(renderer.systemDrone!.remove).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(3500));
+    expect(renderer.systemDrone!.remove).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenLastCalledWith(
+      base,
+      expect.objectContaining({ motion: "eased" }),
+    );
+    view.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
