@@ -211,6 +211,15 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0013_avaia_location.sql"))
             .execute(&self.pool)
             .await?;
+        if !self.has_avaia_location_column("travel_revision").await? {
+            sqlx::raw_sql(include_str!("../migrations/0022_avaia_travel_revision.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
+        // Travel writes Bond and Avaia state within this repository's pool.
+        sqlx::raw_sql(include_str!("../migrations/0009_bond_location_control.sql"))
+            .execute(&self.pool)
+            .await?;
         sqlx::raw_sql(include_str!("../migrations/0017_bond_pub_info.sql"))
             .execute(&self.pool)
             .await?;
@@ -355,6 +364,15 @@ impl IdentityRepository {
 
     async fn has_identity_column(&self, name: &str) -> Result<bool, RepositoryError> {
         let columns = sqlx::query("PRAGMA table_info(identities)")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(columns
+            .iter()
+            .any(|column| column.get::<String, _>("name") == name))
+    }
+
+    async fn has_avaia_location_column(&self, name: &str) -> Result<bool, RepositoryError> {
+        let columns = sqlx::query("PRAGMA table_info(avaia_locations)")
             .fetch_all(&self.pool)
             .await?;
         Ok(columns

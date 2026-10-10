@@ -41,28 +41,15 @@ export interface ShadeMapFactoryOptions {
   readonly fogPalettes?: Readonly<Record<"light" | "dark", FogPalette>>;
   /** Stretches of fog wearing their own palette. */
   readonly fogZones?: readonly FogZone[];
-  /** Whether this person asked not to be moved; the mist then holds still. */
-  readonly prefersReducedMotion?: () => boolean;
   /**
    * Whether anyone can see the page, for a host whose lifecycle the document
-   * does not report. Drifting mist asks for no frame while it is hidden.
+   * does not report. The fog asks for no frame while it is hidden.
    */
   readonly pageVisibility?: PageVisibility;
 }
 
 /** Web Mercator's equator, which a 512-pixel tile spans at zoom 0. */
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
-
-function defaultPrefersReducedMotion(): boolean {
-  try {
-    return (
-      globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ??
-      false
-    );
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Concrete MapLibre composition seam. The product still receives MapRenderer;
@@ -79,7 +66,6 @@ export function createShadeMapFactory(
   requireFogPalette(palettes.dark, "fogPalettes.dark");
   const zones = options.fogZones ?? [];
   requireFogZones(zones);
-  const stillness = options.prefersReducedMotion ?? defaultPrefersReducedMotion;
 
   return (mapOptions) => {
     const map = new MapLibreMap(mapOptions);
@@ -126,7 +112,10 @@ export function createShadeMapFactory(
                 )
               ],
             zones,
-            motion: stillness() ? "still" : "drift",
+            // Still, for everyone: a drifting frame re-uploads the whole atlas
+            // and redrapes the terrain every second for motion the eye barely
+            // sees. Still mist draws only when something it shows changed.
+            motion: "still",
             ...(options.pageVisibility === undefined
               ? {}
               : { visibility: options.pageVisibility }),
@@ -138,7 +127,7 @@ export function createShadeMapFactory(
           // The atlas draws mist over a fixed square; the rest of the Earth
           // wears flat mist of the same floor colour, holed only where ground
           // was revealed wholly beyond the square. It changes only when such
-          // ground does, never with the drift.
+          // ground does.
           const bounds = atlasBounds(layer.coordinates);
           let worldKey: string | undefined;
           const worldData = () => {

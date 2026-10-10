@@ -23,6 +23,8 @@ export interface RememberedPoint extends MapPointSelection {
 export interface WorldMemory {
   readonly bond?: MapPointSelection;
   readonly avaia?: RememberedPoint;
+  /** Last admin journey applied to this device's Avaia body. */
+  readonly travelRevision?: string;
   /**
    * When the Avaia last decided on an outing, wall-clock milliseconds, so a
    * reload does not send it out again before the interval is up.
@@ -96,6 +98,11 @@ export function readWorldMemory(
     if (!isRecord(parsed)) return EMPTY;
     const bond = parsePoint(parsed.bond);
     const avaia = parseRemembered(parsed.avaia);
+    const travelRevision =
+      typeof parsed.travelRevision === "string" &&
+      /^[1-9][0-9]*$/.test(parsed.travelRevision)
+        ? parsed.travelRevision
+        : undefined;
     const lastOutingAt =
       typeof parsed.lastOutingAt === "number" &&
       Number.isFinite(parsed.lastOutingAt)
@@ -108,6 +115,7 @@ export function readWorldMemory(
     return {
       ...(bond === undefined ? {} : { bond }),
       ...(avaia === undefined ? {} : { avaia }),
+      ...(travelRevision === undefined ? {} : { travelRevision }),
       ...(lastOutingAt === undefined ? {} : { lastOutingAt }),
       ...(drive === undefined ? {} : { drive }),
     };
@@ -125,18 +133,18 @@ export function rememberWorld(
   change: {
     bond?: MapPointSelection;
     avaia?: RememberedPoint | undefined;
+    travelRevision?: string;
     lastOutingAt?: number;
     drive?: string;
   },
   storage: WorldMemoryStorage | undefined = defaultStorage(),
 ): void {
   try {
-    const { bond, avaia, lastOutingAt, drive } = readWorldMemory(
-      owner,
-      storage,
-    );
+    const { bond, avaia, travelRevision, lastOutingAt, drive } =
+      readWorldMemory(owner, storage);
     const nextBond = change.bond ?? bond;
     const nextAvaia = "avaia" in change ? change.avaia : avaia;
+    const nextTravelRevision = change.travelRevision ?? travelRevision;
     const nextOuting = change.lastOutingAt ?? lastOutingAt;
     const next: WorldMemory = {
       ...(nextBond === undefined
@@ -156,6 +164,9 @@ export function rememberWorld(
               bearingDeg: nextAvaia.bearingDeg,
             },
           }),
+      ...(nextTravelRevision === undefined
+        ? {}
+        : { travelRevision: nextTravelRevision }),
       ...(nextOuting === undefined ? {} : { lastOutingAt: nextOuting }),
       ...((change.drive ?? drive) === undefined
         ? {}

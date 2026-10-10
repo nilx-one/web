@@ -12,12 +12,13 @@ use std::{
 };
 
 use identity_bot::{
-    BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository, BrowserOAuthConfig,
-    DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig, GithubEvidenceRepository,
-    IdentityProvider, IdentityRecord, IdentityRepository, NativeAuthConfig, OAuthClientCredentials,
-    PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
-    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, github_evidence,
-    location_control_router, provider_self_service_router, public_api,
+    AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository,
+    BrowserOAuthConfig, DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig,
+    GithubEvidenceRepository, IdentityProvider, IdentityRecord, IdentityRepository,
+    NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,
+    ProviderSecretCipher, SelfDisconnectOutcome, TelegramInitDataVerifier, TelegramLocationIntents,
+    api, browser_web_auth, github_evidence, location_control_router, provider_self_service_router,
+    public_api,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
@@ -84,10 +85,16 @@ const USER_COMMANDS: &[CommandSpec] = &[
 /// default menu and are only registered for a chat once its sender resolves
 /// to [`BondAccessRole::Admin`], matching the runtime check already made in
 /// [`begin_manual_position`].
-const ADMIN_ONLY_COMMANDS: &[CommandSpec] = &[CommandSpec {
-    command: "set_position",
-    description: "Обрати довільну точку й перейти в manual mode",
-}];
+const ADMIN_ONLY_COMMANDS: &[CommandSpec] = &[
+    CommandSpec {
+        command: "set_position",
+        description: "Обрати довільну точку й перейти в manual mode",
+    },
+    CommandSpec {
+        command: "travel",
+        description: "Телепортувати Bond та Avaia у вибрану точку",
+    },
+];
 
 fn bot_commands(role: BondAccessRole) -> Vec<BotCommand> {
     let mut commands: Vec<BotCommand> = USER_COMMANDS
@@ -494,6 +501,7 @@ async fn handle_message(
         "/set_position" | SET_POSITION_BUTTON => {
             begin_manual_position(&bot, &message, state.as_ref(), telegram_user_id).await?
         }
+        "/travel" => begin_travel(&bot, &message, state.as_ref(), telegram_user_id).await?,
         "/recover" => {
             let role = role_for_telegram(&state.repository, telegram_user_id).await;
             bot.send_message(
@@ -699,6 +707,8 @@ fn resolve_location_mode(
                 Err(LocationModeRefusal::ManualRequiresAdmin)
             }
         }
+        // Never downgrade an explicit trip to a Bond-only movement.
+        Some(PendingLocationIntent::Travel) => Err(LocationModeRefusal::ManualRequiresAdmin),
         None if role.can_set_manual_location() => Ok(if live {
             BondLocationMode::Live
         } else {
@@ -722,6 +732,9 @@ async fn handle_location(
     };
 
     let intent = state.intents.consume(telegram_user_id).await;
+    if intent == Some(PendingLocationIntent::Travel) {
+        return handle_travel_point(bot, message, state, &identity, role, location).await;
+    }
     let mode = match resolve_location_mode(intent, role, location.live_period.is_some()) {
         Ok(mode) => mode,
         Err(LocationModeRefusal::ManualRequiresAdmin) => {
@@ -783,6 +796,104 @@ async fn handle_location(
     bot.send_message(message.chat.id, acknowledgement)
         .reply_markup(control_keyboard(role))
         .await?;
+    Ok(())
+}
+
+/// One admin-initiated manual destination, not a live GPS observation.
+async fn handle_travel_point(
+    bot: &Bot,
+    message: &Message,
+    state: &TelegramBotState,
+    identity: &IdentityRecord,
+    role: BondAccessRole,
+    point: &teloxide::types::Location,
+) -> ResponseResult<()> {
+    if !role.can_set_manual_location() {
+        bot.send_message(message.chat.id, "Подорожі з Avaia доступні лише admin.")
+            .await?;
+        return Ok(());
+    }
+    if point.live_period.is_some() {
+        bot.send_message(
+            message.chat.id,
+            "Для подорожі оберіть звичайну точку на мапі, не live location. Повторіть /travel.",
+        )
+        .await?;
+        return Ok(());
+    }
+    let coordinate = match GeoCoordinate::from_degrees(point.longitude, point.latitude) {
+        Ok(value) => value,
+        Err(_) => {
+            bot.send_message(message.chat.id, "Некоректні координати подорожі.")
+                .await?;
+            return Ok(());
+        }
+    };
+    let owner = match identity.pub_dress.parse() {
+        Ok(owner) => owner,
+        Err(error) => {
+            error!(%error, "stored travel owner pub_dress invalid");
+            bot.send_message(message.chat.id, "Bond тимчасово недоступний.")
+                .await?;
+            return Ok(());
+        }
+    };
+    let at = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(now) => DecimalU64::new(now.as_secs()),
+        Err(_) => {
+            bot.send_message(message.chat.id, "Подорож тимчасово недоступна.")
+                .await?;
+            return Ok(());
+        }
+    };
+    let response = match state
+        .repository
+        .travel_with_avaia(&owner, coordinate, at)
+        .await
+    {
+        Ok(AvaiaTravelOutcome::Arrived) => {
+            "Подорож розпочато! Bond і Avaia телепортовані у вибрану точку. Позиції збережено окремо; Avaia далі рухається самостійно."
+        }
+        Ok(AvaiaTravelOutcome::AdminRequired) => "Подорожі з Avaia доступні лише admin.",
+        Ok(AvaiaTravelOutcome::AvaiaUnavailable) => {
+            "Спочатку створіть Avaia в 0x1. Позиція Bond не змінена."
+        }
+        Err(error) => {
+            error!(%error, "atomic Bond/Avaia travel failed");
+            "Подорож не вдалася; позиції Bond і Avaia не змінено."
+        }
+    };
+    bot.send_message(message.chat.id, response)
+        .reply_markup(control_keyboard(role))
+        .await?;
+    Ok(())
+}
+
+async fn begin_travel(
+    bot: &Bot,
+    message: &Message,
+    state: &TelegramBotState,
+    telegram_user_id: i64,
+) -> ResponseResult<()> {
+    let Some((_identity, role)) =
+        registered_identity(bot, message, &state.repository, telegram_user_id).await?
+    else {
+        return Ok(());
+    };
+    if !role.can_set_manual_location() {
+        bot.send_message(message.chat.id, "Подорожі з Avaia доступні лише admin.")
+            .await?;
+        return Ok(());
+    }
+    state
+        .intents
+        .begin(telegram_user_id, PendingLocationIntent::Travel)
+        .await;
+    bot.send_message(
+        message.chat.id,
+        "Відкрийте Telegram Location та надішліть звичайну точку на карті протягом 5 хвилин. Bond і створена Avaia перемістяться туди разом (manual mode).",
+    )
+    .await?;
     Ok(())
 }
 
@@ -1152,13 +1263,17 @@ mod tests {
 
         assert!(!user_commands.iter().any(|c| c.command == "set_position"));
         assert!(admin_commands.iter().any(|c| c.command == "set_position"));
-        assert_eq!(admin_commands.len(), user_commands.len() + 1);
+        assert_eq!(admin_commands.len(), user_commands.len() + 2);
+        assert!(!user_commands.iter().any(|c| c.command == "travel"));
+        assert!(admin_commands.iter().any(|c| c.command == "travel"));
     }
 
     #[test]
     fn only_admins_see_set_position_in_help_text() {
         assert!(!help_text(BondAccessRole::User).contains("/set_position"));
         assert!(help_text(BondAccessRole::Admin).contains("/set_position"));
+        assert!(!help_text(BondAccessRole::User).contains("/travel"));
+        assert!(help_text(BondAccessRole::Admin).contains("/travel"));
     }
 
     #[test]
@@ -1258,6 +1373,16 @@ mod tests {
             resolve_location_mode(None, BondAccessRole::Admin, false),
             Ok(BondLocationMode::Manual)
         );
+    }
+
+    #[test]
+    fn pending_travel_cannot_fall_back_to_bond_only_location() {
+        for role in [BondAccessRole::Admin, BondAccessRole::User] {
+            assert_eq!(
+                resolve_location_mode(Some(PendingLocationIntent::Travel), role, false),
+                Err(LocationModeRefusal::ManualRequiresAdmin)
+            );
+        }
     }
 
     #[test]

@@ -222,7 +222,6 @@ function build(
   const createMap = createShadeMapFactory({
     runtime: Promise.resolve(runtime),
     anchor: ANCHOR,
-    prefersReducedMotion: () => false,
     ...options,
   });
   return createMap(MAP_OPTIONS) as unknown as FakeMapInstance;
@@ -403,13 +402,11 @@ describe("shade map factory", () => {
     expect(setPalette).toHaveBeenLastCalledWith(dusk);
   });
 
-  it("holds the mist still for a person who asked not to be moved", async () => {
-    const drifting = build(fakeRuntime([]));
-    const still = build(fakeRuntime([]), { prefersReducedMotion: () => true });
+  it("holds the mist still, so it draws only when what it shows changed", async () => {
+    const map = build(fakeRuntime([]));
     await settle();
 
-    expect(shadeLayerOf(drifting).motion).toBe("drift");
-    expect(shadeLayerOf(still).motion).toBe("still");
+    expect(shadeLayerOf(map).motion).toBe("still");
   });
 
   it("tells the composing host about fog it could not draw, before any map exists", () => {

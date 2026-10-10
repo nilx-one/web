@@ -359,6 +359,33 @@ describe("Provider password setup transport", () => {
 });
 
 describe("Avaia profile transport", () => {
+  it("reads a journey revision separately from ordinary positions", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
+      response(200, {
+        pub_dress: "x0skai",
+        owner_pub_dress: "0x0sky",
+        configuration_state: "configured",
+        location: {
+          coordinate: { longitude_e7: "23522000", latitude_e7: "488566000" },
+          travel_revision: "5",
+        },
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma signed",
+    });
+    await expect(adapter.readAvaiaProfile()).resolves.toMatchObject({
+      kind: "available",
+      profile: {
+        location: {
+          coordinate: { longitude: 2.3522, latitude: 48.8566 },
+          travelRevision: "5",
+        },
+      },
+    });
+  });
+
   it("reads the stored Avaia over the session, and stores no copy of it", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {

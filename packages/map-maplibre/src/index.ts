@@ -499,6 +499,9 @@ export function createMapLibreRenderer(
   // failure arrives in is what distinguishes a missing style from a missing
   // basemap from ordinary tile noise on a map that already renders.
   let styleResolved = false;
+  // styledata only announces a change; style.load is the boundary at which
+  // a frame can paint, even while tiles keep MapLibre load pending.
+  let styleReadyForPaint = false;
   let firstPaintDone = false;
   // A style swap discards every source and layer the renderer owns, so the
   // presentation the application already set has to be reapplied rather than
@@ -558,6 +561,38 @@ export function createMapLibreRenderer(
     for (const listener of listeners) {
       listener(next);
     }
+  }
+
+  function completeFirstPaint(
+    mountedMap: MapLibreMap,
+    container: HTMLElement,
+  ): void {
+    if (firstPaintDone) return;
+    // A late visible frame may recover a timeout, not an actual renderer
+    // failure (including missing WebGL and failed basemap resources).
+    if (
+      status.kind !== "loading" &&
+      !(
+        status.kind === "unavailable" &&
+        (status.reason === "first-paint-timeout" ||
+          status.reason === "style-load-timeout")
+      )
+    ) {
+      return;
+    }
+
+    firstPaintDone = true;
+    applyPresentation(mountedMap);
+
+    if (container.isConnected) {
+      const bounds = container.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) {
+        publish({ kind: "unavailable", reason: "container-zero-size" });
+        return;
+      }
+    }
+
+    publish({ kind: "ready" });
   }
 
   function reportRendererError(error?: unknown): void {
@@ -1216,6 +1251,7 @@ export function createMapLibreRenderer(
         });
         map = mountedMap;
         styleResolved = false;
+        styleReadyForPaint = false;
         firstPaintDone = false;
         presentationApplied = false;
 
@@ -1239,6 +1275,15 @@ export function createMapLibreRenderer(
           publish({ kind: "unavailable", reason: "webgl-context-lost" });
         });
 
+        // Render can arrive before MapLibre load when the basemap is already
+        // visible but a tile or fog source is still pending.
+        mountedMap.on("style.load", () => {
+          styleResolved = true;
+          styleReadyForPaint = true;
+        });
+        mountedMap.on("render", () => {
+          if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
+        });
         mountedMap.on("styledata", () => {
           styleResolved = true;
           // A reloaded style arrives without the renderer's own presentation
@@ -1319,20 +1364,11 @@ export function createMapLibreRenderer(
             }
           },
         );
+        // Keep MapLibre load as a compatibility fallback.
         mountedMap.once("load", () => {
           styleResolved = true;
-          firstPaintDone = true;
-          applyPresentation(mountedMap);
-
-          if (container.isConnected) {
-            const bounds = container.getBoundingClientRect();
-            if (bounds.width <= 0 || bounds.height <= 0) {
-              publish({ kind: "unavailable", reason: "container-zero-size" });
-              return;
-            }
-          }
-
-          publish({ kind: "ready" });
+          styleReadyForPaint = true;
+          completeFirstPaint(mountedMap, container);
         });
       } catch {
         map = undefined;
@@ -1348,6 +1384,7 @@ export function createMapLibreRenderer(
       map?.remove();
       map = undefined;
       styleResolved = false;
+      styleReadyForPaint = false;
       firstPaintDone = false;
       presentationApplied = false;
       publish({ kind: "unmounted" });
@@ -1593,6 +1630,7 @@ export function createMapLibreRenderer(
       // A style swap keeps the current camera and reopens the style phase so a
       // missing appearance variant is reported instead of blanking the map.
       styleResolved = false;
+      styleReadyForPaint = false;
       presentationApplied = false;
       // MapLibre owns style diffing, but the renderer owns live terrain state.
       // Detach it before replacing the style so an in-flight presentation
