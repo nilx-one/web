@@ -201,7 +201,10 @@ describe("useOrbSpills", () => {
 
     await act(async () => {
       result.current.spill(cell);
-      await vi.advanceTimersByTimeAsync(2);
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
     });
     const orb = world.orbs.find((item) => item.kind === "orb");
     expect(orb).toBeDefined();
@@ -269,7 +272,10 @@ describe("useOrbSpills", () => {
 
     await act(async () => {
       result.current.spill(cell);
-      await vi.advanceTimersByTimeAsync(2);
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
     });
     const orb = world.orbs.find((item) => item.kind === "orb");
     expect(orb).toBeDefined();
