@@ -14,7 +14,11 @@ vi.mock("../progression/committed-sync", () => ({
 
 import { queueWorldAwards } from "../progression/committed-sync";
 import { findsWithin, squareAround } from "./orb-spills";
-import { ORB_REACH_CHECK_MS, useOrbSpills } from "./use-orb-spills";
+import {
+  ORB_REACH_CHECK_MS,
+  useOrbSpills,
+  type OrbSpillsInput,
+} from "./use-orb-spills";
 
 const NOW = Date.UTC(2026, 9, 10, 12);
 const center = { longitude: 30.4469, latitude: 50.4655 };
@@ -159,6 +163,140 @@ describe("useOrbSpills", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(world.orbs.map((orb) => orb.id)).not.toContain(drawn[0]!.id);
+  });
+
+  it.each([
+    { mode: "manual position", accuracyMeters: 999, declared: true },
+    { mode: "accurate GPS", accuracyMeters: 10, declared: false },
+  ])("Bond collects orbs at $mode", async ({ accuracyMeters, declared }) => {
+    const cell = cellWithFind();
+    const [roll] = findsWithin(cell.boundary, NOW);
+    const sha = await artifactSha(roll!.artifactId);
+    const port: OrbSpillAccessPort = {
+      spillOrbs: vi.fn(async () => ({
+        kind: "spilled" as const,
+        spill: {
+          sha,
+          count: 7,
+          expiresAt: NOW + 30 * 60_000,
+          taken: [],
+        },
+      })),
+      readOrbSpills: vi.fn(async () => ({ kind: "read" as const, spills: [] })),
+    };
+    const world = renderer();
+    const { result, rerender } = renderHook(
+      ({ bond }: { bond: OrbSpillsInput["bond"] }) =>
+        useOrbSpills({
+          owner: "0x0sky",
+          port,
+          core,
+          renderer: world,
+          near: undefined,
+          bond,
+          avaiaPoint: () => undefined,
+        }),
+      { initialProps: { bond: undefined as OrbSpillsInput["bond"] } },
+    );
+
+    await act(async () => {
+      result.current.spill(cell);
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    const orb = world.orbs.find((item) => item.kind === "orb");
+    expect(orb).toBeDefined();
+
+    rerender({
+      bond: {
+        longitude: orb!.longitude,
+        latitude: orb!.latitude,
+        accuracyMeters,
+        ...(declared ? { declared: true } : {}),
+      },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(queueWorldAwards).toHaveBeenCalledWith(
+      "0x0sky",
+      expect.arrayContaining([
+        {
+          record: {
+            kind: "orb_picked_up",
+            earner: "bond",
+            subject: orb!.id,
+            at: expect.any(Number),
+          },
+        },
+      ]),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(world.orbs.map((item) => item.id)).not.toContain(orb!.id);
+  });
+
+  it("refuses imprecise GPS fixes and a Bond not driving", async () => {
+    const cell = cellWithFind();
+    const [roll] = findsWithin(cell.boundary, NOW);
+    const sha = await artifactSha(roll!.artifactId);
+    const port: OrbSpillAccessPort = {
+      spillOrbs: vi.fn(async () => ({
+        kind: "spilled" as const,
+        spill: {
+          sha,
+          count: 7,
+          expiresAt: NOW + 30 * 60_000,
+          taken: [],
+        },
+      })),
+      readOrbSpills: vi.fn(async () => ({ kind: "read" as const, spills: [] })),
+    };
+    const world = renderer();
+    const { result, rerender } = renderHook(
+      ({ bond }: { bond: OrbSpillsInput["bond"] }) =>
+        useOrbSpills({
+          owner: "0x0sky",
+          port,
+          core,
+          renderer: world,
+          near: undefined,
+          bond,
+          avaiaPoint: () => undefined,
+        }),
+      { initialProps: { bond: undefined as OrbSpillsInput["bond"] } },
+    );
+
+    await act(async () => {
+      result.current.spill(cell);
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    const orb = world.orbs.find((item) => item.kind === "orb");
+    expect(orb).toBeDefined();
+
+    rerender({
+      bond: {
+        longitude: orb!.longitude,
+        latitude: orb!.latitude,
+        accuracyMeters: 90,
+      },
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(queueWorldAwards).not.toHaveBeenCalled();
+
+    rerender({ bond: undefined }); // Wheel belongs to Avaia, or handover underway.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ORB_REACH_CHECK_MS);
+    });
+    expect(queueWorldAwards).not.toHaveBeenCalled();
   });
 
   it("draws nothing on a host without spills", () => {

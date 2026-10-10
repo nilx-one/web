@@ -1346,9 +1346,10 @@ export function AuthenticatedMapHomeView({
     proximityObserver.current = avaiaProximity?.observeAvaiaPoint;
   }, [avaiaProximity]);
   const [fogAnnouncement, setFogAnnouncement] = useState("");
-  // Orbs spill from every cell opened, and lie for anyone near to pick up:
-  // the Bond from its own observation while it drives, the Avaia as its
-  // body walks past them.
+  // Orbs spill from every opened cell. The driving Bond collects at its
+  // gameplay position (physical GPS or manual/virtual); the Avaia collects
+  // where its own body walks. Manual position stays excluded from physical
+  // presence checks, such as workshops and first-hand find discoveries.
   const orbSpills = useOrbSpills({
     owner: pubDress,
     port: committedAwards,
@@ -1356,9 +1357,7 @@ export function AuthenticatedMapHomeView({
     renderer,
     near: observedPosition,
     bond:
-      wheel === "bond" && handover === undefined
-        ? deviceObservation
-        : undefined,
+      wheel === "bond" && handover === undefined ? observedPosition : undefined,
     avaiaPoint: () =>
       wheel === "avaia" && handover === undefined
         ? avaiaWalk.stance(globalThis.performance.now())?.point
