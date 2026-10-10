@@ -6,6 +6,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { SystemInformerProvider } from "../system-informer/system-informer";
 import { chooseLocale } from "../../shell/localization";
 import {
   ToastViewport,
@@ -308,4 +309,86 @@ describe("FailureNoticeProvider", () => {
 
     consoleError.mockRestore();
   });
+});
+
+it("delivers a failure through xPing once and retains the real retry action", async () => {
+  chooseLocale("en");
+  const user = userEvent.setup();
+  const onRetry = vi.fn();
+  render(
+    <SystemInformerProvider>
+      <FailureNoticeProvider>
+        <Producer
+          report={{
+            code: "inference_unavailable",
+            kind: "unavailable",
+            retryable: true,
+            operation_id: "op-71c",
+          }}
+          options={{ onRetry }}
+        />
+      </FailureNoticeProvider>
+    </SystemInformerProvider>,
+  );
+  await user.click(screen.getByRole("button", { name: "Publish failure" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("Request unanswered");
+  expect(screen.queryByText("xPing: Request unanswered")).toBeNull();
+  await user.click(screen.getByText("(skip)"));
+  expect(screen.getAllByText("xPing: Request unanswered")).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(onRetry).toHaveBeenCalledOnce();
+  expect(screen.getByText("xPing: Request unanswered")).toBeInTheDocument();
+});
+
+it("announces repeated and retried failures once, refreshing the receipt with each async failure", async () => {
+  chooseLocale("en");
+  const user = userEvent.setup();
+  let attempts = 0;
+  function RetryingProducer() {
+    const publish = usePublishFailure();
+    function fail() {
+      attempts += 1;
+      publish(
+        {
+          code: "inference_unavailable",
+          kind: "unavailable",
+          retryable: true,
+          session_id: "s1",
+          operation_id: `op-${attempts}`,
+        },
+        {
+          onRetry: () => {
+            void Promise.resolve().then(fail);
+          },
+        },
+      );
+    }
+    return <button onClick={fail}>Fail</button>;
+  }
+  render(
+    <SystemInformerProvider>
+      <FailureNoticeProvider>
+        <RetryingProducer />
+      </FailureNoticeProvider>
+    </SystemInformerProvider>,
+  );
+  await user.click(screen.getByText("Fail"));
+  await user.click(screen.getByText("Fail"));
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  await user.click(screen.getByText("Understood"));
+  for (const op of [3, 4]) {
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(
+      await screen.findByText(
+        `code inference_unavailable · operation op-${op} · session s1`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getAllByText("xPing: Request unanswered")).toHaveLength(1);
+  }
+  await user.click(
+    screen.getByRole("button", { name: "Dismiss: xPing: Request unanswered" }),
+  );
+  await user.click(screen.getByText("Fail"));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
 });

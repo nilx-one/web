@@ -205,6 +205,12 @@ import {
   rememberGuideIntro,
 } from "../guide/guide-memory";
 import type { GuideOutcome, GuideSceneId } from "../guide/guide-script";
+import {
+  useSystemInformer,
+  useSystemInformerBlock,
+  useSystemErrorNotices,
+} from "../system-informer/system-informer";
+import { useSystemDroneScene } from "../system-informer/use-system-drone-scene";
 import { guideResultToast } from "../guide/guide-result-toast";
 import type { GuidePlayOptions } from "../guide/use-guide-cutscene";
 import { useGuideCutscene } from "../guide/use-guide-cutscene";
@@ -1475,6 +1481,10 @@ export function AuthenticatedMapHomeView({
     onEnd: (scene, outcome, result) => endGuideScene(scene, outcome, result),
   });
   const guideActive = guide.state !== undefined;
+  const systemInformer = useSystemInformer();
+  useSystemInformerBlock(guideActive || achievementDialog !== undefined);
+  useSystemErrorNotices(statusToasts);
+  useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
   // In a cutscene the characters who are not the person speak: xSasha says
   // her line when it opens. The person's own replies are never voiced.
   const guideBeat = guide.state?.beat;
@@ -1516,6 +1526,7 @@ export function AuthenticatedMapHomeView({
     mapStatus.kind === "ready" &&
     (focusState === "focused" || focusState === "unavailable") &&
     !guideActive &&
+    !systemInformer.pending &&
     achievementDialog === undefined;
   // Her backpack gift comes when the Bond's pockets fill up, or by level 3:
   // given first, then said, once the world is free to film it.
@@ -1533,6 +1544,7 @@ export function AuthenticatedMapHomeView({
       mapStatus.kind === "ready" &&
       (focusState === "focused" || focusState === "unavailable") &&
       !guideActive &&
+      !systemInformer.pending &&
       achievementDialog === undefined,
     onGiven: () => {
       const item = t("guide.backpack.item");
@@ -1685,7 +1697,12 @@ export function AuthenticatedMapHomeView({
   // the bootstrap camera, while the first fix is still on its way.
   const resumeApplied = useRef(false);
   useEffect(() => {
-    if (resumeApplied.current || mapStatus.kind !== "ready") return;
+    if (
+      systemInformer.activeId !== undefined ||
+      resumeApplied.current ||
+      mapStatus.kind !== "ready"
+    )
+      return;
     resumeApplied.current = true;
     if (firstFixApplied.current || cameraMovedByPerson.current) return;
     const remembered = readWorldMemory(pubDress);
@@ -1711,6 +1728,7 @@ export function AuthenticatedMapHomeView({
     );
   }, [
     dimension,
+    systemInformer.activeId,
     mapStatus.kind,
     presentation,
     pubDress,
@@ -1735,7 +1753,12 @@ export function AuthenticatedMapHomeView({
   // move the marker; they never take the camera back from the person holding
   // it.
   useEffect(() => {
-    if (observedPosition === undefined || firstFixApplied.current) return;
+    if (
+      systemInformer.activeId !== undefined ||
+      observedPosition === undefined ||
+      firstFixApplied.current
+    )
+      return;
     firstFixApplied.current = true;
     if (cameraMovedByPerson.current) return;
 
@@ -1753,7 +1776,14 @@ export function AuthenticatedMapHomeView({
         padding: locationCameraPadding(context),
       },
     );
-  }, [dimension, observedPosition, presentation, renderer, safeArea]);
+  }, [
+    dimension,
+    systemInformer.activeId,
+    observedPosition,
+    presentation,
+    renderer,
+    safeArea,
+  ]);
 
   // Where this device last observed itself is kept on this device alone, so
   // the next opening of the world starts there. A declared point is the
@@ -2427,7 +2457,11 @@ export function AuthenticatedMapHomeView({
       }
       toasts={
         <StatusToastStack
-          toasts={statusToasts}
+          toasts={
+            systemInformer.available
+              ? statusToasts.filter((toast) => toast.kind !== "error")
+              : statusToasts
+          }
           label={t("shell.worldStatus")}
           placement="inline"
           copy={{
