@@ -179,7 +179,6 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
       "guide.territory.newGround.2",
     ],
     shot: "two-shot",
-    recorded: false,
     choices: [
       { reply: "thanks", next: { end: "done" } },
       { reply: "skip", next: { end: "done" } },

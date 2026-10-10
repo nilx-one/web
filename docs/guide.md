@@ -199,8 +199,8 @@ its own time, longer where more lies hidden — and the orbs that spill from
 opened ground: each one picked up makes the Bond or its Avaia more experienced.
 The scene speaks of the Avaia by name, so it is only played once one exists; a
 Bond that skipped creating it hears the scene as soon as it does (after the
-reward scene). It is played once per Bond on this device, and its lines are
-typed out until recorded.
+reward scene). It is played once per Bond on this device, voiced in her own
+two voices like her other lines ([Character voices](avaia-voice.md)).
 Nothing she says is sent anywhere.
 
 © 2026 aiaiaiai · aiaiaiai.org

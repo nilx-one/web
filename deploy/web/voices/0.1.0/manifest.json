@@ -928,6 +928,30 @@
       "seconds": 2.66,
       "sha256": "0b15ba006ab9c1c954694f1dbe65d54ce43594ead8f99e7319407dc0b790e735"
     },
+    "en/xsasha-feminine/guide.territory.newGround.0": {
+      "text": "There — new ground. Every cell takes its time to open: the timer over it counts down, longer where more lies hidden. And look — orbs spilled out of it. Every one you pick up makes you or {avaia} more experienced.",
+      "spoken": "There — new ground. Every cell takes its time to open: the timer over it counts down, longer where more lies hidden. And look — orbs spilled out of it. Every one you pick up makes you or your Avaia more experienced.",
+      "heard": "They're new ground. Every cell takes its time to open. The timer over it counts down. Longer where more lies hidden. And look, orbs spilled out of it. Everyone you pick up makes you or your AVEA more experienced.",
+      "characterErrorRate": 0.02,
+      "seconds": 12.15,
+      "sha256": "d67baecd05444b22d9655e0bf7b40af8dc3bfa115c30b6c67a7b2682410e3fd9"
+    },
+    "en/xsasha-feminine/guide.territory.newGround.1": {
+      "text": "Fog doesn’t lift at once: each cell has its own timer, and the more it hides, the longer it runs. What it hides spills out as orbs — pick them up, and you or {avaia} grow more experienced with each one.",
+      "spoken": "Fog doesn't lift at once: each cell has its own timer, and the more it hides, the longer it runs. What it hides spills out as orbs — pick them up, and you or your Avaia grow more experienced with each one.",
+      "heard": "Fog doesn't lift at once. Each cell has its own timer, and the more it hides, the longer it runs. What it hides spills out as orbs pick them up, and you or your AVEA grow more experienced with each one.",
+      "characterErrorRate": 0.01,
+      "seconds": 11.12,
+      "sha256": "4b90eb70b4ac00ea98d199dd0e3fa448268a0b34f39e065d082951ecc2c2a1fc"
+    },
+    "en/xsasha-feminine/guide.territory.newGround.2": {
+      "text": "You’ve opened your first cell. The timer over a cell shows how long it still needs. Once it’s open, collect the orbs on it — each makes you or {avaia} more experienced.",
+      "spoken": "You've opened your first cell. The timer over a cell shows how long it still needs. Once it's open, collect the orbs on it — each makes you or your Avaia more experienced.",
+      "heard": "You've opened your first cell. The timer over a cell shows how long it still needs. Once it's open, collect the orbs on it. Each makes you or your AVEA more experienced.",
+      "characterErrorRate": 0.012,
+      "seconds": 9.39,
+      "sha256": "f1d101a7ac58b9db813aabd5ed7f2fde0c160d0b90ad40441d67e465e8ad7b2c"
+    },
     "en/xsasha-masculine/guide.intro.farewell.0": {
       "text": "Fine. I’ll drop by again.",
       "spoken": "Fine. I'll drop by again.",
@@ -1023,6 +1047,30 @@
       "characterErrorRate": 0.0,
       "seconds": 2.37,
       "sha256": "51ac68b3c5789eeceba07de9ebd1672b3f6c02810201f4e02ff91512f3a05a5e"
+    },
+    "en/xsasha-masculine/guide.territory.newGround.0": {
+      "text": "There — new ground. Every cell takes its time to open: the timer over it counts down, longer where more lies hidden. And look — orbs spilled out of it. Every one you pick up makes you or {avaia} more experienced.",
+      "spoken": "There — new ground. Every cell takes its time to open: the timer over it counts down, longer where more lies hidden. And look — orbs spilled out of it. Every one you pick up makes you or your Avaia more experienced.",
+      "heard": "There, new ground. Every cell takes its time to open. The timer over it counts down, longer where more lies hidden. And look, orbs spilled out of it. Every one you pick up makes you or your Avea more experienced.",
+      "characterErrorRate": 0.01,
+      "seconds": 12.22,
+      "sha256": "a4b4ac529fe67be451a36482e6cc80492cdc9716c3b68215dbae36f63dd2762a"
+    },
+    "en/xsasha-masculine/guide.territory.newGround.1": {
+      "text": "Fog doesn’t lift at once: each cell has its own timer, and the more it hides, the longer it runs. What it hides spills out as orbs — pick them up, and you or {avaia} grow more experienced with each one.",
+      "spoken": "Fog doesn't lift at once: each cell has its own timer, and the more it hides, the longer it runs. What it hides spills out as orbs — pick them up, and you or your Avaia grow more experienced with each one.",
+      "heard": "Fog doesn't lift it once. Each cell has its own timer and the more it hides, the longer it runs. What it hides spills out as orbs, pick them up, and you or your Avaea grow more experienced with each one.",
+      "characterErrorRate": 0.01,
+      "seconds": 10.82,
+      "sha256": "84c996bf80f9f96f9c239a4a97c309c3b8f893e554783675481ce22e2bfd0224"
+    },
+    "en/xsasha-masculine/guide.territory.newGround.2": {
+      "text": "You’ve opened your first cell. The timer over a cell shows how long it still needs. Once it’s open, collect the orbs on it — each makes you or {avaia} more experienced.",
+      "spoken": "You've opened your first cell. The timer over a cell shows how long it still needs. Once it's open, collect the orbs on it — each makes you or your Avaia more experienced.",
+      "heard": "You've opened your first cell. The timer over a cell shows how long it still needs. Once it's open, collect the orbs on it. Each makes you or your Avea more experienced.",
+      "characterErrorRate": 0.012,
+      "seconds": 8.88,
+      "sha256": "836e9ae5eaf05e642e86772567790396d797a4377d844e71882e676232afa08e"
     },
     "uk-UA/dasha-study/blocked.building.0": {
       "text": "Це ж чийсь дім!",
@@ -1952,6 +2000,30 @@
       "seconds": 2.14,
       "sha256": "8929fe014d9ec3cc9d2e19c1b5d926204b81c4934a8d32c84c67803f892d2688"
     },
+    "uk-UA/xsasha-feminine/guide.territory.newGround.0": {
+      "text": "Ось і нова територія. Кожна клітинка відкривається не одразу: таймер над нею показує, скільки ще чекати, — довше там, де більше сховано. А глянь — з неї висипались кульки. За кожну зібрану ти або {avaia} станете досвідченішими.",
+      "spoken": "Ось і нова́ терито́рія. Ко́жна кліти́нка відкрива́ється не одра́зу: та́ймер над не́ю пока́зує, скі́льки ще чека́ти, — до́вше там, де бі́льше схо́вано. А глянь — з не́ї ви́сипались кульки́. За ко́жну зі́брану ти або́ твоя́ ава́я ста́нете досві́дченішими.",
+      "heard": "Ось і нова територія. Кожна клітинка відкривається не одразу, таймер над нею показує, скільки ще чекати. Довше там, де більше схована. А глянь, з неї висипались кульки. За кожну зібрану ти або твоя авая станете досвідченіш",
+      "characterErrorRate": 0.018,
+      "seconds": 14.33,
+      "sha256": "f233d3bbb2351aab539bc79db74cf2d5bf63f2b820dbd48bdf8d2265f8f1c13b"
+    },
+    "uk-UA/xsasha-feminine/guide.territory.newGround.1": {
+      "text": "Туман не розходиться миттю: у кожної клітинки свій таймер, і що більше вона ховає, то довше він іде. А сховане висипається кульками — збирай, і з кожною ти або {avaia} станете досвідченішими.",
+      "spoken": "Тума́н не розхо́диться ми́ттю: у ко́жної кліти́нки свій та́ймер, і що бі́льше вона́ хова́є, то до́вше він іде́. А схо́ване висипа́ється кулька́ми — збира́й, і з ко́жною ти або́ твоя́ ава́я ста́нете досві́дченішими.",
+      "heard": "Туман не розходиться, мить у кожної клітинки свій таймер, і що більше вона ховає, то довше він йде, а сховане висипається кульками. Збирай, і з кожної ти або твоя авая станете досвідченішими",
+      "characterErrorRate": 0.022,
+      "seconds": 12.21,
+      "sha256": "1b37e0bf9273cdbbac2c5542eaea36daebc00d8e4fc884381d98569ed1840d41"
+    },
+    "uk-UA/xsasha-feminine/guide.territory.newGround.2": {
+      "text": "Перша клітинка — твоя. Таймер над клітинкою показує, скільки їй ще відкриватись. А на відкритій землі збирай кульки: за кожну ти або {avaia} станете досвідченішими.",
+      "spoken": "Пе́рша кліти́нка — твоя́. Та́ймер над кліти́нкою пока́зує, скі́льки їй ще відкрива́тись. А на відкри́тій землі́ збира́й кульки́: за ко́жну ти або́ твоя́ ава́я ста́нете досві́дченішими.",
+      "heard": "Перша клітинка, твоя, таймер над клітинкою показує, скільки її ще відкриватись. А на відкритій землі збирай коньки за кожну ти, або твоя авая станете досвідченішими.",
+      "characterErrorRate": 0.019,
+      "seconds": 11.17,
+      "sha256": "14f7c2c7b6bb4ef361ad6a3d7a52305a2cc576742a5959c44b9f546a5144c631"
+    },
     "uk-UA/xsasha-masculine/guide.intro.farewell.0": {
       "text": "Добре. Я ще зазирну.",
       "spoken": "До́бре. Я ще зазирну́.",
@@ -2047,6 +2119,30 @@
       "characterErrorRate": 0.0,
       "seconds": 3.21,
       "sha256": "b76f9786747baf2b5e9d64629ffbf446c68ee14cbc4ebd32a53981af2d928ee6"
+    },
+    "uk-UA/xsasha-masculine/guide.territory.newGround.0": {
+      "text": "Ось і нова територія. Кожна клітинка відкривається не одразу: таймер над нею показує, скільки ще чекати, — довше там, де більше сховано. А глянь — з неї висипались кульки. За кожну зібрану ти або {avaia} станете досвідченішими.",
+      "spoken": "Ось і нова́ терито́рія. Ко́жна кліти́нка відкрива́ється не одра́зу: та́ймер над не́ю пока́зує, скі́льки ще чека́ти, — до́вше там, де бі́льше схо́вано. А глянь — з не́ї ви́сипались кульки́. За ко́жну зі́брану ти або́ твоя́ ава́я ста́нете досві́дченішими.",
+      "heard": "Ось і нова територія. Кожна клітинка відкривається не одразу, таймер над нею показує, скільки ще чекати. Довше там, де більше сховано, а глянь. З неї висипались кульки. За кожну зібрану ти або твоя авая станете досвідченішими.",
+      "characterErrorRate": 0.0,
+      "seconds": 19.31,
+      "sha256": "059f93e822a9d5128701a341aa0a89129e0067ba1766f39c50f82fd2d6395981"
+    },
+    "uk-UA/xsasha-masculine/guide.territory.newGround.1": {
+      "text": "Туман не розходиться миттю: у кожної клітинки свій таймер, і що більше вона ховає, то довше він іде. А сховане висипається кульками — збирай, і з кожною ти або {avaia} станете досвідченішими.",
+      "spoken": "Тума́н не розхо́диться ми́ттю: у ко́жної кліти́нки свій та́ймер, і що бі́льше вона́ хова́є, то до́вше він іде́. А схо́ване висипа́ється кулька́ми — збира́й, і з ко́жною ти або́ твоя́ ава́я ста́нете досві́дченішими.",
+      "heard": "Туман не розходиться, миттюд у кожної клітинки свій таймер, і що більше вона ховає, то довше він йде, а сховане висипається кульками, збирай, і з кожною ти або твоя авая станете досвідченішими.",
+      "characterErrorRate": 0.011,
+      "seconds": 16.09,
+      "sha256": "80c44788e877a9c81c72c1703d519e4758975dd30a423fb296946a3d39c9fbfa"
+    },
+    "uk-UA/xsasha-masculine/guide.territory.newGround.2": {
+      "text": "Перша клітинка — твоя. Таймер над клітинкою показує, скільки їй ще відкриватись. А на відкритій землі збирай кульки: за кожну ти або {avaia} станете досвідченішими.",
+      "spoken": "Пе́рша кліти́нка — твоя́. Та́ймер над кліти́нкою пока́зує, скі́льки їй ще відкрива́тись. А на відкри́тій землі́ збира́й кульки́: за ко́жну ти або́ твоя́ ава́я ста́нете досві́дченішими.",
+      "heard": "Перша клітинка, твоя, таймер над клітинкою показує, скільки їй ще відкриватись. А на відкритій землі збирай кульки за кожну ти або двоя аває станете досвідченішими.",
+      "characterErrorRate": 0.013,
+      "seconds": 13.8,
+      "sha256": "9e625bdc6660d3e7f8e7eaf47bb5a22b790a8c8da38d4cfaf44f9642c3fcca27"
     }
   },
   "version": "0.1.0",
