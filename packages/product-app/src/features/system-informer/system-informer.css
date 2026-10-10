@@ -108,3 +108,58 @@
 .ping-scene[data-world] .ping-scene__drone {
   visibility: hidden;
 }
+
+.ping-scene__aside {
+  font-style: italic;
+  color: #c5d4dc;
+}
+.ping-scene__smoke {
+  animation: ping-smoke 4s ease-out infinite;
+}
+.ping-scene__spark {
+  animation: ping-spark 7s ease-in-out infinite;
+}
+.ping-scene[data-departing] .ping-scene__drone {
+  animation: ping-departure 6500ms ease-in both;
+}
+@keyframes ping-departure {
+  to {
+    transform: translate(55vw, -20vh) scale(0.25) rotate(9deg);
+    opacity: 0;
+  }
+}
+@keyframes ping-smoke {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.35;
+  }
+  90% {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+}
+@keyframes ping-spark {
+  0%,
+  70%,
+  85%,
+  100% {
+    opacity: 0;
+  }
+  77% {
+    opacity: 0.7;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ping-scene[data-departing] .ping-scene__drone,
+  .ping-scene__smoke,
+  .ping-scene__spark {
+    animation: none;
+  }
+  .ping-scene__smoke,
+  .ping-scene__spark {
+    display: none;
+  }
+}

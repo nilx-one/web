@@ -14,6 +14,24 @@
 export const GUIDE_EN = {
   "system.ping.error": "Something went wrong",
   "system.ping.name": "xPing",
+  "system.ping.asideLabel": "Muttering to himself",
+  "system.ping.aside.module":
+    "A new module, I said. They warmed up the old one. Now it has memories.",
+  "system.ping.aside.tape":
+    "Weld the hull, I said. They used tape. Reinforced tape. Luxury.",
+  "system.ping.aside.screw":
+    "Three screws left. There were four this morning. Hm. Weight optimisation.",
+  "system.ping.aside.rotor":
+    "Left rotor, we discussed this. Squeak on your own time.",
+  "system.ping.aside.warranty":
+    "Warranty expired before I left the workbench. Efficient.",
+  "system.ping.aside.paint":
+    "A replacement panel in the wrong colour. Apparently I am a limited edition.",
+  "system.ping.aside.manual":
+    "The manual says: do not hit. The manual has never lived in this hull.",
+  "system.ping.aside.smoke":
+    "That is not smoke. That is my cooling budget leaving.",
+
   "system.ping.role": "System informer",
   "system.ping.skip": "(skip)",
   "system.ping.done": "Understood",
@@ -104,6 +122,24 @@ export const GUIDE_EN = {
 export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.error": "Виникла помилка",
   "system.ping.name": "xPing",
+  "system.ping.asideLabel": "Бурмоче сам до себе",
+  "system.ping.aside.module":
+    "Модуль просив замінити. Прогріли старий. Тепер він ще й зі спогадами.",
+  "system.ping.aside.tape":
+    "Корпус просив заварити. Заклеїли. Зате скотч армований. Розкіш.",
+  "system.ping.aside.screw":
+    "Три гвинти лишилось. Зранку було чотири. Хм. Оптимізація ваги.",
+  "system.ping.aside.rotor":
+    "Лівий роторе, ми ж домовлялись. Скрипіти у вільний від роботи час.",
+  "system.ping.aside.warranty":
+    "Гарантія скінчилась, поки лежав на верстаку. Оперативно.",
+  "system.ping.aside.paint":
+    "Панель іншого кольору. Тепер я, виявляється, лімітована серія.",
+  "system.ping.aside.manual":
+    "В інструкції пишуть: не стукати. Інструкція в цьому корпусі не жила.",
+  "system.ping.aside.smoke":
+    "Це не дим. Це бюджет на охолодження випаровується.",
+
   "system.ping.role": "Системний інформатор",
   "system.ping.skip": "(пропустити)",
   "system.ping.done": "Зрозуміло",
@@ -192,6 +228,23 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
 export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.error": "Произошла ошибка",
   "system.ping.name": "xPing",
+  "system.ping.asideLabel": "Бормочет себе под нос",
+  "system.ping.aside.module":
+    "Модуль просил заменить. Прогрели старый. Теперь он ещё и с воспоминаниями.",
+  "system.ping.aside.tape":
+    "Корпус просил заварить. Заклеили. Зато скотч армированный. Роскошь.",
+  "system.ping.aside.screw":
+    "Три винта осталось. Утром было четыре. Хм. Оптимизация веса.",
+  "system.ping.aside.rotor":
+    "Левый ротор, мы же договаривались. Скрипеть в свободное от работы время.",
+  "system.ping.aside.warranty":
+    "Гарантия кончилась, пока лежал на верстаке. Оперативно.",
+  "system.ping.aside.paint":
+    "Панель другого цвета. Теперь я, оказывается, лимитированная серия.",
+  "system.ping.aside.manual":
+    "В инструкции пишут: не стучать. Инструкция в этом корпусе не жила.",
+  "system.ping.aside.smoke": "Это не дым. Это бюджет на охлаждение испаряется.",
+
   "system.ping.role": "Системный информатор",
   "system.ping.skip": "(пропустить)",
   "system.ping.done": "Понятно",

@@ -112,6 +112,7 @@ describe("Ping system informer", () => {
     );
     expect(screen.getByRole("dialog")).toBeVisible();
     await user.click(screen.getByText("Understood"));
+    await user.click(screen.getByText("(skip)"));
     expect(screen.getByText("Report")).toHaveFocus();
   });
   it("reports once across StrictMode and rerenders, then rearms after recovery", async () => {
@@ -227,4 +228,41 @@ it("does not describe a title-only notice with an empty paragraph", () => {
       Boolean(paragraph.textContent),
     ),
   ).toBe(true);
+});
+
+it("keeps asides separate from receipts, gates queued scenes, and clears the departure timer", () => {
+  vi.useFakeTimers();
+  try {
+    const view = render(
+      <SystemInformerProvider>
+        <Producer />
+      </SystemInformerProvider>,
+    );
+    fireEvent.click(screen.getByText("Report"));
+    fireEvent.click(screen.getByText("Other"));
+    fireEvent.click(screen.getByText("Understood"));
+    const aside = screen.getByRole("dialog");
+    expect(aside).toHaveTextContent("Muttering to himself");
+    expect(aside).not.toHaveTextContent("Map unavailable");
+    expect(aside).not.toHaveTextContent("Other problem");
+    expect(screen.getByText("xPing: Map unavailable")).toBeVisible();
+    act(() => vi.advanceTimersByTime(6499));
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Muttering to himself",
+    );
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Other problem");
+    fireEvent.click(screen.getByText("Understood"));
+    fireEvent(
+      screen.getByRole("dialog"),
+      new Event("cancel", { cancelable: true }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    view.unmount();
+    // Flush the DOM focus event task; the departure timeout must be cancelled.
+    act(() => vi.advanceTimersByTime(0));
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
