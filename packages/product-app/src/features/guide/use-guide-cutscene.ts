@@ -128,7 +128,11 @@ export interface GuideCutsceneInput {
   readonly bondName: string;
   readonly names: GuideNames;
   readonly reducedMotion: boolean;
-  onEnd(scene: GuideSceneId, outcome: GuideOutcome): void;
+  onEnd(
+    scene: GuideSceneId,
+    outcome: GuideOutcome,
+    result: GuidePlayOptions,
+  ): void;
 }
 
 interface Playing {
@@ -280,7 +284,7 @@ export function useGuideCutscene({
     const current = playingRef.current;
     if (current === undefined) return;
     setPlaying(undefined);
-    onEndRef.current(current.scene, current.outcome ?? "done");
+    onEndRef.current(current.scene, current.outcome ?? "done", current);
   }, [setPlaying]);
 
   const toLine = useCallback(() => {

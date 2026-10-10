@@ -23,6 +23,7 @@ const HOME = join(
  */
 const ALLOWED_IMPORTS = new Set([
   "react",
+  "@nilx-one/ui",
   "@nilx-one/map-contract",
   "@nilx-one/application",
   "../../shell/localization",
@@ -89,6 +90,8 @@ describe("xSasha stays presentation", () => {
           violations.push(`${file}: ${from}`);
           continue;
         }
+        if (from === "@nilx-one/ui" && match[1] === undefined)
+          violations.push(`${file}: UI imports must be type-only`);
         if (from === "@nilx-one/application" && match[1] === undefined) {
           const names = (match[2] ?? "")
             .split(",")
@@ -127,7 +130,7 @@ describe("xSasha stays presentation", () => {
     expect(memory?.code).toContain('"nilx-one.guide.v1."');
   });
 
-  it("answers the end of a scene with navigation and its own record only", () => {
+  it("answers the end of a scene with navigation, presentation receipts and its own record only", () => {
     const home = withoutComments(readFileSync(HOME, "utf8"));
     const ending = functionBody(home, "endGuideScene");
     const calls = [...ending.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)]
@@ -135,6 +138,8 @@ describe("xSasha stays presentation", () => {
       .filter((name) => name !== "if");
     expect(new Set(calls)).toEqual(
       new Set([
+        "guideResultToast",
+        "setSceneToasts",
         "postponeGuideIntro",
         "rememberGuideIntro",
         "openDetail",
