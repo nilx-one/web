@@ -2627,30 +2627,37 @@ export function AuthenticatedMapHomeView({
                       </fieldset>
                       <fieldset className="interface-settings__appearance">
                         <legend>{t("settings.depth.legend")}</legend>
-                        <SettingsSlider
-                          id="dimension-level"
-                          label={t("settings.depth.legend")}
-                          options={(
+                        {(
+                          [
                             [
-                              [
-                                "flat",
-                                "settings.depth.twoD",
-                                "settings.depth.twoDDetail",
-                              ],
-                              [
-                                "volumetric",
-                                "settings.depth.threeD",
-                                "settings.depth.threeDDetail",
-                              ],
-                            ] as const
-                          ).map(([value, label, detail]) => ({
-                            value,
-                            label: t(label),
-                            detail: t(detail),
-                          }))}
-                          value={dimension}
-                          onChange={setDimension}
-                        />
+                              "volumetric",
+                              "settings.depth.threeD",
+                              "settings.depth.threeDDetail",
+                            ],
+                            [
+                              "flat",
+                              "settings.depth.twoD",
+                              "settings.depth.twoDDetail",
+                            ],
+                          ] as const
+                        ).map(([mode, label, detail]) => (
+                          <label
+                            key={mode}
+                            className="interface-settings__option"
+                          >
+                            <span>
+                              <strong>{t(label)}</strong>
+                              <small>{t(detail)}</small>
+                            </span>
+                            <input
+                              type="radio"
+                              name="dimension"
+                              value={mode}
+                              checked={dimension === mode}
+                              onChange={() => setDimension(mode)}
+                            />
+                          </label>
+                        ))}
                       </fieldset>
                       {sound === undefined ? null : (
                         <SoundSettings sound={sound} />

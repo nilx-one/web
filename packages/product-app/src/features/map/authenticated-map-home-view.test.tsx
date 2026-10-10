@@ -1442,7 +1442,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
     expect(screen.getByText("Глибина")).toBeVisible();
     expect(screen.getByText("Піднімати будівлі при наближенні")).toBeVisible();
-    expect(screen.getByRole("slider", { name: "Глибина" })).toHaveValue("1");
+    expect(screen.getByRole("radio", { name: /^3D/ })).toBeChecked();
     expect(
       screen.getByText(/не змінює стан Bond, BondChain чи спільного Core/),
     ).toBeVisible();
@@ -1474,6 +1474,20 @@ describe("AuthenticatedMapHomeView", () => {
     );
     expect(window.localStorage.getItem("nilx-one.interface.appearance")).toBe(
       "light",
+    );
+  });
+
+  it("restores the Depth radio selector and persists the dimension", () => {
+    renderView({ section: "settings" });
+
+    expect(screen.queryByRole("slider", { name: "Depth" })).toBeNull();
+    expect(screen.getByRole("radio", { name: /^3D/ })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: /^2D/ }));
+
+    expect(screen.getByRole("radio", { name: /^2D/ })).toBeChecked();
+    expect(window.localStorage.getItem("nilx-one.interface.dimension")).toBe(
+      "flat",
     );
   });
 
