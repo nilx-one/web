@@ -6,6 +6,8 @@ import {
   DEFAULT_MAP_DIMENSION,
   MAP_SCALE_ZOOM,
   type AvatarHandle,
+  type SystemDroneHandle,
+  type SystemDroneLayerContract,
   type AvatarLayerContract,
   type MapAppearance,
   type MapCamera,
@@ -426,6 +428,8 @@ export function createMapLibreRenderer(
   let avatarLayer: AvatarCustomLayer | undefined;
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
+  const droneHandles = new Map<string, SystemDroneHandle>();
+  let droneLayerFailed = false;
   let avatarCamera: MapCamera = camera;
   let monumentLayer: MonumentCustomLayer | undefined;
   let monumentLayerPromise: Promise<MonumentCustomLayer> | undefined;
@@ -463,6 +467,7 @@ export function createMapLibreRenderer(
         avatarLayer = layer;
         layer.setCamera(avatarCamera);
         for (const handle of avatarHandles.values()) layer.upsert(handle);
+        for (const handle of droneHandles.values()) layer.upsertDrone(handle);
         if (map !== undefined && firstPaintDone && layer.hasInstances()) {
           ensureAvatarLayer(map);
         }
@@ -472,6 +477,25 @@ export function createMapLibreRenderer(
     return avatarLayerPromise;
   }
 
+  const systemDrone: SystemDroneLayerContract = {
+    upsert(handle) {
+      droneHandles.set(handle.id, handle);
+      if (avatarLayer !== undefined) return avatarLayer.upsertDrone(handle);
+      if (droneLayerFailed) return false;
+      void requestAvatarLayer().catch(() => {
+        // The informer keeps its independent text/SVG fallback if this chunk
+        // cannot load. A later publication may retry the capability.
+        avatarLayerPromise = undefined;
+        droneLayerFailed = droneHandles.size > 0;
+      });
+      return false;
+    },
+    remove(id) {
+      droneHandles.delete(id);
+      if (droneHandles.size === 0) droneLayerFailed = false;
+      avatarLayer?.remove(id);
+    },
+  };
   const avatars: AvatarLayerContract = {
     upsert(handle) {
       avatarHandles.set(handle.id, handle);
@@ -1292,6 +1316,7 @@ export function createMapLibreRenderer(
 
   return {
     avatars,
+    systemDrone,
 
     mount(container) {
       if (map !== undefined) {
@@ -1464,6 +1489,16 @@ export function createMapLibreRenderer(
 
     getCamera() {
       return camera;
+    },
+
+    getCameraPadding() {
+      const padding = map?.getPadding();
+      return {
+        top: padding?.top ?? 0,
+        right: padding?.right ?? 0,
+        bottom: padding?.bottom ?? 0,
+        left: padding?.left ?? 0,
+      };
     },
 
     subscribeCamera(listener) {

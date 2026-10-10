@@ -20,6 +20,7 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import { useSystemErrorNotices } from "../system-informer/system-informer";
 import type { AvatarChoiceViewState } from "./avatar-choice-view-model";
 import type {
   IdentityFoundationViewModel,
@@ -1231,6 +1232,30 @@ export function IdentityFoundationView({
   passwordHandoff,
 }: IdentityFoundationViewProps) {
   const { t } = useLocalization();
+  const identity = viewModel.identity;
+  const error =
+    identity.kind === "unavailable"
+      ? identity.detail
+      : identity.kind === "form" &&
+          identity.status.kind === "service-unavailable"
+        ? identity.status.detail
+        : identity.kind === "avatar-choice"
+          ? identity.choice.error
+          : "error" in identity
+            ? identity.error
+            : undefined;
+  useSystemErrorNotices(
+    error === undefined
+      ? []
+      : [
+          {
+            id: `identity:${identity.kind}:${error}`,
+            kind: "error",
+            title: t("system.ping.error"),
+            description: translateCopy(t, error),
+          },
+        ],
+  );
   return (
     <AppChrome
       copy={{

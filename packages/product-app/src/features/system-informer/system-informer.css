@@ -1,0 +1,110 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.ping-scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  box-sizing: border-box;
+  overflow: auto;
+  color: #e9f5fa;
+  background: linear-gradient(180deg, #040e17e8, #071925b8 45%, #040e17f5);
+}
+.ping-scene::backdrop {
+  background: #0006;
+}
+.ping-scene__sky {
+  height: 44%;
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.ping-scene__drone {
+  width: min(320px, 65vw);
+  max-height: 100%;
+  color: #7ae0f5;
+  animation: ping-arrival 950ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.ping-scene__copy {
+  max-width: 38rem;
+  margin: 0 auto;
+  padding: 1rem 0;
+}
+.ping-scene__speaker {
+  color: #7ae0f5;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+}
+.ping-scene__copy h2 {
+  font-size: clamp(1.3rem, 4vw, 2rem);
+}
+.ping-scene__copy p {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.ping-scene__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.ping-scene__actions button {
+  min-height: 44px;
+  border: 1px solid #7ae0f580;
+  border-radius: 12px;
+  padding: 0.6rem 1rem;
+  background: #143547;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.ping-scene__actions .ping-scene__skip {
+  background: transparent;
+  border-color: transparent;
+}
+.ping-scene__actions button:focus-visible {
+  outline: 2px solid #7ae0f5;
+  outline-offset: 3px;
+}
+@keyframes ping-arrival {
+  from {
+    transform: translate(65vw, -25vh) scale(0.15) rotate(-12deg);
+    opacity: 0;
+  }
+  to {
+    transform: translate(0, 0) scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ping-scene__drone {
+    animation: none;
+  }
+}
+
+.ping-scene[data-world] {
+  background: linear-gradient(
+    180deg,
+    #000b,
+    transparent 12%,
+    transparent 44%,
+    #040e17ed 58%
+  );
+}
+.ping-scene[data-world]::backdrop {
+  background: transparent;
+}
+
+.ping-scene[data-world] .ping-scene__drone {
+  visibility: hidden;
+}

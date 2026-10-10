@@ -519,9 +519,15 @@ describe("ProductApp identity", () => {
     await user.type(password, "incorrect password");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(
-      await screen.findByText("The pub_dress or password is invalid."),
-    ).toBeInTheDocument();
+    const errorDialog = await screen.findByRole("dialog");
+    expect(errorDialog).toHaveTextContent(
+      "The pub_dress or password is invalid.",
+    );
+    await user.click(screen.getByRole("button", { name: "(skip)" }));
+    expect(screen.getByText("xPing: Something went wrong")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The pub_dress or password is invalid.",
+    );
     expect(screen.getByLabelText("pub_dress").closest("form")).toHaveAttribute(
       "data-submission-error",
       "true",
