@@ -1436,10 +1436,13 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByRole("heading", { name: "Налаштування" })).toBeVisible();
     expect(screen.getByText("Застосунок")).toBeVisible();
     expect(screen.getByText("Вигляд")).toBeVisible();
-    expect(screen.getByText("Залишити мапу світлою")).toBeVisible();
+    expect(screen.getByRole("slider", { name: "Вигляд" })).toHaveAttribute(
+      "aria-valuetext",
+      "Автоматично",
+    );
     expect(screen.getByText("Глибина")).toBeVisible();
     expect(screen.getByText("Піднімати будівлі при наближенні")).toBeVisible();
-    expect(screen.getByText("Залишати будівлі контурами")).toBeVisible();
+    expect(screen.getByRole("radio", { name: /^3D/ })).toBeChecked();
     expect(
       screen.getByText(/не змінює стан Bond, BondChain чи спільного Core/),
     ).toBeVisible();
@@ -1457,11 +1460,14 @@ describe("AuthenticatedMapHomeView", () => {
     const { container } = renderView({ section: "settings" });
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeVisible();
-    expect(screen.getByRole("radio", { name: /Auto/i })).toBeChecked();
+    const appearance = screen.getByRole("slider", { name: "Appearance" });
+    expect(appearance).toHaveValue("1");
+    expect(appearance).toHaveAttribute("aria-valuetext", "Auto");
 
-    fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
+    fireEvent.change(appearance, { target: { value: "0" } });
 
-    expect(screen.getByRole("radio", { name: /Light/i })).toBeChecked();
+    expect(appearance).toHaveValue("0");
+    expect(appearance).toHaveAttribute("aria-valuetext", "Light");
     expect(container.querySelector(".authenticated-map-home")).toHaveAttribute(
       "data-theme",
       "light",
@@ -1471,16 +1477,31 @@ describe("AuthenticatedMapHomeView", () => {
     );
   });
 
+  it("restores the Depth radio selector and persists the dimension", () => {
+    renderView({ section: "settings" });
+
+    expect(screen.queryByRole("slider", { name: "Depth" })).toBeNull();
+    expect(screen.getByRole("radio", { name: /^3D/ })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: /^2D/ }));
+
+    expect(screen.getByRole("radio", { name: /^2D/ })).toBeChecked();
+    expect(window.localStorage.getItem("nilx-one.interface.dimension")).toBe(
+      "flat",
+    );
+  });
+
   it("offers sound on the settings route and keeps the choice on this device", () => {
     const sound = soundDouble();
     renderView({ section: "settings", sound });
 
     expect(screen.getByRole("group", { name: "Sound" })).toBeVisible();
-    expect(
-      screen.getByRole("radio", { name: /^Effects\s?A short/ }),
-    ).toBeChecked();
+    const soundLevel = screen.getByRole("slider", { name: "Sound" });
+    expect(soundLevel).toHaveValue("1");
+    expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects");
 
-    fireEvent.click(screen.getByRole("radio", { name: /Effects and world/ }));
+    fireEvent.change(soundLevel, { target: { value: "2" } });
+    expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects and world");
 
     expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
     // Character voices default to cutscenes: the middle of three stops.
@@ -1566,7 +1587,9 @@ describe("AuthenticatedMapHomeView", () => {
     const mapRenderer = renderer();
 
     renderView({ mapRenderer, section: "settings" });
-    fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
+    fireEvent.change(screen.getByRole("slider", { name: "Appearance" }), {
+      target: { value: "0" },
+    });
 
     expect(mapRenderer.setAppearance).toHaveBeenLastCalledWith("light");
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
