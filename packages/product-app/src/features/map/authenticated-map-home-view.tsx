@@ -1357,9 +1357,7 @@ export function AuthenticatedMapHomeView({
     renderer,
     near: observedPosition,
     bond:
-      wheel === "bond" && handover === undefined
-        ? observedPosition
-        : undefined,
+      wheel === "bond" && handover === undefined ? observedPosition : undefined,
     avaiaPoint: () =>
       wheel === "avaia" && handover === undefined
         ? avaiaWalk.stance(globalThis.performance.now())?.point
