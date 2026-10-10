@@ -106,6 +106,38 @@ export function segmentAt(point: LonLat): SegmentId {
   return `seg:${Math.floor(y)}:${Math.floor(x)}`;
 }
 
+/**
+ * A point inside a segment: `x` and `y` are fractions, 0 to 1, of the way
+ * across it from its south-west corner. Arithmetic only, like the grid.
+ */
+export function pointInSegment(
+  segment: SegmentId,
+  x: number,
+  y: number,
+): LonLat {
+  const [, row, column] = segment.split(":").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return [(column + x) * COLUMN_DEGREES - 180, (row + y) * ROW_DEGREES - 90];
+}
+
+/**
+ * Where a find rolled for ground rather than for a walk lies: inside its own
+ * segment, at its placement read as fractions across it. Every device puts
+ * the same find in the same place, and nothing has to be sent to agree.
+ */
+export function findPoint(
+  roll: Pick<FindRoll, "segment" | "placement">,
+): LonLat {
+  return pointInSegment(
+    roll.segment,
+    roll.placement.along,
+    (roll.placement.across + 1) / 2,
+  );
+}
+
 /** The most segments one area may span; a larger ring is a caller's mistake. */
 const MAX_SEGMENTS_WITHIN = 10_000;
 

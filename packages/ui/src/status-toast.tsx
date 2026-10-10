@@ -7,12 +7,16 @@ import type { ToastPlacement } from "./toast";
 
 export type StatusToastKind = "active" | "loading" | "warning" | "error";
 
+/** Whose a toast is, when it is someone's: the Bond's blue, its Avaia's violet. */
+export type StatusToastTone = "bond" | "avaia";
+
 export interface StatusToastItem {
   readonly id: string;
   readonly kind: StatusToastKind;
   readonly title: string;
   readonly description?: string;
   readonly dismissible?: boolean;
+  readonly tone?: StatusToastTone;
 }
 
 /** Words the stack itself supplies; a localized host passes its own. */
@@ -60,7 +64,9 @@ function StatusToast({
 
   return (
     <div
-      className={`toast status-toast status-toast--${toast.kind}`}
+      className={`toast status-toast status-toast--${toast.kind}${
+        toast.tone === undefined ? "" : ` status-toast--tone-${toast.tone}`
+      }`}
       data-status-toast-kind={toast.kind}
     >
       <span className="toast__marker" aria-hidden="true" />

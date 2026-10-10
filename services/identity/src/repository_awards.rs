@@ -23,6 +23,25 @@ pub struct CommittedAward {
     pub weekly_cap: u32,
     /// Set for a pick-up of a claimed tier: the find, as the service rolled it.
     pub claim: Option<FindClaim>,
+    /// Set for an orb pick-up: which orb of which spill.
+    pub orb: Option<OrbClaim>,
+}
+
+/// One orb a pick-up claims: its find's public sha and its number.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OrbClaim {
+    pub artifact_sha: String,
+    pub orb: u8,
+}
+
+/// A spill as it is answered: how many orbs fell, when they are gone, and
+/// which are picked up already, by anyone.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OrbSpill {
+    pub artifact_sha: String,
+    pub count: u8,
+    pub expires_at_ms: i64,
+    pub taken: Vec<u8>,
 }
 
 /// A rare find a pick-up claims, as the service rolled it.
@@ -114,6 +133,65 @@ impl IdentityRepository {
         Ok((experience, outcomes))
     }
 
+    /// Spills a find's orbs, once a week: a find that spilled before keeps
+    /// its first spill, live or gone. Old weeks are pruned on the way.
+    pub async fn spill_orbs(
+        &self,
+        artifact_sha: &str,
+        epoch: i64,
+        count: u8,
+        now_ms: i64,
+    ) -> Result<OrbSpill, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("DELETE FROM orb_spills WHERE epoch < ?")
+            .bind(epoch - 2)
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query(
+            "INSERT INTO orb_spills (artifact_sha, epoch, count, expires_at_ms) \
+             VALUES (?, ?, ?, ?) ON CONFLICT(artifact_sha) DO NOTHING",
+        )
+        .bind(artifact_sha)
+        .bind(epoch)
+        .bind(i64::from(count))
+        .bind(now_ms + crate::finds::ORB_LIFETIME_MS)
+        .execute(&mut *transaction)
+        .await?;
+        let spill = read_spill_in(&mut transaction, artifact_sha).await?;
+        transaction.commit().await?;
+        spill.ok_or(RepositoryError::CorruptPubInfo)
+    }
+
+    /// The spills still lying at `now_ms` in the given sha buckets.
+    pub async fn read_spills(
+        &self,
+        buckets: &[u8],
+        now_ms: i64,
+    ) -> Result<Vec<OrbSpill>, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let mut spills = Vec::new();
+        for &bucket in buckets {
+            let (low, high) = bucket_range(bucket);
+            let shas = sqlx::query_scalar::<_, String>(
+                "SELECT artifact_sha FROM orb_spills \
+                 WHERE expires_at_ms > ? AND artifact_sha >= ? AND artifact_sha < ? \
+                 ORDER BY artifact_sha",
+            )
+            .bind(now_ms)
+            .bind(low)
+            .bind(high)
+            .fetch_all(&mut *transaction)
+            .await?;
+            for sha in shas {
+                if let Some(spill) = read_spill_in(&mut transaction, &sha).await? {
+                    spills.push(spill);
+                }
+            }
+        }
+        transaction.commit().await?;
+        Ok(spills)
+    }
+
     /// The claims of `epoch` in the given sha buckets (two hex digits each),
     /// each marked as this Bond's or not. It never names another Bond.
     pub async fn read_claims(
@@ -124,12 +202,7 @@ impl IdentityRepository {
     ) -> Result<Vec<ClaimedFind>, RepositoryError> {
         let mut claims = Vec::new();
         for &bucket in buckets {
-            let low = format!("{bucket:02x}");
-            let high = if bucket == u8::MAX {
-                "g".to_owned()
-            } else {
-                format!("{:02x}", bucket + 1)
-            };
+            let (low, high) = bucket_range(bucket);
             let rows = sqlx::query(
                 "SELECT artifact_sha, owner_pub_dress = ? AS yours FROM find_claims \
                  WHERE epoch = ? AND artifact_sha >= ? AND artifact_sha < ? \
@@ -150,6 +223,47 @@ impl IdentityRepository {
         }
         Ok(claims)
     }
+}
+
+/// The sha range one bucket covers: from its two hex digits to the next.
+fn bucket_range(bucket: u8) -> (String, String) {
+    let low = format!("{bucket:02x}");
+    let high = if bucket == u8::MAX {
+        "g".to_owned()
+    } else {
+        format!("{:02x}", bucket + 1)
+    };
+    (low, high)
+}
+
+async fn read_spill_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    artifact_sha: &str,
+) -> Result<Option<OrbSpill>, RepositoryError> {
+    let Some(row) = sqlx::query("SELECT count, expires_at_ms FROM orb_spills WHERE artifact_sha = ?")
+        .bind(artifact_sha)
+        .fetch_optional(&mut **transaction)
+        .await?
+    else {
+        return Ok(None);
+    };
+    let count = u8::try_from(row.try_get::<i64, _>("count")?)
+        .map_err(|_| RepositoryError::CorruptPubInfo)?;
+    let taken = sqlx::query_scalar::<_, i64>(
+        "SELECT orb FROM orb_claims WHERE artifact_sha = ? ORDER BY orb",
+    )
+    .bind(artifact_sha)
+    .fetch_all(&mut **transaction)
+    .await?
+    .into_iter()
+    .map(|orb| u8::try_from(orb).map_err(|_| RepositoryError::CorruptPubInfo))
+    .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(OrbSpill {
+        artifact_sha: artifact_sha.to_owned(),
+        count,
+        expires_at_ms: row.try_get("expires_at_ms")?,
+        taken,
+    }))
 }
 
 async fn commit_award(
@@ -234,6 +348,45 @@ async fn commit_award(
         }
     }
 
+    if let Some(orb) = &award.orb {
+        // An orb that never fell, or lies no longer, went to nobody: it is
+        // as gone as one someone else picked up. Crap.
+        let live = sqlx::query_scalar::<_, i64>(
+            "SELECT count FROM orb_spills WHERE artifact_sha = ? AND expires_at_ms > ?",
+        )
+        .bind(&orb.artifact_sha)
+        .bind(now.saturating_mul(1000))
+        .fetch_optional(&mut **transaction)
+        .await?;
+        if !live.is_some_and(|count| i64::from(orb.orb) < count) {
+            return Ok(AwardOutcome::Taken);
+        }
+        let claimed = sqlx::query(
+            "INSERT INTO orb_claims (artifact_sha, orb, owner_pub_dress) VALUES (?, ?, ?) \
+             ON CONFLICT(artifact_sha, orb) DO NOTHING",
+        )
+        .bind(&orb.artifact_sha)
+        .bind(i64::from(orb.orb))
+        .bind(owner.as_str())
+        .execute(&mut **transaction)
+        .await?
+        .rows_affected();
+        if claimed == 0 {
+            let holder = sqlx::query_scalar::<_, String>(
+                "SELECT owner_pub_dress FROM orb_claims WHERE artifact_sha = ? AND orb = ?",
+            )
+            .bind(&orb.artifact_sha)
+            .bind(i64::from(orb.orb))
+            .fetch_one(&mut **transaction)
+            .await?;
+            return Ok(if holder == owner.as_str() {
+                AwardOutcome::AlreadyYours
+            } else {
+                AwardOutcome::Taken
+            });
+        }
+    }
+
     apply_event(
         transaction,
         owner,
@@ -306,6 +459,7 @@ mod award_tests {
             amount: 30,
             weekly_cap: 2,
             claim: None,
+            orb: None,
         }
     }
 
@@ -324,6 +478,7 @@ mod award_tests {
                 epoch: EPOCH,
                 tier: 5,
             }),
+            orb: None,
         }
     }
 
@@ -598,5 +753,43 @@ mod award_tests {
                 .iter()
                 .all(|outcome| *outcome == AwardOutcome::Accepted)
         );
+    }
+    #[tokio::test]
+    async fn an_orb_is_gone_once_its_spill_has_lain_its_time() {
+        let (repository, sky, _other) = repository().await;
+        let sha = "a".repeat(64);
+        let spill = repository
+            .spill_orbs(&sha, EPOCH, 7, 1_000_000)
+            .await
+            .expect("spill");
+        assert_eq!(spill.count, 7);
+        assert_eq!(spill.expires_at_ms, 1_000_000 + crate::finds::ORB_LIFETIME_MS);
+        assert_eq!(
+            repository.read_spills(&[0xaa], 1_000_000).await.expect("read").len(),
+            1
+        );
+        let gone = 1_000_000 + crate::finds::ORB_LIFETIME_MS;
+        assert!(repository.read_spills(&[0xaa], gone).await.expect("read").is_empty());
+
+        let orb = CommittedAward {
+            id: "xp:orb".to_owned(),
+            parent: None,
+            chain: "ch:phone".to_owned(),
+            kind: "orb_picked_up",
+            tier: 0,
+            earner: ExperienceEarner::Bond,
+            amount: 10,
+            weekly_cap: 1_500,
+            claim: None,
+            orb: Some(super::OrbClaim {
+                artifact_sha: sha,
+                orb: 3,
+            }),
+        };
+        let (_, outcomes) = repository
+            .commit_awards(&sky, &[orb], EPOCH, u64::try_from(gone / 1000).expect("seconds"))
+            .await
+            .expect("commit");
+        assert_eq!(outcomes, [AwardOutcome::Taken]);
     }
 }

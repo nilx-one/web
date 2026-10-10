@@ -388,13 +388,18 @@ export async function readCommittedJournal(
 }
 
 function isFindAward(record: AwardRecord): boolean {
-  return record.kind === "find_seen" || record.kind === "find_picked_up";
+  return (
+    record.kind === "find_seen" ||
+    record.kind === "find_picked_up" ||
+    record.kind === "orb_picked_up"
+  );
 }
 
 /**
  * Whether two records are the same fact. A find is seen once and picked up
  * once, whoever does it (`awardsFor`): the Avaia's sighting and the Bond's
- * are one fact, so the earner does not tell them apart.
+ * are one fact, so the earner does not tell them apart. An orb is picked up
+ * once, by whichever of them got there.
  */
 function sameAward(left: AwardRecord, right: AwardRecord): boolean {
   return (

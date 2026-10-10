@@ -120,6 +120,41 @@ fn validate_awards(
             crate::repository::ExperienceEarner::Bond => finds::Earner::Bond,
             crate::repository::ExperienceEarner::Avaia => finds::Earner::Avaia,
         };
+        // An orb names its find and which of its orbs, and nothing else. Either
+        // earner may pick it up; whether it still lies is the claim's to say.
+        if kind == AwardKind::OrbPickedUp {
+            let (Some(artifact_id), Some(orb)) = (body.artifact_id.as_deref(), body.orb) else {
+                return None;
+            };
+            if body.tier.is_some() || body.recipe.is_some() {
+                return None;
+            }
+            let roll = finds::roll_artifact(finds::FIND_PACK_ID, artifact_id).ok()?;
+            if !finds::claimable_epoch(roll.epoch, now_ms)
+                || finds::orb_count(artifact_id).is_none_or(|count| orb >= count)
+            {
+                return None;
+            }
+            awards.push(crate::repository::CommittedAward {
+                id: body.id.clone(),
+                parent: body.parent.clone(),
+                chain: body.chain.clone(),
+                kind: kind.as_str(),
+                tier: 0,
+                earner,
+                amount: finds::award_amount(kind, finds_earner, None)?,
+                weekly_cap: finds::weekly_cap(kind, None),
+                claim: None,
+                orb: Some(crate::repository::OrbClaim {
+                    artifact_sha: finds::artifact_sha(artifact_id),
+                    orb,
+                }),
+            });
+            continue;
+        }
+        if body.orb.is_some() {
+            return None;
+        }
         // A finished craft is the Bond's, names its recipe and nothing else,
         // and is priced by it. Nothing else names a recipe.
         if kind == AwardKind::CraftFinished {
@@ -141,6 +176,7 @@ fn validate_awards(
                 amount,
                 weekly_cap: finds::weekly_cap(kind, Some(bucket)),
                 claim: None,
+                orb: None,
             });
             continue;
         }
@@ -184,6 +220,7 @@ fn validate_awards(
             amount,
             weekly_cap: finds::weekly_cap(kind, body.tier),
             claim,
+            orb: None,
         });
     }
     Some(awards)
@@ -280,6 +317,150 @@ async fn read_claims_response(
     }
 }
 
+async fn spill_orbs(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<SpillRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
+    if !active {
+        return with_session_cookie(session_inactive(), cookie);
+    }
+    let mut response = spill_orbs_response(&state, &identity, &request, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+/// A Bond tells the service that a find of the cell it opened spilled. The
+/// service rolls the find itself, so only a real find of this week spills,
+/// and counts its orbs itself, so a spill cannot be made larger.
+async fn spill_orbs_response(
+    state: &ApiState,
+    identity: &IdentityRecord,
+    request: &SpillRequest,
+    now: u64,
+) -> Response {
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        tracing::error!("stored human pub_dress is invalid");
+        return unavailable();
+    };
+    let Some(now_ms) = now.checked_mul(1000).and_then(|ms| i64::try_from(ms).ok()) else {
+        return unavailable();
+    };
+    let current = crate::finds::epoch_of(now_ms);
+    let roll = match crate::finds::roll_artifact(crate::finds::FIND_PACK_ID, &request.artifact_id) {
+        Ok(roll) if roll.epoch == current => roll,
+        _ => {
+            return no_store_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_spill",
+                "Only a find of this week spills.",
+            );
+        }
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(format!("orb-spills:{}", owner.as_str()), now, 120, 3600)
+        .and_then(|_| state.limiter.consume("orb-spills:global", now, 10_000, 3600))
+    {
+        return rate_limited(retry_after);
+    }
+    let Some(count) = crate::finds::orb_count(&request.artifact_id) else {
+        return unavailable();
+    };
+    match state
+        .repository
+        .spill_orbs(
+            &crate::finds::artifact_sha(&request.artifact_id),
+            roll.epoch,
+            count,
+            now_ms,
+        )
+        .await
+    {
+        Ok(spill) => no_store_json(StatusCode::OK, SpillBody::from(spill)),
+        Err(error) => {
+            tracing::error!(%error, "spilling orbs failed");
+            unavailable()
+        }
+    }
+}
+
+async fn read_spills(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Query(query): Query<ClaimsQuery>,
+) -> Response {
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let (identity, _active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
+    let mut response = read_spills_response(&state, &identity, &query, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn read_spills_response(
+    state: &ApiState,
+    identity: &IdentityRecord,
+    query: &ClaimsQuery,
+    now: u64,
+) -> Response {
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        tracing::error!("stored human pub_dress is invalid");
+        return unavailable();
+    };
+    let Some(buckets) = parse_buckets(&query.buckets) else {
+        return no_store_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_buckets",
+            "Ask for up to sixteen sha buckets, two lowercase hex digits each.",
+        );
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(format!("orb-reads:{}", owner.as_str()), now, 240, 3600)
+        .and_then(|_| state.limiter.consume("orb-reads:global", now, 20_000, 3600))
+    {
+        return rate_limited(retry_after);
+    }
+    let Some(now_ms) = now.checked_mul(1000).and_then(|ms| i64::try_from(ms).ok()) else {
+        return unavailable();
+    };
+    match state.repository.read_spills(&buckets, now_ms).await {
+        Ok(spills) => no_store_json(
+            StatusCode::OK,
+            SpillsResponse {
+                spills: spills.into_iter().map(SpillBody::from).collect(),
+            },
+        ),
+        Err(error) => {
+            tracing::error!(%error, "reading spills failed");
+            unavailable()
+        }
+    }
+}
+
 /// Comma-separated buckets, each two lowercase hex digits, each once.
 fn parse_buckets(text: &str) -> Option<Vec<u8>> {
     let mut buckets = std::collections::BTreeSet::new();
@@ -315,6 +496,9 @@ struct AwardBody {
     /// For `craft_finished` only: Core's recipe id, which prices it.
     #[serde(default)]
     recipe: Option<String>,
+    /// For `orb_picked_up` only: which orb of the named find's spill.
+    #[serde(default)]
+    orb: Option<u8>,
 }
 
 #[derive(Debug, Serialize)]
@@ -347,4 +531,34 @@ struct ClaimsResponse {
 struct ClaimBody {
     sha: String,
     yours: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpillRequest {
+    artifact_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SpillsResponse {
+    spills: Vec<SpillBody>,
+}
+
+#[derive(Debug, Serialize)]
+struct SpillBody {
+    sha: String,
+    count: u8,
+    expires_at_ms: i64,
+    taken: Vec<u8>,
+}
+
+impl From<crate::repository::OrbSpill> for SpillBody {
+    fn from(spill: crate::repository::OrbSpill) -> Self {
+        Self {
+            sha: spill.artifact_sha,
+            count: spill.count,
+            expires_at_ms: spill.expires_at_ms,
+            taken: spill.taken,
+        }
+    }
 }

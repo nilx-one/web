@@ -966,6 +966,69 @@ describe("committed awards and claims transport", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("spills a find's orbs and reads the live spills by bucket", async () => {
+    const spill = {
+      sha,
+      count: 12,
+      expires_at_ms: 1_800_001_800_000,
+      taken: [0, 3],
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(response(200, spill))
+      .mockResolvedValueOnce(response(200, { spills: [spill] }));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    const view = {
+      sha,
+      count: 12,
+      expiresAt: 1_800_001_800_000,
+      taken: [0, 3],
+    };
+
+    await expect(adapter.spillOrbs("art:seg:1:2:e2961:1:0")).resolves.toEqual({
+      kind: "spilled",
+      spill: view,
+    });
+    expect(fetch).toHaveBeenNthCalledWith(1, "/api/v1/identity/finds/spills", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-0x1-csrf": "1" },
+      body: JSON.stringify({ artifact_id: "art:seg:1:2:e2961:1:0" }),
+    });
+    await expect(adapter.readOrbSpills([sha.slice(0, 2)])).resolves.toEqual({
+      kind: "read",
+      spills: [view],
+    });
+    expect(fetch).toHaveBeenLastCalledWith(
+      `/api/v1/identity/finds/spills?buckets=${sha.slice(0, 2)}`,
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("does not adopt a spill outside the buckets asked or past its count", async () => {
+    const other = sha.slice(0, 2) === "00" ? "01" : "00";
+    for (const spills of [
+      [{ sha, count: 12, expires_at_ms: 1, taken: [] }],
+      [{ sha, count: 12, expires_at_ms: 1, taken: [12] }],
+    ]) {
+      const adapter = createIdentityHttpAdapter({
+        fetch: vi
+          .fn<typeof globalThis.fetch>()
+          .mockResolvedValue(response(200, { spills })),
+        getAuthorization: () => undefined,
+      });
+      const buckets =
+        spills[0]?.taken.length === 0 ? [other] : [sha.slice(0, 2)];
+      await expect(adapter.readOrbSpills(buckets)).resolves.toEqual({
+        kind: "service-unavailable",
+      });
+    }
+  });
+
   it("does not adopt a claim outside the buckets asked", async () => {
     const adapter = createIdentityHttpAdapter({
       fetch: vi

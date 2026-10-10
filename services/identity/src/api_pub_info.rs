@@ -58,6 +58,10 @@ fn pub_info_router_with_clock(
         )
         .route("/api/v1/identity/pub-info/awards", post(commit_awards))
         .route("/api/v1/identity/finds/claims", get(read_claims))
+        .route(
+            "/api/v1/identity/finds/spills",
+            get(read_spills).post(spill_orbs),
+        )
         .layer(DefaultBodyLimit::max(PUB_INFO_MAX_BYTES))
         .with_state(state)
 }
@@ -758,6 +762,144 @@ mod pub_info_api_tests {
                     .await;
             assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{award}");
         }
+    }
+
+    /// Any find of this week: a spill does not care how rare it is.
+    fn this_weeks_find() -> String {
+        let epoch = crate::finds::epoch_of(i64::try_from(NOW * 1000).expect("ms"));
+        (0..100_000)
+            .find_map(|row| {
+                crate::finds::roll_segment(crate::finds::FIND_PACK_ID, 1, epoch, 312_000 + row, 298_243)
+                    .expect("roll")
+            })
+            .map(|roll| roll.artifact_id)
+            .expect("a find within reach")
+    }
+
+    async fn spill_request(
+        app: &axum::Router,
+        cookie: &str,
+        method: &str,
+        uri: &str,
+        body: Option<Value>,
+    ) -> axum::response::Response {
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(COOKIE, cookie)
+            .header("x-0x1-csrf", "1")
+            .header("content-type", "application/json");
+        app.clone()
+            .oneshot(
+                request
+                    .body(body.map_or_else(Body::empty, |body| Body::from(body.to_string())))
+                    .expect("request"),
+            )
+            .await
+            .expect("response")
+    }
+
+    #[tokio::test]
+    async fn an_orb_goes_to_whoever_reaches_it_first() {
+        let (app, sky, other) = two_bonds().await;
+        let artifact_id = this_weeks_find();
+        let sha = crate::finds::artifact_sha(&artifact_id);
+        let count = u32::from(crate::finds::orb_count(&artifact_id).expect("a find"));
+        let orb = |seed: &str, earner: &str, orb: u32| {
+            serde_json::json!({ "awards": [
+                { "id": commitment(seed), "chain": format!("ch:{seed}-phone"), "kind": "orb_picked_up",
+                  "earner": earner, "artifact_id": artifact_id, "orb": orb },
+            ]})
+        };
+
+        // An orb of a find that never spilled lies nowhere: crap.
+        let mut sky_session = None;
+        let early = post_awards(&app, &sky, &mut sky_session, &orb("early", "avaia", 0)).await;
+        assert_eq!(json(early).await["results"][0]["outcome"], "taken");
+        let sky_cookie = sky_session.clone().expect("session");
+
+        let spilled = spill_request(
+            &app,
+            &sky_cookie,
+            "POST",
+            "/api/v1/identity/finds/spills",
+            Some(serde_json::json!({ "artifact_id": artifact_id })),
+        )
+        .await;
+        assert_eq!(spilled.status(), StatusCode::OK);
+        let spilled = json(spilled).await;
+        assert_eq!(spilled["sha"], sha);
+        assert_eq!(spilled["count"], count);
+        let expires = spilled["expires_at_ms"].as_i64().expect("expiry");
+        assert_eq!(
+            expires,
+            i64::try_from(NOW * 1000).expect("ms") + crate::finds::ORB_LIFETIME_MS
+        );
+
+        let picked = post_awards(&app, &sky, &mut sky_session, &orb("sky", "avaia", 0)).await;
+        let picked = json(picked).await;
+        assert_eq!(picked["results"][0]["outcome"], "accepted");
+        assert_eq!(picked["experience"]["avaia_xp"], 10);
+
+        let mut other_session = None;
+        let late = post_awards(&app, &other, &mut other_session, &orb("late", "bond", 0)).await;
+        let late = json(late).await;
+        assert_eq!(late["results"][0]["outcome"], "taken");
+        assert_eq!(late["experience"]["bond_xp"], 0);
+        let next = post_awards(&app, &other, &mut other_session, &orb("next", "bond", 1)).await;
+        let next = json(next).await;
+        assert_eq!(next["results"][0]["outcome"], "accepted");
+        assert_eq!(next["experience"]["bond_xp"], 10);
+
+        // Spilling again changes nothing: a find spills once a week.
+        let other_cookie = other_session.expect("session");
+        let again = spill_request(
+            &app,
+            &other_cookie,
+            "POST",
+            "/api/v1/identity/finds/spills",
+            Some(serde_json::json!({ "artifact_id": artifact_id })),
+        )
+        .await;
+        assert_eq!(json(again).await["expires_at_ms"], expires);
+
+        let read = spill_request(
+            &app,
+            &other_cookie,
+            "GET",
+            &format!("/api/v1/identity/finds/spills?buckets={}", &sha[..2]),
+            None,
+        )
+        .await;
+        assert_eq!(read.status(), StatusCode::OK);
+        assert_eq!(
+            json(read).await["spills"],
+            serde_json::json!([{ "sha": sha, "count": count, "expires_at_ms": expires, "taken": [0, 1] }])
+        );
+
+        // Past the count, or a find that is not there, is no orb at all.
+        let past = post_awards(&app, &sky, &mut sky_session, &orb("past", "bond", count)).await;
+        assert_eq!(past.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let made_up = spill_request(
+            &app,
+            &sky_cookie,
+            "POST",
+            "/api/v1/identity/finds/spills",
+            Some(serde_json::json!({ "artifact_id": "art:seg:1:1:e1:1:0" })),
+        )
+        .await;
+        assert_eq!(made_up.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let tiered = post_awards(
+            &app,
+            &sky,
+            &mut sky_session,
+            &serde_json::json!({ "awards": [
+                { "id": commitment("tiered"), "chain": "ch:phone-01", "kind": "orb_picked_up",
+                  "earner": "bond", "tier": 1, "artifact_id": artifact_id, "orb": 2 },
+            ]}),
+        )
+        .await;
+        assert_eq!(tiered.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]

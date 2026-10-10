@@ -226,6 +226,9 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0020_committed_experience.sql"))
             .execute(&self.pool)
             .await?;
+        sqlx::raw_sql(include_str!("../migrations/0023_orb_spills.sql"))
+            .execute(&self.pool)
+            .await?;
         self.migrate_avaia_prefix().await?;
         self.migrate_bond_roles().await?;
         let mut reserved_transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;

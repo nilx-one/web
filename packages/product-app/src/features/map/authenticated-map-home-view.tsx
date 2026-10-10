@@ -174,6 +174,7 @@ import {
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFindLoop } from "./use-find-loop";
+import { useOrbSpills } from "../finds/use-orb-spills";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import { FogRevealPrompt } from "./fog-reveal-prompt";
 import { AvaiaTravelPrompt } from "./avaia-travel-prompt";
@@ -262,6 +263,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "avaiaDriveStep"
     | "applyAvaiaLife"
     | "avaiaProximity"
+    | "orbWorld"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -762,6 +764,17 @@ export function AuthenticatedMapHomeView({
   const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
     undefined,
   );
+  // Orbs come by the handful: one toast counts them while it is up, per
+  // whoever picked them up.
+  const orbTally = useRef<
+    | {
+        readonly id: string;
+        readonly count: number;
+        readonly xp: number;
+        readonly at: number;
+      }
+    | undefined
+  >(undefined);
   const [achievementDialog, setAchievementDialog] = useState<
     AchievementDialogState | undefined
   >(undefined);
@@ -1047,6 +1060,48 @@ export function AuthenticatedMapHomeView({
     bondDriving: wheel === "bond" && handover === undefined,
     device: deviceObservation,
     onEvent: (event) => {
+      if (event.kind === "orb-kept") {
+        cue("spot");
+        const id = `orb-kept-${event.earner}`;
+        const now = Date.now();
+        const last = orbTally.current;
+        const tally =
+          last?.id === id && now - last.at < FIND_TOAST_MS
+            ? last
+            : { id, count: 0, xp: 0, at: now };
+        const next = {
+          id,
+          count: tally.count + 1,
+          xp: tally.xp + event.experience,
+          at: now,
+        };
+        orbTally.current = next;
+        setFindToast({
+          id,
+          kind: "active",
+          tone: event.earner,
+          title: t(
+            event.earner === "avaia"
+              ? "orb.toast.kept.avaia"
+              : "orb.toast.kept.bond",
+          ),
+          description: t("orb.toast.kept.detail")
+            .replace("{count}", String(next.count))
+            .replace("{xp}", String(next.xp)),
+        });
+        return;
+      }
+      if (event.kind === "orb-taken") {
+        cue("failure");
+        setFindToast({
+          id: `orb-taken-${event.orb}`,
+          kind: "error",
+          tone: event.earner,
+          title: t("orb.toast.taken.title"),
+          description: t("orb.toast.taken.detail"),
+        });
+        return;
+      }
       if (event.kind === "find-taken") {
         cue("failure");
         setFindToast({
@@ -1285,6 +1340,24 @@ export function AuthenticatedMapHomeView({
     proximityObserver.current = avaiaProximity?.observeAvaiaPoint;
   }, [avaiaProximity]);
   const [fogAnnouncement, setFogAnnouncement] = useState("");
+  // Orbs spill from every cell opened, and lie for anyone near to pick up:
+  // the Bond from its own observation while it drives, the Avaia as its
+  // body walks past them.
+  const orbSpills = useOrbSpills({
+    owner: pubDress,
+    port: committedAwards,
+    core: findItems,
+    renderer,
+    near: observedPosition,
+    bond:
+      wheel === "bond" && handover === undefined
+        ? deviceObservation
+        : undefined,
+    avaiaPoint: () =>
+      wheel === "avaia" && handover === undefined
+        ? avaiaWalk.stance(globalThis.performance.now())?.point
+        : undefined,
+  });
   const fogReveal = useFogReveal({
     renderer,
     bondPoint: observedPosition,
@@ -1295,6 +1368,7 @@ export function AuthenticatedMapHomeView({
     onRevealed: (cell, via) => {
       setFogAnnouncement(t("fog.announce.revealed"));
       cue("reveal");
+      orbSpills.spill(cell);
       void earnActivity(
         pubDress,
         {
