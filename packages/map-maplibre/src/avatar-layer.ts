@@ -7,6 +7,7 @@ import type {
   AvatarHandle,
   AvatarLayerContract,
   AvatarModelId,
+  SystemDroneHandle,
   MapCamera,
 } from "@nilx-one/map-contract";
 // The ambient sampler is contract-level policy: the application chooses the
@@ -34,6 +35,8 @@ import {
 } from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+
+import { createPingModel } from "./ping-model";
 
 import {
   loadedTerrainElevationMeters,
@@ -65,8 +68,13 @@ type AssetLoader = (
  */
 const APPLICATION_NODE_MARK = ":";
 
+type SceneHandle = Omit<AvatarHandle, "modelId"> & {
+  readonly modelId: AvatarModelId | "system-ping";
+  readonly reducedMotion?: boolean;
+};
 interface AvatarInstance {
-  handle: AvatarHandle;
+  handle: SceneHandle;
+  drone?: ReturnType<typeof createPingModel>;
   root?: Object3D;
   mixer?: AnimationMixer;
   clips?: ReadonlyMap<string, AnimationClip>;
@@ -82,6 +90,7 @@ interface AvatarInstance {
 
 export interface AvatarCustomLayer
   extends CustomLayerInterface, AvatarLayerContract {
+  upsertDrone(handle: SystemDroneHandle): boolean;
   hasInstances(): boolean;
   dispose(): void;
 }
@@ -251,7 +260,8 @@ export function createAvatarLayer(
     // grows southward, so a positive turn about its Z axis is clockwise on the
     // ground — the same sense a compass bearing turns in.
     const terrainPitch =
-      instance.handle.altitudeMeters === undefined
+      instance.handle.altitudeMeters === undefined &&
+      instance.handle.modelId !== "system-ping"
         ? terrainBodyPitchRadians(map, lngLat, bearingDeg)
         : 0;
     root.rotation.set(
@@ -277,6 +287,17 @@ export function createAvatarLayer(
 
   async function hydrate(instance: AvatarInstance): Promise<void> {
     const localGeneration = instance.loadGeneration;
+    if (instance.handle.modelId === "system-ping") {
+      instance.drone?.dispose();
+      const drone = createPingModel();
+      instance.drone = drone;
+      instance.root = drone.root;
+      drone.sample(instance.handle.clipPhase, !instance.handle.reducedMotion);
+      scene.add(drone.root);
+      place(instance);
+      map?.triggerRepaint();
+      return;
+    }
     try {
       const asset = await requestAsset(instance.handle.modelId);
       if (disposed || localGeneration !== instance.loadGeneration) return;
@@ -296,6 +317,30 @@ export function createAvatarLayer(
     } catch {
       // Fail closed: a missing study asset renders nothing and does not affect the map.
     }
+  }
+
+  function upsertBody(handle: SceneHandle): void {
+    if (disposed) return;
+    const existing = instances.get(handle.id);
+    if (existing !== undefined && existing.handle.modelId === handle.modelId) {
+      existing.handle = handle;
+      existing.drone?.sample(handle.clipPhase, !handle.reducedMotion);
+      place(existing);
+      applyVisibility(existing);
+      applyClip(existing);
+      map?.triggerRepaint();
+      return;
+    }
+    existing?.drone?.dispose();
+    existing?.root?.removeFromParent();
+    existing?.mixer?.stopAllAction();
+    const instance: AvatarInstance = {
+      handle,
+      loadGeneration: ++generation,
+    };
+    instances.set(handle.id, instance);
+    requestMount();
+    if (map !== undefined) void hydrate(instance);
   }
 
   const layer: AvatarCustomLayer = {
@@ -354,29 +399,23 @@ export function createAvatarLayer(
         instance.terrainAnchor = undefined;
     },
 
-    upsert(handle) {
-      if (disposed) return;
-      const existing = instances.get(handle.id);
-      if (
-        existing !== undefined &&
-        existing.handle.modelId === handle.modelId
-      ) {
-        existing.handle = handle;
-        place(existing);
-        applyVisibility(existing);
-        applyClip(existing);
-        map?.triggerRepaint();
-        return;
-      }
-      existing?.root?.removeFromParent();
-      existing?.mixer?.stopAllAction();
-      const instance: AvatarInstance = {
-        handle,
-        loadGeneration: ++generation,
-      };
-      instances.set(handle.id, instance);
-      requestMount();
-      if (map !== undefined) void hydrate(instance);
+    upsert: upsertBody,
+
+    upsertDrone(handle) {
+      upsertBody({
+        id: handle.id,
+        modelId: "system-ping",
+        lngLat: handle.lngLat,
+        bearingDeg: handle.bearingDeg,
+        clipId: "idle",
+        clipPhase: handle.phase,
+        scale: 1,
+        visible: true,
+        reducedMotion: handle.reducedMotion,
+      });
+      return (
+        renderer !== undefined && instances.get(handle.id)?.root !== undefined
+      );
     },
 
     remove(id) {
@@ -384,6 +423,7 @@ export function createAvatarLayer(
       if (instance === undefined) return;
       instance.loadGeneration = ++generation;
       instance.mixer?.stopAllAction();
+      instance.drone?.dispose();
       instance.root?.removeFromParent();
       instances.delete(id);
       map?.triggerRepaint();
@@ -405,6 +445,7 @@ export function createAvatarLayer(
       abortController.abort();
       for (const instance of instances.values()) {
         instance.mixer?.stopAllAction();
+        instance.drone?.dispose();
         instance.root?.removeFromParent();
       }
       instances.clear();

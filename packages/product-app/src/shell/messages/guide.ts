@@ -12,6 +12,12 @@
  * marks none of these; it carries every voice so the three catalogues agree.
  */
 export const GUIDE_EN = {
+  "system.ping.error": "Something went wrong",
+  "system.ping.name": "xPing",
+  "system.ping.role": "System informer",
+  "system.ping.skip": "(skip)",
+  "system.ping.done": "Understood",
+  "system.ping.window": "Service window",
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Continue",
   "guide.intro.greeting.0.feminine":
@@ -81,6 +87,12 @@ export const GUIDE_EN = {
 } as const;
 
 export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
+  "system.ping.error": "Виникла помилка",
+  "system.ping.name": "xPing",
+  "system.ping.role": "Системний інформатор",
+  "system.ping.skip": "(пропустити)",
+  "system.ping.done": "Зрозуміло",
+  "system.ping.window": "Час робіт",
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далі",
   "guide.intro.greeting.0.feminine":
@@ -148,6 +160,12 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
 };
 
 export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
+  "system.ping.error": "Произошла ошибка",
+  "system.ping.name": "xPing",
+  "system.ping.role": "Системный информатор",
+  "system.ping.skip": "(пропустить)",
+  "system.ping.done": "Понятно",
+  "system.ping.window": "Время работ",
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далее",
   "guide.intro.greeting.0.feminine":

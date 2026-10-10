@@ -513,6 +513,8 @@ export interface MapRenderer {
    * own body — and an avatar on the map is never evidence of presence.
    */
   readonly avatars?: AvatarLayerContract;
+  /** Local system prop. Never an identity, presence report or selectable avatar. */
+  readonly systemDrone?: SystemDroneLayerContract;
   /**
    * Notifies when a person activates a body this renderer drew. Absent on a
    * renderer that draws no bodies, or draws them where nothing can be pointed
@@ -703,6 +705,20 @@ export interface AvatarLayerContract {
   upsert(handle: AvatarHandle): void;
   remove(id: string): void;
   setCamera(camera: MapCamera): void;
+}
+
+/** xPing is renderer-local presentation and cannot enter the avatar catalogue. */
+export interface SystemDroneHandle {
+  readonly id: string;
+  readonly lngLat: readonly [number, number];
+  readonly bearingDeg: number;
+  readonly phase: number;
+  readonly reducedMotion: boolean;
+}
+export interface SystemDroneLayerContract {
+  /** True only once the prop has a mounted, hydrated 3D layer. */
+  upsert(handle: SystemDroneHandle): boolean;
+  remove(id: string): void;
 }
 
 export const DEFAULT_MAP_CAMERA: MapCamera = {

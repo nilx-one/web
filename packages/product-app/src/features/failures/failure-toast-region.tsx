@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { useSystemInformer } from "../system-informer/system-informer";
 import { useLocalization, type Translate } from "../../shell/localization";
 import { useSoundCue } from "../../shell/sound-preference";
 import { useToastViewportNode } from "../../shell/toast-viewport";
@@ -140,6 +141,19 @@ export function FailureNoticeProvider({
   sound,
 }: FailureNoticeProviderProps) {
   const { t } = useLocalization();
+  const informer = useSystemInformer();
+  const informerRef = useRef({
+    publish: informer.publish,
+    available: informer.available,
+    t,
+  });
+  useEffect(() => {
+    informerRef.current = {
+      publish: informer.publish,
+      available: informer.available,
+      t,
+    };
+  });
   const [presented, setPresented] = useState<readonly PresentedFailure[]>([]);
   const sequence = useRef(0);
   // Read through a ref so `publish` keeps one identity for its whole life.
@@ -160,6 +174,27 @@ export function FailureNoticeProvider({
       // must never hide, delay, or otherwise alter the failure event itself.
     }
     cueRef.current("failure");
+    if (informerRef.current.available) {
+      const notice = localizedNotice(report, informerRef.current.t);
+      informerRef.current.publish({
+        id,
+        kind: "error",
+        title: notice.title,
+        description: notice.description,
+        ...(notice.reference === undefined
+          ? {}
+          : { reference: notice.reference }),
+        ...(notice.action === undefined || options.onRetry === undefined
+          ? {}
+          : {
+              action: {
+                label: notice.action.label,
+                onPerform: options.onRetry,
+              },
+            }),
+      });
+      return;
+    }
 
     setPresented((current) => [
       ...current,

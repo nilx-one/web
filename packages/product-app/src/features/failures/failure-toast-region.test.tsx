@@ -6,6 +6,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { SystemInformerProvider } from "../system-informer/system-informer";
 import { chooseLocale } from "../../shell/localization";
 import {
   ToastViewport,
@@ -308,4 +309,33 @@ describe("FailureNoticeProvider", () => {
 
     consoleError.mockRestore();
   });
+});
+
+it("delivers a failure through xPing once and retains the real retry action", async () => {
+  chooseLocale("en");
+  const user = userEvent.setup();
+  const onRetry = vi.fn();
+  render(
+    <SystemInformerProvider>
+      <FailureNoticeProvider>
+        <Producer
+          report={{
+            code: "inference_unavailable",
+            kind: "unavailable",
+            retryable: true,
+            operation_id: "op-71c",
+          }}
+          options={{ onRetry }}
+        />
+      </FailureNoticeProvider>
+    </SystemInformerProvider>,
+  );
+  await user.click(screen.getByRole("button", { name: "Publish failure" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("Request unanswered");
+  expect(screen.queryByText("xPing: Request unanswered")).toBeNull();
+  await user.click(screen.getByText("(skip)"));
+  expect(screen.getAllByText("xPing: Request unanswered")).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(onRetry).toHaveBeenCalledOnce();
+  expect(screen.queryByText("xPing: Request unanswered")).toBeNull();
 });

@@ -65,6 +65,11 @@ import { useEffect, useRef, useState } from "react";
 
 import "./product.css";
 import "./features/identity/identity-field-feedback.css";
+import { SystemInformerProvider } from "./features/system-informer/system-informer";
+export {
+  useSystemInformer,
+  type SystemNotice,
+} from "./features/system-informer/system-informer";
 import { FailureNoticeProvider } from "./features/failures/failure-toast-region";
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
 import {
@@ -1271,9 +1276,11 @@ export function ProductApp({
   return (
     <QueryClientProvider client={queryClient}>
       <ToastViewportProvider>
-        <FailureNoticeProvider sound={host.sound}>
-          <RouterProvider router={router} />
-        </FailureNoticeProvider>
+        <SystemInformerProvider>
+          <FailureNoticeProvider sound={host.sound}>
+            <RouterProvider router={router} />
+          </FailureNoticeProvider>
+        </SystemInformerProvider>
       </ToastViewportProvider>
     </QueryClientProvider>
   );
