@@ -2,11 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { OrbSpillAccessPort } from "@nilx-one/application";
-import {
-  artifactSha,
-  orbCount,
-  type ArtifactId,
-} from "@nilx-one/artifact-contract";
+import type { OrbWorldInput, OrbWorldView } from "@nilx-one/application";
+import { artifactSha, type ArtifactId } from "@nilx-one/artifact-contract";
 import type { MapFogCell, MapOrb, MapRenderer } from "@nilx-one/map-contract";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,6 +39,43 @@ function renderer(): MapRenderer & { orbs: readonly MapOrb[] } {
   }) as unknown as MapRenderer & { orbs: readonly MapOrb[] };
 }
 
+/**
+ * A stand-in for Core: one orb per count at the find itself, and whoever
+ * stands exactly there reaches them. The rules are Core's; this only proves
+ * the hook draws Core's answer and picks up what Core says is in reach.
+ */
+const core = {
+  orbWorld: vi.fn(async (world: OrbWorldInput): Promise<OrbWorldView> => {
+    const orbs = world.spills.flatMap((spill) =>
+      Array.from({ length: spill.count }, (_, index) => ({
+        id: `orb:${spill.artifact_id}:${index}`,
+        kind: "orb" as const,
+        at: spill.to,
+        lands_at: spill.appeared_at,
+      })).filter(
+        (orb, index) =>
+          !spill.taken.includes(index) && !world.picked.includes(orb.id),
+      ),
+    );
+    const reach = (at: OrbWorldInput["avaia"]) =>
+      at === null
+        ? []
+        : orbs
+            .filter(
+              (orb) =>
+                orb.at.longitude_e7 === at.longitude_e7 &&
+                orb.at.latitude_e7 === at.latitude_e7,
+            )
+            .map((orb) => orb.id);
+    return {
+      orbs,
+      bond_reach: reach(world.bond),
+      avaia_reach: reach(world.avaia),
+      next_expiry: null,
+    };
+  }),
+};
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "setTimeout", "setInterval"] });
   vi.setSystemTime(NOW);
@@ -63,7 +97,7 @@ describe("useOrbSpills", () => {
         kind: "spilled" as const,
         spill: {
           sha: artifactId === id ? sha : "f".repeat(64),
-          count: orbCount(artifactId as ArtifactId),
+          count: 7,
           expiresAt: NOW + 30 * 60_000,
           taken: [],
         },
@@ -78,6 +112,7 @@ describe("useOrbSpills", () => {
       useOrbSpills({
         owner: "0x0sky",
         port,
+        core,
         renderer: world,
         near: undefined,
         bond: undefined,
@@ -87,13 +122,17 @@ describe("useOrbSpills", () => {
 
     await act(async () => {
       result.current.spill(cell);
-      await vi.runOnlyPendingTimersAsync();
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    // The spill is kept, then Core is asked about it.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
     });
     expect(port.spillOrbs).toHaveBeenCalledWith(id);
     const drawn = world.orbs.filter(
       (orb) => orb.kind === "orb" && orb.id.startsWith(`orb:${id}:`),
     );
-    expect(drawn).toHaveLength(orbCount(id));
+    expect(drawn).toHaveLength(7);
 
     avaia.point = {
       longitude: drawn[0]!.longitude,
@@ -115,6 +154,10 @@ describe("useOrbSpills", () => {
         },
       ]),
     );
+    // Picked up, it is no longer Core's to draw.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
     expect(world.orbs.map((orb) => orb.id)).not.toContain(drawn[0]!.id);
   });
 
@@ -124,6 +167,7 @@ describe("useOrbSpills", () => {
       useOrbSpills({
         owner: "0x0sky",
         port: {},
+        core,
         renderer: world,
         near: center,
         bond: undefined,

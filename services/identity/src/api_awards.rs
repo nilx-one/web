@@ -131,7 +131,7 @@ fn validate_awards(
             }
             let roll = finds::roll_artifact(finds::FIND_PACK_ID, artifact_id).ok()?;
             if !finds::claimable_epoch(roll.epoch, now_ms)
-                || u32::from(orb) >= finds::orb_count(artifact_id)
+                || finds::orb_count(artifact_id).is_none_or(|count| orb >= count)
             {
                 return None;
             }
@@ -378,7 +378,7 @@ async fn spill_orbs_response(
     {
         return rate_limited(retry_after);
     }
-    let Ok(count) = u8::try_from(crate::finds::orb_count(&request.artifact_id)) else {
+    let Some(count) = crate::finds::orb_count(&request.artifact_id) else {
         return unavailable();
     };
     match state

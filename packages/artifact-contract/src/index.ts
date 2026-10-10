@@ -15,8 +15,6 @@
  * experience is the caller's to decide (R2).
  */
 
-import { mulberry32, xmur3 } from "./random";
-
 /** A geographic point, longitude first. */
 export type LonLat = readonly [longitude: number, latitude: number];
 
@@ -358,6 +356,31 @@ export function rollAlong(
   });
 }
 
+/** String hash to a 32-bit seed. Not cryptographic: there is nothing to guard. */
+function xmur3(text: string): () => number {
+  let h = 1779033703 ^ text.length;
+  for (let i = 0; i < text.length; i++) {
+    h = Math.imul(h ^ text.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  };
+}
+
+/** A small seeded generator, uniform in [0, 1). */
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export {
   AVAIA_PICKUP_MAX_TIER,
   awardsFor,
@@ -393,18 +416,3 @@ export {
   type ClaimOutcome,
   type ClosedLeads,
 } from "./claim";
-
-export {
-  isOrbId,
-  ORB_EXPERIENCE,
-  ORB_LIFETIME_MS,
-  ORB_MAX,
-  ORB_MIN,
-  ORB_PICKUP_METERS,
-  orbCount,
-  orbId,
-  orbTrail,
-  parseOrbId,
-  type OrbId,
-  type OrbSpot,
-} from "./orbs";

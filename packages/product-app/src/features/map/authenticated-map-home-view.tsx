@@ -261,6 +261,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "avaiaDriveStep"
     | "applyAvaiaLife"
     | "avaiaProximity"
+    | "orbWorld"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -1338,6 +1339,7 @@ export function AuthenticatedMapHomeView({
   const orbSpills = useOrbSpills({
     owner: pubDress,
     port: committedAwards,
+    core: findItems,
     renderer,
     near: observedPosition,
     bond:

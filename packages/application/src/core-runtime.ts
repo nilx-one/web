@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { OrbWorldInput, OrbWorldView } from "./orb-world";
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveInput,
@@ -192,6 +193,12 @@ export interface CoreRuntimePort {
     artifacts: number,
     previouslyBlocked: boolean,
   ): Promise<AvaiaProximityPolicy>;
+  /**
+   * Core is the sole authority for orbs: what lies where, when it lands, and
+   * what the Bond and the Avaia reach now. The host draws the answer and
+   * claims what is in reach; it decides nothing about an orb itself.
+   */
+  orbWorld?(world: OrbWorldInput, nowMs: number): Promise<OrbWorldView>;
 }
 
 export type CoreHolder = "bond" | "avaia";

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   epochOf,
+  findPoint,
   FIND_OFFSET_METERS,
   isFindPerceptible,
   PERCEPTION_METERS,
@@ -446,6 +447,20 @@ describe("the segments an area holds", () => {
       expect(area.some((segment) => id.startsWith(`art:${segment}:`))).toBe(
         true,
       );
+    }
+  });
+});
+
+describe("findPoint", () => {
+  it("lies inside the find's own segment", () => {
+    for (const along of [0, 0.3, 0.99]) {
+      for (const across of [-1, 0, 0.98]) {
+        const point = findPoint({
+          segment: "seg:312346:298243",
+          placement: { along, across },
+        });
+        expect(segmentAt(point)).toBe("seg:312346:298243");
+      }
     }
   });
 });

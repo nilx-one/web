@@ -5,12 +5,7 @@ import type {
   CommittedAward,
   CommittedAwardAccessPort,
 } from "@nilx-one/application";
-import {
-  isClaimed,
-  parseOrbId,
-  type ArtifactId,
-  type OrbId,
-} from "@nilx-one/artifact-contract";
+import { isClaimed, type ArtifactId } from "@nilx-one/artifact-contract";
 import { useEffect, useRef } from "react";
 
 import { resolvePickUp } from "./claims";
@@ -33,6 +28,21 @@ import {
   updateProgression,
 } from "./progression";
 import { awardAmount, craftRecipeOf, type AwardRecord } from "./commitment";
+
+/** An orb's id, as Core names it: `orb:`, its find, and which of its orbs. */
+export type OrbId = `orb:${string}`;
+
+const ORB_ID = /^orb:(art:seg:-?\d+:-?\d+:e-?\d+:\d+:\d+):(0|[1-9]\d?)$/;
+
+/** The find and the orb an id names, as the service wants them apart. */
+export function orbParts(
+  id: string,
+): { readonly artifactId: string; readonly orb: number } | undefined {
+  const match = ORB_ID.exec(id);
+  return match === null
+    ? undefined
+    : { artifactId: match[1]!, orb: Number(match[2]) };
+}
 
 export type CommittedWorldEvent =
   | {
@@ -68,7 +78,7 @@ function toWire(award: PendingCommittedAward): CommittedAward {
   const { record } = award;
   // An orb names its find and which of its orbs; its subject is the orb id.
   const orb =
-    record.kind === "orb_picked_up" ? parseOrbId(record.subject) : undefined;
+    record.kind === "orb_picked_up" ? orbParts(record.subject) : undefined;
   const tier = record.kind === "find_picked_up" ? record.tier : undefined;
   return {
     id: award.id,
@@ -83,9 +93,7 @@ function toWire(award: PendingCommittedAward): CommittedAward {
     ...(record.kind === "craft_finished"
       ? { recipe: craftRecipeOf(record.subject) }
       : {}),
-    ...(orb === undefined
-      ? {}
-      : { artifactId: orb.artifactId, orb: orb.index }),
+    ...(orb === undefined ? {} : { artifactId: orb.artifactId, orb: orb.orb }),
   };
 }
 

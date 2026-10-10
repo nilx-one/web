@@ -1,44 +1,40 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { OrbSpillView } from "@nilx-one/application";
+import type {
+  OrbCoordinate,
+  OrbSpillView,
+  OrbWorldInput,
+  OrbWorldView,
+} from "@nilx-one/application";
 import {
   epochOf,
   FIND_PACK_ID,
   findPoint,
-  ORB_PICKUP_METERS,
-  orbId,
-  orbTrail,
   rollSegment,
   ROLL_TABLE,
   segmentsWithin,
   type ArtifactId,
   type FindRoll,
   type LonLat,
-  type OrbId,
 } from "@nilx-one/artifact-contract";
-import {
-  mapDistanceMeters,
-  type MapOrb,
-  type MapPointSelection,
-} from "@nilx-one/map-contract";
+import type { MapOrb, MapPointSelection } from "@nilx-one/map-contract";
 
 /**
- * Orb spills as this device lives with them (artifact-contract `orbs.ts`).
- *
- * A spill is known here once the service has answered it: the Bond that
- * opened the cell told it, or a read around this Bond found it. Where each
- * orb lies is laid on this device from the find alone, so the service never
- * hears a place.
+ * Orb spills as this device holds them. Every orb rule is Core's
+ * (`orb_world`, nilx-one/core `docs/orb-spills.md`): how many, where, when
+ * each lands, how long a spill lives, what is within reach. This module only
+ * keeps what the service answered and translates between the map's degrees
+ * and Core's wire.
  */
-export interface LiveSpill {
+export interface KnownSpill {
   readonly artifactId: ArtifactId;
   readonly sha: string;
   readonly count: number;
-  /** Wall-clock milliseconds the spill is gone at. */
+  /** Wall-clock milliseconds the service says the spill is gone at. */
   readonly expiresAt: number;
   /** Orbs someone has picked up already, as the service last answered. */
-  readonly taken: ReadonlySet<number>;
+  readonly taken: readonly number[];
   /** Where the trail starts: the middle of the cell the find lies in. */
   readonly from: LonLat;
   /** The find the trail leads to. */
@@ -46,12 +42,6 @@ export interface LiveSpill {
   /** When this device first drew it, so its orbs fall once, then lie. */
   readonly appearedAt: number;
 }
-
-/** How far apart, in time, the orbs of one trail land: a trickle, not a dump. */
-export const ORB_STAGGER_MS = 70;
-
-/** A trail shorter than this is stretched back, so its clumps do not pile up. */
-export const MIN_TRAIL_METERS = 30;
 
 /** How far around a Bond the spills of its finds are read. */
 export const SPILL_READ_RADIUS_METERS = 450;
@@ -94,131 +84,87 @@ export function squareAround(
   ];
 }
 
-/**
- * Where a trail to `to` starts: `from`, unless that is too close to make a
- * trail of, in which case the same way back, `MIN_TRAIL_METERS` from the find.
- */
-export function trailStart(from: LonLat, to: LonLat): LonLat {
-  const scale =
-    METERS_PER_DEGREE * Math.max(0.01, Math.cos((to[1] * Math.PI) / 180));
-  const dx = (from[0] - to[0]) * scale;
-  const dy = (from[1] - to[1]) * METERS_PER_DEGREE;
-  const length = Math.hypot(dx, dy);
-  if (length >= MIN_TRAIL_METERS) return from;
-  // Straight at the find, or nowhere at all: come in from the south-west.
-  const [ux, uy] =
-    length < 1e-6 ? [-Math.SQRT1_2, -Math.SQRT1_2] : [dx / length, dy / length];
-  return [
-    to[0] + (ux * MIN_TRAIL_METERS) / scale,
-    to[1] + (uy * MIN_TRAIL_METERS) / METERS_PER_DEGREE,
-  ];
+/** Degrees as Core's E7 decimal strings. */
+export function toCoordinate([longitude, latitude]: LonLat): OrbCoordinate {
+  const e7 = (degrees: number) => String(Math.round(degrees * 1e7) || 0);
+  return { longitude_e7: e7(longitude), latitude_e7: e7(latitude) };
 }
 
-/** A spill as the service answered it, laid out for a find this device rolled. */
-export function liveSpill(
+/** Core's E7 decimal strings as degrees. */
+export function fromCoordinate(at: OrbCoordinate): LonLat {
+  return [Number(at.longitude_e7) / 1e7, Number(at.latitude_e7) / 1e7];
+}
+
+/** A spill as the service answered it, for a find this device rolled. */
+export function knownSpill(
   view: OrbSpillView,
   roll: Pick<FindRoll, "artifactId" | "segment" | "placement">,
   cellCenter: (point: LonLat) => LonLat | undefined,
   appearedAt: number,
-): LiveSpill {
+): KnownSpill {
   const to = findPoint(roll);
   return {
     artifactId: roll.artifactId,
     sha: view.sha,
     count: view.count,
     expiresAt: view.expiresAt,
-    taken: new Set(view.taken),
-    from: trailStart(cellCenter(to) ?? to, to),
+    taken: [...view.taken],
+    from: cellCenter(to) ?? to,
     to,
     appearedAt,
   };
 }
 
 /** A newer answer for a spill already drawn: who took what, nothing else. */
-export function refreshSpill(spill: LiveSpill, view: OrbSpillView): LiveSpill {
+export function refreshSpill(
+  spill: KnownSpill,
+  view: OrbSpillView,
+): KnownSpill {
   return {
     ...spill,
     count: view.count,
     expiresAt: view.expiresAt,
-    taken: new Set(view.taken),
+    taken: [...view.taken],
   };
 }
 
-export interface LyingOrb {
-  readonly id: OrbId;
-  readonly point: LonLat;
-  readonly landsAt: number;
+/** What Core is asked: the spills, this device's pick-ups, and who stands where. */
+export function orbWorldInput(
+  spills: readonly KnownSpill[],
+  picked: ReadonlySet<string>,
+  bond: MapPointSelection | undefined,
+  avaia: MapPointSelection | undefined,
+): OrbWorldInput {
+  const at = (point: MapPointSelection | undefined) =>
+    point === undefined
+      ? null
+      : toCoordinate([point.longitude, point.latitude]);
+  return {
+    spills: spills.map((spill) => ({
+      artifact_id: spill.artifactId,
+      from: toCoordinate(spill.from),
+      to: toCoordinate(spill.to),
+      appeared_at: String(Math.max(0, Math.trunc(spill.appearedAt))),
+      expires_at: String(Math.max(0, Math.trunc(spill.expiresAt))),
+      count: spill.count,
+      taken: [...spill.taken],
+    })),
+    picked: [...picked],
+    bond: at(bond),
+    avaia: at(avaia),
+  };
 }
 
-/**
- * The orbs of a spill still on the ground at `nowMs`: none once it is gone,
- * and none someone took or this device picked up.
- */
-export function lyingOrbs(
-  spill: LiveSpill,
-  picked: ReadonlySet<string>,
-  nowMs: number,
-): LyingOrb[] {
-  if (nowMs >= spill.expiresAt) return [];
-  return orbTrail(spill.artifactId, spill.from, spill.to).flatMap((spot) => {
-    if (spot.index >= spill.count || spill.taken.has(spot.index)) return [];
-    const id = orbId(spill.artifactId, spot.index);
-    if (picked.has(id)) return [];
-    return [
-      {
-        id,
-        point: spot.point,
-        landsAt: spill.appearedAt + (spot.index + 1) * ORB_STAGGER_MS,
-      },
-    ];
-  });
-}
-
-/** What the world draws: every lying orb, and the find each trail leads to. */
-export function mapOrbs(
-  spills: readonly LiveSpill[],
-  picked: ReadonlySet<string>,
-  nowMs: number,
-): MapOrb[] {
-  return spills.flatMap((spill) => {
-    const lying = lyingOrbs(spill, picked, nowMs);
-    if (lying.length === 0) return [];
-    return [
-      ...lying.map((orb): MapOrb => ({
-        id: orb.id,
-        longitude: orb.point[0],
-        latitude: orb.point[1],
-        kind: "orb",
-        landsAt: orb.landsAt,
-      })),
-      {
-        id: `goal:${spill.artifactId}`,
-        longitude: spill.to[0],
-        latitude: spill.to[1],
-        kind: "goal",
-        landsAt: spill.appearedAt + (spill.count + 2) * ORB_STAGGER_MS,
-      },
-    ];
-  });
-}
-
-/** The lying orbs within reach of `point`, nearest first. */
-export function orbsInReach(
-  spills: readonly LiveSpill[],
-  picked: ReadonlySet<string>,
-  point: MapPointSelection,
-  nowMs: number,
-): OrbId[] {
-  return spills
-    .flatMap((spill) => lyingOrbs(spill, picked, nowMs))
-    .map((orb) => ({
+/** What the world draws, exactly as Core laid it. */
+export function mapOrbs(view: OrbWorldView): MapOrb[] {
+  return view.orbs.map((orb) => {
+    const [longitude, latitude] = fromCoordinate(orb.at);
+    return {
       id: orb.id,
-      meters: mapDistanceMeters(point, {
-        longitude: orb.point[0],
-        latitude: orb.point[1],
-      }),
-    }))
-    .filter((orb) => orb.meters < ORB_PICKUP_METERS)
-    .sort((a, b) => a.meters - b.meters)
-    .map((orb) => orb.id);
+      longitude,
+      latitude,
+      kind: orb.kind,
+      landsAt: Number(orb.lands_at),
+    };
+  });
 }

@@ -1,7 +1,7 @@
 -- © 2026 aiaiaiai · aiaiaiai.org
 -- SPDX-License-Identifier: MPL-2.0
 
--- Orbs a find spills when a fog cell opens (artifact-contract orbs.ts).
+-- Orbs a find spills when a fog cell opens (nilx-one/core docs/orb-spills.md).
 --
 -- A spill names its find by the public sha only, like a claim. It holds how
 -- many orbs fell and when they are gone, never who spilled them, where, or

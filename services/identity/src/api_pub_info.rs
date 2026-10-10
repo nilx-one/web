@@ -804,7 +804,7 @@ mod pub_info_api_tests {
         let (app, sky, other) = two_bonds().await;
         let artifact_id = this_weeks_find();
         let sha = crate::finds::artifact_sha(&artifact_id);
-        let count = crate::finds::orb_count(&artifact_id);
+        let count = u32::from(crate::finds::orb_count(&artifact_id).expect("a find"));
         let orb = |seed: &str, earner: &str, orb: u32| {
             serde_json::json!({ "awards": [
                 { "id": commitment(seed), "chain": format!("ch:{seed}-phone"), "kind": "orb_picked_up",

@@ -5,7 +5,6 @@ import type { AwardKind } from "@nilx-one/application";
 import {
   AVAIA_PICKUP_MAX_TIER,
   FIND_SEEN_EXPERIENCE,
-  ORB_EXPERIENCE,
   ROLL_TABLE,
   type Tier,
 } from "@nilx-one/artifact-contract";
@@ -35,6 +34,9 @@ import {
  */
 
 export type { AwardKind };
+
+/** What an orb pays, as Core's `ORB_EXPERIENCE` sets it. */
+export const XP_ORB_PICKED_UP = 10;
 
 /** One award, as this device's history records it. Never sent. */
 export interface AwardRecord {
@@ -91,9 +93,10 @@ export function awardAmount(
       return ROLL_TABLE.tiers[tier - 1]?.experience ?? null;
     }
     // Whoever reached it first, an Avaia or a Bond. Committed only: an orb
-    // has to be claimed, so it is never published the legacy way.
+    // has to be claimed, so it is never published the legacy way. Core's
+    // `ORB_EXPERIENCE`, which the service prices it by; shown, never sent.
     case "orb_picked_up":
-      return ORB_EXPERIENCE;
+      return XP_ORB_PICKED_UP;
     // Priced by its recipe in Core, by the service: never estimated here,
     // and never published the legacy way.
     case "craft_finished":

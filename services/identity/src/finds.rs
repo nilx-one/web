@@ -279,21 +279,16 @@ pub fn pick_up_amount(artifact_id: Option<&str>, tier: u8) -> Option<u64> {
     }
 }
 
-/// What one orb pays: `ORB_EXPERIENCE` in `artifact-contract`.
-pub const ORB_EXPERIENCE: u64 = 10;
+/// What one orb pays: Core's `ORB_EXPERIENCE`.
+pub const ORB_EXPERIENCE: u64 = nilxone_contracts::ORB_EXPERIENCE as u64;
 
-/// How long a spill lies on the ground: `ORB_LIFETIME_MS`.
-pub const ORB_LIFETIME_MS: i64 = 30 * 60 * 1000;
+/// How long a spill lies on the ground: Core's `ORB_LIFETIME_MS`.
+pub const ORB_LIFETIME_MS: i64 = nilxone_contracts::ORB_LIFETIME_MS as i64;
 
-/// The fewest and most orbs one find spills: `ORB_MIN` and `ORB_MAX`.
-const ORB_MIN: u32 = 5;
-const ORB_MAX: u32 = 30;
-
-/// How many orbs a find spills: the port of `orbCount`.
-pub fn orb_count(artifact_id: &str) -> u32 {
-    let draw = Mulberry32(xmur3(&format!("nilx-one.orbs.v1:{artifact_id}"))).next();
-    // `draw` is in [0, 1), so this is a whole number from 0 to 25.
-    ORB_MIN + (draw * f64::from(ORB_MAX - ORB_MIN + 1)).floor() as u32
+/// How many orbs a find spills, as Core counts them, or `None` for an id
+/// Core does not read as a find.
+pub fn orb_count(artifact_id: &str) -> Option<u8> {
+    nilxone_contracts::orb_count(artifact_id).ok()
 }
 
 /// The pack the service rolls claimed finds with. A claim cannot choose its
@@ -428,13 +423,13 @@ mod tests {
         assert_eq!(pick_up_amount(None, 5), Some(400));
     }
 
-    // The golden counts from `artifact-contract`'s orbs.test.ts.
+    // Core's golden counts (`orb_spill.rs`): the service claims against them.
     #[test]
-    fn matches_the_typescript_golden_orb_counts() {
-        let counts: Vec<u32> = (0..5)
+    fn counts_orbs_as_core_does() {
+        let counts: Vec<Option<u8>> = (0..5)
             .map(|row| orb_count(&format!("art:seg:{}:298243:e2908:1:0", 312_346 + row)))
             .collect();
-        assert_eq!(counts, [24, 12, 27, 5, 29]);
+        assert_eq!(counts, [Some(20), Some(23), Some(14), Some(7), Some(27)]);
         assert_eq!(
             award_amount(AwardKind::OrbPickedUp, Earner::Avaia, None),
             Some(ORB_EXPERIENCE)

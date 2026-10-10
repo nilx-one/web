@@ -79,6 +79,13 @@ export {
   type NearbySpeechAccessPort,
   type SpokenLineView,
 } from "./nearby-speech";
+export type {
+  OrbCoordinate,
+  OrbWorldInput,
+  OrbWorldOrb,
+  OrbWorldSpill,
+  OrbWorldView,
+} from "./orb-world";
 export {
   hasCommittedAwardAccess,
   hasOrbSpillAccess,

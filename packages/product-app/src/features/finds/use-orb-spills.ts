@@ -4,6 +4,7 @@
 import {
   hasOrbSpillAccess,
   MAX_CLAIM_BUCKETS,
+  type CoreRuntimePort,
   type OrbSpillAccessPort,
   type OrbSpillView,
 } from "@nilx-one/application";
@@ -13,31 +14,30 @@ import {
   type ArtifactId,
   type FindRoll,
   type LonLat,
-  type OrbId,
 } from "@nilx-one/artifact-contract";
 import type {
   MapFogCell,
   MapPointSelection,
   MapRenderer,
 } from "@nilx-one/map-contract";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { queueWorldAwards } from "../progression/committed-sync";
 import {
   findsWithin,
-  liveSpill,
+  knownSpill,
   mapOrbs,
-  orbsInReach,
+  orbWorldInput,
   refreshSpill,
   SPILL_READ_RADIUS_METERS,
   squareAround,
-  type LiveSpill,
+  type KnownSpill,
 } from "./orb-spills";
 
 /** How often the spills around a Bond are read again. */
 export const SPILL_READ_MS = 45_000;
 
-/** How often the Avaia's place is checked against the orbs around it. */
+/** How often Core is asked again while orbs lie: who has walked into reach. */
 export const ORB_REACH_CHECK_MS = 1_000;
 
 /** A fix vaguer than this does not say a Bond stood at an orb. */
@@ -47,6 +47,8 @@ export interface OrbSpillsInput {
   readonly owner: string;
   /** The identity service; spills need it to be one that has them. */
   readonly port: unknown;
+  /** Core, which owns every orb rule. Without it no orb is drawn. */
+  readonly core: Pick<CoreRuntimePort, "orbWorld"> | undefined;
   readonly renderer: MapRenderer;
   /** Where the Bond stands, observed or declared: spills are read around it. */
   readonly near: MapPointSelection | undefined;
@@ -66,15 +68,16 @@ export interface OrbSpillsState {
 }
 
 /**
- * Orbs on the world around a Bond: spilled by the cells it opens, read by
- * sha bucket for the finds around it, drawn on the map, and picked up by
- * whichever of the Bond and its Avaia comes within fifteen metres. A pick-up
- * is a committed award, claimed like a rare find: the committed sync says
- * whether it was kept or someone got there first.
+ * Orbs on the world around a Bond. The Bond tells the service which finds
+ * of a cell it opened spilled, and reads the spills around it by sha bucket.
+ * Core lays them out and says who reaches what; this hook draws Core's
+ * answer and turns what is in reach into a committed pick-up, which the
+ * service claims first-wins.
  */
 export function useOrbSpills({
   owner,
   port,
+  core,
   renderer,
   near,
   bond,
@@ -83,11 +86,11 @@ export function useOrbSpills({
   const spillPort: OrbSpillAccessPort | undefined = hasOrbSpillAccess(port)
     ? port
     : undefined;
-  const [spills, setSpills] = useState<ReadonlyMap<string, LiveSpill>>(
+  const orbWorld = useMemo(() => core?.orbWorld?.bind(core), [core]);
+  const [spills, setSpills] = useState<ReadonlyMap<string, KnownSpill>>(
     () => new Map(),
   );
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
-  const [clock, setClock] = useState(() => Date.now());
   const shas = useRef(new Map<ArtifactId, string>());
 
   const shaOf = useCallback(async (id: ArtifactId): Promise<string> => {
@@ -123,7 +126,7 @@ export function useOrbSpills({
           next.set(
             view.sha,
             known === undefined
-              ? liveSpill(view, roll, cellCenter, now)
+              ? knownSpill(view, roll, cellCenter, now)
               : refreshSpill(known, view),
           );
         }
@@ -200,27 +203,8 @@ export function useOrbSpills({
     // The read moves with the Bond's segment, not with every fix inside it.
   }, [adopt, nearSegment, shaOf, spillPort]);
 
-  // A spill is gone at its time; the world stops drawing it then.
-  const live = [...spills.values()].filter((entry) => entry.expiresAt > clock);
-  const nextExpiry = Math.min(...live.map((entry) => entry.expiresAt));
-  useEffect(() => {
-    if (!Number.isFinite(nextExpiry)) return;
-    const timer = globalThis.setTimeout(
-      () => setClock(Date.now()),
-      Math.max(0, nextExpiry - Date.now()) + 50,
-    );
-    return () => globalThis.clearTimeout(timer);
-  }, [nextExpiry]);
-
-  useEffect(() => {
-    renderer.setOrbs?.(mapOrbs(live, picked, Date.now()));
-    // `live` is derived from these; it is a new array every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clock, picked, renderer, spills]);
-  useEffect(() => () => renderer.setOrbs?.([]), [renderer]);
-
   const pickUp = useCallback(
-    (ids: readonly OrbId[], earner: "bond" | "avaia") => {
+    (ids: readonly string[], earner: "bond" | "avaia") => {
       if (ids.length === 0) return;
       setPicked((current) => new Set([...current, ...ids]));
       const at = Date.now();
@@ -234,59 +218,70 @@ export function useOrbSpills({
     [owner],
   );
 
-  // The Bond picks up what it walks to, from its own observation only.
+  // Core is asked whenever what it knows changes, and on a short beat while
+  // orbs lie, so an Avaia walking into reach is noticed. Its answer is drawn
+  // as it is, and what it says is in reach is picked up.
+  const latest = useRef({ spills, picked, bond, avaiaPoint });
+  useEffect(() => {
+    latest.current = { spills, picked, bond, avaiaPoint };
+  });
+  const [lying, setLying] = useState(false);
+  const [nextExpiry, setNextExpiry] = useState<number | undefined>(undefined);
+  const ask = useCallback(() => {
+    if (orbWorld === undefined) return;
+    const state = latest.current;
+    const now = Date.now();
+    const observed =
+      state.bond !== undefined &&
+      state.bond.accuracyMeters <= ORB_OBSERVATION_ACCURACY_METERS
+        ? state.bond
+        : undefined;
+    void orbWorld(
+      orbWorldInput(
+        [...state.spills.values()],
+        state.picked,
+        observed,
+        state.avaiaPoint(),
+      ),
+      now,
+    )
+      .then((view) => {
+        renderer.setOrbs?.(mapOrbs(view));
+        setLying(view.orbs.length > 0);
+        setNextExpiry(
+          view.next_expiry === null ? undefined : Number(view.next_expiry),
+        );
+        pickUp(view.bond_reach, "bond");
+        pickUp(view.avaia_reach, "avaia");
+      })
+      .catch(() => undefined);
+  }, [orbWorld, pickUp, renderer]);
+
   const bondLongitude = bond?.longitude;
   const bondLatitude = bond?.latitude;
-  const bondAccuracy = bond?.accuracyMeters;
   useEffect(() => {
-    if (
-      bondLongitude === undefined ||
-      bondLatitude === undefined ||
-      bondAccuracy === undefined ||
-      bondAccuracy > ORB_OBSERVATION_ACCURACY_METERS ||
-      live.length === 0
-    ) {
-      return;
-    }
-    const reach = orbsInReach(
-      live,
-      picked,
-      { longitude: bondLongitude, latitude: bondLatitude },
-      Date.now(),
-    );
-    if (reach.length === 0) return;
-    // Picked up after this render, not during it: the pick-up hides them.
-    let cancelled = false;
-    globalThis.queueMicrotask(() => {
-      if (!cancelled) pickUp(reach, "bond");
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bondAccuracy, bondLatitude, bondLongitude, pickUp, picked, spills]);
+    // Asked after this render, not during it: an answer may pick up orbs.
+    const asked = globalThis.setTimeout(ask, 0);
+    return () => globalThis.clearTimeout(asked);
+  }, [ask, bondLatitude, bondLongitude, picked, spills]);
 
-  // The Avaia picks up what its body passes, checked on a short beat while
-  // there is anything to pick up.
-  const latestAvaia = useRef(avaiaPoint);
   useEffect(() => {
-    latestAvaia.current = avaiaPoint;
-  }, [avaiaPoint]);
-  const anyLying = live.length > 0;
-  const latestState = useRef({ live, picked });
-  useEffect(() => {
-    latestState.current = { live, picked };
-  });
-  useEffect(() => {
-    if (!anyLying) return;
-    const beat = globalThis.setInterval(() => {
-      const point = latestAvaia.current();
-      if (point === undefined) return;
-      const state = latestState.current;
-      pickUp(orbsInReach(state.live, state.picked, point, Date.now()), "avaia");
-    }, ORB_REACH_CHECK_MS);
+    if (!lying) return;
+    const beat = globalThis.setInterval(ask, ORB_REACH_CHECK_MS);
     return () => globalThis.clearInterval(beat);
-  }, [anyLying, pickUp]);
+  }, [ask, lying]);
+
+  // A spill is gone when Core says; the world is redrawn then.
+  useEffect(() => {
+    if (nextExpiry === undefined) return;
+    const timer = globalThis.setTimeout(
+      ask,
+      Math.max(0, nextExpiry - Date.now()) + 50,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [ask, nextExpiry]);
+
+  useEffect(() => () => renderer.setOrbs?.([]), [renderer]);
 
   return { spill };
 }
