@@ -19,6 +19,8 @@ export const GUIDE_EN = {
   "system.ping.done": "Understood",
   "system.ping.window": "Service window",
   "guide.result.title": "Scene complete",
+  "guide.result.territory":
+    "Opening a cell takes time. Orbs on opened ground give you or your Avaia experience.",
   "guide.result.create":
     "Choose a 3D model, check the name, then save your Avaia.",
   "guide.result.later":
@@ -70,6 +72,12 @@ export const GUIDE_EN = {
     "Take these. Two backpacks: yours, and your Avaia’s.",
   "guide.backpack.title": "Backpacks",
   "guide.backpack.item": "Backpack · 40 cells",
+  "guide.territory.newGround.0":
+    "There — new ground. Every cell takes its time to open: the timer over it counts down, longer where more lies hidden. And look — orbs spilled out of it. Every one you pick up makes you or {avaia} more experienced.",
+  "guide.territory.newGround.1":
+    "Fog doesn’t lift at once: each cell has its own timer, and the more it hides, the longer it runs. What it hides spills out as orbs — pick them up, and you or {avaia} grow more experienced with each one.",
+  "guide.territory.newGround.2":
+    "You’ve opened your first cell. The timer over a cell shows how long it still needs. Once it’s open, collect the orbs on it — each makes you or {avaia} more experienced.",
   "guide.reward.together.1": "Now go — you and {avaia}. I’ll find you.",
   "guide.choice.curious.0.feminine":
     "This is strange. I feel like I’ve been here before.",
@@ -101,6 +109,8 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.done": "Зрозуміло",
   "system.ping.window": "Час робіт",
   "guide.result.title": "Катсцену завершено",
+  "guide.result.territory":
+    "Клітинка відкривається за таймером. Кульки на відкритій території дають досвід вам або вашій Avaia.",
   "guide.result.create":
     "Оберіть 3D model, перевірте ім’я та збережіть свою Avaia.",
   "guide.result.later":
@@ -152,6 +162,12 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.backpack.gift.2": "Бери. Два рюкзаки: твій і твоєї Avaia.",
   "guide.backpack.title": "Рюкзаки",
   "guide.backpack.item": "Рюкзак · 40 клітинок",
+  "guide.territory.newGround.0":
+    "Ось і нова територія. Кожна клітинка відкривається не одразу: таймер над нею показує, скільки ще чекати, — довше там, де більше сховано. А глянь — з неї висипались кульки. За кожну зібрану ти або {avaia} станете досвідченішими.",
+  "guide.territory.newGround.1":
+    "Туман не розходиться миттю: у кожної клітинки свій таймер, і що більше вона ховає, то довше він іде. А сховане висипається кульками — збирай, і з кожною ти або {avaia} станете досвідченішими.",
+  "guide.territory.newGround.2":
+    "Перша клітинка — твоя. Таймер над клітинкою показує, скільки їй ще відкриватись. А на відкритій землі збирай кульки: за кожну ти або {avaia} станете досвідченішими.",
   "guide.reward.together.1": "Тепер ідіть — ти і {avaia}. Я вас знайду.",
   "guide.choice.curious.0.feminine": "Це дивно. Я відчуваю, що вже була тут.",
   "guide.choice.curious.0.masculine": "Це дивно. Я відчуваю, що вже був тут.",
@@ -181,6 +197,8 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.done": "Понятно",
   "system.ping.window": "Время работ",
   "guide.result.title": "Катсцена завершена",
+  "guide.result.territory":
+    "Клетка открывается по таймеру. Шарики на открытой территории дают опыт вам или вашей Avaia.",
   "guide.result.create":
     "Выберите 3D model, проверьте имя и сохраните свою Avaia.",
   "guide.result.later": "Знакомство отложено. Создать Avaia можно через Dock.",
@@ -231,6 +249,12 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.backpack.gift.2": "Бери. Два рюкзака: твой и твоей Avaia.",
   "guide.backpack.title": "Рюкзаки",
   "guide.backpack.item": "Рюкзак · 40 клеток",
+  "guide.territory.newGround.0":
+    "Вот и новая территория. Каждая клетка открывается не сразу: таймер над ней показывает, сколько ещё ждать, — дольше там, где больше спрятано. А смотри — из неё высыпались шарики. За каждый собранный ты или {avaia} станете опытнее.",
+  "guide.territory.newGround.1":
+    "Туман не расходится мгновенно: у каждой клетки свой таймер, и чем больше она прячет, тем дольше он идёт. А спрятанное высыпается шариками — собирай, и с каждым ты или {avaia} станете опытнее.",
+  "guide.territory.newGround.2":
+    "Первая клетка — твоя. Таймер над клеткой показывает, сколько ей ещё открываться. А на открытой земле собирай шарики: за каждый ты или {avaia} станете опытнее.",
   "guide.reward.together.1": "Теперь идите — ты и {avaia}. Я вас найду.",
   "guide.choice.curious.0.feminine":
     "Это странно. Я чувствую, что уже была здесь.",

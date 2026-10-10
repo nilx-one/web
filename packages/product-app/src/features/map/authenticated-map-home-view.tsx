@@ -201,8 +201,11 @@ import {
 } from "../guide/guide-reward-toasts";
 import {
   guideIntroOwed,
+  guideTerritoryOwed,
   postponeGuideIntro,
+  rememberFirstCellOpened,
   rememberGuideIntro,
+  rememberGuideTerritory,
 } from "../guide/guide-memory";
 import type { GuideOutcome, GuideSceneId } from "../guide/guide-script";
 import {
@@ -1363,6 +1366,10 @@ export function AuthenticatedMapHomeView({
         ? avaiaWalk.stance(globalThis.performance.now())?.point
         : undefined,
   });
+  // Her word on new ground is owed from the first cell opened beyond the
+  // starting one, and said once the Avaia it speaks of exists.
+  const [territoryVersion, setTerritoryVersion] = useState(0);
+  const territoryOwed = territoryVersion >= 0 && guideTerritoryOwed(pubDress);
   const fogReveal = useFogReveal({
     renderer,
     bondPoint: observedPosition,
@@ -1374,6 +1381,10 @@ export function AuthenticatedMapHomeView({
       setFogAnnouncement(t("fog.announce.revealed"));
       cue("reveal");
       orbSpills.spill(cell);
+      if (!guideTerritoryOwed(pubDress)) {
+        rememberFirstCellOpened(pubDress);
+        setTerritoryVersion((version) => version + 1);
+      }
       void earnActivity(
         pubDress,
         {
@@ -1558,6 +1569,24 @@ export function AuthenticatedMapHomeView({
       });
     },
   });
+  const guideTerritoryDue =
+    territoryOwed &&
+    avaiaConfiguration === "configured" &&
+    section === "world" &&
+    activeDetail === undefined &&
+    mapStatus.kind === "ready" &&
+    (focusState === "focused" || focusState === "unavailable") &&
+    !guideActive &&
+    !systemInformer.pending &&
+    achievementDialog === undefined;
+  useEffect(() => {
+    if (!guideTerritoryDue || !guideTerritoryOwed(pubDress)) return;
+    const arrives = globalThis.setTimeout(
+      () => playGuide("territory"),
+      GUIDE_INTRO_DELAY_MS,
+    );
+    return () => globalThis.clearTimeout(arrives);
+  }, [guideTerritoryDue, playGuide, pubDress]);
   useEffect(() => {
     if (!guideIntroDue || !guideIntroOwed(pubDress)) return;
     const arrives = globalThis.setTimeout(
@@ -2259,6 +2288,11 @@ export function AuthenticatedMapHomeView({
         );
       }
       if (outcome === "create") openDetail("avaia");
+      return;
+    }
+    if (scene === "territory") {
+      // The receipt above re-renders, and the scene is no longer owed.
+      rememberGuideTerritory(pubDress);
       return;
     }
     // The Bond and its new Avaia take it from here: the Avaia arrives on the

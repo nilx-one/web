@@ -14,7 +14,7 @@ import type { GuideShot } from "./guide-stage";
  * one thing a scene may pay is an achievement the product already priced —
  * she only says it out loud.
  */
-export type GuideSceneId = "intro" | "reward" | "backpack";
+export type GuideSceneId = "intro" | "reward" | "backpack" | "territory";
 
 export type GuideNodeId =
   | "greeting"
@@ -22,7 +22,8 @@ export type GuideNodeId =
   | "farewell"
   | "almostForgot"
   | "together"
-  | "backpackGift";
+  | "backpackGift"
+  | "newGround";
 
 /**
  * How a scene ended, which is all the world is told about it.
@@ -110,6 +111,7 @@ export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
   intro: "greeting",
   reward: "almostForgot",
   backpack: "backpackGift",
+  territory: "newGround",
 };
 
 export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
@@ -165,6 +167,18 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
     shot: "reward",
     reward: true,
     recorded: false,
+    choices: [
+      { reply: "thanks", next: { end: "done" } },
+      { reply: "skip", next: { end: "done" } },
+    ],
+  },
+  newGround: {
+    line: [
+      "guide.territory.newGround.0",
+      "guide.territory.newGround.1",
+      "guide.territory.newGround.2",
+    ],
+    shot: "two-shot",
     choices: [
       { reply: "thanks", next: { end: "done" } },
       { reply: "skip", next: { end: "done" } },

@@ -56,9 +56,9 @@ Ukrainian lines already use.
 ## What is recorded, and what is not
 
 - **Recorded:** the 26 fixed lines of every study (walking, the three refusals,
-  and the fog lines), and xSasha's 12 lines in each of her two voices, in
-  English and Ukrainian: 256 clips, a few seconds each, mono MP3 at 48 kbit/s.
-- **Said without the name:** six of xSasha's lines carry a name the moment
+  and the fog lines), and xSasha's 15 lines in each of her two voices, in
+  English and Ukrainian: 268 clips, a few seconds each, mono MP3 at 48 kbit/s.
+- **Said without the name:** nine of xSasha's lines carry a name the moment
   fills in (`{bond}`, `{avaia}`). The card shows it; the voice says a wording
   without it (`tools/voices/spoken.json`), because an address like `0x0sky`
   is not something to spell out. "Almost forgot — here, 0x0sky." is heard as

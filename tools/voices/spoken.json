@@ -7,7 +7,10 @@
     "guide.reward.almostForgot.1.feminine": "Oh, I nearly left without giving you this. Here.",
     "guide.reward.almostForgot.1.masculine": "Oh, I nearly left without giving you this. Here.",
     "guide.reward.almostForgot.2": "Wait. This is yours.",
-    "guide.reward.together.1": "Now go, the two of you. I’ll find you."
+    "guide.reward.together.1": "Now go, the two of you. I’ll find you.",
+    "guide.territory.newGround.0": "There — new ground. Every cell takes its time to open: the timer over it counts down, longer where more lies hidden. And look — orbs spilled out of it. Every one you pick up makes you or your Avaia more experienced.",
+    "guide.territory.newGround.1": "Fog doesn’t lift at once: each cell has its own timer, and the more it hides, the longer it runs. What it hides spills out as orbs — pick them up, and you or your Avaia grow more experienced with each one.",
+    "guide.territory.newGround.2": "You’ve opened your first cell. The timer over a cell shows how long it still needs. Once it’s open, collect the orbs on it — each makes you or your Avaia more experienced."
   },
   "uk-UA": {
     "guide.intro.howTo.0": "Тоді ти знаєш дорогу. Внизу, у доку, чекає твоя Avaia, поки неналаштована. Торкнись її й натисни «Створити». Ім’я вона вже знає.",
@@ -17,6 +20,9 @@
     "guide.reward.almostForgot.1.feminine": "Ой, мало не пішла просто так. Тримай.",
     "guide.reward.almostForgot.1.masculine": "Ой, мало не пішов просто так. Тримай.",
     "guide.reward.almostForgot.2": "Стій. Це твоє.",
-    "guide.reward.together.1": "Тепер ідіть разом. Я вас знайду."
+    "guide.reward.together.1": "Тепер ідіть разом. Я вас знайду.",
+    "guide.territory.newGround.0": "Ось і нова територія. Кожна клітинка відкривається не одразу: таймер над нею показує, скільки ще чекати, — довше там, де більше сховано. А глянь — з неї висипались кульки. За кожну зібрану ти або твоя Avaia станете досвідченішими.",
+    "guide.territory.newGround.1": "Туман не розходиться миттю: у кожної клітинки свій таймер, і що більше вона ховає, то довше він іде. А сховане висипається кульками — збирай, і з кожною ти або твоя Avaia станете досвідченішими.",
+    "guide.territory.newGround.2": "Перша клітинка — твоя. Таймер над клітинкою показує, скільки їй ще відкриватись. А на відкритій землі збирай кульки: за кожну ти або твоя Avaia станете досвідченішими."
   }
 }

@@ -29,6 +29,7 @@ export function guideResultToast(
       ),
     );
   }
+  if (scene === "territory") lines.push(t("guide.result.territory"));
   if (result.gift !== undefined) {
     title = result.gift.title;
     for (const item of result.gift.items)
