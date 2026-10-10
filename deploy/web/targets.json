@@ -9,7 +9,7 @@
       "compatEdgeAlias": "nilxone-web",
       "composeProject": "nilx-one-web",
       "publicPath": "/",
-      "requiresIdentityContract": 12
+      "requiresIdentityContract": 13
     },
     "telegram": {
       "app": "telegram-mini-app",
@@ -18,7 +18,7 @@
       "compatEdgeAlias": "nilxone-telegram",
       "composeProject": "nilx-one-telegram",
       "publicPath": "/telegram/",
-      "requiresIdentityContract": 9
+      "requiresIdentityContract": 13
     },
     "discord": {
       "app": "discord-activity",

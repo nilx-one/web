@@ -27,6 +27,7 @@ import {
   type MapRoad,
   type MapObservedPosition,
   type MapObservedPositionLabel,
+  type MapOrb,
   type MapPinnedLandmark,
   type MapPointSelection,
   type MapRenderer,
@@ -94,6 +95,16 @@ import {
   fogPulseLevel,
 } from "./fog-marks";
 import {
+  ORBS_CORE_LAYER_ID,
+  ORBS_GLOW_LAYER_ID,
+  ORBS_GOAL_LAYER_ID,
+  ORBS_SOURCE_ID,
+  orbsData,
+  orbsFalling,
+  orbsLayers,
+  orbsSource,
+} from "./orb-layer";
+import {
   PINNED_LANDMARKS_GLOW_LAYER_ID,
   PINNED_LANDMARKS_POINT_LAYER_ID,
   PINNED_LANDMARKS_SOURCE_ID,
@@ -138,6 +149,12 @@ export {
   FOG_MARKS_OUTLINE_LAYER_ID,
   FOG_MARKS_SOURCE_ID,
 } from "./fog-marks";
+export {
+  ORBS_CORE_LAYER_ID,
+  ORBS_GLOW_LAYER_ID,
+  ORBS_GOAL_LAYER_ID,
+  ORBS_SOURCE_ID,
+} from "./orb-layer";
 export {
   PINNED_LANDMARKS_GLOW_LAYER_ID,
   PINNED_LANDMARKS_POINT_LAYER_ID,
@@ -492,6 +509,8 @@ export function createMapLibreRenderer(
   let fogMarks: readonly MapFogMark[] = [];
   let fogPulseFrame: number | undefined;
   let pinnedLandmarks: readonly MapPinnedLandmark[] = [];
+  let orbs: readonly MapOrb[] = [];
+  let orbFallFrame: number | undefined;
   const pinnedLabels = new Map<
     string,
     { readonly element: HTMLElement; readonly marker: MapLabelMarker }
@@ -980,6 +999,73 @@ export function createMapLibreRenderer(
     applyPinnedLandmarkLabels(mounted);
   }
 
+  function stopOrbFall(): void {
+    if (orbFallFrame === undefined) return;
+    globalThis.cancelAnimationFrame(orbFallFrame);
+    orbFallFrame = undefined;
+  }
+
+  // Orbs move only while some are still falling; once every one lies still
+  // the frame loop ends, and nothing redraws them until the list changes.
+  function tickOrbFall(): void {
+    orbFallFrame = undefined;
+    if (map === undefined) return;
+    const now = Date.now();
+    const source = map.getSource(ORBS_SOURCE_ID) as GeoJSONSource | undefined;
+    source?.setData(
+      orbsData(orbs, now) as Parameters<GeoJSONSource["setData"]>[0],
+    );
+    if (orbsFalling(orbs, now)) {
+      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+    }
+  }
+
+  function applyOrbs(mounted: MapLibreMap): void {
+    if (orbs.length === 0) {
+      stopOrbFall();
+      for (const layerId of [
+        ORBS_GLOW_LAYER_ID,
+        ORBS_CORE_LAYER_ID,
+        ORBS_GOAL_LAYER_ID,
+      ]) {
+        if (mounted.getLayer(layerId) !== undefined)
+          mounted.removeLayer(layerId);
+      }
+      if (mounted.getSource(ORBS_SOURCE_ID) !== undefined) {
+        mounted.removeSource(ORBS_SOURCE_ID);
+      }
+      return;
+    }
+    const now = Date.now();
+    const source = mounted.getSource(ORBS_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    if (source === undefined) {
+      mounted.addSource(
+        ORBS_SOURCE_ID,
+        orbsSource(orbs, now) as unknown as SourceSpecification,
+      );
+    } else {
+      source.setData(
+        orbsData(orbs, now) as Parameters<GeoJSONSource["setData"]>[0],
+      );
+    }
+    // Beneath the observation and the pins, like the fog marks: an orb lies
+    // on the ground the Bond's own marker stands on.
+    const before = [
+      PINNED_LANDMARKS_GLOW_LAYER_ID,
+      OBSERVED_POSITION_CELL_LAYER_ID,
+      OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
+    ].find((id) => mounted.getLayer(id) !== undefined);
+    for (const layer of orbsLayers()) {
+      if (mounted.getLayer(String(layer.id)) === undefined) {
+        mounted.addLayer(layer as unknown as LayerSpecification, before);
+      }
+    }
+    if (orbFallFrame === undefined && orbsFalling(orbs, now)) {
+      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+    }
+  }
+
   function ensureAvatarLayer(mounted: MapLibreMap): void {
     if (avatarLayer === undefined) return;
     if (mounted.getLayer(avatarLayer.id) !== undefined) return;
@@ -995,6 +1081,7 @@ export function createMapLibreRenderer(
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
     applyFogMarks(mounted);
+    applyOrbs(mounted);
     applyPinnedLandmarks(mounted);
     applyObservedPosition(mounted);
     applySelectionPoint(mounted);
@@ -1353,6 +1440,7 @@ export function createMapLibreRenderer(
 
     unmount() {
       stopFogPulse();
+      stopOrbFall();
       releaseLabel();
       releaseSelectionMarker();
       releasePinnedLabels();
@@ -1657,6 +1745,11 @@ export function createMapLibreRenderer(
     setPinnedLandmarks(next: readonly MapPinnedLandmark[]) {
       pinnedLandmarks = next.map((landmark) => ({ ...landmark }));
       if (map !== undefined && presentationApplied) applyPinnedLandmarks(map);
+    },
+
+    setOrbs(next: readonly MapOrb[]) {
+      orbs = next.map((orb) => ({ ...orb }));
+      if (map !== undefined && presentationApplied) applyOrbs(map);
     },
   };
 }

@@ -45,6 +45,10 @@ import {
   type CommittedAward,
   type CommittedAwardAccessPort,
   MAX_CLAIM_BUCKETS,
+  type OrbSpillAccessPort,
+  type OrbSpillResult,
+  type OrbSpillsReadResult,
+  type OrbSpillView,
   type NearbySpeechAccessPort,
   type PubInfoAccessPort,
   type SpokenLineView,
@@ -206,6 +210,7 @@ class IdentityHttpAdapter
     AvaiaProfileAccessPort,
     PubInfoAccessPort,
     CommittedAwardAccessPort,
+    OrbSpillAccessPort,
     NearbySpeechAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
@@ -1146,6 +1151,7 @@ class IdentityHttpAdapter
               ? {}
               : { artifact_id: award.artifactId }),
             ...(award.recipe === undefined ? {} : { recipe: award.recipe }),
+            ...(award.orb === undefined ? {} : { orb: award.orb }),
           })),
         }),
       });
@@ -1199,6 +1205,81 @@ class IdentityHttpAdapter
       return read === undefined
         ? { kind: "service-unavailable" }
         : { kind: "read", ...read };
+    }
+    return pubInfoRefusal(body);
+  }
+
+  public async spillOrbs(artifactId: string): Promise<OrbSpillResult> {
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch("/api/v1/identity/finds/spills", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ artifact_id: artifactId }),
+      });
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const spill = parseOrbSpill(body);
+      return spill === undefined
+        ? { kind: "service-unavailable" }
+        : { kind: "spilled", spill };
+    }
+    return pubInfoRefusal(body);
+  }
+
+  public async readOrbSpills(
+    buckets: readonly string[],
+  ): Promise<OrbSpillsReadResult> {
+    const asked = [...new Set(buckets)].sort();
+    if (
+      asked.length === 0 ||
+      asked.length > MAX_CLAIM_BUCKETS ||
+      !asked.every((bucket) => CLAIM_BUCKET.test(bucket))
+    ) {
+      return { kind: "rejected", reason: "invalid" };
+    }
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch(
+        `/api/v1/identity/finds/spills?buckets=${asked.join(",")}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: {
+            ...(authorization === undefined ? {} : { authorization }),
+          },
+        },
+      );
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      if (!isRecord(body) || !Array.isArray(body.spills)) {
+        return { kind: "service-unavailable" };
+      }
+      const buckets = new Set(asked);
+      const spills: OrbSpillView[] = [];
+      for (const entry of body.spills) {
+        const spill = parseOrbSpill(entry);
+        if (spill === undefined || !buckets.has(spill.sha.slice(0, 2))) {
+          return { kind: "service-unavailable" };
+        }
+        spills.push(spill);
+      }
+      return { kind: "read", spills };
     }
     return pubInfoRefusal(body);
   }
@@ -1280,6 +1361,33 @@ function parseAwardOutcome(
   }
 }
 
+/** One spill, or `undefined` for anything that does not read as one. */
+function parseOrbSpill(value: unknown): OrbSpillView | undefined {
+  if (!isRecord(value)) return undefined;
+  const { sha, count, expires_at_ms: expiresAt, taken } = value;
+  if (
+    typeof sha !== "string" ||
+    !ARTIFACT_SHA.test(sha) ||
+    typeof count !== "number" ||
+    !Number.isInteger(count) ||
+    count < 1 ||
+    count > 30 ||
+    typeof expiresAt !== "number" ||
+    !Number.isSafeInteger(expiresAt) ||
+    !Array.isArray(taken) ||
+    !taken.every(
+      (orb) =>
+        typeof orb === "number" &&
+        Number.isInteger(orb) &&
+        orb >= 0 &&
+        orb < count,
+    )
+  ) {
+    return undefined;
+  }
+  return { sha, count, expiresAt, taken: taken as number[] };
+}
+
 /** The claims answered, each in a bucket that was asked for. */
 function parseClaims(
   body: unknown,
@@ -1344,6 +1452,7 @@ export function createIdentityHttpAdapter(
   AvaiaProfileAccessPort &
   PubInfoAccessPort &
   CommittedAwardAccessPort &
+  OrbSpillAccessPort &
   NearbySpeechAccessPort {
   return new IdentityHttpAdapter(options);
 }

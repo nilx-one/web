@@ -5,7 +5,12 @@ import type {
   CommittedAward,
   CommittedAwardAccessPort,
 } from "@nilx-one/application";
-import { isClaimed, type ArtifactId } from "@nilx-one/artifact-contract";
+import {
+  isClaimed,
+  parseOrbId,
+  type ArtifactId,
+  type OrbId,
+} from "@nilx-one/artifact-contract";
 import { useEffect, useRef } from "react";
 
 import { resolvePickUp } from "./claims";
@@ -46,10 +51,24 @@ export type CommittedWorldEvent =
       readonly kind: "find-taken";
       readonly tier: number;
       readonly artifactId: ArtifactId;
+    }
+  | {
+      readonly kind: "orb-kept";
+      readonly orb: OrbId;
+      readonly earner: "bond" | "avaia";
+      readonly experience: number;
+    }
+  | {
+      readonly kind: "orb-taken";
+      readonly orb: OrbId;
+      readonly earner: "bond" | "avaia";
     };
 
 function toWire(award: PendingCommittedAward): CommittedAward {
   const { record } = award;
+  // An orb names its find and which of its orbs; its subject is the orb id.
+  const orb =
+    record.kind === "orb_picked_up" ? parseOrbId(record.subject) : undefined;
   const tier = record.kind === "find_picked_up" ? record.tier : undefined;
   return {
     id: award.id,
@@ -64,6 +83,9 @@ function toWire(award: PendingCommittedAward): CommittedAward {
     ...(record.kind === "craft_finished"
       ? { recipe: craftRecipeOf(record.subject) }
       : {}),
+    ...(orb === undefined
+      ? {}
+      : { artifactId: orb.artifactId, orb: orb.index }),
   };
 }
 
@@ -71,6 +93,14 @@ function keptEvent(
   award: PendingCommittedAward,
 ): CommittedWorldEvent | undefined {
   const { record, find } = award;
+  if (record.kind === "orb_picked_up") {
+    return {
+      kind: "orb-kept",
+      orb: record.subject as OrbId,
+      earner: record.earner,
+      experience: awardAmount(record) ?? 0,
+    };
+  }
   if (record.kind === "find_seen" && find !== undefined) {
     return {
       kind: "find-seen",
@@ -150,6 +180,49 @@ export function flushCommittedAwards(
 
       const answer = result.results.find((item) => item.id === award.id);
       if (answer === undefined) return;
+
+      // An orb is claimed like a rare find: whoever got there first keeps
+      // it, and everyone after gets "crap!". Nothing else changes for it.
+      if (award.record.kind === "orb_picked_up") {
+        switch (resolvePickUp(result, award.id)) {
+          case "keep": {
+            const kept = await keepCommittedAward(owner, award.id);
+            if (kept !== undefined) afterKeep(kept, onEvent);
+            continue;
+          }
+          case "close-quietly":
+            await dropCommittedAward(owner, award.id, "already-yours");
+            continue;
+          case "oh-crap":
+            onEvent?.({
+              kind: "orb-taken",
+              orb: award.record.subject as OrbId,
+              earner: award.record.earner,
+            });
+            await dropCommittedAward(owner, award.id, "taken");
+            continue;
+          case "drop":
+            if (answer.outcome.kind === "behind") {
+              await rebaseCommittedAwards(
+                owner,
+                answer.outcome.head as `xp:${string}` | null,
+              );
+            } else {
+              await dropCommittedAward(
+                owner,
+                award.id,
+                answer.outcome.kind === "capped"
+                  ? "capped"
+                  : answer.outcome.kind === "too-many-chains"
+                    ? "too-many-chains"
+                    : "invalid",
+              );
+            }
+            continue;
+          case "wait":
+            return;
+        }
+      }
 
       if (award.record.kind === "find_picked_up") {
         const resolution = resolvePickUp(result, award.id);

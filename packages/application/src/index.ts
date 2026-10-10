@@ -81,6 +81,7 @@ export {
 } from "./nearby-speech";
 export {
   hasCommittedAwardAccess,
+  hasOrbSpillAccess,
   hasPubInfoAccess,
   MAX_CLAIM_BUCKETS,
   type AwardKind,
@@ -92,6 +93,10 @@ export {
   type CommittedAward,
   type CommittedAwardAccessPort,
   type ExperienceEarner,
+  type OrbSpillAccessPort,
+  type OrbSpillResult,
+  type OrbSpillsReadResult,
+  type OrbSpillView,
   type ExperienceEvent,
   type ExperiencePublication,
   type PubInfoAccessPort,

@@ -319,6 +319,64 @@ describe("flushCommittedAwards", () => {
     ]);
   });
 
+  it("names an orb by its find and number, keeps it, and pays whoever got there", async () => {
+    const orb = `orb:${commonFind.artifactId}:3` as const;
+    const pickup = award(id("o"), {
+      kind: "orb_picked_up",
+      earner: "avaia",
+      subject: orb,
+      at: 4000,
+    });
+    pending = [pickup];
+    const sent: CommittedAward[] = [];
+    const port = access(async (awards) => {
+      sent.push(...awards);
+      return accepted(awards);
+    });
+    const events: CommittedWorldEvent[] = [];
+
+    await flushCommittedAwards("0x0sky", port, (event) => events.push(event));
+
+    expect(sent).toEqual([
+      {
+        id: pickup.id,
+        parent: null,
+        chain: "ch:phone123",
+        kind: "orb_picked_up",
+        earner: "avaia",
+        artifactId: commonFind.artifactId,
+        orb: 3,
+      },
+    ]);
+    expect(events).toEqual([
+      { kind: "orb-kept", orb, earner: "avaia", experience: 10 },
+    ]);
+  });
+
+  it("says crap when someone picked the orb up first, and closes no lead", async () => {
+    const orb = `orb:${commonFind.artifactId}:0` as const;
+    const pickup = award(id("p"), {
+      kind: "orb_picked_up",
+      earner: "bond",
+      subject: orb,
+      at: 4000,
+    });
+    pending = [pickup];
+    const port = access(async (awards) => answered(awards, { kind: "taken" }));
+    const events: CommittedWorldEvent[] = [];
+
+    await flushCommittedAwards("0x0sky", port, (event) => events.push(event));
+
+    expect(keepCommittedAward).not.toHaveBeenCalled();
+    expect(closeCommittedLead).not.toHaveBeenCalled();
+    expect(dropCommittedAward).toHaveBeenCalledWith(
+      "0x0sky",
+      pickup.id,
+      "taken",
+    );
+    expect(events).toEqual([{ kind: "orb-taken", orb, earner: "bond" }]);
+  });
+
   it("closes an already-yours claim quietly and never keeps duplicate XP", async () => {
     const pickup = award(
       id("f"),
