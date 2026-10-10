@@ -35,6 +35,7 @@ import {
   type CoreRuntimePort,
   type IdentityAccessPort,
   type AvatarModel,
+  type AvaiaTravelResult,
   type NativeIdentityContextResult,
   type ProviderPasswordHost,
   type PubDressSelection,
@@ -1110,6 +1111,28 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
                 pending: saveAvaiaProfile.isPending,
                 result: saveAvaiaProfile.data,
               }),
+              ...(avaiaProfileAccess.travelAvaiaToBond === undefined
+                ? {}
+                : {
+                    onBringAvaia: async (position: {
+                      longitude: number;
+                      latitude: number;
+                    }): Promise<AvaiaTravelResult> => {
+                      try {
+                        const result =
+                          await avaiaProfileAccess.travelAvaiaToBond!(position);
+                        if (result.kind === "arrived") {
+                          queryClient.setQueryData(["avaia-profile"], {
+                            kind: "available",
+                            profile: result.profile,
+                          });
+                        }
+                        return result;
+                      } catch {
+                        return { kind: "service-unavailable" };
+                      }
+                    },
+                  }),
               onAvaiaSetupChange: (slugStem: string) => {
                 saveAvaiaProfile.reset();
                 setAvaiaProfileSlugStemDraft(slugStem);

@@ -225,6 +225,7 @@ pub enum BondLocationRepositoryError {
 pub enum PendingLocationIntent {
     Current,
     Manual,
+    Travel,
 }
 
 #[derive(Clone, Debug)]

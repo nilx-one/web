@@ -21,6 +21,27 @@ function memoryStorage(): WorldMemoryStorage & { map: Map<string, string> } {
 }
 
 describe("world memory", () => {
+  it("preserves the last applied journey revision across ordinary Avaia walks", () => {
+    const storage = memoryStorage();
+    rememberWorld(
+      "0:bond",
+      {
+        avaia: { longitude: 2.3522, latitude: 48.8566, bearingDeg: 0 },
+        travelRevision: "12",
+      },
+      storage,
+    );
+    rememberWorld(
+      "0:bond",
+      { avaia: { longitude: 2.354, latitude: 48.857, bearingDeg: 90 } },
+      storage,
+    );
+    expect(readWorldMemory("0:bond", storage)).toEqual({
+      avaia: { longitude: 2.354, latitude: 48.857, bearingDeg: 90 },
+      travelRevision: "12",
+    });
+  });
+
   it("remembers the Bond and the Avaia separately, per owner", () => {
     const storage = memoryStorage();
     rememberWorld(

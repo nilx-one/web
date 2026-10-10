@@ -111,6 +111,72 @@ describe("createBondLocationGeolocation", () => {
     expect(device.watchPosition).not.toHaveBeenCalled();
   });
 
+  it("never asks physical GPS for a Bond in manual mode on separate Web and Discord sessions", async () => {
+    for (const host of ["web", "discord"] as const) {
+      const { device } = deviceDouble();
+      const bond = createBondLocationGeolocation({
+        device,
+        readLocation: async () => manual,
+      });
+      await expect(bond.readPermission()).resolves.toBe("granted");
+      await expect(bond.requestPosition()).resolves.toMatchObject({
+        kind: "observed",
+        position: { declared: true, ...manual.position },
+      });
+      const stop = bond.watchPosition(vi.fn());
+      await Promise.resolve();
+      await Promise.resolve();
+      stop();
+      expect(device.readPermission, host).not.toHaveBeenCalled();
+      expect(device.requestPosition, host).not.toHaveBeenCalled();
+      expect(device.watchPosition, host).not.toHaveBeenCalled();
+    }
+    // Telegram composes a declared-only capability rather than browser GPS.
+    const telegram = createDeclaredGeolocation(manual.position);
+    await expect(telegram.requestPosition()).resolves.toMatchObject({
+      position: { declared: true, ...manual.position },
+    });
+  });
+
+  it("does not let a delayed live mode read override a newer manual one", async () => {
+    vi.useFakeTimers();
+    try {
+      const { device } = deviceDouble();
+      let resolveOld: ((mode: BondLocationMode) => void) | undefined;
+      let checks = 0;
+      const bond = createBondLocationGeolocation({
+        device,
+        recheckMs: 1_000,
+        readLocation: () => {
+          checks += 1;
+          if (checks === 1) {
+            return new Promise<BondLocationMode>((resolve) => {
+              resolveOld = resolve;
+            });
+          }
+          return Promise.resolve(manual);
+        },
+      });
+      const seen = vi.fn();
+      const stop = bond.watchPosition(seen);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(seen).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          position: expect.objectContaining({
+            declared: true,
+            longitude: manual.position.longitude,
+          }),
+        }),
+      );
+      resolveOld?.({ kind: "live" });
+      await Promise.resolve();
+      expect(device.watchPosition).not.toHaveBeenCalled();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("observes the device only while the Bond is live", async () => {
     const { device } = deviceDouble();
     const bond = createBondLocationGeolocation({

@@ -7,12 +7,14 @@ import type {
   AvaiaDriveInput,
   AvatarModel,
   AvatarModelResult,
+  AvaiaTravelResult,
   BondProviderConnections,
   CommittedAwardAccessPort,
   CoreRuntimePort,
   NearbySpeechAccessPort,
 } from "@nilx-one/application";
 import {
+  createBondLocationGeolocation,
   createDeclaredGeolocation,
   type GeolocationCapability,
   type SoundCapability,
@@ -170,6 +172,10 @@ interface ViewOverrides {
     model: "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study",
   ) => Promise<AvatarModelResult | undefined>;
   avaiaSetup?: AvaiaSetupViewState;
+  onBringAvaia?: (position: {
+    longitude: number;
+    latitude: number;
+  }) => Promise<AvaiaTravelResult>;
   onLogout?: () => void;
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
@@ -222,6 +228,9 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.avaiaSetup === undefined
       ? {}
       : { avaiaSetup: overrides.avaiaSetup }),
+    ...(overrides.onBringAvaia === undefined
+      ? {}
+      : { onBringAvaia: overrides.onBringAvaia }),
     ...(overrides.onSlugChange === undefined
       ? {}
       : { onSlugChange: overrides.onSlugChange }),
@@ -320,6 +329,96 @@ describe("AuthenticatedMapHomeView spoken lines", () => {
 });
 
 describe("AuthenticatedMapHomeView", () => {
+  it("offers an admin one GPS-only trip with Avaia and honours No", async () => {
+    chooseLocale("en");
+    const mapRenderer = Object.assign(renderer(), {
+      fog: Object.assign(createFogFieldDouble(), {
+        home: () => ({ longitude: 30.5234, latitude: 50.4501 }),
+      }),
+    });
+    const geolocation = createGeolocationDouble({
+      position: observation({ latitude: 50.48, observedAt: Date.now() }),
+    });
+    const onBringAvaia = vi.fn(async () => ({
+      kind: "service-unavailable" as const,
+    }));
+    const profile = createAvaiaSetupViewState({
+      load: {
+        kind: "available",
+        profile: {
+          pubDress: "x0skai",
+          ownerPubDress: "0x0sky",
+          configurationState: "configured",
+          canTravel: true,
+        },
+      },
+      pending: false,
+    });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: profile,
+      onBringAvaia,
+    });
+    await screen.findByRole("dialog", { name: "Travel together?" });
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(onBringAvaia).not.toHaveBeenCalled();
+    act(() => {
+      geolocation.publish({
+        kind: "observed",
+        position: observation({ latitude: 50.481, observedAt: Date.now() }),
+      });
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Travel together?" }),
+    ).toBeNull();
+  });
+
+  it("moves Avaia only after an admin confirms fresh GPS", async () => {
+    chooseLocale("en");
+    const mapRenderer = Object.assign(renderer(), {
+      fog: Object.assign(createFogFieldDouble(), {
+        home: () => ({ longitude: 30.5234, latitude: 50.4501 }),
+      }),
+    });
+    const geolocation = createGeolocationDouble({
+      position: observation({ latitude: 50.48, observedAt: Date.now() }),
+    });
+    const profile = {
+      pubDress: "x0skai",
+      ownerPubDress: "0x0sky",
+      configurationState: "configured" as const,
+      canTravel: true,
+    };
+    const onBringAvaia = vi.fn(async (): Promise<AvaiaTravelResult> => ({
+      kind: "arrived",
+      profile,
+    }));
+    const setup = createAvaiaSetupViewState({
+      load: { kind: "available", profile },
+      pending: false,
+    });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: setup,
+      onBringAvaia,
+    });
+    await screen.findByRole("dialog", { name: "Travel together?" });
+    fireEvent.click(screen.getByRole("button", { name: "Yes, bring Avaia" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onBringAvaia).toHaveBeenCalledOnce();
+    expect(onBringAvaia).toHaveBeenCalledWith({
+      longitude: 30.5234,
+      latitude: 50.48,
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Travel together?" }),
+    ).toBeNull();
+  });
+
   it("presents the compact Bond pair without inventing reciprocity", () => {
     const mapRenderer = renderer();
 
@@ -1337,10 +1436,13 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByRole("heading", { name: "Налаштування" })).toBeVisible();
     expect(screen.getByText("Застосунок")).toBeVisible();
     expect(screen.getByText("Вигляд")).toBeVisible();
-    expect(screen.getByText("Залишити мапу світлою")).toBeVisible();
+    expect(screen.getByRole("slider", { name: "Вигляд" })).toHaveAttribute(
+      "aria-valuetext",
+      "Автоматично",
+    );
     expect(screen.getByText("Глибина")).toBeVisible();
     expect(screen.getByText("Піднімати будівлі при наближенні")).toBeVisible();
-    expect(screen.getByText("Залишати будівлі контурами")).toBeVisible();
+    expect(screen.getByRole("radio", { name: /^3D/ })).toBeChecked();
     expect(
       screen.getByText(/не змінює стан Bond, BondChain чи спільного Core/),
     ).toBeVisible();
@@ -1358,11 +1460,14 @@ describe("AuthenticatedMapHomeView", () => {
     const { container } = renderView({ section: "settings" });
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeVisible();
-    expect(screen.getByRole("radio", { name: /Auto/i })).toBeChecked();
+    const appearance = screen.getByRole("slider", { name: "Appearance" });
+    expect(appearance).toHaveValue("1");
+    expect(appearance).toHaveAttribute("aria-valuetext", "Auto");
 
-    fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
+    fireEvent.change(appearance, { target: { value: "0" } });
 
-    expect(screen.getByRole("radio", { name: /Light/i })).toBeChecked();
+    expect(appearance).toHaveValue("0");
+    expect(appearance).toHaveAttribute("aria-valuetext", "Light");
     expect(container.querySelector(".authenticated-map-home")).toHaveAttribute(
       "data-theme",
       "light",
@@ -1372,16 +1477,31 @@ describe("AuthenticatedMapHomeView", () => {
     );
   });
 
+  it("restores the Depth radio selector and persists the dimension", () => {
+    renderView({ section: "settings" });
+
+    expect(screen.queryByRole("slider", { name: "Depth" })).toBeNull();
+    expect(screen.getByRole("radio", { name: /^3D/ })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: /^2D/ }));
+
+    expect(screen.getByRole("radio", { name: /^2D/ })).toBeChecked();
+    expect(window.localStorage.getItem("nilx-one.interface.dimension")).toBe(
+      "flat",
+    );
+  });
+
   it("offers sound on the settings route and keeps the choice on this device", () => {
     const sound = soundDouble();
     renderView({ section: "settings", sound });
 
     expect(screen.getByRole("group", { name: "Sound" })).toBeVisible();
-    expect(
-      screen.getByRole("radio", { name: /^Effects\s?A short/ }),
-    ).toBeChecked();
+    const soundLevel = screen.getByRole("slider", { name: "Sound" });
+    expect(soundLevel).toHaveValue("1");
+    expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects");
 
-    fireEvent.click(screen.getByRole("radio", { name: /Effects and world/ }));
+    fireEvent.change(soundLevel, { target: { value: "2" } });
+    expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects and world");
 
     expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
     // Character voices default to cutscenes: the middle of three stops.
@@ -1467,7 +1587,9 @@ describe("AuthenticatedMapHomeView", () => {
     const mapRenderer = renderer();
 
     renderView({ mapRenderer, section: "settings" });
-    fireEvent.click(screen.getByRole("radio", { name: /Light/i }));
+    fireEvent.change(screen.getByRole("slider", { name: "Appearance" }), {
+      target: { value: "0" },
+    });
 
     expect(mapRenderer.setAppearance).toHaveBeenLastCalledWith("light");
     expect(mapRenderer.mount).toHaveBeenCalledOnce();
@@ -1606,6 +1728,8 @@ describe("AuthenticatedMapHomeView", () => {
     });
 
     expect(upsert.mock.lastCall?.[0].visible).toBe(false);
+    // Pulling back hides the body; it does not throw the loaded study away.
+    expect(vi.mocked(mapRenderer.avatars!.remove)).not.toHaveBeenCalled();
   });
 
   // Authentication starts with the Avaia at the wheel, in the study its Bond's
@@ -1629,8 +1753,51 @@ describe("AuthenticatedMapHomeView", () => {
       new Set(["avaia"]),
     );
     expect(drawn.at(-1)?.modelId).toBe(avaiaStudy("x0skai", "dasha-study"));
-    // The seat nobody is in is dropped rather than left standing behind.
-    expect(vi.mocked(mapRenderer.avatars!.remove)).toHaveBeenCalledWith("bond");
+  });
+
+  // Handing the wheel over and back hides each body in turn instead of
+  // removing it, so neither study is fetched and cloned again on return.
+  it("hides the body that left the seat instead of removing it", async () => {
+    vi.useFakeTimers();
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      avaiaAvailability: "ready",
+    });
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Map centred on this device" }),
+      ).toBeVisible(),
+    );
+    act(() => {
+      mapRenderer.moveCamera(
+        { ...mapRenderer.getCamera(), zoom: MAP_BODY_HANDOVER_ZOOM },
+        true,
+      );
+    });
+
+    const upsert = vi.mocked(mapRenderer.avatars!.upsert);
+    const last = (id: string) =>
+      upsert.mock.calls.map(([handle]) => handle).findLast((h) => h.id === id);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(last("bond")?.visible).toBe(true);
+    expect(last("avaia")?.visible).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
+    );
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(last("avaia")?.visible).toBe(true);
+    expect(last("bond")?.visible).toBe(false);
+
+    expect(vi.mocked(mapRenderer.avatars!.remove)).not.toHaveBeenCalled();
   });
 
   it("settles the leaving body before the arriving one, rather than swapping", async () => {
@@ -2128,6 +2295,8 @@ describe("AuthenticatedMapHomeView", () => {
       vi.useFakeTimers();
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
       const declared = { longitude: 30.563, latitude: 50.4265 };
+      const avaia = { longitude: 30.5234, latitude: 50.4501 };
+      avaiaStandsAt(avaia);
       renderView({
         mapRenderer,
         geolocation: createDeclaredGeolocation(declared),
@@ -2135,12 +2304,55 @@ describe("AuthenticatedMapHomeView", () => {
       });
       await vi.waitFor(() =>
         expect(lastAvaia(mapRenderer)?.lngLat).toEqual([
-          declared.longitude,
-          declared.latitude,
+          avaia.longitude,
+          avaia.latitude,
         ]),
       );
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
+      expect(lastLabel(mapRenderer)?.detail).toContain(
+        "from the manual position",
+      );
+    });
 
-      expect(lastLabel(mapRenderer)?.detail).toBe("Manual position");
+    it("measures declared Bond position against Avaia, not GPS", async () => {
+      vi.useFakeTimers();
+      const manual = { longitude: 30.5234, latitude: 50.4501 };
+      const avaia = {
+        longitude: manual.longitude + 0.09,
+        latitude: manual.latitude,
+      };
+      avaiaStandsAt(avaia);
+      const device = {
+        readPermission: vi.fn(async () => "granted" as const),
+        requestPosition: vi.fn(async () => ({
+          kind: "failed" as const,
+          reason: "host-failed" as const,
+        })),
+        watchPosition: vi.fn(() => () => undefined),
+      };
+      const geolocation = createBondLocationGeolocation({
+        device,
+        readLocation: async () => ({ kind: "manual", position: manual }),
+      });
+      const asked = vi.fn(nearbyProximityCore().avaiaProximity);
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      renderView({
+        mapRenderer,
+        geolocation,
+        findItems: { avaiaProximity: asked },
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() => expect(asked).toHaveBeenCalled());
+      const distance = asked.mock.calls[0]?.[0] ?? 0;
+      expect(distance).toBeGreaterThan(5_000);
+      expect(distance).toBeLessThan(8_000);
+      expect(lastLabel(mapRenderer)?.detail).toContain(
+        "from the manual position",
+      );
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
+      expect(device.readPermission).not.toHaveBeenCalled();
+      expect(device.requestPosition).not.toHaveBeenCalled();
+      expect(device.watchPosition).not.toHaveBeenCalled();
     });
 
     it("asks before revealing fog, then sends the Avaia to reveal it", async () => {

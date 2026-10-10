@@ -84,6 +84,60 @@ describe("MapLibre renderer health invariants", () => {
     expect(getWorkerUrl()).not.toBe("");
   });
 
+  it("accepts a painted style before the stricter MapLibre load event", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = rendererFor(fakeMap);
+    const statuses: string[] = [];
+    renderer.subscribe((status) => statuses.push(status.kind));
+
+    renderer.mount(document.createElement("div"));
+    // A render without a completed style must not mark an empty frame ready.
+    fakeMap.emit("render");
+    fakeMap.emit("styledata");
+    fakeMap.emit("render");
+    expect(renderer.getStatus()).toEqual({ kind: "loading" });
+
+    // Telegram WebView can display the real world before all tiles settle.
+    fakeMap.emit("style.load");
+    fakeMap.emit("render");
+    expect(renderer.getStatus()).toEqual({ kind: "ready" });
+
+    // The eventual load event must not publish ready a second time.
+    fakeMap.emit("load");
+    expect(statuses).toEqual(["loading", "ready"]);
+  });
+
+  it("recovers if a visible frame arrives after the first-paint timeout", () => {
+    vi.useFakeTimers();
+    const fakeMap = makeFakeMap();
+    const renderer = rendererFor(fakeMap);
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("styledata");
+    vi.advanceTimersByTime(50);
+    expect(renderer.getStatus()).toEqual({
+      kind: "unavailable",
+      reason: "first-paint-timeout",
+    });
+
+    fakeMap.emit("style.load");
+    fakeMap.emit("render");
+    expect(renderer.getStatus()).toEqual({ kind: "ready" });
+  });
+
+  it("never lets a render override an actual WebGL initialization failure", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = rendererFor(fakeMap);
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("error", new GPUInitializationError({}, null));
+
+    fakeMap.emit("style.load");
+    fakeMap.emit("render");
+    expect(renderer.getStatus()).toEqual({
+      kind: "unavailable",
+      reason: "webgl-unavailable",
+    });
+  });
+
   it("names the stalled phase when a style resolves but never paints", () => {
     vi.useFakeTimers();
     const fakeMap = makeFakeMap();

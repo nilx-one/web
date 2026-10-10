@@ -4,6 +4,7 @@
 import type { SoundCapability } from "@nilx-one/host-contract";
 
 import { useLocalization, type TranslationKey } from "./localization";
+import { SettingsSlider } from "./settings-slider";
 import {
   chooseSoundPreference,
   chooseVoicePreference,
@@ -64,21 +65,17 @@ export function SoundSettings({ sound }: SoundSettingsProps) {
   return (
     <fieldset className="interface-settings__appearance">
       <legend>{t("settings.sound.legend")}</legend>
-      {OPTIONS.map(([mode, label, detail]) => (
-        <label key={mode} className="interface-settings__option">
-          <span>
-            <strong>{t(label)}</strong>
-            <small>{t(detail)}</small>
-          </span>
-          <input
-            type="radio"
-            name="sound"
-            value={mode}
-            checked={preference === mode}
-            onChange={() => choose(mode)}
-          />
-        </label>
-      ))}
+      <SettingsSlider
+        id="sound-level"
+        label={t("settings.sound.legend")}
+        options={OPTIONS.map(([value, label, detail]) => ({
+          value,
+          label: t(label),
+          detail: t(detail),
+        }))}
+        value={preference}
+        onChange={choose}
+      />
       <VoiceSlider muted={preference === "off"} />
     </fieldset>
   );

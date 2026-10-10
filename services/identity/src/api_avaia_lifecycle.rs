@@ -56,6 +56,7 @@ fn avaia_router_with_clock(
             "/api/v1/identity/avaia/location",
             post(write_owned_avaia_location),
         )
+        .route("/api/v1/identity/avaia/travel", post(bring_owned_avaia))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(state)
 }
@@ -94,10 +95,16 @@ async fn read_owned_avaia(State(state): State<ApiState>, headers: HeaderMap) -> 
             return unavailable();
         }
     };
-    let mut response = no_store_json(
-        StatusCode::OK,
-        avaia_identity_projection(profile, location),
-    );
+    let can_travel = match state.repository.role_for(owner.as_str()).await {
+        Ok(role) => role == crate::BondAccessRole::Admin,
+        Err(error) => {
+            tracing::error!(%error, "Avaia travel role lookup failed");
+            return unavailable();
+        }
+    };
+    let mut projection = avaia_identity_projection(profile, location);
+    projection.can_travel = Some(can_travel);
+    let mut response = no_store_json(StatusCode::OK, projection);
     if let Some(cookie) = cookie {
         append_cookie(&mut response, cookie);
     }
@@ -203,12 +210,15 @@ struct AvaiaIdentityProjection {
     configuration_state: &'static str,
     model_ref: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    can_travel: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     location: Option<AvaiaLocationProjection>,
 }
 
 #[derive(Debug, Serialize)]
 struct AvaiaLocationProjection {
     coordinate: GeoCoordinate,
+    travel_revision: String,
 }
 
 fn avaia_identity_projection(
@@ -220,8 +230,10 @@ fn avaia_identity_projection(
         owner_pub_dress: profile.owner_pub_dress,
         configuration_state: profile.configuration_state.as_str(),
         model_ref: None,
+        can_travel: None,
         location: location.map(|location| AvaiaLocationProjection {
             coordinate: location.coordinate,
+            travel_revision: location.travel_revision.to_string(),
         }),
     }
 }
@@ -329,6 +341,96 @@ async fn write_owned_avaia_location_response(
     }
 }
 
+/// A confirmed device observation brings Avaia to Bond, without declaring
+/// a manual Bond position. The service never infers confirmation from GPS:
+/// only an explicit authenticated POST can cause this transition.
+async fn bring_owned_avaia(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<AvaiaLocationUpdateRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
+    if !active {
+        return with_session_cookie(session_inactive(), cookie);
+    }
+    let mut response = bring_owned_avaia_response(&state, identity, &request, now).await;
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+async fn bring_owned_avaia_response(
+    state: &ApiState,
+    identity: IdentityRecord,
+    request: &AvaiaLocationUpdateRequest,
+    now: u64,
+) -> Response {
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        return unavailable();
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(format!("avaia-travel:{}", owner.as_str()), now, 12, 3600)
+        .and_then(|_| state.limiter.consume("avaia-travel:global", now, 500, 3600))
+    {
+        return rate_limited(retry_after);
+    }
+    let coordinate = match GeoCoordinate::from_degrees(request.longitude, request.latitude) {
+        Ok(value) => value,
+        Err(_) => {
+            return no_store_error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_avaia_location",
+                "Longitude and latitude must be finite WGS84 degrees.",
+            );
+        }
+    };
+    match state.repository.bring_avaia_to_bond(&owner, coordinate, crate::DecimalU64::new(now)).await {
+        Ok(crate::AvaiaTravelOutcome::Arrived) => {
+            let profile = match state.repository.owned_avaia_identity(&owner).await {
+                Ok(Some(value)) => value,
+                _ => return unavailable(),
+            };
+            let location = match state.repository.read_avaia_location(&owner).await {
+                Ok(value) => value,
+                Err(error) => {
+                    tracing::error!(%error, "Avaia arrival read failed");
+                    return unavailable();
+                }
+            };
+            let mut projection = avaia_identity_projection(profile, location);
+            projection.can_travel = Some(true);
+            no_store_json(StatusCode::OK, projection)
+        }
+        Ok(crate::AvaiaTravelOutcome::AdminRequired) => no_store_error(
+            StatusCode::FORBIDDEN,
+            "admin_required",
+            "Only an administrator can travel with Avaia.",
+        ),
+        Ok(crate::AvaiaTravelOutcome::AvaiaUnavailable) => no_store_error(
+            StatusCode::CONFLICT,
+            "avaia_unavailable",
+            "Create Avaia before travelling together.",
+        ),
+        Err(error) => {
+            tracing::error!(%error, "Avaia travel failed");
+            unavailable()
+        }
+    }
+}
+
 #[cfg(test)]
 mod avaia_lifecycle_api_tests {
     use std::sync::{atomic::{AtomicU64, Ordering}, Arc};
@@ -347,7 +449,7 @@ mod avaia_lifecycle_api_tests {
     use url::form_urlencoded;
 
     use super::{Clock, avaia_router_with_clock};
-    use crate::{IdentityRepository, NativeAuthConfig, ProviderIdentity, PubDress, TelegramInitDataVerifier};
+    use crate::{BondAccessRole, IdentityRepository, NativeAuthConfig, ProviderIdentity, PubDress, TelegramInitDataVerifier};
 
     const TOKEN: &str = "123456:development-token";
     const NOW: u64 = 1_800_000_000;
@@ -396,6 +498,10 @@ mod avaia_lifecycle_api_tests {
     }
 
     async fn app(user_id: i64, owner: &str) -> (axum::Router, String) {
+        app_with_role(user_id, owner, false).await
+    }
+
+    async fn app_with_role(user_id: i64, owner: &str, is_admin: bool) -> (axum::Router, String) {
         let database_url = test_database_url();
         let repository = IdentityRepository::connect(&database_url).await.expect("repository");
         let owner: PubDress = owner.parse().expect("owner");
@@ -403,6 +509,12 @@ mod avaia_lifecycle_api_tests {
             .register(&owner, &ProviderIdentity::telegram(user_id), NOW)
             .await
             .expect("registration");
+        if is_admin {
+            repository
+                .set_role(&owner, BondAccessRole::Admin)
+                .await
+                .expect("assign admin role");
+        }
         let provider_links = crate::ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider links");
@@ -424,6 +536,37 @@ mod avaia_lifecycle_api_tests {
     async fn json(response: axum::response::Response) -> Value {
         let body = to_bytes(response.into_body(), 8192).await.expect("body");
         serde_json::from_slice(&body).expect("json")
+    }
+
+    #[tokio::test]
+    async fn travel_rejects_non_admin_and_admin_without_owned_avaia() {
+        let (user_app, user_auth) = app(8991, "0x1sky").await;
+        let request = || {
+            Request::post("/api/v1/identity/avaia/travel")
+                .header(AUTHORIZATION, format!("tma {user_auth}"))
+                .header("x-0x1-csrf", "1")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
+                .expect("request")
+        };
+        let denied = user_app.oneshot(request()).await.expect("denied");
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+        assert_eq!(json(denied).await["error"]["code"], "admin_required");
+
+        let (admin_app, admin_auth) = app_with_role(8992, "0x1sky", true).await;
+        let missing = admin_app
+            .oneshot(
+                Request::post("/api/v1/identity/avaia/travel")
+                    .header(AUTHORIZATION, format!("tma {admin_auth}"))
+                    .header("x-0x1-csrf", "1")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"longitude":30.5234,"latitude":50.4501}"#))
+                    .expect("request"),
+            )
+            .await
+            .expect("missing Avaia");
+        assert_eq!(missing.status(), StatusCode::CONFLICT);
+        assert_eq!(json(missing).await["error"]["code"], "avaia_unavailable");
     }
 
     #[tokio::test]

@@ -72,6 +72,7 @@ export {
   type AvaiaProfileReadResult,
   type AvaiaProfileUpdateRejection,
   type AvaiaProfileUpdateResult,
+  type AvaiaTravelResult,
 } from "./avaia-profile";
 export {
   hasNearbySpeechAccess,
