@@ -30,6 +30,8 @@ export interface SystemNotice {
   readonly id: string;
   readonly kind: "error" | "maintenance";
   readonly action?: ToastAction;
+  /** Retain a historical failure receipt across retry until explicitly dismissed. */
+  readonly retainOnAction?: boolean;
   readonly reference?: string;
   readonly title: string;
   readonly description?: string;
@@ -56,12 +58,22 @@ export function systemInformerReducer(state: State, action: Action): State {
     if (notice?.id !== action.id) return state;
     return { queue: state.queue.slice(1), results: [...state.results, notice] };
   }
-  if (
-    [...state.queue, ...state.results].some(
-      (notice) => notice.id === action.notice.id,
-    )
-  )
-    return state;
+  // Refresh the receipt and retry closure without replaying its scene. An
+  // operation reference can change on retry while the failure stays the same.
+  if (state.queue.some((notice) => notice.id === action.notice.id))
+    return {
+      ...state,
+      queue: state.queue.map((notice) =>
+        notice.id === action.notice.id ? action.notice : notice,
+      ),
+    };
+  if (state.results.some((notice) => notice.id === action.notice.id))
+    return {
+      ...state,
+      results: state.results.map((notice) =>
+        notice.id === action.notice.id ? action.notice : notice,
+      ),
+    };
   // A burst must not force an unbounded run of movies. Every extra report is
   // still readable in the result stack, without another interruption.
   if (state.queue.length >= 8)
@@ -156,7 +168,7 @@ function PingScene({
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useId();
   const description = useId();
-  const window = maintenanceWindow(notice, locale);
+  const serviceWindow = maintenanceWindow(notice, locale);
   useEffect(() => {
     const element = dialog.current;
     const focused = document.activeElement;
@@ -174,7 +186,9 @@ function PingScene({
       className="ping-scene"
       data-world={worldVisible || undefined}
       aria-labelledby={title}
-      aria-describedby={description}
+      aria-describedby={
+        notice.description || serviceWindow ? description : undefined
+      }
       onCancel={(event) => {
         event.preventDefault();
         onFinish();
@@ -210,10 +224,10 @@ function PingScene({
         </p>
         <h2 id={title}>{notice.title}</h2>
         <div id={description}>
-          <p>{notice.description}</p>
-          {window === undefined ? null : (
+          {notice.description ? <p>{notice.description}</p> : null}
+          {serviceWindow === undefined ? null : (
             <p>
-              {t("system.ping.window")}: {window}
+              {t("system.ping.window")}: {serviceWindow}
             </p>
           )}
         </div>
@@ -273,7 +287,7 @@ export function SystemInformerProvider({
   const viewport = useToastViewportNode();
   const active = blocks.size === 0 ? state.queue[0] : undefined;
   const toasts: ToastRegionItem[] = state.results.map((notice) => {
-    const window = maintenanceWindow(notice, locale);
+    const serviceWindow = maintenanceWindow(notice, locale);
     return {
       id: notice.id,
       ...(notice.reference === undefined ? {} : { details: notice.reference }),
@@ -283,14 +297,17 @@ export function SystemInformerProvider({
             action: {
               label: notice.action.label,
               onPerform: () => {
-                dispatch({ type: "dismiss", id: notice.id });
+                if (!notice.retainOnAction)
+                  dispatch({ type: "dismiss", id: notice.id });
                 notice.action?.onPerform();
               },
             },
           }),
       tone: notice.kind === "error" ? "critical" : "attention",
       title: `${t("system.ping.name")}: ${notice.title}`,
-      description: [notice.description, window].filter(Boolean).join(" · "),
+      description: [notice.description, serviceWindow]
+        .filter(Boolean)
+        .join(" · "),
     };
   });
   const region = (

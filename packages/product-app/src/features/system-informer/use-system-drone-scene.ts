@@ -3,6 +3,7 @@
 
 import type {
   MapCamera,
+  MapCameraPadding,
   MapPointSelection,
   MapRenderer,
 } from "@nilx-one/map-contract";
@@ -44,8 +45,10 @@ export function useSystemDroneScene(
     const destination = offsetPoint(you, 0, 2.8);
     const entry = offsetPoint(you, 45, 18);
     let base: MapCamera;
+    let basePadding: MapCameraPadding | undefined;
     try {
       base = renderer.getCamera();
+      basePadding = renderer.getCameraPadding?.();
     } catch {
       showWorld(false);
       return;
@@ -88,7 +91,9 @@ export function useSystemDroneScene(
         {
           motion: reduced ? "immediate" : "eased",
           durationMs: 900,
-          padding: guideCameraPadding(globalThis.innerHeight),
+          ...(basePadding === undefined
+            ? {}
+            : { padding: guideCameraPadding(globalThis.innerHeight) }),
         },
       );
       draw(started);
@@ -105,8 +110,9 @@ export function useSystemDroneScene(
       }
       try {
         renderer.setCamera(base, {
-          motion: "immediate",
-          padding: { top: 0, bottom: 0, left: 0, right: 0 },
+          motion: reduced ? "immediate" : "eased",
+          durationMs: 600,
+          ...(basePadding === undefined ? {} : { padding: basePadding }),
         });
       } catch {
         /* Same fallback on context loss. */

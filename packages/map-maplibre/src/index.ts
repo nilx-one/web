@@ -1403,6 +1403,16 @@ export function createMapLibreRenderer(
       return camera;
     },
 
+    getCameraPadding() {
+      const padding = map?.getPadding();
+      return {
+        top: padding?.top ?? 0,
+        right: padding?.right ?? 0,
+        bottom: padding?.bottom ?? 0,
+        left: padding?.left ?? 0,
+      };
+    },
+
     subscribeCamera(listener) {
       cameraListeners.add(listener);
       return () => cameraListeners.delete(listener);

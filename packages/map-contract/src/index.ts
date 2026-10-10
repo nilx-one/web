@@ -487,6 +487,8 @@ export interface MapRenderer {
   getStatus(): MapRendererStatus;
   subscribe(listener: (status: MapRendererStatus) => void): () => void;
   getCamera(): MapCamera;
+  /** Snapshot of actual viewport padding for temporary cinematic framing. */
+  getCameraPadding?(): MapCameraPadding;
   setCamera(camera: MapCamera, options?: MapCameraOptions): void;
   subscribeCamera(listener: (change: MapCameraChange) => void): () => void;
   setAppearance(appearance: MapAppearance): void;

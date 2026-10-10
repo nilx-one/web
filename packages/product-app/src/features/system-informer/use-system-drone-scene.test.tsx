@@ -57,7 +57,7 @@ it("returns the camera, removes the prop and stops animation on skip without mov
   expect(renderer.systemDrone?.remove).toHaveBeenCalledWith("system:xPing");
   expect(renderer.setCamera).toHaveBeenLastCalledWith(
     base,
-    expect.objectContaining({ motion: "immediate" }),
+    expect.objectContaining({ motion: "eased" }),
   );
   expect(renderer.setObservedPosition).not.toHaveBeenCalled();
   expect(cancel).toHaveBeenCalled();
@@ -110,3 +110,33 @@ it("keeps the message available if even camera inspection fails", () => {
   fireEvent.click(screen.getByText("(skip)"));
   expect(screen.getByText("xPing: Problem")).toBeVisible();
 });
+
+it.each([false, true])(
+  "restores the captured padding with reducedMotion=%s",
+  (reduced) => {
+    chooseLocale("en");
+    vi.stubGlobal("matchMedia", () => ({ matches: reduced }));
+    const base = { center: [30.5, 50.4], zoom: 16, bearing: 20, pitch: 40 };
+    const padding = { top: 30, right: 12, bottom: 240, left: 8 };
+    const renderer = {
+      systemDrone: { upsert: vi.fn(() => true), remove: vi.fn() },
+      getCamera: () => base,
+      getCameraPadding: () => ({ ...padding }),
+      setCamera: vi.fn(),
+    } as unknown as MapRenderer;
+    const view = render(
+      <SystemInformerProvider>
+        <World renderer={renderer} />
+      </SystemInformerProvider>,
+    );
+    fireEvent.click(screen.getByText("Report"));
+    fireEvent.click(screen.getByText("(skip)"));
+    expect(renderer.setCamera).toHaveBeenLastCalledWith(base, {
+      motion: reduced ? "immediate" : "eased",
+      durationMs: 600,
+      padding,
+    });
+    view.unmount();
+    vi.unstubAllGlobals();
+  },
+);

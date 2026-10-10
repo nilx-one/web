@@ -210,6 +210,8 @@ import {
   useSystemErrorNotices,
 } from "../system-informer/system-informer";
 import { useSystemDroneScene } from "../system-informer/use-system-drone-scene";
+import { guideResultToast } from "../guide/guide-result-toast";
+import type { GuidePlayOptions } from "../guide/use-guide-cutscene";
 import { useGuideCutscene } from "../guide/use-guide-cutscene";
 
 /** The provider types this client can present. The domain owns the list. */
@@ -759,6 +761,10 @@ export function AuthenticatedMapHomeView({
   const [avaiaSavedToast, setAvaiaSavedToast] = useState<
     StatusToastItem | undefined
   >(undefined);
+  const [sceneToasts, setSceneToasts] = useState<readonly StatusToastItem[]>(
+    [],
+  );
+  const sceneSequence = useRef(0);
   const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
     undefined,
   );
@@ -1024,6 +1030,7 @@ export function AuthenticatedMapHomeView({
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
     ...(findToast === undefined ? [] : [findToast]),
     ...speech.toasts,
+    ...sceneToasts,
   ];
   const headerActions: readonly HeaderAction[] =
     onLogout === undefined
@@ -1396,7 +1403,7 @@ export function AuthenticatedMapHomeView({
     bondName: pubDress,
     names: { avaia: avaiaLabel, bond: pubDress },
     reducedMotion,
-    onEnd: (scene, outcome) => endGuideScene(scene, outcome),
+    onEnd: (scene, outcome, result) => endGuideScene(scene, outcome, result),
   });
   const guideActive = guide.state !== undefined;
   const systemInformer = useSystemInformer();
@@ -2155,7 +2162,21 @@ export function AuthenticatedMapHomeView({
    * introduction played through or skipped is not played again on this
    * device; one put off comes back the next time the world opens.
    */
-  function endGuideScene(scene: GuideSceneId, outcome: GuideOutcome): void {
+  function endGuideScene(
+    scene: GuideSceneId,
+    outcome: GuideOutcome,
+    result: GuidePlayOptions,
+  ): void {
+    sceneSequence.current += 1;
+    const toast = guideResultToast(
+      `scene:${sceneSequence.current}`,
+      scene,
+      outcome,
+      result,
+      t,
+      { bond: pubDress, avaia: avaiaLabel },
+    );
+    setSceneToasts((current) => [...current, toast]);
     if (scene === "intro") {
       if (outcome === "later") postponeGuideIntro(pubDress);
       else {
@@ -2374,6 +2395,12 @@ export function AuthenticatedMapHomeView({
             dismiss: t("toast.dismiss"),
           }}
           onDismiss={(id) => {
+            if (sceneToasts.some((toast) => toast.id === id)) {
+              setSceneToasts((current) =>
+                current.filter((toast) => toast.id !== id),
+              );
+              return;
+            }
             if (avaiaSavedToast?.id === id) {
               setAvaiaSavedToast(undefined);
               return;
@@ -3093,7 +3120,10 @@ export function AuthenticatedMapHomeView({
               state={achievementDialog}
               bondName={pubDress}
               avaiaName={avaiaLabel}
-              onClose={() => setAchievementDialog(undefined)}
+              onClose={() => {
+                endGuideScene("reward", "done", { reward: achievementDialog });
+                setAchievementDialog(undefined);
+              }}
             />
           )}
           <span className="visually-hidden" aria-live="polite">

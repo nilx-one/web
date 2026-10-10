@@ -200,3 +200,31 @@ describe("Ping system informer", () => {
     expect(screen.getByRole("dialog").querySelector("img")).toBeNull();
   });
 });
+
+it("does not describe a title-only notice with an empty paragraph", () => {
+  function Producer() {
+    const { publish } = useSystemInformer();
+    return (
+      <button
+        onClick={() =>
+          publish({ id: "title-only", kind: "error", title: "Problem" })
+        }
+      >
+        Title only
+      </button>
+    );
+  }
+  render(
+    <SystemInformerProvider>
+      <Producer />
+    </SystemInformerProvider>,
+  );
+  fireEvent.click(screen.getByText("Title only"));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog).not.toHaveAttribute("aria-describedby");
+  expect(
+    [...dialog.querySelectorAll("p")].every((paragraph) =>
+      Boolean(paragraph.textContent),
+    ),
+  ).toBe(true);
+});

@@ -582,6 +582,16 @@ describe("observed position label", () => {
 });
 
 describe("camera ownership", () => {
+  it("snapshots the actual viewport padding without retaining mutable MapLibre state", () => {
+    const padding = { top: 31, right: 12, bottom: 241, left: 8 };
+    const fakeMap = Object.assign(makeFakeMap(), { getPadding: () => padding });
+    const renderer = readyRenderer(fakeMap);
+    const snapshot = renderer.getCameraPadding?.();
+    expect(snapshot).toEqual(padding);
+    padding.bottom = 400;
+    expect(snapshot?.bottom).toBe(241);
+    expect(renderer.getCameraPadding?.().bottom).toBe(400);
+  });
   it("eases a requested transition and honours viewport padding", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);

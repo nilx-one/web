@@ -18,6 +18,13 @@ export const GUIDE_EN = {
   "system.ping.skip": "(skip)",
   "system.ping.done": "Understood",
   "system.ping.window": "Service window",
+  "guide.result.title": "Scene complete",
+  "guide.result.create":
+    "Choose a 3D model, check the name, then save your Avaia.",
+  "guide.result.later":
+    "Introduction postponed. You can create your Avaia from the Dock.",
+  "guide.result.skipped":
+    "Introduction skipped. You can create your Avaia from the Dock.",
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Continue",
   "guide.intro.greeting.0.feminine":
@@ -93,6 +100,13 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.skip": "(пропустити)",
   "system.ping.done": "Зрозуміло",
   "system.ping.window": "Час робіт",
+  "guide.result.title": "Катсцену завершено",
+  "guide.result.create":
+    "Оберіть 3D model, перевірте ім’я та збережіть свою Avaia.",
+  "guide.result.later":
+    "Знайомство відкладено. Створити Avaia можна через Dock.",
+  "guide.result.skipped":
+    "Знайомство пропущено. Створити Avaia можна через Dock.",
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далі",
   "guide.intro.greeting.0.feminine":
@@ -166,6 +180,12 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.skip": "(пропустить)",
   "system.ping.done": "Понятно",
   "system.ping.window": "Время работ",
+  "guide.result.title": "Катсцена завершена",
+  "guide.result.create":
+    "Выберите 3D model, проверьте имя и сохраните свою Avaia.",
+  "guide.result.later": "Знакомство отложено. Создать Avaia можно через Dock.",
+  "guide.result.skipped":
+    "Знакомство пропущено. Создать Avaia можно через Dock.",
   "guide.speaker": "xSasha",
   "guide.cutscene.advance": "Далее",
   "guide.intro.greeting.0.feminine":

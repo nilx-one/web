@@ -177,7 +177,10 @@ export function FailureNoticeProvider({
     if (informerRef.current.available) {
       const notice = localizedNotice(report, informerRef.current.t);
       informerRef.current.publish({
-        id,
+        // Presentation grouping only: a retry may have a new operation_id.
+        // Keep opaque code/session boundaries and never key by localized copy.
+        id: `failure:${JSON.stringify([report.kind, report.code, report.session_id ?? null])}`,
+        retainOnAction: true,
         kind: "error",
         title: notice.title,
         description: notice.description,
