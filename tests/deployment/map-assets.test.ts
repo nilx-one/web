@@ -195,21 +195,22 @@ function layersPaintingAt(
 
 describe("map deployment assets", () => {
   it("ships real global country outlines independent of the regional archive", () => {
-    const world = JSON.parse(
-      readFileSync(
-        resolve("deploy/web/map/0.1.0/countries-110m.geojson"),
-        "utf8",
-      ),
-    ) as { type: string; features: unknown[] };
+    const worldPath = resolve("deploy/web/map/0.1.0/countries-110m.geojson");
+    const world = JSON.parse(readFileSync(worldPath, "utf8")) as {
+      type: string;
+      features: unknown[];
+    };
     expect(world.type).toBe("FeatureCollection");
     expect(world.features.length).toBeGreaterThan(170);
 
     for (const appearance of ["light", "dark"] as const) {
       const style = readStyle(appearance);
-      expect(style.layers.find((layer) => layer.id === "countries-land"))
-        .toMatchObject({ source: "countries", maxzoom: 8 });
-      expect(style.layers.find((layer) => layer.id === "countries-borders"))
-        .toMatchObject({ source: "countries", maxzoom: 8 });
+      const land = style.layers.find((layer) => layer.id === "countries-land");
+      const borders = style.layers.find(
+        (layer) => layer.id === "countries-borders",
+      );
+      expect(land).toMatchObject({ source: "countries", maxzoom: 8 });
+      expect(borders).toMatchObject({ source: "countries", maxzoom: 8 });
       expect(layersPaintingAt(style, 3)).toEqual(
         expect.arrayContaining(["countries-land", "countries-borders"]),
       );
