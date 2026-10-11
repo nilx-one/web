@@ -637,7 +637,10 @@ describe("camera ownership", () => {
 
     renderer.setCamera(
       { center: [30.52, 50.45], zoom: 18.5, bearing: 0, pitch: 48 },
-      { motion: "flight", padding: { top: 80, right: 16, bottom: 220, left: 16 } },
+      {
+        motion: "flight",
+        padding: { top: 80, right: 16, bottom: 220, left: 16 },
+      },
     );
 
     expect(fakeMap.flyTo).toHaveBeenCalledWith({
