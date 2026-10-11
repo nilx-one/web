@@ -215,6 +215,8 @@ export function createShadeMapFactory(
                     id: worldId,
                     type: "fill",
                     source: worldId,
+                    // Country-scale geography stays visible before local fog.
+                    minzoom: 8,
                     paint: {
                       "fill-color": fogFloorCss(palette),
                       // Opaque, as the atlas is along its edge: the two overlap
@@ -240,6 +242,7 @@ export function createShadeMapFactory(
                   id: layer.id,
                   type: "raster",
                   source: sourceId,
+                  minzoom: 8,
                   paint: { "raster-fade-duration": 0 },
                 },
                 firstSymbol,
