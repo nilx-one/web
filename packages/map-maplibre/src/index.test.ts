@@ -728,10 +728,19 @@ describe("camera ownership", () => {
         left: 0,
         toJSON: () => ({}),
       });
+    let nextFrame: FrameRequestCallback | undefined;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      nextFrame = callback;
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
     try {
       renderer.mount(container);
       window.dispatchEvent(new Event("resize"));
-      expect(fakeMap.resize).toHaveBeenCalled();
+      expect(fakeMap.resize).not.toHaveBeenCalled();
+      // Resizing is batched until the next frame, not synchronous.
+      nextFrame?.(0);
+      expect(fakeMap.resize).toHaveBeenCalledOnce();
       renderer.unmount();
       fakeMap.resize.mockClear();
       window.dispatchEvent(new Event("resize"));
@@ -740,6 +749,7 @@ describe("camera ownership", () => {
       renderer.unmount();
       bounds.mockRestore();
       container.remove();
+      vi.unstubAllGlobals();
     }
   });
 
