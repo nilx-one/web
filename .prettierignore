@@ -6,3 +6,5 @@ LICENSE
 
 deploy/web/avatars/
 deploy/web/voices/
+# Unmodified published country geometry (public-domain Natural Earth source)
+deploy/web/map/0.1.0/countries-110m.geojson
