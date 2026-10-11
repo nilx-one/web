@@ -18,10 +18,10 @@ export interface MapCameraPadding {
 
 /**
  * How a camera change is presented. `immediate` is also the reduced-motion
- * equivalent of `eased`: the destination is identical, only the transition is
- * not animated.
+ * equivalent of `eased` or `flight`: the destination is identical, only
+ * the transition is not animated.
  */
-export type MapCameraMotion = "immediate" | "eased";
+export type MapCameraMotion = "immediate" | "eased" | "flight";
 
 export interface MapCameraOptions {
   readonly motion?: MapCameraMotion;
