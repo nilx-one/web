@@ -1737,12 +1737,14 @@ export function AuthenticatedMapHomeView({
     // For the country-scale entry, wait for an actual first observation.
     // Only a completed location failure may fall back to the remembered
     // camera, and that memory never becomes a location observation.
+    const locationFinishedWithoutPosition =
+      location.state.kind === "permission-required" ||
+      location.state.kind === "denied" ||
+      location.state.kind === "unsupported" ||
+      location.state.kind === "unavailable";
     if (
       entryFromCountries &&
-      (observedPosition !== undefined ||
-        !["permission-required", "denied", "unsupported", "unavailable"].includes(
-          location.state.kind,
-        ))
+      (observedPosition !== undefined || !locationFinishedWithoutPosition)
     )
       return;
     resumeApplied.current = true;
