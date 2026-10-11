@@ -52,6 +52,7 @@ interface FakeMap {
   readonly remove: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly easeTo: ReturnType<typeof vi.fn>;
+  readonly flyTo: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
   readonly addSource: ReturnType<typeof vi.fn>;
   readonly removeSource: ReturnType<typeof vi.fn>;
@@ -119,6 +120,7 @@ function makeFakeMap(): FakeMap {
     remove: vi.fn(),
     jumpTo: vi.fn(),
     easeTo: vi.fn(),
+    flyTo: vi.fn(),
     setStyle: vi.fn(),
     addSource: vi.fn((id: string) => {
       sources.set(id, { setData: vi.fn() });
@@ -627,6 +629,28 @@ describe("camera ownership", () => {
     expect(fakeMap.easeTo).toHaveBeenCalledWith(
       expect.objectContaining({ bearing: 100, duration: 4_500 }),
     );
+  });
+
+  it("flies from country scale with a bounded cinematic duration", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setCamera(
+      { center: [30.52, 50.45], zoom: 18.5, bearing: 0, pitch: 48 },
+      { motion: "flight", padding: { top: 80, right: 16, bottom: 220, left: 16 } },
+    );
+
+    expect(fakeMap.flyTo).toHaveBeenCalledWith({
+      center: [30.52, 50.45],
+      zoom: 18.5,
+      bearing: 0,
+      pitch: 48,
+      padding: { top: 80, right: 16, bottom: 220, left: 16 },
+      duration: 3_200,
+      essential: false,
+    });
+    expect(fakeMap.easeTo).not.toHaveBeenCalled();
+    expect(fakeMap.jumpTo).not.toHaveBeenCalled();
   });
 
   it("cuts immediately when motion is not requested", () => {
