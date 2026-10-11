@@ -602,17 +602,15 @@ export function createMapLibreRenderer(
       return;
     }
 
-    firstPaintDone = true;
-    applyPresentation(mountedMap);
-
+    // An embedded WebView may paint before its container has a real size.
+    // Hold readiness until the host has actually measured a viewport.
     if (container.isConnected) {
       const bounds = container.getBoundingClientRect();
-      if (bounds.width <= 0 || bounds.height <= 0) {
-        publish({ kind: "unavailable", reason: "container-zero-size" });
-        return;
-      }
+      if (bounds.width <= 0 || bounds.height <= 0) return;
     }
 
+    firstPaintDone = true;
+    applyPresentation(mountedMap);
     publish({ kind: "ready" });
   }
 
@@ -1339,30 +1337,50 @@ export function createMapLibreRenderer(
           pitch: camera.pitch,
         });
         map = mountedMap;
-        // Telegram's WebView can change its visible dimensions after mount
-        // without emitting a window resize. Align the WebGL canvas to the
-        // actual container, so a pinch is not required to trigger a redraw.
+        // Telegram can resize the WebView without a window resize event.
+        // Coalesce host changes into a single canvas update each frame.
+        let resizeFrame: number | undefined;
         const syncViewport = () => {
+          resizeFrame = undefined;
           if (map !== mountedMap || !container.isConnected) return;
           const bounds = container.getBoundingClientRect();
-          if (bounds.width > 0 && bounds.height > 0) mountedMap.resize();
+          if (bounds.width <= 0 || bounds.height <= 0) return;
+          mountedMap.resize();
+          if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
+        };
+        const scheduleViewportSync = () => {
+          if (map !== mountedMap || resizeFrame !== undefined) return;
+          resizeFrame = globalThis.requestAnimationFrame(syncViewport);
         };
         const observer =
           typeof ResizeObserver === "undefined"
             ? undefined
-            : new ResizeObserver(syncViewport);
+            : new ResizeObserver(scheduleViewportSync);
         observer?.observe(container);
         const onVisible = () => {
-          if (document.visibilityState === "visible") syncViewport();
+          if (document.visibilityState === "visible") scheduleViewportSync();
         };
-        globalThis.addEventListener("resize", syncViewport);
+        globalThis.addEventListener("resize", scheduleViewportSync);
+        globalThis.visualViewport?.addEventListener(
+          "resize",
+          scheduleViewportSync,
+        );
+        globalThis.addEventListener("pageshow", scheduleViewportSync);
         document.addEventListener("visibilitychange", onVisible);
-        const firstFrame = globalThis.requestAnimationFrame(syncViewport);
+        scheduleViewportSync();
         viewportCleanup = () => {
           observer?.disconnect();
-          globalThis.removeEventListener("resize", syncViewport);
+          globalThis.removeEventListener("resize", scheduleViewportSync);
+          globalThis.visualViewport?.removeEventListener(
+            "resize",
+            scheduleViewportSync,
+          );
+          globalThis.removeEventListener("pageshow", scheduleViewportSync);
           document.removeEventListener("visibilitychange", onVisible);
-          globalThis.cancelAnimationFrame(firstFrame);
+          if (resizeFrame !== undefined) {
+            globalThis.cancelAnimationFrame(resizeFrame);
+            resizeFrame = undefined;
+          }
         };
         styleResolved = false;
         styleReadyForPaint = false;

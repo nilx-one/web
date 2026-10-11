@@ -206,6 +206,64 @@ describe("published map style contract", () => {
 });
 
 describe("createMapLibreRenderer", () => {
+  it("resizes the mounted map when its Mini App container changes", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = mountedRenderer(fakeMap);
+    const pendingFrames: FrameRequestCallback[] = [];
+    let resizeCallback: ResizeObserverCallback | undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe = observe;
+        disconnect = disconnect;
+      },
+    );
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      pendingFrames.push(callback);
+      return pendingFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    const container = document.createElement("div");
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+      width: 320,
+      height: 640,
+      top: 0,
+      right: 320,
+      bottom: 640,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    document.body.append(container);
+    try {
+      renderer.mount(container);
+      expect(observe).toHaveBeenCalledOnce();
+      expect(resizeCallback).toBeDefined();
+
+      resizeCallback?.([], {} as ResizeObserver);
+      resizeCallback?.([], {} as ResizeObserver);
+      // The first frame is scheduled by mount and notifications are coalesced.
+      expect(pendingFrames).toHaveLength(1);
+      pendingFrames.shift()?.(0);
+      expect(fakeMap.resize).toHaveBeenCalledOnce();
+
+      renderer.unmount();
+      expect(disconnect).toHaveBeenCalledOnce();
+      resizeCallback?.([], {} as ResizeObserver);
+      expect(pendingFrames).toHaveLength(0);
+    } finally {
+      renderer.unmount();
+      container.remove();
+      vi.unstubAllGlobals();
+    }
+  });
   it("boots the regional presentation camera without changing the shared map contract", () => {
     const fakeMap = makeFakeMap();
     const createMap = vi.fn(
@@ -670,10 +728,19 @@ describe("camera ownership", () => {
         left: 0,
         toJSON: () => ({}),
       });
+    let nextFrame: FrameRequestCallback | undefined;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      nextFrame = callback;
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
     try {
       renderer.mount(container);
       window.dispatchEvent(new Event("resize"));
-      expect(fakeMap.resize).toHaveBeenCalled();
+      expect(fakeMap.resize).not.toHaveBeenCalled();
+      // Resizing is batched until the next frame, not synchronous.
+      nextFrame?.(0);
+      expect(fakeMap.resize).toHaveBeenCalledOnce();
       renderer.unmount();
       fakeMap.resize.mockClear();
       window.dispatchEvent(new Event("resize"));
@@ -682,6 +749,7 @@ describe("camera ownership", () => {
       renderer.unmount();
       bounds.mockRestore();
       container.remove();
+      vi.unstubAllGlobals();
     }
   });
 
