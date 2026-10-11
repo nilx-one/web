@@ -1701,6 +1701,17 @@ export function createMapLibreRenderer(
           : { padding: { ...cameraOptions.padding } }),
       };
 
+      // The globe-to-ground entry is a flight, not a near-local ease.
+      // Product presentation chooses the motion; MapLibre owns its curve.
+      if (cameraOptions.motion === "flight") {
+        map?.flyTo({
+          ...target,
+          duration: cameraOptions.durationMs ?? 3_200,
+          essential: false,
+        });
+        return;
+      }
+
       // MapLibre owns the transition mechanics; the application only says
       // whether this change should read as movement or as an immediate cut.
       if (cameraOptions.motion === "eased") {
