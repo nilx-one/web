@@ -1678,7 +1678,9 @@ describe("AuthenticatedMapHomeView", () => {
       expect.objectContaining({ motion: "flight" }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Map centred on this device" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Map centred on this device" }),
+    );
     expect(changes.mock.calls.at(-1)?.[1]?.motion).not.toBe("flight");
   });
 
