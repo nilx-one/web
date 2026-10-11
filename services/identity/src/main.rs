@@ -635,7 +635,14 @@ async fn ensure_command_menu(
         return;
     };
     let chat_id = message.chat.id.0;
-    if state.synced_command_menus.lock().await.get(&chat_id).copied() == Some(menu) {
+    if state
+        .synced_command_menus
+        .lock()
+        .await
+        .get(&chat_id)
+        .copied()
+        == Some(menu)
+    {
         return;
     }
 
@@ -650,7 +657,11 @@ async fn ensure_command_menu(
         error!(%error, "failed to synchronize Telegram command menu");
         return;
     }
-    state.synced_command_menus.lock().await.insert(chat_id, menu);
+    state
+        .synced_command_menus
+        .lock()
+        .await
+        .insert(chat_id, menu);
 }
 
 async fn registered_identity(
@@ -1061,8 +1072,11 @@ async fn send_help(
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
     let Some(menu) = command_menu_for_telegram(&state.repository, telegram_user_id).await else {
-        bot.send_message(message.chat.id, "Identity lookup is temporarily unavailable.")
-            .await?;
+        bot.send_message(
+            message.chat.id,
+            "Identity lookup is temporarily unavailable.",
+        )
+        .await?;
         return Ok(());
     };
     bot.send_message(message.chat.id, help_text(menu))
@@ -1201,10 +1215,10 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        CURRENT_POSITION_BUTTON, LocationModeRefusal, MINI_APP_URL, PendingUnlinkConfirmations,
-        SET_POSITION_BUTTON, CommandMenu, bot_commands, command_of, control_keyboard,
-        current_position_request_keyboard, help_text, registration_keyboard, resolve_location_mode,
-        shared_point,
+        CURRENT_POSITION_BUTTON, CommandMenu, LocationModeRefusal, MINI_APP_URL,
+        PendingUnlinkConfirmations, SET_POSITION_BUTTON, bot_commands, command_of,
+        control_keyboard, current_position_request_keyboard, help_text, registration_keyboard,
+        resolve_location_mode, shared_point,
     };
 
     #[test]
@@ -1227,7 +1241,11 @@ mod tests {
         assert!(help_text(CommandMenu::Unregistered).contains("/start"));
         assert!(!help_text(CommandMenu::Unregistered).contains("/unlink"));
 
-        for role in [BondAccessRole::User, BondAccessRole::Admin, BondAccessRole::Business] {
+        for role in [
+            BondAccessRole::User,
+            BondAccessRole::Admin,
+            BondAccessRole::Business,
+        ] {
             let menu = CommandMenu::Registered(role);
             let commands = bot_commands(menu);
             assert!(!commands.iter().any(|c| c.command == "start"));
@@ -1235,10 +1253,7 @@ mod tests {
             let help = help_text(menu);
             assert!(!help.contains("/start"));
             assert!(help.contains("/unlink"));
-            let command_lines: Vec<_> = help
-                .lines()
-                .filter(|line| line.starts_with('/'))
-                .collect();
+            let command_lines: Vec<_> = help.lines().filter(|line| line.starts_with('/')).collect();
             assert!(command_lines.last().unwrap().starts_with("/unlink — "));
         }
     }
@@ -1296,8 +1311,12 @@ mod tests {
 
     #[test]
     fn only_admins_see_set_position_in_help_text() {
-        assert!(!help_text(CommandMenu::Registered(BondAccessRole::User)).contains("/set_position"));
-        assert!(help_text(CommandMenu::Registered(BondAccessRole::Admin)).contains("/set_position"));
+        assert!(
+            !help_text(CommandMenu::Registered(BondAccessRole::User)).contains("/set_position")
+        );
+        assert!(
+            help_text(CommandMenu::Registered(BondAccessRole::Admin)).contains("/set_position")
+        );
         assert!(!help_text(CommandMenu::Registered(BondAccessRole::User)).contains("/travel"));
         assert!(help_text(CommandMenu::Registered(BondAccessRole::Admin)).contains("/travel"));
     }
