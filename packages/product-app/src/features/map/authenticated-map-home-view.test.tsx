@@ -1691,6 +1691,11 @@ describe("AuthenticatedMapHomeView", () => {
     // Recentering reuses the observation it already holds.
     expect(geolocation.requestPosition).toHaveBeenCalledOnce();
     expect(mapRenderer.setCamera).toHaveBeenCalledTimes(2);
+    // The country-to-Bond flight is an opening event, never the action
+    // attached to an ordinary recenter button.
+    expect(
+      vi.mocked(mapRenderer.setCamera).mock.lastCall?.[1]?.motion,
+    ).not.toBe("flight");
     expect(
       screen.getByText("Map camera focused near this device."),
     ).toBeInTheDocument();
