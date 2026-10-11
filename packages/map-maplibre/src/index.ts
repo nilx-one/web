@@ -4,7 +4,6 @@
 import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
-  MAP_SCALE_ZOOM,
   type AvatarHandle,
   type SystemDroneHandle,
   type SystemDroneLayerContract,
@@ -201,6 +200,8 @@ export {
 
 /** Eased camera transitions stay short enough to read as one continuous world. */
 export const MAP_CAMERA_TRANSITION_MS = 900;
+/** Country-to-local opening flight, without altering normal short camera moves. */
+export const MAP_OPENING_FLIGHT_MS = 2_300;
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
 export const MAP_RENDER_LOAD_TIMEOUT_MS = 10_000;
@@ -221,13 +222,13 @@ export const TERRAIN_SOURCE_ID = "terrain";
 /** Real terrain stays at measured scale; exaggeration is never used as effect. */
 export const TERRAIN_EXAGGERATION = 1;
 
-// Presentation bootstrap only. Keep temporary regional coverage in the
-// MapLibre adapter rather than leaking deployment geography into MapRenderer.
+// Presentation bootstrap only. Natural Earth provides country geography here;
+// local detail remains authoritative in the regional Protomaps archive.
 export const MAP_BOOTSTRAP_CAMERA: MapCamera = {
   center: [30.5234, 50.4501],
-  zoom: MAP_SCALE_ZOOM.city,
+  zoom: 3.3,
   bearing: 0,
-  pitch: 32,
+  pitch: 0,
 };
 
 const pmtilesProtocol = new Protocol();
@@ -425,6 +426,7 @@ export function createMapLibreRenderer(
   let status: MapRendererStatus = { kind: "unmounted" };
   let camera: MapCamera = initialCamera;
   let map: MapLibreMap | undefined;
+  let viewportCleanup: (() => void) | undefined;
   let avatarLayer: AvatarCustomLayer | undefined;
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
@@ -1337,6 +1339,31 @@ export function createMapLibreRenderer(
           pitch: camera.pitch,
         });
         map = mountedMap;
+        // Telegram's WebView can change its visible dimensions after mount
+        // without emitting a window resize. Align the WebGL canvas to the
+        // actual container, so a pinch is not required to trigger a redraw.
+        const syncViewport = () => {
+          if (map !== mountedMap || !container.isConnected) return;
+          const bounds = container.getBoundingClientRect();
+          if (bounds.width > 0 && bounds.height > 0) mountedMap.resize();
+        };
+        const observer =
+          typeof ResizeObserver === "undefined"
+            ? undefined
+            : new ResizeObserver(syncViewport);
+        observer?.observe(container);
+        const onVisible = () => {
+          if (document.visibilityState === "visible") syncViewport();
+        };
+        globalThis.addEventListener("resize", syncViewport);
+        document.addEventListener("visibilitychange", onVisible);
+        const firstFrame = globalThis.requestAnimationFrame(syncViewport);
+        viewportCleanup = () => {
+          observer?.disconnect();
+          globalThis.removeEventListener("resize", syncViewport);
+          document.removeEventListener("visibilitychange", onVisible);
+          globalThis.cancelAnimationFrame(firstFrame);
+        };
         styleResolved = false;
         styleReadyForPaint = false;
         firstPaintDone = false;
@@ -1382,8 +1409,13 @@ export function createMapLibreRenderer(
         mountedMap.on("error", (event) => {
           reportRendererError(event.error);
         });
-        // moveend rather than move: camera state reaches the application once
-        // per gesture instead of once per frame.
+        // Claim camera ownership as soon as a user gesture begins, not after
+        // it finishes and could be overwritten by an opening flight.
+        mountedMap.on("movestart", (event: { originalEvent?: unknown }) => {
+          if (event?.originalEvent !== undefined) publishCamera(true);
+        });
+        // moveend rather than move: final camera state is published once per
+        // gesture instead of every animation frame.
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
           publishCamera(event?.originalEvent !== undefined);
         });
@@ -1464,6 +1496,8 @@ export function createMapLibreRenderer(
     },
 
     unmount() {
+      viewportCleanup?.();
+      viewportCleanup = undefined;
       stopFogPulse();
       stopOrbFall();
       releaseLabel();
@@ -1707,6 +1741,13 @@ export function createMapLibreRenderer(
         map?.easeTo({
           ...target,
           duration: cameraOptions.durationMs ?? MAP_CAMERA_TRANSITION_MS,
+        });
+        return;
+      }
+      if (cameraOptions.motion === "flight") {
+        map?.flyTo({
+          ...target,
+          duration: cameraOptions.durationMs ?? MAP_OPENING_FLIGHT_MS,
         });
         return;
       }

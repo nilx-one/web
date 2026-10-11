@@ -15,6 +15,7 @@ import {
   FOG_MARKS_SOURCE_ID,
   MAP_BOOTSTRAP_CAMERA,
   MAP_CAMERA_TRANSITION_MS,
+  MAP_OPENING_FLIGHT_MS,
   MAP_STYLE_URL,
   MAP_STYLE_URLS,
   TERRAIN_EXAGGERATION,
@@ -52,6 +53,8 @@ interface FakeMap {
   readonly remove: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly easeTo: ReturnType<typeof vi.fn>;
+  readonly flyTo: ReturnType<typeof vi.fn>;
+  readonly resize: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
   readonly addSource: ReturnType<typeof vi.fn>;
   readonly removeSource: ReturnType<typeof vi.fn>;
@@ -119,6 +122,8 @@ function makeFakeMap(): FakeMap {
     remove: vi.fn(),
     jumpTo: vi.fn(),
     easeTo: vi.fn(),
+    flyTo: vi.fn(),
+    resize: vi.fn(),
     setStyle: vi.fn(),
     addSource: vi.fn((id: string) => {
       sources.set(id, { setData: vi.fn() });
@@ -627,6 +632,57 @@ describe("camera ownership", () => {
     expect(fakeMap.easeTo).toHaveBeenCalledWith(
       expect.objectContaining({ bearing: 100, duration: 4_500 }),
     );
+  });
+
+  it("flies from country overview into local detail", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setCamera(
+      { center: [30.5234, 50.4501], zoom: 18.5, bearing: 0, pitch: 48 },
+      { motion: "flight" },
+    );
+    expect(fakeMap.flyTo).toHaveBeenCalledWith({
+      center: [30.5234, 50.4501],
+      zoom: 18.5,
+      bearing: 0,
+      pitch: 48,
+      duration: MAP_OPENING_FLIGHT_MS,
+    });
+    expect(fakeMap.easeTo).not.toHaveBeenCalled();
+  });
+
+  it("resizes an already mounted canvas when Telegram changes its viewport", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = mountedRenderer(fakeMap);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const bounds = vi
+      .spyOn(container, "getBoundingClientRect")
+      .mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 390,
+        height: 690,
+        top: 0,
+        right: 390,
+        bottom: 690,
+        left: 0,
+        toJSON: () => ({}),
+      });
+    try {
+      renderer.mount(container);
+      window.dispatchEvent(new Event("resize"));
+      expect(fakeMap.resize).toHaveBeenCalled();
+      renderer.unmount();
+      fakeMap.resize.mockClear();
+      window.dispatchEvent(new Event("resize"));
+      expect(fakeMap.resize).not.toHaveBeenCalled();
+    } finally {
+      renderer.unmount();
+      bounds.mockRestore();
+      container.remove();
+    }
   });
 
   it("cuts immediately when motion is not requested", () => {

@@ -6,3 +6,6 @@ LICENSE
 
 deploy/web/avatars/
 deploy/web/voices/
+
+# Generated compact Natural Earth geometry (validated by deployment tests).
+deploy/web/map/0.1.0/world-countries.geojson
