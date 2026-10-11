@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     env,
     future::Future,
     net::SocketAddr,
@@ -47,9 +47,8 @@ struct CommandSpec {
     description: &'static str,
 }
 
-/// Commands every registered user sees — the default Telegram command menu
-/// scope, so they show up both when typing `/` and via the composer's menu
-/// button in any private chat with the bot.
+/// Default private-chat commands. Registration is only offered to accounts
+/// without a linked Bond; registered chats get their own command scope.
 const USER_COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         command: "open",
@@ -72,10 +71,6 @@ const USER_COMMANDS: &[CommandSpec] = &[
         description: "Explain the current recovery boundary",
     },
     CommandSpec {
-        command: "unlink",
-        description: "Від'єднати Telegram від цього Bond",
-    },
-    CommandSpec {
         command: "help",
         description: "Show available commands",
     },
@@ -96,34 +91,59 @@ const ADMIN_ONLY_COMMANDS: &[CommandSpec] = &[
     },
 ];
 
-fn bot_commands(role: BondAccessRole) -> Vec<BotCommand> {
-    let mut commands: Vec<BotCommand> = USER_COMMANDS
-        .iter()
-        .map(|spec| BotCommand::new(spec.command, spec.description))
-        .collect();
-    if role.can_set_manual_location() {
-        commands.extend(
-            ADMIN_ONLY_COMMANDS
-                .iter()
-                .map(|spec| BotCommand::new(spec.command, spec.description)),
-        );
-    }
-    commands
+/// Disconnect is deliberately the final command, including for admins.
+const UNLINK_COMMAND: CommandSpec = CommandSpec {
+    command: "unlink",
+    description: "Від'єднати Telegram від цього Bond",
+};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommandMenu {
+    Unregistered,
+    Registered(BondAccessRole),
 }
 
-fn help_text(role: BondAccessRole) -> String {
+impl CommandMenu {
+    fn role(self) -> BondAccessRole {
+        match self {
+            Self::Unregistered => BondAccessRole::User,
+            Self::Registered(role) => role,
+        }
+    }
+}
+
+/// One ordering for the Telegram menu and /help, based on the persisted
+/// Telegram-to-Bond binding and the Bond's actual role.
+fn command_specs(menu: CommandMenu) -> Vec<&'static CommandSpec> {
+    let mut specs: Vec<&'static CommandSpec> = USER_COMMANDS
+        .iter()
+        .filter(|spec| !matches!(menu, CommandMenu::Registered(_)) || spec.command != "start")
+        .collect();
+
+    if let CommandMenu::Registered(role) = menu {
+        if role.can_set_manual_location() {
+            specs.extend(ADMIN_ONLY_COMMANDS.iter());
+        }
+        specs.push(&UNLINK_COMMAND);
+    }
+    specs
+}
+
+fn bot_commands(menu: CommandMenu) -> Vec<BotCommand> {
+    command_specs(menu)
+        .into_iter()
+        .map(|spec| BotCommand::new(spec.command, spec.description))
+        .collect()
+}
+
+fn help_text(menu: CommandMenu) -> String {
     let mut lines = vec!["Commands:".to_owned()];
     lines.extend(
-        USER_COMMANDS
-            .iter()
+        command_specs(menu)
+            .into_iter()
             .map(|spec| format!("/{} — {}", spec.command, spec.description)),
     );
-    if role.can_set_manual_location() {
-        lines.extend(
-            ADMIN_ONLY_COMMANDS
-                .iter()
-                .map(|spec| format!("/{} — {}", spec.command, spec.description)),
-        );
+    if menu.role().can_set_manual_location() {
         lines.push(ADMIN_LOCATION_NOTE.to_owned());
     }
     lines.join("\n")
@@ -194,10 +214,8 @@ struct TelegramBotState {
     intents: TelegramLocationIntents,
     provider_links: ProviderLinkRepository,
     pending_unlinks: PendingUnlinkConfirmations,
-    /// Chat ids whose command menu has already been scoped to
-    /// [`ADMIN_ONLY_COMMANDS`], so a resolved admin only costs one
-    /// `setMyCommands` call per chat rather than one per message.
-    admin_menu_synced: Arc<Mutex<HashSet<i64>>>,
+    /// Last successfully synchronized menu per chat, rechecked on every message.
+    synced_command_menus: Arc<Mutex<HashMap<i64, CommandMenu>>>,
 }
 
 #[tokio::main]
@@ -304,7 +322,7 @@ async fn main() {
         .await
         .expect("GitHub evidence database connection must initialize");
     let bot = Bot::new(bot_token.clone());
-    bot.set_my_commands(bot_commands(BondAccessRole::User))
+    bot.set_my_commands(bot_commands(CommandMenu::Unregistered))
         .scope(BotCommandScope::AllPrivateChats)
         .await
         .expect("Telegram command menu must register for private chats");
@@ -407,7 +425,7 @@ async fn main() {
         intents: TelegramLocationIntents::default(),
         provider_links,
         pending_unlinks: PendingUnlinkConfirmations::default(),
-        admin_menu_synced: Arc::new(Mutex::new(HashSet::new())),
+        synced_command_menus: Arc::new(Mutex::new(HashMap::new())),
     });
 
     info!(%http_bind, "starting Stage 1 identity service");
@@ -480,7 +498,7 @@ async fn handle_message(
         return Ok(());
     };
 
-    ensure_admin_command_menu(&bot, &message, state.as_ref(), telegram_user_id).await;
+    ensure_command_menu(&bot, &message, state.as_ref(), telegram_user_id).await;
 
     if let Some(location) = shared_point(&message) {
         handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
@@ -588,60 +606,51 @@ async fn role_for_telegram(
     }
 }
 
-/// Keeps this chat's Telegram command menu in sync with the sender's current
-/// [`BondAccessRole`]. The first time a chat resolves to
-/// [`BondAccessRole::Admin`] it gets a [`BotCommandScope::Chat`] override
-/// including [`ADMIN_ONLY_COMMANDS`]; the first time a previously-synced chat
-/// resolves back to [`BondAccessRole::User`] (a demoted admin), that override
-/// is deleted so the chat falls back to the [`BotCommandScope::AllPrivateChats`]
-/// default registered at startup — otherwise a demoted admin would keep
-/// seeing `/set_position`, the command that puts `Bond.location` into manual
-/// mode, in both the `/` autocomplete and the composer's menu button even
-/// though the runtime role check in `begin_manual_position` already rejects
-/// the write. Chats that were never synced, and stay `User`, never call the
-/// Telegram API at all.
-async fn ensure_admin_command_menu(
+/// Persisted provider bindings decide registration; failed lookups are not guests.
+async fn command_menu_for_telegram(
+    repository: &IdentityRepository,
+    telegram_user_id: i64,
+) -> Option<CommandMenu> {
+    match repository.find_by_telegram(telegram_user_id).await {
+        Ok(Some(identity)) => Some(CommandMenu::Registered(
+            role_for_identity(repository, &identity).await,
+        )),
+        Ok(None) => Some(CommandMenu::Unregistered),
+        Err(error) => {
+            error!(%error, "identity lookup failed while resolving command menu");
+            None
+        }
+    }
+}
+
+/// Linked Bonds receive a per-chat Telegram override. Guests inherit global
+/// defaults. The first message after process restart also clears stale scopes.
+async fn ensure_command_menu(
     bot: &Bot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) {
-    let role = role_for_telegram(&state.repository, telegram_user_id).await;
+    let Some(menu) = command_menu_for_telegram(&state.repository, telegram_user_id).await else {
+        return;
+    };
     let chat_id = message.chat.id.0;
-    let previously_synced = state.admin_menu_synced.lock().await.contains(&chat_id);
-
-    if role.can_set_manual_location() {
-        if previously_synced {
-            return;
-        }
-        if let Err(error) = bot
-            .set_my_commands(bot_commands(role))
-            .scope(BotCommandScope::Chat {
-                chat_id: message.chat.id.into(),
-            })
-            .await
-        {
-            error!(%error, "failed to scope admin command menu");
-            return;
-        }
-        state.admin_menu_synced.lock().await.insert(chat_id);
+    if state.synced_command_menus.lock().await.get(&chat_id).copied() == Some(menu) {
         return;
     }
 
-    if !previously_synced {
+    let scope = BotCommandScope::Chat {
+        chat_id: message.chat.id.into(),
+    };
+    let result = match menu {
+        CommandMenu::Unregistered => bot.delete_my_commands().scope(scope).await,
+        CommandMenu::Registered(_) => bot.set_my_commands(bot_commands(menu)).scope(scope).await,
+    };
+    if let Err(error) = result {
+        error!(%error, "failed to synchronize Telegram command menu");
         return;
     }
-    if let Err(error) = bot
-        .delete_my_commands()
-        .scope(BotCommandScope::Chat {
-            chat_id: message.chat.id.into(),
-        })
-        .await
-    {
-        error!(%error, "failed to revert command menu after admin demotion");
-        return;
-    }
-    state.admin_menu_synced.lock().await.remove(&chat_id);
+    state.synced_command_menus.lock().await.insert(chat_id, menu);
 }
 
 async fn registered_identity(
@@ -1023,6 +1032,7 @@ async fn confirm_unlink(
                 "Telegram від'єднано від цього Bond. Щоб знову користуватись 0x1 з цього чату, зареєструйте новий Bond через /start або увійдіть іншим прив'язаним способом.",
             )
             .await?;
+            ensure_command_menu(bot, message, state, telegram_user_id).await;
         }
         Ok(SelfDisconnectOutcome::NotLinked) => {
             bot.send_message(message.chat.id, "Спочатку зареєструйте Bond через /start.")
@@ -1050,9 +1060,13 @@ async fn send_help(
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
-    let role = role_for_telegram(&state.repository, telegram_user_id).await;
-    bot.send_message(message.chat.id, help_text(role))
-        .reply_markup(control_keyboard(role))
+    let Some(menu) = command_menu_for_telegram(&state.repository, telegram_user_id).await else {
+        bot.send_message(message.chat.id, "Identity lookup is temporarily unavailable.")
+            .await?;
+        return Ok(());
+    };
+    bot.send_message(message.chat.id, help_text(menu))
+        .reply_markup(control_keyboard(menu.role()))
         .await?;
     Ok(())
 }
@@ -1188,33 +1202,45 @@ mod tests {
 
     use super::{
         CURRENT_POSITION_BUTTON, LocationModeRefusal, MINI_APP_URL, PendingUnlinkConfirmations,
-        SET_POSITION_BUTTON, bot_commands, command_of, control_keyboard,
+        SET_POSITION_BUTTON, CommandMenu, bot_commands, command_of, control_keyboard,
         current_position_request_keyboard, help_text, registration_keyboard, resolve_location_mode,
         shared_point,
     };
 
     #[test]
-    fn open_is_the_first_command_for_every_role() {
-        assert_eq!(bot_commands(BondAccessRole::User)[0].command, "open");
-        assert_eq!(bot_commands(BondAccessRole::Admin)[0].command, "open");
-        assert!(help_text(BondAccessRole::User).contains("/open"));
-        assert!(help_text(BondAccessRole::Admin).contains("/open"));
+    fn open_is_first_for_guests_and_registered_bonds() {
+        for menu in [
+            CommandMenu::Unregistered,
+            CommandMenu::Registered(BondAccessRole::User),
+            CommandMenu::Registered(BondAccessRole::Admin),
+        ] {
+            assert_eq!(bot_commands(menu)[0].command, "open");
+            assert!(help_text(menu).contains("/open"));
+        }
     }
 
     #[test]
-    fn unlink_is_registered_and_documented_for_every_role() {
-        assert!(
-            bot_commands(BondAccessRole::User)
-                .iter()
-                .any(|c| c.command == "unlink")
-        );
-        assert!(
-            bot_commands(BondAccessRole::Admin)
-                .iter()
-                .any(|c| c.command == "unlink")
-        );
-        assert!(help_text(BondAccessRole::User).contains("/unlink"));
-        assert!(help_text(BondAccessRole::Admin).contains("/unlink"));
+    fn registration_only_for_guests_and_unlink_last_for_registered_bonds() {
+        let guest = bot_commands(CommandMenu::Unregistered);
+        assert!(guest.iter().any(|c| c.command == "start"));
+        assert!(!guest.iter().any(|c| c.command == "unlink"));
+        assert!(help_text(CommandMenu::Unregistered).contains("/start"));
+        assert!(!help_text(CommandMenu::Unregistered).contains("/unlink"));
+
+        for role in [BondAccessRole::User, BondAccessRole::Admin, BondAccessRole::Business] {
+            let menu = CommandMenu::Registered(role);
+            let commands = bot_commands(menu);
+            assert!(!commands.iter().any(|c| c.command == "start"));
+            assert_eq!(commands.last().unwrap().command, "unlink");
+            let help = help_text(menu);
+            assert!(!help.contains("/start"));
+            assert!(help.contains("/unlink"));
+            let command_lines: Vec<_> = help
+                .lines()
+                .filter(|line| line.starts_with('/'))
+                .collect();
+            assert!(command_lines.last().unwrap().starts_with("/unlink — "));
+        }
     }
 
     #[tokio::test]
@@ -1258,8 +1284,8 @@ mod tests {
 
     #[test]
     fn only_admins_get_set_position_in_the_registered_command_menu() {
-        let user_commands = bot_commands(BondAccessRole::User);
-        let admin_commands = bot_commands(BondAccessRole::Admin);
+        let user_commands = bot_commands(CommandMenu::Registered(BondAccessRole::User));
+        let admin_commands = bot_commands(CommandMenu::Registered(BondAccessRole::Admin));
 
         assert!(!user_commands.iter().any(|c| c.command == "set_position"));
         assert!(admin_commands.iter().any(|c| c.command == "set_position"));
@@ -1270,10 +1296,10 @@ mod tests {
 
     #[test]
     fn only_admins_see_set_position_in_help_text() {
-        assert!(!help_text(BondAccessRole::User).contains("/set_position"));
-        assert!(help_text(BondAccessRole::Admin).contains("/set_position"));
-        assert!(!help_text(BondAccessRole::User).contains("/travel"));
-        assert!(help_text(BondAccessRole::Admin).contains("/travel"));
+        assert!(!help_text(CommandMenu::Registered(BondAccessRole::User)).contains("/set_position"));
+        assert!(help_text(CommandMenu::Registered(BondAccessRole::Admin)).contains("/set_position"));
+        assert!(!help_text(CommandMenu::Registered(BondAccessRole::User)).contains("/travel"));
+        assert!(help_text(CommandMenu::Registered(BondAccessRole::Admin)).contains("/travel"));
     }
 
     #[test]
