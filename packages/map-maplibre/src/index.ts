@@ -425,6 +425,7 @@ export function createMapLibreRenderer(
   let status: MapRendererStatus = { kind: "unmounted" };
   let camera: MapCamera = initialCamera;
   let map: MapLibreMap | undefined;
+  let stopResizeMonitoring: (() => void) | undefined;
   let avatarLayer: AvatarCustomLayer | undefined;
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
@@ -600,17 +601,16 @@ export function createMapLibreRenderer(
       return;
     }
 
-    firstPaintDone = true;
-    applyPresentation(mountedMap);
-
+    // Mini App WebViews can mount the map before the host has given its
+    // container a measurable size. Wait for a resize rather than declaring a
+    // permanent renderer failure on the first, zero-sized frame.
     if (container.isConnected) {
       const bounds = container.getBoundingClientRect();
-      if (bounds.width <= 0 || bounds.height <= 0) {
-        publish({ kind: "unavailable", reason: "container-zero-size" });
-        return;
-      }
+      if (bounds.width <= 0 || bounds.height <= 0) return;
     }
 
+    firstPaintDone = true;
+    applyPresentation(mountedMap);
     publish({ kind: "ready" });
   }
 
@@ -1457,6 +1457,42 @@ export function createMapLibreRenderer(
           styleReadyForPaint = true;
           completeFirstPaint(mountedMap, container);
         });
+
+        // Telegram resizes its WebView independently of the window's resize
+        // event. MapLibre must recalculate its canvas and transform against the
+        // actual container after a host expansion, orientation change, or return
+        // from the background. Coalesce notifications into one frame.
+        let resizeFrame: number | undefined;
+        const scheduleResize = (): void => {
+          if (map !== mountedMap || resizeFrame !== undefined) return;
+          resizeFrame = globalThis.requestAnimationFrame(() => {
+            resizeFrame = undefined;
+            if (map !== mountedMap) return;
+            mountedMap.resize();
+            if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
+          });
+        };
+        const observer =
+          typeof ResizeObserver === "undefined"
+            ? undefined
+            : new ResizeObserver(scheduleResize);
+        observer?.observe(container);
+        const visibleAgain = (): void => {
+          if (document.visibilityState === "visible") scheduleResize();
+        };
+        window.visualViewport?.addEventListener("resize", scheduleResize);
+        window.addEventListener("pageshow", scheduleResize);
+        document.addEventListener("visibilitychange", visibleAgain);
+        stopResizeMonitoring = () => {
+          observer?.disconnect();
+          window.visualViewport?.removeEventListener("resize", scheduleResize);
+          window.removeEventListener("pageshow", scheduleResize);
+          document.removeEventListener("visibilitychange", visibleAgain);
+          if (resizeFrame !== undefined) {
+            globalThis.cancelAnimationFrame(resizeFrame);
+            resizeFrame = undefined;
+          }
+        };
       } catch {
         map = undefined;
         publish({ kind: "unavailable", reason: "renderer-init-failed" });
@@ -1464,6 +1500,8 @@ export function createMapLibreRenderer(
     },
 
     unmount() {
+      stopResizeMonitoring?.();
+      stopResizeMonitoring = undefined;
       stopFogPulse();
       stopOrbFall();
       releaseLabel();
