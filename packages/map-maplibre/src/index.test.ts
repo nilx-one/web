@@ -657,10 +657,19 @@ describe("camera ownership", () => {
     const renderer = mountedRenderer(fakeMap);
     const container = document.createElement("div");
     document.body.append(container);
-    const bounds = vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
-      x: 0, y: 0, width: 390, height: 690, top: 0, right: 390,
-      bottom: 690, left: 0, toJSON: () => ({}),
-    });
+    const bounds = vi
+      .spyOn(container, "getBoundingClientRect")
+      .mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 390,
+        height: 690,
+        top: 0,
+        right: 390,
+        bottom: 690,
+        left: 0,
+        toJSON: () => ({}),
+      });
     try {
       renderer.mount(container);
       window.dispatchEvent(new Event("resize"));
