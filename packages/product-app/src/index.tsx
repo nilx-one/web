@@ -132,6 +132,8 @@ export interface ProductAppDependencies {
   host: HostPort;
   identity: IdentityAccessPort;
   mapRenderer: MapRenderer;
+  /** Host presentation only: begin at country scale, then fly to the Bond. */
+  entryFromCountries?: boolean;
   /**
    * The on-device model host, when this deployment has wired one — see
    * `./shell/local-model-host.ts` for why this package cannot build one itself. Omitted
@@ -1049,6 +1051,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         hostLabel={viewModel.hostLabel}
         pubDress={viewModel.identity.pubDress}
         renderer={dependencies.mapRenderer}
+        entryFromCountries={dependencies.entryFromCountries === true}
         geolocation={dependencies.host.geolocation}
         feedback={dependencies.host}
         sound={dependencies.host.sound}
@@ -1262,6 +1265,7 @@ export function ProductApp({
   host,
   identity,
   mapRenderer,
+  entryFromCountries,
   localModel,
   routerBasepath = "/",
 }: ProductAppProps) {
@@ -1285,6 +1289,7 @@ export function ProductApp({
           host,
           identity,
           mapRenderer,
+          ...(entryFromCountries === undefined ? {} : { entryFromCountries }),
           ...(localModel === undefined ? {} : { localModel }),
         },
       },
