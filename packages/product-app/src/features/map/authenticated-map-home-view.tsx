@@ -226,6 +226,8 @@ export interface AuthenticatedMapHomeViewProps {
   readonly pubDress: string;
   readonly avaiaPubDress?: string;
   readonly renderer: MapRenderer;
+  /** A one-time host presentation, never a source of Bond position. */
+  readonly entryFromCountries?: boolean;
   /**
    * The host capability. This surface never reaches for a platform geolocation
    * API of its own, and the renderer never asks for a position at all.
@@ -709,6 +711,7 @@ export function AuthenticatedMapHomeView({
   pubDress,
   avaiaPubDress,
   renderer,
+  entryFromCountries = false,
   geolocation,
   feedback,
   sound,
@@ -816,6 +819,7 @@ export function AuthenticatedMapHomeView({
   const cameraMovedByPerson = useRef(false);
   const reachForBody = useRef<() => void>(() => undefined);
   const firstFixApplied = useRef(false);
+  const entryFlightStarted = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
   const [travelPrompt, setTravelPrompt] = useState<
@@ -1730,6 +1734,17 @@ export function AuthenticatedMapHomeView({
       mapStatus.kind !== "ready"
     )
       return;
+    // For the country-scale entry, wait for an actual first observation.
+    // Only a completed location failure may fall back to the remembered
+    // camera, and that memory never becomes a location observation.
+    if (
+      entryFromCountries &&
+      (observedPosition !== undefined ||
+        !["permission-required", "denied", "unsupported", "unavailable"].includes(
+          location.state.kind,
+        ))
+    )
+      return;
     resumeApplied.current = true;
     if (firstFixApplied.current || cameraMovedByPerson.current) return;
     const remembered = readWorldMemory(pubDress);
@@ -1751,10 +1766,20 @@ export function AuthenticatedMapHomeView({
         },
         context,
       ),
-      { motion: "immediate", padding: locationCameraPadding(context) },
+      {
+        motion:
+          entryFromCountries && !prefersReducedMotion() && !entryFlightStarted.current
+            ? "flight"
+            : "immediate",
+        padding: locationCameraPadding(context),
+      },
     );
+    entryFlightStarted.current = true;
   }, [
     dimension,
+    entryFromCountries,
+    location.state.kind,
+    observedPosition,
     systemInformer.activeId,
     mapStatus.kind,
     presentation,
@@ -1791,6 +1816,8 @@ export function AuthenticatedMapHomeView({
 
     const avaiaPoint = wheelAvaiaPointRef.current();
     const context = { presentation, dimension, safeArea };
+    const entryFlight = entryFromCountries && !entryFlightStarted.current;
+    entryFlightStarted.current = true;
     renderer.setCamera(
       firstFixCamera(
         avaiaPoint === undefined
@@ -1799,12 +1826,16 @@ export function AuthenticatedMapHomeView({
         context,
       ),
       {
-        motion: cameraMotion(prefersReducedMotion()),
+        motion:
+          entryFlight && !prefersReducedMotion()
+            ? "flight"
+            : cameraMotion(prefersReducedMotion()),
         padding: locationCameraPadding(context),
       },
     );
   }, [
     dimension,
+    entryFromCountries,
     systemInformer.activeId,
     observedPosition,
     presentation,
