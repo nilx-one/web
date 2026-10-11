@@ -1755,6 +1755,10 @@ export function AuthenticatedMapHomeView({
     if (point === undefined) return;
 
     const context = { presentation, dimension, safeArea };
+    const entryFlight =
+      entryFromCountries &&
+      !prefersReducedMotion() &&
+      !entryFlightStarted.current;
     renderer.setCamera(
       firstFixCamera(
         {
@@ -1767,10 +1771,7 @@ export function AuthenticatedMapHomeView({
         context,
       ),
       {
-        motion:
-          entryFromCountries && !prefersReducedMotion() && !entryFlightStarted.current
-            ? "flight"
-            : "immediate",
+        motion: entryFlight ? "flight" : "immediate",
         padding: locationCameraPadding(context),
       },
     );
