@@ -15,6 +15,7 @@ import {
   FOG_MARKS_SOURCE_ID,
   MAP_BOOTSTRAP_CAMERA,
   MAP_CAMERA_TRANSITION_MS,
+  MAP_OPENING_FLIGHT_MS,
   MAP_STYLE_URL,
   MAP_STYLE_URLS,
   TERRAIN_EXAGGERATION,
@@ -53,6 +54,7 @@ interface FakeMap {
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly easeTo: ReturnType<typeof vi.fn>;
   readonly flyTo: ReturnType<typeof vi.fn>;
+  readonly resize: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
   readonly addSource: ReturnType<typeof vi.fn>;
   readonly removeSource: ReturnType<typeof vi.fn>;
@@ -121,6 +123,7 @@ function makeFakeMap(): FakeMap {
     jumpTo: vi.fn(),
     easeTo: vi.fn(),
     flyTo: vi.fn(),
+    resize: vi.fn(),
     setStyle: vi.fn(),
     addSource: vi.fn((id: string) => {
       sources.set(id, { setData: vi.fn() });
@@ -203,6 +206,64 @@ describe("published map style contract", () => {
 });
 
 describe("createMapLibreRenderer", () => {
+  it("resizes the mounted map when its Mini App container changes", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = mountedRenderer(fakeMap);
+    const pendingFrames: FrameRequestCallback[] = [];
+    let resizeCallback: ResizeObserverCallback | undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe = observe;
+        disconnect = disconnect;
+      },
+    );
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      pendingFrames.push(callback);
+      return pendingFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    const container = document.createElement("div");
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+      width: 320,
+      height: 640,
+      top: 0,
+      right: 320,
+      bottom: 640,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    document.body.append(container);
+    try {
+      renderer.mount(container);
+      expect(observe).toHaveBeenCalledOnce();
+      expect(resizeCallback).toBeDefined();
+
+      resizeCallback?.([], {} as ResizeObserver);
+      resizeCallback?.([], {} as ResizeObserver);
+      // The first frame is scheduled by mount and notifications are coalesced.
+      expect(pendingFrames).toHaveLength(1);
+      pendingFrames.shift()?.(0);
+      expect(fakeMap.resize).toHaveBeenCalledOnce();
+
+      renderer.unmount();
+      expect(disconnect).toHaveBeenCalledOnce();
+      resizeCallback?.([], {} as ResizeObserver);
+      expect(pendingFrames).toHaveLength(0);
+    } finally {
+      renderer.unmount();
+      container.remove();
+      vi.unstubAllGlobals();
+    }
+  });
   it("boots the regional presentation camera without changing the shared map contract", () => {
     const fakeMap = makeFakeMap();
     const createMap = vi.fn(
@@ -631,29 +692,65 @@ describe("camera ownership", () => {
     );
   });
 
-  it("flies from country scale with a bounded cinematic duration", () => {
+  it("flies from country overview into local detail", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);
 
     renderer.setCamera(
-      { center: [30.52, 50.45], zoom: 18.5, bearing: 0, pitch: 48 },
-      {
-        motion: "flight",
-        padding: { top: 80, right: 16, bottom: 220, left: 16 },
-      },
+      { center: [30.5234, 50.4501], zoom: 18.5, bearing: 0, pitch: 48 },
+      { motion: "flight" },
     );
-
     expect(fakeMap.flyTo).toHaveBeenCalledWith({
-      center: [30.52, 50.45],
+      center: [30.5234, 50.4501],
       zoom: 18.5,
       bearing: 0,
       pitch: 48,
-      padding: { top: 80, right: 16, bottom: 220, left: 16 },
-      duration: 3_200,
-      essential: false,
+      duration: MAP_OPENING_FLIGHT_MS,
     });
     expect(fakeMap.easeTo).not.toHaveBeenCalled();
-    expect(fakeMap.jumpTo).not.toHaveBeenCalled();
+  });
+
+  it("resizes an already mounted canvas when Telegram changes its viewport", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = mountedRenderer(fakeMap);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const bounds = vi
+      .spyOn(container, "getBoundingClientRect")
+      .mockReturnValue({
+        x: 0,
+        y: 0,
+        width: 390,
+        height: 690,
+        top: 0,
+        right: 390,
+        bottom: 690,
+        left: 0,
+        toJSON: () => ({}),
+      });
+    let nextFrame: FrameRequestCallback | undefined;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      nextFrame = callback;
+      return 1;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    try {
+      renderer.mount(container);
+      window.dispatchEvent(new Event("resize"));
+      expect(fakeMap.resize).not.toHaveBeenCalled();
+      // Resizing is batched until the next frame, not synchronous.
+      nextFrame?.(0);
+      expect(fakeMap.resize).toHaveBeenCalledOnce();
+      renderer.unmount();
+      fakeMap.resize.mockClear();
+      window.dispatchEvent(new Event("resize"));
+      expect(fakeMap.resize).not.toHaveBeenCalled();
+    } finally {
+      renderer.unmount();
+      bounds.mockRestore();
+      container.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("cuts immediately when motion is not requested", () => {

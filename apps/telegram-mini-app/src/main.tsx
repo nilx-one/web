@@ -114,9 +114,6 @@ async function bootstrap(): Promise<void> {
   const fog = createFogField(localPresence);
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
   const mapRenderer = createMapLibreRenderer({
-    // A regional zoom is not a readable first frame in a Mini App. Open on
-    // the country layer; the product will fly to the observed Bond position.
-    initialCamera: { ...MAP_BOOTSTRAP_CAMERA, zoom: 3, pitch: 0 },
     createMap: createShadeMapFactory({
       runtime: fog.runtime,
       anchor: { lng: anchorLng, lat: anchorLat },
@@ -166,7 +163,6 @@ async function bootstrap(): Promise<void> {
         host={host}
         identity={identity}
         mapRenderer={mapRenderer}
-        entryFromCountries
         routerBasepath="/telegram"
       />
     </StrictMode>,

@@ -226,8 +226,6 @@ export interface AuthenticatedMapHomeViewProps {
   readonly pubDress: string;
   readonly avaiaPubDress?: string;
   readonly renderer: MapRenderer;
-  /** A one-time host presentation, never a source of Bond position. */
-  readonly entryFromCountries?: boolean;
   /**
    * The host capability. This surface never reaches for a platform geolocation
    * API of its own, and the renderer never asks for a position at all.
@@ -711,7 +709,6 @@ export function AuthenticatedMapHomeView({
   pubDress,
   avaiaPubDress,
   renderer,
-  entryFromCountries = false,
   geolocation,
   feedback,
   sound,
@@ -819,7 +816,6 @@ export function AuthenticatedMapHomeView({
   const cameraMovedByPerson = useRef(false);
   const reachForBody = useRef<() => void>(() => undefined);
   const firstFixApplied = useRef(false);
-  const entryFlightStarted = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
   const [travelPrompt, setTravelPrompt] = useState<
@@ -1727,24 +1723,12 @@ export function AuthenticatedMapHomeView({
   // to where the body at the wheel was last seen on this device, rather than
   // the bootstrap camera, while the first fix is still on its way.
   const resumeApplied = useRef(false);
+  const openingTarget = useRef<MapPointSelection | undefined>(undefined);
   useEffect(() => {
     if (
       systemInformer.activeId !== undefined ||
       resumeApplied.current ||
       mapStatus.kind !== "ready"
-    )
-      return;
-    // For the country-scale entry, wait for an actual first observation.
-    // Only a completed location failure may fall back to the remembered
-    // camera, and that memory never becomes a location observation.
-    const locationFinishedWithoutPosition =
-      location.state.kind === "permission-required" ||
-      location.state.kind === "denied" ||
-      location.state.kind === "unsupported" ||
-      location.state.kind === "unavailable";
-    if (
-      entryFromCountries &&
-      (observedPosition !== undefined || !locationFinishedWithoutPosition)
     )
       return;
     resumeApplied.current = true;
@@ -1755,12 +1739,12 @@ export function AuthenticatedMapHomeView({
         ? (remembered.avaia ?? remembered.bond)
         : remembered.bond;
     if (point === undefined) return;
+    openingTarget.current = {
+      longitude: point.longitude,
+      latitude: point.latitude,
+    };
 
     const context = { presentation, dimension, safeArea };
-    const entryFlight =
-      entryFromCountries &&
-      !prefersReducedMotion() &&
-      !entryFlightStarted.current;
     renderer.setCamera(
       firstFixCamera(
         {
@@ -1773,16 +1757,12 @@ export function AuthenticatedMapHomeView({
         context,
       ),
       {
-        motion: entryFlight ? "flight" : "immediate",
+        motion: prefersReducedMotion() ? "immediate" : "flight",
         padding: locationCameraPadding(context),
       },
     );
-    entryFlightStarted.current = true;
   }, [
     dimension,
-    entryFromCountries,
-    location.state.kind,
-    observedPosition,
     systemInformer.activeId,
     mapStatus.kind,
     presentation,
@@ -1811,6 +1791,7 @@ export function AuthenticatedMapHomeView({
     if (
       systemInformer.activeId !== undefined ||
       observedPosition === undefined ||
+      mapStatus.kind !== "ready" ||
       firstFixApplied.current
     )
       return;
@@ -1818,28 +1799,31 @@ export function AuthenticatedMapHomeView({
     if (cameraMovedByPerson.current) return;
 
     const avaiaPoint = wheelAvaiaPointRef.current();
+    const target =
+      avaiaPoint === undefined
+        ? observedPosition
+        : { ...observedPosition, ...avaiaPoint };
+    const resumedAt = openingTarget.current;
+    // Nearby observed positions must not restart an in-flight opening flight.
+    if (resumedAt !== undefined && mapDistanceMeters(resumedAt, target) < 150) {
+      return;
+    }
+    openingTarget.current = {
+      longitude: target.longitude,
+      latitude: target.latitude,
+    };
     const context = { presentation, dimension, safeArea };
-    const entryFlight = entryFromCountries && !entryFlightStarted.current;
-    entryFlightStarted.current = true;
-    renderer.setCamera(
-      firstFixCamera(
-        avaiaPoint === undefined
-          ? observedPosition
-          : { ...observedPosition, ...avaiaPoint },
-        context,
-      ),
-      {
-        motion:
-          entryFlight && !prefersReducedMotion()
-            ? "flight"
-            : cameraMotion(prefersReducedMotion()),
-        padding: locationCameraPadding(context),
-      },
-    );
+    renderer.setCamera(firstFixCamera(target, context), {
+      motion:
+        resumedAt === undefined && !prefersReducedMotion()
+          ? "flight"
+          : cameraMotion(prefersReducedMotion()),
+      padding: locationCameraPadding(context),
+    });
   }, [
     dimension,
-    entryFromCountries,
     systemInformer.activeId,
+    mapStatus.kind,
     observedPosition,
     presentation,
     renderer,

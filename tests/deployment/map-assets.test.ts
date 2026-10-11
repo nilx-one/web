@@ -194,30 +194,6 @@ function layersPaintingAt(
 }
 
 describe("map deployment assets", () => {
-  it("ships real global country outlines independent of the regional archive", () => {
-    const worldPath = resolve("deploy/web/map/0.1.0/countries-110m.geojson");
-    const world = JSON.parse(readFileSync(worldPath, "utf8")) as {
-      type: string;
-      features: unknown[];
-    };
-    expect(world.type).toBe("FeatureCollection");
-    expect(world.features.length).toBeGreaterThan(170);
-
-    for (const appearance of ["light", "dark"] as const) {
-      const style = readStyle(appearance);
-      const land = style.layers.find((layer) => layer.id === "countries-land");
-      const borders = style.layers.find(
-        (layer) => layer.id === "countries-borders",
-      );
-      expect(land).toMatchObject({ source: "countries", maxzoom: 8 });
-      expect(borders).toMatchObject({ source: "countries", maxzoom: 8 });
-      expect(layersPaintingAt(style, 3)).toEqual(
-        expect.arrayContaining(["countries-land", "countries-borders"]),
-      );
-      expect(layersPaintingAt(style, 9)).not.toContain("countries-land");
-    }
-  });
-
   it.each(["light", "dark"] as const)(
     "publishes the versioned same-origin regional basemap contract (%s)",
     (appearance) => {
@@ -239,11 +215,6 @@ describe("map deployment assets", () => {
       expect(style.metadata?.["nilx-one:visual-direction"]).toBe(
         "0x1 spatial map with restrained cyan accents",
       );
-      expect(style.sources.countries).toEqual({
-        type: "geojson",
-        data: "/map/0.1.0/countries-110m.geojson",
-        attribution: "Natural Earth (public domain)",
-      });
       expect(style.sources.basemap).toEqual({
         type: "vector",
         url: "pmtiles:///map/0.1.0/basemap.pmtiles",
@@ -268,6 +239,39 @@ describe("map deployment assets", () => {
   );
 
   it.each(["light", "dark"] as const)(
+    "publishes genuine geographic country shapes for the opening view (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      expect(style.sources["world-countries"]).toEqual({
+        type: "geojson",
+        data: "/map/0.1.0/world-countries.geojson",
+        maxzoom: 8,
+        attribution: "Natural Earth (public domain)",
+      });
+      expect(layersPaintingAt(style, 3.3)).toEqual(
+        expect.arrayContaining(["world-land", "world-borders"]),
+      );
+      expect(layersPaintingAt(style, 10)).not.toContain("world-land");
+      const countries = JSON.parse(
+        readFileSync(
+          resolve("deploy/web/map/0.1.0/world-countries.geojson"),
+          "utf8",
+        ),
+      ) as {
+        type: string;
+        features: readonly { geometry: { type: string } }[];
+      };
+      expect(countries.type).toBe("FeatureCollection");
+      expect(countries.features.length).toBeGreaterThan(150);
+      expect(
+        countries.features.every((feature) =>
+          ["Polygon", "MultiPolygon"].includes(feature.geometry.type),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
     "reads only basemap layers the published archive provides (%s)",
     (appearance) => {
       const style = readStyle(appearance);
@@ -277,9 +281,8 @@ describe("map deployment assets", () => {
           expect(layer["source-layer"]).toBeUndefined();
           continue;
         }
-        if (layer.source === "countries") {
+        if (layer.source === "world-countries") {
           expect(layer["source-layer"]).toBeUndefined();
-          expect(["countries-land", "countries-borders"]).toContain(layer.id);
           continue;
         }
 
@@ -347,8 +350,9 @@ describe("map deployment assets", () => {
 
     expect(layerIds).toEqual([
       "background",
-      "countries-land",
-      "countries-borders",
+      "world-land",
+      "world-borders",
+      "world-country-label",
       "earth",
       "landcover",
       "parks",

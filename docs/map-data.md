@@ -2,29 +2,11 @@
 
 The 0x1 Web map uses a versioned, same-origin MapLibre style and a self-hosted PMTiles basemap. Map rendering is a client projection; map data and presentation do not define Bond, BondChain, Relationship, identity, consent, or authority truth.
 
-## Country-scale entry
+## Global overview and regional detail
 
-The Telegram Mini App opens with a globe/country overview at zoom 3 before a
-one-time camera flight to the first device or declared Bond observation. The
-flight changes camera presentation only; it never sets a Bond position.
-Reduced-motion devices jump to the same destination. If there is no observation
-and the host's location attempt ends without one, a last camera position on
-this device may be used as a fallback. Manual gestures always take precedence.
+The opening map can display countries from a versioned, same-origin Natural Earth 1:110m admin-0 GeoJSON (`/map/0.1.0/world-countries.geojson`), reduced to three decimal coordinate places and country names for fast overview rendering. Source: [Natural Earth vector](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson), public-domain geography. Country shapes are cartographic depictions, not political endorsement or protocol authority. The low-zoom labels disappear before the regional basemap takes over.
 
-The world overview is a same-origin GeoJSON source:
-`/map/0.1.0/countries-110m.geojson`, derived from Natural Earth 1:110m
-administrative country polygons, via the Natural Earth vector GeoJSON
-distribution: https://github.com/nvkelso/natural-earth-vector
-(Natural Earth data are public domain). Coordinates are rounded to 0.001°
-only for the country-scale illustration; the regional Protomaps archive
-remains authoritative for local detail, roads, buildings and interaction.
-The overview layers disappear at zoom 8, where the cell-bound geographic fog
-takes over. Countries are visual geography, not location evidence.
-
-This is deliberately **not yet a global detailed basemap**. Beyond the
-existing Kyiv regional data envelope, a camera may show country shapes
-but not detailed local geography at high zoom. Global detailed coverage is
-a separate deployment/data task.
+The regional Protomaps and DEM remain the only sources of detailed geography. No global street, terrain, or POI coverage is implied by the overview. Geographic fog begins at zoom 8 so public country outlines remain visible, while cell revealing stays a local-world mechanic. The opening camera moves to the last known or first observed position with a presentation-only flight, respecting reduced-motion preferences and manual gestures. Telegram WebView viewport changes trigger a renderer resize instead of waiting for a pinch to force repaint.
 
 ## Regional bootstrap
 

@@ -162,7 +162,6 @@ interface ViewOverrides {
   onDisconnectProvider?: (provider: ConnectedProvider) => void;
   geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
-  entryFromCountries?: boolean;
   localModel?: LocalModelDependency;
   section?: ShellSection;
   avaiaAvailability?: AvaiaAvailability;
@@ -254,7 +253,6 @@ function renderView(overrides: ViewOverrides = {}) {
       }}
       safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
       section={overrides.section ?? "world"}
-      entryFromCountries={overrides.entryFromCountries === true}
       {...optionalProps}
     />,
   );
@@ -1666,24 +1664,6 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onLogout).toHaveBeenCalledOnce();
   });
 
-  it("flies once from countries, then preserves ordinary location controls", async () => {
-    const mapRenderer = renderer();
-    const geolocation = createGeolocationDouble({ position: observation() });
-    renderView({ mapRenderer, geolocation, entryFromCountries: true });
-
-    await screen.findByRole("button", { name: "Map centred on this device" });
-    const changes = vi.mocked(mapRenderer.setCamera);
-    expect(changes).toHaveBeenCalledWith(
-      expect.objectContaining({ zoom: MAP_BODY_HANDOVER_ZOOM }),
-      expect.objectContaining({ motion: "flight" }),
-    );
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Map centred on this device" }),
-    );
-    expect(changes.mock.calls.at(-1)?.[1]?.motion).not.toBe("flight");
-  });
-
   it("recenters through the host capability instead of a browser API", async () => {
     const mapRenderer = renderer();
     const geolocation = createGeolocationDouble({ position: observation() });
@@ -1698,6 +1678,10 @@ describe("AuthenticatedMapHomeView", () => {
       accuracyMeters: 24,
     });
     expect(mapRenderer.setCamera).toHaveBeenCalledOnce();
+    expect(mapRenderer.setCamera).toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: 18.5 }),
+      expect.objectContaining({ motion: "flight" }),
+    );
     expect(geolocation.requestPosition).toHaveBeenCalledOnce();
 
     fireEvent.click(
@@ -1707,6 +1691,11 @@ describe("AuthenticatedMapHomeView", () => {
     // Recentering reuses the observation it already holds.
     expect(geolocation.requestPosition).toHaveBeenCalledOnce();
     expect(mapRenderer.setCamera).toHaveBeenCalledTimes(2);
+    // The country-to-Bond flight is an opening event, never the action
+    // attached to an ordinary recenter button.
+    expect(
+      vi.mocked(mapRenderer.setCamera).mock.lastCall?.[1]?.motion,
+    ).not.toBe("flight");
     expect(
       screen.getByText("Map camera focused near this device."),
     ).toBeInTheDocument();

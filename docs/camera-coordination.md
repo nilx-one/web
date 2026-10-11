@@ -25,20 +25,9 @@ This keeps a person's camera choice stable while still allowing controls such as
 
 Every accepted application focus gets a monotonically increasing generation. Retargeting cancels the previous transition. A completion callback may release ownership only when its generation still matches the active transition, so a stale animation completion cannot clear a newer request.
 
-## Country-to-Bond entry
+## Opening camera
 
-The Telegram host may initialize the MapLibre camera at country scale. Once a
-real observation resolves, the product makes at most one globe-to-local
-`flight` transition to `firstFixCamera` (with the existing pitch and
-viewport padding). The renderer supplies flight mechanics only; it cannot
-claim a location, choose a Bond or start the journey by itself.
-The normal browser host still uses its regional bootstrap camera.
-
-If the host denies or cannot provide a position, a local-only remembered
-camera position can end the overview. This fallback is never drawn as a
-Bond observation. The first subsequent live observation uses the ordinary
-focus transition. User gestures are authoritative throughout; reduced motion
-uses an immediate cut to the same target.
+A new map instance first frames geographic countries at zoom 3.3, backed by a genuine low-resolution global source. When the map becomes ready, the first observed position triggers a single 2.3-second MapLibre flight to the usual local-cell camera (zoom 18.5); reduced motion skips the animation. A remembered on-device position can serve as the first flight target while current geolocation resolves; a nearby live fix must not restart the flight. This is camera presentation, not a Bond location mutation. A direct gesture claims camera ownership immediately, and a Telegram viewport resize refreshes the renderer without changing geography.
 
 ## Cell-bound fragments
 

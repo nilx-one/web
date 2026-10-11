@@ -4,7 +4,6 @@
 import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
-  MAP_SCALE_ZOOM,
   type AvatarHandle,
   type SystemDroneHandle,
   type SystemDroneLayerContract,
@@ -201,6 +200,8 @@ export {
 
 /** Eased camera transitions stay short enough to read as one continuous world. */
 export const MAP_CAMERA_TRANSITION_MS = 900;
+/** Country-to-local opening flight, without altering normal short camera moves. */
+export const MAP_OPENING_FLIGHT_MS = 2_300;
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
 export const MAP_RENDER_LOAD_TIMEOUT_MS = 10_000;
@@ -221,13 +222,13 @@ export const TERRAIN_SOURCE_ID = "terrain";
 /** Real terrain stays at measured scale; exaggeration is never used as effect. */
 export const TERRAIN_EXAGGERATION = 1;
 
-// Presentation bootstrap only. Keep temporary regional coverage in the
-// MapLibre adapter rather than leaking deployment geography into MapRenderer.
+// Presentation bootstrap only. Natural Earth provides country geography here;
+// local detail remains authoritative in the regional Protomaps archive.
 export const MAP_BOOTSTRAP_CAMERA: MapCamera = {
   center: [30.5234, 50.4501],
-  zoom: MAP_SCALE_ZOOM.city,
+  zoom: 3.3,
   bearing: 0,
-  pitch: 32,
+  pitch: 0,
 };
 
 const pmtilesProtocol = new Protocol();
@@ -425,6 +426,7 @@ export function createMapLibreRenderer(
   let status: MapRendererStatus = { kind: "unmounted" };
   let camera: MapCamera = initialCamera;
   let map: MapLibreMap | undefined;
+  let viewportCleanup: (() => void) | undefined;
   let avatarLayer: AvatarCustomLayer | undefined;
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
@@ -600,17 +602,15 @@ export function createMapLibreRenderer(
       return;
     }
 
-    firstPaintDone = true;
-    applyPresentation(mountedMap);
-
+    // An embedded WebView may paint before its container has a real size.
+    // Hold readiness until the host has actually measured a viewport.
     if (container.isConnected) {
       const bounds = container.getBoundingClientRect();
-      if (bounds.width <= 0 || bounds.height <= 0) {
-        publish({ kind: "unavailable", reason: "container-zero-size" });
-        return;
-      }
+      if (bounds.width <= 0 || bounds.height <= 0) return;
     }
 
+    firstPaintDone = true;
+    applyPresentation(mountedMap);
     publish({ kind: "ready" });
   }
 
@@ -1337,6 +1337,51 @@ export function createMapLibreRenderer(
           pitch: camera.pitch,
         });
         map = mountedMap;
+        // Telegram can resize the WebView without a window resize event.
+        // Coalesce host changes into a single canvas update each frame.
+        let resizeFrame: number | undefined;
+        const syncViewport = () => {
+          resizeFrame = undefined;
+          if (map !== mountedMap || !container.isConnected) return;
+          const bounds = container.getBoundingClientRect();
+          if (bounds.width <= 0 || bounds.height <= 0) return;
+          mountedMap.resize();
+          if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
+        };
+        const scheduleViewportSync = () => {
+          if (map !== mountedMap || resizeFrame !== undefined) return;
+          resizeFrame = globalThis.requestAnimationFrame(syncViewport);
+        };
+        const observer =
+          typeof ResizeObserver === "undefined"
+            ? undefined
+            : new ResizeObserver(scheduleViewportSync);
+        observer?.observe(container);
+        const onVisible = () => {
+          if (document.visibilityState === "visible") scheduleViewportSync();
+        };
+        globalThis.addEventListener("resize", scheduleViewportSync);
+        globalThis.visualViewport?.addEventListener(
+          "resize",
+          scheduleViewportSync,
+        );
+        globalThis.addEventListener("pageshow", scheduleViewportSync);
+        document.addEventListener("visibilitychange", onVisible);
+        scheduleViewportSync();
+        viewportCleanup = () => {
+          observer?.disconnect();
+          globalThis.removeEventListener("resize", scheduleViewportSync);
+          globalThis.visualViewport?.removeEventListener(
+            "resize",
+            scheduleViewportSync,
+          );
+          globalThis.removeEventListener("pageshow", scheduleViewportSync);
+          document.removeEventListener("visibilitychange", onVisible);
+          if (resizeFrame !== undefined) {
+            globalThis.cancelAnimationFrame(resizeFrame);
+            resizeFrame = undefined;
+          }
+        };
         styleResolved = false;
         styleReadyForPaint = false;
         firstPaintDone = false;
@@ -1382,8 +1427,13 @@ export function createMapLibreRenderer(
         mountedMap.on("error", (event) => {
           reportRendererError(event.error);
         });
-        // moveend rather than move: camera state reaches the application once
-        // per gesture instead of once per frame.
+        // Claim camera ownership as soon as a user gesture begins, not after
+        // it finishes and could be overwritten by an opening flight.
+        mountedMap.on("movestart", (event: { originalEvent?: unknown }) => {
+          if (event?.originalEvent !== undefined) publishCamera(true);
+        });
+        // moveend rather than move: final camera state is published once per
+        // gesture instead of every animation frame.
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
           publishCamera(event?.originalEvent !== undefined);
         });
@@ -1464,6 +1514,8 @@ export function createMapLibreRenderer(
     },
 
     unmount() {
+      viewportCleanup?.();
+      viewportCleanup = undefined;
       stopFogPulse();
       stopOrbFall();
       releaseLabel();
@@ -1701,23 +1753,19 @@ export function createMapLibreRenderer(
           : { padding: { ...cameraOptions.padding } }),
       };
 
-      // The globe-to-ground entry is a flight, not a near-local ease.
-      // Product presentation chooses the motion; MapLibre owns its curve.
-      if (cameraOptions.motion === "flight") {
-        map?.flyTo({
-          ...target,
-          duration: cameraOptions.durationMs ?? 3_200,
-          essential: false,
-        });
-        return;
-      }
-
       // MapLibre owns the transition mechanics; the application only says
       // whether this change should read as movement or as an immediate cut.
       if (cameraOptions.motion === "eased") {
         map?.easeTo({
           ...target,
           duration: cameraOptions.durationMs ?? MAP_CAMERA_TRANSITION_MS,
+        });
+        return;
+      }
+      if (cameraOptions.motion === "flight") {
+        map?.flyTo({
+          ...target,
+          duration: cameraOptions.durationMs ?? MAP_OPENING_FLIGHT_MS,
         });
         return;
       }
