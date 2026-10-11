@@ -4,7 +4,6 @@
 import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
-  MAP_SCALE_ZOOM,
   type AvatarHandle,
   type SystemDroneHandle,
   type SystemDroneLayerContract,
