@@ -25,6 +25,21 @@ This keeps a person's camera choice stable while still allowing controls such as
 
 Every accepted application focus gets a monotonically increasing generation. Retargeting cancels the previous transition. A completion callback may release ownership only when its generation still matches the active transition, so a stale animation completion cannot clear a newer request.
 
+## Country-to-Bond entry
+
+The Telegram host may initialize the MapLibre camera at country scale. Once a
+real observation resolves, the product makes at most one globe-to-local
+`flight` transition to `firstFixCamera` (with the existing pitch and
+viewport padding). The renderer supplies flight mechanics only; it cannot
+claim a location, choose a Bond or start the journey by itself.
+The normal browser host still uses its regional bootstrap camera.
+
+If the host denies or cannot provide a position, a local-only remembered
+camera position can end the overview. This fallback is never drawn as a
+Bond observation. The first subsequent live observation uses the ordinary
+focus transition. User gestures are authoritative throughout; reduced motion
+uses an immediate cut to the same target.
+
 ## Cell-bound fragments
 
 H3 remains adapter-owned. `presence-geo` converts an opaque `CellIndex` into a `CellCameraAnchor` containing the same cell identifier and only the cell centre needed for presentation. Product code never imports H3 APIs.
