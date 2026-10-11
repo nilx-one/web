@@ -21,13 +21,13 @@ export interface MapCameraPadding {
  * equivalent of `eased`: the destination is identical, only the transition is
  * not animated.
  */
-export type MapCameraMotion = "immediate" | "eased";
+export type MapCameraMotion = "immediate" | "eased" | "flight";
 
 export interface MapCameraOptions {
   readonly motion?: MapCameraMotion;
   readonly padding?: MapCameraPadding;
   /**
-   * How long an `eased` change takes, when the caller is staging a shot
+   * How long an animated change takes, when the caller is staging a shot
    * rather than moving the camera out of the way. Absent means the renderer's
    * own transition length. Ignored for `immediate`.
    */
