@@ -2,6 +2,30 @@
 
 The 0x1 Web map uses a versioned, same-origin MapLibre style and a self-hosted PMTiles basemap. Map rendering is a client projection; map data and presentation do not define Bond, BondChain, Relationship, identity, consent, or authority truth.
 
+## Country-scale entry
+
+The Telegram Mini App opens with a globe/country overview at zoom 3 before a
+one-time camera flight to the first device or declared Bond observation. The
+flight changes camera presentation only; it never sets a Bond position.
+Reduced-motion devices jump to the same destination. If there is no observation
+and the host's location attempt ends without one, a last camera position on
+this device may be used as a fallback. Manual gestures always take precedence.
+
+The world overview is a same-origin GeoJSON source:
+`/map/0.1.0/countries-110m.geojson`, derived from Natural Earth 1:110m
+administrative country polygons, via the Natural Earth vector GeoJSON
+distribution: https://github.com/nvkelso/natural-earth-vector
+(Natural Earth data are public domain). Coordinates are rounded to 0.001°
+only for the country-scale illustration; the regional Protomaps archive
+remains authoritative for local detail, roads, buildings and interaction.
+The overview layers disappear at zoom 8, where the cell-bound geographic fog
+takes over. Countries are visual geography, not location evidence.
+
+This is deliberately **not yet a global detailed basemap**. Beyond the
+existing Kyiv regional data envelope, a camera may show country shapes
+but not detailed local geography at high zoom. Global detailed coverage is
+a separate deployment/data task.
+
 ## Regional bootstrap
 
 The first published basemap is intentionally regional so the real map path can be proven before introducing global-scale storage and refresh infrastructure.
