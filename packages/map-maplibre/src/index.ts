@@ -4,7 +4,6 @@
 import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
-  MAP_SCALE_ZOOM,
   type AvatarHandle,
   type SystemDroneHandle,
   type SystemDroneLayerContract,
@@ -201,6 +200,8 @@ export {
 
 /** Eased camera transitions stay short enough to read as one continuous world. */
 export const MAP_CAMERA_TRANSITION_MS = 900;
+/** Country-to-local opening flight, without altering normal short camera moves. */
+export const MAP_OPENING_FLIGHT_MS = 2_300;
 
 export const MAP_STYLE_CONTRACT_VERSION = "0.1.0";
 export const MAP_RENDER_LOAD_TIMEOUT_MS = 10_000;
@@ -221,13 +222,13 @@ export const TERRAIN_SOURCE_ID = "terrain";
 /** Real terrain stays at measured scale; exaggeration is never used as effect. */
 export const TERRAIN_EXAGGERATION = 1;
 
-// Presentation bootstrap only. Keep temporary regional coverage in the
-// MapLibre adapter rather than leaking deployment geography into MapRenderer.
+// Presentation bootstrap only. Natural Earth provides country geography here;
+// local detail remains authoritative in the regional Protomaps archive.
 export const MAP_BOOTSTRAP_CAMERA: MapCamera = {
   center: [30.5234, 50.4501],
-  zoom: MAP_SCALE_ZOOM.city,
+  zoom: 3.3,
   bearing: 0,
-  pitch: 32,
+  pitch: 0,
 };
 
 const pmtilesProtocol = new Protocol();
@@ -425,7 +426,7 @@ export function createMapLibreRenderer(
   let status: MapRendererStatus = { kind: "unmounted" };
   let camera: MapCamera = initialCamera;
   let map: MapLibreMap | undefined;
-  let stopResizeMonitoring: (() => void) | undefined;
+  let viewportCleanup: (() => void) | undefined;
   let avatarLayer: AvatarCustomLayer | undefined;
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
@@ -601,9 +602,8 @@ export function createMapLibreRenderer(
       return;
     }
 
-    // Mini App WebViews can mount the map before the host has given its
-    // container a measurable size. Wait for a resize rather than declaring a
-    // permanent renderer failure on the first, zero-sized frame.
+    // An embedded WebView may paint before its container has a real size.
+    // Hold readiness until the host has actually measured a viewport.
     if (container.isConnected) {
       const bounds = container.getBoundingClientRect();
       if (bounds.width <= 0 || bounds.height <= 0) return;
@@ -1337,6 +1337,51 @@ export function createMapLibreRenderer(
           pitch: camera.pitch,
         });
         map = mountedMap;
+        // Telegram can resize the WebView without a window resize event.
+        // Coalesce host changes into a single canvas update each frame.
+        let resizeFrame: number | undefined;
+        const syncViewport = () => {
+          resizeFrame = undefined;
+          if (map !== mountedMap || !container.isConnected) return;
+          const bounds = container.getBoundingClientRect();
+          if (bounds.width <= 0 || bounds.height <= 0) return;
+          mountedMap.resize();
+          if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
+        };
+        const scheduleViewportSync = () => {
+          if (map !== mountedMap || resizeFrame !== undefined) return;
+          resizeFrame = globalThis.requestAnimationFrame(syncViewport);
+        };
+        const observer =
+          typeof ResizeObserver === "undefined"
+            ? undefined
+            : new ResizeObserver(scheduleViewportSync);
+        observer?.observe(container);
+        const onVisible = () => {
+          if (document.visibilityState === "visible") scheduleViewportSync();
+        };
+        globalThis.addEventListener("resize", scheduleViewportSync);
+        globalThis.visualViewport?.addEventListener(
+          "resize",
+          scheduleViewportSync,
+        );
+        globalThis.addEventListener("pageshow", scheduleViewportSync);
+        document.addEventListener("visibilitychange", onVisible);
+        scheduleViewportSync();
+        viewportCleanup = () => {
+          observer?.disconnect();
+          globalThis.removeEventListener("resize", scheduleViewportSync);
+          globalThis.visualViewport?.removeEventListener(
+            "resize",
+            scheduleViewportSync,
+          );
+          globalThis.removeEventListener("pageshow", scheduleViewportSync);
+          document.removeEventListener("visibilitychange", onVisible);
+          if (resizeFrame !== undefined) {
+            globalThis.cancelAnimationFrame(resizeFrame);
+            resizeFrame = undefined;
+          }
+        };
         styleResolved = false;
         styleReadyForPaint = false;
         firstPaintDone = false;
@@ -1382,8 +1427,13 @@ export function createMapLibreRenderer(
         mountedMap.on("error", (event) => {
           reportRendererError(event.error);
         });
-        // moveend rather than move: camera state reaches the application once
-        // per gesture instead of once per frame.
+        // Claim camera ownership as soon as a user gesture begins, not after
+        // it finishes and could be overwritten by an opening flight.
+        mountedMap.on("movestart", (event: { originalEvent?: unknown }) => {
+          if (event?.originalEvent !== undefined) publishCamera(true);
+        });
+        // moveend rather than move: final camera state is published once per
+        // gesture instead of every animation frame.
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
           publishCamera(event?.originalEvent !== undefined);
         });
@@ -1457,42 +1507,6 @@ export function createMapLibreRenderer(
           styleReadyForPaint = true;
           completeFirstPaint(mountedMap, container);
         });
-
-        // Telegram resizes its WebView independently of the window's resize
-        // event. MapLibre must recalculate its canvas and transform against the
-        // actual container after a host expansion, orientation change, or return
-        // from the background. Coalesce notifications into one frame.
-        let resizeFrame: number | undefined;
-        const scheduleResize = (): void => {
-          if (map !== mountedMap || resizeFrame !== undefined) return;
-          resizeFrame = globalThis.requestAnimationFrame(() => {
-            resizeFrame = undefined;
-            if (map !== mountedMap) return;
-            mountedMap.resize();
-            if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
-          });
-        };
-        const observer =
-          typeof ResizeObserver === "undefined"
-            ? undefined
-            : new ResizeObserver(scheduleResize);
-        observer?.observe(container);
-        const visibleAgain = (): void => {
-          if (document.visibilityState === "visible") scheduleResize();
-        };
-        window.visualViewport?.addEventListener("resize", scheduleResize);
-        window.addEventListener("pageshow", scheduleResize);
-        document.addEventListener("visibilitychange", visibleAgain);
-        stopResizeMonitoring = () => {
-          observer?.disconnect();
-          window.visualViewport?.removeEventListener("resize", scheduleResize);
-          window.removeEventListener("pageshow", scheduleResize);
-          document.removeEventListener("visibilitychange", visibleAgain);
-          if (resizeFrame !== undefined) {
-            globalThis.cancelAnimationFrame(resizeFrame);
-            resizeFrame = undefined;
-          }
-        };
       } catch {
         map = undefined;
         publish({ kind: "unavailable", reason: "renderer-init-failed" });
@@ -1500,8 +1514,8 @@ export function createMapLibreRenderer(
     },
 
     unmount() {
-      stopResizeMonitoring?.();
-      stopResizeMonitoring = undefined;
+      viewportCleanup?.();
+      viewportCleanup = undefined;
       stopFogPulse();
       stopOrbFall();
       releaseLabel();
@@ -1745,6 +1759,13 @@ export function createMapLibreRenderer(
         map?.easeTo({
           ...target,
           duration: cameraOptions.durationMs ?? MAP_CAMERA_TRANSITION_MS,
+        });
+        return;
+      }
+      if (cameraOptions.motion === "flight") {
+        map?.flyTo({
+          ...target,
+          duration: cameraOptions.durationMs ?? MAP_OPENING_FLIGHT_MS,
         });
         return;
       }

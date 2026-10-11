@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 interface MapStyleSource {
   readonly type?: string;
   readonly url?: string;
+  readonly data?: string;
   readonly tiles?: readonly string[];
   readonly bounds?: readonly number[];
   readonly minzoom?: number;
@@ -238,12 +239,49 @@ describe("map deployment assets", () => {
   );
 
   it.each(["light", "dark"] as const)(
+    "publishes genuine geographic country shapes for the opening view (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      expect(style.sources["world-countries"]).toEqual({
+        type: "geojson",
+        data: "/map/0.1.0/world-countries.geojson",
+        maxzoom: 8,
+        attribution: "Natural Earth (public domain)",
+      });
+      expect(layersPaintingAt(style, 3.3)).toEqual(
+        expect.arrayContaining(["world-land", "world-borders"]),
+      );
+      expect(layersPaintingAt(style, 10)).not.toContain("world-land");
+      const countries = JSON.parse(
+        readFileSync(
+          resolve("deploy/web/map/0.1.0/world-countries.geojson"),
+          "utf8",
+        ),
+      ) as {
+        type: string;
+        features: readonly { geometry: { type: string } }[];
+      };
+      expect(countries.type).toBe("FeatureCollection");
+      expect(countries.features.length).toBeGreaterThan(150);
+      expect(
+        countries.features.every((feature) =>
+          ["Polygon", "MultiPolygon"].includes(feature.geometry.type),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
     "reads only basemap layers the published archive provides (%s)",
     (appearance) => {
       const style = readStyle(appearance);
 
       for (const layer of style.layers) {
         if (layer.type === "background") {
+          expect(layer["source-layer"]).toBeUndefined();
+          continue;
+        }
+        if (layer.source === "world-countries") {
           expect(layer["source-layer"]).toBeUndefined();
           continue;
         }
@@ -312,6 +350,9 @@ describe("map deployment assets", () => {
 
     expect(layerIds).toEqual([
       "background",
+      "world-land",
+      "world-borders",
+      "world-country-label",
       "earth",
       "landcover",
       "parks",

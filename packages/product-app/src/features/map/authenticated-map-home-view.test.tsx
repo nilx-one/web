@@ -1678,6 +1678,10 @@ describe("AuthenticatedMapHomeView", () => {
       accuracyMeters: 24,
     });
     expect(mapRenderer.setCamera).toHaveBeenCalledOnce();
+    expect(mapRenderer.setCamera).toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: 18.5 }),
+      expect.objectContaining({ motion: "flight" }),
+    );
     expect(geolocation.requestPosition).toHaveBeenCalledOnce();
 
     fireEvent.click(

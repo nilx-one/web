@@ -168,7 +168,8 @@ export function createShadeMapFactory(
             store: runtime.store,
           });
           const onClick = (event: MapMouseEvent) => {
-            if (options.onCellTap === undefined) return;
+            // The overview shows real countries, but cannot open local cells.
+            if (options.onCellTap === undefined || map.getZoom() < 8) return;
             void tap(event.lngLat)
               .then((hit) => {
                 if (hit !== null) return options.onCellTap?.(hit);
@@ -215,6 +216,7 @@ export function createShadeMapFactory(
                     id: worldId,
                     type: "fill",
                     source: worldId,
+                    minzoom: 8,
                     paint: {
                       "fill-color": fogFloorCss(palette),
                       // Opaque, as the atlas is along its edge: the two overlap
@@ -240,6 +242,7 @@ export function createShadeMapFactory(
                   id: layer.id,
                   type: "raster",
                   source: sourceId,
+                  minzoom: 8,
                   paint: { "raster-fade-duration": 0 },
                 },
                 firstSymbol,

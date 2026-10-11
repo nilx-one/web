@@ -2,6 +2,12 @@
 
 The 0x1 Web map uses a versioned, same-origin MapLibre style and a self-hosted PMTiles basemap. Map rendering is a client projection; map data and presentation do not define Bond, BondChain, Relationship, identity, consent, or authority truth.
 
+## Global overview and regional detail
+
+The opening map can display countries from a versioned, same-origin Natural Earth 1:110m admin-0 GeoJSON (`/map/0.1.0/world-countries.geojson`), reduced to three decimal coordinate places and country names for fast overview rendering. Source: [Natural Earth vector](https://github.com/nvkelso/natural-earth-vector/tree/master/geojson), public-domain geography. Country shapes are cartographic depictions, not political endorsement or protocol authority. The low-zoom labels disappear before the regional basemap takes over.
+
+The regional Protomaps and DEM remain the only sources of detailed geography. No global street, terrain, or POI coverage is implied by the overview. Geographic fog begins at zoom 8 so public country outlines remain visible, while cell revealing stays a local-world mechanic. The opening camera moves to the last known or first observed position with a presentation-only flight, respecting reduced-motion preferences and manual gestures. Telegram WebView viewport changes trigger a renderer resize instead of waiting for a pinch to force repaint.
+
 ## Regional bootstrap
 
 The first published basemap is intentionally regional so the real map path can be proven before introducing global-scale storage and refresh infrastructure.
