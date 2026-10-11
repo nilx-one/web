@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 interface MapStyleSource {
   readonly type?: string;
   readonly url?: string;
+  readonly data?: string;
   readonly tiles?: readonly string[];
   readonly bounds?: readonly number[];
   readonly minzoom?: number;
@@ -193,6 +194,29 @@ function layersPaintingAt(
 }
 
 describe("map deployment assets", () => {
+  it("ships real global country outlines independent of the regional archive", () => {
+    const world = JSON.parse(
+      readFileSync(
+        resolve("deploy/web/map/0.1.0/countries-110m.geojson"),
+        "utf8",
+      ),
+    ) as { type: string; features: unknown[] };
+    expect(world.type).toBe("FeatureCollection");
+    expect(world.features.length).toBeGreaterThan(170);
+
+    for (const appearance of ["light", "dark"] as const) {
+      const style = readStyle(appearance);
+      expect(style.layers.find((layer) => layer.id === "countries-land"))
+        .toMatchObject({ source: "countries", maxzoom: 8 });
+      expect(style.layers.find((layer) => layer.id === "countries-borders"))
+        .toMatchObject({ source: "countries", maxzoom: 8 });
+      expect(layersPaintingAt(style, 3)).toEqual(
+        expect.arrayContaining(["countries-land", "countries-borders"]),
+      );
+      expect(layersPaintingAt(style, 9)).not.toContain("countries-land");
+    }
+  });
+
   it.each(["light", "dark"] as const)(
     "publishes the versioned same-origin regional basemap contract (%s)",
     (appearance) => {
@@ -214,6 +238,11 @@ describe("map deployment assets", () => {
       expect(style.metadata?.["nilx-one:visual-direction"]).toBe(
         "0x1 spatial map with restrained cyan accents",
       );
+      expect(style.sources.countries).toEqual({
+        type: "geojson",
+        data: "/map/0.1.0/countries-110m.geojson",
+        attribution: "Natural Earth (public domain)",
+      });
       expect(style.sources.basemap).toEqual({
         type: "vector",
         url: "pmtiles:///map/0.1.0/basemap.pmtiles",
@@ -245,6 +274,11 @@ describe("map deployment assets", () => {
       for (const layer of style.layers) {
         if (layer.type === "background") {
           expect(layer["source-layer"]).toBeUndefined();
+          continue;
+        }
+        if (layer.source === "countries") {
+          expect(layer["source-layer"]).toBeUndefined();
+          expect(["countries-land", "countries-borders"]).toContain(layer.id);
           continue;
         }
 
@@ -312,6 +346,8 @@ describe("map deployment assets", () => {
 
     expect(layerIds).toEqual([
       "background",
+      "countries-land",
+      "countries-borders",
       "earth",
       "landcover",
       "parks",
