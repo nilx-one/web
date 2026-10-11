@@ -162,6 +162,7 @@ interface ViewOverrides {
   onDisconnectProvider?: (provider: ConnectedProvider) => void;
   geolocation?: GeolocationCapability;
   mapRenderer?: MapRenderer;
+  entryFromCountries?: boolean;
   localModel?: LocalModelDependency;
   section?: ShellSection;
   avaiaAvailability?: AvaiaAvailability;
@@ -253,6 +254,7 @@ function renderView(overrides: ViewOverrides = {}) {
       }}
       safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
       section={overrides.section ?? "world"}
+      entryFromCountries={overrides.entryFromCountries}
       {...optionalProps}
     />,
   );
@@ -1662,6 +1664,22 @@ describe("AuthenticatedMapHomeView", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
     expect(onLogout).toHaveBeenCalledOnce();
+  });
+
+  it("flies once from countries, then preserves ordinary location controls", async () => {
+    const mapRenderer = renderer();
+    const geolocation = createGeolocationDouble({ position: observation() });
+    renderView({ mapRenderer, geolocation, entryFromCountries: true });
+
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    const changes = vi.mocked(mapRenderer.setCamera);
+    expect(changes).toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: MAP_BODY_HANDOVER_ZOOM }),
+      expect.objectContaining({ motion: "flight" }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Map centred on this device" }));
+    expect(changes.mock.calls.at(-1)?.[1]?.motion).not.toBe("flight");
   });
 
   it("recenters through the host capability instead of a browser API", async () => {
