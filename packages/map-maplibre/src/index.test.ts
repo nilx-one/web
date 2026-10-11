@@ -52,6 +52,7 @@ interface FakeMap {
   readonly remove: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly easeTo: ReturnType<typeof vi.fn>;
+  readonly resize: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
   readonly addSource: ReturnType<typeof vi.fn>;
   readonly removeSource: ReturnType<typeof vi.fn>;
@@ -119,6 +120,7 @@ function makeFakeMap(): FakeMap {
     remove: vi.fn(),
     jumpTo: vi.fn(),
     easeTo: vi.fn(),
+    resize: vi.fn(),
     setStyle: vi.fn(),
     addSource: vi.fn((id: string) => {
       sources.set(id, { setData: vi.fn() });
@@ -201,6 +203,50 @@ describe("published map style contract", () => {
 });
 
 describe("createMapLibreRenderer", () => {
+  it("resizes the mounted map when its Mini App container changes", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = mountedRenderer(fakeMap);
+    const pendingFrames: FrameRequestCallback[] = [];
+    let resizeCallback: ResizeObserverCallback | undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallback = callback;
+        }
+        observe = observe;
+        disconnect = disconnect;
+      },
+    );
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      pendingFrames.push(callback);
+      return pendingFrames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    try {
+      renderer.mount(document.createElement("div"));
+      expect(observe).toHaveBeenCalledOnce();
+      expect(resizeCallback).toBeDefined();
+
+      resizeCallback?.([], {} as ResizeObserver);
+      resizeCallback?.([], {} as ResizeObserver);
+      expect(pendingFrames).toHaveLength(1);
+      pendingFrames.shift()?.(0);
+      expect(fakeMap.resize).toHaveBeenCalledOnce();
+
+      renderer.unmount();
+      expect(disconnect).toHaveBeenCalledOnce();
+      resizeCallback?.([], {} as ResizeObserver);
+      expect(pendingFrames).toHaveLength(0);
+    } finally {
+      renderer.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("boots the regional presentation camera without changing the shared map contract", () => {
     const fakeMap = makeFakeMap();
     const createMap = vi.fn(
