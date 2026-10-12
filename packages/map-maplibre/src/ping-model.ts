@@ -6,6 +6,7 @@ import {
   CylinderGeometry,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   SphereGeometry,
   TorusGeometry,
@@ -37,6 +38,45 @@ export function createPingModel() {
   const eye = new Mesh(new SphereGeometry(0.085, 12, 8), lens);
   eye.position.set(0, 0, 0.22);
   body.add(eye);
+  // Permanent repairs remain legible when motion/effects are disabled.
+  const patchMaterial = new MeshStandardMaterial({
+    color: 0xaa7956,
+    roughness: 0.85,
+  });
+  const tapeMaterial = new MeshStandardMaterial({
+    color: 0xc5b58c,
+    roughness: 1,
+  });
+  const patch = new Mesh(new BoxGeometry(0.14, 0.16, 0.025), patchMaterial);
+  patch.position.set(0.16, 0, 0.19);
+  patch.rotation.y = 0.5;
+  body.add(patch);
+  for (const y of [-0.045, 0.045]) {
+    const tape = new Mesh(new BoxGeometry(0.2, 0.027, 0.012), tapeMaterial);
+    tape.position.set(0.16, y, 0.215);
+    tape.rotation.z = 0.16;
+    body.add(tape);
+  }
+  const smokeMaterial = new MeshBasicMaterial({
+    color: 0x9aa2aa,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const smoke = new Mesh(new SphereGeometry(0.065, 8, 6), smokeMaterial);
+  smoke.name = "ping-smoke";
+  body.add(smoke);
+  const sparkMaterial = new MeshBasicMaterial({
+    color: 0xe8b563,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+  });
+  const spark = new Mesh(new BoxGeometry(0.08, 0.008, 0.008), sparkMaterial);
+  spark.name = "ping-spark";
+  spark.position.set(-0.24, 0.025, 0.12);
+  spark.rotation.z = 0.6;
+  body.add(spark);
   const rotors: Mesh[] = [];
   for (const x of [-1, 1])
     for (const z of [-1, 1]) {
@@ -59,8 +99,26 @@ export function createPingModel() {
     sample(phase: number, moving: boolean) {
       body.position.y =
         1.9 + (moving ? Math.sin(phase * Math.PI * 2) * 0.055 : 0);
-      for (const rotor of rotors)
-        rotor.rotation.y = moving ? phase * Math.PI * 32 : 0;
+      const wobble = moving ? Math.sin(phase * Math.PI * 2) : 0;
+      body.rotation.z = wobble * 0.055;
+      patch.rotation.z = wobble * 0.07;
+      for (const [index, rotor] of rotors.entries()) {
+        // One tired bearing, mechanically separate from any reported error.
+        rotor.rotation.y = moving
+          ? phase * Math.PI * 32 +
+            (index === 0 ? Math.sin(phase * Math.PI * 6) * 0.9 : 0)
+          : 0;
+        rotor.rotation.z = index === 0 ? wobble * 0.12 : 0;
+      }
+      const puff = moving ? Math.max(0, Math.sin(phase * Math.PI * 2)) : 0;
+      smoke.visible = moving && puff > 0;
+      smoke.position.set(0.18, 0.16 + (moving ? phase : 0) * 0.3, -0.08);
+      smoke.scale.setScalar(1 + puff * 1.2);
+      smokeMaterial.opacity = puff * 0.22;
+      spark.visible = moving && phase > 0.7 && phase < 0.85;
+      sparkMaterial.opacity = spark.visible
+        ? Math.sin(((phase - 0.7) / 0.15) * Math.PI) * 0.7
+        : 0;
     },
     dispose() {
       root.traverse((node) => {
@@ -69,6 +127,10 @@ export function createPingModel() {
       shell.dispose();
       trim.dispose();
       lens.dispose();
+      patchMaterial.dispose();
+      tapeMaterial.dispose();
+      smokeMaterial.dispose();
+      sparkMaterial.dispose();
       root.removeFromParent();
     },
   };
