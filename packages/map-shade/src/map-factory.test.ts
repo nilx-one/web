@@ -268,6 +268,10 @@ describe("shade map factory", () => {
       { id: WORLD_LAYER_ID, before: "place-labels" },
       { id: SHADE_LAYER_ID, before: "place-labels" },
     ]);
+    // Public country geometry must remain visible until regional cell fog
+    // takes over. Both fog layers are local-only presentation.
+    expect(map.layers.get(WORLD_LAYER_ID)).toMatchObject({ minzoom: 8 });
+    expect(map.layers.get(SHADE_LAYER_ID)).toMatchObject({ minzoom: 8 });
   });
 
   it("fogs the whole Earth beyond the atlas, holed only where it was revealed", async () => {

@@ -1723,6 +1723,7 @@ export function AuthenticatedMapHomeView({
   // to where the body at the wheel was last seen on this device, rather than
   // the bootstrap camera, while the first fix is still on its way.
   const resumeApplied = useRef(false);
+  const openingTarget = useRef<MapPointSelection | undefined>(undefined);
   useEffect(() => {
     if (
       systemInformer.activeId !== undefined ||
@@ -1738,6 +1739,10 @@ export function AuthenticatedMapHomeView({
         ? (remembered.avaia ?? remembered.bond)
         : remembered.bond;
     if (point === undefined) return;
+    openingTarget.current = {
+      longitude: point.longitude,
+      latitude: point.latitude,
+    };
 
     const context = { presentation, dimension, safeArea };
     renderer.setCamera(
@@ -1751,7 +1756,10 @@ export function AuthenticatedMapHomeView({
         },
         context,
       ),
-      { motion: "immediate", padding: locationCameraPadding(context) },
+      {
+        motion: prefersReducedMotion() ? "immediate" : "flight",
+        padding: locationCameraPadding(context),
+      },
     );
   }, [
     dimension,
@@ -1783,6 +1791,7 @@ export function AuthenticatedMapHomeView({
     if (
       systemInformer.activeId !== undefined ||
       observedPosition === undefined ||
+      mapStatus.kind !== "ready" ||
       firstFixApplied.current
     )
       return;
@@ -1790,22 +1799,31 @@ export function AuthenticatedMapHomeView({
     if (cameraMovedByPerson.current) return;
 
     const avaiaPoint = wheelAvaiaPointRef.current();
+    const target =
+      avaiaPoint === undefined
+        ? observedPosition
+        : { ...observedPosition, ...avaiaPoint };
+    const resumedAt = openingTarget.current;
+    // Nearby observed positions must not restart an in-flight opening flight.
+    if (resumedAt !== undefined && mapDistanceMeters(resumedAt, target) < 150) {
+      return;
+    }
+    openingTarget.current = {
+      longitude: target.longitude,
+      latitude: target.latitude,
+    };
     const context = { presentation, dimension, safeArea };
-    renderer.setCamera(
-      firstFixCamera(
-        avaiaPoint === undefined
-          ? observedPosition
-          : { ...observedPosition, ...avaiaPoint },
-        context,
-      ),
-      {
-        motion: cameraMotion(prefersReducedMotion()),
-        padding: locationCameraPadding(context),
-      },
-    );
+    renderer.setCamera(firstFixCamera(target, context), {
+      motion:
+        resumedAt === undefined && !prefersReducedMotion()
+          ? "flight"
+          : cameraMotion(prefersReducedMotion()),
+      padding: locationCameraPadding(context),
+    });
   }, [
     dimension,
     systemInformer.activeId,
+    mapStatus.kind,
     observedPosition,
     presentation,
     renderer,

@@ -180,11 +180,12 @@ describe("MapLibre renderer health invariants", () => {
     });
   });
 
-  it("rejects a connected map surface that resolves to zero size", () => {
+  it("waits for a measurable Mini App container before publishing ready", () => {
     const fakeMap = makeFakeMap();
     const renderer = rendererFor(fakeMap);
     const container = document.createElement("div");
-    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({
+    const bounds = vi.spyOn(container, "getBoundingClientRect");
+    bounds.mockReturnValue({
       width: 0,
       height: 0,
       top: 0,
@@ -200,10 +201,24 @@ describe("MapLibre renderer health invariants", () => {
     renderer.mount(container);
     fakeMap.emit("load");
 
-    expect(renderer.getStatus()).toEqual({
-      kind: "unavailable",
-      reason: "container-zero-size",
+    // Telegram can expand a zero-sized WebView after the first style paint.
+    // This is transient, not an unrecoverable renderer initialization error.
+    expect(renderer.getStatus()).toEqual({ kind: "loading" });
+    bounds.mockReturnValue({
+      width: 320,
+      height: 640,
+      top: 0,
+      right: 320,
+      bottom: 640,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
     });
+    fakeMap.emit("render");
+    expect(renderer.getStatus()).toEqual({ kind: "ready" });
+    renderer.unmount();
+    container.remove();
   });
 
   it("surfaces a lost WebGL context after the map had rendered", () => {
