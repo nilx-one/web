@@ -17,10 +17,10 @@ function reporter(): BrowserReporter {
 describe("map health error reporting", () => {
   it.each([
     ["style-load-timeout", "map.renderer.style.load.timeout"],
-    ["first-paint-timeout", "map.renderer.first_paint.timeout"],
-    ["container-zero-size", "map.renderer.container.zero_size"],
+    ["first-paint-timeout", "map.renderer.first.paint.timeout"],
+    ["container-zero-size", "map.renderer.container.zero.size"],
     ["webgl-unavailable", "map.renderer.webgl.unavailable"],
-    ["webgl-context-lost", "map.renderer.webgl.context_lost"],
+    ["webgl-context-lost", "map.renderer.webgl.context.lost"],
   ] as const)("maps %s into %s", (reason, errorId) => {
     const target = reporter();
 
