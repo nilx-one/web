@@ -10,6 +10,27 @@ import { describe, expect, it } from "vitest";
 import { reportMapRendererStatus } from "./error-reporting";
 
 describe("@aiaiaiai/4x-errors-browser integration", () => {
+  it.each([
+    ["first-paint-timeout", "map.renderer.first.paint.timeout"],
+    ["container-zero-size", "map.renderer.container.zero.size"],
+    ["webgl-context-lost", "map.renderer.webgl.context.lost"],
+  ])("delivers %s through the real SDK", async (reason, errorId) => {
+    const events: ErrorEventV1[] = [];
+    const reporter = createBrowserReporter({
+      project: "nilx-one/web",
+      source: "browser",
+      captureGlobalErrors: false,
+      transport: (event) => {
+        events.push(event);
+      },
+    });
+    reportMapRendererStatus(reporter, { kind: "unavailable", reason });
+    await reporter.flush();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.error_id).toBe(errorId);
+    reporter.dispose();
+  });
+
   it("projects an explicit map failure into a canonical errors.v1 browser event", async () => {
     const events: ErrorEventV1[] = [];
     const reporter = createBrowserReporter({
