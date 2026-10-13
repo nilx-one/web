@@ -20,3 +20,13 @@ Describe tests, builds, contract checks, accessibility checks, or manual verific
 ## Compatibility / security
 
 - [ ] I documented any compatibility, migration, security, accessibility, or licensing impact, or none applies.
+
+## Attribution / handoff
+
+- Primary account / tool:
+- Other account's incorporated contribution (files, patch or SHA; or none):
+- Other AI tool contribution (or none):
+- Verified head / checks:
+- Remaining work / merge authorization:
+- [ ] Pushed source commit authors and trailers match the agent instructions.
+- [ ] Final squash/merge attribution will be inspected separately.
