@@ -14,7 +14,8 @@ import type { GuideShot } from "./guide-stage";
  * one thing a scene may pay is an achievement the product already priced —
  * she only says it out loud.
  */
-export type GuideSceneId = "intro" | "reward" | "backpack" | "territory";
+export type GuideSceneId =
+  "intro" | "reward" | "backpack" | "territory" | "afterthought";
 
 export type GuideNodeId =
   | "greeting"
@@ -23,13 +24,15 @@ export type GuideNodeId =
   | "almostForgot"
   | "together"
   | "backpackGift"
-  | "newGround";
+  | "newGround"
+  | "afterthought";
 
 /**
  * How a scene ended, which is all the world is told about it.
  *
- * - `later` — she comes back the next time the world opens;
- * - `skipped` — a person asked not to see this scene again on this device;
+ * - `later` — she comes back, on a schedule that doubles each time;
+ * - `skipped` — a person cut the scene short; whatever it was paying or
+ *   giving was already paid;
  * - `create` — a person went to create their Avaia, so its screen opens;
  * - `done` — the scene said what it had to;
  * - `together` — the Bond and its new Avaia take it from here.
@@ -104,6 +107,11 @@ export interface GuideNode {
    * render adds it (`docs/avaia-voice.md`).
    */
   readonly recorded?: false;
+  /**
+   * More wordings of the line, not recorded yet: typed out and not said aloud
+   * until a render adds them, when they move into `line`.
+   */
+  readonly unrecorded?: readonly GuideWording[];
   readonly choices: readonly GuideChoice[];
 }
 
@@ -112,6 +120,7 @@ export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
   reward: "almostForgot",
   backpack: "backpackGift",
   territory: "newGround",
+  afterthought: "afterthought",
 };
 
 export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
@@ -137,6 +146,7 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
   },
   farewell: {
     line: ["guide.intro.farewell.0", "guide.intro.farewell.1"],
+    unrecorded: ["guide.intro.farewell.2", "guide.intro.farewell.3"],
     shot: "dasha",
     choices: [{ reply: "continue", next: { end: "later" } }],
   },
@@ -150,12 +160,21 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
     reward: true,
     choices: [
       { reply: "thanks", next: "together" },
-      { reply: "skip", next: { end: "done" } },
+      { reply: "skip", next: { end: "skipped" } },
     ],
   },
   together: {
     line: ["guide.reward.together.0", "guide.reward.together.1"],
     shot: "together",
+    choices: [{ reply: "continue", next: { end: "together" } }],
+  },
+  afterthought: {
+    line: [
+      inVoices("guide.reward.afterthought.0"),
+      "guide.reward.afterthought.1",
+    ],
+    shot: "together",
+    recorded: false,
     choices: [{ reply: "continue", next: { end: "together" } }],
   },
   backpackGift: {
@@ -169,7 +188,7 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
     recorded: false,
     choices: [
       { reply: "thanks", next: { end: "done" } },
-      { reply: "skip", next: { end: "done" } },
+      { reply: "skip", next: { end: "skipped" } },
     ],
   },
   newGround: {
@@ -181,20 +200,21 @@ export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
     shot: "two-shot",
     choices: [
       { reply: "thanks", next: { end: "done" } },
-      { reply: "skip", next: { end: "done" } },
+      { reply: "skip", next: { end: "skipped" } },
     ],
   },
 };
 
 /** Every wording of every line not recorded yet. */
 const UNRECORDED_KEYS: ReadonlySet<string> = new Set(
-  Object.values(GUIDE_NODES)
-    .filter((node) => node.recorded === false)
-    .flatMap((node) =>
-      node.line.flatMap((wording) =>
-        typeof wording === "string" ? [wording] : Object.values(wording),
-      ),
+  Object.values(GUIDE_NODES).flatMap((node) =>
+    [
+      ...(node.recorded === false ? node.line : []),
+      ...(node.unrecorded ?? []),
+    ].flatMap((wording) =>
+      typeof wording === "string" ? [wording] : Object.values(wording),
     ),
+  ),
 );
 
 /** Whether a line of hers has a recording to play. */
@@ -305,7 +325,11 @@ export function createGuideLineState(
   replyVoice: GuideVoice = voice,
 ): GuideLineViewState {
   const script = GUIDE_NODES[node];
-  const wording = pickVariant(script.line, seed, `line:${node}`);
+  const wording = pickVariant(
+    [...script.line, ...(script.unrecorded ?? [])],
+    seed,
+    `line:${node}`,
+  );
   const key = voiced(wording, voice);
   return {
     node,

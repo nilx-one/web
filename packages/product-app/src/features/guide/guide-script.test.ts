@@ -9,6 +9,7 @@ import {
   followChoice,
   GUIDE_NODES,
   GUIDE_OPENING,
+  isRecordedGuideLine,
   isSpokenReply,
   pickVariant,
   replyText,
@@ -162,8 +163,68 @@ describe("xSasha's script", () => {
     expect(paying.node).toBe("almostForgot");
     expect(paying.reward).toBe(true);
     expect(followChoice("almostForgot", "thanks")).toBe("together");
-    expect(followChoice("almostForgot", "skip")).toEqual({ end: "done" });
+    expect(followChoice("almostForgot", "skip")).toEqual({ end: "skipped" });
     expect(followChoice("together", "continue")).toEqual({ end: "together" });
+  });
+
+  it("cuts a scene short on skip and ends it on a thank-you, whatever was given", () => {
+    for (const node of ["almostForgot", "backpackGift", "newGround"] as const) {
+      expect(followChoice(node, "skip")).toEqual({ end: "skipped" });
+    }
+    for (const node of ["backpackGift", "newGround"] as const) {
+      expect(followChoice(node, "thanks")).toEqual({ end: "done" });
+    }
+    // Nothing else in the script is cut short: it has no skip to give.
+    expect(followChoice("greeting", "skip")).toBeUndefined();
+    expect(followChoice("farewell", "skip")).toBeUndefined();
+    expect(followChoice("afterthought", "skip")).toBeUndefined();
+  });
+
+  it("turns back for what a skipped reward left unsaid, and hands the wheel over", () => {
+    expect(GUIDE_OPENING.afterthought).toBe("afterthought");
+    expect(followChoice("afterthought", "continue")).toEqual({
+      end: "together",
+    });
+    const said = (voice: GuideVoice) =>
+      [0, 1, 2, 3].map(
+        (seed) =>
+          createGuideLineState("afterthought", seed, uk, names, voice).text,
+      );
+    expect(said("feminine")).toContain(
+      "Ледь не забула — далі ви вдвох. Я поруч.",
+    );
+    expect(said("masculine")).toContain(
+      "Ледь не забув — далі ви вдвох. Я поруч.",
+    );
+    for (const line of said("neutral")) expect(line).not.toMatch(/забул|забув/);
+    // It pays nothing: the reward was paid, and shown, before she spoke.
+    expect(GUIDE_NODES.afterthought.reward).toBeUndefined();
+    expect(said("feminine").some((line) => line.includes("xda-shai"))).toBe(
+      true,
+    );
+  });
+
+  it("is sorry to go when put off, in wordings not recorded yet", () => {
+    const farewells = (locale: typeof uk) =>
+      [0, 1, 2, 3].map((seed) =>
+        createGuideLineState("farewell", seed, locale, names, "feminine"),
+      );
+    expect(
+      farewells(uk).filter((line) => /шкода/i.test(line.text)),
+    ).toHaveLength(2);
+    expect(
+      farewells(ru).filter((line) => /жаль/i.test(line.text)),
+    ).toHaveLength(2);
+    expect(
+      farewells(en).filter((line) => /shame|pity/i.test(line.text)),
+    ).toHaveLength(2);
+    // What was recorded stays heard; the new wordings are only typed out.
+    const keys = farewells(uk).map((line) => line.key);
+    expect(keys.filter(isRecordedGuideLine)).toEqual([
+      "guide.intro.farewell.0",
+      "guide.intro.farewell.1",
+    ]);
+    expect(isRecordedGuideLine("guide.reward.afterthought.1")).toBe(false);
   });
 
   it("calls the Bond by its pub_dress when she pays it, and nearly forgets to", () => {

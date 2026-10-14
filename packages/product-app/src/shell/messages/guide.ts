@@ -71,6 +71,8 @@ export const GUIDE_EN = {
     "Then this will feel familiar. Your Avaia, {avaia}, is waiting in the Dock below. Tap its card, then Create. The name is already its own.",
   "guide.intro.farewell.0": "Fine. I’ll drop by again.",
   "guide.intro.farewell.1": "Okay. I’ll be around.",
+  "guide.intro.farewell.2": "Shame. I’ll come by later.",
+  "guide.intro.farewell.3": "Oh, what a pity. I’ll be back.",
   "guide.reward.almostForgot.0.feminine": "Almost forgot — here, {bond}.",
   "guide.reward.almostForgot.0.masculine": "Almost forgot — here, {bond}.",
   "guide.reward.almostForgot.0.neutral": "Almost forgot — here, {bond}.",
@@ -97,6 +99,14 @@ export const GUIDE_EN = {
   "guide.territory.newGround.2":
     "You’ve opened your first cell. The timer over a cell shows how long it still needs. Once it’s open, collect the orbs on it — each makes you or {avaia} more experienced.",
   "guide.reward.together.1": "Now go — you and {avaia}. I’ll find you.",
+  "guide.reward.afterthought.0.feminine":
+    "Almost forgot — it’s the two of you from here. I’ll be near.",
+  "guide.reward.afterthought.0.masculine":
+    "Almost forgot — it’s the two of you from here. I’ll be near.",
+  "guide.reward.afterthought.0.neutral":
+    "Almost forgot — it’s the two of you from here. I’ll be near.",
+  "guide.reward.afterthought.1":
+    "One more thing: go on, you and {avaia}. I’ll find you.",
   "guide.choice.curious.0.feminine":
     "This is strange. I feel like I’ve been here before.",
   "guide.choice.curious.0.masculine":
@@ -179,6 +189,8 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
     "Тоді тобі це знайоме. Твоя Avaia, {avaia}, — внизу, у Dock. Торкнись картки, потім «Створити». Своє ім’я вона вже має.",
   "guide.intro.farewell.0": "Добре. Я ще зазирну.",
   "guide.intro.farewell.1": "Гаразд. Я буду поруч.",
+  "guide.intro.farewell.2": "Шкода. Я зазирну пізніше.",
+  "guide.intro.farewell.3": "Ех, шкода. Я ще повернуся.",
   "guide.reward.almostForgot.0.feminine": "Ледь не забула — тримай, {bond}.",
   "guide.reward.almostForgot.0.masculine": "Ледь не забув — тримай, {bond}.",
   "guide.reward.almostForgot.0.neutral":
@@ -205,6 +217,14 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.territory.newGround.2":
     "Перша клітинка — твоя. Таймер над клітинкою показує, скільки їй ще відкриватись. А на відкритій землі збирай кульки: за кожну ти або {avaia} станете досвідченішими.",
   "guide.reward.together.1": "Тепер ідіть — ти і {avaia}. Я вас знайду.",
+  "guide.reward.afterthought.0.feminine":
+    "Ледь не забула — далі ви вдвох. Я поруч.",
+  "guide.reward.afterthought.0.masculine":
+    "Ледь не забув — далі ви вдвох. Я поруч.",
+  "guide.reward.afterthought.0.neutral":
+    "Ледь не вилетіло з голови — далі ви вдвох. Я поруч.",
+  "guide.reward.afterthought.1":
+    "Ой, ще дещо: ідіть далі, ти і {avaia}. Я вас знайду.",
   "guide.choice.curious.0.feminine": "Це дивно. Я відчуваю, що вже була тут.",
   "guide.choice.curious.0.masculine": "Це дивно. Я відчуваю, що вже був тут.",
   "guide.choice.curious.0.neutral":
@@ -283,6 +303,8 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
     "Тогда тебе это знакомо. Твоя Avaia, {avaia}, — внизу, в Dock. Коснись карточки, потом «Создать». Своё имя у неё уже есть.",
   "guide.intro.farewell.0": "Хорошо. Я ещё загляну.",
   "guide.intro.farewell.1": "Ладно. Я буду рядом.",
+  "guide.intro.farewell.2": "Жаль. Загляну позже.",
+  "guide.intro.farewell.3": "Эх, жаль. Я ещё вернусь.",
   "guide.reward.almostForgot.0.feminine": "Чуть не забыла — держи, {bond}.",
   "guide.reward.almostForgot.0.masculine": "Чуть не забыл — держи, {bond}.",
   "guide.reward.almostForgot.0.neutral":
@@ -309,6 +331,14 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.territory.newGround.2":
     "Первая клетка — твоя. Таймер над клеткой показывает, сколько ей ещё открываться. А на открытой земле собирай шарики: за каждый ты или {avaia} станете опытнее.",
   "guide.reward.together.1": "Теперь идите — ты и {avaia}. Я вас найду.",
+  "guide.reward.afterthought.0.feminine":
+    "Чуть не забыла — дальше вы вдвоём. Я рядом.",
+  "guide.reward.afterthought.0.masculine":
+    "Чуть не забыл — дальше вы вдвоём. Я рядом.",
+  "guide.reward.afterthought.0.neutral":
+    "Чуть не вылетело из головы — дальше вы вдвоём. Я рядом.",
+  "guide.reward.afterthought.1":
+    "Ой, ещё кое-что: идите дальше, ты и {avaia}. Я вас найду.",
   "guide.choice.curious.0.feminine":
     "Это странно. Я чувствую, что уже была здесь.",
   "guide.choice.curious.0.masculine":

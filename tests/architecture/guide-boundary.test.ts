@@ -141,6 +141,7 @@ describe("xSasha stays presentation", () => {
         "guideResultToast",
         "setSceneToasts",
         "postponeGuideIntro",
+        "setAfterthoughtOwed",
         "rememberGuideIntro",
         "rememberGuideTerritory",
         "openDetail",

@@ -59,6 +59,9 @@ her departure. Replies can be chosen by number, and Escape takes the scene's
 own way out. A person who asked for reduced motion gets cuts instead of camera
 moves, sees each line whole, and finds her already standing there.
 
+A scene can be ended in two ways that are not the same, and a reply is only
+ever one of them ([Putting her off and cutting her short](#putting-her-off-and-cutting-her-short)).
+
 Where she stands is the one place this client observed: a couple of metres in
 front of the Bond's body, which faces north. A device with no observation
 stages the scene wherever the camera already is.
@@ -79,8 +82,8 @@ xSasha   Hi, bunny. The two of us are going to have fun — but I'm busy
 
 - The first reply leads to how: the Avaia waiting in the Dock, and **Create**.
   Going to do it closes the scene and opens the Avaia screen.
-- **Later** is answered with a goodbye, and she comes back the next time the
-  world opens.
+- **Later** is answered with a goodbye — one that is sorry to go — and she
+  comes back on her own schedule, which doubles each time she is put off.
 
 **Reward.** The first save that configures the Avaia brings her back — or
 rather, finds her on her way out. She is some twenty metres off, her back to
@@ -124,6 +127,14 @@ its new Avaia: from here it is the two of them. Handing the wheel over this way
 fetches nothing — a reply to her is not the gesture that asks a device to
 download a model.
 
+A reward that is skipped is cut at once, and paid exactly the same. What it
+leaves unsaid is that it is the two of them now, so a few seconds later she
+turns back for it: _Ледь не забула — далі ви вдвох. Я поруч._ She comes the
+way she came for the reward, found on her way out and turning round, and the
+Avaia walks up; going on hands the wheel over as above. It has no skip of its
+own and pays nothing, so a Bond that cut the reward short never meets a third
+scene.
+
 ## Backpacks
 
 Both the Bond and its Avaia start out carrying things in their pockets: five
@@ -148,6 +159,43 @@ herself.
 
 This line is not recorded yet: it is typed out and not said aloud until a
 render adds it ([Character voices](avaia-voice.md)).
+
+## Putting her off and cutting her short
+
+A Bond has two ways out of a scene that are not the same thing, and a scene
+offers one of them.
+
+- **Skip** cuts a scene short. It ends at once — she does not walk off, and
+  the camera is simply back where it was — and whatever the scene carried
+  (experience, a backpack, her word on new ground) was given before she
+  spoke, so it is given all the same and goes to the corner as a toast. A
+  skipped reward is followed by one more scene, above. Reward, backpack and new
+  ground have it; the introduction does not, because there is nothing in it
+  that has been given.
+- **Later** puts a scene off. Only the introduction has it, and it is the only
+  scene that comes back for being put off. She says goodbye, sorry to go, and
+  walks off the way she came.
+
+Put off, she keeps to a window, counted from the moment she was put off:
+
+| Put off | Away from a login for at least | Comes on her own after |
+| ------- | ------------------------------ | ---------------------- |
+| once    | 30 min                         | 60 min                 |
+| twice   | 60 min                         | 120 min                |
+| thrice  | 120 min                        | 240 min                |
+
+and so on, both doubling each time. A login is the world being opened — signing
+in, reopening, reloading. One that comes inside the first wait does not bring
+her; the first one after it does; and with no login at all she walks up once
+the longer wait has passed, wherever the Bond is, when nothing else is being
+asked. Putting her off in the session the world is open in never counts as
+having come back to it. The count stays until the introduction is played
+through, and a clock set back starts the wait over from now rather than
+leaving her waiting for a time that has not come.
+
+The afterthought, and the two goodbyes that say she is sorry to go, are not
+recorded yet: they are typed out and not said aloud until a render adds them
+([Character voices](avaia-voice.md)).
 
 ## What this is not
 
@@ -186,11 +234,13 @@ its own play record. The code that ends a scene is pinned to exactly that.
 
 ## What is kept
 
-Whether the introduction was played through or skipped is a play record on
-this device, `nilx-one.guide.v1.<owner>`, transport-eligible like the others
-([State placement](state-placement.md)). "Later" is kept for the session only.
-The same record says whether her word on new ground is owed: from the first
-cell the Bond opens beyond its starting one, by Avaia or on foot.
+Whether the introduction was played through is a play record on this device,
+`nilx-one.guide.v1.<owner>`, transport-eligible like the others
+([State placement](state-placement.md)). So is how often she was put off and
+when last, which is what her schedule is read from. A device with nowhere to
+keep it keeps it for the session. The same record says whether her word on new
+ground is owed: from the first cell the Bond opens beyond its starting one, by
+Avaia or on foot.
 
 ## New ground
 

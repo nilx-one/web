@@ -161,7 +161,8 @@ function viewportHeight(): number {
  * then handed back exactly where it was. The reward scene finds her a way off
  * instead, her back to the Bond and the place behind her, and she turns round
  * to say it. A person who asked for reduced motion gets cuts instead of moves,
- * and she is simply standing there, already facing them.
+ * and she is simply standing there, already facing them. Skipping a scene is a
+ * cut too: it ends at once, with nothing left to walk off.
  */
 export function useGuideCutscene({
   renderer,
@@ -196,7 +197,7 @@ export function useGuideCutscene({
   const shoot = useCallback(
     (camera: MapCamera, durationMs: number) => {
       renderer.setCamera(camera, {
-        motion: reducedMotion ? "immediate" : "eased",
+        motion: reducedMotion || durationMs === 0 ? "immediate" : "eased",
         durationMs,
         padding: guideCameraPadding(viewportHeight()),
       });
@@ -235,7 +236,7 @@ export function useGuideCutscene({
         latitude: base.center[1],
       };
       stageRef.current =
-        scene === "reward" || scene === "backpack"
+        scene === "reward" || scene === "backpack" || scene === "afterthought"
           ? guideAsideStage(
               you,
               guideAsideBearing(
@@ -434,6 +435,15 @@ export function useGuideCutscene({
         break;
       }
       case "leaving": {
+        // A skipped scene is cut, not played out: no walk off, the camera
+        // simply back where it was. What it carried was given before she spoke.
+        if (playingRef.current?.outcome === "skipped") {
+          motionRef.current = undefined;
+          const origin = baseCameraRef.current;
+          if (origin !== undefined) shoot(origin, 0);
+          later(0, finish);
+          break;
+        }
         motionRef.current = reducedMotion
           ? undefined
           : {
