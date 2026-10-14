@@ -26,6 +26,7 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { forgetGuideSession } from "../../packages/product-app/src/features/guide/guide-memory";
 import { createMapRendererDouble } from "../support/doubles";
 
 const readyCore: CoreRuntimePort = {
@@ -188,6 +189,7 @@ function renderWorld(
 describe("xSasha, the first time a Bond opens the world", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    forgetGuideSession();
   });
 
   afterEach(() => {
@@ -443,22 +445,205 @@ describe("xSasha, the first time a Bond opens the world", () => {
     expect(document.querySelector(".guide-cutscene")).toBeNull();
   }, 20_000);
 
-  // Last: "later" is remembered for the rest of this session.
-  it("comes back another time when asked to", async () => {
+  it("cuts a skipped reward short, pays it all the same, and turns back to hand over the wheel", async () => {
+    const user = userEvent.setup();
+    const renderer = renderWorld();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Set up x0skai" }),
+    );
+    const address = await screen.findByLabelText("pub_dress");
+    await waitFor(() => expect(address).toHaveValue("sk"));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    const replies = await untilReplies(user);
+    expect(replies[1]).toHaveTextContent("(skip)");
+    const cameraMoves = vi.mocked(renderer.setCamera).mock.calls.length;
+    await user.click(replies[1] as HTMLElement);
+
+    // A cut, not a walk off: she does not take the 2.4 s she needs to leave.
+    await waitFor(() =>
+      expect(document.querySelector(".guide-cutscene")).toBeNull(),
+    );
+    expect(renderer.avatars?.remove).toHaveBeenCalledWith("guide");
+    expect(
+      vi
+        .mocked(renderer.setCamera)
+        .mock.calls.slice(cameraMoves)
+        .some(([, options]) => options?.motion === "immediate"),
+    ).toBe(true);
+
+    // What the reward paid is paid, and goes to the corner as it always does.
+    await waitFor(() => {
+      const toasts = document.querySelector(".guide-reward-toasts");
+      expect(
+        [...(toasts?.querySelectorAll(".guide-toast") ?? [])].map(
+          (toast) => toast.textContent,
+        ),
+      ).toEqual(["+20 Bond experience", "x0skai reached level 1"]);
+    }, ARRIVAL_WAIT);
+    // Skipping did not hand the wheel over.
+    expect(
+      screen.queryByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toBeNull();
+
+    // A few seconds on she turns back for the one thing it left unsaid.
+    const dialog = await screen.findByRole(
+      "dialog",
+      { name: "xSasha" },
+      { timeout: 9_000 },
+    );
+    const onward = await untilReplies(user);
+    expect(dialog).toHaveTextContent(/forgot|one more thing/i);
+    expect(onward).toHaveLength(1);
+    expect(onward[0]).toHaveTextContent("(continue)");
+    await user.click(onward[0] as HTMLElement);
+    await untilGone(user);
+
+    expect(
+      await screen.findByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toBeVisible();
+    // Each scene leaves its receipt, and the afterthought exactly one.
+    expect(
+      screen.getAllByText("x0skai takes the wheel. It’s the two of you now."),
+    ).toHaveLength(1);
+  }, 30_000);
+
+  it("sends the reward to the corner however fast it is skipped, for a person who asked for less motion", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: query === "(prefers-reduced-motion: reduce)",
+          media: query,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          onchange: null,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    try {
+      const user = userEvent.setup();
+      renderWorld();
+
+      await user.click(
+        await screen.findByRole("button", { name: "Set up x0skai" }),
+      );
+      const address = await screen.findByLabelText("pub_dress");
+      await waitFor(() => expect(address).toHaveValue("sk"));
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      // She is already there and the line is whole: skipped the moment it
+      // can be.
+      const skip = await screen.findByRole("button", { name: /\(skip\)/ });
+      await user.click(skip);
+      await waitFor(() =>
+        expect(document.querySelector(".guide-cutscene")).toBeNull(),
+      );
+
+      await waitFor(() => {
+        const toasts = document.querySelector(".guide-reward-toasts");
+        expect(
+          [...(toasts?.querySelectorAll(".guide-toast") ?? [])].map(
+            (toast) => toast.textContent,
+          ),
+        ).toEqual(["+20 Bond experience", "x0skai reached level 1"]);
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }, 30_000);
+
+  it("cuts the afterthought short without her turning back a third time", async () => {
+    const user = userEvent.setup();
+    renderWorld();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Set up x0skai" }),
+    );
+    const address = await screen.findByLabelText("pub_dress");
+    await waitFor(() => expect(address).toHaveValue("sk"));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click((await untilReplies(user))[1] as HTMLElement);
+    await waitFor(() =>
+      expect(document.querySelector(".guide-cutscene")).toBeNull(),
+    );
+
+    await screen.findByRole("dialog", { name: "xSasha" }, { timeout: 9_000 });
+    await untilReplies(user);
+    // The only way out of it is to go on: there is nothing in it to skip.
+    expect(document.querySelector("[data-reply='skip']")).toBeNull();
+    await user.keyboard("{Escape}");
+    await untilGone(user);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 4_200)));
+    expect(document.querySelector(".guide-cutscene")).toBeNull();
+  }, 30_000);
+
+  it("keeps away from a login that comes within half an hour of putting her off", async () => {
+    window.localStorage.setItem(
+      "nilx-one.guide.v1.0x0sky",
+      JSON.stringify({
+        introSnooze: { skips: 1, at: Date.now() - 15 * 60_000 },
+      }),
+    );
+    renderWorld();
+
+    await screen.findByRole("button", { name: "Set up x0skai" });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 2_400)));
+    expect(document.querySelector(".guide-cutscene")).toBeNull();
+  }, 10_000);
+
+  it("walks up for the first login after half an hour", async () => {
+    window.localStorage.setItem(
+      "nilx-one.guide.v1.0x0sky",
+      JSON.stringify({
+        introSnooze: { skips: 1, at: Date.now() - 31 * 60_000 },
+      }),
+    );
+    renderWorld();
+
+    await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
+  }, 15_000);
+
+  it("waits twice as long the second time she was put off", async () => {
+    window.localStorage.setItem(
+      "nilx-one.guide.v1.0x0sky",
+      JSON.stringify({
+        introSnooze: { skips: 2, at: Date.now() - 45 * 60_000 },
+      }),
+    );
+    renderWorld();
+
+    await screen.findByRole("button", { name: "Set up x0skai" });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 2_400)));
+    expect(document.querySelector(".guide-cutscene")).toBeNull();
+  }, 10_000);
+
+  it("is sorry to go when put off, and remembers when and how often", async () => {
     const user = userEvent.setup();
     renderWorld();
 
     await screen.findByRole("dialog", { name: "xSasha" }, ARRIVAL_WAIT);
     const replies = await untilReplies(user);
+    const before = Date.now();
     await user.click(replies[1] as HTMLElement);
     const farewell = await untilReplies(user);
     await user.click(farewell[0] as HTMLElement);
     await untilGone(user);
 
-    // Nothing is kept: the next time the world opens she walks up again.
-    expect(window.localStorage.getItem("nilx-one.guide.v1.0x0sky")).toBeNull();
+    // She is back on her own schedule, so this is kept, with when it was said.
+    const kept = JSON.parse(
+      window.localStorage.getItem("nilx-one.guide.v1.0x0sky") ?? "",
+    ) as { introSnooze: { skips: number; at: number } };
+    expect(kept.introSnooze.skips).toBe(1);
+    expect(kept.introSnooze.at).toBeGreaterThanOrEqual(before);
     expect(
       screen.getByRole("button", { name: "Set up x0skai" }),
     ).toBeInTheDocument();
-  }, 15_000);
+    // And she does not walk up again straight away.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 2_400)));
+    expect(document.querySelector(".guide-cutscene")).toBeNull();
+  }, 20_000);
 });

@@ -212,8 +212,8 @@ describe("Avaia setup from the Bond dock", () => {
     expect(dialog).toHaveTextContent("x0skai reached level 1");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(screen.getByRole("button", { name: "(skip)" }));
-    await user.click(await screen.findByRole("button", { name: "Continue" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    // Skipping is a cut: there is no walk off left to hurry along.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
     // The body offered is now a choice, not a default.
     expect(

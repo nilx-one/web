@@ -370,7 +370,7 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     medium: "local-storage",
     key: "nilx-one.guide.v1",
     perOwner: true,
-    what: "Whether xSasha's introduction was played through or skipped for this Bond.",
+    what: "Whether xSasha's introduction was played through for this Bond, and how often and when last she was put off.",
   },
   {
     id: "avaia.life",

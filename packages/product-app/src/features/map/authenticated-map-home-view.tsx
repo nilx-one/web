@@ -201,6 +201,7 @@ import {
 } from "../guide/guide-reward-toasts";
 import {
   guideIntroOwed,
+  guideIntroWaitMs,
   guideTerritoryOwed,
   postponeGuideIntro,
   rememberFirstCellOpened,
@@ -421,6 +422,10 @@ const FIND_TOAST_MS = 6_000;
  * xSasha walks up, so her arrival is not lost in the camera finding its feet.
  */
 export const GUIDE_INTRO_DELAY_MS = 1_800;
+/** How soon after a reward cut short she turns back for what it left unsaid. */
+export const GUIDE_AFTERTHOUGHT_DELAY_MS = 3_500;
+/** The longest a timer can wait; a longer one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647;
 
 export function levelFill(standing: LevelStanding, seat: DockSeat): number {
   const currentLevelXp =
@@ -1526,10 +1531,9 @@ export function AuthenticatedMapHomeView({
     [],
   );
   const playGuide = guide.play;
-  // She introduces herself to a Bond whose Avaia nobody has configured yet,
-  // once the world is there to be filmed and nothing else is being asked.
-  const guideIntroDue =
-    avaiaConfiguration === "unconfigured" &&
+  // The world is there to be filmed and nothing else is being asked: the only
+  // moment a scene may start.
+  const guideFloorClear =
     section === "world" &&
     activeDetail === undefined &&
     mapStatus.kind === "ready" &&
@@ -1537,6 +1541,9 @@ export function AuthenticatedMapHomeView({
     !guideActive &&
     !systemInformer.pending &&
     achievementDialog === undefined;
+  // She introduces herself to a Bond whose Avaia nobody has configured yet.
+  const guideIntroDue =
+    avaiaConfiguration === "unconfigured" && guideFloorClear;
   // Her backpack gift comes when the Bond's pockets fill up, or by level 3:
   // given first, then said, once the world is free to film it.
   useBackpackGift({
@@ -1546,15 +1553,7 @@ export function AuthenticatedMapHomeView({
         ? undefined
         : findItems,
     bondLevel: standing.bond.level,
-    ready:
-      avaiaConfiguration !== "unconfigured" &&
-      section === "world" &&
-      activeDetail === undefined &&
-      mapStatus.kind === "ready" &&
-      (focusState === "focused" || focusState === "unavailable") &&
-      !guideActive &&
-      !systemInformer.pending &&
-      achievementDialog === undefined,
+    ready: avaiaConfiguration !== "unconfigured" && guideFloorClear,
     onGiven: () => {
       const item = t("guide.backpack.item");
       playGuide("backpack", {
@@ -1570,15 +1569,7 @@ export function AuthenticatedMapHomeView({
     },
   });
   const guideTerritoryDue =
-    territoryOwed &&
-    avaiaConfiguration === "configured" &&
-    section === "world" &&
-    activeDetail === undefined &&
-    mapStatus.kind === "ready" &&
-    (focusState === "focused" || focusState === "unavailable") &&
-    !guideActive &&
-    !systemInformer.pending &&
-    achievementDialog === undefined;
+    territoryOwed && avaiaConfiguration === "configured" && guideFloorClear;
   useEffect(() => {
     if (!guideTerritoryDue || !guideTerritoryOwed(pubDress)) return;
     const arrives = globalThis.setTimeout(
@@ -1587,14 +1578,38 @@ export function AuthenticatedMapHomeView({
     );
     return () => globalThis.clearTimeout(arrives);
   }, [guideTerritoryDue, playGuide, pubDress]);
+  // Put off, she keeps to her own schedule (`guideIntroWaitMs`): a login that
+  // comes too soon does not bring her, and one that comes after the longest
+  // wait is not needed — she walks up wherever the Bond is.
+  const [sessionOpenedAt] = useState(() => Date.now());
+  const [introClock, setIntroClock] = useState(0);
   useEffect(() => {
     if (!guideIntroDue || !guideIntroOwed(pubDress)) return;
+    const waitMs = guideIntroWaitMs(pubDress, sessionOpenedAt);
     const arrives = globalThis.setTimeout(
-      () => playGuide("intro"),
-      GUIDE_INTRO_DELAY_MS,
+      () => {
+        // A wait longer than a timer can count comes round again.
+        if (guideIntroWaitMs(pubDress, sessionOpenedAt) > 0) {
+          setIntroClock((tick) => tick + 1);
+          return;
+        }
+        playGuide("intro");
+      },
+      Math.min(Math.max(GUIDE_INTRO_DELAY_MS, waitMs), MAX_TIMER_MS),
     );
     return () => globalThis.clearTimeout(arrives);
-  }, [guideIntroDue, playGuide, pubDress]);
+  }, [guideIntroDue, introClock, playGuide, pubDress, sessionOpenedAt]);
+  // A reward cut short is not quite the end of her: a moment later she turns
+  // back for the one thing it left unsaid — that it is the two of them now.
+  const [afterthoughtOwed, setAfterthoughtOwed] = useState(false);
+  useEffect(() => {
+    if (!afterthoughtOwed || !guideFloorClear) return;
+    const arrives = globalThis.setTimeout(() => {
+      setAfterthoughtOwed(false);
+      playGuide("afterthought");
+    }, GUIDE_AFTERTHOUGHT_DELAY_MS);
+    return () => globalThis.clearTimeout(arrives);
+  }, [afterthoughtOwed, guideFloorClear, playGuide]);
 
   /**
    * The card over whoever is at the wheel. It stands over the body — which for
@@ -2297,6 +2312,12 @@ export function AuthenticatedMapHomeView({
       { bond: pubDress, avaia: avaiaLabel },
     );
     setSceneToasts((current) => [...current, toast]);
+    if (scene === "afterthought") {
+      // Its receipt is the wheel changing hands; what the reward paid was
+      // left by the reward's own.
+      if (outcome === "together" && wheel === "bond") handWheel("avaia");
+      return;
+    }
     if (scene === "intro") {
       if (outcome === "later") postponeGuideIntro(pubDress);
       else {
@@ -2311,6 +2332,10 @@ export function AuthenticatedMapHomeView({
     if (scene === "territory") {
       // The receipt above re-renders, and the scene is no longer owed.
       rememberGuideTerritory(pubDress);
+      return;
+    }
+    if (scene === "reward" && outcome === "skipped") {
+      setAfterthoughtOwed(true);
       return;
     }
     // The Bond and its new Avaia take it from here: the Avaia arrives on the
