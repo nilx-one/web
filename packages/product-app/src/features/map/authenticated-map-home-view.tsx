@@ -2302,11 +2302,6 @@ export function AuthenticatedMapHomeView({
     outcome: GuideOutcome,
     result: GuidePlayOptions,
   ): void {
-    if (scene === "afterthought") {
-      // Said in passing: the receipt was left by the reward before it.
-      if (outcome === "together" && wheel === "bond") handWheel("avaia");
-      return;
-    }
     sceneSequence.current += 1;
     const toast = guideResultToast(
       `scene:${sceneSequence.current}`,
@@ -2317,6 +2312,12 @@ export function AuthenticatedMapHomeView({
       { bond: pubDress, avaia: avaiaLabel },
     );
     setSceneToasts((current) => [...current, toast]);
+    if (scene === "afterthought") {
+      // Its receipt is the wheel changing hands; what the reward paid was
+      // left by the reward's own.
+      if (outcome === "together" && wheel === "bond") handWheel("avaia");
+      return;
+    }
     if (scene === "intro") {
       if (outcome === "later") postponeGuideIntro(pubDress);
       else {

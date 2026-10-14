@@ -203,7 +203,11 @@ export function guideIntroWaitMs(
     writeSnooze(owner, { skips: snooze.skips, at }, storage);
   }
   const { minMs, maxMs } = guideSnoozeWindow(snooze.skips);
-  if (at < openedAtMs && openedAtMs - at >= minMs) return 0;
+  // A login counts only once it has happened: one stamped after now is the
+  // clock that was set back, not a session that came after her.
+  if (at < openedAtMs && openedAtMs <= nowMs && openedAtMs - at >= minMs) {
+    return 0;
+  }
   return Math.max(0, maxMs - (nowMs - at));
 }
 

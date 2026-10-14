@@ -286,8 +286,8 @@ export function GuideCutsceneView({
   }
 
   // Once it has landed and counted up, what was paid leaves the scene for
-  // the corner. A scene that moves on sooner sends it on its way from where
-  // it was last seen.
+  // the corner. A scene that moves on sooner — however soon — sends it on its
+  // way from where it was last seen.
   const chipsRef = useRef(new Map<string, HTMLElement>());
   const rectsRef = useRef(new Map<string, ChipRect>());
   const paidRef = useRef(paid);
@@ -298,9 +298,20 @@ export function GuideCutsceneView({
   });
   const [flown, setFlown] = useState<string | undefined>(undefined);
   const rewardKey = reward?.achievement ?? gift?.key;
+  // What a cleanup sent on its way, for the moment before it lands: a
+  // development double mount runs the effect again at once for the same
+  // payment, and takes it back.
+  const leavingRef = useRef<
+    | { readonly key: string; readonly timer: ReturnType<typeof setTimeout> }
+    | undefined
+  >(undefined);
   useEffect(() => {
     if (rewardKey === undefined) return;
-    const started = globalThis.performance.now();
+    const leaving = leavingRef.current;
+    if (leaving?.key === rewardKey) {
+      globalThis.clearTimeout(leaving.timer);
+      leavingRef.current = undefined;
+    }
     let done = false;
     function measure(): void {
       for (const [key, element] of chipsRef.current) {
@@ -315,10 +326,8 @@ export function GuideCutsceneView({
         });
       }
     }
-    function fly(): void {
-      if (done) return;
-      done = true;
-      const toasts = paidRef.current.map((line, index) => {
+    function toasts(): GuideRewardToast[] {
+      return paidRef.current.map((line, index) => {
         const from = rectsRef.current.get(line.key);
         return {
           key: `${String(rewardKey)}:${line.key}`,
@@ -329,7 +338,6 @@ export function GuideCutsceneView({
           ...(from === undefined ? {} : { from }),
         };
       });
-      onRewardFlyRef.current?.(toasts);
     }
     const landed = globalThis.setTimeout(
       measure,
@@ -338,13 +346,24 @@ export function GuideCutsceneView({
     const away = globalThis.setTimeout(() => {
       measure();
       setFlown(rewardKey);
-      fly();
+      done = true;
+      onRewardFlyRef.current?.(toasts());
     }, GUIDE_XP_FLY_MS);
     return () => {
       globalThis.clearTimeout(landed);
       globalThis.clearTimeout(away);
-      // A development double mount is not the scene moving on.
-      if (globalThis.performance.now() - started > 100) fly();
+      if (done || rewardKey === undefined) return;
+      // Taken now, as it was last shown; sent a moment later, unless this was
+      // only the effect being run twice.
+      const sent = toasts();
+      const fly = onRewardFlyRef.current;
+      leavingRef.current = {
+        key: rewardKey,
+        timer: globalThis.setTimeout(() => {
+          leavingRef.current = undefined;
+          fly?.(sent);
+        }, 0),
+      };
     };
   }, [rewardKey]);
 

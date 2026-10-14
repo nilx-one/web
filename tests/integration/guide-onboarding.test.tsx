@@ -458,9 +458,6 @@ describe("xSasha, the first time a Bond opens the world", () => {
 
     const replies = await untilReplies(user);
     expect(replies[1]).toHaveTextContent("(skip)");
-    // A person takes longer to answer than a development double mount does,
-    // which is what a scene gone in under 100 ms is taken for.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
     const cameraMoves = vi.mocked(renderer.setCamera).mock.calls.length;
     await user.click(replies[1] as HTMLElement);
 
@@ -506,6 +503,57 @@ describe("xSasha, the first time a Bond opens the world", () => {
     expect(
       await screen.findByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toBeVisible();
+    // Each scene leaves its receipt, and the afterthought exactly one.
+    expect(
+      screen.getAllByText("x0skai takes the wheel. It’s the two of you now."),
+    ).toHaveLength(1);
+  }, 30_000);
+
+  it("sends the reward to the corner however fast it is skipped, for a person who asked for less motion", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: query === "(prefers-reduced-motion: reduce)",
+          media: query,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          onchange: null,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    try {
+      const user = userEvent.setup();
+      renderWorld();
+
+      await user.click(
+        await screen.findByRole("button", { name: "Set up x0skai" }),
+      );
+      const address = await screen.findByLabelText("pub_dress");
+      await waitFor(() => expect(address).toHaveValue("sk"));
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      // She is already there and the line is whole: skipped the moment it
+      // can be.
+      const skip = await screen.findByRole("button", { name: /\(skip\)/ });
+      await user.click(skip);
+      await waitFor(() =>
+        expect(document.querySelector(".guide-cutscene")).toBeNull(),
+      );
+
+      await waitFor(() => {
+        const toasts = document.querySelector(".guide-reward-toasts");
+        expect(
+          [...(toasts?.querySelectorAll(".guide-toast") ?? [])].map(
+            (toast) => toast.textContent,
+          ),
+        ).toEqual(["+20 Bond experience", "x0skai reached level 1"]);
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   }, 30_000);
 
   it("cuts the afterthought short without her turning back a third time", async () => {

@@ -167,6 +167,16 @@ describe("when she comes back after being put off", () => {
     expect(wait(storage, 10, 80)).toBe(0);
   });
 
+  it("does not take a login stamped after now for a session that came after her", () => {
+    const storage = memoryStorage();
+    // Put off at minute 500, the world opened at 100, and the clock now says
+    // 20: it was set back, and the wait starts over from now.
+    postponeGuideIntro("0x0sky", 500 * MINUTE, storage);
+    expect(wait(storage, 100, 20)).toBe(60);
+    expect(wait(storage, 100, 79)).toBe(1);
+    expect(wait(storage, 100, 80)).toBe(0);
+  });
+
   it("ignores a snooze it cannot read", () => {
     const storage = memoryStorage();
     storage.items.set(

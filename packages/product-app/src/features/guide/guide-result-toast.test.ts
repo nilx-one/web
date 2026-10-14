@@ -77,6 +77,20 @@ describe("scene result notifications", () => {
     }
     expect(JSON.stringify(reward)).toBe(original);
   });
+  it("says the Avaia has the wheel once the afterthought hands it over", () => {
+    const toast = guideResultToast(
+      "5",
+      "afterthought",
+      "together",
+      {},
+      t,
+      names,
+    );
+    expect(toast.title).toBe("Scene complete");
+    expect(toast.description).toBe(
+      "Avaia takes the wheel. It’s the two of you now.",
+    );
+  });
   it("does not invent gifts or achievements for an empty result", () => {
     expect(
       guideResultToast("4", "reward", "done", {}, t, names).description,

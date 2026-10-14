@@ -133,7 +133,11 @@ turns back for it: _Ледь не забула — далі ви вдвох. Я 
 way she came for the reward, found on her way out and turning round, and the
 Avaia walks up; going on hands the wheel over as above. It has no skip of its
 own and pays nothing, so a Bond that cut the reward short never meets a third
-scene.
+scene. Like every scene it leaves one receipt: that the Avaia has the wheel.
+The reward's own receipt already said what it paid.
+
+However soon a reward is skipped — a person who asked for reduced motion can
+skip it the moment the line is there — what it paid still goes to the corner.
 
 ## Backpacks
 

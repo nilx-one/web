@@ -37,6 +37,8 @@ export const GUIDE_EN = {
   "system.ping.done": "Understood",
   "system.ping.window": "Service window",
   "guide.result.title": "Scene complete",
+  "guide.result.afterthought":
+    "{avaia} takes the wheel. It’s the two of you now.",
   "guide.result.territory":
     "Opening a cell takes time. Orbs on opened ground give you or your Avaia experience.",
   "guide.result.create":
@@ -155,6 +157,7 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.done": "Зрозуміло",
   "system.ping.window": "Час робіт",
   "guide.result.title": "Катсцену завершено",
+  "guide.result.afterthought": "{avaia} за кермом. Тепер ви вдвох.",
   "guide.result.territory":
     "Клітинка відкривається за таймером. Кульки на відкритій території дають досвід вам або вашій Avaia.",
   "guide.result.create":
@@ -270,6 +273,7 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "system.ping.done": "Понятно",
   "system.ping.window": "Время работ",
   "guide.result.title": "Катсцена завершена",
+  "guide.result.afterthought": "{avaia} за рулём. Теперь вы вдвоём.",
   "guide.result.territory":
     "Клетка открывается по таймеру. Шарики на открытой территории дают опыт вам или вашей Avaia.",
   "guide.result.create":
