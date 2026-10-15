@@ -63,6 +63,7 @@ import { avaiaLines } from "./avaia-lines";
 import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
+import { HANDOVER_MS } from "./wheel-handover";
 import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import {
@@ -1917,7 +1918,8 @@ describe("AuthenticatedMapHomeView", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
       );
-      act(() => vi.advanceTimersByTime(2_000));
+      // The Bond accepts taps only after the three-second wheel handover.
+      act(() => vi.advanceTimersByTime(HANDOVER_MS + 200));
       act(() =>
         (
           mapRenderer as ReturnType<typeof createMapRendererDouble> & {
@@ -1933,7 +1935,11 @@ describe("AuthenticatedMapHomeView", () => {
       expect(bond?.lngLat[0]).toBeGreaterThan(here.longitude);
       expect(onManualBondMove).not.toHaveBeenCalled();
       await act(async () => vi.advanceTimersByTimeAsync(90_000));
-      expect(onManualBondMove).toHaveBeenCalledWith(here, there);
+      expect(onManualBondMove).toHaveBeenCalledOnce();
+      const [from, arrived] = vi.mocked(onManualBondMove).mock.calls[0]!;
+      expect(from).toEqual(here);
+      expect(arrived.longitude).toBeCloseTo(there.longitude, 6);
+      expect(arrived.latitude).toBeCloseTo(there.latitude, 6);
     });
   });
 
