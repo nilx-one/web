@@ -162,7 +162,7 @@ describe("InventoryPanel", () => {
     expect(screen.getAllByRole("region")[0]).toHaveAccessibleName("Avaia");
     const bond = within(screen.getByRole("region", { name: "You" }));
     expect(bond.getByRole("meter")).toHaveAccessibleName(
-      "2 of 40 cells occupied",
+      "2 of 12 cells occupied",
     );
     expect(bond.getByRole("meter")).toHaveAttribute("value", "2");
     expect(bond.getByRole("list")).toHaveTextContent("Bottle");
