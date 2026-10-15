@@ -100,7 +100,9 @@ describe("moveManualBondLocation", () => {
   it("fails closed on conflict or invalid coordinates", async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 409 }));
     await expect(
-      moveManualBondLocation(expected, target, { fetch: fetchImpl as typeof fetch }),
+      moveManualBondLocation(expected, target, {
+        fetch: fetchImpl as typeof fetch,
+      }),
     ).resolves.toBe(false);
     await expect(
       moveManualBondLocation(expected, { longitude: NaN, latitude: 1 }, {
