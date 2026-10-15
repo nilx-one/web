@@ -53,10 +53,15 @@ import {
 import { SoundSettings } from "../../shell/sound-settings";
 import { SettingsSlider } from "../../shell/settings-slider";
 import { PickupSettings } from "../finds/pickup-settings";
-import { useBackpackGift } from "../inventory/backpack-gift";
+import { oweBackpackScene, useBackpackGift } from "../inventory/backpack-gift";
 import { useCraftCompletion } from "../inventory/craft";
-import { pickUpFind } from "../inventory/inventory";
+import { pickUpFind, useInventory } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
+import {
+  ERROR_TOAST_MS,
+  useErrorToastFeedback,
+  useTransientFlag,
+} from "../../shell/error-toast-feedback";
 import { thingName } from "../inventory/thing-name";
 import { useWorkshop } from "../inventory/workshops";
 import {
@@ -1073,6 +1078,10 @@ export function AuthenticatedMapHomeView({
       title: t(issue.title),
       description: t(issue.detail),
     }));
+  const manualBondFailedShown = useTransientFlag(
+    manualBondFailed,
+    ERROR_TOAST_MS,
+  );
   const statusToasts = [
     ...(statusToast === undefined || statusToast.id === dismissedStatus
       ? []
@@ -1080,7 +1089,7 @@ export function AuthenticatedMapHomeView({
     ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
     ...(findToast === undefined ? [] : [findToast]),
-    ...(manualBondFailed
+    ...(manualBondFailedShown
       ? [
           {
             id: "manual-bond-move-failed",
@@ -1156,7 +1165,6 @@ export function AuthenticatedMapHomeView({
         return;
       }
       if (event.kind === "orb-taken") {
-        cue("failure");
         setFindToast({
           id: `orb-taken-${event.orb}`,
           kind: "error",
@@ -1167,7 +1175,6 @@ export function AuthenticatedMapHomeView({
         return;
       }
       if (event.kind === "find-taken") {
-        cue("failure");
         setFindToast({
           id: `find-taken-${event.artifactId}`,
           kind: "error",
@@ -1200,21 +1207,37 @@ export function AuthenticatedMapHomeView({
             holder: event.earner,
           })
             .then(async (answer) => {
-              if (answer === "already-in" || answer.ok) return;
-              if (answer.error !== "no_room") return;
+              if (answer === "already-in") return;
+              // A find the pockets could not hold brought xSasha's gift:
+              // it is given already, and her scene is owed.
+              if (answer.ok && answer.gifted === true) {
+                oweBackpackScene(pubDress);
+              }
+              const refused = answer.ok ? answer.leftBehind : answer.error;
+              if (refused !== "no_room" && refused !== "too_big") return;
               const item = await findItems.findItem?.(
                 event.artifactId,
                 event.tier,
               );
-              setFindToast({
-                id: `find-full-${event.artifactId}`,
-                kind: "error",
-                title: t("inventory.title"),
-                description: t("inventory.full").replace(
-                  "{item}",
-                  item?.kind === "item" ? thingName(t, item.id) : "",
-                ),
-              });
+              const name = item?.kind === "item" ? thingName(t, item.id) : "";
+              setFindToast(
+                refused === "too_big"
+                  ? {
+                      id: `find-too-big-${event.artifactId}`,
+                      kind: "error",
+                      title: t("inventory.tooBig.title"),
+                      description: t("inventory.tooBig").replace(
+                        "{item}",
+                        name,
+                      ),
+                    }
+                  : {
+                      id: `find-full-${event.artifactId}`,
+                      kind: "error",
+                      title: t("inventory.title"),
+                      description: t("inventory.full").replace("{item}", name),
+                    },
+              );
             })
             .catch(() => undefined);
         }
@@ -1490,7 +1513,7 @@ export function AuthenticatedMapHomeView({
     if (findToast === undefined) return;
     const fades = globalThis.setTimeout(
       () => setFindToast(undefined),
-      FIND_TOAST_MS,
+      findToast.kind === "error" ? ERROR_TOAST_MS : FIND_TOAST_MS,
     );
     return () => globalThis.clearTimeout(fades);
   }, [findToast]);
@@ -1527,6 +1550,7 @@ export function AuthenticatedMapHomeView({
       : undefined;
   const avaiaStudied = studiedBy(avaiaWalk.notebook, avaiaAddress);
   const reducedMotion = prefersReducedMotion();
+  const { model: carriedInventory } = useInventory(pubDress, findItems);
   const guide = useGuideCutscene({
     renderer,
     anchor: observedPosition,
@@ -1537,6 +1561,7 @@ export function AuthenticatedMapHomeView({
           avaia: {
             model: avaiaAvatar.modelId as AvatarModelId,
             appearance: avaiaAvatar.appearance,
+            backpack: carriedInventory.avaia.carry === "backpack",
           },
         }),
     bondName: pubDress,
@@ -1548,6 +1573,7 @@ export function AuthenticatedMapHomeView({
   const systemInformer = useSystemInformer();
   useSystemInformerBlock(guideActive || achievementDialog !== undefined);
   useSystemErrorNotices(statusToasts);
+  useErrorToastFeedback(statusToasts, feedback, cue);
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
   // In a cutscene the characters who are not the person speak: xSasha says
   // her line when it opens. The person's own replies are never voiced.
@@ -2135,6 +2161,7 @@ export function AuthenticatedMapHomeView({
         body.seat === "avaia" && stance === undefined && declaredPosition
           ? null
           : createWheelBodyHandle({
+              carry: carriedInventory[body.seat].carry,
               body,
               address: address(body.seat),
               study: study(body.seat),
@@ -2196,6 +2223,7 @@ export function AuthenticatedMapHomeView({
     avaiaWalk,
     bondAvatar?.appearance,
     cameraZoom,
+    carriedInventory,
     declaredPosition,
     handover,
     location.state,
@@ -2784,7 +2812,10 @@ export function AuthenticatedMapHomeView({
                     </h2>
                   </div>
                 </div>
-                <div className="bond-dock__scroll" onScroll={handleDockScroll}>
+                <div
+                  className={`bond-dock__scroll${activeDetail === "avatar" ? " bond-dock__scroll--avatar" : ""}`}
+                  onScroll={handleDockScroll}
+                >
                   {section === "identity" && activeDetail === undefined ? (
                     <div className="bond-profile">
                       <AddressField

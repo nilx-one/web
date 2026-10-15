@@ -124,6 +124,7 @@ export interface GuideCutsceneInput {
   readonly avaia?: {
     readonly model: AvatarModelId;
     readonly appearance: Parameters<typeof resolveAvatarScene>[1];
+    readonly backpack?: boolean;
   };
   readonly bondName: string;
   readonly names: GuideNames;
@@ -487,6 +488,7 @@ export function useGuideCutscene({
   const voice = studyVoice(guideModel(bondModel));
   const avaiaModel = avaia?.model;
   const avaiaAppearance = avaia?.appearance;
+  const avaiaBackpack = avaia?.backpack ?? false;
   useEffect(() => {
     const avatars = renderer.avatars;
     if (!active || avatars === undefined) return;
@@ -506,6 +508,7 @@ export function useGuideCutscene({
         const pose = sampleGuideBody(joined, nowMs, reducedMotion);
         avatars?.upsert({
           id: GUIDE_AVAIA_HANDLE_ID,
+          backpack: avaiaBackpack,
           modelId: avaiaModel,
           lngLat: [pose.point.longitude, pose.point.latitude],
           bearingDeg: pose.bearingDeg,
@@ -523,6 +526,7 @@ export function useGuideCutscene({
         const pose = sampleGuideBody(motion, nowMs, reducedMotion);
         avatars?.upsert({
           id: GUIDE_HANDLE_ID,
+          backpack: true,
           modelId: model,
           lngLat: [pose.point.longitude, pose.point.latitude],
           bearingDeg: pose.bearingDeg,
@@ -542,7 +546,15 @@ export function useGuideCutscene({
       avatars.remove(GUIDE_HANDLE_ID);
       avatars.remove(GUIDE_AVAIA_HANDLE_ID);
     };
-  }, [active, model, avaiaModel, avaiaAppearance, reducedMotion, renderer]);
+  }, [
+    active,
+    model,
+    avaiaModel,
+    avaiaAppearance,
+    avaiaBackpack,
+    reducedMotion,
+    renderer,
+  ]);
 
   const bondVoice = studyVoice(bondModel);
   const state: GuideCutsceneState | undefined =

@@ -245,8 +245,15 @@ function decodeInventoryAnswer(value: string): CoreInventoryAnswer {
     isRecord(parsed.outcome) &&
     isCount(parsed.outcome.experience) &&
     (parsed.item === undefined ||
-      (typeof parsed.item === "string" && CORE_CODE.test(parsed.item)))
+      (typeof parsed.item === "string" && CORE_CODE.test(parsed.item))) &&
+    (parsed.outcome.gifted === undefined ||
+      typeof parsed.outcome.gifted === "boolean") &&
+    (parsed.outcome.left_behind === undefined ||
+      parsed.outcome.left_behind === null ||
+      (typeof parsed.outcome.left_behind === "string" &&
+        CORE_CODE.test(parsed.outcome.left_behind)))
   ) {
+    const leftBehind = parsed.outcome.left_behind;
     return {
       ok: true,
       state: JSON.stringify(parsed.state),
@@ -254,6 +261,8 @@ function decodeInventoryAnswer(value: string): CoreInventoryAnswer {
       seedsSpent: decodeAmount(parsed.outcome.seeds_spent),
       experience: parsed.outcome.experience,
       ...(parsed.item === undefined ? {} : { item: parsed.item }),
+      ...(parsed.outcome.gifted === true ? { gifted: true } : {}),
+      ...(typeof leftBehind === "string" ? { leftBehind } : {}),
     };
   }
   throw new Error("0x1 Core returned an invalid inventory answer");

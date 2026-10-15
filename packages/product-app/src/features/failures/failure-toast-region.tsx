@@ -24,6 +24,7 @@ import { createPortal } from "react-dom";
 
 import { useSystemInformer } from "../system-informer/system-informer";
 import { useLocalization, type Translate } from "../../shell/localization";
+import { ERROR_TOAST_MS } from "../../shell/error-toast-feedback";
 import { useSoundCue } from "../../shell/sound-preference";
 import { useToastViewportNode } from "../../shell/toast-viewport";
 
@@ -129,16 +130,21 @@ export interface FailureNoticeProviderProps {
   readonly children: ReactNode;
   /** The host's sound; a failure is marked with a cue as well as a notice. */
   readonly sound?: SoundCapability;
+  /** The host's feedback; a failure is felt where the host can say so. */
+  readonly feedback?: Pick<HostPort, "impact">;
 }
 
 /**
  * Mounts the single failure toast region for the whole client and exposes the
- * seam a failure producer publishes through. Notices are never dismissed on a
- * timer: a person reads them for as long as they need and closes them.
+ * seam a failure producer publishes through. A notice that offers a retry
+ * stays until it is closed or used, so the retry can be reached; any other
+ * notice reports something that happened and leaves on its own after
+ * `ERROR_TOAST_MS`.
  */
 export function FailureNoticeProvider({
   children,
   sound,
+  feedback,
 }: FailureNoticeProviderProps) {
   const { t } = useLocalization();
   const informer = useSystemInformer();
@@ -159,16 +165,26 @@ export function FailureNoticeProvider({
   // Read through a ref so `publish` keeps one identity for its whole life.
   const cue = useSoundCue(sound);
   const cueRef = useRef(cue);
+  const feedbackRef = useRef(feedback);
   useEffect(() => {
     cueRef.current = cue;
+    feedbackRef.current = feedback;
   });
+  const timers = useRef(new Set<ReturnType<typeof globalThis.setTimeout>>());
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const timer of pending) globalThis.clearTimeout(timer);
+      pending.clear();
+    };
+  }, []);
 
   const publish = useCallback<PublishFailure>((report, options = {}) => {
     sequence.current += 1;
     const id = `failure-${sequence.current}`;
 
     try {
-      options.feedback?.impact("light");
+      (options.feedback ?? feedbackRef.current)?.impact("heavy");
     } catch {
       // Host effects are best-effort presentation. A failed haptic/vibration
       // must never hide, delay, or otherwise alter the failure event itself.
@@ -207,6 +223,13 @@ export function FailureNoticeProvider({
         ...(options.onRetry === undefined ? {} : { onRetry: options.onRetry }),
       },
     ]);
+    if (options.onRetry === undefined) {
+      const timer = globalThis.setTimeout(() => {
+        timers.current.delete(timer);
+        setPresented((current) => current.filter((entry) => entry.id !== id));
+      }, ERROR_TOAST_MS);
+      timers.current.add(timer);
+    }
   }, []);
 
   const dismiss = useCallback((id: string) => {

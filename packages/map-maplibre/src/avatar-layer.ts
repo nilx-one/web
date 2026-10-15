@@ -37,6 +37,12 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 import { createPingModel } from "./ping-model";
+import {
+  BACKPACK_ASSET_URL,
+  createBackpackSource,
+  disposeBackpack,
+  mountBackpack,
+} from "./backpack-model";
 
 import {
   loadedTerrainElevationMeters,
@@ -73,6 +79,8 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly reducedMotion?: boolean;
 };
 interface AvatarInstance {
+  backpack?: Object3D;
+  backpackLoading?: boolean;
   handle: SceneHandle;
   drone?: ReturnType<typeof createPingModel>;
   root?: Object3D;
@@ -153,6 +161,10 @@ export function createAvatarLayer(
   const requestMount = options.requestMount ?? (() => undefined);
   const instances = new Map<string, AvatarInstance>();
   const assetCache = new Map<AvatarModelId, Promise<GLTF>>();
+  const backpackSource = createBackpackSource(
+    () => new GLTFLoader().loadAsync(BACKPACK_ASSET_URL),
+    now,
+  );
   const abortController = new AbortController();
   const scene = new Scene();
   // Custom layers have their own Three scene: MapLibre's map lighting does
@@ -210,6 +222,52 @@ export function createAvatarLayer(
   function applyVisibility(instance: AvatarInstance): void {
     if (instance.root === undefined) return;
     applyAvatarNodeVisibility(instance.root, instance.handle.visibleNodes);
+    syncBackpack(instance);
+  }
+
+  function syncBackpack(instance: AvatarInstance): void {
+    if (instance.backpack !== undefined) {
+      instance.backpack.visible = instance.handle.backpack === true;
+      return;
+    }
+    if (
+      !instance.handle.backpack ||
+      instance.root === undefined ||
+      instance.backpackLoading
+    )
+      return;
+    const request = backpackSource.request();
+    if (request === undefined) return;
+    const root = instance.root;
+    const localGeneration = instance.loadGeneration;
+    instance.backpackLoading = true;
+    void request
+      .then((asset) => {
+        if (
+          disposed ||
+          localGeneration !== instance.loadGeneration ||
+          instance.root !== root
+        )
+          return;
+        const mounted = mountBackpack(root, asset.scene);
+        if (mounted !== undefined) {
+          instance.backpack = mounted;
+          mounted.visible = instance.handle.backpack === true;
+          map?.triggerRepaint();
+        }
+      })
+      .catch(() => {
+        // A carry asset must never prevent the body or map from rendering;
+        // the source forgets a failed fetch, so a later sync tries again.
+        if (localGeneration === instance.loadGeneration)
+          instance.backpackLoading = false;
+      });
+  }
+
+  function releaseBackpack(instance: AvatarInstance): void {
+    if (instance.backpack !== undefined) disposeBackpack(instance.backpack);
+    delete instance.backpack;
+    delete instance.backpackLoading;
   }
 
   function terrainAltitude(instance: AvatarInstance): number {
@@ -304,6 +362,7 @@ export function createAvatarLayer(
       const root = cloneSkeleton(asset.scene);
       const mixer = new AnimationMixer(root);
       instance.root?.removeFromParent();
+      releaseBackpack(instance);
       instance.root = root;
       instance.mixer = mixer;
       instance.clips = new Map(
@@ -332,6 +391,10 @@ export function createAvatarLayer(
       return;
     }
     existing?.drone?.dispose();
+    if (existing !== undefined) {
+      existing.loadGeneration = ++generation;
+      releaseBackpack(existing);
+    }
     existing?.root?.removeFromParent();
     existing?.mixer?.stopAllAction();
     const instance: AvatarInstance = {
@@ -424,6 +487,7 @@ export function createAvatarLayer(
       instance.loadGeneration = ++generation;
       instance.mixer?.stopAllAction();
       instance.drone?.dispose();
+      releaseBackpack(instance);
       instance.root?.removeFromParent();
       instances.delete(id);
       map?.triggerRepaint();
@@ -446,10 +510,12 @@ export function createAvatarLayer(
       for (const instance of instances.values()) {
         instance.mixer?.stopAllAction();
         instance.drone?.dispose();
+        releaseBackpack(instance);
         instance.root?.removeFromParent();
       }
       instances.clear();
       assetCache.clear();
+      backpackSource.release();
       renderer?.dispose();
       renderer = undefined;
       map = undefined;

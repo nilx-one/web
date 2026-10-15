@@ -1312,7 +1312,7 @@ export function ProductApp({
     <QueryClientProvider client={queryClient}>
       <ToastViewportProvider>
         <SystemInformerProvider>
-          <FailureNoticeProvider sound={host.sound}>
+          <FailureNoticeProvider sound={host.sound} feedback={host}>
             <RouterProvider router={router} />
           </FailureNoticeProvider>
         </SystemInformerProvider>

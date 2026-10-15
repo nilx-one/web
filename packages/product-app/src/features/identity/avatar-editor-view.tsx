@@ -43,78 +43,80 @@ export function AvatarEditorView({
 
   return (
     <div className="avatar-editor">
-      {leaving === undefined ? null : (
-        <LeavePrompt onStay={leaving.onStay} onDiscard={leaving.onDiscard} />
-      )}
+      <div className="avatar-editor__content">
+        {leaving === undefined ? null : (
+          <LeavePrompt onStay={leaving.onStay} onDiscard={leaving.onDiscard} />
+        )}
 
-      <div className="avatar-editor__stage">
-        <AvatarPreviewCanvas
-          scene={state.scene}
-          framing="full-body"
-          label={t("avatar.preview.draft").replaceAll(
-            "{name}",
-            state.selectedName,
-          )}
-          className="avatar-editor__preview"
-          animated
-        />
-      </div>
+        <div className="avatar-editor__stage">
+          <AvatarPreviewCanvas
+            scene={state.scene}
+            framing="full-body"
+            label={t("avatar.preview.draft").replaceAll(
+              "{name}",
+              state.selectedName,
+            )}
+            className="avatar-editor__preview"
+            animated
+          />
+        </div>
 
-      <fieldset className="avatar-editor__models">
-        <legend>{t("dock.model")}</legend>
-        {state.models.map((option) => (
-          <label
-            key={option.model}
-            className={`avatar-editor__model${
-              option.selected ? " avatar-editor__model--selected" : ""
-            }`}
-          >
-            <img src={option.thumbnailUrl} alt="" aria-hidden="true" />
-            <span>
-              <strong>{option.name}</strong>
-              <small>{translateCopy(t, option.detail)}</small>
-            </span>
-            <input
-              type="radio"
-              name="avatar-model"
-              value={option.model}
-              checked={option.selected}
-              disabled={state.busy}
-              onChange={() => onChooseModel(option.model)}
-            />
-          </label>
-        ))}
-      </fieldset>
+        <fieldset className="avatar-editor__models">
+          <legend>{t("dock.model")}</legend>
+          {state.models.map((option) => (
+            <label
+              key={option.model}
+              className={`avatar-editor__model${
+                option.selected ? " avatar-editor__model--selected" : ""
+              }`}
+            >
+              <img src={option.thumbnailUrl} alt="" aria-hidden="true" />
+              <span>
+                <strong>{option.name}</strong>
+                <small>{translateCopy(t, option.detail)}</small>
+              </span>
+              <input
+                type="radio"
+                name="avatar-model"
+                value={option.model}
+                checked={option.selected}
+                disabled={state.busy}
+                onChange={() => onChooseModel(option.model)}
+              />
+            </label>
+          ))}
+        </fieldset>
 
-      <p className="avatar-editor__note">
-        {translateCopy(t, state.appearanceNote)}
-      </p>
-
-      {/* Hidden for now: equipping an item here does not persist. Re-enable
-          once that is fixed — onEquip and state.sections are untouched, only
-          this rendering is suppressed.
-      {state.sections.map((section) => (
-        <WardrobeSection
-          key={section.slot}
-          slot={section.slot}
-          label={section.label}
-          multiple={section.multiple}
-          items={section.items}
-          busy={state.busy}
-          onEquip={onEquip}
-        />
-      ))}
-      */}
-
-      {state.error === undefined ? null : (
-        <p className="profile-edit__error" role="alert">
-          {translateCopy(t, state.error)}
+        <p className="avatar-editor__note">
+          {translateCopy(t, state.appearanceNote)}
         </p>
-      )}
 
-      <p className="avatar-editor__note">
-        {translateCopy(t, state.storageNote)}
-      </p>
+        {/* Hidden for now: equipping an item here does not persist. Re-enable
+            once that is fixed — onEquip and state.sections are untouched, only
+            this rendering is suppressed.
+        {state.sections.map((section) => (
+          <WardrobeSection
+            key={section.slot}
+            slot={section.slot}
+            label={section.label}
+            multiple={section.multiple}
+            items={section.items}
+            busy={state.busy}
+            onEquip={onEquip}
+          />
+        ))}
+        */}
+
+        {state.error === undefined ? null : (
+          <p className="profile-edit__error" role="alert">
+            {translateCopy(t, state.error)}
+          </p>
+        )}
+
+        <p className="avatar-editor__note">
+          {translateCopy(t, state.storageNote)}
+        </p>
+      </div>
 
       <div className="avatar-editor__actions">
         <button type="button" onClick={onCancel} disabled={state.busy}>
