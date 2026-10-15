@@ -227,6 +227,36 @@ export function needsInventoryLayoutMigration(state: string): boolean {
   }
 }
 
+/** The first economy whose Core reads and repacks legacy layouts. */
+const LAYOUT_ECONOMY_VERSION = 3;
+
+/**
+ * Lets Core repack a legacy layout, once. Only a Core that knows the new
+ * geometry is asked, and the check runs inside the journal's per-owner queue,
+ * so several screens loading together write one migrated state, not one each.
+ */
+export async function normalizeInventoryLayout(
+  owner: string,
+  core: InventoryPort,
+  economyVersion: number | undefined,
+  now: () => number = Date.now,
+): Promise<boolean> {
+  const apply = core.applyInventoryCommand;
+  if (apply === undefined || (economyVersion ?? 0) < LAYOUT_ECONOMY_VERSION) {
+    return false;
+  }
+  return updateInventory(owner, async (current) => {
+    if (!needsInventoryLayoutMigration(current.state)) return undefined;
+    const answer = await apply.call(
+      core,
+      current.state,
+      { op: "normalize" },
+      now(),
+    );
+    return answer.ok ? { state: answer.state } : undefined;
+  });
+}
+
 /** The inventory as stored, kept current with the journal, and the catalog. */
 export function useInventory(
   owner: string,
@@ -266,24 +296,10 @@ export function useInventory(
   }, [core]);
 
   useEffect(() => {
-    if (
-      core?.applyInventoryCommand === undefined ||
-      (catalog?.economyVersion ?? 0) < 3
-    ) {
-      return;
-    }
-    let active = true;
-    void readCommittedJournal(owner)
-      .then((snapshot) => {
-        if (active && needsInventoryLayoutMigration(snapshot.inventory.state)) {
-          return applyInventory(owner, core, { op: "normalize" });
-        }
-        return undefined;
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
+    if (core === undefined) return;
+    void normalizeInventoryLayout(owner, core, catalog?.economyVersion).catch(
+      () => undefined,
+    );
   }, [owner, core, catalog?.economyVersion]);
 
   return { model, catalog };

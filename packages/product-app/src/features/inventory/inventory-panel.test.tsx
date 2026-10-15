@@ -93,7 +93,7 @@ describe("InventoryPanel", () => {
     );
   });
 
-  it("frames every carry at 3×4 size: pockets light three cells, bags scroll", () => {
+  it("frames every carry at 3×4 size: pockets draw their three cells, bags scroll", () => {
     const snapshot = useInventory("0x0sky", core);
     vi.mocked(useInventory).mockReturnValueOnce({
       ...snapshot,
@@ -108,24 +108,34 @@ describe("InventoryPanel", () => {
       const region = screen.getByRole("region", { name });
       const scroller = within(region).getByRole("group");
       return {
+        region,
         scroller,
-        cells: region.querySelectorAll(".inventory__cell"),
-        active: region.querySelectorAll(
-          ".inventory__cell:not(.inventory__cell--inactive)",
-        ),
+        cells: region.querySelectorAll<HTMLElement>(".inventory__cell"),
       };
     };
 
     const pocket = holder("Avaia");
-    expect(pocket.cells).toHaveLength(12);
-    expect(pocket.active).toHaveLength(3);
+    expect(pocket.cells).toHaveLength(3);
+    expect([...pocket.cells].map((cell) => cell.style.gridColumn)).toEqual([
+      "1",
+      "1",
+      "1",
+    ]);
+    expect([...pocket.cells].map((cell) => cell.style.gridRow)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+    expect(pocket.region).toHaveTextContent("Pocket — 1×3");
+    expect(pocket.region).toHaveTextContent("3 cells");
     expect(
       pocket.scroller.style.getPropertyValue("--inventory-frame-columns"),
     ).toBe("3");
 
     const bag = holder("You");
     expect(bag.cells).toHaveLength(120);
-    expect(bag.active).toHaveLength(120);
+    expect(bag.region).toHaveTextContent("Bag — 12×10");
+    expect(bag.region).toHaveTextContent("120 cells");
     expect(
       bag.scroller.style.getPropertyValue("--inventory-frame-columns"),
     ).toBe("3");

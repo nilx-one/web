@@ -57,6 +57,13 @@ function priceOf(
   return catalog?.crafted.find((item) => item.id === id)?.sellPrice;
 }
 
+/** The cell-count message for a plural category; "two" and "zero" read as "other". */
+function cellsForm(category: Intl.LDMLPluralRule) {
+  return category === "one" || category === "few" || category === "many"
+    ? category
+    : "other";
+}
+
 interface Selection {
   readonly holder: CoreHolder;
   readonly thing: PlacedThing;
@@ -75,7 +82,8 @@ export function InventoryPanel({
   first = "bond",
   shopAndCraft = false,
 }: InventoryPanelProps) {
-  const { t } = useLocalization();
+  const { t, resolved } = useLocalization();
+  const plural = new Intl.PluralRules(resolved);
   const { model, catalog } = useInventory(owner, core);
   const inventoryId = useId();
   const [selected, setSelected] = useState<Selection | undefined>();
@@ -116,11 +124,9 @@ export function InventoryPanel({
 
   function holderGrid(holder: CoreHolder, carried: CarriedGrid) {
     const { width, height } = carryGrid(carried.carry);
-    // Every carry is shown in a backpack-sized frame: a smaller carry lights
-    // only its own cells inside it, a larger one scrolls within it.
+    // Every carry sits in a backpack-sized frame, so the cards line up: a
+    // smaller carry draws only its own cells, a larger one scrolls within it.
     const frame = carryGrid("backpack");
-    const columns = Math.max(width, frame.width);
-    const rows = Math.max(height, frame.height);
     const used = carried.things.reduce<number | undefined>((total, thing) => {
       const size = sizeOf(catalog, thing.id);
       return total === undefined || size === undefined
@@ -132,7 +138,14 @@ export function InventoryPanel({
     )
       .replace("{used}", String(used))
       .replace("{total}", String(width * height));
-    const cells = Array.from({ length: columns * rows }, (_, index) => index);
+    const carrySize = t("inventory.carrySize")
+      .replace("{carry}", t(`inventory.carryTitle.${carried.carry}`))
+      .replace("{width}", String(width))
+      .replace("{height}", String(height));
+    const cellCount = t(
+      `inventory.cells.${cellsForm(plural.select(width * height))}`,
+    ).replace("{count}", String(width * height));
+    const cells = Array.from({ length: width * height }, (_, index) => index);
     return (
       <section
         className="inventory__holder"
@@ -145,7 +158,10 @@ export function InventoryPanel({
             <strong>
               {t(holder === "bond" ? "inventory.bond" : "inventory.avaia")}
             </strong>
-            <small>{t(`inventory.carryName.${carried.carry}`)}</small>
+            <small className="inventory__carry">
+              <span>{carrySize}</span>
+              <span>{cellCount}</span>
+            </small>
           </div>
           <span className="inventory__capacity" aria-label={occupancy}>
             {used ?? "—"}
@@ -218,24 +234,22 @@ export function InventoryPanel({
             className="inventory__grid"
             style={
               {
-                "--inventory-columns": columns,
-                "--inventory-rows": rows,
+                "--inventory-columns": width,
+                "--inventory-rows": height,
               } as CSSProperties
             }
           >
-            {cells.map((index) => {
-              const x = index % columns;
-              const y = Math.floor(index / columns);
-              const usable = x < width && y < height;
-              return (
-                <span
-                  key={`cell-${index}`}
-                  className={`inventory__cell${usable ? "" : " inventory__cell--inactive"}`}
-                  style={{ gridColumn: x + 1, gridRow: y + 1 }}
-                  aria-hidden="true"
-                />
-              );
-            })}
+            {cells.map((index) => (
+              <span
+                key={`cell-${index}`}
+                className="inventory__cell"
+                style={{
+                  gridColumn: (index % width) + 1,
+                  gridRow: Math.floor(index / width) + 1,
+                }}
+                aria-hidden="true"
+              />
+            ))}
             {carried.things.map((thing, index) => {
               const size = sizeOf(catalog, thing.id) ?? { width: 1, height: 1 };
               const pressed =
