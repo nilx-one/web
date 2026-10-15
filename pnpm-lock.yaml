@@ -135,8 +135,8 @@ importers:
   apps/site:
     dependencies:
       '@aiaiaiai/4x-errors-browser':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.2.0
+        version: 0.2.0
       '@nilx-one/core-wasm':
         specifier: workspace:*
         version: link:../../packages/core-wasm
@@ -397,8 +397,8 @@ packages:
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
 
-  '@aiaiaiai/4x-errors-browser@0.1.0':
-    resolution: {integrity: sha512-enyPr7OK468H29rLb2VogIm8bSl4my4pU+vjZ/et4qbUD2JNHnPtm9Os5kqbtILjSXRNlFB4M0V+ZmE+m3GfRg==}
+  '@aiaiaiai/4x-errors-browser@0.2.0':
+    resolution: {integrity: sha512-F+8SEP4rOSR4j6CGqXG5ArthJomKbvdGEwQ669OfE6U82wR+pdIcfc8vbY0ZOCeb+B7nIblW2WRXnDrd/qiszA==}
     engines: {node: '>=24'}
 
   '@aiaiaiai/webllm@0.1.0':
@@ -1877,7 +1877,7 @@ snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
-  '@aiaiaiai/4x-errors-browser@0.1.0': {}
+  '@aiaiaiai/4x-errors-browser@0.2.0': {}
 
   '@aiaiaiai/webllm@0.1.0':
     dependencies:
