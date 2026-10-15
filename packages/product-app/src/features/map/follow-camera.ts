@@ -111,7 +111,7 @@ export interface CameraKeyEvent {
 
 /** A key pressed into a control belongs to that control, not to the camera. */
 const CONTROL_SELECTOR =
-  "input, textarea, select, button, a[href], summary, [contenteditable]:not([contenteditable='false']), [role='button'], [role='textbox'], [role='slider'], [role='menuitem'], [role='tab'], [role='dialog']";
+  "input, textarea, select, button, a[href], summary, dialog, [aria-modal='true'], [contenteditable]:not([contenteditable='false']), [role='button'], [role='textbox'], [role='slider'], [role='switch'], [role='checkbox'], [role='radio'], [role='combobox'], [role='listbox'], [role='option'], [role='menu'], [role='menuitem'], [role='tab'], [role='dialog']";
 
 export function cameraKeyCommand(
   event: CameraKeyEvent,
