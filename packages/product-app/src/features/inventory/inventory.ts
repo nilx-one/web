@@ -213,6 +213,50 @@ export interface InventoryState {
   readonly catalog: CoreEconomyCatalog | undefined;
 }
 
+/** Old stored layouts lack a version; only Core may repack them. */
+export function needsInventoryLayoutMigration(state: string): boolean {
+  if (state === "") return false;
+  try {
+    const parsed: unknown = JSON.parse(state);
+    return (
+      isRecord(parsed) &&
+      (parsed.layout_version === undefined || parsed.layout_version === 1)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** The first economy whose Core reads and repacks legacy layouts. */
+const LAYOUT_ECONOMY_VERSION = 3;
+
+/**
+ * Lets Core repack a legacy layout, once. Only a Core that knows the new
+ * geometry is asked, and the check runs inside the journal's per-owner queue,
+ * so several screens loading together write one migrated state, not one each.
+ */
+export async function normalizeInventoryLayout(
+  owner: string,
+  core: InventoryPort,
+  economyVersion: number | undefined,
+  now: () => number = Date.now,
+): Promise<boolean> {
+  const apply = core.applyInventoryCommand;
+  if (apply === undefined || (economyVersion ?? 0) < LAYOUT_ECONOMY_VERSION) {
+    return false;
+  }
+  return updateInventory(owner, async (current) => {
+    if (!needsInventoryLayoutMigration(current.state)) return undefined;
+    const answer = await apply.call(
+      core,
+      current.state,
+      { op: "normalize" },
+      now(),
+    );
+    return answer.ok ? { state: answer.state } : undefined;
+  });
+}
+
 /** The inventory as stored, kept current with the journal, and the catalog. */
 export function useInventory(
   owner: string,
@@ -250,6 +294,13 @@ export function useInventory(
       active = false;
     };
   }, [core]);
+
+  useEffect(() => {
+    if (core === undefined) return;
+    void normalizeInventoryLayout(owner, core, catalog?.economyVersion).catch(
+      () => undefined,
+    );
+  }, [owner, core, catalog?.economyVersion]);
 
   return { model, catalog };
 }

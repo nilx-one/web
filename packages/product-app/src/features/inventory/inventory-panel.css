@@ -96,6 +96,17 @@
   font-size: 12px;
 }
 
+.inventory__carry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+}
+
+.inventory__carry > span + span::before {
+  content: "·";
+  margin-right: 6px;
+}
+
 .inventory__capacity {
   flex: 0 0 auto;
   font-size: 13px;
@@ -129,7 +140,7 @@
 }
 
 /* The viewport is always backpack-sized, so every carry reads at one scale:
-   a pocket lights a few cells inside it, a bag scrolls within it. */
+   a pocket draws its own cells inside it, a bag scrolls within it. */
 .inventory__grid-scroll {
   --inventory-gap: 4px;
   --inventory-pad: 3px;
@@ -168,13 +179,6 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-
-.inventory__cell--inactive {
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--line) 50%, transparent);
-  background: none;
-  opacity: 0.5;
 }
 
 .inventory__thing {
