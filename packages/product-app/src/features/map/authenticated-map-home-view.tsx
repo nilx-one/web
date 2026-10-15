@@ -2339,7 +2339,7 @@ export function AuthenticatedMapHomeView({
       ...(wheel === "avaia" ? avaiaPoint : manualPoint),
     };
     const context = { presentation, dimension, safeArea };
-    followCamera.lock();
+    followCamera.holdFocus();
     renderer.setCamera(closeUpCamera(target, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
@@ -2547,7 +2547,7 @@ export function AuthenticatedMapHomeView({
         : to === "bond" && manualPoint !== undefined && declaredPosition
           ? { ...observedPosition, ...manualPoint }
           : observedPosition;
-    followCamera.lock();
+    followCamera.holdFocus();
     renderer.setCamera(bodyVisibleCamera(target, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
@@ -2592,7 +2592,7 @@ export function AuthenticatedMapHomeView({
         : observedPosition;
     // Recentring is on the Bond's own place: it locks the camera only when
     // that is where the body at the wheel stands.
-    if (wheel === "bond") followCamera.lock();
+    if (wheel === "bond") followCamera.holdFocus();
     else followCamera.release();
     renderer.setCamera(recenterCamera(current, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
@@ -3392,6 +3392,30 @@ export function AuthenticatedMapHomeView({
       }
       overlay={
         <>
+          {section === "world" &&
+          mapStatus.kind === "ready" &&
+          handover === undefined &&
+          !guideActive &&
+          systemInformer.activeId === undefined ? (
+            <div className="camera-mode-control" role="group" aria-label={t("camera.mode")}>
+              <button
+                type="button"
+                className="camera-mode-control__button"
+                aria-pressed={followCamera.follow === "locked"}
+                onClick={followCamera.center}
+              >
+                {t("camera.follow")}
+              </button>
+              <button
+                type="button"
+                className="camera-mode-control__button"
+                aria-pressed={followCamera.follow === "free"}
+                onClick={followCamera.release}
+              >
+                {t("camera.free")}
+              </button>
+            </div>
+          ) : null}
           <LocationControl
             viewModel={locationControl}
             proximity={
