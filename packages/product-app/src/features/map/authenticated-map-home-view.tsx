@@ -2106,7 +2106,10 @@ export function AuthenticatedMapHomeView({
           : declaredPosition
             ? manualBond.stance(nowMs)
             : undefined;
-      if (stance !== undefined) proximityObserver.current?.(stance.point);
+      // A declared Bond walk is visual navigation, not proximity evidence.
+      if (body.seat === "avaia" && stance !== undefined) {
+        proximityObserver.current?.(stance.point);
+      }
       // A manual Bond coordinate is not Avaia's location. Without an
       // independent Avaia stance, do not draw her at the Bond's declared spot.
       const handle =
