@@ -211,6 +211,10 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0013_avaia_location.sql"))
             .execute(&self.pool)
             .await?;
+        // Widens the 0013 lifecycle guard for stations, so it runs right after.
+        sqlx::raw_sql(include_str!("../migrations/0024_business_stations.sql"))
+            .execute(&self.pool)
+            .await?;
         if !self.has_avaia_location_column("travel_revision").await? {
             sqlx::raw_sql(include_str!("../migrations/0022_avaia_travel_revision.sql"))
                 .execute(&self.pool)
