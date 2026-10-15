@@ -1759,6 +1759,28 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
+  it("starts in Follow mode and offers an explicit Free camera toggle", async () => {
+    const mapRenderer = renderer();
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+    });
+
+    const modes = await screen.findByRole("group", { name: "Camera mode" });
+    const follow = within(modes).getByRole("button", { name: "Follow" });
+    const free = within(modes).getByRole("button", { name: "Free" });
+    expect(follow).toHaveAttribute("aria-pressed", "true");
+    expect(free).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(free);
+    expect(free).toHaveAttribute("aria-pressed", "true");
+    expect(follow).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(follow);
+    expect(follow).toHaveAttribute("aria-pressed", "true");
+    expect(free).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("opens on a readable manual identity rather than a distant marker", async () => {
     const mapRenderer = renderer();
     const declared = { longitude: 30.563, latitude: 50.4265 };
