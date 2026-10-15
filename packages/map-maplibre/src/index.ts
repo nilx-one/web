@@ -328,6 +328,22 @@ function createMapLibreSelectionMarker(
   };
 }
 
+/**
+ * Whether a MapLibre gesture's DOM event came from a finger: a touch event,
+ * or a pointer event a touch screen produced.
+ */
+function isTouchEvent(event: unknown): boolean {
+  if (typeof event !== "object" || event === null) return false;
+  const { type, pointerType } = event as {
+    readonly type?: unknown;
+    readonly pointerType?: unknown;
+  };
+  return (
+    pointerType === "touch" ||
+    (typeof type === "string" && type.startsWith("touch"))
+  );
+}
+
 export function resolvePmtilesProtocolUrl(
   url: string,
   baseUrl: string,
@@ -649,14 +665,19 @@ export function createMapLibreRenderer(
     };
   }
 
-  function publishCamera(gesture: boolean, phase: "start" | "end"): void {
+  function publishCamera(
+    gesture: boolean,
+    phase: "start" | "end",
+    originalEvent?: unknown,
+  ): void {
     if (map === undefined) {
       return;
     }
     camera = readCamera(map);
     avatars.setCamera(camera);
+    const touch = isTouchEvent(originalEvent);
     for (const listener of cameraListeners) {
-      listener({ camera, gesture, phase });
+      listener({ camera, gesture, phase, ...(touch ? { touch } : {}) });
     }
   }
 
@@ -1447,12 +1468,18 @@ export function createMapLibreRenderer(
         // Claim camera ownership as soon as a user gesture begins, not after
         // it finishes and could be overwritten by an opening flight.
         mountedMap.on("movestart", (event: { originalEvent?: unknown }) => {
-          if (event?.originalEvent !== undefined) publishCamera(true, "start");
+          if (event?.originalEvent !== undefined) {
+            publishCamera(true, "start", event.originalEvent);
+          }
         });
         // moveend rather than move: final camera state is published once per
         // gesture instead of every animation frame.
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
-          publishCamera(event?.originalEvent !== undefined, "end");
+          publishCamera(
+            event?.originalEvent !== undefined,
+            "end",
+            event?.originalEvent,
+          );
         });
         // "idle" is MapLibre saying every tile the view needs has loaded and
         // painted: the one moment new landmarks can have become readable. It

@@ -789,6 +789,22 @@ describe("camera ownership", () => {
     expect(phases).toEqual(["start", "end"]);
   });
 
+  it("says when a gesture came from a touch screen", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const touches: (boolean | undefined)[] = [];
+    renderer.subscribeCamera((change) => touches.push(change.touch));
+
+    fakeMap.emit("movestart", { originalEvent: { type: "touchstart" } });
+    fakeMap.emit("moveend", {
+      originalEvent: { type: "pointerup", pointerType: "touch" },
+    });
+    fakeMap.emit("movestart", { originalEvent: { type: "wheel" } });
+    fakeMap.emit("moveend");
+
+    expect(touches).toEqual([true, true, undefined, undefined]);
+  });
+
   it("closes zoom gestures in on the centre a followed camera keeps", () => {
     const fakeMap = makeFakeMap();
     let scrollOn = true;

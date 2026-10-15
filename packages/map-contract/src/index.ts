@@ -48,6 +48,11 @@ export interface MapCameraChange {
    * ever reports a camera at rest.
    */
   readonly phase?: "start" | "end";
+  /**
+   * The gesture came from a touch screen: a finger drag, a pinch or a tap
+   * zoom. Absent on application moves and on a renderer that cannot tell.
+   */
+  readonly touch?: boolean;
 }
 
 /**

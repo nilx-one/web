@@ -39,14 +39,19 @@ function fakeRenderer() {
   return {
     renderer: renderer as unknown as MapRenderer & typeof renderer,
     /** A person's gesture, from its first frame to where it settles. */
-    gesture(next: Partial<MapCamera>) {
+    gesture(next: Partial<MapCamera>, touch = false) {
+      const from = touch ? { touch } : {};
       for (const listener of listeners) {
-        listener({ camera, gesture: true, phase: "start" });
+        listener({ camera, gesture: true, phase: "start", ...from });
       }
       camera = { ...camera, ...next };
       for (const listener of listeners) {
-        listener({ camera, gesture: true, phase: "end" });
+        listener({ camera, gesture: true, phase: "end", ...from });
       }
+    },
+    /** Two fingers zooming the camera by `levels`. */
+    pinch(levels: number) {
+      this.gesture({ zoom: camera.zoom + levels }, true);
     },
     /** A gesture that has started and not settled yet. */
     begin() {
@@ -105,10 +110,79 @@ describe("useFollowCamera", () => {
 
     act(() => fake.gesture({ center: [FAR.longitude, FAR.latitude] }));
     expect(result.current.follow).toBe("locked");
+    fake.renderer.setCamera.mockClear();
 
     act(() => result.current.release());
     expect(result.current.follow).toBe("free");
     expect(fake.renderer.setZoomPivot).toHaveBeenLastCalledWith("pointer");
+  });
+
+  it("brings a Follow camera dragged off the body straight back to it", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+
+    act(() => fake.gesture({ center: [FAR.longitude, FAR.latitude] }));
+
+    expect(result.current.follow).toBe("locked");
+    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
+      expect.objectContaining({ center: [HOME.longitude, HOME.latitude] }),
+      { motion: "eased" },
+    );
+  });
+
+  it("leaves Follow for Free when two fingers pinch out", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+
+    act(() => fake.pinch(-1));
+
+    expect(result.current.follow).toBe("free");
+    expect(fake.renderer.setZoomPivot).toHaveBeenLastCalledWith("pointer");
+    expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it("returns to Follow on the body when two fingers pinch in", () => {
+    const fake = fakeRenderer();
+    let body = HOME;
+    const { result } = follow(fake, () => body);
+    act(() => result.current.release());
+    act(() => fake.gesture({ center: [FAR.longitude, FAR.latitude] }, true));
+    body = AHEAD;
+
+    act(() => fake.pinch(1));
+
+    expect(result.current.follow).toBe("locked");
+    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
+      expect.objectContaining({ center: [AHEAD.longitude, AHEAD.latitude] }),
+      { motion: "eased" },
+    );
+  });
+
+  it("keeps the mode for a small pinch, a pinch the same way, or a wheel", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+
+    act(() => fake.pinch(-0.2));
+    expect(result.current.follow).toBe("locked");
+    act(() => fake.pinch(1));
+    expect(result.current.follow).toBe("locked");
+    act(() => fake.gesture({ zoom: 15 }));
+    expect(result.current.follow).toBe("locked");
+
+    act(() => result.current.release());
+    act(() => fake.pinch(-1));
+    expect(result.current.follow).toBe("free");
+    act(() => fake.gesture({ zoom: 19 }));
+    expect(result.current.follow).toBe("free");
+  });
+
+  it("does not change the mode by pinching while a scene has the camera", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake, () => HOME, false);
+
+    act(() => fake.pinch(-1));
+
+    expect(result.current.follow).toBe("locked");
   });
 
   it("orbits around the body without letting go of it", () => {

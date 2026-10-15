@@ -36,21 +36,29 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
 
 - **Follow (default)** tracks the body at the wheel while it moves, retaining
   the person's zoom, bearing and pitch. Orbit, tilt and zoom gestures pause
-  tracking while in progress; on the next body movement tracking resumes.
+  tracking while in progress. A drag that leaves the body out of frame (the
+  48 px "centred" tolerance) eases straight back to it when the gesture ends.
   Zoom pivots around the viewport centre while Follow is active.
 - **Free (Dota-style)** detaches camera position from Bond/Avaia movement.
   Dragging and touch panning explore the map independently; wheel and pinch
   zoom toward the pointer. No body motion recentres it.
+- **On a phone two fingers choose the mode**: pinching out by at least 0.35
+  zoom levels steps back from the body into Free, pinching in by as much
+  returns to Follow and eases onto the body. A smaller pinch, a pinch the way
+  the mode already is, a mouse wheel or a trackpad pinch only zoom.
 - The on-screen **Follow / Free** control is available on mobile and desktop.
   **Y** toggles modes; **Space** explicitly selects Follow and recentres on
   the body. Repeating a held key never triggers another camera animation.
   Keys inside controls or dialogs, or with modifiers, are left alone.
-- A camera focus, recenter or wheel handover performs its requested camera
-  move without silently changing the selected mode. Gestures do not change
-  the selected mode, either.
+- A camera focus or wheel handover performs its requested camera move
+  without changing the selected mode. Recentring keeps the mode with the Bond
+  at the wheel; with the Avaia at the wheel it goes to the Bond's place, away
+  from the followed body, so it selects Free. Apart from the pinch above,
+  gestures do not change the mode.
 
 The renderer reports gesture start and end (`MapCameraChange.phase`) and
-Follow never fights a gesture in progress. Opening flights and focus moves
+whether a gesture came from a touch screen (`MapCameraChange.touch`). Follow
+never fights a gesture in progress. Opening flights and focus moves
 get time to settle before tracking resumes. Both modes stand down during
 cutscenes, the system informer, handovers and outside the world. This is
 presentation only: camera actions never change a body, Bond or presence state.

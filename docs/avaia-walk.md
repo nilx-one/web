@@ -34,8 +34,8 @@ Open ground starts a walk. Anything else is refused, and the Avaia says why.
 
 The camera starts in Follow mode, tracking the body at the wheel while it
 walks. Free mode lets a person explore the map independently without pulling
-it back to the body. Choose Follow or Free on the world overlay, press Y to
-switch or Space to follow again
+it back to the body. Choose Follow or Free on the world overlay, pinch out
+or in with two fingers on a phone, press Y to switch or Space to follow again
 ([camera coordination](camera-coordination.md#follow-and-free-camera)).
 
 ### The way there

@@ -2590,8 +2590,9 @@ export function AuthenticatedMapHomeView({
             ...manualBondPoint(globalThis.performance.now()),
           }
         : observedPosition;
-    // Recentring is on the Bond's own place: it locks the camera only when
-    // that is where the body at the wheel stands.
+    // Recentring goes to the Bond's own place. With the Avaia at the wheel
+    // that is not where the followed body stands, so Follow would pull the
+    // camera straight off it: the camera goes Free instead.
     if (wheel === "bond") followCamera.holdFocus();
     else followCamera.release();
     renderer.setCamera(recenterCamera(current, camera, context), {

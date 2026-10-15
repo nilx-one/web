@@ -8,10 +8,12 @@ import {
   FOLLOW_HOLD_MS,
   INITIAL_CAMERA_FOLLOW,
   cameraKeyCommand,
+  followAfterPinch,
   followCamera,
   zoomPivotFor,
   type CameraFollow,
 } from "./follow-camera";
+import { cameraFramesPosition } from "./location-camera-policy";
 
 export interface FollowCameraInput {
   readonly renderer: MapRenderer;
@@ -48,6 +50,8 @@ export function useFollowCamera({
   const [follow, setFollow] = useState<CameraFollow>(INITIAL_CAMERA_FOLLOW);
   const followRef = useRef(follow);
   const gesturing = useRef(false);
+  /** The touch gesture under way, and the zoom it started from. */
+  const touchStart = useRef<number | undefined>(undefined);
   const heldUntil = useRef(0);
   const input = useRef({ enabled, body, reducedMotion });
   useEffect(() => {
@@ -116,6 +120,8 @@ export function useFollowCamera({
         if (change.phase === "start" && change.gesture) {
           gesturing.current = true;
           heldUntil.current = 0;
+          touchStart.current =
+            change.touch === true ? change.camera.zoom : undefined;
           return;
         }
         // MapLibre may omit originalEvent on moveend even when a user's
@@ -123,13 +129,44 @@ export function useFollowCamera({
         // matching end; otherwise the follow would remain paused forever.
         if (gesturing.current || change.gesture) {
           gesturing.current = false;
-          // A gesture never changes the explicit Follow/Free selection.
+          const startZoom = touchStart.current;
+          touchStart.current = undefined;
+          if (!input.current.enabled) return;
+          // Two fingers on a phone choose the mode: out to Free, in to Follow.
+          if (startZoom !== undefined) {
+            const next = followAfterPinch(
+              followRef.current,
+              startZoom,
+              change.camera.zoom,
+            );
+            if (next === "locked" && followRef.current === "free") {
+              center();
+              return;
+            }
+            if (next !== followRef.current) {
+              choose(next);
+              return;
+            }
+          }
+          // Follow keeps the body in frame: a drag that left it is brought
+          // back now, rather than snapping back on the body's next step.
+          const point = input.current.body();
+          if (
+            followRef.current === "locked" &&
+            point !== undefined &&
+            !cameraFramesPosition(change.camera, point)
+          ) {
+            hold(FOLLOW_HOLD_MS);
+            renderer.setCamera(followCamera(change.camera, point), {
+              motion: input.current.reducedMotion() ? "immediate" : "eased",
+            });
+          }
           return;
         }
         // Only a purely programmatic settle releases an application hold.
         heldUntil.current = 0;
       }),
-    [renderer],
+    [center, choose, hold, renderer],
   );
 
   useEffect(() => {

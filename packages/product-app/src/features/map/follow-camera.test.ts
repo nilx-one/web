@@ -8,6 +8,7 @@ import {
   CAMERA_READ_PIXELS,
   cameraChangeVisible,
   cameraKeyCommand,
+  followAfterPinch,
   followCamera,
   zoomPivotFor,
   type CameraKeyEvent,
@@ -80,6 +81,20 @@ describe("follow camera", () => {
     expect(cameraChangeVisible(previous, camera({ zoom: 18.6 }))).toBe(true);
     expect(cameraChangeVisible(previous, camera({ bearing: 31 }))).toBe(true);
     expect(cameraChangeVisible(previous, camera({ pitch: 40 }))).toBe(true);
+  });
+});
+
+describe("pinch mode", () => {
+  it("pinching out steps back into Free, pinching in returns to Follow", () => {
+    expect(followAfterPinch("locked", 18.5, 17.5)).toBe("free");
+    expect(followAfterPinch("free", 16, 17)).toBe("locked");
+  });
+
+  it("changes nothing for a nudge or a pinch the way the mode already is", () => {
+    expect(followAfterPinch("locked", 18.5, 18.3)).toBe("locked");
+    expect(followAfterPinch("free", 16, 16.2)).toBe("free");
+    expect(followAfterPinch("locked", 17, 18)).toBe("locked");
+    expect(followAfterPinch("free", 18, 17)).toBe("free");
   });
 });
 

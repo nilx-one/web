@@ -16,8 +16,9 @@ import { distanceMeters } from "./location-camera-policy";
  * `locked` is the default Follow camera: it tracks the walking body while
  * preserving chosen zoom, bearing and pitch. `free` is a Dota-style
  * independent map camera: dragging, touch panning and pointer zoom move the
- * camera without pulling it back to the body. Only an explicit selection,
- * Space or Y switches modes; a pan gesture never silently changes the mode.
+ * camera without pulling it back to the body. An explicit selection, Space
+ * or Y switches modes, and so does a two-finger pinch on a phone (out to
+ * Free, in to Follow); a pan gesture never changes the mode.
  *
  * Presentation only: following never moves a body, records presence or
  * changes who owns the camera beyond what `camera-coordination.md` says.
@@ -43,6 +44,29 @@ export function followCamera(
   body: MapPointSelection,
 ): MapCamera {
   return { ...current, center: [body.longitude, body.latitude] };
+}
+
+/**
+ * How far two fingers have to zoom, in zoom levels, before the pinch changes
+ * the mode rather than only the distance. Below it a pinch is just a nudge.
+ */
+export const PINCH_MODE_ZOOM = 0.35;
+
+/**
+ * What a finished touch zoom asks of the mode, the way a phone game camera
+ * answers two fingers: pinching out steps back from the body into Free to
+ * look around, pinching in returns to Follow. A pinch the same way as the
+ * mode it is already in, or one too small to mean anything, changes nothing.
+ */
+export function followAfterPinch(
+  follow: CameraFollow,
+  startZoom: number,
+  endZoom: number,
+): CameraFollow {
+  const zoomed = endZoom - startZoom;
+  if (follow === "locked" && zoomed <= -PINCH_MODE_ZOOM) return "free";
+  if (follow === "free" && zoomed >= PINCH_MODE_ZOOM) return "locked";
+  return follow;
 }
 
 /** A locked camera closes in on the body it is centred on. */
