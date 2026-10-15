@@ -19,7 +19,10 @@ type Point = MapPointSelection;
 export type ManualMoveOutcome =
   | { readonly kind: "accepted" }
   | { readonly kind: "rejected"; readonly current?: Point };
-type ManualMove = (expected: Point, target: Point) => Promise<ManualMoveOutcome>;
+type ManualMove = (
+  expected: Point,
+  target: Point,
+) => Promise<ManualMoveOutcome>;
 interface Rest {
   readonly point: Point;
   readonly bearingDeg: number;
