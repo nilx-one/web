@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { CoreEconomyCatalog, CoreHolder } from "@nilx-one/application";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 
 import { useLocalization } from "../../shell/localization";
 import { CraftSection } from "./craft-section";
@@ -14,6 +14,7 @@ import {
   type InventoryPort,
   type PlacedThing,
 } from "./inventory";
+import { ThingIcon } from "./thing-icon";
 import { thingName } from "./thing-name";
 
 export interface InventoryPanelProps {
@@ -44,7 +45,7 @@ function sizeOf(catalog: CoreEconomyCatalog | undefined, id: string) {
   const sized =
     catalog?.found.find((item) => item.id === id)?.size ??
     catalog?.crafted.find((item) => item.id === id)?.size;
-  return sized ?? { width: 1, height: 1 };
+  return sized ?? undefined;
 }
 
 function priceOf(
@@ -76,7 +77,15 @@ export function InventoryPanel({
 }: InventoryPanelProps) {
   const { t } = useLocalization();
   const { model, catalog } = useInventory(owner, core);
+  const inventoryId = useId();
   const [selected, setSelected] = useState<Selection | undefined>();
+  const detailsRef = useRef<HTMLDivElement>(null);
+  const selectedButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    detailsRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [selected]);
+
   const [note, setNote] = useState<string | undefined>();
 
   const carryGrid = (carry: CarriedGrid["carry"]) =>
@@ -107,19 +116,46 @@ export function InventoryPanel({
 
   function holderGrid(holder: CoreHolder, carried: CarriedGrid) {
     const { width, height } = carryGrid(carried.carry);
+    const used = carried.things.reduce<number | undefined>((total, thing) => {
+      const size = sizeOf(catalog, thing.id);
+      return total === undefined || size === undefined
+        ? undefined
+        : total + size.width * size.height;
+    }, 0);
+    const occupancy = t(
+      used === undefined ? "inventory.capacityUnknown" : "inventory.occupancy",
+    )
+      .replace("{used}", String(used))
+      .replace("{total}", String(width * height));
     const cells = Array.from({ length: width * height }, (_, index) => index);
     return (
       <section
         className="inventory__holder"
         data-holder={holder}
+        data-carry={carried.carry}
         aria-label={t(holder === "bond" ? "inventory.bond" : "inventory.avaia")}
       >
         <div className="inventory__holder-title">
-          <strong>
-            {t(holder === "bond" ? "inventory.bond" : "inventory.avaia")}
-          </strong>
-          <small>{t(`inventory.carry.${carried.carry}`)}</small>
+          <div>
+            <strong>
+              {t(holder === "bond" ? "inventory.bond" : "inventory.avaia")}
+            </strong>
+            <small>{t(`inventory.carryName.${carried.carry}`)}</small>
+          </div>
+          <span className="inventory__capacity" aria-label={occupancy}>
+            {used ?? "—"}
+            <span aria-hidden="true"> / {width * height}</span>
+          </span>
         </div>
+        {used === undefined ? null : (
+          <meter
+            className="inventory__capacity-meter"
+            min={0}
+            max={width * height}
+            value={used}
+            aria-label={occupancy}
+          />
+        )}
         {shopAndCraft ? (
           <div className="inventory__actions">
             {(["backpack", "bag"] as const).map((carry) => {
@@ -158,12 +194,22 @@ export function InventoryPanel({
             })}
           </div>
         ) : null}
-        <div className="inventory__grid-scroll">
+        <div
+          className="inventory__grid-scroll"
+          tabIndex={0}
+          role="group"
+          aria-label={t("inventory.grid").replace(
+            "{holder}",
+            t(holder === "bond" ? "inventory.bond" : "inventory.avaia"),
+          )}
+        >
           <div
             className="inventory__grid"
-            style={{
-              gridTemplateColumns: `repeat(${width}, var(--inventory-cell))`,
-            }}
+            style={
+              {
+                "--inventory-columns": width,
+              } as CSSProperties
+            }
           >
             {cells.map((index) => (
               <span
@@ -176,8 +222,8 @@ export function InventoryPanel({
                 aria-hidden="true"
               />
             ))}
-            {carried.things.map((thing) => {
-              const size = sizeOf(catalog, thing.id);
+            {carried.things.map((thing, index) => {
+              const size = sizeOf(catalog, thing.id) ?? { width: 1, height: 1 };
               const pressed =
                 selected?.holder === holder &&
                 selected.thing.x === thing.x &&
@@ -188,52 +234,72 @@ export function InventoryPanel({
                   type="button"
                   className="inventory__thing"
                   aria-pressed={pressed}
+                  aria-label={thingName(t, thing.id)}
+                  aria-describedby={`${inventoryId}-${holder}-${index}`}
+                  title={thingName(t, thing.id)}
                   style={{
                     gridColumn: `${thing.x + 1} / span ${size.width}`,
                     gridRow: `${thing.y + 1} / span ${size.height}`,
                   }}
-                  onClick={() => {
+                  onClick={(event) => {
+                    selectedButtonRef.current = event.currentTarget;
                     setNote(undefined);
                     setSelected(pressed ? undefined : { holder, thing });
                   }}
                 >
-                  {thingName(t, thing.id)}
+                  <ThingIcon id={thing.id} />
+                  <span className="inventory__thing-number" aria-hidden="true">
+                    {index + 1}
+                  </span>
                 </button>
               );
             })}
           </div>
         </div>
+        {carried.things.length === 0 ? (
+          <p className="inventory__hint">{t("inventory.holderEmpty")}</p>
+        ) : (
+          <ol className="inventory__manifest">
+            {carried.things.map((thing, index) => (
+              <li
+                key={`${thing.x}:${thing.y}`}
+                id={`${inventoryId}-${holder}-${index}`}
+              >
+                <span className="inventory__manifest-number" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <span>{thingName(t, thing.id)}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {selected?.holder === holder ? selectionDetails() : null}
       </section>
     );
   }
 
   const price =
     selected === undefined ? undefined : priceOf(catalog, selected.thing.id);
-  const empty =
-    model.bond.things.length === 0 && model.avaia.things.length === 0;
-
-  return (
-    <div className="inventory">
-      <p className="inventory__seeds" role="status">
-        {t("inventory.seeds").replace("{amount}", String(model.seeds))}
-      </p>
-      {empty ? (
-        <p className="profile-edit__note">{t("inventory.empty")}</p>
-      ) : null}
-      {first === "avaia" ? (
-        <>
-          {holderGrid("avaia", model.avaia)}
-          {holderGrid("bond", model.bond)}
-        </>
-      ) : (
-        <>
-          {holderGrid("bond", model.bond)}
-          {holderGrid("avaia", model.avaia)}
-        </>
-      )}
-      {selected === undefined ? null : (
-        <div className="inventory__actions">
+  function selectionDetails() {
+    if (selected === undefined) return null;
+    return (
+      <div className="inventory__selection" ref={detailsRef}>
+        <div className="inventory__selection-heading">
+          <ThingIcon id={selected.thing.id} />
           <strong>{thingName(t, selected.thing.id)}</strong>
+          <button
+            type="button"
+            className="inventory__dismiss"
+            aria-label={t("inventory.closeDetails")}
+            onClick={() => {
+              setSelected(undefined);
+              selectedButtonRef.current?.focus();
+            }}
+          >
+            ×
+          </button>
+        </div>
+        <div className="inventory__actions">
           {selected.holder === "bond" ? (
             typeof price === "number" ? (
               <button
@@ -270,6 +336,31 @@ export function InventoryPanel({
             )}
           </button>
         </div>
+      </div>
+    );
+  }
+
+  const empty =
+    model.bond.things.length === 0 && model.avaia.things.length === 0;
+
+  return (
+    <div className="inventory">
+      <p className="inventory__seeds" role="status">
+        {t("inventory.seeds").replace("{amount}", String(model.seeds))}
+      </p>
+      <p className="inventory__hint">
+        {t(empty ? "inventory.empty" : "inventory.selectHint")}
+      </p>
+      {first === "avaia" ? (
+        <>
+          {holderGrid("avaia", model.avaia)}
+          {holderGrid("bond", model.bond)}
+        </>
+      ) : (
+        <>
+          {holderGrid("bond", model.bond)}
+          {holderGrid("avaia", model.avaia)}
+        </>
       )}
       {note === undefined ? null : (
         <p className="profile-edit__note" role="status">
