@@ -7,7 +7,10 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMapRendererDouble } from "../../../../../tests/support/doubles";
-import { useBondManualWalk, type ManualMoveOutcome } from "./use-bond-manual-walk";
+import {
+  useBondManualWalk,
+  type ManualMoveOutcome,
+} from "./use-bond-manual-walk";
 
 const here = { longitude: 30.5234, latitude: 50.4501 };
 const there = { longitude: 30.5244, latitude: 50.4501 };
@@ -30,12 +33,16 @@ describe("manual Bond walking", () => {
     options: {
       declared?: typeof here | undefined;
       active?: boolean;
-      commit?: (from: typeof here, to: typeof here) => Promise<ManualMoveOutcome>;
+      commit?: (
+        from: typeof here,
+        to: typeof here,
+      ) => Promise<ManualMoveOutcome>;
     } = {},
   ) {
     const declared = "declared" in options ? options.declared : here;
     const active = options.active ?? true;
-    const commit = options.commit ?? vi.fn(async () => ({ kind: "accepted" as const }));
+    const commit =
+      options.commit ?? vi.fn(async () => ({ kind: "accepted" as const }));
     vi.useFakeTimers();
     const renderer = createMapRendererDouble({ kind: "ready" }) as TestRenderer;
     const hook = renderHook(
@@ -160,9 +167,10 @@ describe("manual Bond walking", () => {
   it("keeps a pending handover commit single-shot and rejects new taps", async () => {
     let resolveCommit: ((outcome: ManualMoveOutcome) => void) | undefined;
     const commit = vi.fn(
-      () => new Promise<ManualMoveOutcome>((resolve) => {
-        resolveCommit = resolve;
-      }),
+      () =>
+        new Promise<ManualMoveOutcome>((resolve) => {
+          resolveCommit = resolve;
+        }),
     );
     const { result, renderer, rerender } = setup({ commit });
     tap(renderer);
@@ -189,5 +197,4 @@ describe("manual Bond walking", () => {
     expect(result.current.point(performance.now())).toBeUndefined();
     expect(commit).not.toHaveBeenCalled();
   });
-
 });
