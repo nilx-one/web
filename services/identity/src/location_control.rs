@@ -972,6 +972,83 @@ mod tests {
         identities
     }
 
+    #[tokio::test]
+    async fn manual_map_moves_require_admin_and_refuse_stale_or_live_state() {
+        let database = tempfile::NamedTempFile::new().expect("temporary database");
+        let database_url = format!("sqlite://{}", database.path().display());
+        let identities = registered(&database_url, "0x1walker", 7).await;
+        let locations = BondLocationRepository::connect(&database_url)
+            .await
+            .expect("Bond location repository");
+        let origin = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("origin");
+        let target = GeoCoordinate::from_degrees(30.5244, 50.4501).expect("target");
+        locations
+            .write(
+                "0x1walker",
+                BondLocation::new(origin, BondLocationMode::Manual, DecimalU64::new(30)),
+            )
+            .await
+            .expect("manual setup");
+
+        let app = session_test_app(&database_url).await;
+        let request_body = serde_json::json!({
+            "expected_longitude": 30.5234,
+            "expected_latitude": 50.4501,
+            "longitude": 30.5244,
+            "latitude": 50.4501,
+        })
+        .to_string();
+        let request = || {
+            Request::post("/api/v1/location-control/manual-move")
+                .header(
+                    AUTHORIZATION,
+                    format!("tma {}", session_signed_init_data(7)),
+                )
+                .header("content-type", "application/json")
+                .body(Body::from(request_body.clone()))
+                .expect("request")
+        };
+
+        let denied = app.clone().oneshot(request()).await.expect("response");
+        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            locations.read("0x1walker").await.expect("location").expect("declared").coordinate,
+            origin
+        );
+
+        let bond: PubDress = "0x1walker".parse().expect("valid address");
+        identities
+            .set_role(&bond, BondAccessRole::Admin)
+            .await
+            .expect("assign admin");
+        let accepted = app.clone().oneshot(request()).await.expect("response");
+        assert_eq!(accepted.status(), StatusCode::OK);
+        let saved = locations.read("0x1walker").await.expect("location").expect("saved");
+        assert_eq!(saved.coordinate, target);
+        assert_eq!(saved.mode, BondLocationMode::Manual);
+
+        let stale = app.clone().oneshot(request()).await.expect("response");
+        assert_eq!(stale.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            locations.read("0x1walker").await.expect("location").expect("saved").coordinate,
+            target
+        );
+
+        locations
+            .write(
+                "0x1walker",
+                BondLocation::new(origin, BondLocationMode::Live, DecimalU64::new(40)),
+            )
+            .await
+            .expect("switch to live");
+        let not_a_mode_toggle = app.oneshot(request()).await.expect("response");
+        assert_eq!(not_a_mode_toggle.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            locations.read("0x1walker").await.expect("location").expect("live").mode,
+            BondLocationMode::Live
+        );
+    }
+
     #[test]
     fn admin_is_user_plus_manual_location() {
         assert!(!BondAccessRole::User.can_set_manual_location());
