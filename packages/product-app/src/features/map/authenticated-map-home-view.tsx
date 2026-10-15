@@ -3014,6 +3014,7 @@ export function AuthenticatedMapHomeView({
                         committed={committedAwards !== undefined}
                         workshop={workshop}
                         first={detailState?.subject ?? "bond"}
+                        together={avaiaProximity?.policy.level === "near"}
                       />
                     </>
                   ) : null}

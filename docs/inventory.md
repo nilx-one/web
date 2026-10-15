@@ -15,10 +15,10 @@ A find goes into its finder's grid when its pick-up award is **kept**, that is, 
 
 ## What a person does with them
 
-**Inventory** (Ukrainian: «Рюкзак») opens from the Dock's header, the glyph left of «змінити»: a bag filled as far as the driver's state goes (the Avaia's energy, else progress to the next level), in their colour. For whoever is driving, the Bond or its Avaia, it shows their state (level, and the Avaia's energy) and their grid first, then the other's and the balance. The Bond's screen in the Dock opens it too. Tap a thing to:
+**Inventory** (Ukrainian: «Рюкзак») opens from the Dock's header, the glyph left of «змінити»: a bag filled as far as the driver's state goes (the Avaia's energy, else progress to the next level), in their colour. For whoever is driving, the Bond or its Avaia, it shows their state (level, and the Avaia's energy), their grid and the balance. The other's grid shows only while the two **stand together**: Core's `near` proximity level, under 15 m between the Bond and the Avaia ([Avaia proximity](https://github.com/nilx-one/core/blob/master/docs/avaia-proximity.md)). Apart, or while either place is unknown, each sees only its own, and the screen says the other's shows when they stand together. The Bond's screen in the Dock opens it too. Tap a thing to:
 
 - **sell** it from the Bond's grid, for Core's price. Things nobody buys say so;
-- **hand it across**: from the Avaia to the Bond, or back.
+- **hand it across**: from the Avaia to the Bond, or back, only while they stand together.
 
 A change Core refuses (no room, not for sale) changes nothing, and the screen says why.
 
