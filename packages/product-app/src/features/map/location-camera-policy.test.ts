@@ -41,7 +41,7 @@ describe("first fix camera policy", () => {
   });
 
   it("frames a manually declared location close enough to read the body", () => {
-    const manual = { ...observation(), declared: true, accuracyMeters: 0 };
+    const manual = { ...observation(), declared: true as const, accuracyMeters: 0 };
     const camera = firstFixCamera(manual, VOLUMETRIC);
 
     expect(camera.center).toEqual([manual.longitude, manual.latitude]);
