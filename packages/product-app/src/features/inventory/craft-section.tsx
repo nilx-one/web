@@ -117,7 +117,9 @@ export function CraftSection({
         ? undefined
         : result.error === "no_room"
           ? t("inventory.error.no_room")
-          : errorText(t, result.error),
+          : result.error === "too_big"
+            ? t("inventory.error.too_big")
+            : errorText(t, result.error),
     );
   }
 

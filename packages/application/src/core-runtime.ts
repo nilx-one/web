@@ -119,6 +119,13 @@ export type CoreInventoryAnswer =
       readonly experience: number;
       /** The item a pick-up turned out to be. */
       readonly item?: string;
+      /** Whether this command gave xSasha's backpack gift. */
+      readonly gifted?: boolean;
+      /**
+       * Why a picked-up thing stayed where it lay although the command
+       * succeeded: the gift was given, but it does not fit even then.
+       */
+      readonly leftBehind?: string;
     }
   | { readonly ok: false; readonly error: string };
 
