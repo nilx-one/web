@@ -1759,6 +1759,74 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens on a readable manual identity rather than a distant marker", async () => {
+    const mapRenderer = renderer();
+    const declared = { longitude: 30.563, latitude: 50.4265 };
+    renderView({
+      mapRenderer,
+      geolocation: createDeclaredGeolocation(declared),
+    });
+    await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
+    const [camera, options] =
+      vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
+    expect(camera?.center).toEqual([declared.longitude, declared.latitude]);
+    expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
+    expect(options?.motion).toBe("flight");
+  });
+
+  it("opens a coarse GPS location wide enough to include its uncertainty", async () => {
+    const mapRenderer = renderer();
+    const coarse = { ...observation(), accuracyMeters: 525 };
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: coarse }),
+    });
+    await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
+    const [camera] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
+    expect(camera?.center).toEqual([coarse.longitude, coarse.latitude]);
+    expect(camera?.zoom).toBeLessThan(MAP_BODY_HANDOVER_ZOOM);
+    expect(camera?.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.neighborhood);
+  });
+
+  it("reframes a remembered GPS point when the current fix is much less accurate", async () => {
+    const near = { longitude: 30.5234, latitude: 50.4501 };
+    rememberWorld("0x0sky", { bond: near });
+    const mapRenderer = renderer();
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({
+        position: { ...observation(), ...near, accuracyMeters: 525 },
+      }),
+    });
+
+    await vi.waitFor(() =>
+      expect(mapRenderer.setCamera).toHaveBeenCalledTimes(2),
+    );
+    const calls = vi.mocked(mapRenderer.setCamera).mock.calls;
+    expect(calls[0]?.[0].center).toEqual([near.longitude, near.latitude]);
+    expect(calls[0]?.[0].zoom).toBe(18.5);
+    expect(calls[1]?.[0].zoom).toBeLessThan(16);
+    expect(calls[1]?.[0].center).toEqual([near.longitude, near.latitude]);
+  });
+
+  it("frames Avaia's remembered home rather than treating coarse Bond GPS as her accuracy", async () => {
+    const avaia = { longitude: 30.61, latitude: 50.48, bearingDeg: 0 };
+    rememberWorld("0x0sky", { avaia });
+    const mapRenderer = renderer();
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({
+        position: { ...observation(), accuracyMeters: 525 },
+      }),
+    });
+
+    await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
+    await act(async () => Promise.resolve());
+    const [camera] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
+    expect(camera?.center).toEqual([avaia.longitude, avaia.latitude]);
+    expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
+  });
+
   // Focusing an identity is the moment a person expects to see somebody. A
   // body is drawn at true human height, never larger than life, so this covers
   // the whole path: the camera arrives close enough to read it, and it

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { observation } from "../../../../../tests/support/doubles";
 import {
+  DECLARED_OPENING_ZOOM,
   FIRST_FIX_ZOOM,
   bodyVisibleCamera,
   cameraFramesPosition,
@@ -37,6 +38,42 @@ describe("first fix camera policy", () => {
     expect(camera.center).toEqual([30.5234, 50.4501]);
     expect(camera.zoom).toBe(FIRST_FIX_ZOOM);
     expect(camera.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.building);
+  });
+
+  it("frames a manually declared location close enough to read the body", () => {
+    const manual = {
+      ...observation(),
+      declared: true as const,
+      accuracyMeters: 0,
+    };
+    const camera = firstFixCamera(manual, VOLUMETRIC);
+
+    expect(camera.center).toEqual([manual.longitude, manual.latitude]);
+    expect(camera.zoom).toBe(DECLARED_OPENING_ZOOM);
+    expect(camera.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
+  });
+
+  it("widens imprecise GPS framing without changing its geographic target", () => {
+    const coarse = { ...observation(), accuracyMeters: 525 };
+    const camera = firstFixCamera(coarse, VOLUMETRIC);
+
+    expect(camera.center).toEqual([coarse.longitude, coarse.latitude]);
+    expect(camera.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.neighborhood);
+    expect(camera.zoom).toBeLessThan(MAP_SCALE_ZOOM.building);
+    expect(
+      firstFixCamera({ ...coarse, accuracyMeters: 50 }, VOLUMETRIC).zoom,
+    ).toBe(FIRST_FIX_ZOOM);
+  });
+
+  it("bounds the camera for missing or extremely inaccurate GPS readings", () => {
+    for (const accuracyMeters of [Number.NaN, Number.POSITIVE_INFINITY, 1e9]) {
+      const camera = firstFixCamera(
+        { ...observation(), accuracyMeters },
+        VOLUMETRIC,
+      );
+      expect(camera.zoom).toBe(MAP_SCALE_ZOOM.neighborhood);
+      expect(Number.isFinite(camera.zoom)).toBe(true);
+    }
   });
 
   it("opens wider on a narrow viewport so the same context fits", () => {
