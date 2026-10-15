@@ -308,7 +308,10 @@ pub fn location_control_router(
     Router::new()
         .route("/api/v1/location-control", get(read_location_control))
         .route("/api/v1/location-control", post(write_live_location))
-        .route("/api/v1/location-control/manual-move", post(move_manual_location))
+        .route(
+            "/api/v1/location-control/manual-move",
+            post(move_manual_location),
+        )
         .layer(DefaultBodyLimit::max(MAX_LOCATION_REQUEST_BYTES))
         .with_state(LocationControlApiState {
             identities,
@@ -576,13 +579,11 @@ async fn move_manual_location(
     if !role.can_set_manual_location() {
         return status(StatusCode::FORBIDDEN);
     }
-    let expected = match GeoCoordinate::from_degrees(
-        request.expected_longitude,
-        request.expected_latitude,
-    ) {
-        Ok(value) => value,
-        Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
-    };
+    let expected =
+        match GeoCoordinate::from_degrees(request.expected_longitude, request.expected_latitude) {
+            Ok(value) => value,
+            Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
+        };
     let target = match GeoCoordinate::from_degrees(request.longitude, request.latitude) {
         Ok(value) => value,
         Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
@@ -1012,7 +1013,11 @@ mod tests {
         let denied = app.clone().oneshot(request()).await.expect("response");
         assert_eq!(denied.status(), StatusCode::FORBIDDEN);
         assert_eq!(
-            locations.read("0x1walker").await.expect("location").expect("declared").coordinate,
+            locations
+                .read("0x1walker")
+                .await
+                .expect("location")
+                .expect("declared").coordinate,
             origin
         );
 
@@ -1023,14 +1028,22 @@ mod tests {
             .expect("assign admin");
         let accepted = app.clone().oneshot(request()).await.expect("response");
         assert_eq!(accepted.status(), StatusCode::OK);
-        let saved = locations.read("0x1walker").await.expect("location").expect("saved");
+        let saved = locations
+            .read("0x1walker")
+            .await
+            .expect("location")
+            .expect("saved");
         assert_eq!(saved.coordinate, target);
         assert_eq!(saved.mode, BondLocationMode::Manual);
 
         let stale = app.clone().oneshot(request()).await.expect("response");
         assert_eq!(stale.status(), StatusCode::CONFLICT);
         assert_eq!(
-            locations.read("0x1walker").await.expect("location").expect("saved").coordinate,
+            locations
+                .read("0x1walker")
+                .await
+                .expect("location")
+                .expect("saved").coordinate,
             target
         );
 
@@ -1044,7 +1057,11 @@ mod tests {
         let not_a_mode_toggle = app.oneshot(request()).await.expect("response");
         assert_eq!(not_a_mode_toggle.status(), StatusCode::CONFLICT);
         assert_eq!(
-            locations.read("0x1walker").await.expect("location").expect("live").mode,
+            locations
+                .read("0x1walker")
+                .await
+                .expect("location")
+                .expect("live").mode,
             BondLocationMode::Live
         );
     }
