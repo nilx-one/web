@@ -173,6 +173,7 @@ import {
 } from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
+import { useBondManualWalk } from "./use-bond-manual-walk";
 import { useFindLoop } from "./use-find-loop";
 import { useOrbSpills } from "../finds/use-orb-spills";
 import { readWorldMemory, rememberWorld } from "./world-memory";
@@ -232,6 +233,11 @@ export interface AuthenticatedMapHomeViewProps {
    * API of its own, and the renderer never asks for a position at all.
    */
   readonly geolocation: GeolocationCapability;
+  /** Only a server-confirmed manual Bond location may be moved by map taps. */
+  readonly onManualBondMove?: (
+    expected: MapPointSelection,
+    target: MapPointSelection,
+  ) => Promise<boolean>;
   /** Host feedback for a tap on the Dock; the host decides what it feels like. */
   readonly feedback?: Pick<HostPort, "impact">;
   /**
@@ -715,6 +721,7 @@ export function AuthenticatedMapHomeView({
   avaiaPubDress,
   renderer,
   geolocation,
+  onManualBondMove,
   feedback,
   sound,
   runtime,
@@ -823,6 +830,20 @@ export function AuthenticatedMapHomeView({
   const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
+  const manualBond = useBondManualWalk({
+    renderer,
+    owner: pubDress,
+    declared:
+      observedPosition?.declared === true
+        ? {
+            longitude: observedPosition.longitude,
+            latitude: observedPosition.latitude,
+          }
+        : undefined,
+    active: wheel === "bond" && handover === undefined && section === "world",
+    commit: onManualBondMove,
+    zoom: camera.zoom,
+  });
   const [travelPrompt, setTravelPrompt] = useState<
     | {
         readonly longitude: number;
@@ -1620,7 +1641,7 @@ export function AuthenticatedMapHomeView({
     at: MapPointSelection | undefined,
   ): MapObservedPositionLabel {
     const away =
-      at !== undefined && observedPosition !== undefined
+      wheel === "avaia" && at !== undefined && observedPosition !== undefined
         ? mapDistanceMeters(observedPosition, at)
         : 0;
     return {
@@ -1713,20 +1734,29 @@ export function AuthenticatedMapHomeView({
       return;
     }
 
+    const now = globalThis.performance.now();
+    const bondPoint =
+      observedPosition.declared === true
+        ? (manualBond.point(now) ?? observedPosition)
+        : observedPosition;
     renderer.setObservedPosition({
-      center: [observedPosition.longitude, observedPosition.latitude],
+      center: [bondPoint.longitude, bondPoint.latitude],
       accuracyMeters: observedPosition.accuracyMeters,
     });
     const stance =
       wheel === "avaia"
-        ? avaiaWalk.stance(globalThis.performance.now())
-        : undefined;
+        ? avaiaWalk.stance(now)
+        : wheel === "bond" && observedPosition.declared === true
+          ? manualBond.stance(now)
+          : undefined;
     renderer.setObservedPositionLabel(wheelLabelRef.current(stance?.point));
   }, [
     avaiaSpeech,
     avaiaWalk,
     handover,
     locale,
+    manualBond.point,
+    manualBond.stance,
     observedPosition,
     renderer,
     wheel,
@@ -2049,7 +2079,11 @@ export function AuthenticatedMapHomeView({
     function draw(nowMs: number): void {
       const body = wheelBody(wheel, handover, nowMs);
       const stance =
-        body.seat === "avaia" ? avaiaWalk.stance(nowMs) : undefined;
+        body.seat === "avaia"
+          ? avaiaWalk.stance(nowMs)
+          : declaredPosition
+            ? manualBond.stance(nowMs)
+            : undefined;
       if (stance !== undefined) proximityObserver.current?.(stance.point);
       // A manual Bond coordinate is not Avaia's location. Without an
       // independent Avaia stance, do not draw her at the Bond's declared spot.
@@ -2071,9 +2105,17 @@ export function AuthenticatedMapHomeView({
         drawn[body.seat] = handle;
         avatarLayer.upsert(handle);
       } else hide(body.seat);
-      // A walking body carries its card with it, frame by frame.
-      if (avaiaWalk.moving && stance !== undefined) {
+      // Only the driver carries its own card as the body traverses the map.
+      const moving = body.seat === "avaia" ? avaiaWalk.moving : manualBond.moving;
+      if (moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
+        if (body.seat === "bond" && declaredPosition) {
+          // This moves the manual *presentation*, not a device observation.
+          renderer.setObservedPosition({
+            center: [stance.point.longitude, stance.point.latitude],
+            accuracyMeters: 0,
+          });
+        }
       }
 
       // Only the identity in the seat this instant is on the world: the other
@@ -2086,7 +2128,7 @@ export function AuthenticatedMapHomeView({
       // both end.
       frame =
         (handover !== undefined && !handoverComplete(handover, nowMs)) ||
-        (handover === undefined && avaiaWalk.moving)
+        (handover === undefined && (avaiaWalk.moving || manualBond.moving))
           ? globalThis.requestAnimationFrame(draw)
           : undefined;
     }
@@ -2112,6 +2154,8 @@ export function AuthenticatedMapHomeView({
     declaredPosition,
     handover,
     location.state,
+    manualBond.moving,
+    manualBond.stance,
     observedPosition,
     pubDress,
     renderer,
@@ -2178,10 +2222,14 @@ export function AuthenticatedMapHomeView({
   function focusWorldOnWheel(): void {
     if (observedPosition === undefined) return;
     const avaiaPoint = wheelAvaiaPoint();
-    const target =
-      avaiaPoint === undefined
-        ? observedPosition
-        : { ...observedPosition, ...avaiaPoint };
+    const manualPoint =
+      observedPosition.declared === true
+        ? manualBond.point(globalThis.performance.now())
+        : undefined;
+    const target = {
+      ...observedPosition,
+      ...(wheel === "avaia" ? avaiaPoint : manualPoint),
+    };
     const context = { presentation, dimension, safeArea };
     renderer.setCamera(closeUpCamera(target, context), {
       motion: cameraMotion(prefersReducedMotion()),
@@ -2377,6 +2425,8 @@ export function AuthenticatedMapHomeView({
     // Switching control changes neither identity's position. Freeze an
     // interrupted walk where the Avaia actually stands, including handover.
     const avaiaPoint = avaiaWalk.stop();
+    manualBond.stop();
+    const manualPoint = manualBond.point(globalThis.performance.now());
     setHandover({ from: wheel, to, startedMs: globalThis.performance.now() });
     setChosenWheel(to);
 
@@ -2385,7 +2435,9 @@ export function AuthenticatedMapHomeView({
     const target =
       to === "avaia" && avaiaPoint !== undefined
         ? { ...observedPosition, ...avaiaPoint }
-        : observedPosition;
+        : to === "bond" && manualPoint !== undefined && declaredPosition
+          ? { ...observedPosition, ...manualPoint }
+          : observedPosition;
     renderer.setCamera(bodyVisibleCamera(target, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
@@ -2421,7 +2473,11 @@ export function AuthenticatedMapHomeView({
     }
 
     const context = { presentation, dimension, safeArea };
-    renderer.setCamera(recenterCamera(observedPosition, camera, context), {
+    const current =
+      observedPosition.declared === true
+        ? { ...observedPosition, ...manualBond.point(globalThis.performance.now()) }
+        : observedPosition;
+    renderer.setCamera(recenterCamera(current, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
     });
