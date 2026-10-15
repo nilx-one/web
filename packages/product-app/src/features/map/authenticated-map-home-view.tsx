@@ -1852,7 +1852,7 @@ export function AuthenticatedMapHomeView({
           // persisted accuracy. Avaia memory is a deliberate independent point.
           accuracyMeters: 50,
           observedAt: 0,
-          declared: rememberedAvaia !== undefined,
+          ...(rememberedAvaia !== undefined ? { declared: true as const } : {}),
         },
         context,
       ),
@@ -1906,7 +1906,7 @@ export function AuthenticatedMapHomeView({
             ...observedPosition,
             ...avaiaPoint,
             // Avaia's own remembered place is not the device's GPS estimate.
-            declared: true,
+            declared: true as const,
             accuracyMeters: 0,
           };
     const context = { presentation, dimension, safeArea };
