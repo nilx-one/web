@@ -8,7 +8,6 @@ import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
 import {
   startWalk,
-  walkArrived,
   walkPosition,
   walkStance,
   type AvaiaWalk,
