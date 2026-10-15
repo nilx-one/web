@@ -19,13 +19,13 @@ import {
 } from "./use-business-stations";
 
 const batkivshchyna: BusinessStationView = {
-  pubDress: "xda-market-batkivshchynai",
+  pubDress: "0xda-market-batkivshchyna",
   ownerPubDress: "0xda-market",
   longitude: 30.5632,
   latitude: 50.4265,
 };
 const zolotiVorota: BusinessStationView = {
-  pubDress: "xda-market-zoloti-vorotai",
+  pubDress: "0xda-market-zoloti-vorota",
   ownerPubDress: "0xda-market",
   longitude: 30.5131,
   latitude: 50.4489,
@@ -42,7 +42,7 @@ function over(
 /** Shops spread across Ukraine and beyond, all far from Zoloti Vorota. */
 function distantStations(count: number): BusinessStationView[] {
   return Array.from({ length: count }, (_, index) => ({
-    pubDress: `xda-far-${index}ai`,
+    pubDress: `0xda-market-far-${index}`,
     ownerPubDress: "0xda-market",
     longitude: 22 + (index % 100) * 0.2,
     latitude: 45 + Math.floor(index / 100) * 0.2,
@@ -73,7 +73,7 @@ describe("createStationHandle", () => {
   it("stands idle at its shop and keeps the same body everywhere", () => {
     const handle = createStationHandle(batkivshchyna, true);
     expect(handle).toMatchObject({
-      id: "station:xda-market-batkivshchynai",
+      id: "station:0xda-market-batkivshchyna",
       lngLat: [30.5632, 50.4265],
       clipId: "idle",
       visible: true,

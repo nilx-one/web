@@ -23,7 +23,7 @@ function stations(...rest: unknown[]): Promise<Response> {
 }
 
 const zolotiVorota = {
-  pub_dress: "xda-market-zoloti-vorotai",
+  pub_dress: "0xda-market-zoloti-vorota",
   owner_pub_dress: "0xda-market",
   coordinate: { latitude_e7: "504489000", longitude_e7: "305131000" },
 };
@@ -34,7 +34,7 @@ describe("readBusinessStations", () => {
 
     await expect(adapter.readBusinessStations()).resolves.toEqual([
       {
-        pubDress: "xda-market-zoloti-vorotai",
+        pubDress: "0xda-market-zoloti-vorota",
         ownerPubDress: "0xda-market",
         longitude: 30.5131,
         latitude: 50.4489,
@@ -50,13 +50,20 @@ describe("readBusinessStations", () => {
   it("accepts the whole published list, past any page size", async () => {
     const many = Array.from({ length: 1_001 }, (_, index) => ({
       ...zolotiVorota,
-      pub_dress: `xda-market-${index}ai`,
+      pub_dress: `0xda-market-${index}`,
     }));
     const { adapter } = adapterAnswering(() => stations(...many));
 
     const read = await adapter.readBusinessStations();
     expect(read).toHaveLength(1_001);
-    expect(read?.at(-1)?.pubDress).toBe("xda-market-1000ai");
+    expect(read?.at(-1)?.pubDress).toBe("0xda-market-1000");
+  });
+
+  it("drops an answer naming a station after another business", async () => {
+    const { adapter } = adapterAnswering(() =>
+      stations({ ...zolotiVorota, owner_pub_dress: "0xdrival" }),
+    );
+    await expect(adapter.readBusinessStations()).resolves.toBeUndefined();
   });
 
   it("drops the whole answer when one station is malformed", async () => {

@@ -217,7 +217,8 @@ function parseBusinessStations(
     if (
       !isRecord(station) ||
       typeof station.pub_dress !== "string" ||
-      !station.pub_dress.startsWith("x") ||
+      // A station is named after its business: `0xda-market-zoloti-vorota`.
+      !station.pub_dress.startsWith(`${String(station.owner_pub_dress)}-`) ||
       typeof station.owner_pub_dress !== "string" ||
       !station.owner_pub_dress.startsWith("0x")
     ) {
