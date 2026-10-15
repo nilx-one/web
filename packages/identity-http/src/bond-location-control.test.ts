@@ -69,17 +69,14 @@ describe("moveManualBondLocation", () => {
   const expected = { longitude: 30.5234, latitude: 50.4501 };
   const target = { longitude: 30.5244, latitude: 50.4501 };
 
-  it("persists a manual-only compare-and-set with host authorization", async () => {
-    const fetchImpl = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        manualProjection(),
-    );
+  it("persists a manual compare-and-set with host authorization", async () => {
+    const fetchImpl = vi.fn(async () => manualProjection());
     await expect(
       moveManualBondLocation(expected, target, {
         fetch: fetchImpl as typeof fetch,
         authorization: "tma signed",
       }),
-    ).resolves.toBe(true);
+    ).resolves.toEqual({ kind: "accepted" });
 
     const [url, init] = fetchImpl.mock.calls[0] ?? [];
     expect(url).toBe("/api/v1/location-control/manual-move");
@@ -89,6 +86,7 @@ describe("moveManualBondLocation", () => {
       "content-type": "application/json",
       authorization: "tma signed",
     });
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.parse(init?.body as string)).toEqual({
       expected_longitude: expected.longitude,
       expected_latitude: expected.latitude,
@@ -97,22 +95,64 @@ describe("moveManualBondLocation", () => {
     });
   });
 
-  it("fails closed on conflict or invalid coordinates", async () => {
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 409 }));
+  it("re-reads authoritative manual position after a 409 conflict", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(manualProjection());
     await expect(
       moveManualBondLocation(expected, target, {
         fetch: fetchImpl as typeof fetch,
+        authorization: "tma signed",
       }),
-    ).resolves.toBe(false);
-    await expect(
-      moveManualBondLocation(
-        expected,
-        { longitude: NaN, latitude: 1 },
-        {
-          fetch: fetchImpl as typeof fetch,
+    ).resolves.toEqual({
+      kind: "conflict",
+      state: { kind: "manual", position: { longitude: 2.3522, latitude: 48.8566 } },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe("/api/v1/location-control");
+    expect(fetchImpl.mock.calls[1]?.[1]?.headers).toEqual({ authorization: "tma signed" });
+  });
+
+  it("detects that the server switched back to live mode", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        role: "admin",
+        location: {
+          coordinate: { longitude_e7: "305244000", latitude_e7: "504501000" },
+          mode: "live",
+          updated_at: "1800000000",
         },
-      ),
-    ).resolves.toBe(false);
-    expect(fetchImpl).toHaveBeenCalledOnce();
+      }), { status: 200 }));
+    await expect(
+      moveManualBondLocation(expected, target, { fetch: fetchImpl as typeof fetch }),
+    ).resolves.toEqual({ kind: "conflict", state: { kind: "live" } });
+  });
+
+  it("fails closed for invalid coordinates without performing a request", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      moveManualBondLocation(expected, { longitude: NaN, latitude: 1 }, {
+        fetch: fetchImpl as typeof fetch,
+      }),
+    ).resolves.toEqual({ kind: "failed" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("times out a stalled POST without accepting a late response", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) =>
+        new Promise<Response>(() => undefined));
+      const pending = moveManualBondLocation(expected, target, {
+        fetch: fetchImpl as typeof fetch,
+        timeoutMs: 75,
+      });
+      await vi.advanceTimersByTimeAsync(75);
+      await expect(pending).resolves.toEqual({ kind: "failed" });
+      expect(fetchImpl.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
