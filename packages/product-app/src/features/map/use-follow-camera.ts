@@ -8,7 +8,6 @@ import {
   FOLLOW_HOLD_MS,
   INITIAL_CAMERA_FOLLOW,
   cameraKeyCommand,
-  followAfterGesture,
   followCamera,
   zoomPivotFor,
   type CameraFollow,
@@ -30,11 +29,8 @@ export interface FollowCameraState {
   readonly follow: CameraFollow;
   /** Keeps the camera on a body that moved this frame, while locked. */
   track(point: MapPointSelection): void;
-  /**
-   * The application is about to bring the camera to the body itself (a
-   * focus, a handover): lock it there and let that move finish first.
-   */
-  lock(): void;
+  /** Hold a focus or handover without switching the selected camera mode. */
+  holdFocus(): void;
   /** The application took the camera somewhere else than the body. */
   release(): void;
   /** Leave a camera move the application just started to finish. */
@@ -70,10 +66,7 @@ export function useFollowCamera({
     );
   }, []);
 
-  const lock = useCallback(() => {
-    choose("locked");
-    hold(FOLLOW_HOLD_MS);
-  }, [choose, hold]);
+  const holdFocus = useCallback(() => hold(FOLLOW_HOLD_MS), [hold]);
 
   const release = useCallback(() => choose("free"), [choose]);
 
@@ -130,18 +123,13 @@ export function useFollowCamera({
         // matching end; otherwise the follow would remain paused forever.
         if (gesturing.current || change.gesture) {
           gesturing.current = false;
-          const next = followAfterGesture(
-            followRef.current,
-            change.camera,
-            input.current.body(),
-          );
-          if (next !== followRef.current) choose(next);
+          // A gesture never changes the explicit Follow/Free selection.
           return;
         }
         // Only a purely programmatic settle releases an application hold.
         heldUntil.current = 0;
       }),
-    [choose, renderer],
+    [renderer],
   );
 
   useEffect(() => {
@@ -162,7 +150,7 @@ export function useFollowCamera({
   }, [center, choose, enabled]);
 
   return useMemo(
-    () => ({ follow, track, lock, release, hold, center }),
-    [center, follow, hold, lock, release, track],
+    () => ({ follow, track, holdFocus, release, hold, center }),
+    [center, follow, hold, holdFocus, release, track],
   );
 }
