@@ -1017,7 +1017,8 @@ mod tests {
                 .read("0x1walker")
                 .await
                 .expect("location")
-                .expect("declared").coordinate,
+                .expect("declared")
+                .coordinate,
             origin
         );
 
@@ -1043,7 +1044,8 @@ mod tests {
                 .read("0x1walker")
                 .await
                 .expect("location")
-                .expect("saved").coordinate,
+                .expect("saved")
+                .coordinate,
             target
         );
 
@@ -1061,7 +1063,8 @@ mod tests {
                 .read("0x1walker")
                 .await
                 .expect("location")
-                .expect("live").mode,
+                .expect("live")
+                .mode,
             BondLocationMode::Live
         );
     }
