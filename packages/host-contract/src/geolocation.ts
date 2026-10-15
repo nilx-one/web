@@ -171,7 +171,10 @@ export function createMutableDeclaredGeolocation(initial: {
       ) {
         return;
       }
-      if (point.longitude === next.longitude && point.latitude === next.latitude)
+      if (
+        point.longitude === next.longitude &&
+        point.latitude === next.latitude
+      )
         return;
       point = { longitude: next.longitude, latitude: next.latitude };
       for (const observer of [...observers]) {
