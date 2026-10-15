@@ -15,14 +15,14 @@ What the Bond and its Avaia carry, and the Bond's Seeds ₴€£. Every rule is 
 
 The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (1×3, 3 cells), a backpack (3×4, 12 cells) or a bag (12×10, 120 cells). Every thing takes its own rectangle. Both **start with pockets**. Anything bigger has to be owned before it can be worn:
 
-- **xSasha's gift**: once, a backpack each for the Bond and its Avaia, when the Bond's three pocket cells are full or by Bond level 3 at the latest. She says so in a scene ([xSasha](guide.md), "Backpacks"), and the gift is given whether the scene plays or not.
+- **xSasha's gift**: once, a backpack each for the Bond and its Avaia, with the first find that does not fit its finder's pockets (the Bond's or the Avaia's), or by Bond level 3 at the latest. Core gives it with that pick-up and puts the find into the new backpack. She says so in a scene ([xSasha](guide.md), "Backpacks") as soon as the world can hold one, and the gift is given whether the scene plays or not.
 - **Buying** (closed for now: carries will change only at home, later), under each grid: a backpack for **1,500** and a bag for **5,000** Seeds ₴€£, from the Bond's Seeds, for either of them. Something owned but not worn can be worn again from there. Real money for them comes later, through 0xda-market. On screen the Bond's grid is marked blue and the Avaia's purple, the colours of their experience.
 
 Legacy 5×1 pockets and 8×5 backpacks are normalized by Core v3. The migration preserves items and Seeds and upgrades old overfilled containers only where needed to preserve their contents. Web persists Core's result once its new economy catalog has loaded.
 
 ## How things get in
 
-A find goes into its finder's grid when its pick-up award is **kept**, that is, when the service has accepted it (R3 in [Avaia walks on its own](avaia-outings.md)). It goes in once: the journal remembers which finds are already in, however often the award is seen kept. A find that fits nowhere stays where it lay, and a toast says so. Small change is money: it is credited to the Bond, whoever picked it up.
+A find goes into its finder's grid when its pick-up award is **kept**, that is, when the service has accepted it (R3 in [Avaia walks on its own](avaia-outings.md)). It goes in once: the journal remembers which finds are already in, however often the award is seen kept. A find that fits nowhere stays where it lay, and a toast says so: "no room" when the grid is full, **"Too big"** («Річ завелика») when it would not fit even an empty one. A find too big even for the backpack it just brought still brings the gift. A find left out is not counted as in, so it can still go in later. Small change is money: it is credited to the Bond, whoever picked it up.
 
 ## What a person does with them
 

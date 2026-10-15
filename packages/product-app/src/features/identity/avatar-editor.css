@@ -89,9 +89,38 @@
 
 /* The editor. Everything here is a draft until Save, so the preview answers
    immediately and nothing else does. */
+/* The Dock keeps its header and the editor's actions outside the only
+   scrolling region. Avoid a second, competing scroll on the Dock itself. */
+.bond-dock__detail > .bond-dock__scroll--avatar {
+  gap: 0;
+  padding-top: 0;
+  overflow-y: hidden;
+}
+
 .avatar-editor {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.avatar-editor__content {
   display: grid;
+  flex: 1 1 auto;
+  align-content: start;
   gap: 1.1rem;
+  min-height: 0;
+  padding: 1.35rem 0 0.85rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.avatar-editor > .avatar-editor__actions {
+  flex: 0 0 auto;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(245, 243, 247, 0.12);
 }
 
 .avatar-editor__stage {

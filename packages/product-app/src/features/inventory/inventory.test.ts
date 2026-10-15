@@ -200,6 +200,21 @@ describe("pickUpFind", () => {
     expect(port.applyInventoryCommand).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the gift a find brought, but not the find too big for it", async () => {
+    const gift = core({
+      ...kept,
+      item: "reel_to_reel",
+      gifted: true,
+      leftBehind: "too_big",
+    });
+    await expect(pickUpFind("0x0sky", gift, find)).resolves.toMatchObject({
+      gifted: true,
+      leftBehind: "too_big",
+    });
+    expect(stored.state).toBe(STATE);
+    expect(stored.pickedUp.has("art:x")).toBe(false);
+  });
+
   it("leaves a find that fits nowhere out, so it can still go in later", async () => {
     const full = core({ ok: false, error: "no_room" });
     await expect(pickUpFind("0x0sky", full, find)).resolves.toEqual({

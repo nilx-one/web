@@ -1,19 +1,33 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import { readCommittedJournal } from "../progression/committed-journal";
 import { applyInventory, useInventory, type InventoryPort } from "./inventory";
 
 /**
- * xSasha's backpack gift (`docs/economy.md` in core): once, when the Bond's
- * pockets fill their three cells or the Bond reaches level 3, she gives
- * the Bond and its Avaia a backpack each. Core decides when it is due and
- * moves both into them; this gives it when a scene can be played, and says
- * so. Like an achievement, the gift is given before she says it: a scene
+ * xSasha's backpack gift (`docs/economy.md` in core): once, she gives the
+ * Bond and its Avaia a backpack each. Core gives it with the first find that
+ * does not fit its finder's pockets (`pick_up`), or at the latest at Bond
+ * level 3; this gives the level one when a scene can be played, and says
+ * both. Like an achievement, the gift is given before she says it: a scene
  * skipped or cut short gives exactly the same.
  */
+
+const owedScenes = new Set<string>();
+const owedListeners = new Set<() => void>();
+
+/** A pick-up gave the gift: her scene is owed once the world can hold it. */
+export function oweBackpackScene(owner: string): void {
+  owedScenes.add(owner);
+  for (const listener of owedListeners) listener();
+}
+
+function subscribeOwed(listener: () => void): () => void {
+  owedListeners.add(listener);
+  return () => owedListeners.delete(listener);
+}
 export async function giveBackpacksIfDue(
   owner: string,
   core: InventoryPort,
@@ -50,6 +64,17 @@ export function useBackpackGift({
     latest.current = onGiven;
   }, [onGiven]);
   const asking = useRef(false);
+
+  const owed = useSyncExternalStore(
+    subscribeOwed,
+    () => owedScenes.has(owner),
+    () => false,
+  );
+  useEffect(() => {
+    if (!ready || !owed) return;
+    owedScenes.delete(owner);
+    latest.current();
+  }, [owed, owner, ready]);
 
   const gifted = model.gifted;
   const bondCells = model.bond.things.length;
