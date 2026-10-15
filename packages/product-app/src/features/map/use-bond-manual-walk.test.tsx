@@ -25,11 +25,13 @@ afterEach(() => {
 });
 
 describe("manual Bond walking", () => {
-  function setup(options: {
-    declared?: typeof here | undefined;
-    active?: boolean;
-    commit?: (from: typeof here, to: typeof here) => Promise<boolean>;
-  } = {}) {
+  function setup(
+    options: {
+      declared?: typeof here | undefined;
+      active?: boolean;
+      commit?: (from: typeof here, to: typeof here) => Promise<boolean>;
+    } = {},
+  ) {
     const declared = "declared" in options ? options.declared : here;
     const active = options.active ?? true;
     const commit = options.commit ?? vi.fn(async () => true);
@@ -68,7 +70,8 @@ describe("manual Bond walking", () => {
 
   it("does not move for fog, buildings or water", () => {
     const { result, renderer, commit } = setup();
-    for (const ground of ["fog", "building", "water"] as const) tap(renderer, ground);
+    for (const ground of ["fog", "building", "water"] as const)
+      tap(renderer, ground);
     expect(result.current.moving).toBe(false);
     expect(result.current.point(performance.now())).toEqual(here);
     expect(commit).not.toHaveBeenCalled();
