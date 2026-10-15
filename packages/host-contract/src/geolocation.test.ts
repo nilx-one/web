@@ -7,6 +7,7 @@ import {
   UNSUPPORTED_GEOLOCATION,
   createBondLocationGeolocation,
   createDeclaredGeolocation,
+  createMutableDeclaredGeolocation,
   type BondLocationMode,
   type GeolocationCapability,
 } from "./geolocation";
@@ -59,6 +60,42 @@ describe("createDeclaredGeolocation", () => {
     const observed = vi.fn();
     declared.watchPosition(observed)();
     expect(observed).not.toHaveBeenCalled();
+  });
+});
+
+describe("createMutableDeclaredGeolocation", () => {
+  it("updates declared location to a running observer without touching device GPS", async () => {
+    const mutable = createMutableDeclaredGeolocation({
+      longitude: 30.5234,
+      latitude: 50.4501,
+    });
+    const listener = vi.fn();
+    await expect(mutable.geolocation.requestPosition()).resolves.toMatchObject({
+      kind: "observed",
+      position: {
+        longitude: 30.5234,
+        latitude: 50.4501,
+        declared: true,
+      },
+    });
+    const stop = mutable.geolocation.watchPosition(listener);
+    expect(listener).not.toHaveBeenCalled();
+    mutable.update({ longitude: 30.5244, latitude: 50.4501 });
+    expect(listener).toHaveBeenCalledExactlyOnceWith({
+      kind: "observed",
+      position: expect.objectContaining({
+        longitude: 30.5244,
+        latitude: 50.4501,
+        accuracyMeters: 0,
+        declared: true,
+      }),
+    });
+    stop();
+    mutable.update({ longitude: 30.525, latitude: 50.45 });
+    expect(listener).toHaveBeenCalledOnce();
+    await expect(mutable.geolocation.requestPosition()).resolves.toMatchObject({
+      position: { longitude: 30.525, latitude: 50.45, declared: true },
+    });
   });
 });
 
