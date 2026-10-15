@@ -70,7 +70,7 @@ describe("moveManualBondLocation", () => {
   const target = { longitude: 30.5244, latitude: 50.4501 };
 
   it("persists a manual compare-and-set with host authorization", async () => {
-    const fetchImpl = vi.fn(async () => manualProjection());
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => manualProjection());
     await expect(
       moveManualBondLocation(expected, target, {
         fetch: fetchImpl as typeof fetch,
@@ -96,7 +96,7 @@ describe("moveManualBondLocation", () => {
   });
 
   it("re-reads authoritative manual position after a 409 conflict", async () => {
-    const fetchImpl = vi.fn()
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => manualProjection())
       .mockResolvedValueOnce(new Response(null, { status: 409 }))
       .mockResolvedValueOnce(manualProjection());
     await expect(
@@ -114,7 +114,7 @@ describe("moveManualBondLocation", () => {
   });
 
   it("detects that the server switched back to live mode", async () => {
-    const fetchImpl = vi.fn()
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => manualProjection())
       .mockResolvedValueOnce(new Response(null, { status: 409 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         role: "admin",
