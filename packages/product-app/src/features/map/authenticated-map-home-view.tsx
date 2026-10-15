@@ -11,6 +11,7 @@ import {
   type BondProviderType,
   type CommittedAwardAccessPort,
   type CoreRuntimePort,
+  type BusinessStationAccessPort,
   type NearbySpeechAccessPort,
   type PubInfoAccessPort,
 } from "@nilx-one/application";
@@ -192,6 +193,7 @@ import {
   AVAIA_TRAVEL_MAX_FIX_AGE_MS,
 } from "./avaia-travel-policy";
 import { useFogReveal, type FogRevealState } from "./use-fog-reveal";
+import { useBusinessStations } from "./use-business-stations";
 import { useNearbySpeech } from "./use-nearby-speech";
 import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
@@ -294,6 +296,11 @@ export interface AuthenticatedMapHomeViewProps {
    * host's identity client has no such capability, which is a normal state.
    */
   readonly nearbySpeech?: NearbySpeechAccessPort;
+  /**
+   * Every business's stationed Avaia, standing at its shop for every Bond.
+   * Absent when this host's identity client cannot read them.
+   */
+  readonly businessStations?: BusinessStationAccessPort;
   /**
    * The provider accounts this Bond carries. Account text never reaches this
    * surface as content: an attachment resolves where it opens, nothing more.
@@ -740,6 +747,7 @@ export function AuthenticatedMapHomeView({
   committedAwards,
   findItems,
   nearbySpeech,
+  businessStations,
   connectedProviders,
   providerDeepLinks = [],
   onDisconnectProvider,
@@ -1057,6 +1065,11 @@ export function AuthenticatedMapHomeView({
   const speech = useNearbySpeech({
     port: nearbySpeech,
     onHeard: () => cue("heard"),
+  });
+  useBusinessStations({
+    port: businessStations,
+    avatars: renderer.avatars,
+    camera,
   });
   // Settings is where the model is downloaded or removed, so leaving it is
   // when this device is asked again.

@@ -50,6 +50,8 @@ import {
   type OrbSpillsReadResult,
   type OrbSpillView,
   type NearbySpeechAccessPort,
+  type BusinessStationAccessPort,
+  type BusinessStationView,
   type PubInfoAccessPort,
   type SpokenLineView,
   type PubInfoExperience,
@@ -200,6 +202,40 @@ function parseNearbySpeech(
   return lines;
 }
 
+/**
+ * Reads the wire shape of `GET /api/v1/identity/stations`, the whole published
+ * list however long it is: the service sets no page or cap, so neither does
+ * this reader. A station that is not exactly well formed drops the whole
+ * answer: half a map of shops is not adopted as the map of shops.
+ */
+function parseBusinessStations(
+  body: unknown,
+): readonly BusinessStationView[] | undefined {
+  if (!isRecord(body) || !Array.isArray(body.stations)) return undefined;
+  const stations: BusinessStationView[] = [];
+  for (const station of body.stations as readonly unknown[]) {
+    if (
+      !isRecord(station) ||
+      typeof station.pub_dress !== "string" ||
+      // A station is named after its business: `0xda-market-zoloti-vorota`.
+      !station.pub_dress.startsWith(`${String(station.owner_pub_dress)}-`) ||
+      typeof station.owner_pub_dress !== "string" ||
+      !station.owner_pub_dress.startsWith("0x")
+    ) {
+      return undefined;
+    }
+    const coordinate = parseAvaiaCoordinate(station.coordinate);
+    if (coordinate === undefined) return undefined;
+    stations.push({
+      pubDress: station.pub_dress,
+      ownerPubDress: station.owner_pub_dress,
+      longitude: coordinate.longitude,
+      latitude: coordinate.latitude,
+    });
+  }
+  return stations;
+}
+
 function isBrowserProvider(value: unknown): value is BrowserIdentityProvider {
   return value === "telegram" || value === "discord" || value === "github";
 }
@@ -211,7 +247,8 @@ class IdentityHttpAdapter
     PubInfoAccessPort,
     CommittedAwardAccessPort,
     OrbSpillAccessPort,
-    NearbySpeechAccessPort
+    NearbySpeechAccessPort,
+    BusinessStationAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
 
@@ -1089,6 +1126,25 @@ class IdentityHttpAdapter
     }
   }
 
+  public async readBusinessStations(): Promise<
+    readonly BusinessStationView[] | undefined
+  > {
+    try {
+      // Stations are public: no proof of who is asking goes with this read.
+      const response = await this.fetch("/api/v1/identity/stations", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "omit",
+      });
+      if (!response.ok) return undefined;
+      return parseBusinessStations(
+        await response.json().catch(() => undefined),
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
   public async publishExperience(
     publication: ExperiencePublication,
   ): Promise<PubInfoExperienceResult> {
@@ -1453,6 +1509,7 @@ export function createIdentityHttpAdapter(
   PubInfoAccessPort &
   CommittedAwardAccessPort &
   OrbSpillAccessPort &
-  NearbySpeechAccessPort {
+  NearbySpeechAccessPort &
+  BusinessStationAccessPort {
   return new IdentityHttpAdapter(options);
 }
