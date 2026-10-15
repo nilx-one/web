@@ -148,10 +148,15 @@ describe("manual Bond walking", () => {
   });
   it("uses the server's position after a competing CAS write", async () => {
     const serverPosition = { longitude: 30.525, latitude: 50.4502 };
-    const commit = vi.fn(async () => ({
-      kind: "rejected" as const,
-      current: serverPosition,
-    }));
+    const commit = vi.fn(
+      async (
+        _expected: typeof here,
+        _target: typeof here,
+      ): Promise<ManualMoveOutcome> => ({
+        kind: "rejected",
+        current: serverPosition,
+      }),
+    );
     const { result, renderer } = setup({ commit });
     tap(renderer);
     await act(async () => vi.advanceTimersByTimeAsync(90_000));

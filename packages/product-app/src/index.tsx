@@ -127,6 +127,7 @@ export type {
   LocalModelEngine,
   LocalModelHost,
 } from "./shell/local-model-host";
+export type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 
 export interface ProductAppDependencies {
   core: CoreRuntimePort;

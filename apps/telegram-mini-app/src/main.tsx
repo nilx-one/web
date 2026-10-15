@@ -21,7 +21,7 @@ import {
 } from "@nilx-one/map-maplibre";
 import { createFogField, createShadeMapFactory } from "@nilx-one/map-shade";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
-import { ProductApp } from "@nilx-one/product-app";
+import { ProductApp, type ManualMoveOutcome } from "@nilx-one/product-app";
 import { declareHostLanguages } from "@nilx-one/product-app/localization";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -138,29 +138,32 @@ async function bootstrap(): Promise<void> {
   const onManualBondMove = async (
     from: { readonly longitude: number; readonly latitude: number },
     to: { readonly longitude: number; readonly latitude: number },
-  ): Promise<boolean> => {
-    if (manualLocation === undefined) return false;
+  ): Promise<ManualMoveOutcome> => {
+    if (manualLocation === undefined) return { kind: "rejected" };
     // Without initData there is no identity to authorize; send no header
     // rather than an empty `tma ` credential, as the Web host does.
     const initData = telegramBridge?.initData ?? "";
     const result = await moveManualBondLocation(from, to, {
       authorization: initData.length > 0 ? `tma ${initData}` : undefined,
     });
-    if (result.kind === "failed") return { kind: "rejected" as const };
-    if (result.kind === "conflict" && result.state.kind === "live") {
+    if (result.kind === "failed") return { kind: "rejected" };
+    let authoritative: {
+      readonly longitude: number;
+      readonly latitude: number;
+    };
+    if (result.kind === "accepted") {
+      authoritative = to;
+    } else if (result.state.kind === "manual") {
+      authoritative = result.state.position;
+    } else {
       // Only a fresh composition may enable device GPS; never reuse the
       // manual-only geolocation capability for a remote mode change.
-      window.location.reload();
-      return { kind: "rejected" as const };
-    }
-    if (result.kind === "conflict" && result.state.kind !== "manual") {
-      return { kind: "rejected" as const };
+      if (result.state.kind === "live") window.location.reload();
+      return { kind: "rejected" };
     }
     // The identity service stores integer E7 coordinates. Publish the
     // canonical server point through a declared-only observer (never GPS).
-    const stored = quantizeDeclaredPoint(
-      result.kind === "accepted" ? to : result.state.position,
-    );
+    const stored = quantizeDeclaredPoint(authoritative);
     manualMoveRevision += 1;
     currentLocationFingerprint = locationControlFingerprint({
       kind: "manual",
@@ -168,8 +171,8 @@ async function bootstrap(): Promise<void> {
     });
     manualLocation.update(stored);
     return result.kind === "accepted"
-      ? { kind: "accepted" as const }
-      : { kind: "rejected" as const, current: stored };
+      ? { kind: "accepted" }
+      : { kind: "rejected", current: stored };
   };
   // Only a definite answer is a changed mode. `unavailable` is also what a
   // slow network or a Mini App left in the background past its initData's
