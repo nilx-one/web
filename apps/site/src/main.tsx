@@ -51,7 +51,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./bond-dock-motion.css";
-import { reportMapRendererStatus, reportWorldWipe } from "./error-reporting";
+import {
+  reportCoreRuntimeStatus,
+  reportMapRendererStatus,
+  reportWorldWipe,
+} from "./error-reporting";
 import { PublicBondPage, isPublicBondHostname } from "./public-bond";
 import { wipeLocalWorldOnce } from "./world-wipe";
 
@@ -149,6 +153,9 @@ if (isPublicBondHostname(window.location.hostname)) {
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,
   });
+  // probe() caches the binding load, so this root-level health check shares the
+  // one load ProductApp also awaits rather than forcing a second.
+  void core.probe().then((status) => reportCoreRuntimeStatus(reporter, status));
   // The Discord Activity sends a person here to create a password this origin
   // owns. While the service still holds that hand-off, the page acts for the
   // Discord account that sent them: a Discord host, not the Web one.

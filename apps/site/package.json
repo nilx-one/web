@@ -8,7 +8,7 @@
     "dev": "vite"
   },
   "dependencies": {
-    "@aiaiaiai/4x-errors-browser": "0.1.0",
+    "@aiaiaiai/4x-errors-browser": "0.2.0",
     "@nilx-one/core-wasm": "workspace:*",
     "@nilx-one/host-browser": "workspace:*",
     "@nilx-one/host-contract": "workspace:*",

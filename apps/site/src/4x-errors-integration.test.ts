@@ -7,7 +7,10 @@ import {
 } from "@aiaiaiai/4x-errors-browser";
 import { describe, expect, it } from "vitest";
 
-import { reportMapRendererStatus } from "./error-reporting";
+import {
+  reportCoreRuntimeStatus,
+  reportMapRendererStatus,
+} from "./error-reporting";
 
 describe("@aiaiaiai/4x-errors-browser integration", () => {
   it.each([
@@ -63,6 +66,28 @@ describe("@aiaiaiai/4x-errors-browser integration", () => {
       }),
     ]);
 
+    reporter.dispose();
+  });
+
+  it("delivers a Core runtime failure through the real SDK", async () => {
+    const events: ErrorEventV1[] = [];
+    const reporter = createBrowserReporter({
+      project: "nilx-one/web",
+      source: "browser",
+      captureGlobalErrors: false,
+      transport: (event) => {
+        events.push(event);
+      },
+    });
+
+    reportCoreRuntimeStatus(reporter, {
+      kind: "unavailable",
+      reason: "load-failed",
+    });
+    await reporter.flush();
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.error_id).toBe("core.runtime.load.failed");
     reporter.dispose();
   });
 });
