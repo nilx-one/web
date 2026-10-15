@@ -61,7 +61,7 @@ export function useBondManualWalk({
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   const expected = useRef<Point | undefined>(declared);
-  const observed = useRef<string | undefined>();
+  const observed = useRef<string | undefined>(undefined);
   const epoch = useRef(0);
   const ownerRef = useRef(owner);
 
