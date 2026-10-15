@@ -41,6 +41,17 @@ class AttributionTests(unittest.TestCase):
     def test_unknown_tool_name_rejected(self):
         self.assertTrue(module.validate(ZERO, "fix: example\n\nAssisted-by: OpenAI ChatGPT\n"))
 
+    def test_x0skai_verified_address_is_x0skai(self):
+        verified = "x0skai@aiaiaiai.org"
+        message = "fix: example\n\nCo-authored-by: Claude <noreply@anthropic.com>\n"
+        self.assertEqual(module.validate(verified, message), [])
+        self.assertEqual(
+            module.validate(ZERO, f"fix: example\n\nCo-authored-by: x0skai <{verified}>\n"), []
+        )
+        self.assertTrue(module.validate(verified, f"fix: example\n\nCo-authored-by: x0skai <{OTHER}>\n"))
+        self.assertTrue(module.validate(OTHER, f"fix: example\n\nCo-authored-by: x0skai <{verified}>\n"))
+        self.assertTrue(module.validate(ZERO, f"fix: example\n\nCo-authored-by: 0x0sky <{verified}>\n"))
+
     def test_external_contributor(self):
         self.assertEqual(module.validate("human@example.org", "fix: example\n"), [])
 

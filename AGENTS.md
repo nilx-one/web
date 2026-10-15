@@ -186,6 +186,10 @@ account ID:
 | `0x0sky`       | 75973992   | `75973992+0x0sky@users.noreply.github.com`  |
 | `x0skai`       | 300452669  | `300452669+x0skai@users.noreply.github.com` |
 
+`x0skai` also commits as `x0skai@aiaiaiai.org`, an address verified on that
+account. GitHub and the commit-attribution check resolve both addresses to
+`x0skai`; co-author trailers keep the ID-based noreply address.
+
 Tool credit is separate from account credit and applies only to real
 contribution to the commit:
 

@@ -88,9 +88,13 @@ account ID:
 | `0x0sky`       | 75973992   | `75973992+0x0sky@users.noreply.github.com`  |
 | `x0skai`       | 300452669  | `300452669+x0skai@users.noreply.github.com` |
 
+`x0skai` also commits as `x0skai@aiaiaiai.org`, an address verified on that
+account. GitHub and the commit-attribution check resolve both addresses to
+`x0skai`; co-author trailers keep the ID-based noreply address.
+
 **Claude Code commits only as `x0skai`.** Every commit Claude Code creates or
-amends is authored and committed as
-`x0skai <300452669+x0skai@users.noreply.github.com>` and ends with
+amends is authored and committed as `x0skai <x0skai@aiaiaiai.org>` (or the
+ID-based noreply address) and ends with
 `Co-authored-by: Claude <noreply@anthropic.com>`. Claude Code never commits as
 `0x0sky`, never overrides the session's `x0skai` git identity with another
 account, and adds `0x0sky` as a co-author only under the rule below, when

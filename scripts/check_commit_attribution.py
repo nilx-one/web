@@ -10,7 +10,12 @@ ACCOUNTS = {
     "0x0sky": "75973992+0x0sky@users.noreply.github.com",
     "x0skai": "300452669+x0skai@users.noreply.github.com",
 }
-ACCOUNT_BY_ADDRESS = {address.lower(): name for name, address in ACCOUNTS.items()}
+# Addresses verified on an account besides its ID-based noreply one.
+VERIFIED_ADDRESSES = {"x0skai@aiaiaiai.org": "x0skai"}
+ACCOUNT_BY_ADDRESS = {
+    **{address.lower(): name for name, address in ACCOUNTS.items()},
+    **VERIFIED_ADDRESSES,
+}
 CLAUDE = "Claude <noreply@anthropic.com>"
 
 
@@ -36,7 +41,7 @@ def validate(email, message):
         name, address = match.groups()
         if (author and name == author) or address.lower() == email.lower():
             errors.append("primary author repeated as co-author")
-        if name in ACCOUNTS and address.lower() != ACCOUNTS[name]:
+        if name in ACCOUNTS and ACCOUNT_BY_ADDRESS.get(address.lower()) != name:
             errors.append("incorrect account co-author address")
         if address.lower() in ACCOUNT_BY_ADDRESS and name != ACCOUNT_BY_ADDRESS[address.lower()]:
             errors.append("incorrect account co-author name")
