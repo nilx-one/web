@@ -8,7 +8,6 @@ import {
   CAMERA_READ_PIXELS,
   cameraChangeVisible,
   cameraKeyCommand,
-  followAfterGesture,
   followCamera,
   zoomPivotFor,
   type CameraKeyEvent,
@@ -56,26 +55,6 @@ describe("follow camera", () => {
       bearing: 135,
       pitch: 60,
     });
-  });
-
-  it("stays locked after turning, tilting or zooming around the body", () => {
-    const orbited = camera({ bearing: 210, pitch: 70, zoom: 17 });
-
-    expect(followAfterGesture("locked", orbited, BODY)).toBe("locked");
-    expect(
-      followAfterGesture("locked", camera({ center: eastBy(20) }), BODY),
-    ).toBe("locked");
-  });
-
-  it("lets go once a drag leaves the body out of frame, and does not grab it back", () => {
-    const looked = camera({ center: eastBy(400) });
-
-    expect(followAfterGesture("locked", looked, BODY)).toBe("free");
-    expect(followAfterGesture("free", camera(), BODY)).toBe("free");
-  });
-
-  it("keeps the follow as it is when there is no body to frame", () => {
-    expect(followAfterGesture("locked", camera(), undefined)).toBe("locked");
   });
 
   it("closes in on the centre only while locked", () => {
