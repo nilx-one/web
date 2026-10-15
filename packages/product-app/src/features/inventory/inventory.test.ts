@@ -94,8 +94,14 @@ describe("layout migration", () => {
       experience: 0,
     };
     const port = core(answer);
-    await expect(applyInventory("0x0sky", port, { op: "normalize" })).resolves.toEqual(answer);
-    expect(port.applyInventoryCommand).toHaveBeenCalledWith(STATE, { op: "normalize" }, expect.any(Number));
+    await expect(
+      applyInventory("0x0sky", port, { op: "normalize" }),
+    ).resolves.toEqual(answer);
+    expect(port.applyInventoryCommand).toHaveBeenCalledWith(
+      STATE,
+      { op: "normalize" },
+      expect.any(Number),
+    );
     expect(stored.state).toBe('{"layout_version":2}');
   });
 });
