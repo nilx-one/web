@@ -132,9 +132,11 @@ export function InventoryPanel({
     setNote(
       answer.error === "no_room"
         ? t("inventory.error.no_room")
-        : answer.error === "not_enough_seeds"
-          ? t("craft.error.not_enough_seeds")
-          : t("inventory.error.generic"),
+        : answer.error === "too_big"
+          ? t("inventory.error.too_big")
+          : answer.error === "not_enough_seeds"
+            ? t("craft.error.not_enough_seeds")
+            : t("inventory.error.generic"),
     );
   }
 

@@ -297,6 +297,48 @@ describe("CoreWasmClient", () => {
     ).toThrow(RangeError);
   });
 
+  it("reads a pick-up that brought the gift, and one left behind after it", async () => {
+    let outcome: Record<string, unknown> = {};
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          apply_inventory_command: () =>
+            JSON.stringify({
+              ok: true,
+              item: "reel_to_reel",
+              state: { seeds: "0" },
+              outcome: {
+                seeds_gained: "0",
+                seeds_spent: "0",
+                experience: 0,
+                ...outcome,
+              },
+            }),
+        }),
+    });
+    const pickUp = () =>
+      bindings.applyInventoryCommand?.(
+        "",
+        { op: "pick_up", holder: "avaia", artifact_id: "art:x", tier: 1 },
+        0,
+      );
+
+    outcome = { gifted: true, left_behind: null };
+    expect(pickUp()).toMatchObject({ ok: true, gifted: true });
+    expect(pickUp()).not.toHaveProperty("leftBehind");
+
+    outcome = { gifted: true, left_behind: "too_big" };
+    expect(pickUp()).toMatchObject({ gifted: true, leftBehind: "too_big" });
+
+    outcome = { gifted: false, left_behind: null };
+    expect(pickUp()).not.toHaveProperty("gifted");
+
+    outcome = { gifted: "yes" };
+    expect(pickUp).toThrow("invalid inventory answer");
+    outcome = { left_behind: "Too Big!" };
+    expect(pickUp).toThrow("invalid inventory answer");
+  });
+
   it("steps the Avaia's drive through Core and reads its commands strictly", async () => {
     // Answers as Core's drive gives them (docs/avaia-drive.md in core).
     const tap =

@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const applyInventory = vi.fn(async () => ({
@@ -18,7 +19,9 @@ vi.mock("../progression/committed-journal", () => ({
   }),
 }));
 
-const { giveBackpacksIfDue } = await import("./backpack-gift");
+const { giveBackpacksIfDue, oweBackpackScene, useBackpackGift } =
+  await import("./backpack-gift");
+const { useInventory } = await import("./inventory");
 const { GUIDE_NODES, GUIDE_OPENING, isRecordedGuideLine } =
   await import("../guide/guide-script");
 
@@ -52,6 +55,40 @@ describe("xSasha's backpack gift", () => {
         3,
       ),
     ).resolves.toBe(false);
+    expect(applyInventory).not.toHaveBeenCalled();
+  });
+
+  it("plays her scene for a gift a pick-up gave, once the world can hold it", () => {
+    vi.mocked(useInventory).mockReturnValue({
+      model: {
+        seeds: 0,
+        bond: { carry: "backpack", things: [], owned: ["pocket", "backpack"] },
+        avaia: { carry: "backpack", things: [], owned: ["pocket", "backpack"] },
+        craft: undefined,
+        gifted: true,
+      },
+      catalog: undefined,
+    });
+    const onGiven = vi.fn();
+    const { rerender } = renderHook(
+      ({ ready }: { ready: boolean }) =>
+        useBackpackGift({
+          owner: "0x0sky",
+          core: core(false),
+          bondLevel: 1,
+          ready,
+          onGiven,
+        }),
+      { initialProps: { ready: false } },
+    );
+    act(() => oweBackpackScene("0x0sky"));
+    expect(onGiven).not.toHaveBeenCalled();
+
+    rerender({ ready: true });
+    expect(onGiven).toHaveBeenCalledOnce();
+    rerender({ ready: false });
+    rerender({ ready: true });
+    expect(onGiven).toHaveBeenCalledOnce();
     expect(applyInventory).not.toHaveBeenCalled();
   });
 

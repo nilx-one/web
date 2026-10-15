@@ -70,6 +70,10 @@ export const FINDS_EN = {
   "inventory.error.no_room": "No room for it there.",
   "inventory.error.generic": "That didn’t work. Nothing changed.",
   "inventory.full": "No room for {item}. It stays where it lay.",
+  "inventory.tooBig.title": "Too big",
+  "inventory.tooBig":
+    "{item} does not fit even an empty backpack. It stays where it lay.",
+  "inventory.error.too_big": "Too big to fit there.",
   "item.headphones": "Headphones",
   "item.album": "Album",
   "item.kyiv_mixtape": "Kyiv mixtape",
@@ -182,6 +186,10 @@ export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "inventory.error.no_room": "Там для цього немає місця.",
   "inventory.error.generic": "Не вийшло. Нічого не змінилося.",
   "inventory.full": "Немає місця для «{item}». Лишилося лежати, де було.",
+  "inventory.tooBig.title": "Річ завелика",
+  "inventory.tooBig":
+    "«{item}» не влазить навіть у порожній рюкзак. Лишилося лежати, де було.",
+  "inventory.error.too_big": "Річ завелика для цього місця.",
   "item.headphones": "Навушники",
   "item.album": "Альбом",
   "item.kyiv_mixtape": "Київський мікстейп",
@@ -294,6 +302,10 @@ export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "inventory.error.no_room": "Там для этого нет места.",
   "inventory.error.generic": "Не получилось. Ничего не изменилось.",
   "inventory.full": "Нет места для «{item}». Осталось лежать, где было.",
+  "inventory.tooBig.title": "Вещь слишком большая",
+  "inventory.tooBig":
+    "«{item}» не помещается даже в пустой рюкзак. Осталось лежать, где было.",
+  "inventory.error.too_big": "Вещь слишком большая для этого места.",
   "item.headphones": "Наушники",
   "item.album": "Альбом",
   "item.kyiv_mixtape": "Киевский микстейп",
