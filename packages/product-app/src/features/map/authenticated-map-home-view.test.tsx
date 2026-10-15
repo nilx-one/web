@@ -1071,7 +1071,9 @@ describe("AuthenticatedMapHomeView", () => {
     const cancel = screen.getByRole("button", { name: "Cancel" });
 
     expect(outer).toContainElement(editor);
-    expect(content).toContainElement(screen.getByRole("radio", { name: /Sky/ }));
+    expect(content).toContainElement(
+      screen.getByRole("radio", { name: /Sky/ }),
+    );
     expect(content).not.toContainElement(save);
     expect(content).not.toContainElement(cancel);
     expect(footer).toContainElement(save);
