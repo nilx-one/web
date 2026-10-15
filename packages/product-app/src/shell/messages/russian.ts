@@ -196,6 +196,9 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Выбранную модель больше не предлагают, поэтому работает модель по умолчанию.",
   "settings.localModel.status.unsupportedOverBudget":
     "Недоступно: этой модели нужно больше памяти, чем разрешено здесь.",
+  "camera.mode": "Режим камеры",
+  "camera.follow": "Слежение",
+  "camera.free": "Свободная",
   "dock.edit": "изменить",
   "dock.ai": "ИИ",
   "dock.unconfigured": "не настроено",
