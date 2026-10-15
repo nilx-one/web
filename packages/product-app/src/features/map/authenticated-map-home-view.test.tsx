@@ -1902,7 +1902,9 @@ describe("AuthenticatedMapHomeView", () => {
       const here = { longitude: 30.5234, latitude: 50.4501 };
       const there = { longitude: 30.5244, latitude: 50.4501 };
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
-      const onManualBondMove = vi.fn(async () => true);
+      const onManualBondMove = vi.fn(
+        async (_from: typeof here, _to: typeof there) => true,
+      );
       renderView({
         mapRenderer,
         geolocation: createDeclaredGeolocation(here),
