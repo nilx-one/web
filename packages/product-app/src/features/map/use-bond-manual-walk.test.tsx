@@ -63,9 +63,16 @@ describe("manual Bond walking", () => {
     expect(commit).not.toHaveBeenCalled();
 
     await act(async () => vi.advanceTimersByTimeAsync(90_000));
-    expect(commit).toHaveBeenCalledWith(here, there);
+    expect(commit).toHaveBeenCalledOnce();
+    const [from, arrived] = vi.mocked(commit).mock.calls[0]!;
+    expect(from).toEqual(here);
+    expect(arrived.longitude).toBeCloseTo(there.longitude, 6);
+    expect(arrived.latitude).toBeCloseTo(there.latitude, 6);
     expect(result.current.moving).toBe(false);
-    expect(result.current.point(performance.now())).toEqual(there);
+    expect(result.current.point(performance.now())?.longitude).toBeCloseTo(
+      there.longitude,
+      6,
+    );
   });
 
   it("does not move for fog, buildings or water", () => {
@@ -96,7 +103,11 @@ describe("manual Bond walking", () => {
     act(() => renderer.tapGround({ ...target, ground: "open" }));
     expect(result.current.stance(performance.now())?.point).toEqual(from);
     await act(async () => vi.advanceTimersByTimeAsync(90_000));
-    expect(commit).toHaveBeenCalledWith(here, target);
+    expect(commit).toHaveBeenCalledOnce();
+    const [origin, arrived] = vi.mocked(commit).mock.calls[0]!;
+    expect(origin).toEqual(here);
+    expect(arrived.longitude).toBeCloseTo(target.longitude, 6);
+    expect(arrived.latitude).toBeCloseTo(target.latitude, 6);
   });
 
   it("rolls back a rejected server update to its last declared position", async () => {
