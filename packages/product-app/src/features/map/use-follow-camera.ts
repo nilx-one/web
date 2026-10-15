@@ -120,23 +120,26 @@ export function useFollowCamera({
   useEffect(
     () =>
       renderer.subscribeCamera((change) => {
-        if (!change.gesture) {
-          // The application's own move has settled: nothing to wait for.
-          heldUntil.current = 0;
-          return;
-        }
-        if (change.phase === "start") {
+        if (change.phase === "start" && change.gesture) {
           gesturing.current = true;
           heldUntil.current = 0;
           return;
         }
-        gesturing.current = false;
-        const next = followAfterGesture(
-          followRef.current,
-          change.camera,
-          input.current.body(),
-        );
-        if (next !== followRef.current) choose(next);
+        // MapLibre may omit originalEvent on moveend even when a user's
+        // gesture started the move. Its start is authoritative until the
+        // matching end; otherwise the follow would remain paused forever.
+        if (gesturing.current || change.gesture) {
+          gesturing.current = false;
+          const next = followAfterGesture(
+            followRef.current,
+            change.camera,
+            input.current.body(),
+          );
+          if (next !== followRef.current) choose(next);
+          return;
+        }
+        // Only a purely programmatic settle releases an application hold.
+        heldUntil.current = 0;
       }),
     [choose, renderer],
   );
