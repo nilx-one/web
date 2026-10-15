@@ -47,6 +47,18 @@ describe("readBusinessStations", () => {
     });
   });
 
+  it("accepts the whole published list, past any page size", async () => {
+    const many = Array.from({ length: 1_001 }, (_, index) => ({
+      ...zolotiVorota,
+      pub_dress: `xda-market-${index}ai`,
+    }));
+    const { adapter } = adapterAnswering(() => stations(...many));
+
+    const read = await adapter.readBusinessStations();
+    expect(read).toHaveLength(1_001);
+    expect(read?.at(-1)?.pubDress).toBe("xda-market-1000ai");
+  });
+
   it("drops the whole answer when one station is malformed", async () => {
     const { adapter } = adapterAnswering(() =>
       stations(zolotiVorota, { ...zolotiVorota, coordinate: null }),

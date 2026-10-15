@@ -1069,7 +1069,7 @@ export function AuthenticatedMapHomeView({
   useBusinessStations({
     port: businessStations,
     avatars: renderer.avatars,
-    zoom: cameraZoom,
+    camera,
   });
   // Settings is where the model is downloaded or removed, so leaving it is
   // when this device is asked again.

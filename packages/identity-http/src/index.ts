@@ -202,18 +202,16 @@ function parseNearbySpeech(
   return lines;
 }
 
-const MAX_BUSINESS_STATIONS = 500;
-
 /**
- * Reads the wire shape of `GET /api/v1/identity/stations`. A station that is
- * not exactly well formed drops the whole answer: half a map of shops is not
- * adopted as the map of shops.
+ * Reads the wire shape of `GET /api/v1/identity/stations`, the whole published
+ * list however long it is: the service sets no page or cap, so neither does
+ * this reader. A station that is not exactly well formed drops the whole
+ * answer: half a map of shops is not adopted as the map of shops.
  */
 function parseBusinessStations(
   body: unknown,
 ): readonly BusinessStationView[] | undefined {
   if (!isRecord(body) || !Array.isArray(body.stations)) return undefined;
-  if (body.stations.length > MAX_BUSINESS_STATIONS) return undefined;
   const stations: BusinessStationView[] = [];
   for (const station of body.stations as readonly unknown[]) {
     if (
