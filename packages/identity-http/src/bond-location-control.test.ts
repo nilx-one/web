@@ -153,9 +153,13 @@ describe("moveManualBondLocation", () => {
   it("fails closed for invalid coordinates without performing a request", async () => {
     const fetchImpl = vi.fn();
     await expect(
-      moveManualBondLocation(expected, { longitude: NaN, latitude: 1 }, {
-        fetch: fetchImpl as typeof fetch,
-      }),
+      moveManualBondLocation(
+        expected,
+        { longitude: NaN, latitude: 1 },
+        {
+          fetch: fetchImpl as typeof fetch,
+        },
+      ),
     ).resolves.toEqual({ kind: "failed" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
