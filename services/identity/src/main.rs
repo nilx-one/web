@@ -17,8 +17,8 @@ use identity_bot::{
     GithubEvidenceRepository, IdentityProvider, IdentityRecord, IdentityRepository,
     NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,
     ProviderSecretCipher, SelfDisconnectOutcome, TelegramInitDataVerifier, TelegramLocationIntents,
-    api, browser_web_auth, github_evidence, location_control_router, provider_self_service_router,
-    public_api,
+    api, browser_web_auth, business_command, github_evidence, location_control_router,
+    provider_self_service_router, public_api,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
@@ -218,6 +218,31 @@ struct TelegramBotState {
     synced_command_menus: Arc<Mutex<HashMap<i64, CommandMenu>>>,
 }
 
+async fn run_operator_command(args: &[String]) -> i32 {
+    let database_url =
+        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://identity.db".to_owned());
+    let repository = match IdentityRepository::connect(&database_url).await {
+        Ok(repository) => repository,
+        Err(error) => {
+            eprintln!("identity storage is unavailable: {error}");
+            return 1;
+        }
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    match business_command::run(&repository, args, now).await {
+        Ok(line) => {
+            println!("{line}");
+            0
+        }
+        Err(line) => {
+            eprintln!("{line}");
+            2
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -226,6 +251,12 @@ async fn main() {
                 .unwrap_or_else(|_| EnvFilter::new("identity_bot=info")),
         )
         .init();
+
+    // `identity-bot business …` is an operator command, not the service.
+    let args: Vec<String> = env::args().skip(1).collect();
+    if !args.is_empty() {
+        std::process::exit(run_operator_command(&args).await);
+    }
 
     let bot_token = env::var("TELOXIDE_TOKEN").expect("TELOXIDE_TOKEN must be configured");
     let database_url =

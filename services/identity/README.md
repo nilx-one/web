@@ -89,6 +89,27 @@ INSERT INTO bond_roles (pub_dress, role) VALUES ('0x1example', 'business')
 ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role;
 ```
 
+### Business stations
+
+A `business` Bond keeps one stationed Avaia per shop. A station never walks:
+it stands at its shop's point. Its address is an Avaia address with the
+owner's discriminator (`0xda-market` keeps `xda-market-zoloti-vorotai`) and
+takes the same global namespace as every other identity. It is not the
+Bond's own Avaia: that one stays the single Avaia the owner creates, and
+owner-keyed reads never see a station. A station leaves with its business.
+
+Both the role and the stations are assigned out of band, by the service
+binary against its own database:
+
+```sh
+identity-bot business grant 0xda-market
+identity-bot business station 0xda-market xda-market-zoloti-vorotai 30.5131 50.4489
+```
+
+Stationing an address the business already keeps restates its point.
+`GET /api/v1/identity/stations` answers every station to anyone:
+`{ "stations": [{ "pub_dress": "…", "owner_pub_dress": "…", "coordinate": … }] }`.
+
 `Bond.location` has two modes. Every role may use `live`: it is entered only by an explicit current-location share in the bot, where Telegram asks for the device location. The Mini App's background `POST /api/v1/location-control` only refreshes a location that is already `live` and answers `409` for a `manual` one. `manual` is a declared point and needs `admin`, whose rights are exactly those of `user` plus setting a manual location.
 
 A Bond has exactly one location, whichever host it is set from. `GET /api/v1/location-control` answers it to every host: the Telegram Mini App with `initData`, the website with its `__Host-0x1_session` cookie, and the Discord Activity with `authorization: discord <access token>`. While the location is `manual`, each host stands the Bond at the declared point and never asks its device, so no host draws the same Bond a second time at its own position.

@@ -9,6 +9,7 @@ pub mod api {
     include!("session_activation.rs");
 }
 pub mod browser_web_auth;
+pub mod business_command;
 pub mod credentials;
 pub mod discord_oauth;
 pub mod finds;
@@ -24,6 +25,7 @@ pub mod repository {
     include!("repository_avaia_lifecycle.rs");
     include!("repository_pub_info.rs");
     include!("repository_awards.rs");
+    include!("repository_business_stations.rs");
 }
 pub mod speech;
 pub mod telegram_init_data;
@@ -48,8 +50,9 @@ pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
 pub use provider_self_service::provider_self_service_router;
 pub use repository::{
     ActivationRequest, ActivationRequestStatus, AvaiaConfigurationState, AvaiaIdentityRecord,
-    AvaiaLocation, AvaiaTravelOutcome, AvaiaUpdateOutcome, IdentityProvider, IdentityRecord,
-    IdentityRepository, NativeCredentialRecord, NativeRegistrationOutcome, ProviderIdentity,
-    PubDressRenameOutcome, PublicIdentityRecord, RegistrationOutcome, RepositoryError,
+    AvaiaLocation, AvaiaTravelOutcome, AvaiaUpdateOutcome, BusinessStation, BusinessStationOutcome,
+    IdentityProvider, IdentityRecord, IdentityRepository, NativeCredentialRecord,
+    NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome, PublicIdentityRecord,
+    RegistrationOutcome, RepositoryError,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};

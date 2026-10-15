@@ -35,6 +35,7 @@ pub fn router(repository: IdentityRepository) -> Router {
             post(resolve_pub_dress_label),
         )
         .route("/api/v1/identity/public", get(read_public_identity))
+        .route("/api/v1/identity/stations", get(read_business_stations))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(PublicApiState {
             repository,
@@ -171,6 +172,30 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
         Ok(None) => not_found(),
         Err(error) => {
             tracing::error!(%error, "public Bond lookup failed");
+            unavailable()
+        }
+    }
+}
+
+/// Every stationed Avaia, for every Bond's map. A station stands at its shop
+/// and never walks, so this is the whole answer, not a viewport query.
+async fn read_business_stations(State(state): State<PublicApiState>) -> Response {
+    match state.repository.business_stations().await {
+        Ok(stations) => no_store_json(
+            StatusCode::OK,
+            PublicStations {
+                stations: stations
+                    .into_iter()
+                    .map(|station| PublicStation {
+                        pub_dress: station.pub_dress,
+                        owner_pub_dress: station.owner_pub_dress,
+                        coordinate: station.coordinate,
+                    })
+                    .collect(),
+            },
+        ),
+        Err(error) => {
+            tracing::error!(%error, "business station lookup failed");
             unavailable()
         }
     }
@@ -331,6 +356,18 @@ struct ErrorEnvelope {
 struct ApiError {
     code: &'static str,
     message: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct PublicStations {
+    stations: Vec<PublicStation>,
+}
+
+#[derive(Debug, Serialize)]
+struct PublicStation {
+    pub_dress: String,
+    owner_pub_dress: String,
+    coordinate: GeoCoordinate,
 }
 
 #[cfg(test)]
@@ -559,5 +596,46 @@ mod tests {
                 .expect("response");
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "host={host}");
         }
+    }
+
+    #[tokio::test]
+    async fn stations_are_public_and_name_their_business() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let owner: PubDress = "0xda-market".parse().expect("pub_dress");
+        repository
+            .register(&owner, &ProviderIdentity::telegram(44), 100)
+            .await
+            .expect("registration");
+        repository
+            .set_role(&owner, crate::BondAccessRole::Business)
+            .await
+            .expect("role");
+        let station: crate::AvaiaPubDress = "xda-market-zoloti-vorotai".parse().expect("station");
+        let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
+        repository
+            .station_business_avaia(&owner, &station, at, 101)
+            .await
+            .expect("station");
+
+        let response = router(repository)
+            .oneshot(
+                Request::get("/api/v1/identity/stations")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json(response).await;
+        let expected = serde_json::json!({
+            "stations": [{
+                "pub_dress": "xda-market-zoloti-vorotai",
+                "owner_pub_dress": "0xda-market",
+                "coordinate": serde_json::to_value(at).expect("coordinate"),
+            }]
+        });
+        assert_eq!(body, expected);
     }
 }
