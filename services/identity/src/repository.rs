@@ -215,6 +215,14 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0024_business_stations.sql"))
             .execute(&self.pool)
             .await?;
+        if !self.has_business_station_column("caption").await? {
+            sqlx::raw_sql(include_str!("../migrations/0025_business_station_caption.sql"))
+                .execute(&self.pool)
+                .await?;
+        }
+        sqlx::raw_sql(include_str!("../migrations/0026_business_locations.sql"))
+            .execute(&self.pool)
+            .await?;
         if !self.has_avaia_location_column("travel_revision").await? {
             sqlx::raw_sql(include_str!("../migrations/0022_avaia_travel_revision.sql"))
                 .execute(&self.pool)
@@ -380,6 +388,15 @@ impl IdentityRepository {
 
     async fn has_avaia_location_column(&self, name: &str) -> Result<bool, RepositoryError> {
         let columns = sqlx::query("PRAGMA table_info(avaia_locations)")
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(columns
+            .iter()
+            .any(|column| column.get::<String, _>("name") == name))
+    }
+
+    async fn has_business_station_column(&self, name: &str) -> Result<bool, RepositoryError> {
+        let columns = sqlx::query("PRAGMA table_info(business_stations)")
             .fetch_all(&self.pool)
             .await?;
         Ok(columns

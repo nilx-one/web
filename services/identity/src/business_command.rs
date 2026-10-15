@@ -5,13 +5,18 @@
 //! station; an operator runs these against the service's own database:
 //!
 //! ```text
+//! identity-bot business register <pub_dress>
 //! identity-bot business grant <pub_dress>
-//! identity-bot business station <owner pub_dress> <Avaia address> <longitude> <latitude>
+//! identity-bot business station <owner pub_dress> "<caption>" <longitude> <latitude>
+//! identity-bot business locate <owner pub_dress> <station address>
 //! ```
+//!
+//! A station's address is formed from its caption (`business_caption`):
+//! `"xda-market Золоті Ворота"` stations `xda-market-zoloti-vorotai`.
 
 use crate::{
-    AvaiaPubDress, BondAccessRole, BusinessStationOutcome, GeoCoordinate, IdentityRepository,
-    PubDress,
+    AvaiaPubDress, BondAccessRole, BusinessLocationOutcome, BusinessRegistrationOutcome,
+    BusinessStationOutcome, GeoCoordinate, IdentityRepository, PubDress, business_caption,
 };
 
 /// Runs one operation and answers the line to print. `Err` is a refusal or a
@@ -23,6 +28,27 @@ pub async fn run(
 ) -> Result<String, String> {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     match args.as_slice() {
+        ["business", "register", pub_dress] => {
+            let pub_dress = parse_pub_dress(pub_dress)?;
+            match repository
+                .register_business(&pub_dress, now)
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                BusinessRegistrationOutcome::Registered(_) => {
+                    Ok(format!("{pub_dress}: registered, business, no sign-in yet"))
+                }
+                BusinessRegistrationOutcome::AlreadyBusiness(_) => {
+                    Ok(format!("{pub_dress}: already a business"))
+                }
+                BusinessRegistrationOutcome::Unavailable => {
+                    Err(format!("{pub_dress}: the address is taken or reserved"))
+                }
+                BusinessRegistrationOutcome::PublicLabelUnavailable => {
+                    Err(format!("{pub_dress}: its public label is taken"))
+                }
+            }
+        }
         ["business", "grant", pub_dress] => {
             let pub_dress = parse_pub_dress(pub_dress)?;
             let granted = repository
@@ -35,34 +61,60 @@ pub async fn run(
                 Err(format!("{pub_dress}: no such human Bond"))
             }
         }
-        ["business", "station", owner, station, longitude, latitude] => {
+        ["business", "station", owner, caption, longitude, latitude] => {
             let owner = parse_pub_dress(owner)?;
-            let station = station
-                .parse::<AvaiaPubDress>()
-                .map_err(|error| format!("{station}: not an Avaia address ({error})"))?;
+            let written = business_caption::normalize_caption(caption)
+                .map_err(|error| format!("\"{caption}\": {error}"))?;
+            let station = business_caption::station_address(&written)
+                .map_err(|error| format!("\"{caption}\": {error}"))?;
             let coordinate = parse_coordinate(longitude, latitude)?;
             match repository
-                .station_business_avaia(&owner, &station, coordinate, now)
+                .station_business_avaia(&owner, &station, Some(&written), coordinate, now)
                 .await
                 .map_err(|error| error.to_string())?
             {
                 BusinessStationOutcome::Stationed(station) => Ok(format!(
-                    "{}: stationed for {} at {}, {}",
+                    "{}: \"{}\" stationed for {} at {}, {}",
                     station.pub_dress,
+                    station.caption.as_deref().unwrap_or_default(),
                     station.owner_pub_dress,
                     station.coordinate.longitude_degrees(),
                     station.coordinate.latitude_degrees()
                 )),
                 BusinessStationOutcome::Unknown => Err(format!("{owner}: no such human Bond")),
-                BusinessStationOutcome::BusinessRoleRequired => {
-                    Err(format!("{owner}: not a business; grant the role first"))
-                }
+                BusinessStationOutcome::BusinessRoleRequired => Err(format!(
+                    "{owner}: not a business; register or grant it first"
+                )),
                 BusinessStationOutcome::OwnerDiscriminatorMismatch => Err(format!(
-                    "{station}: must keep {owner}'s discriminator, x{}…ai",
+                    "{station}: must keep {owner}'s discriminator; start the caption with x{}",
                     owner.discriminator()
                 )),
                 BusinessStationOutcome::AddressUnavailable => {
                     Err(format!("{station}: the address is taken"))
+                }
+            }
+        }
+        ["business", "locate", owner, station] => {
+            let owner = parse_pub_dress(owner)?;
+            let station = station
+                .parse::<AvaiaPubDress>()
+                .map_err(|error| format!("{station}: not an Avaia address ({error})"))?;
+            match repository
+                .locate_business(&owner, &station, now)
+                .await
+                .map_err(|error| error.to_string())?
+            {
+                BusinessLocationOutcome::Located(station) => Ok(format!(
+                    "{owner}: stands at {} at {}, {}",
+                    station.pub_dress,
+                    station.coordinate.longitude_degrees(),
+                    station.coordinate.latitude_degrees()
+                )),
+                BusinessLocationOutcome::BusinessRoleRequired => {
+                    Err(format!("{owner}: not a business"))
+                }
+                BusinessLocationOutcome::NotItsStation => {
+                    Err(format!("{station}: not a station {owner} keeps"))
                 }
             }
         }
@@ -71,8 +123,10 @@ pub async fn run(
 }
 
 const USAGE: &str = "usage:\n  \
+    identity-bot business register <pub_dress>\n  \
     identity-bot business grant <pub_dress>\n  \
-    identity-bot business station <owner> <Avaia address> <longitude> <latitude>";
+    identity-bot business station <owner> \"<caption>\" <longitude> <latitude>\n  \
+    identity-bot business locate <owner> <station address>";
 
 fn parse_pub_dress(value: &str) -> Result<PubDress, String> {
     value
@@ -94,39 +148,82 @@ fn parse_coordinate(longitude: &str, latitude: &str) -> Result<GeoCoordinate, St
 #[cfg(test)]
 mod tests {
     use super::run;
-    use crate::{IdentityRepository, ProviderIdentity, PubDress};
+    use crate::IdentityRepository;
 
-    fn args(line: &str) -> Vec<String> {
-        line.split_whitespace().map(str::to_owned).collect()
+    fn args(words: &[&str]) -> Vec<String> {
+        words.iter().map(|word| (*word).to_owned()).collect()
     }
 
     #[tokio::test]
-    async fn grants_the_role_then_stations_a_shop() {
+    async fn registers_stations_and_locates_the_first_business() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let owner: PubDress = "0xda-market".parse().expect("owner");
-        repository
-            .register(&owner, &ProviderIdentity::telegram(77), 100)
-            .await
-            .expect("registration");
-        let station = "business station 0xda-market xda-market-batkivshchynai 30.5632 50.4265";
+        let gate = [
+            "business",
+            "station",
+            "0xda-market",
+            "xda-market Золоті Ворота",
+            "30.5131",
+            "50.4489",
+        ];
 
-        let refused = run(&repository, &args(station), 101).await;
         assert_eq!(
-            refused,
-            Err("0xda-market: not a business; grant the role first".to_owned())
+            run(&repository, &args(&gate), 100).await,
+            Err("0xda-market: no such human Bond".to_owned())
         );
         assert_eq!(
-            run(&repository, &args("business grant 0xda-market"), 101).await,
-            Ok("0xda-market: business".to_owned())
-        );
-        assert_eq!(
-            run(&repository, &args(station), 102).await,
-            Ok(
-                "xda-market-batkivshchynai: stationed for 0xda-market at 30.5632, 50.4265"
-                    .to_owned()
+            run(
+                &repository,
+                &args(&["business", "register", "0xda-market"]),
+                100
             )
+            .await,
+            Ok("0xda-market: registered, business, no sign-in yet".to_owned())
+        );
+        assert_eq!(
+            run(
+                &repository,
+                &args(&["business", "register", "0xda-market"]),
+                100
+            )
+            .await,
+            Ok("0xda-market: already a business".to_owned())
+        );
+        assert_eq!(
+            run(&repository, &args(&gate), 101).await,
+            Ok("xda-market-zoloti-vorotai: \"xda-market Золоті Ворота\" stationed for 0xda-market at 30.5131, 50.4489".to_owned())
+        );
+        assert_eq!(
+            run(
+                &repository,
+                &args(&[
+                    "business",
+                    "station",
+                    "0xda-market",
+                    "xda-market Батьківщина-Мати",
+                    "30.5632",
+                    "50.4265"
+                ]),
+                102
+            )
+            .await
+            .map(|line| line.split(':').next().map(str::to_owned)),
+            Ok(Some("xda-market-batkivshchyna-matai".to_owned()))
+        );
+        assert_eq!(
+            run(
+                &repository,
+                &args(&[
+                    "business",
+                    "locate",
+                    "0xda-market",
+                    "xda-market-zoloti-vorotai"
+                ]),
+                103
+            )
+            .await,
+            Ok("0xda-market: stands at xda-market-zoloti-vorotai at 30.5131, 50.4489".to_owned())
         );
     }
 
@@ -135,34 +232,29 @@ mod tests {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        assert!(
-            run(&repository, &args("business grant nobody"), 1)
-                .await
-                .is_err()
-        );
-        assert!(
-            run(&repository, &args("business grant 0xdghost"), 1)
-                .await
-                .is_err()
-        );
-        assert!(
-            run(
-                &repository,
-                &args("business station 0xda-market xda-market-shop 30.5 50.4"),
-                1
-            )
-            .await
-            .is_err()
-        );
-        assert!(
-            run(
-                &repository,
-                &args("business station 0xda-market xda-market-shopai 30.5 95"),
-                1
-            )
-            .await
-            .is_err()
-        );
-        assert!(run(&repository, &args("business"), 1).await.is_err());
+        for line in [
+            &["business", "register", "nobody"][..],
+            &["business", "grant", "0xdghost"],
+            &[
+                "business",
+                "station",
+                "0xda-market",
+                "Золоті Ворота",
+                "30.5",
+                "50.4",
+            ],
+            &[
+                "business",
+                "station",
+                "0xda-market",
+                "xda-market shop",
+                "30.5",
+                "95",
+            ],
+            &["business", "locate", "0xda-market", "not an address"],
+            &["business"],
+        ] {
+            assert!(run(&repository, &args(line), 1).await.is_err(), "{line:?}");
+        }
     }
 }
