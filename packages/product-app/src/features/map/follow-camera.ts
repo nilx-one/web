@@ -8,16 +8,16 @@ import {
   type MapZoomPivot,
 } from "@nilx-one/map-contract";
 
-import { cameraFramesPosition, distanceMeters } from "./location-camera-policy";
+import { distanceMeters } from "./location-camera-policy";
 
 /**
  * The camera that follows the body at the wheel, the way a game camera does.
  *
- * `locked` keeps the body in the middle of the world while it walks: the
- * person turns the camera around it, tilts it and closes in on it, and it
- * stays where it is (a Lineage II chase camera). `free` is the camera a person
- * dragged away to look elsewhere, which the body no longer pulls back (a MOBA
- * camera unlocked from its hero) until they ask for it again.
+ * `locked` is the default Follow camera: it tracks the walking body while
+ * preserving chosen zoom, bearing and pitch. `free` is a Dota-style
+ * independent map camera: dragging, touch panning and pointer zoom move the
+ * camera without pulling it back to the body. Only an explicit selection,
+ * Space or Y switches modes; a pan gesture never silently changes the mode.
  *
  * Presentation only: following never moves a body, records presence or
  * changes who owns the camera beyond what `camera-coordination.md` says.
@@ -43,22 +43,6 @@ export function followCamera(
   body: MapPointSelection,
 ): MapCamera {
   return { ...current, center: [body.longitude, body.latitude] };
-}
-
-/**
- * What a gesture the person has just finished leaves the follow as.
- *
- * Turning, tilting or zooming around the body keeps it framed, so the camera
- * stays on it. A drag that leaves it out of frame is the person looking
- * elsewhere, and the camera is theirs until they ask for the body again.
- */
-export function followAfterGesture(
-  follow: CameraFollow,
-  camera: MapCamera,
-  body: MapPointSelection | undefined,
-): CameraFollow {
-  if (follow === "free" || body === undefined) return follow;
-  return cameraFramesPosition(camera, body) ? "locked" : "free";
 }
 
 /** A locked camera closes in on the body it is centred on. */
