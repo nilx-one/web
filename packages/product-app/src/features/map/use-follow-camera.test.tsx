@@ -125,14 +125,19 @@ describe("useFollowCamera", () => {
     });
   });
 
-  it("does not fight a gesture that is still under way", () => {
+  it("does not fight a gesture, then resumes when moveend lacks originalEvent", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
 
     fake.begin();
     result.current.track(AHEAD);
-
     expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+
+    // Some MapLibre moveend events omit originalEvent although the earlier
+    // movestart was user-owned. Gesture ownership must still be released.
+    fake.settle();
+    result.current.track(AHEAD);
+    expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
   });
 
   it("leaves a camera the person sent elsewhere where it is", () => {
