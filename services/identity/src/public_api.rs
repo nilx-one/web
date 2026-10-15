@@ -632,7 +632,7 @@ mod tests {
             .set_role(&owner, crate::BondAccessRole::Business)
             .await
             .expect("role");
-        let station: crate::AvaiaPubDress = "xda-market-zoloti-vorotai".parse().expect("station");
+        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
         let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
         repository
             .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), at, 101)
@@ -651,7 +651,7 @@ mod tests {
         let body = json(response).await;
         let expected = serde_json::json!({
             "stations": [{
-                "pub_dress": "xda-market-zoloti-vorotai",
+                "pub_dress": "0xda-market-zoloti-vorota",
                 "owner_pub_dress": "0xda-market",
                 "caption": "xda-market Золоті Ворота",
                 "coordinate": serde_json::to_value(at).expect("coordinate"),
@@ -670,7 +670,7 @@ mod tests {
             .register_business(&owner, 100)
             .await
             .expect("register");
-        let station: crate::AvaiaPubDress = "xda-market-zoloti-vorotai".parse().expect("station");
+        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
         let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
         repository
             .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), at, 101)
@@ -692,7 +692,7 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
-        assert_eq!(body["location"]["pub_dress"], "xda-market-zoloti-vorotai");
+        assert_eq!(body["location"]["pub_dress"], "0xda-market-zoloti-vorota");
         assert_eq!(body["location"]["caption"], "xda-market Золоті Ворота");
         assert_eq!(
             body["location"]["coordinate"],

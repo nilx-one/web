@@ -2,23 +2,28 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! A business names each station by a caption, `xda-market Золоті Ворота`, and
-//! the station's Avaia address is formed from it: Ukrainian is transliterated
-//! by the official 2010 table, everything is lowercased, whitespace becomes
-//! `-`, and the address takes the Avaia `ai` ending the way a default Avaia
-//! address does (`xda-market-zoloti-vorotai`). The caption is kept as written.
+//! the station's address is formed from it: the business's own full address,
+//! `-`, then the caption's place transliterated (Ukrainian by the official
+//! 2010 table), lowercased, with whitespace as `-`: `0xda-market-zoloti-vorota`.
+//! A leading business name in the caption (`0xda-market` or `xda-market`) is
+//! the prefix already and is not repeated. A station address takes no `ai`
+//! ending: it is the business's, not a companion's. The caption is kept as
+//! written.
 
-use crate::{AvaiaPubDress, AvaiaPubDressError};
+use crate::{PubDress, PubDressError};
 
 /// The longest caption accepted, in scalars; the address it forms is bounded
-/// again by the Avaia grammar.
+/// again by the `PubDress` grammar.
 pub const MAX_CAPTION_SCALARS: usize = 64;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CaptionError {
     Empty,
     TooLong,
-    /// The formed address is not an Avaia address.
-    Address(AvaiaPubDressError),
+    /// The caption names the business and no place.
+    NoPlace,
+    /// The formed address is not a `PubDress`.
+    Address(PubDressError),
 }
 
 impl core::fmt::Display for CaptionError {
@@ -29,7 +34,8 @@ impl core::fmt::Display for CaptionError {
                 formatter,
                 "the caption is longer than {MAX_CAPTION_SCALARS} characters"
             ),
-            Self::Address(error) => write!(formatter, "it forms no Avaia address ({error})"),
+            Self::NoPlace => formatter.write_str("the caption names no place"),
+            Self::Address(error) => write!(formatter, "it forms no station address ({error})"),
         }
     }
 }
@@ -47,43 +53,56 @@ pub fn normalize_caption(caption: &str) -> Result<String, CaptionError> {
     Ok(caption)
 }
 
-/// The station address a caption forms.
-pub fn station_address(caption: &str) -> Result<AvaiaPubDress, CaptionError> {
+/// The station address a business's caption forms.
+pub fn station_address(owner: &PubDress, caption: &str) -> Result<PubDress, CaptionError> {
     let caption = normalize_caption(caption)?;
-    let mut slug = String::with_capacity(caption.len());
-    let mut word_start = true;
-    let mut previous: Option<char> = None;
-    for scalar in caption.chars() {
-        if scalar.is_whitespace() {
-            slug.push('-');
-            word_start = true;
-            previous = None;
-            continue;
-        }
-        let lower = scalar.to_lowercase().next().unwrap_or(scalar);
-        match transliterate(lower, previous, word_start) {
-            Some(latin) => slug.push_str(latin),
-            None => slug.push(lower),
-        }
-        word_start = !lower.is_alphanumeric() && lower != '\'' && lower != 'ʼ';
-        previous = Some(lower);
+    let owner_name = owner.as_str();
+    // `0xda-market` is also written `xda-market`, the way its Avaia is.
+    let short_name = owner_name[1..].to_lowercase();
+    let mut words = caption.split(' ').peekable();
+    if words
+        .peek()
+        .is_some_and(|first| *first == owner_name || first.to_lowercase() == short_name)
+    {
+        words.next();
     }
-    let address = with_ai_ending(&slug);
-    address.parse().map_err(CaptionError::Address)
+    let place: Vec<&str> = words.collect();
+    if place.is_empty() {
+        return Err(CaptionError::NoPlace);
+    }
+
+    let mut slug = String::with_capacity(caption.len());
+    for (index, word) in place.iter().enumerate() {
+        if index > 0 {
+            slug.push('-');
+        }
+        let mut word_start = true;
+        let mut previous: Option<char> = None;
+        for scalar in word.chars() {
+            let lower = scalar.to_lowercase().next().unwrap_or(scalar);
+            match transliterate(lower, previous, word_start) {
+                Some(latin) => slug.push_str(latin),
+                None => slug.push(lower),
+            }
+            word_start = !lower.is_alphanumeric() && !is_apostrophe(lower);
+            previous = Some(lower);
+        }
+    }
+    format!("{owner_name}-{slug}")
+        .parse()
+        .map_err(CaptionError::Address)
 }
 
-/// The Avaia ending, as a default address takes it: a final vowel gives way.
-fn with_ai_ending(slug: &str) -> String {
-    if slug.ends_with("ai") {
-        return slug.to_owned();
-    }
-    let stem = match slug.chars().next_back() {
-        Some('a' | 'e' | 'i' | 'o' | 'u' | 'y') if slug.chars().count() > 2 => {
-            &slug[..slug.len() - 1]
-        }
-        _ => slug,
-    };
-    format!("{stem}ai")
+/// Whether an address is one of this business's station addresses by shape.
+pub fn is_station_of(owner: &PubDress, station: &PubDress) -> bool {
+    station
+        .as_str()
+        .strip_prefix(owner.as_str())
+        .is_some_and(|rest| rest.len() > 1 && rest.starts_with('-'))
+}
+
+fn is_apostrophe(scalar: char) -> bool {
+    matches!(scalar, '\'' | 'ʼ' | '’')
 }
 
 /// Ukrainian national transliteration (Cabinet of Ministers resolution 55,
@@ -136,28 +155,32 @@ fn transliterate(scalar: char, previous: Option<char>, word_start: bool) -> Opti
 
 #[cfg(test)]
 mod tests {
-    use super::{CaptionError, normalize_caption, station_address};
+    use super::{CaptionError, is_station_of, normalize_caption, station_address};
+    use crate::PubDress;
+
+    fn market() -> PubDress {
+        "0xda-market".parse().expect("owner")
+    }
 
     #[test]
     fn forms_the_shop_addresses_from_their_captions() {
         for (caption, address) in [
-            ("xda-market Золоті Ворота", "xda-market-zoloti-vorotai"),
+            ("xda-market Золоті Ворота", "0xda-market-zoloti-vorota"),
             (
-                "xda-market Батьківщина-Мати",
-                "xda-market-batkivshchyna-matai",
+                "0xda-market Батьківщина-Мати",
+                "0xda-market-batkivshchyna-maty",
             ),
-            ("xda-market  Згорани ", "xda-market-zghoranai"),
-            ("xda Їжак Юрій Яр", "xda-yizhak-yurii-yar"),
-            ("xda-market В'ячеслав", "xda-market-viacheslav"),
-            ("xda-market Подільai", "xda-market-podilai"),
+            ("Батьківщина-Мати", "0xda-market-batkivshchyna-maty"),
+            ("xda-market  Згорани ", "0xda-market-zghorany"),
+            ("Їжак Юрій Яр", "0xda-market-yizhak-yurii-yar"),
+            ("В'ячеслав", "0xda-market-viacheslav"),
+            ("Поділ 2", "0xda-market-podil-2"),
         ] {
-            let formed = station_address(caption).map(|value| value.to_string());
-            let expected = if address.ends_with("ai") {
-                address.to_owned()
-            } else {
-                format!("{address}ai")
-            };
-            assert_eq!(formed, Ok(expected), "{caption}");
+            assert_eq!(
+                station_address(&market(), caption).map(|value| value.to_string()),
+                Ok(address.to_owned()),
+                "{caption}"
+            );
         }
     }
 
@@ -175,19 +198,28 @@ mod tests {
     }
 
     #[test]
-    fn refuses_a_caption_that_forms_no_avaia_address() {
+    fn refuses_a_caption_that_forms_no_station_address() {
+        assert_eq!(
+            station_address(&market(), "xda-market"),
+            Err(CaptionError::NoPlace)
+        );
+        // The PubDress grammar bounds the address, whatever the caption allows.
         assert!(matches!(
-            station_address("Золоті Ворота"),
+            station_address(&market(), "Їжакевич Юрій Яготинський"),
             Err(CaptionError::Address(_))
         ));
-        // The Avaia grammar bounds the address, whatever the caption allows.
         assert!(matches!(
-            station_address("xda-market Їжакевич Юрій Яготин"),
+            station_address(&market(), "🌍"),
             Err(CaptionError::Address(_))
         ));
-        assert!(matches!(
-            station_address("xda-market 🌍"),
-            Err(CaptionError::Address(_))
-        ));
+    }
+
+    #[test]
+    fn a_station_address_is_its_business_then_a_place() {
+        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
+        assert!(is_station_of(&market(), &station));
+        assert!(!is_station_of(&market(), &market()));
+        let other: PubDress = "0xda-marketing".parse().expect("other");
+        assert!(!is_station_of(&market(), &other));
     }
 }

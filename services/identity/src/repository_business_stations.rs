@@ -18,8 +18,8 @@ pub enum BusinessStationOutcome {
     Unknown,
     /// The owner's stored role is not `business`.
     BusinessRoleRequired,
-    /// A station keeps its owner's discriminator, like any Avaia address.
-    OwnerDiscriminatorMismatch,
+    /// A station's address is its business's own, `-`, then a place.
+    NotOwnersAddress,
     /// Another identity, or another business's station, holds the address.
     AddressUnavailable,
 }
@@ -98,7 +98,7 @@ impl IdentityRepository {
     pub async fn locate_business(
         &self,
         owner: &PubDress,
-        station: &AvaiaPubDress,
+        station: &PubDress,
         now: u64,
     ) -> Result<BusinessLocationOutcome, RepositoryError> {
         let now = i64::try_from(now).map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
@@ -156,13 +156,13 @@ impl IdentityRepository {
     pub async fn station_business_avaia(
         &self,
         owner: &PubDress,
-        station: &AvaiaPubDress,
+        station: &PubDress,
         caption: Option<&str>,
         coordinate: GeoCoordinate,
         now: u64,
     ) -> Result<BusinessStationOutcome, RepositoryError> {
-        if station.owner_discriminator() != owner.discriminator() {
-            return Ok(BusinessStationOutcome::OwnerDiscriminatorMismatch);
+        if !crate::business_caption::is_station_of(owner, station) {
+            return Ok(BusinessStationOutcome::NotOwnersAddress);
         }
         let now = i64::try_from(now).map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
@@ -369,8 +369,8 @@ mod business_station_repository_tests {
             .await
             .expect("repository");
         let owner = business(&repository, "0xda-market", 9901).await;
-        let first: AvaiaPubDress = "xda-market-batkivshchynai".parse().expect("station");
-        let second: AvaiaPubDress = "xda-market-zoloti-vorotai".parse().expect("station");
+        let first: PubDress = "0xda-market-batkivshchyna".parse().expect("station");
+        let second: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
 
         for (station, at) in [(&first, point(30.5632, 50.4265)), (&second, point(30.5131, 50.4489))] {
             assert!(matches!(
@@ -398,7 +398,7 @@ mod business_station_repository_tests {
                 .iter()
                 .map(|station| station.pub_dress.as_str())
                 .collect::<Vec<_>>(),
-            ["xda-market-batkivshchynai", "xda-market-zoloti-vorotai"]
+            ["0xda-market-batkivshchyna", "0xda-market-zoloti-vorota"]
         );
         assert!(stations.iter().all(|station| station.owner_pub_dress == "0xda-market"));
         assert_eq!(stations[0].coordinate, point(30.5632, 50.4265));
@@ -410,7 +410,7 @@ mod business_station_repository_tests {
             .await
             .expect("repository");
         let owner = business(&repository, "0xda-market", 9902).await;
-        let station: AvaiaPubDress = "xda-market-batkivshchynai".parse().expect("station");
+        let station: PubDress = "0xda-market-batkivshchyna".parse().expect("station");
         for at in [point(30.56, 50.42), point(30.5632, 50.4265)] {
             repository
                 .station_business_avaia(&owner, &station, None, at, 101)
@@ -433,7 +433,7 @@ mod business_station_repository_tests {
             .await
             .expect("registration");
         let at = point(30.5131, 50.4489);
-        let station: AvaiaPubDress = "xduser-shopai".parse().expect("station");
+        let station: PubDress = "0xduser-shop".parse().expect("station");
         assert_eq!(
             repository
                 .station_business_avaia(&user, &station, None, at, 101)
@@ -442,56 +442,50 @@ mod business_station_repository_tests {
             BusinessStationOutcome::BusinessRoleRequired
         );
         let stranger: PubDress = "0xdnobody".parse().expect("stranger");
+        let nowhere: PubDress = "0xdnobody-shop".parse().expect("station");
         assert_eq!(
             repository
-                .station_business_avaia(&stranger, &station, None, at, 101)
+                .station_business_avaia(&stranger, &nowhere, None, at, 101)
                 .await
                 .expect("unknown"),
             BusinessStationOutcome::Unknown
         );
 
         let owner = business(&repository, "0xda-market", 9904).await;
-        let foreign: AvaiaPubDress = "x1shopai".parse().expect("foreign");
+        let foreign: PubDress = "0x1shop-place".parse().expect("foreign");
         assert_eq!(
             repository
                 .station_business_avaia(&owner, &foreign, None, at, 101)
                 .await
                 .expect("discriminator"),
-            BusinessStationOutcome::OwnerDiscriminatorMismatch
+            BusinessStationOutcome::NotOwnersAddress
         );
-        // `0xduser`'s own Avaia holds this address.
-        let taken: AvaiaPubDress = "xduserai".parse().expect("taken");
+        // A person already holds this address.
+        let person: PubDress = "0xda-market-shop".parse().expect("person");
         repository
-            .configure_owned_avaia(&user, &taken, 102)
+            .register(&person, &ProviderIdentity::telegram(9905), 102)
             .await
-            .expect("create");
+            .expect("registration");
         assert_eq!(
             repository
-                .station_business_avaia(&owner, &taken, None, at, 103)
+                .station_business_avaia(&owner, &person, None, at, 103)
                 .await
                 .expect("taken"),
             BusinessStationOutcome::AddressUnavailable
         );
-        // And a station's address is taken for every other Avaia.
-        let shop: AvaiaPubDress = "xda-market-zoloti-vorotai".parse().expect("shop");
+        // And a station's address is taken for every person after it.
+        let shop: PubDress = "0xda-market-zoloti-vorota".parse().expect("shop");
         repository
             .station_business_avaia(&owner, &shop, None, at, 104)
             .await
             .expect("station");
-        let rival = business(&repository, "0xdrival", 9905).await;
-        assert_eq!(
-            repository
-                .station_business_avaia(&rival, &shop, None, at, 105)
-                .await
-                .expect("rival"),
-            BusinessStationOutcome::AddressUnavailable
-        );
+        assert!(!repository.is_pub_dress_available(&shop).await.expect("check"));
         assert!(matches!(
             repository
-                .rename_owned_avaia(&user, &shop)
+                .register(&shop, &ProviderIdentity::telegram(9906), 105)
                 .await
-                .expect("rename"),
-            PubDressRenameOutcome::AvaiaUnavailable
+                .expect("register"),
+            RegistrationOutcome::HandleUnavailable
         ));
     }
 
@@ -522,7 +516,7 @@ mod business_station_repository_tests {
         let url = format!("sqlite://{}", database.path().display());
         let repository = IdentityRepository::connect(&url).await.expect("repository");
         let owner = business(&repository, "0xda-market", 9906).await;
-        let station: AvaiaPubDress = "xda-market-batkivshchynai".parse().expect("station");
+        let station: PubDress = "0xda-market-batkivshchyna".parse().expect("station");
         repository
             .station_business_avaia(&owner, &station, None, point(30.5632, 50.4265), 101)
             .await
@@ -542,7 +536,7 @@ mod business_station_repository_tests {
         ));
         let stations = repository.business_stations().await.expect("stations");
         assert_eq!(stations[0].owner_pub_dress, "0xda-shop");
-        assert_eq!(stations[0].pub_dress, "xda-market-batkivshchynai");
+        assert_eq!(stations[0].pub_dress, "0xda-market-batkivshchyna");
 
         sqlx::query("DELETE FROM identities WHERE pub_dress = '0xda-shop'")
             .execute(&repository.pool)
@@ -550,7 +544,7 @@ mod business_station_repository_tests {
             .expect("delete");
         assert!(repository.business_stations().await.expect("stations").is_empty());
         let left = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM identities WHERE pub_dress = 'xda-market-batkivshchynai'",
+            "SELECT COUNT(*) FROM identities WHERE pub_dress = '0xda-market-batkivshchyna'",
         )
         .fetch_one(&repository.pool)
         .await
@@ -584,7 +578,7 @@ mod business_station_repository_tests {
             BusinessRegistrationOutcome::AlreadyBusiness(_)
         ));
 
-        let station: AvaiaPubDress = "xda-market-zoloti-vorotai".parse().expect("station");
+        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
         let gate = point(30.5131, 50.4489);
         let stationed = repository
             .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), gate, 102)
@@ -660,7 +654,7 @@ mod business_station_repository_tests {
         repository.register_business(&owner, 102).await.expect("register");
         let rival: PubDress = "0xdrival".parse().expect("rival");
         repository.register_business(&rival, 102).await.expect("register");
-        let theirs: AvaiaPubDress = "xdrival-shopai".parse().expect("station");
+        let theirs: PubDress = "0xdrival-shop".parse().expect("station");
         repository
             .station_business_avaia(&rival, &theirs, None, point(30.5, 50.4), 103)
             .await

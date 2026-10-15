@@ -97,11 +97,13 @@ the single Avaia the owner creates, and owner-keyed reads never see a
 station. A station leaves with its business.
 
 A business names each station by a caption, kept as written. The station's
-address is formed from it once: Ukrainian transliterated by the 2010 national
-table, lowercased, whitespace to `-`, and the Avaia `ai` ending
-(`"xda-market Золоті Ворота"` stations `xda-market-zoloti-vorotai`). The
-caption must start with the owner's `x` and discriminator, and the address it
-forms must fit the Avaia grammar.
+address is formed from it once: the business's own full address, `-`, then
+the caption's place transliterated (Ukrainian by the 2010 national table),
+lowercased, whitespace to `-`, with no Avaia `ai` ending
+(`"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`). A
+leading business name in the caption (`0xda-market` or `xda-market`) is the
+prefix already and is not repeated; the address must fit the `pub_dress`
+grammar (a slug of at most 32 characters).
 
 A business Bond stands at one of its own stations: its location is declared
 (`manual`) at the station's point and follows it when the station moves. Its
@@ -114,7 +116,7 @@ All of it is out of band, by the service binary against its own database:
 identity-bot business register 0xda-market   # a business Bond, no sign-in yet
 identity-bot business grant 0x1shop          # or make an existing Bond a business
 identity-bot business station 0xda-market "xda-market Золоті Ворота" 30.5131 50.4489
-identity-bot business locate 0xda-market xda-market-zoloti-vorotai
+identity-bot business locate 0xda-market 0xda-market-zoloti-vorota
 ```
 
 `register` creates a human Bond with the `business` role and no credential or

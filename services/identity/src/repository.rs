@@ -321,7 +321,8 @@ impl IdentityRepository {
         let mut transaction = self.pool.begin().await?;
         let legacy = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM identities \
-             WHERE identity_kind = 'avaia' AND substr(pub_dress, 1, 1) <> 'x')",
+             WHERE identity_kind = 'avaia' AND substr(pub_dress, 1, 1) <> 'x' \
+               AND owner_pub_dress IS NOT NULL)",
         )
         .fetch_one(&mut *transaction)
         .await?;

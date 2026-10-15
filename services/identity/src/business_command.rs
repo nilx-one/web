@@ -12,11 +12,11 @@
 //! ```
 //!
 //! A station's address is formed from its caption (`business_caption`):
-//! `"xda-market Золоті Ворота"` stations `xda-market-zoloti-vorotai`.
+//! `"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`.
 
 use crate::{
-    AvaiaPubDress, BondAccessRole, BusinessLocationOutcome, BusinessRegistrationOutcome,
-    BusinessStationOutcome, GeoCoordinate, IdentityRepository, PubDress, business_caption,
+    BondAccessRole, BusinessLocationOutcome, BusinessRegistrationOutcome, BusinessStationOutcome,
+    GeoCoordinate, IdentityRepository, PubDress, business_caption,
 };
 
 /// Runs one operation and answers the line to print. `Err` is a refusal or a
@@ -65,7 +65,7 @@ pub async fn run(
             let owner = parse_pub_dress(owner)?;
             let written = business_caption::normalize_caption(caption)
                 .map_err(|error| format!("\"{caption}\": {error}"))?;
-            let station = business_caption::station_address(&written)
+            let station = business_caption::station_address(&owner, &written)
                 .map_err(|error| format!("\"{caption}\": {error}"))?;
             let coordinate = parse_coordinate(longitude, latitude)?;
             match repository
@@ -85,10 +85,9 @@ pub async fn run(
                 BusinessStationOutcome::BusinessRoleRequired => Err(format!(
                     "{owner}: not a business; register or grant it first"
                 )),
-                BusinessStationOutcome::OwnerDiscriminatorMismatch => Err(format!(
-                    "{station}: must keep {owner}'s discriminator; start the caption with x{}",
-                    owner.discriminator()
-                )),
+                BusinessStationOutcome::NotOwnersAddress => {
+                    Err(format!("{station}: not an address of {owner}"))
+                }
                 BusinessStationOutcome::AddressUnavailable => {
                     Err(format!("{station}: the address is taken"))
                 }
@@ -96,9 +95,7 @@ pub async fn run(
         }
         ["business", "locate", owner, station] => {
             let owner = parse_pub_dress(owner)?;
-            let station = station
-                .parse::<AvaiaPubDress>()
-                .map_err(|error| format!("{station}: not an Avaia address ({error})"))?;
+            let station = parse_pub_dress(station)?;
             match repository
                 .locate_business(&owner, &station, now)
                 .await
@@ -192,7 +189,7 @@ mod tests {
         );
         assert_eq!(
             run(&repository, &args(&gate), 101).await,
-            Ok("xda-market-zoloti-vorotai: \"xda-market Золоті Ворота\" stationed for 0xda-market at 30.5131, 50.4489".to_owned())
+            Ok("0xda-market-zoloti-vorota: \"xda-market Золоті Ворота\" stationed for 0xda-market at 30.5131, 50.4489".to_owned())
         );
         assert_eq!(
             run(
@@ -209,7 +206,7 @@ mod tests {
             )
             .await
             .map(|line| line.split(':').next().map(str::to_owned)),
-            Ok(Some("xda-market-batkivshchyna-matai".to_owned()))
+            Ok(Some("0xda-market-batkivshchyna-maty".to_owned()))
         );
         assert_eq!(
             run(
@@ -218,12 +215,12 @@ mod tests {
                     "business",
                     "locate",
                     "0xda-market",
-                    "xda-market-zoloti-vorotai"
+                    "0xda-market-zoloti-vorota"
                 ]),
                 103
             )
             .await,
-            Ok("0xda-market: stands at xda-market-zoloti-vorotai at 30.5131, 50.4489".to_owned())
+            Ok("0xda-market: stands at 0xda-market-zoloti-vorota at 30.5131, 50.4489".to_owned())
         );
     }
 

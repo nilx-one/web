@@ -13,4 +13,6 @@ DROP TRIGGER IF EXISTS identities_configure_avaia_on_direct_rename;
 
 UPDATE identities
 SET pub_dress = 'x' || pub_dress
-WHERE identity_kind = 'avaia' AND substr(pub_dress, 1, 1) <> 'x';
+WHERE identity_kind = 'avaia' AND substr(pub_dress, 1, 1) <> 'x'
+    -- A business station (0024) is ownerless and keeps its business's prefix.
+    AND owner_pub_dress IS NOT NULL;
