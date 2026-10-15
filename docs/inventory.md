@@ -13,10 +13,12 @@ What the Bond and its Avaia carry, and the Bond's Seeds ₴€£. Every rule is 
 
 ## Two grids
 
-The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (5 cells), a backpack (40) or a bag (120). Every thing takes its own rectangle. Both **start with pockets**. Anything bigger has to be owned before it can be worn:
+The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (1×3, 3 cells), a backpack (3×4, 12 cells) or a bag (12×10, 120 cells). Every thing takes its own rectangle. Both **start with pockets**. Anything bigger has to be owned before it can be worn:
 
-- **xSasha's gift**: once, a backpack each for the Bond and its Avaia, when the Bond's pockets have 4 of 5 cells taken or by Bond level 3 at the latest. She says so in a scene ([xSasha](guide.md), "Backpacks"), and the gift is given whether the scene plays or not.
+- **xSasha's gift**: once, a backpack each for the Bond and its Avaia, when the Bond's three pocket cells are full or by Bond level 3 at the latest. She says so in a scene ([xSasha](guide.md), "Backpacks"), and the gift is given whether the scene plays or not.
 - **Buying** (closed for now: carries will change only at home, later), under each grid: a backpack for **1,500** and a bag for **5,000** Seeds ₴€£, from the Bond's Seeds, for either of them. Something owned but not worn can be worn again from there. Real money for them comes later, through 0xda-market. On screen the Bond's grid is marked blue and the Avaia's purple, the colours of their experience.
+
+Legacy 5×1 pockets and 8×5 backpacks are normalized by Core v3. The migration preserves items and Seeds and upgrades old overfilled containers only where needed to preserve their contents. Web persists Core's result once its new economy catalog has loaded.
 
 ## How things get in
 
@@ -24,10 +26,10 @@ A find goes into its finder's grid when its pick-up award is **kept**, that is, 
 
 ## What a person does with them
 
-**Inventory** (Ukrainian: «Рюкзак») opens from the Dock's header, the glyph left of «змінити»: a bag filled as far as the driver's state goes (the Avaia's energy, else progress to the next level), in their colour. For whoever is driving, the Bond or its Avaia, it shows their state (level, and the Avaia's energy) and their grid first, then the other's and the balance. The Bond's screen in the Dock opens it too. Tap a thing to:
+**Inventory** (Ukrainian: «Рюкзак») opens from the Dock's header, the glyph left of «змінити»: a bag filled as far as the driver's state goes (the Avaia's energy, else progress to the next level), in their colour. For whoever is driving, the Bond or its Avaia, it shows their state (level, and the Avaia's energy), their grid and the balance. The other's grid shows only while the two **stand together**: Core's `near` proximity level, under 15 m between the Bond and the Avaia ([Avaia proximity](https://github.com/nilx-one/core/blob/master/docs/avaia-proximity.md)). Apart, or while either place is unknown, each sees only its own, and the screen says the other's shows when they stand together. The Bond's screen in the Dock opens it too. Tap a thing to:
 
 - **sell** it from the Bond's grid, for Core's price. Things nobody buys say so;
-- **hand it across**: from the Avaia to the Bond, or back.
+- **hand it across**: from the Avaia to the Bond, or back, only while they stand together.
 
 A change Core refuses (no room, not for sale) changes nothing, and the screen says why.
 

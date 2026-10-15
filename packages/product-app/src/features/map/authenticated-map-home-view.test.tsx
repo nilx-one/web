@@ -746,7 +746,8 @@ describe("AuthenticatedMapHomeView", () => {
       const grids = [
         ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
       ].map((grid) => grid.dataset.holder);
-      expect(grids).toEqual(["avaia", "bond"]);
+      // Nothing says where either stands, so they are not together.
+      expect(grids).toEqual(["avaia"]);
     });
 
     it("opens the Bond's own when the Bond drives", () => {
@@ -766,7 +767,27 @@ describe("AuthenticatedMapHomeView", () => {
       const grids = [
         ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
       ].map((grid) => grid.dataset.holder);
-      expect(grids).toEqual(["bond", "avaia"]);
+      expect(grids).toEqual(["bond"]);
+    });
+
+    it("shows both grids while the Bond and the Avaia stand together", async () => {
+      const here = observation();
+      avaiaStandsAt(here);
+      const { container } = renderView({
+        ...inventoryHost,
+        findItems: { ...inventoryHost.findItems, ...nearbyProximityCore() },
+        geolocation: createGeolocationDouble({ position: here }),
+      });
+      await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Status and inventory of x0skai" }),
+      );
+
+      const grids = [
+        ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
+      ].map((grid) => grid.dataset.holder);
+      expect(grids).toEqual(["avaia", "bond"]);
     });
   });
 

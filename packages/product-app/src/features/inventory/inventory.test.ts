@@ -7,31 +7,43 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InventoryRecord } from "../progression/committed-journal";
 
 let stored: InventoryRecord = { state: "", pickedUp: new Set() };
+// Like the journal, changes for one owner run one after another.
+let queue: Promise<unknown> = Promise.resolve();
 
 vi.mock("../progression/committed-journal", () => ({
-  updateInventory: async (
+  updateInventory: (
     _owner: string,
     change: (
       current: InventoryRecord,
     ) => Promise<{ state: string; pickedUp?: string } | undefined>,
   ) => {
-    const next = await change(stored);
-    if (next === undefined) return false;
-    stored = {
-      state: next.state,
-      pickedUp: new Set([
-        ...stored.pickedUp,
-        ...(next.pickedUp === undefined ? [] : [next.pickedUp]),
-      ]),
-    };
-    return true;
+    const run = queue.then(async () => {
+      const next = await change(stored);
+      if (next === undefined) return false;
+      stored = {
+        state: next.state,
+        pickedUp: new Set([
+          ...stored.pickedUp,
+          ...(next.pickedUp === undefined ? [] : [next.pickedUp]),
+        ]),
+      };
+      return true;
+    });
+    queue = run.catch(() => undefined);
+    return run;
   },
   readCommittedJournal: vi.fn(),
   subscribeCommittedJournal: vi.fn(),
 }));
 
-const { EMPTY_INVENTORY, applyInventory, pickUpFind, readInventoryModel } =
-  await import("./inventory");
+const {
+  EMPTY_INVENTORY,
+  applyInventory,
+  needsInventoryLayoutMigration,
+  normalizeInventoryLayout,
+  pickUpFind,
+  readInventoryModel,
+} = await import("./inventory");
 
 const STATE =
   '{"avaia":{"carry":"pocket","things":[]},"bond":{"carry":"backpack","things":[{"id":"can","x":0,"y":0}]},"craft":{"ready_ms":"2701000","recipe":"repair_cd_player","started_ms":"1000"},"seeds":"15"}';
@@ -45,6 +57,7 @@ function core(answer: CoreInventoryAnswer) {
 
 beforeEach(() => {
   stored = { state: "", pickedUp: new Set() };
+  queue = Promise.resolve();
 });
 
 describe("readInventoryModel", () => {
@@ -66,6 +79,86 @@ describe("readInventoryModel", () => {
     expect(readInventoryModel("")).toBe(EMPTY_INVENTORY);
     expect(readInventoryModel("{")).toBe(EMPTY_INVENTORY);
     expect(readInventoryModel('{"seeds":"-1"}')).toBe(EMPTY_INVENTORY);
+  });
+});
+
+describe("layout migration", () => {
+  it("recognizes legacy layouts without modifying stored data", () => {
+    expect(needsInventoryLayoutMigration("")).toBe(false);
+    expect(needsInventoryLayoutMigration("{")).toBe(false);
+    expect(needsInventoryLayoutMigration(STATE)).toBe(true);
+    expect(needsInventoryLayoutMigration('{"layout_version":1}')).toBe(true);
+    expect(needsInventoryLayoutMigration('{"layout_version":2}')).toBe(false);
+    expect(needsInventoryLayoutMigration('{"layout_version":9}')).toBe(false);
+  });
+
+  it("persists only the successful Core-normalized state", async () => {
+    stored = { state: STATE, pickedUp: new Set() };
+    const answer: CoreInventoryAnswer = {
+      ok: true,
+      state: '{"layout_version":2}',
+      seedsGained: 0,
+      seedsSpent: 0,
+      experience: 0,
+    };
+    const port = core(answer);
+    await expect(
+      applyInventory("0x0sky", port, { op: "normalize" }),
+    ).resolves.toEqual(answer);
+    expect(port.applyInventoryCommand).toHaveBeenCalledWith(
+      STATE,
+      { op: "normalize" },
+      expect.any(Number),
+    );
+    expect(stored.state).toBe('{"layout_version":2}');
+  });
+
+  it("leaves a legacy layout to a Core that predates the new geometry", async () => {
+    stored = { state: STATE, pickedUp: new Set() };
+    const port = core({
+      ok: true,
+      state: '{"layout_version":2}',
+      seedsGained: 0,
+      seedsSpent: 0,
+      experience: 0,
+    });
+    await expect(normalizeInventoryLayout("0x0sky", port, 2)).resolves.toBe(
+      false,
+    );
+    await expect(
+      normalizeInventoryLayout("0x0sky", port, undefined),
+    ).resolves.toBe(false);
+    expect(port.applyInventoryCommand).not.toHaveBeenCalled();
+    expect(stored.state).toBe(STATE);
+  });
+
+  it("migrates once when several screens ask together", async () => {
+    stored = { state: STATE, pickedUp: new Set() };
+    const port = core({
+      ok: true,
+      state: '{"layout_version":2}',
+      seedsGained: 0,
+      seedsSpent: 0,
+      experience: 0,
+    });
+    await expect(
+      Promise.all([
+        normalizeInventoryLayout("0x0sky", port, 3),
+        normalizeInventoryLayout("0x0sky", port, 3),
+        normalizeInventoryLayout("0x0sky", port, 3),
+      ]),
+    ).resolves.toEqual([true, false, false]);
+    expect(port.applyInventoryCommand).toHaveBeenCalledTimes(1);
+    expect(stored.state).toBe('{"layout_version":2}');
+  });
+
+  it("keeps a legacy layout Core refuses to repack", async () => {
+    stored = { state: STATE, pickedUp: new Set() };
+    const port = core({ ok: false, error: "invalid" });
+    await expect(normalizeInventoryLayout("0x0sky", port, 3)).resolves.toBe(
+      false,
+    );
+    expect(stored.state).toBe(STATE);
   });
 });
 

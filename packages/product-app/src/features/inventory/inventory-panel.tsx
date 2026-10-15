@@ -29,15 +29,21 @@ export interface InventoryPanelProps {
    * home, and both come back together later.
    */
   readonly shopAndCraft?: boolean;
-  /** Whose grid comes first: the one the screen was opened for. */
+  /** Whose grid is shown, and first: the one the screen was opened for. */
   readonly first?: CoreHolder | undefined;
+  /**
+   * Whether the Bond and its Avaia stand together (Core's `near` proximity
+   * level). Only then is the other's grid shown and can things change hands;
+   * apart, or when nothing says where either is, each sees only its own.
+   */
+  readonly together?: boolean;
 }
 
 const GRIDS: Readonly<
   Record<CarriedGrid["carry"], { width: number; height: number }>
 > = {
-  pocket: { width: 5, height: 1 },
-  backpack: { width: 8, height: 5 },
+  pocket: { width: 1, height: 3 },
+  backpack: { width: 3, height: 4 },
   bag: { width: 12, height: 10 },
 };
 
@@ -57,6 +63,13 @@ function priceOf(
   return catalog?.crafted.find((item) => item.id === id)?.sellPrice;
 }
 
+/** The cell-count message for a plural category; "two" and "zero" read as "other". */
+function cellsForm(category: Intl.LDMLPluralRule) {
+  return category === "one" || category === "few" || category === "many"
+    ? category
+    : "other";
+}
+
 interface Selection {
   readonly holder: CoreHolder;
   readonly thing: PlacedThing;
@@ -74,8 +87,10 @@ export function InventoryPanel({
   workshop,
   first = "bond",
   shopAndCraft = false,
+  together = false,
 }: InventoryPanelProps) {
-  const { t } = useLocalization();
+  const { t, resolved } = useLocalization();
+  const plural = new Intl.PluralRules(resolved);
   const { model, catalog } = useInventory(owner, core);
   const inventoryId = useId();
   const [selected, setSelected] = useState<Selection | undefined>();
@@ -87,6 +102,15 @@ export function InventoryPanel({
   }, [selected]);
 
   const [note, setNote] = useState<string | undefined>();
+
+  // Walking apart closes whatever was open on the other's grid.
+  const [wasTogether, setWasTogether] = useState(together);
+  if (wasTogether !== together) {
+    setWasTogether(together);
+    if (!together && selected !== undefined && selected.holder !== first) {
+      setSelected(undefined);
+    }
+  }
 
   const carryGrid = (carry: CarriedGrid["carry"]) =>
     catalog?.carries.find((candidate) => candidate.id === carry) ??
@@ -116,11 +140,9 @@ export function InventoryPanel({
 
   function holderGrid(holder: CoreHolder, carried: CarriedGrid) {
     const { width, height } = carryGrid(carried.carry);
-    // Every carry is shown in a backpack-sized frame: a smaller carry lights
-    // only its own cells inside it, a larger one scrolls within it.
+    // Every carry sits in a backpack-sized frame, so the cards line up: a
+    // smaller carry draws only its own cells, a larger one scrolls within it.
     const frame = carryGrid("backpack");
-    const columns = Math.max(width, frame.width);
-    const rows = Math.max(height, frame.height);
     const used = carried.things.reduce<number | undefined>((total, thing) => {
       const size = sizeOf(catalog, thing.id);
       return total === undefined || size === undefined
@@ -132,7 +154,14 @@ export function InventoryPanel({
     )
       .replace("{used}", String(used))
       .replace("{total}", String(width * height));
-    const cells = Array.from({ length: columns * rows }, (_, index) => index);
+    const carrySize = t("inventory.carrySize")
+      .replace("{carry}", t(`inventory.carryTitle.${carried.carry}`))
+      .replace("{width}", String(width))
+      .replace("{height}", String(height));
+    const cellCount = t(
+      `inventory.cells.${cellsForm(plural.select(width * height))}`,
+    ).replace("{count}", String(width * height));
+    const cells = Array.from({ length: width * height }, (_, index) => index);
     return (
       <section
         className="inventory__holder"
@@ -145,7 +174,10 @@ export function InventoryPanel({
             <strong>
               {t(holder === "bond" ? "inventory.bond" : "inventory.avaia")}
             </strong>
-            <small>{t(`inventory.carryName.${carried.carry}`)}</small>
+            <small className="inventory__carry">
+              <span>{carrySize}</span>
+              <span>{cellCount}</span>
+            </small>
           </div>
           <span className="inventory__capacity" aria-label={occupancy}>
             {used ?? "—"}
@@ -218,24 +250,22 @@ export function InventoryPanel({
             className="inventory__grid"
             style={
               {
-                "--inventory-columns": columns,
-                "--inventory-rows": rows,
+                "--inventory-columns": width,
+                "--inventory-rows": height,
               } as CSSProperties
             }
           >
-            {cells.map((index) => {
-              const x = index % columns;
-              const y = Math.floor(index / columns);
-              const usable = x < width && y < height;
-              return (
-                <span
-                  key={`cell-${index}`}
-                  className={`inventory__cell${usable ? "" : " inventory__cell--inactive"}`}
-                  style={{ gridColumn: x + 1, gridRow: y + 1 }}
-                  aria-hidden="true"
-                />
-              );
-            })}
+            {cells.map((index) => (
+              <span
+                key={`cell-${index}`}
+                className="inventory__cell"
+                style={{
+                  gridColumn: (index % width) + 1,
+                  gridRow: Math.floor(index / width) + 1,
+                }}
+                aria-hidden="true"
+              />
+            ))}
             {carried.things.map((thing, index) => {
               const size = sizeOf(catalog, thing.id) ?? { width: 1, height: 1 };
               const pressed =
@@ -332,30 +362,34 @@ export function InventoryPanel({
               <small>{t("inventory.notForSale")}</small>
             )
           ) : null}
-          <button
-            type="button"
-            onClick={() =>
-              void run({
-                op: "hand_over",
-                from: selected.holder,
-                x: selected.thing.x,
-                y: selected.thing.y,
-              })
-            }
-          >
-            {t(
-              selected.holder === "bond"
-                ? "inventory.handToAvaia"
-                : "inventory.takeFromAvaia",
-            )}
-          </button>
+          {together ? (
+            <button
+              type="button"
+              onClick={() =>
+                void run({
+                  op: "hand_over",
+                  from: selected.holder,
+                  x: selected.thing.x,
+                  y: selected.thing.y,
+                })
+              }
+            >
+              {t(
+                selected.holder === "bond"
+                  ? "inventory.handToAvaia"
+                  : "inventory.takeFromAvaia",
+              )}
+            </button>
+          ) : null}
         </div>
       </div>
     );
   }
 
+  const other: CoreHolder = first === "avaia" ? "bond" : "avaia";
   const empty =
-    model.bond.things.length === 0 && model.avaia.things.length === 0;
+    model[first].things.length === 0 &&
+    (!together || model[other].things.length === 0);
 
   return (
     <div className="inventory">
@@ -365,16 +399,11 @@ export function InventoryPanel({
       <p className="inventory__hint">
         {t(empty ? "inventory.empty" : "inventory.selectHint")}
       </p>
-      {first === "avaia" ? (
-        <>
-          {holderGrid("avaia", model.avaia)}
-          {holderGrid("bond", model.bond)}
-        </>
+      {holderGrid(first, model[first])}
+      {together ? (
+        holderGrid(other, model[other])
       ) : (
-        <>
-          {holderGrid("bond", model.bond)}
-          {holderGrid("avaia", model.avaia)}
-        </>
+        <p className="inventory__hint">{t(`inventory.apart.${other}`)}</p>
       )}
       {note === undefined ? null : (
         <p className="profile-edit__note" role="status">
