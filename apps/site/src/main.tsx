@@ -219,15 +219,18 @@ if (isPublicBondHostname(window.location.hostname)) {
         identity={identity}
         mapRenderer={mapRenderer}
         onManualBondMove={async (from, to) => {
-          const accepted = await moveManualBondLocation(from, to, {
+          const result = await moveManualBondLocation(from, to, {
             ...(discordHandoff
               ? { authorization: DISCORD_HANDOFF_AUTHORIZATION }
               : {}),
           });
-          // The service now holds the new declared point; re-read it at once so
-          // every consumer of the observed position follows the Bond's move.
-          if (accepted) bondLocationRefresh.request();
-          return accepted;
+          // A successful move or a competing write can change the server's
+          // authoritative point (or mode). Refresh every observing consumer.
+          if (result.kind !== "failed") bondLocationRefresh.request();
+          if (result.kind === "accepted") return { kind: "accepted" as const };
+          return result.kind === "conflict" && result.state.kind === "manual"
+            ? { kind: "rejected" as const, current: result.state.position }
+            : { kind: "rejected" as const };
         }}
         localModel={{
           host: createLocalModelHost(),

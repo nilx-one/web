@@ -64,6 +64,7 @@ import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
 import { HANDOVER_MS } from "./wheel-handover";
+import type { ManualMoveOutcome } from "./use-bond-manual-walk";
 import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import {
@@ -165,7 +166,7 @@ interface ViewOverrides {
   onManualBondMove?: (
     expected: { longitude: number; latitude: number },
     target: { longitude: number; latitude: number },
-  ) => Promise<boolean>;
+  ) => Promise<ManualMoveOutcome>;
   mapRenderer?: MapRenderer;
   localModel?: LocalModelDependency;
   section?: ShellSection;
@@ -745,7 +746,8 @@ describe("AuthenticatedMapHomeView", () => {
       const grids = [
         ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
       ].map((grid) => grid.dataset.holder);
-      expect(grids).toEqual(["avaia", "bond"]);
+      // Nothing says where either stands, so they are not together.
+      expect(grids).toEqual(["avaia"]);
     });
 
     it("opens the Bond's own when the Bond drives", () => {
@@ -765,7 +767,27 @@ describe("AuthenticatedMapHomeView", () => {
       const grids = [
         ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
       ].map((grid) => grid.dataset.holder);
-      expect(grids).toEqual(["bond", "avaia"]);
+      expect(grids).toEqual(["bond"]);
+    });
+
+    it("shows both grids while the Bond and the Avaia stand together", async () => {
+      const here = observation();
+      avaiaStandsAt(here);
+      const { container } = renderView({
+        ...inventoryHost,
+        findItems: { ...inventoryHost.findItems, ...nearbyProximityCore() },
+        geolocation: createGeolocationDouble({ position: here }),
+      });
+      await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Status and inventory of x0skai" }),
+      );
+
+      const grids = [
+        ...container.querySelectorAll<HTMLElement>(".inventory__holder"),
+      ].map((grid) => grid.dataset.holder);
+      expect(grids).toEqual(["avaia", "bond"]);
     });
   });
 
@@ -1903,7 +1925,9 @@ describe("AuthenticatedMapHomeView", () => {
       const there = { longitude: 30.5244, latitude: 50.4501 };
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
       const onManualBondMove = vi.fn(
-        async (_from: typeof here, _to: typeof there) => true,
+        async (_from: typeof here, _to: typeof there) => ({
+          kind: "accepted" as const,
+        }),
       );
       renderView({
         mapRenderer,

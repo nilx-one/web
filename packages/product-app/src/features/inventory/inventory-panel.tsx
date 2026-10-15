@@ -29,8 +29,14 @@ export interface InventoryPanelProps {
    * home, and both come back together later.
    */
   readonly shopAndCraft?: boolean;
-  /** Whose grid comes first: the one the screen was opened for. */
+  /** Whose grid is shown, and first: the one the screen was opened for. */
   readonly first?: CoreHolder | undefined;
+  /**
+   * Whether the Bond and its Avaia stand together (Core's `near` proximity
+   * level). Only then is the other's grid shown and can things change hands;
+   * apart, or when nothing says where either is, each sees only its own.
+   */
+  readonly together?: boolean;
 }
 
 const GRIDS: Readonly<
@@ -81,6 +87,7 @@ export function InventoryPanel({
   workshop,
   first = "bond",
   shopAndCraft = false,
+  together = false,
 }: InventoryPanelProps) {
   const { t, resolved } = useLocalization();
   const plural = new Intl.PluralRules(resolved);
@@ -95,6 +102,15 @@ export function InventoryPanel({
   }, [selected]);
 
   const [note, setNote] = useState<string | undefined>();
+
+  // Walking apart closes whatever was open on the other's grid.
+  const [wasTogether, setWasTogether] = useState(together);
+  if (wasTogether !== together) {
+    setWasTogether(together);
+    if (!together && selected !== undefined && selected.holder !== first) {
+      setSelected(undefined);
+    }
+  }
 
   const carryGrid = (carry: CarriedGrid["carry"]) =>
     catalog?.carries.find((candidate) => candidate.id === carry) ??
@@ -346,30 +362,34 @@ export function InventoryPanel({
               <small>{t("inventory.notForSale")}</small>
             )
           ) : null}
-          <button
-            type="button"
-            onClick={() =>
-              void run({
-                op: "hand_over",
-                from: selected.holder,
-                x: selected.thing.x,
-                y: selected.thing.y,
-              })
-            }
-          >
-            {t(
-              selected.holder === "bond"
-                ? "inventory.handToAvaia"
-                : "inventory.takeFromAvaia",
-            )}
-          </button>
+          {together ? (
+            <button
+              type="button"
+              onClick={() =>
+                void run({
+                  op: "hand_over",
+                  from: selected.holder,
+                  x: selected.thing.x,
+                  y: selected.thing.y,
+                })
+              }
+            >
+              {t(
+                selected.holder === "bond"
+                  ? "inventory.handToAvaia"
+                  : "inventory.takeFromAvaia",
+              )}
+            </button>
+          ) : null}
         </div>
       </div>
     );
   }
 
+  const other: CoreHolder = first === "avaia" ? "bond" : "avaia";
   const empty =
-    model.bond.things.length === 0 && model.avaia.things.length === 0;
+    model[first].things.length === 0 &&
+    (!together || model[other].things.length === 0);
 
   return (
     <div className="inventory">
@@ -379,16 +399,11 @@ export function InventoryPanel({
       <p className="inventory__hint">
         {t(empty ? "inventory.empty" : "inventory.selectHint")}
       </p>
-      {first === "avaia" ? (
-        <>
-          {holderGrid("avaia", model.avaia)}
-          {holderGrid("bond", model.bond)}
-        </>
+      {holderGrid(first, model[first])}
+      {together ? (
+        holderGrid(other, model[other])
       ) : (
-        <>
-          {holderGrid("bond", model.bond)}
-          {holderGrid("avaia", model.avaia)}
-        </>
+        <p className="inventory__hint">{t(`inventory.apart.${other}`)}</p>
       )}
       {note === undefined ? null : (
         <p className="profile-edit__note" role="status">

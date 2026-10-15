@@ -189,8 +189,13 @@ export function createShadeMapFactory(
             try {
               const style = map.getStyle() as StyleSpecification | undefined;
               const palette = palettes[styleAppearance(style)];
-              if (style !== undefined) layer.setPalette(palette);
-              if (!map.isStyleLoaded()) return;
+              // The style document is what addSource/addLayer need, and only a
+              // parsed one serializes. Never wait on isStyleLoaded(): it stays
+              // false while any tile is in flight, and a journal that resolves
+              // after `load`, mid-flight, would never hear another event to
+              // add the fog: the whole map stays unveiled.
+              if (style === undefined) return;
+              layer.setPalette(palette);
               if (map.getSource(worldId) === undefined) {
                 worldKey = undefined;
                 map.addSource(worldId, {

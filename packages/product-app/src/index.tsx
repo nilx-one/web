@@ -89,6 +89,7 @@ import {
   createAvaiaSetupViewState,
 } from "./features/avaia/avaia-setup-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
+import type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
 import type { LocalModelDependency } from "./shell/local-model-host";
@@ -126,6 +127,7 @@ export type {
   LocalModelEngine,
   LocalModelHost,
 } from "./shell/local-model-host";
+export type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 
 export interface ProductAppDependencies {
   core: CoreRuntimePort;
@@ -136,7 +138,7 @@ export interface ProductAppDependencies {
   onManualBondMove?: (
     expected: MapPointSelection,
     target: MapPointSelection,
-  ) => Promise<boolean>;
+  ) => Promise<ManualMoveOutcome>;
   /**
    * The on-device model host, when this deployment has wired one — see
    * `./shell/local-model-host.ts` for why this package cannot build one itself. Omitted
