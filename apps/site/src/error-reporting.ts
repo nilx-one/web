@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { BrowserReporter } from "@aiaiaiai/4x-errors-browser";
+import type { CoreRuntimeStatus } from "@nilx-one/application";
 import type { MapRendererStatus } from "@nilx-one/map-contract";
 
 import type { WipeOutcome } from "./world-wipe";
@@ -36,6 +37,38 @@ export function reportMapRendererStatus(
     message: `Map renderer unavailable: ${status.reason}`,
     context: { reason: status.reason },
     tags: ["map", "renderer"],
+  });
+}
+
+const CORE_RUNTIME_ERROR_IDS: Readonly<Record<string, string>> = {
+  "artifact-missing": "core.runtime.artifact.missing",
+  "binding-invalid": "core.runtime.binding.invalid",
+  "load-failed": "core.runtime.load.failed",
+};
+
+// A reason is a closed union today, but mapping by table keeps a reason a later
+// Core build adds visible under a generic id instead of silently dropped.
+const UNMAPPED_CORE_RUNTIME_ERROR_ID = "core.runtime.unavailable";
+
+// The deterministic Core runtime gates Avaia, the economy and every cutscene
+// the drive feeds: when its WebAssembly artifact will not load, those surfaces
+// are inert, so the failure is reported once at the composition root rather
+// than surfacing only as a dozen downstream symptoms.
+export function reportCoreRuntimeStatus(
+  reporter: BrowserReporter,
+  status: CoreRuntimeStatus,
+): void {
+  if (status.kind !== "unavailable") {
+    return;
+  }
+
+  reporter.report({
+    errorId:
+      CORE_RUNTIME_ERROR_IDS[status.reason] ?? UNMAPPED_CORE_RUNTIME_ERROR_ID,
+    severity: "error",
+    message: `Core runtime unavailable: ${status.reason}`,
+    context: { reason: status.reason },
+    tags: ["core", "runtime"],
   });
 }
 
