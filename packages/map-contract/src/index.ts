@@ -693,6 +693,8 @@ export type AvatarClipId =
  * from authority they already possess.
  */
 export interface AvatarHandle {
+  /** Equipped carry supplied by the application, independent of wardrobe. */
+  readonly backpack?: boolean;
   readonly id: string;
   readonly modelId: AvatarModelId;
   readonly lngLat: readonly [longitude: number, latitude: number];

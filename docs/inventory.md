@@ -1,5 +1,14 @@
 # Inventory
 
+The white aiaiaiai backpack is also drawn on the map. xSasha wears it in her
+scenes; Bond and Avaia wear it only while their committed Core inventory's
+equipped carry is `backpack`. The existing gift grants and equips both before
+the scene begins. Hiding or skipping the scene does not change that result.
+Switching back to pockets or to a bag removes the backpack from the body.
+The renderer follows the chest bone and never decides gift eligibility.
+
+![White aiaiaiai backpack mounted on the Dasha study](images/aiaiaiai-backpack-worn.png)
+
 What the Bond and its Avaia carry, and the Bond's Seeds ₴€£. Every rule is Core's (`docs/economy.md` and `docs/find-items.md` in `nilx-one/core`): what a find is, what fits where, what sells for what, what a craft takes. This client stores Core's answer and shows it.
 
 ## Two grids
