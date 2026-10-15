@@ -1739,7 +1739,8 @@ describe("AuthenticatedMapHomeView", () => {
       geolocation: createDeclaredGeolocation(declared),
     });
     await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
-    const [camera, options] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
+    const [camera, options] =
+      vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
     expect(camera?.center).toEqual([declared.longitude, declared.latitude]);
     expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
     expect(options?.motion).toBe("flight");
