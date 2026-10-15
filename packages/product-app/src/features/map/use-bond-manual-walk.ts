@@ -16,7 +16,13 @@ import {
 import type { BodyStance } from "./avatar-presence";
 
 type Point = MapPointSelection;
-type ManualMove = (expected: Point, target: Point) => Promise<boolean>;
+export type ManualMoveOutcome =
+  | { readonly kind: "accepted" }
+  | { readonly kind: "rejected"; readonly current?: Point };
+type ManualMove = (
+  expected: Point,
+  target: Point,
+) => Promise<ManualMoveOutcome>;
 interface Rest {
   readonly point: Point;
   readonly bearingDeg: number;
@@ -120,13 +126,17 @@ export function useBondManualWalk({
       setWalk(undefined);
       setSaving(true);
       void commit(from, target)
-        .then((accepted) => {
+        .then((outcome) => {
           if (generation !== epoch.current) return;
-          if (accepted) {
+          if (outcome.kind === "accepted") {
             expected.current = target;
             setFailed(false);
           } else {
-            setRest({ point: from, bearingDeg: 0 });
+            // On a CAS conflict the service's current point wins, not the
+            // locally remembered starting point from a different device.
+            const authoritative = outcome.current ?? from;
+            expected.current = authoritative;
+            setRest({ point: authoritative, bearingDeg: 0 });
             setFailed(true);
           }
         })

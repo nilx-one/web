@@ -7,7 +7,10 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createMapRendererDouble } from "../../../../../tests/support/doubles";
-import { useBondManualWalk } from "./use-bond-manual-walk";
+import {
+  useBondManualWalk,
+  type ManualMoveOutcome,
+} from "./use-bond-manual-walk";
 
 const here = { longitude: 30.5234, latitude: 50.4501 };
 const there = { longitude: 30.5244, latitude: 50.4501 };
@@ -30,23 +33,29 @@ describe("manual Bond walking", () => {
     options: {
       declared?: typeof here | undefined;
       active?: boolean;
-      commit?: (from: typeof here, to: typeof here) => Promise<boolean>;
+      commit?: (
+        from: typeof here,
+        to: typeof here,
+      ) => Promise<ManualMoveOutcome>;
     } = {},
   ) {
     const declared = "declared" in options ? options.declared : here;
     const active = options.active ?? true;
-    const commit = options.commit ?? vi.fn(async () => true);
+    const commit =
+      options.commit ?? vi.fn(async () => ({ kind: "accepted" as const }));
     vi.useFakeTimers();
     const renderer = createMapRendererDouble({ kind: "ready" }) as TestRenderer;
-    const hook = renderHook(() =>
-      useBondManualWalk({
-        renderer,
-        owner: "0x0sky",
-        declared,
-        active,
-        commit,
-        zoom: 19,
-      }),
+    const hook = renderHook(
+      (props: { active: boolean; declared: typeof here | undefined }) =>
+        useBondManualWalk({
+          renderer,
+          owner: "0x0sky",
+          declared: props.declared,
+          active: props.active,
+          commit,
+          zoom: 19,
+        }),
+      { initialProps: { active, declared } },
     );
     return { ...hook, renderer, commit };
   }
@@ -128,7 +137,7 @@ describe("manual Bond walking", () => {
   });
 
   it("rolls back a rejected server update to its last declared position", async () => {
-    const commit = vi.fn(async () => false);
+    const commit = vi.fn(async () => ({ kind: "rejected" as const }));
     const { result, renderer } = setup({ commit });
     tap(renderer);
     await act(async () => vi.advanceTimersByTimeAsync(90_000));
@@ -136,5 +145,61 @@ describe("manual Bond walking", () => {
     expect(result.current.failed).toBe(true);
     expect(result.current.point(performance.now())).toEqual(here);
     expect(commit).toHaveBeenCalledOnce();
+  });
+  it("uses the server's position after a competing CAS write", async () => {
+    const serverPosition = { longitude: 30.525, latitude: 50.4502 };
+    const commit = vi.fn(
+      async (
+        _expected: typeof here,
+        _target: typeof here,
+      ): Promise<ManualMoveOutcome> => ({
+        kind: "rejected",
+        current: serverPosition,
+      }),
+    );
+    const { result, renderer } = setup({ commit });
+    tap(renderer);
+    await act(async () => vi.advanceTimersByTimeAsync(90_000));
+    expect(result.current.failed).toBe(true);
+    expect(result.current.point(performance.now())).toEqual(serverPosition);
+
+    // The next write expects the freshly read authoritative position.
+    tap(renderer);
+    await act(async () => vi.advanceTimersByTimeAsync(90_000));
+    expect(commit.mock.calls[1]?.[0]).toEqual(serverPosition);
+  });
+
+  it("keeps a pending handover commit single-shot and rejects new taps", async () => {
+    let resolveCommit: ((outcome: ManualMoveOutcome) => void) | undefined;
+    const commit = vi.fn(
+      () =>
+        new Promise<ManualMoveOutcome>((resolve) => {
+          resolveCommit = resolve;
+        }),
+    );
+    const { result, renderer, rerender } = setup({ commit });
+    tap(renderer);
+    act(() => vi.advanceTimersByTime(5_000));
+    act(() => result.current.stop());
+    expect(commit).toHaveBeenCalledOnce();
+    rerender({ active: false, declared: here });
+    tap(renderer);
+    expect(commit).toHaveBeenCalledOnce();
+    await act(async () => {
+      resolveCommit?.({ kind: "rejected" });
+      await Promise.resolve();
+    });
+    expect(result.current.moving).toBe(false);
+    expect(result.current.point(performance.now())).toEqual(here);
+  });
+
+  it("stops accepting manual taps after the host becomes live", () => {
+    const { result, renderer, rerender, commit } = setup();
+    tap(renderer);
+    rerender({ active: true, declared: undefined });
+    tap(renderer);
+    expect(result.current.moving).toBe(false);
+    expect(result.current.point(performance.now())).toBeUndefined();
+    expect(commit).not.toHaveBeenCalled();
   });
 });

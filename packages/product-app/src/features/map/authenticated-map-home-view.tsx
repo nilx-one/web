@@ -173,7 +173,10 @@ import {
 } from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
-import { useBondManualWalk } from "./use-bond-manual-walk";
+import {
+  useBondManualWalk,
+  type ManualMoveOutcome,
+} from "./use-bond-manual-walk";
 import { useFindLoop } from "./use-find-loop";
 import { useOrbSpills } from "../finds/use-orb-spills";
 import { readWorldMemory, rememberWorld } from "./world-memory";
@@ -237,7 +240,7 @@ export interface AuthenticatedMapHomeViewProps {
   readonly onManualBondMove?: (
     expected: MapPointSelection,
     target: MapPointSelection,
-  ) => Promise<boolean>;
+  ) => Promise<ManualMoveOutcome>;
   /** Host feedback for a tap on the Dock; the host decides what it feels like. */
   readonly feedback?: Pick<HostPort, "impact">;
   /**
