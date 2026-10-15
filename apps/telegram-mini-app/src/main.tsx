@@ -143,21 +143,33 @@ async function bootstrap(): Promise<void> {
     // Without initData there is no identity to authorize; send no header
     // rather than an empty `tma ` credential, as the Web host does.
     const initData = telegramBridge?.initData ?? "";
-    const accepted = await moveManualBondLocation(from, to, {
+    const result = await moveManualBondLocation(from, to, {
       authorization: initData.length > 0 ? `tma ${initData}` : undefined,
     });
-    if (!accepted) return false;
-    // The identity service stores integer E7 coordinates. Publish the same
-    // canonical value through the declared-only host capability so the game
-    // keeps moving without reloading or ever requesting physical GPS.
-    const stored = quantizeDeclaredPoint(to);
+    if (result.kind === "failed") return { kind: "rejected" as const };
+    if (result.kind === "conflict" && result.state.kind === "live") {
+      // Only a fresh composition may enable device GPS; never reuse the
+      // manual-only geolocation capability for a remote mode change.
+      window.location.reload();
+      return { kind: "rejected" as const };
+    }
+    if (result.kind === "conflict" && result.state.kind !== "manual") {
+      return { kind: "rejected" as const };
+    }
+    // The identity service stores integer E7 coordinates. Publish the
+    // canonical server point through a declared-only observer (never GPS).
+    const stored = quantizeDeclaredPoint(
+      result.kind === "accepted" ? to : result.state.position,
+    );
     manualMoveRevision += 1;
     currentLocationFingerprint = locationControlFingerprint({
       kind: "manual",
       position: stored,
     });
     manualLocation.update(stored);
-    return true;
+    return result.kind === "accepted"
+      ? { kind: "accepted" as const }
+      : { kind: "rejected" as const, current: stored };
   };
   // Only a definite answer is a changed mode. `unavailable` is also what a
   // slow network or a Mini App left in the background past its initData's
