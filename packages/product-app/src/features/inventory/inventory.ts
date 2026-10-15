@@ -156,7 +156,9 @@ export function readInventoryModel(state: string): InventoryModel {
 
 /**
  * Puts a kept find into its finder's grid, once. A find already in, or one
- * that fits nowhere, changes nothing; the answer says which.
+ * that fits nowhere, changes nothing; the answer says which. A find that
+ * brings xSasha's gift stores the gift even when it still stays where it
+ * lay, and is not counted as in, so it can still go in later.
  */
 export async function pickUpFind(
   owner: string,
@@ -184,9 +186,10 @@ export async function pickUpFind(
       },
       now(),
     );
-    return answer.ok
+    if (!answer.ok) return undefined;
+    return answer.leftBehind === undefined
       ? { state: answer.state, pickedUp: find.artifactId }
-      : undefined;
+      : { state: answer.state };
   });
   return answer;
 }

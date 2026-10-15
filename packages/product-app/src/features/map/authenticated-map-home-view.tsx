@@ -53,7 +53,7 @@ import {
 import { SoundSettings } from "../../shell/sound-settings";
 import { SettingsSlider } from "../../shell/settings-slider";
 import { PickupSettings } from "../finds/pickup-settings";
-import { useBackpackGift } from "../inventory/backpack-gift";
+import { oweBackpackScene, useBackpackGift } from "../inventory/backpack-gift";
 import { useCraftCompletion } from "../inventory/craft";
 import { pickUpFind } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
@@ -1207,21 +1207,37 @@ export function AuthenticatedMapHomeView({
             holder: event.earner,
           })
             .then(async (answer) => {
-              if (answer === "already-in" || answer.ok) return;
-              if (answer.error !== "no_room") return;
+              if (answer === "already-in") return;
+              // A find the pockets could not hold brought xSasha's gift:
+              // it is given already, and her scene is owed.
+              if (answer.ok && answer.gifted === true) {
+                oweBackpackScene(pubDress);
+              }
+              const refused = answer.ok ? answer.leftBehind : answer.error;
+              if (refused !== "no_room" && refused !== "too_big") return;
               const item = await findItems.findItem?.(
                 event.artifactId,
                 event.tier,
               );
-              setFindToast({
-                id: `find-full-${event.artifactId}`,
-                kind: "error",
-                title: t("inventory.title"),
-                description: t("inventory.full").replace(
-                  "{item}",
-                  item?.kind === "item" ? thingName(t, item.id) : "",
-                ),
-              });
+              const name = item?.kind === "item" ? thingName(t, item.id) : "";
+              setFindToast(
+                refused === "too_big"
+                  ? {
+                      id: `find-too-big-${event.artifactId}`,
+                      kind: "error",
+                      title: t("inventory.tooBig.title"),
+                      description: t("inventory.tooBig").replace(
+                        "{item}",
+                        name,
+                      ),
+                    }
+                  : {
+                      id: `find-full-${event.artifactId}`,
+                      kind: "error",
+                      title: t("inventory.title"),
+                      description: t("inventory.full").replace("{item}", name),
+                    },
+              );
             })
             .catch(() => undefined);
         }
