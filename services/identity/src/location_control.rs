@@ -574,10 +574,10 @@ async fn move_manual_location(
     if let (Some(authorization), Some(_)) = (headers.get(AUTHORIZATION), headers.get(COOKIE)) {
         let mut proof = HeaderMap::new();
         proof.insert(AUTHORIZATION, authorization.clone());
-        if let Ok((claimed, _)) = authenticate_bond(&state, &proof, now).await {
-            if claimed.pub_dress != identity.pub_dress {
-                return status(StatusCode::FORBIDDEN);
-            }
+        if let Ok((claimed, _)) = authenticate_bond(&state, &proof, now).await
+            && claimed.pub_dress != identity.pub_dress
+        {
+            return status(StatusCode::FORBIDDEN);
         }
     }
     let pub_dress = match identity.pub_dress.parse::<PubDress>() {
