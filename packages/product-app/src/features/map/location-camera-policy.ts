@@ -23,12 +23,34 @@ import type { ShellPresentation } from "../../shell/shell-presentation";
  * a Bond is present there, and none of this writes shared-world state.
  */
 
-/**
- * The first authenticated fix opens at local-cell scale. The visible viewport
- * keeps useful street/building context while making the roughly 10 m local cell
- * around the observation immediately legible.
- */
+/** Accurate GPS observations retain the established local-cell opening scale. */
 export const FIRST_FIX_ZOOM = 18.5;
+
+/** A manually declared coordinate can frame a readable body, not a GPS fix. */
+export const DECLARED_OPENING_ZOOM = 20.25;
+
+/** Above this uncertainty, keep more of the real surrounding world in frame. */
+const OPENING_ACCURACY_BASE_METERS = 50;
+
+/**
+ * A coarse GPS observation cannot justify the same tight framing as a precise
+ * one. Every doubling of uncertainty widens the opening camera by one zoom
+ * level; neighborhood scale is the lowest level needed for a local landing.
+ * A manual position is a deliberate coordinate, not device sensor evidence.
+ */
+function openingCameraZoom(position: ObservedGeolocation): number {
+  if (position.declared === true) return DECLARED_OPENING_ZOOM;
+  if (!Number.isFinite(position.accuracyMeters))
+    return MAP_SCALE_ZOOM.neighborhood;
+  const uncertainty = Math.max(
+    1,
+    position.accuracyMeters / OPENING_ACCURACY_BASE_METERS,
+  );
+  return Math.max(
+    MAP_SCALE_ZOOM.neighborhood,
+    FIRST_FIX_ZOOM - Math.log2(uncertainty),
+  );
+}
 
 /** Recentering never leaves the camera further out than useful local context. */
 export const RECENTER_MIN_SCALE: MapScale = "neighborhood";
@@ -118,7 +140,7 @@ export function firstFixCamera(
   position: ObservedGeolocation,
   context: LocationCameraContext,
 ): MapCamera {
-  const zoom = FIRST_FIX_ZOOM;
+  const zoom = openingCameraZoom(position);
   return {
     center: [position.longitude, position.latitude],
     zoom,
