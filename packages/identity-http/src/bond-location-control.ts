@@ -161,54 +161,77 @@ export async function readBondLocationControl(
   }
 }
 
-/** Persists only an already-manual Bond movement, once the local walk arrives.
- * The expected point prevents another host's move being silently overwritten.
- * Failure leaves the caller's local animation non-authoritative.
+/** A rejected CAS includes a fresh authoritative projection when readable. */
+export type ManualBondMoveResult =
+  | { readonly kind: "accepted" }
+  | { readonly kind: "conflict"; readonly state: BondLocationControlState }
+  | { readonly kind: "failed" };
+
+/** Persists an already-manual Bond movement. A rejected CAS re-reads the
+ * authoritative location rather than implying that the original point is
+ * still current. Network failures and timeouts never imply acceptance.
  */
 export async function moveManualBondLocation(
   expected: BondLocationPoint,
   target: BondLocationPoint,
   options: BondLocationControlReadOptions = {},
-): Promise<boolean> {
+): Promise<ManualBondMoveResult> {
   const valid = (point: BondLocationPoint) =>
     Number.isFinite(point.longitude) &&
     Number.isFinite(point.latitude) &&
     Math.abs(point.longitude) <= 180 &&
     Math.abs(point.latitude) <= 90;
-  if (!valid(expected) || !valid(target)) return false;
+  if (!valid(expected) || !valid(target)) return { kind: "failed" };
   const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
   try {
-    const response = await fetchImpl("/api/v1/location-control/manual-move", {
-      method: "POST",
-      cache: "no-store",
-      credentials: "same-origin",
-      headers: {
-        "content-type": "application/json",
-        ...(options.authorization === undefined
-          ? {}
-          : { authorization: options.authorization }),
-      },
-      body: JSON.stringify({
-        expected_longitude: expected.longitude,
-        expected_latitude: expected.latitude,
-        longitude: target.longitude,
-        latitude: target.latitude,
+    const response = await Promise.race([
+      fetchImpl("/api/v1/location-control/manual-move", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+        headers: {
+          "content-type": "application/json",
+          ...(options.authorization === undefined
+            ? {}
+            : { authorization: options.authorization }),
+        },
+        body: JSON.stringify({
+          expected_longitude: expected.longitude,
+          expected_latitude: expected.latitude,
+          longitude: target.longitude,
+          latitude: target.latitude,
+        }),
       }),
-    });
-    if (!response.ok) return false;
-    const body: unknown = await response.json();
-    if (typeof body !== "object" || body === null || !("location" in body)) {
-      return false;
+      new Promise<never>((_resolve, reject) => {
+        timeoutId = globalThis.setTimeout(() => {
+          controller.abort();
+          reject(new Error("Bond manual move timed out"));
+        }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+      }),
+    ]);
+    if (response.status === 409) {
+      return {
+        kind: "conflict",
+        state: await readBondLocationControl(options),
+      };
     }
-    const location = body.location;
-    return (
-      typeof location === "object" &&
-      location !== null &&
-      "mode" in location &&
-      location.mode === "manual"
-    );
+    if (!response.ok) return { kind: "failed" };
+    const body: unknown = await response.json();
+    if (
+      !isRecord(body) ||
+      !isRecord(body.location) ||
+      body.location.mode !== "manual"
+    ) {
+      return { kind: "failed" };
+    }
+    return { kind: "accepted" };
   } catch {
-    return false;
+    return { kind: "failed" };
+  } finally {
+    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
   }
 }
 
