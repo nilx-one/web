@@ -568,6 +568,18 @@ async fn move_manual_location(
         Ok(value) => value,
         Err(code) => return status(code),
     };
+    // A valid session cookie is authoritative, but an additional valid
+    // provider proof for a *different* Bond must never silently move the
+    // cookie's Bond. Expired initData is allowed when the session is valid.
+    if let (Some(authorization), Some(_)) = (headers.get(AUTHORIZATION), headers.get(COOKIE)) {
+        let mut proof = HeaderMap::new();
+        proof.insert(AUTHORIZATION, authorization.clone());
+        if let Ok((claimed, _)) = authenticate_bond(&state, &proof, now).await {
+            if claimed.pub_dress != identity.pub_dress {
+                return status(StatusCode::FORBIDDEN);
+            }
+        }
+    }
     let pub_dress = match identity.pub_dress.parse::<PubDress>() {
         Ok(value) => value,
         Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
@@ -576,7 +588,9 @@ async fn move_manual_location(
         Ok(value) => value,
         Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
     };
-    if !role.can_set_manual_location() {
+    // Tap-to-walk is reserved for the 0x0 namespace. Admin is still
+    // required: a prefix alone does not grant the capability.
+    if !role.can_set_manual_location() || !pub_dress.as_str().starts_with("0x0") {
         return status(StatusCode::FORBIDDEN);
     }
     let expected =
@@ -977,7 +991,7 @@ mod tests {
     async fn manual_map_moves_require_admin_and_refuse_stale_or_live_state() {
         let database = tempfile::NamedTempFile::new().expect("temporary database");
         let database_url = format!("sqlite://{}", database.path().display());
-        let identities = registered(&database_url, "0x1walker", 7).await;
+        let identities = registered(&database_url, "0x0walker", 7).await;
         let locations = BondLocationRepository::connect(&database_url)
             .await
             .expect("Bond location repository");
@@ -985,7 +999,7 @@ mod tests {
         let target = GeoCoordinate::from_degrees(30.5244, 50.4501).expect("target");
         locations
             .write(
-                "0x1walker",
+                "0x0walker",
                 BondLocation::new(origin, BondLocationMode::Manual, DecimalU64::new(30)),
             )
             .await
@@ -1014,7 +1028,7 @@ mod tests {
         assert_eq!(denied.status(), StatusCode::FORBIDDEN);
         assert_eq!(
             locations
-                .read("0x1walker")
+                .read("0x0walker")
                 .await
                 .expect("location")
                 .expect("declared")
@@ -1022,15 +1036,90 @@ mod tests {
             origin
         );
 
-        let bond: PubDress = "0x1walker".parse().expect("valid address");
+        let bond: PubDress = "0x0walker".parse().expect("valid address");
         identities
             .set_role(&bond, BondAccessRole::Admin)
             .await
             .expect("assign admin");
-        let accepted = app.clone().oneshot(request()).await.expect("response");
+        // Even an explicitly assigned Admin outside the reserved namespace
+        // cannot move by tapping the map.
+        let others = registered(&database_url, "0x1walker", 8).await;
+        let other_bond: PubDress = "0x1walker".parse().expect("valid pub_dress");
+        others
+            .set_role(&other_bond, BondAccessRole::Admin)
+            .await
+            .expect("assign another admin");
+        locations
+            .write(
+                "0x1walker",
+                BondLocation::new(origin, BondLocationMode::Manual, DecimalU64::new(30)),
+            )
+            .await
+            .expect("other manual setup");
+        let outside = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/location-control/manual-move")
+                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(8)))
+                    .header("content-type", "application/json")
+                    .body(Body::from(request_body.clone()))
+                    .expect("request"),
+            )
+            .await
+            .expect("outside response");
+        assert_eq!(outside.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            locations.read("0x1walker").await.expect("location").expect("declared").coordinate,
+            origin
+        );
+
+        // Two individually valid proofs for different Bonds must not be
+        // resolved by silently preferring the cookie's admin authority.
+        let cookie_response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/location-control")
+                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(7)))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("cookie response");
+        let cookie = session_cookie_from(&cookie_response);
+        let mismatched_proofs = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/location-control/manual-move")
+                    .header(COOKIE, cookie.clone())
+                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(8)))
+                    .header("content-type", "application/json")
+                    .body(Body::from(request_body.clone()))
+                    .expect("request"),
+            )
+            .await
+            .expect("conflicting response");
+        assert_eq!(mismatched_proofs.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            locations.read("0x0walker").await.expect("location").expect("declared").coordinate,
+            origin
+        );
+
+        // Matching session and initData remain accepted.
+        let accepted = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/location-control/manual-move")
+                    .header(COOKIE, cookie)
+                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(7)))
+                    .header("content-type", "application/json")
+                    .body(Body::from(request_body.clone()))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
         assert_eq!(accepted.status(), StatusCode::OK);
         let saved = locations
-            .read("0x1walker")
+            .read("0x0walker")
             .await
             .expect("location")
             .expect("saved");
@@ -1041,7 +1130,7 @@ mod tests {
         assert_eq!(stale.status(), StatusCode::CONFLICT);
         assert_eq!(
             locations
-                .read("0x1walker")
+                .read("0x0walker")
                 .await
                 .expect("location")
                 .expect("saved")
@@ -1051,7 +1140,7 @@ mod tests {
 
         locations
             .write(
-                "0x1walker",
+                "0x0walker",
                 BondLocation::new(origin, BondLocationMode::Live, DecimalU64::new(40)),
             )
             .await
@@ -1060,7 +1149,7 @@ mod tests {
         assert_eq!(not_a_mode_toggle.status(), StatusCode::CONFLICT);
         assert_eq!(
             locations
-                .read("0x1walker")
+                .read("0x0walker")
                 .await
                 .expect("location")
                 .expect("live")
