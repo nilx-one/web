@@ -131,6 +131,57 @@ export function createDeclaredGeolocation(point: {
 }
 
 /**
+ * A declared (never GPS-observed) location that can follow an accepted
+ * in-game manual movement without remounting the Telegram world.
+ *
+ * Only the authorized host composition may call update(). Regular device
+ * geolocation and the immutable declared capability are unchanged.
+ */
+export function createMutableDeclaredGeolocation(initial: {
+  readonly longitude: number;
+  readonly latitude: number;
+}): {
+  readonly geolocation: GeolocationCapability;
+  readonly update: (point: {
+    readonly longitude: number;
+    readonly latitude: number;
+  }) => void;
+} {
+  let point = { longitude: initial.longitude, latitude: initial.latitude };
+  const observers = new Set<GeolocationObserver>();
+  const geolocation: GeolocationCapability = {
+    readPermission: async () => "granted",
+    requestPosition: async () => declaredObservation(point),
+    watchPosition(observer) {
+      observers.add(observer);
+      // requestPosition already supplied the initial declared point.
+      return () => {
+        observers.delete(observer);
+      };
+    },
+  };
+  return {
+    geolocation,
+    update(next) {
+      if (
+        !Number.isFinite(next.longitude) ||
+        !Number.isFinite(next.latitude) ||
+        Math.abs(next.longitude) > 180 ||
+        Math.abs(next.latitude) > 90
+      ) {
+        return;
+      }
+      if (point.longitude === next.longitude && point.latitude === next.latitude)
+        return;
+      point = { longitude: next.longitude, latitude: next.latitude };
+      for (const observer of [...observers]) {
+        observer(declaredObservation(point));
+      }
+    },
+  };
+}
+
+/**
  * The Bond's one location as the identity service holds it. `live` lets the
  * device observe; `manual` is a declared point that stands the Bond there on
  * every host; `unavailable` is unknown state and never unlocks the device.
