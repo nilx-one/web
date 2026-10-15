@@ -1,7 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const applyInventory = vi.fn(async () => ({
@@ -14,7 +20,7 @@ const applyInventory = vi.fn(async () => ({
 
 vi.mock("./inventory", () => ({
   applyInventory,
-  useInventory: () => ({
+  useInventory: vi.fn(() => ({
     model: {
       seeds: 15,
       bond: {
@@ -62,10 +68,11 @@ vi.mock("./inventory", () => ({
         { id: "bag", width: 12, height: 10, price: 5000 },
       ],
     },
-  }),
+  })),
 }));
 
 const { InventoryPanel } = await import("./inventory-panel");
+const { useInventory } = await import("./inventory");
 
 const core = { applyInventoryCommand: vi.fn(), economyCatalog: vi.fn() };
 
@@ -83,6 +90,58 @@ describe("InventoryPanel", () => {
     );
   });
 
+  it("frames every carry at backpack size: pockets light five cells, bags scroll", () => {
+    const snapshot = useInventory("0x0sky", core);
+    vi.mocked(useInventory).mockReturnValueOnce({
+      ...snapshot,
+      model: {
+        ...snapshot.model,
+        bond: { ...snapshot.model.bond, carry: "bag" },
+      },
+    });
+    render(<InventoryPanel owner="0x0sky" core={core} committed />);
+
+    const holder = (name: string) => {
+      const region = screen.getByRole("region", { name });
+      const scroller = within(region).getByRole("group");
+      return {
+        scroller,
+        cells: region.querySelectorAll(".inventory__cell"),
+        active: region.querySelectorAll(
+          ".inventory__cell:not(.inventory__cell--inactive)",
+        ),
+      };
+    };
+
+    const pocket = holder("Avaia");
+    expect(pocket.cells).toHaveLength(40);
+    expect(pocket.active).toHaveLength(5);
+    expect(
+      pocket.scroller.style.getPropertyValue("--inventory-frame-columns"),
+    ).toBe("8");
+
+    const bag = holder("You");
+    expect(bag.cells).toHaveLength(120);
+    expect(bag.active).toHaveLength(120);
+    expect(
+      bag.scroller.style.getPropertyValue("--inventory-frame-columns"),
+    ).toBe("8");
+    expect(bag.scroller.style.getPropertyValue("--inventory-frame-rows")).toBe(
+      "5",
+    );
+  });
+
+  it("does not invent occupied area before the catalog supplies item sizes", () => {
+    const snapshot = useInventory("0x0sky", core);
+    vi.mocked(useInventory).mockReturnValueOnce({
+      ...snapshot,
+      catalog: undefined,
+    });
+    render(<InventoryPanel owner="0x0sky" core={core} committed />);
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bottle" })).toBeInTheDocument();
+  });
+
   it("keeps buying and crafting closed for now", () => {
     render(<InventoryPanel owner="0x0sky" core={core} committed />);
 
@@ -90,6 +149,42 @@ describe("InventoryPanel", () => {
       screen.queryByRole("button", { name: /^Buy / }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Craft")).not.toBeInTheDocument();
+  });
+
+  it("counts occupied cells, preserves the opened owner, and shows readable names", () => {
+    render(
+      <InventoryPanel owner="0x0sky" core={core} committed first="avaia" />,
+    );
+
+    expect(screen.getAllByRole("region")[0]).toHaveAccessibleName("Avaia");
+    const bond = within(screen.getByRole("region", { name: "You" }));
+    expect(bond.getByRole("meter")).toHaveAccessibleName(
+      "2 of 40 cells occupied",
+    );
+    expect(bond.getByRole("meter")).toHaveAttribute("value", "2");
+    expect(bond.getByRole("list")).toHaveTextContent("Bottle");
+    expect(
+      bond.getByRole("button", { name: "Bottle" }),
+    ).toHaveAccessibleDescription("Bottle");
+  });
+
+  it("keeps item actions in their owner's section and allows closing details", () => {
+    render(<InventoryPanel owner="0x0sky" core={core} committed />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Flyer" }));
+    const avaia = within(screen.getByRole("region", { name: "Avaia" }));
+    expect(
+      avaia.getByRole("button", { name: "Take from Avaia" }),
+    ).toBeInTheDocument();
+    fireEvent.click(avaia.getByRole("button", { name: "Close item details" }));
+    expect(
+      screen.queryByRole("button", { name: "Take from Avaia" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Flyer" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Flyer" })).toHaveFocus();
   });
 
   it("offers what each does not own yet, at Core's price", async () => {

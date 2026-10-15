@@ -2736,7 +2736,9 @@ export function AuthenticatedMapHomeView({
                 </div>
               </>
             ) : (
-              <div className="bond-dock__detail">
+              <div
+                className={`bond-dock__detail${activeDetail === "inventory" ? " bond-dock__detail--inventory" : ""}`}
+              >
                 <div className="bond-dock__detail-header">
                   <button
                     className="interface-settings__back"
@@ -2970,7 +2972,7 @@ export function AuthenticatedMapHomeView({
                   {activeDetail === "inventory" && findItems !== undefined ? (
                     <>
                       <section
-                        className="avaia-notebook"
+                        className="inventory-summary"
                         aria-labelledby="inventory-state-title"
                       >
                         <span
