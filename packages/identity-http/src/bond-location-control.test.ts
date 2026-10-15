@@ -70,7 +70,10 @@ describe("moveManualBondLocation", () => {
   const target = { longitude: 30.5244, latitude: 50.4501 };
 
   it("persists a manual-only compare-and-set with host authorization", async () => {
-    const fetchImpl = vi.fn(async () => manualProjection());
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        manualProjection(),
+    );
     await expect(
       moveManualBondLocation(expected, target, {
         fetch: fetchImpl as typeof fetch,
