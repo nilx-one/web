@@ -1055,7 +1055,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         pubDress={viewModel.identity.pubDress}
         renderer={dependencies.mapRenderer}
         geolocation={dependencies.host.geolocation}
-        onManualBondMove={dependencies.onManualBondMove}
+        {...(dependencies.onManualBondMove === undefined
+          ? {}
+          : { onManualBondMove: dependencies.onManualBondMove })}
         feedback={dependencies.host}
         sound={dependencies.host.sound}
         runtime={viewModel.runtime}
