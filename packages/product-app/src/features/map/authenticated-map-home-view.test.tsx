@@ -63,6 +63,7 @@ import { avaiaLines } from "./avaia-lines";
 import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
 import { SPEECH_MS } from "./use-avaia-walk";
+import { HANDOVER_MS } from "./wheel-handover";
 import { READINESS_FRAME_SETTLE_MS } from "./use-readiness-frame";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 import {
@@ -161,6 +162,10 @@ interface ViewOverrides {
   providerDeepLinks?: readonly ConnectedProvider[];
   onDisconnectProvider?: (provider: ConnectedProvider) => void;
   geolocation?: GeolocationCapability;
+  onManualBondMove?: (
+    expected: { longitude: number; latitude: number },
+    target: { longitude: number; latitude: number },
+  ) => Promise<boolean>;
   mapRenderer?: MapRenderer;
   localModel?: LocalModelDependency;
   section?: ShellSection;
@@ -195,6 +200,9 @@ function renderView(overrides: ViewOverrides = {}) {
       ? {}
       : { nearbySpeech: overrides.nearbySpeech }),
     ...(overrides.sound === undefined ? {} : { sound: overrides.sound }),
+    ...(overrides.onManualBondMove === undefined
+      ? {}
+      : { onManualBondMove: overrides.onManualBondMove }),
     ...(overrides.localModel === undefined
       ? {}
       : { localModel: overrides.localModel }),
@@ -1886,6 +1894,55 @@ describe("AuthenticatedMapHomeView", () => {
     const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
       .lastCall?.[0];
     expect(label).toMatchObject({ title: "0x0sky", detail: "This device" });
+  });
+
+  describe("Bond manual map navigation", () => {
+    it("routes a map tap to the manually located Bond, not Avaia or GPS", async () => {
+      vi.useFakeTimers();
+      const here = { longitude: 30.5234, latitude: 50.4501 };
+      const there = { longitude: 30.5244, latitude: 50.4501 };
+      const mapRenderer = createMapRendererDouble({ kind: "ready" });
+      const onManualBondMove = vi.fn(
+        async (_from: typeof here, _to: typeof there) => true,
+      );
+      renderView({
+        mapRenderer,
+        geolocation: createDeclaredGeolocation(here),
+        onManualBondMove,
+        avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+      });
+      await vi.waitFor(() =>
+        expect(mapRenderer.setObservedPosition).toHaveBeenCalledWith({
+          center: [here.longitude, here.latitude],
+          accuracyMeters: 0,
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      );
+      // The Bond accepts taps only after the three-second wheel handover.
+      act(() => vi.advanceTimersByTime(HANDOVER_MS + 200));
+      act(() =>
+        (
+          mapRenderer as ReturnType<typeof createMapRendererDouble> & {
+            tapGround: (tap: object) => void;
+          }
+        ).tapGround({ ...there, ground: "open" }),
+      );
+      act(() => vi.advanceTimersByTime(1_000));
+      const bond = vi
+        .mocked(mapRenderer.avatars!.upsert)
+        .mock.calls.map(([handle]) => handle)
+        .findLast((handle) => handle.id === "bond");
+      expect(bond?.lngLat[0]).toBeGreaterThan(here.longitude);
+      expect(onManualBondMove).not.toHaveBeenCalled();
+      await act(async () => vi.advanceTimersByTimeAsync(90_000));
+      expect(onManualBondMove).toHaveBeenCalledOnce();
+      const [from, arrived] = vi.mocked(onManualBondMove).mock.calls[0]!;
+      expect(from).toEqual(here);
+      expect(arrived.longitude).toBeCloseTo(there.longitude, 6);
+      expect(arrived.latitude).toBeCloseTo(there.latitude, 6);
+    });
   });
 
   describe("an Avaia at the wheel", () => {

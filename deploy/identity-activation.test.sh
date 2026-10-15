@@ -36,6 +36,17 @@ git add -A
 git commit -q -m squashed
 squashed="$(git rev-parse HEAD)"
 git checkout -q master
+# a client branch that changed identity, then landed on master as an identical squash
+git checkout -q -b feature "$head"
+printf 'feature\n' >services/identity/feature
+git add -A
+git commit -q -m feature
+feature="$(git rev-parse HEAD)"
+git checkout -q master
+printf 'feature\n' >services/identity/feature
+git add -A
+git commit -q -m "feature (squash)"
+landed="$(commit 9 landed)"
 unknown=0123456789abcdef0123456789abcdef01234567
 
 failures=0
@@ -68,6 +79,8 @@ expect "diverged package with sufficient running contract" refuse "$diverged" "$
 expect "diverged package is forced" true "$diverged" "$(image "$head")" true
 expect "diverged package with insufficient running contract" true "$diverged" "$(image "$old")"
 expect "running package from a branch without identity changes" true "$head" "$(image "$squashed")"
+expect "running package from a branch squash-merged with identity changes" true "$landed" "$(image "$feature")"
+expect "running branch package with identity changes not yet landed" refuse "$diverged" "$(image "$feature")"
 expect "no identity deployment exists" true "$head" ""
 expect "running package is not in the repository" refuse "$head" "$(image "$unknown")"
 expect "running image is foreign" refuse "$head" "ghcr.io/other/identity:latest"

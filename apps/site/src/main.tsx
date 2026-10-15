@@ -11,7 +11,10 @@ import {
   createBrowserHost,
   createBrowserSound,
 } from "@nilx-one/host-browser";
-import { createBondLocationGeolocation } from "@nilx-one/host-contract";
+import {
+  createBondLocationGeolocation,
+  createGeolocationRefresh,
+} from "@nilx-one/host-contract";
 import {
   DISCORD_HANDOFF_AUTHORIZATION,
   createDiscordHandoffHost,
@@ -20,6 +23,7 @@ import {
 import {
   createIdentityHttpAdapter,
   readBondLocationControl,
+  moveManualBondLocation,
 } from "@nilx-one/identity-http";
 import {
   MAP_BOOTSTRAP_CAMERA,
@@ -47,7 +51,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./bond-dock-motion.css";
-import { reportMapRendererStatus, reportWorldWipe } from "./error-reporting";
+import {
+  reportCoreRuntimeStatus,
+  reportMapRendererStatus,
+  reportWorldWipe,
+} from "./error-reporting";
 import { PublicBondPage, isPublicBondHostname } from "./public-bond";
 import { wipeLocalWorldOnce } from "./world-wipe";
 
@@ -145,6 +153,9 @@ if (isPublicBondHostname(window.location.hostname)) {
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,
   });
+  // probe() caches the binding load, so this root-level health check shares the
+  // one load ProductApp also awaits rather than forcing a second.
+  void core.probe().then((status) => reportCoreRuntimeStatus(reporter, status));
   // The Discord Activity sends a person here to create a password this origin
   // owns. While the service still holds that hand-off, the page acts for the
   // Discord account that sent them: a Discord host, not the Web one.
@@ -169,7 +180,10 @@ if (isPublicBondHostname(window.location.hostname)) {
     tracker,
   );
   // A manual location declared from Telegram is the Bond's location here too:
-  // the browser is asked only while the Bond is live.
+  // the browser is asked only while the Bond is live. An accepted in-game move
+  // asks this same capability to re-read at once, so the observed point follows
+  // the walk instead of lagging until the next poll.
+  const bondLocationRefresh = createGeolocationRefresh();
   const hostEnvironment = {
     matchMedia: (query: string) => window.matchMedia(query),
     open: (url: string, target: string, features: string) =>
@@ -177,6 +191,7 @@ if (isPublicBondHostname(window.location.hostname)) {
     geolocation: createBondLocationGeolocation({
       device: browserGeolocation,
       readLocation: () => readBondLocationControl(),
+      refresh: bondLocationRefresh,
     }),
     sound: createBrowserSound(),
   };
@@ -203,6 +218,17 @@ if (isPublicBondHostname(window.location.hostname)) {
         host={host}
         identity={identity}
         mapRenderer={mapRenderer}
+        onManualBondMove={async (from, to) => {
+          const accepted = await moveManualBondLocation(from, to, {
+            ...(discordHandoff
+              ? { authorization: DISCORD_HANDOFF_AUTHORIZATION }
+              : {}),
+          });
+          // The service now holds the new declared point; re-read it at once so
+          // every consumer of the observed position follows the Bond's move.
+          if (accepted) bondLocationRefresh.request();
+          return accepted;
+        }}
         localModel={{
           host: createLocalModelHost(),
           catalog: LOCAL_MODEL_CATALOG.models,

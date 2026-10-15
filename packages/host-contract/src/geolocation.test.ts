@@ -7,9 +7,29 @@ import {
   UNSUPPORTED_GEOLOCATION,
   createBondLocationGeolocation,
   createDeclaredGeolocation,
+  createGeolocationRefresh,
+  createMutableDeclaredGeolocation,
+  quantizeDeclaredPoint,
   type BondLocationMode,
   type GeolocationCapability,
 } from "./geolocation";
+
+describe("quantizeDeclaredPoint", () => {
+  it("snaps an off-grid point to the service's E7 grid", () => {
+    expect(
+      quantizeDeclaredPoint({ longitude: 30.52439876, latitude: 50.45011234 }),
+    ).toEqual({ longitude: 30.5243988, latitude: 50.4501123 });
+  });
+
+  it("leaves an already-canonical point and non-finite values untouched", () => {
+    expect(
+      quantizeDeclaredPoint({ longitude: 30.5244, latitude: 50.4501 }),
+    ).toEqual({ longitude: 30.5244, latitude: 50.4501 });
+    expect(
+      quantizeDeclaredPoint({ longitude: Number.NaN, latitude: 50.4501 }),
+    ).toEqual({ longitude: Number.NaN, latitude: 50.4501 });
+  });
+});
 
 describe("UNSUPPORTED_GEOLOCATION", () => {
   it("answers the canonical contract instead of forcing a host branch", async () => {
@@ -59,6 +79,60 @@ describe("createDeclaredGeolocation", () => {
     const observed = vi.fn();
     declared.watchPosition(observed)();
     expect(observed).not.toHaveBeenCalled();
+  });
+});
+
+describe("createMutableDeclaredGeolocation", () => {
+  it("updates declared location to a running observer without touching device GPS", async () => {
+    const mutable = createMutableDeclaredGeolocation({
+      longitude: 30.5234,
+      latitude: 50.4501,
+    });
+    const listener = vi.fn();
+    await expect(mutable.geolocation.requestPosition()).resolves.toMatchObject({
+      kind: "observed",
+      position: {
+        longitude: 30.5234,
+        latitude: 50.4501,
+        declared: true,
+      },
+    });
+    const stop = mutable.geolocation.watchPosition(listener);
+    expect(listener).not.toHaveBeenCalled();
+    mutable.update({ longitude: 30.5244, latitude: 50.4501 });
+    expect(listener).toHaveBeenCalledExactlyOnceWith({
+      kind: "observed",
+      position: expect.objectContaining({
+        longitude: 30.5244,
+        latitude: 50.4501,
+        accuracyMeters: 0,
+        declared: true,
+      }),
+    });
+    stop();
+    mutable.update({ longitude: 30.525, latitude: 50.45 });
+    expect(listener).toHaveBeenCalledOnce();
+    await expect(mutable.geolocation.requestPosition()).resolves.toMatchObject({
+      position: { longitude: 30.525, latitude: 50.45, declared: true },
+    });
+  });
+
+  it("snaps an off-grid update to the service's E7 grid", async () => {
+    const mutable = createMutableDeclaredGeolocation({
+      longitude: 30.5234,
+      latitude: 50.4501,
+    });
+    const listener = vi.fn();
+    mutable.geolocation.watchPosition(listener);
+    mutable.update({ longitude: 30.52439876, latitude: 50.45011234 });
+    expect(listener).toHaveBeenCalledExactlyOnceWith({
+      kind: "observed",
+      position: expect.objectContaining({
+        longitude: 30.5243988,
+        latitude: 50.4501123,
+        declared: true,
+      }),
+    });
   });
 });
 
@@ -172,6 +246,48 @@ describe("createBondLocationGeolocation", () => {
       await Promise.resolve();
       expect(device.watchPosition).not.toHaveBeenCalled();
       stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-reads at once when a refresh is requested, not only on the poll", async () => {
+    vi.useFakeTimers();
+    try {
+      const { device } = deviceDouble();
+      const refresh = createGeolocationRefresh();
+      let position = { longitude: 2.3522, latitude: 48.8566 };
+      const bond = createBondLocationGeolocation({
+        device,
+        recheckMs: 60_000,
+        readLocation: async () => ({ kind: "manual", position }),
+        refresh,
+      });
+      const seen = vi.fn();
+      const stop = bond.watchPosition(seen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(seen).toHaveBeenCalledOnce();
+
+      // A move just persisted a new point. Without a refresh the watch would
+      // not see it until the 60s poll; request() re-reads immediately.
+      position = { longitude: 2.3542, latitude: 48.8566 };
+      refresh.request();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(seen).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          position: expect.objectContaining({
+            longitude: 2.3542,
+            declared: true,
+          }),
+        }),
+      );
+
+      // A stopped watch no longer answers a refresh.
+      stop();
+      position = { longitude: 2.3562, latitude: 48.8566 };
+      refresh.request();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(seen).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
