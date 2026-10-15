@@ -36,8 +36,8 @@ export interface InventoryPanelProps {
 const GRIDS: Readonly<
   Record<CarriedGrid["carry"], { width: number; height: number }>
 > = {
-  pocket: { width: 5, height: 1 },
-  backpack: { width: 8, height: 5 },
+  pocket: { width: 1, height: 3 },
+  backpack: { width: 3, height: 4 },
   bag: { width: 12, height: 10 },
 };
 

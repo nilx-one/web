@@ -8,7 +8,7 @@ import { applyInventory, useInventory, type InventoryPort } from "./inventory";
 
 /**
  * xSasha's backpack gift (`docs/economy.md` in core): once, when the Bond's
- * pockets are four cells of five full or the Bond reaches level 3, she gives
+ * pockets fill their three cells or the Bond reaches level 3, she gives
  * the Bond and its Avaia a backpack each. Core decides when it is due and
  * moves both into them; this gives it when a scene can be played, and says
  * so. Like an achievement, the gift is given before she says it: a scene

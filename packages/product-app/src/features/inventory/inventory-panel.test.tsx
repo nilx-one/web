@@ -30,7 +30,7 @@ vi.mock("./inventory", () => ({
       },
       avaia: {
         carry: "pocket",
-        things: [{ id: "flyer", x: 2, y: 0 }],
+        things: [{ id: "flyer", x: 0, y: 2 }],
         owned: ["pocket"],
       },
       craft: undefined,
@@ -38,7 +38,7 @@ vi.mock("./inventory", () => ({
     },
     catalog: {
       findCatalogVersion: 1,
-      economyVersion: 1,
+      economyVersion: 3,
       currency: { code: "seed", emblem: "₴€£" },
       found: [
         {
@@ -63,8 +63,8 @@ vi.mock("./inventory", () => ({
       crafted: [],
       recipes: [],
       carries: [
-        { id: "pocket", width: 5, height: 1, price: null },
-        { id: "backpack", width: 8, height: 5, price: 1500 },
+        { id: "pocket", width: 1, height: 3, price: null },
+        { id: "backpack", width: 3, height: 4, price: 1500 },
         { id: "bag", width: 12, height: 10, price: 5000 },
       ],
     },
@@ -86,11 +86,14 @@ describe("InventoryPanel", () => {
     expect(bottle.style.gridRow).toBe("1 / span 2");
     expect(screen.getByRole("region", { name: "Avaia" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Flyer" }).style.gridColumn).toBe(
+      "1 / span 1",
+    );
+    expect(screen.getByRole("button", { name: "Flyer" }).style.gridRow).toBe(
       "3 / span 1",
     );
   });
 
-  it("frames every carry at backpack size: pockets light five cells, bags scroll", () => {
+  it("frames every carry at 3×4 size: pockets light three cells, bags scroll", () => {
     const snapshot = useInventory("0x0sky", core);
     vi.mocked(useInventory).mockReturnValueOnce({
       ...snapshot,
@@ -114,20 +117,20 @@ describe("InventoryPanel", () => {
     };
 
     const pocket = holder("Avaia");
-    expect(pocket.cells).toHaveLength(40);
-    expect(pocket.active).toHaveLength(5);
+    expect(pocket.cells).toHaveLength(12);
+    expect(pocket.active).toHaveLength(3);
     expect(
       pocket.scroller.style.getPropertyValue("--inventory-frame-columns"),
-    ).toBe("8");
+    ).toBe("3");
 
     const bag = holder("You");
     expect(bag.cells).toHaveLength(120);
     expect(bag.active).toHaveLength(120);
     expect(
       bag.scroller.style.getPropertyValue("--inventory-frame-columns"),
-    ).toBe("8");
+    ).toBe("3");
     expect(bag.scroller.style.getPropertyValue("--inventory-frame-rows")).toBe(
-      "5",
+      "4",
     );
   });
 
@@ -232,8 +235,8 @@ describe("InventoryPanel", () => {
       expect(applyInventory).toHaveBeenLastCalledWith("0x0sky", core, {
         op: "hand_over",
         from: "avaia",
-        x: 2,
-        y: 0,
+        x: 0,
+        y: 2,
       }),
     );
   });

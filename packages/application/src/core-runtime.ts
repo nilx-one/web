@@ -205,6 +205,7 @@ export type CoreHolder = "bond" | "avaia";
 
 /** One inventory command, as Core's wire names it. */
 export type CoreInventoryCommand =
+  | { readonly op: "normalize" }
   | {
       readonly op: "pick_up";
       readonly holder: CoreHolder;

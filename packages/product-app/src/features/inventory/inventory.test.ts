@@ -30,8 +30,13 @@ vi.mock("../progression/committed-journal", () => ({
   subscribeCommittedJournal: vi.fn(),
 }));
 
-const { EMPTY_INVENTORY, applyInventory, pickUpFind, readInventoryModel } =
-  await import("./inventory");
+const {
+  EMPTY_INVENTORY,
+  applyInventory,
+  needsInventoryLayoutMigration,
+  pickUpFind,
+  readInventoryModel,
+} = await import("./inventory");
 
 const STATE =
   '{"avaia":{"carry":"pocket","things":[]},"bond":{"carry":"backpack","things":[{"id":"can","x":0,"y":0}]},"craft":{"ready_ms":"2701000","recipe":"repair_cd_player","started_ms":"1000"},"seeds":"15"}';
@@ -66,6 +71,32 @@ describe("readInventoryModel", () => {
     expect(readInventoryModel("")).toBe(EMPTY_INVENTORY);
     expect(readInventoryModel("{")).toBe(EMPTY_INVENTORY);
     expect(readInventoryModel('{"seeds":"-1"}')).toBe(EMPTY_INVENTORY);
+  });
+});
+
+describe("layout migration", () => {
+  it("recognizes legacy layouts without modifying stored data", () => {
+    expect(needsInventoryLayoutMigration("")).toBe(false);
+    expect(needsInventoryLayoutMigration("{")).toBe(false);
+    expect(needsInventoryLayoutMigration(STATE)).toBe(true);
+    expect(needsInventoryLayoutMigration('{"layout_version":1}')).toBe(true);
+    expect(needsInventoryLayoutMigration('{"layout_version":2}')).toBe(false);
+    expect(needsInventoryLayoutMigration('{"layout_version":9}')).toBe(false);
+  });
+
+  it("persists only the successful Core-normalized state", async () => {
+    stored = { state: STATE, pickedUp: new Set() };
+    const answer: CoreInventoryAnswer = {
+      ok: true,
+      state: '{"layout_version":2}',
+      seedsGained: 0,
+      seedsSpent: 0,
+      experience: 0,
+    };
+    const port = core(answer);
+    await expect(applyInventory("0x0sky", port, { op: "normalize" })).resolves.toEqual(answer);
+    expect(port.applyInventoryCommand).toHaveBeenCalledWith(STATE, { op: "normalize" }, expect.any(Number));
+    expect(stored.state).toBe('{"layout_version":2}');
   });
 });
 

@@ -213,6 +213,20 @@ export interface InventoryState {
   readonly catalog: CoreEconomyCatalog | undefined;
 }
 
+/** Old stored layouts lack a version; only Core may repack them. */
+export function needsInventoryLayoutMigration(state: string): boolean {
+  if (state === "") return false;
+  try {
+    const parsed: unknown = JSON.parse(state);
+    return (
+      isRecord(parsed) &&
+      (parsed.layout_version === undefined || parsed.layout_version === 1)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** The inventory as stored, kept current with the journal, and the catalog. */
 export function useInventory(
   owner: string,
@@ -250,6 +264,27 @@ export function useInventory(
       active = false;
     };
   }, [core]);
+
+  useEffect(() => {
+    if (
+      core?.applyInventoryCommand === undefined ||
+      (catalog?.economyVersion ?? 0) < 3
+    ) {
+      return;
+    }
+    let active = true;
+    void readCommittedJournal(owner)
+      .then((snapshot) => {
+        if (active && needsInventoryLayoutMigration(snapshot.inventory.state)) {
+          return applyInventory(owner, core, { op: "normalize" });
+        }
+        return undefined;
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [owner, core, catalog?.economyVersion]);
 
   return { model, catalog };
 }
