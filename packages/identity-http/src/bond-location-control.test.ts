@@ -105,9 +105,13 @@ describe("moveManualBondLocation", () => {
       }),
     ).resolves.toBe(false);
     await expect(
-      moveManualBondLocation(expected, { longitude: NaN, latitude: 1 }, {
-        fetch: fetchImpl as typeof fetch,
-      }),
+      moveManualBondLocation(
+        expected,
+        { longitude: NaN, latitude: 1 },
+        {
+          fetch: fetchImpl as typeof fetch,
+        },
+      ),
     ).resolves.toBe(false);
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
