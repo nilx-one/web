@@ -112,9 +112,12 @@ describe("camera keys", () => {
     expect(cameraKeyCommand(key({ key: "Y" }))).toBe("toggle");
   });
 
-  it("does not toggle twice for a held key", () => {
+  it("does not repeat a held camera key, including Space", () => {
     expect(
       cameraKeyCommand(key({ key: "y", code: "KeyY", repeat: true })),
+    ).toBeUndefined();
+    expect(
+      cameraKeyCommand(key({ key: " ", code: "Space", repeat: true })),
     ).toBeUndefined();
   });
 
