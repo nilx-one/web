@@ -1052,6 +1052,32 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.queryByRole("heading", { name: "Hair" })).toBeNull();
   });
 
+  it("keeps model choices scrollable while Save and Cancel stay in the footer", () => {
+    const { container } = renderView({
+      section: "identity",
+      avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Change your 3D model — currently Sky/,
+      }),
+    );
+
+    const outer = container.querySelector(".bond-dock__scroll--avatar");
+    const editor = outer?.querySelector(".avatar-editor");
+    const content = editor?.querySelector(".avatar-editor__content");
+    const footer = editor?.querySelector(":scope > .avatar-editor__actions");
+    const save = screen.getByRole("button", { name: "Save" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+
+    expect(outer).toContainElement(editor);
+    expect(content).toContainElement(screen.getByRole("radio", { name: /Sky/ }));
+    expect(content).not.toContainElement(save);
+    expect(content).not.toContainElement(cancel);
+    expect(footer).toContainElement(save);
+    expect(footer).toContainElement(cancel);
+  });
+
   it("leaves an untouched editor at once, and asks once before the way back discards a change", () => {
     renderView({
       section: "identity",

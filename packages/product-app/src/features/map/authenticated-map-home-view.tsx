@@ -2780,7 +2780,10 @@ export function AuthenticatedMapHomeView({
                     </h2>
                   </div>
                 </div>
-                <div className="bond-dock__scroll" onScroll={handleDockScroll}>
+                <div
+                  className={`bond-dock__scroll${activeDetail === "avatar" ? " bond-dock__scroll--avatar" : ""}`}
+                  onScroll={handleDockScroll}
+                >
                   {section === "identity" && activeDetail === undefined ? (
                     <div className="bond-profile">
                       <AddressField
