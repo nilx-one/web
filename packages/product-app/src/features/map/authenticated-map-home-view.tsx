@@ -173,7 +173,10 @@ import {
 } from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
-import { useBondManualWalk, type ManualMoveOutcome } from "./use-bond-manual-walk";
+import {
+  useBondManualWalk,
+  type ManualMoveOutcome,
+} from "./use-bond-manual-walk";
 import { useFindLoop } from "./use-find-loop";
 import { useOrbSpills } from "../finds/use-orb-spills";
 import { readWorldMemory, rememberWorld } from "./world-memory";
