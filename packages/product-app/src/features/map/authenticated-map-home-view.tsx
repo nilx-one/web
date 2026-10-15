@@ -1071,6 +1071,26 @@ export function AuthenticatedMapHomeView({
     ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
     ...(findToast === undefined ? [] : [findToast]),
+    ...(manualBond.failed
+      ? [
+          {
+            id: "manual-bond-move-failed",
+            kind: "error" as const,
+            title:
+              locale === "uk-UA"
+                ? "Переміщення не збережено"
+                : locale === "ru-RU"
+                  ? "Перемещение не сохранено"
+                  : "Movement not saved",
+            description:
+              locale === "uk-UA"
+                ? "Bond повернувся до останньої збереженої позиції."
+                : locale === "ru-RU"
+                  ? "Bond вернулся к последней сохранённой позиции."
+                  : "Bond returned to its last saved location.",
+          },
+        ]
+      : []),
     ...speech.toasts,
     ...sceneToasts,
   ];
