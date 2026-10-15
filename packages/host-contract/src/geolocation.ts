@@ -95,6 +95,32 @@ export const UNSUPPORTED_GEOLOCATION: GeolocationCapability = Object.freeze({
   },
 });
 
+/**
+ * Decimal scale the identity service stores declared coordinates at: signed
+ * degrees times 10^7. The service keeps integer E7 and compares on it, so a
+ * declared point the client holds as authoritative — the `expected` side of a
+ * manual compare-and-set, or the coordinate it draws after an accepted move —
+ * must already sit on this grid, or a later write races a value the service
+ * never stored.
+ */
+export const GEO_DECLARED_E7_SCALE = 10_000_000;
+
+/**
+ * Snaps a degree pair to the identity service's E7 grid, matching the server's
+ * `round`-based quantization so a round-trip is stable. Non-finite input is
+ * returned unchanged; range is the caller's to validate.
+ */
+export function quantizeDeclaredPoint(point: {
+  readonly longitude: number;
+  readonly latitude: number;
+}): { readonly longitude: number; readonly latitude: number } {
+  const snap = (value: number): number =>
+    Number.isFinite(value)
+      ? Math.round(value * GEO_DECLARED_E7_SCALE) / GEO_DECLARED_E7_SCALE
+      : value;
+  return { longitude: snap(point.longitude), latitude: snap(point.latitude) };
+}
+
 function declaredObservation(point: {
   readonly longitude: number;
   readonly latitude: number;
@@ -162,15 +188,18 @@ export function createMutableDeclaredGeolocation(initial: {
   };
   return {
     geolocation,
-    update(next) {
+    update(raw) {
       if (
-        !Number.isFinite(next.longitude) ||
-        !Number.isFinite(next.latitude) ||
-        Math.abs(next.longitude) > 180 ||
-        Math.abs(next.latitude) > 90
+        !Number.isFinite(raw.longitude) ||
+        !Number.isFinite(raw.latitude) ||
+        Math.abs(raw.longitude) > 180 ||
+        Math.abs(raw.latitude) > 90
       ) {
         return;
       }
+      // Snap to the same E7 grid the service stores, so this presentation
+      // never drifts off the coordinate a later compare-and-set must match.
+      const next = quantizeDeclaredPoint(raw);
       if (
         point.longitude === next.longitude &&
         point.latitude === next.latitude
@@ -200,6 +229,34 @@ export type BondLocationMode =
     }
   | { readonly kind: "unavailable" };
 
+/**
+ * A hook for forcing a Bond-location re-read out of band from the poll. A host
+ * that just accepted a manual move calls `request()` so the running watch
+ * re-reads immediately instead of leaving the observed point stale until the
+ * next poll. Idempotent and safe with no active watch.
+ */
+export interface GeolocationRefresh {
+  /** Registers a watch's re-read for the life of that watch. */
+  subscribe(recheck: () => void): GeolocationUnsubscribe;
+  /** Re-reads every active watch now. */
+  request(): void;
+}
+
+export function createGeolocationRefresh(): GeolocationRefresh {
+  const rechecks = new Set<() => void>();
+  return {
+    subscribe(recheck) {
+      rechecks.add(recheck);
+      return () => {
+        rechecks.delete(recheck);
+      };
+    },
+    request() {
+      for (const recheck of [...rechecks]) recheck();
+    },
+  };
+}
+
 export interface BondLocationGeolocationOptions {
   /** What this host would observe on its own. */
   readonly device: GeolocationCapability;
@@ -210,6 +267,12 @@ export interface BondLocationGeolocationOptions {
    * another host reaches this one without a reload.
    */
   readonly recheckMs?: number;
+  /**
+   * An out-of-band re-read trigger. A composition that just persisted a manual
+   * move calls `refresh.request()` so the declared point updates at once rather
+   * than at the next poll.
+   */
+  readonly refresh?: GeolocationRefresh;
 }
 
 const DEFAULT_BOND_LOCATION_RECHECK_MS = 15_000;
@@ -310,10 +373,12 @@ export function createBondLocationGeolocation(
 
       check();
       const timer = globalThis.setInterval(check, recheckMs);
+      const stopRefresh = options.refresh?.subscribe(check);
       return () => {
         if (stopped) return;
         stopped = true;
         globalThis.clearInterval(timer);
+        stopRefresh?.();
         stopDevice?.();
         stopDevice = undefined;
       };

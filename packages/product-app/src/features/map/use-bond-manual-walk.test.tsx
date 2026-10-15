@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { quantizeDeclaredPoint } from "@nilx-one/host-contract";
 import type { MapGroundTap } from "@nilx-one/map-contract";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -73,6 +74,22 @@ describe("manual Bond walking", () => {
       there.longitude,
       6,
     );
+  });
+
+  it("commits an off-grid arrival snapped to the service's E7 grid", async () => {
+    const { result, renderer, commit } = setup();
+    const offGrid = { longitude: 30.52439876, latitude: 50.4501 };
+    act(() => renderer.tapGround({ ...offGrid, ground: "open" }));
+    await act(async () => vi.advanceTimersByTimeAsync(90_000));
+
+    expect(commit).toHaveBeenCalledOnce();
+    const [, arrived] = vi.mocked(commit).mock.calls[0]!;
+    // The committed point is already on grid: quantizing it again is a no-op,
+    // so the next move's compare-and-set cannot miss the stored coordinate.
+    expect(quantizeDeclaredPoint(arrived)).toEqual(arrived);
+    expect(arrived.longitude).toBeCloseTo(30.5243988, 7);
+    // The hook now rests on that same canonical point.
+    expect(result.current.point(performance.now())).toEqual(arrived);
   });
 
   it("does not move for fog, buildings or water", () => {

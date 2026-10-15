@@ -27,6 +27,7 @@ import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   createMutableDeclaredGeolocation,
+  quantizeDeclaredPoint,
   type ObservedGeolocation,
 } from "@nilx-one/host-contract";
 import { StrictMode } from "react";
@@ -146,10 +147,7 @@ async function bootstrap(): Promise<void> {
     // The identity service stores integer E7 coordinates. Publish the same
     // canonical value through the declared-only host capability so the game
     // keeps moving without reloading or ever requesting physical GPS.
-    const stored = {
-      longitude: Math.round(to.longitude * 10_000_000) / 10_000_000,
-      latitude: Math.round(to.latitude * 10_000_000) / 10_000_000,
-    };
+    const stored = quantizeDeclaredPoint(to);
     manualMoveRevision += 1;
     currentLocationFingerprint = locationControlFingerprint({
       kind: "manual",

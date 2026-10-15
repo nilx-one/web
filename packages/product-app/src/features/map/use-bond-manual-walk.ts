@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { quantizeDeclaredPoint } from "@nilx-one/host-contract";
 import type { MapPointSelection, MapRenderer } from "@nilx-one/map-contract";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -104,7 +105,11 @@ export function useBondManualWalk({
 
   const finish = useCallback(
     (completed: AvaiaWalk, at: number) => {
-      const target = walkPosition(completed, at);
+      // Commit and remember the arrival on the service's E7 grid: the service
+      // stores integer E7 and compares the next move against it, so an
+      // off-grid animation coordinate would persist one value yet expect
+      // another and lose the following move to a false conflict.
+      const target = quantizeDeclaredPoint(walkPosition(completed, at));
       const from = expected.current;
       if (from === undefined || commit === undefined) {
         setWalk(undefined);
