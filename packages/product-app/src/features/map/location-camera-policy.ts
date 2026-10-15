@@ -40,9 +40,16 @@ const OPENING_ACCURACY_BASE_METERS = 50;
  */
 function openingCameraZoom(position: ObservedGeolocation): number {
   if (position.declared === true) return DECLARED_OPENING_ZOOM;
-  if (!Number.isFinite(position.accuracyMeters)) return MAP_SCALE_ZOOM.neighborhood;
-  const uncertainty = Math.max(1, position.accuracyMeters / OPENING_ACCURACY_BASE_METERS);
-  return Math.max(MAP_SCALE_ZOOM.neighborhood, FIRST_FIX_ZOOM - Math.log2(uncertainty));
+  if (!Number.isFinite(position.accuracyMeters))
+    return MAP_SCALE_ZOOM.neighborhood;
+  const uncertainty = Math.max(
+    1,
+    position.accuracyMeters / OPENING_ACCURACY_BASE_METERS,
+  );
+  return Math.max(
+    MAP_SCALE_ZOOM.neighborhood,
+    FIRST_FIX_ZOOM - Math.log2(uncertainty),
+  );
 }
 
 /** Recentering never leaves the camera further out than useful local context. */
