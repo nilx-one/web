@@ -56,12 +56,17 @@ describe("first fix camera policy", () => {
     expect(camera.center).toEqual([coarse.longitude, coarse.latitude]);
     expect(camera.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.neighborhood);
     expect(camera.zoom).toBeLessThan(MAP_SCALE_ZOOM.building);
-    expect(firstFixCamera({ ...coarse, accuracyMeters: 50 }, VOLUMETRIC).zoom).toBe(FIRST_FIX_ZOOM);
+    expect(
+      firstFixCamera({ ...coarse, accuracyMeters: 50 }, VOLUMETRIC).zoom,
+    ).toBe(FIRST_FIX_ZOOM);
   });
 
   it("bounds the camera for missing or extremely inaccurate GPS readings", () => {
     for (const accuracyMeters of [Number.NaN, Number.POSITIVE_INFINITY, 1e9]) {
-      const camera = firstFixCamera({ ...observation(), accuracyMeters }, VOLUMETRIC);
+      const camera = firstFixCamera(
+        { ...observation(), accuracyMeters },
+        VOLUMETRIC,
+      );
       expect(camera.zoom).toBe(MAP_SCALE_ZOOM.neighborhood);
       expect(Number.isFinite(camera.zoom)).toBe(true);
     }
