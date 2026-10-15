@@ -11,6 +11,24 @@ The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (1×3, 3 
 
 Legacy 5×1 pockets and 8×5 backpacks are normalized by Core v3. The migration preserves items and Seeds and upgrades old overfilled containers only where needed to preserve their contents. Web persists Core's result once its new economy catalog has loaded.
 
+## On the map
+
+The white aiaiaiai backpack is also drawn on the map. xSasha wears it in her
+scenes; Bond and Avaia wear it only while their committed Core inventory's
+equipped carry is `backpack`. The existing gift grants and equips both before
+the scene begins. Hiding or skipping the scene does not change that result.
+Switching back to pockets or to a bag removes the backpack from the body.
+
+The renderer fits it to each study from that study's own torso: the bag's top
+clears the shoulder line by the same 6 cm on every body, it rests on the back,
+and two shoulder straps run over the shoulders, down the chest and under the
+arms to the bag's base. It follows the chest bone and never decides gift
+eligibility.
+
+![White aiaiaiai backpack on the four studies, from behind](images/aiaiaiai-backpack-worn.png)
+
+![Its shoulder straps, from the front](images/aiaiaiai-backpack-straps.png)
+
 ## How things get in
 
 A find goes into its finder's grid when its pick-up award is **kept**, that is, when the service has accepted it (R3 in [Avaia walks on its own](avaia-outings.md)). It goes in once: the journal remembers which finds are already in, however often the award is seen kept. A find that fits nowhere stays where it lay, and a toast says so: "no room" when the grid is full, **"Too big"** («Річ завелика») when it would not fit even an empty one. A find too big even for the backpack it just brought still brings the gift. A find left out is not counted as in, so it can still go in later. Small change is money: it is credited to the Bond, whoever picked it up.

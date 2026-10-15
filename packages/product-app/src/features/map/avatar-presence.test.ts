@@ -21,6 +21,21 @@ import type { DeviceLocationState } from "./device-location";
 
 const LATITUDE = 50.4501;
 
+it("draws the equipped carry, not merely an owned or previously gifted backpack", () => {
+  for (const seat of ["bond", "avaia"] as const) {
+    expect(
+      wheelBodyHandle({ body: { seat }, carry: "backpack" })?.backpack,
+    ).toBe(true);
+    expect(wheelBodyHandle({ body: { seat }, carry: "pocket" })?.backpack).toBe(
+      false,
+    );
+    expect(wheelBodyHandle({ body: { seat }, carry: "bag" })?.backpack).toBe(
+      false,
+    );
+    expect(wheelBodyHandle({ body: { seat } })?.backpack).toBe(false);
+  }
+});
+
 const located: DeviceLocationState = {
   kind: "active",
   position: {

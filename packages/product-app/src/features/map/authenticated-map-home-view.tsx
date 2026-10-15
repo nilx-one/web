@@ -55,7 +55,7 @@ import { SettingsSlider } from "../../shell/settings-slider";
 import { PickupSettings } from "../finds/pickup-settings";
 import { oweBackpackScene, useBackpackGift } from "../inventory/backpack-gift";
 import { useCraftCompletion } from "../inventory/craft";
-import { pickUpFind } from "../inventory/inventory";
+import { pickUpFind, useInventory } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
 import {
   ERROR_TOAST_MS,
@@ -1550,6 +1550,7 @@ export function AuthenticatedMapHomeView({
       : undefined;
   const avaiaStudied = studiedBy(avaiaWalk.notebook, avaiaAddress);
   const reducedMotion = prefersReducedMotion();
+  const { model: carriedInventory } = useInventory(pubDress, findItems);
   const guide = useGuideCutscene({
     renderer,
     anchor: observedPosition,
@@ -1560,6 +1561,7 @@ export function AuthenticatedMapHomeView({
           avaia: {
             model: avaiaAvatar.modelId as AvatarModelId,
             appearance: avaiaAvatar.appearance,
+            backpack: carriedInventory.avaia.carry === "backpack",
           },
         }),
     bondName: pubDress,
@@ -2147,6 +2149,7 @@ export function AuthenticatedMapHomeView({
         body.seat === "avaia" && stance === undefined && declaredPosition
           ? null
           : createWheelBodyHandle({
+              carry: carriedInventory[body.seat].carry,
               body,
               address: address(body.seat),
               study: study(body.seat),
@@ -2208,6 +2211,7 @@ export function AuthenticatedMapHomeView({
     avaiaWalk,
     bondAvatar?.appearance,
     cameraZoom,
+    carriedInventory,
     declaredPosition,
     handover,
     location.state,

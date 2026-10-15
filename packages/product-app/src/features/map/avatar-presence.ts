@@ -96,6 +96,7 @@ export const AVATAR_PRESENTATION_SCALE = 1;
 
 /** Everything the client needs to stand a body on the world. */
 export interface WheelBodyInput {
+  readonly carry?: "pocket" | "backpack" | "bag";
   /** The identity this body belongs to, which is the one at the wheel. */
   readonly body: WheelBody;
   /** The address that seeds this identity's own ambient rhythm. */
@@ -137,6 +138,7 @@ export interface BodyStance {
  * does, the world can only draw it at the client's own anchor.
  */
 export function createWheelBodyHandle({
+  carry,
   body,
   address,
   study,
@@ -168,6 +170,7 @@ export function createWheelBodyHandle({
   const scene = resolveAvatarScene(study, appearance);
 
   return {
+    backpack: carry === "backpack",
     id: BODY_HANDLE_IDS[body.seat],
     // The application and the map contract publish the same study names, so a
     // chosen body needs no translation table between them.
