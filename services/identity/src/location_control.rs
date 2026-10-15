@@ -179,6 +179,34 @@ impl BondLocationRepository {
     ///
     /// Replacing `manual` with `live` is therefore an explicit new observation,
     /// not a mode toggle that resurrects an older device coordinate.
+    /// Commits a user-initiated manual walk only when the Bond still has the
+    /// same declared starting point. This cannot enable manual mode, replace
+    /// a live observation, or overwrite another host's move.
+    pub async fn move_manual(
+        &self,
+        pub_dress: &str,
+        expected: GeoCoordinate,
+        target: GeoCoordinate,
+        updated_at: DecimalU64,
+    ) -> Result<bool, BondLocationRepositoryError> {
+        let updated_at = i64::try_from(updated_at.get())
+            .map_err(|_| BondLocationRepositoryError::TimestampOutOfRange)?;
+        let result = sqlx::query(
+            "UPDATE bond_locations SET longitude_e7 = ?, latitude_e7 = ?, updated_at = ? \\
+             WHERE pub_dress = ? AND mode = 'manual' \\
+             AND longitude_e7 = ? AND latitude_e7 = ?",
+        )
+        .bind(i64::from(target.longitude_e7()))
+        .bind(i64::from(target.latitude_e7()))
+        .bind(updated_at)
+        .bind(pub_dress)
+        .bind(i64::from(expected.longitude_e7()))
+        .bind(i64::from(expected.latitude_e7()))
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
     pub async fn write(
         &self,
         pub_dress: &str,
@@ -281,6 +309,7 @@ pub fn location_control_router(
     Router::new()
         .route("/api/v1/location-control", get(read_location_control))
         .route("/api/v1/location-control", post(write_live_location))
+        .route("/api/v1/location-control/manual-move", post(move_manual_location))
         .layer(DefaultBodyLimit::max(MAX_LOCATION_REQUEST_BYTES))
         .with_state(LocationControlApiState {
             identities,
@@ -512,6 +541,80 @@ async fn write_live_location(
             status(StatusCode::SERVICE_UNAVAILABLE)
         }
     }
+}
+
+#[derive(Deserialize)]
+struct ManualMoveRequest {
+    expected_longitude: f64,
+    expected_latitude: f64,
+    longitude: f64,
+    latitude: f64,
+}
+
+/// A declared Bond location moves only by its own authenticated admin's
+/// explicit gesture. A live location can never be switched to manual here.
+async fn move_manual_location(
+    State(state): State<LocationControlApiState>,
+    headers: HeaderMap,
+    Json(request): Json<ManualMoveRequest>,
+) -> Response {
+    let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(value) => value.as_secs(),
+        Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
+    };
+    let (identity, cookie) = match authenticate_bond(&state, &headers, now).await {
+        Ok(value) => value,
+        Err(code) => return status(code),
+    };
+    let pub_dress = match identity.pub_dress.parse::<PubDress>() {
+        Ok(value) => value,
+        Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
+    };
+    let role = match state.identities.role_for(pub_dress.as_str()).await {
+        Ok(value) => value,
+        Err(_) => return status(StatusCode::SERVICE_UNAVAILABLE),
+    };
+    if !role.can_set_manual_location() {
+        return status(StatusCode::FORBIDDEN);
+    }
+    let expected = match GeoCoordinate::from_degrees(
+        request.expected_longitude,
+        request.expected_latitude,
+    ) {
+        Ok(value) => value,
+        Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
+    };
+    let target = match GeoCoordinate::from_degrees(request.longitude, request.latitude) {
+        Ok(value) => value,
+        Err(_) => return status(StatusCode::UNPROCESSABLE_ENTITY),
+    };
+    let updated_at = DecimalU64::new(now);
+    let mut response = match state
+        .locations
+        .move_manual(pub_dress.as_str(), expected, target, updated_at)
+        .await
+    {
+        Ok(true) => no_store_json(
+            StatusCode::OK,
+            LocationControlProjection {
+                role,
+                location: Some(BondLocation::new(
+                    target,
+                    BondLocationMode::Manual,
+                    updated_at,
+                )),
+            },
+        ),
+        Ok(false) => status(StatusCode::CONFLICT),
+        Err(error) => {
+            tracing::error!(%error, "Bond manual move failed");
+            status(StatusCode::SERVICE_UNAVAILABLE)
+        }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
 }
 
 async fn read_location_control(
