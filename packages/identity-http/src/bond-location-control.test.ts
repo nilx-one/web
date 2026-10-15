@@ -70,7 +70,10 @@ describe("moveManualBondLocation", () => {
   const target = { longitude: 30.5244, latitude: 50.4501 };
 
   it("persists a manual compare-and-set with host authorization", async () => {
-    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => manualProjection());
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        manualProjection(),
+    );
     await expect(
       moveManualBondLocation(expected, target, {
         fetch: fetchImpl as typeof fetch,
@@ -96,9 +99,12 @@ describe("moveManualBondLocation", () => {
   });
 
   it("re-reads authoritative manual position after a 409 conflict", async () => {
-    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => manualProjection())
-      .mockResolvedValueOnce(new Response(null, { status: 409 }))
-      .mockResolvedValueOnce(manualProjection());
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        manualProjection(),
+    );
+    fetchImpl.mockResolvedValueOnce(new Response(null, { status: 409 }));
+    fetchImpl.mockResolvedValueOnce(manualProjection());
     await expect(
       moveManualBondLocation(expected, target, {
         fetch: fetchImpl as typeof fetch,
@@ -106,26 +112,41 @@ describe("moveManualBondLocation", () => {
       }),
     ).resolves.toEqual({
       kind: "conflict",
-      state: { kind: "manual", position: { longitude: 2.3522, latitude: 48.8566 } },
+      state: {
+        kind: "manual",
+        position: { longitude: 2.3522, latitude: 48.8566 },
+      },
     });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(fetchImpl.mock.calls[1]?.[0]).toBe("/api/v1/location-control");
-    expect(fetchImpl.mock.calls[1]?.[1]?.headers).toEqual({ authorization: "tma signed" });
+    expect(fetchImpl.mock.calls[1]?.[1]?.headers).toEqual({
+      authorization: "tma signed",
+    });
   });
 
   it("detects that the server switched back to live mode", async () => {
-    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => manualProjection())
-      .mockResolvedValueOnce(new Response(null, { status: 409 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        role: "admin",
-        location: {
-          coordinate: { longitude_e7: "305244000", latitude_e7: "504501000" },
-          mode: "live",
-          updated_at: "1800000000",
-        },
-      }), { status: 200 }));
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        manualProjection(),
+    );
+    fetchImpl.mockResolvedValueOnce(new Response(null, { status: 409 }));
+    fetchImpl.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          role: "admin",
+          location: {
+            coordinate: { longitude_e7: "305244000", latitude_e7: "504501000" },
+            mode: "live",
+            updated_at: "1800000000",
+          },
+        }),
+        { status: 200 },
+      ),
+    );
     await expect(
-      moveManualBondLocation(expected, target, { fetch: fetchImpl as typeof fetch }),
+      moveManualBondLocation(expected, target, {
+        fetch: fetchImpl as typeof fetch,
+      }),
     ).resolves.toEqual({ kind: "conflict", state: { kind: "live" } });
   });
 
@@ -142,8 +163,10 @@ describe("moveManualBondLocation", () => {
   it("times out a stalled POST without accepting a late response", async () => {
     vi.useFakeTimers();
     try {
-      const fetchImpl = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) =>
-        new Promise<Response>(() => undefined));
+      const fetchImpl = vi.fn(
+        (_url: RequestInfo | URL, _init?: RequestInit) =>
+          new Promise<Response>(() => undefined),
+      );
       const pending = moveManualBondLocation(expected, target, {
         fetch: fetchImpl as typeof fetch,
         timeoutMs: 75,
