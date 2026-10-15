@@ -12,6 +12,7 @@ import {
   type MapCamera,
   type MapCameraChange,
   type MapCameraOptions,
+  type MapZoomPivot,
   type MapDimension,
   MAP_BODY_HANDOVER_ZOOM,
   MAP_BODY_HEIGHT_METERS,
@@ -425,6 +426,7 @@ export function createMapLibreRenderer(
   let dimension = options.initialDimension ?? DEFAULT_MAP_DIMENSION;
   let status: MapRendererStatus = { kind: "unmounted" };
   let camera: MapCamera = initialCamera;
+  let zoomPivot: MapZoomPivot = "pointer";
   let map: MapLibreMap | undefined;
   let viewportCleanup: (() => void) | undefined;
   let avatarLayer: AvatarCustomLayer | undefined;
@@ -647,15 +649,29 @@ export function createMapLibreRenderer(
     };
   }
 
-  function publishCamera(gesture: boolean): void {
+  function publishCamera(gesture: boolean, phase: "start" | "end"): void {
     if (map === undefined) {
       return;
     }
     camera = readCamera(map);
     avatars.setCamera(camera);
     for (const listener of cameraListeners) {
-      listener({ camera, gesture });
+      listener({ camera, gesture, phase });
     }
+  }
+
+  // MapLibre reads `around` only as a handler is enabled, and its scroll
+  // handler ignores a second enable, so a new pivot re-enables what is on.
+  function applyZoomPivot(mounted: MapLibreMap): void {
+    const around =
+      zoomPivot === "center" ? { around: "center" as const } : undefined;
+    const scroll = mounted.scrollZoom;
+    if (scroll?.isEnabled()) {
+      scroll.disable();
+      scroll.enable(around);
+    }
+    const touch = mounted.touchZoomRotate;
+    if (touch?.isEnabled()) touch.enable(around);
   }
 
   function applyDimension(mounted: MapLibreMap): void {
@@ -1337,6 +1353,7 @@ export function createMapLibreRenderer(
           pitch: camera.pitch,
         });
         map = mountedMap;
+        if (zoomPivot !== "pointer") applyZoomPivot(mountedMap);
         // Telegram can resize the WebView without a window resize event.
         // Coalesce host changes into a single canvas update each frame.
         let resizeFrame: number | undefined;
@@ -1430,12 +1447,12 @@ export function createMapLibreRenderer(
         // Claim camera ownership as soon as a user gesture begins, not after
         // it finishes and could be overwritten by an opening flight.
         mountedMap.on("movestart", (event: { originalEvent?: unknown }) => {
-          if (event?.originalEvent !== undefined) publishCamera(true);
+          if (event?.originalEvent !== undefined) publishCamera(true, "start");
         });
         // moveend rather than move: final camera state is published once per
         // gesture instead of every animation frame.
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
-          publishCamera(event?.originalEvent !== undefined);
+          publishCamera(event?.originalEvent !== undefined, "end");
         });
         // "idle" is MapLibre saying every tile the view needs has loaded and
         // painted: the one moment new landmarks can have become readable. It
@@ -1771,6 +1788,12 @@ export function createMapLibreRenderer(
       }
 
       map?.jumpTo(target);
+    },
+
+    setZoomPivot(next: MapZoomPivot) {
+      if (next === zoomPivot) return;
+      zoomPivot = next;
+      if (map !== undefined) applyZoomPivot(map);
     },
 
     setAppearance(next: MapAppearance) {

@@ -243,7 +243,7 @@ export function distanceMeters(
  */
 export function cameraFramesPosition(
   camera: MapCamera,
-  position: ObservedGeolocation,
+  position: Pick<ObservedGeolocation, "longitude" | "latitude">,
 ): boolean {
   const tolerance =
     CENTERED_TOLERANCE_PIXELS *

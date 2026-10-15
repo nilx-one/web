@@ -777,6 +777,64 @@ describe("camera ownership", () => {
     expect(renderer.getCamera().zoom).toBe(15);
   });
 
+  it("says when a person's gesture starts and when it settles", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const phases: (string | undefined)[] = [];
+    renderer.subscribeCamera((change) => phases.push(change.phase));
+
+    fakeMap.emit("movestart", { originalEvent: { type: "mousedown" } });
+    fakeMap.emit("moveend", { originalEvent: { type: "mouseup" } });
+
+    expect(phases).toEqual(["start", "end"]);
+  });
+
+  it("closes zoom gestures in on the centre a followed camera keeps", () => {
+    const fakeMap = makeFakeMap();
+    let scrollOn = true;
+    const scrollZoom = {
+      isEnabled: () => scrollOn,
+      disable: vi.fn(() => {
+        scrollOn = false;
+      }),
+      enable: vi.fn(() => {
+        scrollOn = true;
+      }),
+    };
+    const touchZoomRotate = { isEnabled: () => true, enable: vi.fn() };
+    Object.assign(fakeMap, { scrollZoom, touchZoomRotate });
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setZoomPivot?.("center");
+    expect(scrollZoom.disable).toHaveBeenCalledOnce();
+    expect(scrollZoom.enable).toHaveBeenLastCalledWith({ around: "center" });
+    expect(touchZoomRotate.enable).toHaveBeenLastCalledWith({
+      around: "center",
+    });
+
+    renderer.setZoomPivot?.("center");
+    expect(scrollZoom.enable).toHaveBeenCalledOnce();
+
+    renderer.setZoomPivot?.("pointer");
+    expect(scrollZoom.enable).toHaveBeenLastCalledWith(undefined);
+    expect(touchZoomRotate.enable).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("leaves a zoom gesture switched off where it is", () => {
+    const fakeMap = makeFakeMap();
+    const scrollZoom = {
+      isEnabled: () => false,
+      disable: vi.fn(),
+      enable: vi.fn(),
+    };
+    Object.assign(fakeMap, { scrollZoom });
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setZoomPivot?.("center");
+
+    expect(scrollZoom.enable).not.toHaveBeenCalled();
+  });
+
   it("stops publishing camera changes after unsubscribe", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);

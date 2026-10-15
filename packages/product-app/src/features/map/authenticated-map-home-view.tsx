@@ -178,6 +178,8 @@ import {
 } from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
+import { useFollowCamera } from "./use-follow-camera";
+import { FOLLOW_FLIGHT_HOLD_MS, cameraChangeVisible } from "./follow-camera";
 import {
   useBondManualWalk,
   type ManualMoveOutcome,
@@ -1575,6 +1577,28 @@ export function AuthenticatedMapHomeView({
   useSystemErrorNotices(statusToasts);
   useErrorToastFeedback(statusToasts, feedback, cue);
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
+  // The camera follows the body at the wheel the way a game camera follows
+  // its character. It stands down while a scene or an informer stages shots.
+  const followCamera = useFollowCamera({
+    renderer,
+    enabled:
+      mapStatus.kind === "ready" &&
+      section === "world" &&
+      handover === undefined &&
+      !guideActive &&
+      systemInformer.activeId === undefined,
+    body: () => {
+      const now = globalThis.performance.now();
+      if (wheel === "avaia") return avaiaWalk.stance(now)?.point;
+      if (declaredPosition) return manualBondStance(now)?.point;
+      return observedPosition;
+    },
+    reducedMotion: prefersReducedMotion,
+  });
+  const followCameraRef = useRef(followCamera);
+  useEffect(() => {
+    followCameraRef.current = followCamera;
+  });
   // In a cutscene the characters who are not the person speak: xSasha says
   // her line when it opens. The person's own replies are never voiced.
   const guideBeat = guide.state?.beat;
@@ -1769,7 +1793,13 @@ export function AuthenticatedMapHomeView({
   useEffect(
     () =>
       renderer.subscribeCamera((change) => {
-        setCamera(change.camera);
+        // A followed camera moves every frame by a fraction of a pixel; the
+        // world reads it again only once that adds up to something visible.
+        setCamera((previous) =>
+          change.gesture || cameraChangeVisible(previous, change.camera)
+            ? change.camera
+            : previous,
+        );
         if (change.gesture) {
           cameraMovedByPerson.current = true;
           // A person who is looking elsewhere is not answering the prompt.
@@ -1845,6 +1875,7 @@ export function AuthenticatedMapHomeView({
     };
 
     const context = { presentation, dimension, safeArea };
+    followCameraRef.current.hold(FOLLOW_FLIGHT_HOLD_MS);
     renderer.setCamera(
       firstFixCamera(
         {
@@ -1913,6 +1944,7 @@ export function AuthenticatedMapHomeView({
       latitude: target.latitude,
     };
     const context = { presentation, dimension, safeArea };
+    followCameraRef.current.hold(FOLLOW_FLIGHT_HOLD_MS);
     renderer.setCamera(firstFixCamera(target, context), {
       motion:
         resumedAt === undefined && !prefersReducedMotion()
@@ -2167,6 +2199,9 @@ export function AuthenticatedMapHomeView({
       // Only the driver carries its own card as the body traverses the map.
       const moving =
         body.seat === "avaia" ? avaiaWalk.moving : manualBondMoving;
+      if (moving && stance !== undefined && handover === undefined) {
+        followCameraRef.current.track(stance.point);
+      }
       if (moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
         if (body.seat === "bond" && declaredPosition) {
@@ -2292,6 +2327,7 @@ export function AuthenticatedMapHomeView({
       ...(wheel === "avaia" ? avaiaPoint : manualPoint),
     };
     const context = { presentation, dimension, safeArea };
+    followCamera.lock();
     renderer.setCamera(closeUpCamera(target, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
@@ -2499,6 +2535,7 @@ export function AuthenticatedMapHomeView({
         : to === "bond" && manualPoint !== undefined && declaredPosition
           ? { ...observedPosition, ...manualPoint }
           : observedPosition;
+    followCamera.lock();
     renderer.setCamera(bodyVisibleCamera(target, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),
@@ -2541,6 +2578,10 @@ export function AuthenticatedMapHomeView({
             ...manualBondPoint(globalThis.performance.now()),
           }
         : observedPosition;
+    // Recentring is on the Bond's own place: it locks the camera only when
+    // that is where the body at the wheel stands.
+    if (wheel === "bond") followCamera.lock();
+    else followCamera.release();
     renderer.setCamera(recenterCamera(current, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
       padding: locationCameraPadding(context),

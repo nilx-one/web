@@ -29,6 +29,40 @@ Every accepted application focus gets a monotonically increasing generation. Ret
 
 A new map instance first frames geographic countries at zoom 3.3, backed by a genuine low-resolution global source. When the map becomes ready, the first observed position triggers a single 2.3-second MapLibre flight to the usual local-cell camera (zoom 18.5); reduced motion skips the animation. A remembered on-device position can serve as the first flight target while current geolocation resolves; a nearby live fix must not restart the flight. This is camera presentation, not a Bond location mutation. A direct gesture claims camera ownership immediately, and a Telegram viewport resize refreshes the renderer without changing geography.
 
+## Following the body
+
+The camera follows the body at the wheel the way a game camera follows its
+character (`follow-camera.ts`, `use-follow-camera.ts`). It opens **locked**:
+while the body walks, every frame keeps it in the middle of the world, and the
+person's zoom, bearing and pitch stay exactly as they left them.
+
+- **Orbit, tilt and zoom keep the lock** — the Lineage II chase camera. A
+  right-drag or a two-finger twist turns the camera around the body, and the
+  wheel or a pinch closes in on it: while locked the renderer pivots zoom on
+  the viewport centre (`MapRenderer.setZoomPivot`), so the body stays where it
+  is instead of sliding toward the pointer.
+- **A drag that leaves the body out of frame unlocks it** — the MOBA camera
+  unlocked from its hero. "Out of frame" is the same 48 px tolerance that
+  separates a centred location control from a displaced one. A walking body
+  then never pulls the camera back.
+- **Space** brings the camera back onto the body and locks it; **Y** (the
+  physical key, on any layout) locks or unlocks it. A key pressed into a
+  control, a dialog or with a modifier is left to it.
+- Focusing the body at the wheel and taking the wheel lock the camera, since
+  both land on the body. Recentring locks it when the Bond is at the wheel
+  and releases it when the Avaia is, because it goes to the Bond's place.
+
+A person's gesture still wins at once (rule 1): the renderer reports when a
+gesture starts (`MapCameraChange.phase`), and the follow stands still from
+then until it settles. An application move — a focus, a handover, the opening
+flight — is left to finish before the follow takes the camera again. The
+follow stands down entirely while a scene, an informer or a handover has the
+camera, and outside the world. It is presentation only: it moves the camera,
+never the body.
+
+A followed camera moves every frame by a fraction of a pixel, so the world
+reads it again only once it has moved 8 px or changed zoom, bearing or pitch.
+
 ## Cell-bound fragments
 
 H3 remains adapter-owned. `presence-geo` converts an opaque `CellIndex` into a `CellCameraAnchor` containing the same cell identifier and only the cell centre needed for presentation. Product code never imports H3 APIs.

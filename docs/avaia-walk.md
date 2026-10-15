@@ -32,6 +32,10 @@ standing on it.
 
 Open ground starts a walk. Anything else is refused, and the Avaia says why.
 
+The camera follows the walking body, turns and closes in around it, and lets
+go once a person drags it away; Space brings it back
+([camera coordination](camera-coordination.md#following-the-body)).
+
 ### The way there
 
 A walk keeps to paths first. The renderer answers `roadsWithin` from the
