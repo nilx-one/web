@@ -1864,10 +1864,8 @@ export function AuthenticatedMapHomeView({
     resumeApplied.current = true;
     if (firstFixApplied.current || cameraMovedByPerson.current) return;
     const remembered = readWorldMemory(pubDress);
-    const point =
-      wheel === "avaia"
-        ? (remembered.avaia ?? remembered.bond)
-        : remembered.bond;
+    const rememberedAvaia = wheel === "avaia" ? remembered.avaia : undefined;
+    const point = rememberedAvaia ?? remembered.bond;
     if (point === undefined) return;
     openingTarget.current = {
       longitude: point.longitude,
@@ -1881,9 +1879,11 @@ export function AuthenticatedMapHomeView({
         {
           longitude: point.longitude,
           latitude: point.latitude,
-          accuracyMeters: 0,
+          // Bond memory comes only from a prior device observation and has no
+          // persisted accuracy. Avaia memory is a deliberate independent point.
+          accuracyMeters: 50,
           observedAt: 0,
-          declared: true,
+          ...(rememberedAvaia !== undefined ? { declared: true as const } : {}),
         },
         context,
       ),
@@ -1933,19 +1933,31 @@ export function AuthenticatedMapHomeView({
     const target =
       avaiaPoint === undefined
         ? observedPosition
-        : { ...observedPosition, ...avaiaPoint };
+        : {
+            ...observedPosition,
+            ...avaiaPoint,
+            // Avaia's own remembered place is not the device's GPS estimate.
+            declared: true as const,
+            accuracyMeters: 0,
+          };
+    const context = { presentation, dimension, safeArea };
+    const targetCamera = firstFixCamera(target, context);
     const resumedAt = openingTarget.current;
-    // Nearby observed positions must not restart an in-flight opening flight.
-    if (resumedAt !== undefined && mapDistanceMeters(resumedAt, target) < 150) {
+    // Keep an existing flight only when its target *and framing* are right.
+    // A late, coarse device fix must widen even when coordinates barely move.
+    if (
+      resumedAt !== undefined &&
+      mapDistanceMeters(resumedAt, target) < 150 &&
+      Math.abs(renderer.getCamera().zoom - targetCamera.zoom) < 0.1
+    ) {
       return;
     }
     openingTarget.current = {
       longitude: target.longitude,
       latitude: target.latitude,
     };
-    const context = { presentation, dimension, safeArea };
     followCameraRef.current.hold(FOLLOW_FLIGHT_HOLD_MS);
-    renderer.setCamera(firstFixCamera(target, context), {
+    renderer.setCamera(targetCamera, {
       motion:
         resumedAt === undefined && !prefersReducedMotion()
           ? "flight"
