@@ -179,7 +179,12 @@ import {
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFollowCamera } from "./use-follow-camera";
-import { FOLLOW_FLIGHT_HOLD_MS, cameraChangeVisible } from "./follow-camera";
+import {
+  FOLLOW_FLIGHT_HOLD_MS,
+  cameraChangeVisible,
+  followCamera as chaseCamera,
+  sameFollowCamera,
+} from "./follow-camera";
 import {
   useBondManualWalk,
   type ManualMoveOutcome,
@@ -968,7 +973,18 @@ export function AuthenticatedMapHomeView({
   }
   const cameraCentered =
     observedPosition !== undefined &&
-    cameraFramesPosition(camera, observedPosition);
+    (cameraFramesPosition(camera, observedPosition) ||
+      sameFollowCamera(
+        camera,
+        chaseCamera(
+          camera,
+          {
+            ...observedPosition,
+            bearingDeg: camera.bearing,
+          },
+          dimension,
+        ),
+      ));
   const locationControl = createLocationControlViewModel(
     location.state,
     cameraCentered,
@@ -1589,10 +1605,18 @@ export function AuthenticatedMapHomeView({
       systemInformer.activeId === undefined,
     body: () => {
       const now = globalThis.performance.now();
-      if (wheel === "avaia") return avaiaWalk.stance(now)?.point;
-      if (declaredPosition) return manualBondStance(now)?.point;
-      return observedPosition;
+      const stance =
+        wheel === "avaia"
+          ? avaiaWalk.stance(now)
+          : declaredPosition
+            ? manualBondStance(now)
+            : undefined;
+      if (stance !== undefined)
+        return { ...stance.point, bearingDeg: stance.bearingDeg };
+      if (wheel === "avaia" || observedPosition === undefined) return undefined;
+      return { ...observedPosition, bearingDeg: 0 };
     },
+    dimension,
     reducedMotion: prefersReducedMotion,
   });
   const followCameraRef = useRef(followCamera);
@@ -2211,8 +2235,12 @@ export function AuthenticatedMapHomeView({
       // Only the driver carries its own card as the body traverses the map.
       const moving =
         body.seat === "avaia" ? avaiaWalk.moving : manualBondMoving;
-      if (moving && stance !== undefined && handover === undefined) {
-        followCameraRef.current.track(stance.point);
+      if (handle !== null && handover === undefined) {
+        followCameraRef.current.track({
+          longitude: handle.lngLat[0],
+          latitude: handle.lngLat[1],
+          bearingDeg: handle.bearingDeg,
+        });
       }
       if (moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));

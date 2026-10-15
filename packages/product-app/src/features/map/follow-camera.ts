@@ -5,6 +5,7 @@ import {
   mapMetersPerPixel,
   type MapCamera,
   type MapPointSelection,
+  type MapDimension,
   type MapZoomPivot,
 } from "@nilx-one/map-contract";
 
@@ -13,8 +14,8 @@ import { distanceMeters } from "./location-camera-policy";
 /**
  * The camera that follows the body at the wheel, the way a game camera does.
  *
- * `locked` is the default Follow camera: it tracks the walking body while
- * preserving chosen zoom, bearing and pitch. `free` is a Dota-style
+ * `locked` is the default Follow camera: it looks over the body's head,
+ * tilted forward and aligned with the body's heading. `free` is a Dota-style
  * independent map camera: dragging, touch panning and pointer zoom move the
  * camera without pulling it back to the body. An explicit selection, Space
  * or Y switches modes, and so does a two-finger pinch on a phone (out to
@@ -38,12 +39,68 @@ export const FOLLOW_HOLD_MS = 900;
 /** The same for the flight that opens a world on the body. */
 export const FOLLOW_FLIGHT_HOLD_MS = 2_300;
 
-/** The camera on the body: zoom, bearing and pitch are the person's. */
+/** The rendered body's position and facing, never device compass evidence. */
+export interface FollowBody extends MapPointSelection {
+  readonly bearingDeg: number;
+}
+
+/** Map pitch is measured from overhead: 60° looks down at 30° to the ground. */
+export const FOLLOW_PITCH = 60;
+export const FOLLOW_MIN_ZOOM = 21.5;
+
+/**
+ * Aim along the line through a nominal 1.6 m head above the ground. MapCamera
+ * centres a ground coordinate, so its target lies ahead by height * tan(pitch).
+ * This puts the camera behind the body looking over its head, without moving
+ * the avatar or coupling the map contract to a particular skeleton.
+ */
 export function followCamera(
   current: MapCamera,
-  body: MapPointSelection,
+  body: FollowBody,
+  dimension: MapDimension = "volumetric",
 ): MapCamera {
-  return { ...current, center: [body.longitude, body.latitude] };
+  const bearing = ((body.bearingDeg % 360) + 360) % 360;
+  const pitch = dimension === "flat" ? 0 : FOLLOW_PITCH;
+  const distance = 1.6 * Math.tan((pitch * Math.PI) / 180);
+  const angular = distance / 6_371_008.8;
+  const heading = (bearing * Math.PI) / 180;
+  const latitude = (body.latitude * Math.PI) / 180;
+  const targetLatitude = Math.asin(
+    Math.sin(latitude) * Math.cos(angular) +
+      Math.cos(latitude) * Math.sin(angular) * Math.cos(heading),
+  );
+  const longitudeOffset = Math.atan2(
+    Math.sin(heading) * Math.sin(angular) * Math.cos(latitude),
+    Math.cos(angular) - Math.sin(latitude) * Math.sin(targetLatitude),
+  );
+  return {
+    center:
+      pitch === 0
+        ? [body.longitude, body.latitude]
+        : [
+            ((body.longitude + (longitudeOffset * 180) / Math.PI + 540) % 360) -
+              180,
+            (targetLatitude * 180) / Math.PI,
+          ],
+    zoom: Math.max(current.zoom, FOLLOW_MIN_ZOOM),
+    bearing,
+    pitch,
+  };
+}
+
+/** Equivalent wrapped bearings and tiny projection roundoff need no update. */
+export function sameFollowCamera(
+  current: MapCamera,
+  target: MapCamera,
+): boolean {
+  const turn = ((current.bearing - target.bearing + 540) % 360) - 180;
+  return (
+    Math.abs(current.center[0] - target.center[0]) < 1e-9 &&
+    Math.abs(current.center[1] - target.center[1]) < 1e-9 &&
+    Math.abs(current.zoom - target.zoom) < 1e-6 &&
+    Math.abs(turn) < 1e-6 &&
+    Math.abs(current.pitch - target.pitch) < 1e-6
+  );
 }
 
 /**

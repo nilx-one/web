@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapPointSelection, MapRenderer } from "@nilx-one/map-contract";
+import type { MapDimension, MapRenderer } from "@nilx-one/map-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -11,9 +11,10 @@ import {
   followAfterPinch,
   followCamera,
   zoomPivotFor,
+  sameFollowCamera,
+  type FollowBody,
   type CameraFollow,
 } from "./follow-camera";
-import { cameraFramesPosition } from "./location-camera-policy";
 
 export interface FollowCameraInput {
   readonly renderer: MapRenderer;
@@ -23,14 +24,15 @@ export interface FollowCameraInput {
    */
   readonly enabled: boolean;
   /** Where the body at the wheel stands this instant. */
-  readonly body: () => MapPointSelection | undefined;
+  readonly body: () => FollowBody | undefined;
+  readonly dimension: MapDimension;
   readonly reducedMotion: () => boolean;
 }
 
 export interface FollowCameraState {
   readonly follow: CameraFollow;
   /** Keeps the camera on a body that moved this frame, while locked. */
-  track(point: MapPointSelection): void;
+  track(point: FollowBody): void;
   /** Hold a focus or handover without switching the selected camera mode. */
   holdFocus(): void;
   /** The application took the camera somewhere else than the body. */
@@ -45,6 +47,7 @@ export function useFollowCamera({
   renderer,
   enabled,
   body,
+  dimension,
   reducedMotion,
 }: FollowCameraInput): FollowCameraState {
   const [follow, setFollow] = useState<CameraFollow>(INITIAL_CAMERA_FOLLOW);
@@ -53,9 +56,9 @@ export function useFollowCamera({
   /** The touch gesture under way, and the zoom it started from. */
   const touchStart = useRef<number | undefined>(undefined);
   const heldUntil = useRef(0);
-  const input = useRef({ enabled, body, reducedMotion });
+  const input = useRef({ enabled, body, dimension, reducedMotion });
   useEffect(() => {
-    input.current = { enabled, body, reducedMotion };
+    input.current = { enabled, body, dimension, reducedMotion };
   });
 
   const choose = useCallback((next: CameraFollow) => {
@@ -80,13 +83,16 @@ export function useFollowCamera({
     const point = input.current.body();
     if (point === undefined) return;
     hold(FOLLOW_HOLD_MS);
-    renderer.setCamera(followCamera(renderer.getCamera(), point), {
-      motion: input.current.reducedMotion() ? "immediate" : "eased",
-    });
+    renderer.setCamera(
+      followCamera(renderer.getCamera(), point, input.current.dimension),
+      {
+        motion: input.current.reducedMotion() ? "immediate" : "eased",
+      },
+    );
   }, [choose, hold, renderer]);
 
   const track = useCallback(
-    (point: MapPointSelection) => {
+    (point: FollowBody) => {
       if (
         !input.current.enabled ||
         followRef.current !== "locked" ||
@@ -96,14 +102,10 @@ export function useFollowCamera({
         return;
       }
       const current = renderer.getCamera();
-      if (
-        current.center[0] === point.longitude &&
-        current.center[1] === point.latitude
-      ) {
-        return;
-      }
+      const target = followCamera(current, point, input.current.dimension);
+      if (sameFollowCamera(current, target)) return;
       // Following is background motion: it never takes a gesture away.
-      renderer.setCamera(followCamera(current, point), {
+      renderer.setCamera(target, {
         yieldToGesture: true,
       });
     },
@@ -151,25 +153,38 @@ export function useFollowCamera({
               return;
             }
           }
-          // Follow keeps the body in frame: a drag that left it is brought
-          // back now, rather than snapping back on the body's next step.
+          // Return behind the head after orbit/tilt/pan, even when stationary.
+          // Free is the mode for keeping an independent viewing angle.
           const point = input.current.body();
           if (
             followRef.current === "locked" &&
             point !== undefined &&
-            !cameraFramesPosition(change.camera, point)
+            !sameFollowCamera(
+              change.camera,
+              followCamera(change.camera, point, input.current.dimension),
+            )
           ) {
             hold(FOLLOW_HOLD_MS);
-            renderer.setCamera(followCamera(change.camera, point), {
-              motion: input.current.reducedMotion() ? "immediate" : "eased",
-            });
+            renderer.setCamera(
+              followCamera(change.camera, point, input.current.dimension),
+              {
+                motion: input.current.reducedMotion() ? "immediate" : "eased",
+              },
+            );
           }
           return;
         }
         // Only a purely programmatic settle releases an application hold.
+        const wasHeld = heldUntil.current > 0;
         heldUntil.current = 0;
+        // A tracking jump also emits moveend. Do not sample the moving body
+        // recursively from that notification; its animation frame owns it.
+        if (wasHeld) {
+          const point = input.current.body();
+          if (point !== undefined) track(point);
+        }
       }),
-    [center, choose, hold, renderer],
+    [center, choose, hold, renderer, track],
   );
 
   useEffect(() => {

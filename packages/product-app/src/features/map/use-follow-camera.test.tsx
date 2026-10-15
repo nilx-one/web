@@ -4,26 +4,34 @@
 import type {
   MapCamera,
   MapCameraChange,
-  MapPointSelection,
   MapRenderer,
 } from "@nilx-one/map-contract";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FOLLOW_HOLD_MS } from "./follow-camera";
+import {
+  FOLLOW_HOLD_MS,
+  FOLLOW_PITCH,
+  FOLLOW_MIN_ZOOM,
+  followCamera,
+  type FollowBody,
+} from "./follow-camera";
 import { useFollowCamera } from "./use-follow-camera";
 
-const HOME = { longitude: 24.03, latitude: 49.84 };
-const AHEAD = { longitude: 24.0301, latitude: 49.8401 };
+const HOME = { longitude: 24.03, latitude: 49.84, bearingDeg: 0 };
+const AHEAD = { longitude: 24.0301, latitude: 49.8401, bearingDeg: 90 };
 const FAR = { longitude: 24.05, latitude: 49.86 };
 
 function fakeRenderer() {
-  let camera: MapCamera = {
-    center: [HOME.longitude, HOME.latitude],
-    zoom: 18.5,
-    bearing: 30,
-    pitch: 48,
-  };
+  let camera: MapCamera = followCamera(
+    {
+      center: [HOME.longitude, HOME.latitude],
+      zoom: 18.5,
+      bearing: 30,
+      pitch: 48,
+    },
+    HOME,
+  );
   const listeners = new Set<(change: MapCameraChange) => void>();
   const renderer = {
     getCamera: () => camera,
@@ -69,7 +77,7 @@ function fakeRenderer() {
 
 function follow(
   fake: ReturnType<typeof fakeRenderer>,
-  body: () => MapPointSelection | undefined = () => HOME,
+  body: () => FollowBody | undefined = () => HOME,
   enabled = true,
 ) {
   return renderHook(
@@ -78,6 +86,7 @@ function follow(
         renderer: fake.renderer,
         enabled: on,
         body,
+        dimension: "volumetric",
         reducedMotion: () => false,
       }),
     { initialProps: { on: enabled } },
@@ -97,10 +106,10 @@ describe("useFollowCamera", () => {
 
     expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
       {
-        center: [AHEAD.longitude, AHEAD.latitude],
-        zoom: 18.5,
-        bearing: 30,
-        pitch: 48,
+        center: followCamera(fake.renderer.getCamera(), AHEAD).center,
+        zoom: FOLLOW_MIN_ZOOM,
+        bearing: 90,
+        pitch: FOLLOW_PITCH,
       },
       { yieldToGesture: true },
     );
@@ -128,7 +137,9 @@ describe("useFollowCamera", () => {
 
     expect(result.current.follow).toBe("locked");
     expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
-      expect.objectContaining({ center: [HOME.longitude, HOME.latitude] }),
+      expect.objectContaining({
+        center: followCamera(fake.renderer.getCamera(), HOME).center,
+      }),
       { motion: "eased" },
     );
   });
@@ -156,7 +167,9 @@ describe("useFollowCamera", () => {
 
     expect(result.current.follow).toBe("locked");
     expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
-      expect.objectContaining({ center: [AHEAD.longitude, AHEAD.latitude] }),
+      expect.objectContaining({
+        center: followCamera(fake.renderer.getCamera(), AHEAD).center,
+      }),
       { motion: "eased" },
     );
   });
@@ -188,23 +201,29 @@ describe("useFollowCamera", () => {
     expect(result.current.follow).toBe("locked");
   });
 
-  it("orbits around the body without letting go of it", () => {
+  it("returns behind a stationary head after orbit and tilt", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
-
-    act(() => fake.gesture({ bearing: 200, pitch: 60, zoom: 17.5 }));
-    result.current.track(AHEAD);
-
+    act(() => fake.gesture({ bearing: 200, pitch: 0, zoom: 22 }));
     expect(result.current.follow).toBe("locked");
     expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
-      {
-        center: [AHEAD.longitude, AHEAD.latitude],
-        zoom: 17.5,
-        bearing: 200,
-        pitch: 60,
-      },
-      { yieldToGesture: true },
+      expect.objectContaining({
+        bearing: HOME.bearingDeg,
+        pitch: FOLLOW_PITCH,
+        zoom: 22,
+      }),
+      { motion: "eased" },
     );
+  });
+
+  it("tracks a turn in place and does not write again once settled", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    const turned = { ...HOME, bearingDeg: 270 };
+    result.current.track(turned);
+    expect(fake.renderer.getCamera().bearing).toBe(270);
+    result.current.track(turned);
+    expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
   });
 
   it("does not fight a gesture, then resumes when moveend lacks originalEvent", () => {
@@ -218,6 +237,7 @@ describe("useFollowCamera", () => {
     // Some MapLibre moveend events omit originalEvent although the earlier
     // movestart was user-owned. Gesture ownership must still be released.
     fake.settle();
+    fake.renderer.setCamera.mockClear();
     result.current.track(AHEAD);
     expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
   });
@@ -253,7 +273,9 @@ describe("useFollowCamera", () => {
 
     expect(result.current.follow).toBe("locked");
     expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
-      expect.objectContaining({ center: [AHEAD.longitude, AHEAD.latitude] }),
+      expect.objectContaining({
+        center: followCamera(fake.renderer.getCamera(), AHEAD).center,
+      }),
       { motion: "eased" },
     );
 
@@ -287,8 +309,33 @@ describe("useFollowCamera", () => {
     expect(fake.renderer.setCamera).not.toHaveBeenCalled();
 
     fake.settle();
+    fake.renderer.setCamera.mockClear();
     result.current.track(AHEAD);
     expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
+  });
+
+  it("frames a stationary body when an opening flight settles", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake, () => AHEAD);
+    act(() => result.current.hold(FOLLOW_HOLD_MS));
+    fake.settle();
+    expect(fake.renderer.getCamera()).toEqual(
+      followCamera(fake.renderer.getCamera(), AHEAD),
+    );
+  });
+
+  it("does not sample the moving body recursively on tracking moveend", () => {
+    const fake = fakeRenderer();
+    const body = vi.fn(() => AHEAD);
+    const { result } = follow(fake, body);
+    const setCamera = fake.renderer.setCamera.getMockImplementation()!;
+    fake.renderer.setCamera.mockImplementation((next) => {
+      setCamera(next);
+      fake.settle();
+    });
+    result.current.track(AHEAD);
+    expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
+    expect(body).not.toHaveBeenCalled();
   });
 
   it("follows again once the hold has run out", () => {

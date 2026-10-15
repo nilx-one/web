@@ -34,11 +34,16 @@ A new map instance first frames geographic countries at zoom 3.3, backed by a ge
 Two explicit camera modes are selected on the world overlay next to the
 location control (`follow-camera.ts`, `use-follow-camera.ts`).
 
-- **Follow (default)** tracks the body at the wheel while it moves, retaining
-  the person's zoom, bearing and pitch. Orbit, tilt and zoom gestures pause
-  tracking while in progress. A drag that leaves the body out of frame (the
-  48 px "centred" tolerance) eases straight back to it when the gesture ends.
-  Zoom pivots around the viewport centre while Follow is active.
+- **Follow (default)** looks over the head of the body at the wheel. Its
+  bearing follows the rendered body's facing, including turns in place; no
+  device compass heading is inferred. Pitch is 60° from overhead (30° down
+  towards the ground), with a minimum zoom of 21.5; a closer chosen zoom stays.
+  The ground target lies about 2.77 m ahead, placing the sight line through a
+  nominal 1.6 m head. This is framing, not a change to the body's position.
+  Explicit flat/2D mode keeps pitch zero and centres on the body.
+  Orbit, tilt and pan gestures pause tracking while in progress, then ease
+  back behind the head even if the body is stationary. Free retains arbitrary
+  viewing angles. Zoom pivots around the viewport centre while Follow is active.
 - **Free (Dota-style)** detaches camera position from Bond/Avaia movement.
   Dragging and touch panning explore the map independently; wheel and pinch
   zoom toward the pointer. No body motion recentres it.
@@ -63,7 +68,7 @@ cancels the gesture it is recognising whenever the camera is set, so Follow
 moves with `MapCameraOptions.yieldToGesture` and the renderer skips them while
 a finger or a mouse button is on the map. Otherwise turning the camera around
 a walking body would snap it straight back. Opening flights and focus moves
-get time to settle before tracking resumes. Both modes stand down during
+get time to settle before tracking resumes, including for a stationary body. Both modes stand down during
 cutscenes, the system informer, handovers and outside the world. This is
 presentation only: camera actions never change a body, Bond or presence state.
 

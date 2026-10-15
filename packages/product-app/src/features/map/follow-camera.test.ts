@@ -1,11 +1,19 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { mapMetersPerPixel, type MapCamera } from "@nilx-one/map-contract";
+import {
+  mapMetersPerPixel,
+  mapCompassBearing,
+  mapDistanceMeters,
+  type MapCamera,
+} from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
   CAMERA_READ_PIXELS,
+  FOLLOW_MIN_ZOOM,
+  FOLLOW_PITCH,
+  sameFollowCamera,
   cameraChangeVisible,
   cameraKeyCommand,
   followAfterPinch,
@@ -14,7 +22,7 @@ import {
   type CameraKeyEvent,
 } from "./follow-camera";
 
-const BODY = { longitude: 24.03, latitude: 49.84 };
+const BODY = { longitude: 24.03, latitude: 49.84, bearingDeg: 90 };
 
 function camera(overrides: Partial<MapCamera> = {}): MapCamera {
   return {
@@ -47,15 +55,42 @@ function key(overrides: Partial<CameraKeyEvent>): CameraKeyEvent {
 }
 
 describe("follow camera", () => {
-  it("centres on the body and keeps the person's zoom, bearing and pitch", () => {
-    const current = camera({ center: [30.5, 50.4], bearing: 135, pitch: 60 });
+  it.each([0, 90, 180, 270, 359])(
+    "looks over the head along heading %s",
+    (bearingDeg) => {
+      const body = { ...BODY, bearingDeg };
+      const next = followCamera(
+        camera({ pitch: 0, bearing: 135, zoom: 14 }),
+        body,
+      );
+      const target = { longitude: next.center[0], latitude: next.center[1] };
+      expect(next.pitch).toBe(FOLLOW_PITCH);
+      expect(next.zoom).toBe(FOLLOW_MIN_ZOOM);
+      expect(next.bearing).toBe(bearingDeg);
+      expect(
+        ((mapCompassBearing(body, target) - bearingDeg + 540) % 360) - 180,
+      ).toBeCloseTo(0, 4);
+      expect(mapDistanceMeters(body, target)).toBeCloseTo(
+        1.6 * Math.tan(Math.PI / 3),
+        4,
+      );
+    },
+  );
 
-    expect(followCamera(current, BODY)).toEqual({
+  it("keeps a closer zoom and respects explicit flat mode", () => {
+    expect(followCamera(camera({ zoom: 22 }), BODY).zoom).toBe(22);
+    expect(followCamera(camera(), BODY, "flat")).toMatchObject({
       center: [BODY.longitude, BODY.latitude],
-      zoom: 18.5,
-      bearing: 135,
-      pitch: 60,
+      pitch: 0,
+      bearing: 90,
     });
+  });
+
+  it("settles without a feedback loop across wrapped headings", () => {
+    const next = followCamera(camera(), { ...BODY, bearingDeg: 270 });
+    expect(sameFollowCamera({ ...next, bearing: -90 }, next)).toBe(true);
+    expect(sameFollowCamera({ ...next, bearing: -89 }, next)).toBe(false);
+    expect(sameFollowCamera({ ...next, pitch: 0 }, next)).toBe(false);
   });
 
   it("closes in on the centre only while locked", () => {

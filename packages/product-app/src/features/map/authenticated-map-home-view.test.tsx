@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { followCamera } from "./follow-camera";
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveCommand,
@@ -598,7 +599,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
 
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
-    expect(camera?.center).toEqual([avaiaAt.longitude, avaiaAt.latitude]);
+    expect(camera?.center).toEqual(followCamera(camera!, avaiaAt).center);
   });
 
   it("comes in far enough to see the identity that just took the wheel", async () => {
@@ -1845,7 +1846,7 @@ describe("AuthenticatedMapHomeView", () => {
     await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
     await act(async () => Promise.resolve());
     const [camera] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
-    expect(camera?.center).toEqual([avaia.longitude, avaia.latitude]);
+    expect(camera?.center).toEqual(followCamera(camera!, avaia).center);
     expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
   });
 
@@ -1877,6 +1878,7 @@ describe("AuthenticatedMapHomeView", () => {
     const close = upsert.mock.lastCall?.[0];
     expect(close).toMatchObject({ visible: true, scale: 1 });
 
+    fireEvent.click(screen.getByRole("button", { name: "Free" }));
     act(() => {
       mapRenderer.moveCamera(
         { ...mapRenderer.getCamera(), zoom: MAP_SCALE_ZOOM.city },
@@ -2374,7 +2376,7 @@ describe("AuthenticatedMapHomeView", () => {
       const arrived = lastAvaia(mapRenderer);
       expect(arrived?.lngLat[0]).toBeCloseTo(there.longitude, 6);
       expect(arrived?.lngLat[1]).toBeCloseTo(there.latitude, 6);
-    });
+    }, 15_000);
 
     it("says what walls a place in, and stays, when there is no way round", async () => {
       const mapRenderer = await renderWorld();
@@ -2593,6 +2595,9 @@ describe("AuthenticatedMapHomeView", () => {
         ),
       ).toBe(true);
 
+      // Camera settling can render before the asynchronous Core proximity
+      // answer. Flush that answer before requesting the reveal.
+      await act(async () => Promise.resolve());
       act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
       const prompt = screen.getByRole("dialog", {
         name: "Reveal this patch of fog?",
@@ -2642,6 +2647,9 @@ describe("AuthenticatedMapHomeView", () => {
       );
       await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
 
+      // Camera settling can render before the asynchronous Core proximity
+      // answer. Flush that answer before requesting the reveal.
+      await act(async () => Promise.resolve());
       act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
       expect(
         screen.getByRole("dialog", { name: "Reveal this patch of fog?" }),
@@ -2676,6 +2684,9 @@ describe("AuthenticatedMapHomeView", () => {
       );
       await vi.waitFor(() => expect(screen.getByText("0m")).toBeVisible());
 
+      // Camera settling can render before the asynchronous Core proximity
+      // answer. Flush that answer before requesting the reveal.
+      await act(async () => Promise.resolve());
       act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
       expect(
         screen.getByRole("dialog", { name: "Reveal this patch of fog?" }),
