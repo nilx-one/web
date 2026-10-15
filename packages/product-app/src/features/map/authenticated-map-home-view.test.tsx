@@ -165,7 +165,7 @@ interface ViewOverrides {
   onManualBondMove?: (
     expected: { longitude: number; latitude: number },
     target: { longitude: number; latitude: number },
-  ) => Promise<boolean>;
+  ) => Promise<{ kind: "accepted" } | { kind: "rejected"; current?: { longitude: number; latitude: number } }>;
   mapRenderer?: MapRenderer;
   localModel?: LocalModelDependency;
   section?: ShellSection;
@@ -1903,7 +1903,7 @@ describe("AuthenticatedMapHomeView", () => {
       const there = { longitude: 30.5244, latitude: 50.4501 };
       const mapRenderer = createMapRendererDouble({ kind: "ready" });
       const onManualBondMove = vi.fn(
-        async (_from: typeof here, _to: typeof there) => true,
+        async (_from: typeof here, _to: typeof there) => ({ kind: "accepted" as const }),
       );
       renderView({
         mapRenderer,
