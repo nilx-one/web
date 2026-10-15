@@ -161,6 +161,57 @@ export async function readBondLocationControl(
   }
 }
 
+/** Persists only an already-manual Bond movement, once the local walk arrives.
+ * The expected point prevents another host's move being silently overwritten.
+ * Failure leaves the caller's local animation non-authoritative.
+ */
+export async function moveManualBondLocation(
+  expected: BondLocationPoint,
+  target: BondLocationPoint,
+  options: BondLocationControlReadOptions = {},
+): Promise<boolean> {
+  const valid = (point: BondLocationPoint) =>
+    Number.isFinite(point.longitude) &&
+    Number.isFinite(point.latitude) &&
+    Math.abs(point.longitude) <= 180 &&
+    Math.abs(point.latitude) <= 90;
+  if (!valid(expected) || !valid(target)) return false;
+  const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
+  try {
+    const response = await fetchImpl("/api/v1/location-control/manual-move", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "content-type": "application/json",
+        ...(options.authorization === undefined
+          ? {}
+          : { authorization: options.authorization }),
+      },
+      body: JSON.stringify({
+        expected_longitude: expected.longitude,
+        expected_latitude: expected.latitude,
+        longitude: target.longitude,
+        latitude: target.latitude,
+      }),
+    });
+    if (!response.ok) return false;
+    const body: unknown = await response.json();
+    if (typeof body !== "object" || body === null || !("location" in body)) {
+      return false;
+    }
+    const location = body.location;
+    return (
+      typeof location === "object" &&
+      location !== null &&
+      "mode" in location &&
+      location.mode === "manual"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function bondLocationControlFingerprint(
   state: BondLocationControlState,
 ): string {
