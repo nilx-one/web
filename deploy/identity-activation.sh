@@ -16,7 +16,9 @@
 # plain upgrade; the explicit `identity` target forces it.
 #
 # A running package built from a branch that was later squash-merged is not an ancestor of the
-# release. It is still a plain upgrade when the branch changed no identity input after it forked.
+# release. It is still a plain upgrade when the release history already carries its identity
+# inputs: either the branch changed none after it forked, or a commit since the fork (the squash)
+# has exactly the same identity inputs.
 
 set -Eeuo pipefail
 
@@ -47,11 +49,15 @@ ensure_commit() {
     git fetch -q --no-tags origin "$1" >/dev/null 2>&1
 }
 
-# True when $1 changed no identity input since it forked from $2's history.
-identity_unchanged_since_fork() {
-  local fork
+# True when the identity inputs of $1 match the fork point with $2 or a commit of $2's history
+# since that fork, so $2 already carries everything $1 runs.
+identity_carried_by() {
+  local fork commit
   fork="$(git merge-base "$1" "$2" 2>/dev/null)" || return 1
-  git diff --quiet "$fork" "$1" -- "${identity_inputs[@]}"
+  while read -r commit; do
+    git diff --quiet "$commit" "$1" -- "${identity_inputs[@]}" && return 0
+  done < <(printf '%s\n' "$fork"; git rev-list "$fork..$2" -- "${identity_inputs[@]}")
+  return 1
 }
 
 decide() {
@@ -99,8 +105,8 @@ if is_ancestor "$package_sha" "$active_sha"; then
   decide false "newer identity package ${active_sha} with contract ${active_contract} is already active"
 fi
 
-if identity_unchanged_since_fork "$active_sha" "$package_sha"; then
-  decide true "running identity package ${active_sha} changed no identity input since it forked; upgrading to ${package_sha}"
+if identity_carried_by "$active_sha" "$package_sha"; then
+  decide true "identity inputs of running package ${active_sha} are already in the package history; upgrading to ${package_sha}"
 fi
 
 refuse "Identity package ${package_sha} and running package ${active_sha} have diverged, and the running contract ${active_contract} already satisfies ${required}."
