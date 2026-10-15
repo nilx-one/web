@@ -116,7 +116,9 @@ const CONTROL_SELECTOR =
 export function cameraKeyCommand(
   event: CameraKeyEvent,
 ): CameraKeyCommand | undefined {
-  if (event.altKey || event.ctrlKey || event.metaKey) return undefined;
+  // Holding a key should not restart a camera animation every repeat frame.
+  if (event.repeat || event.altKey || event.ctrlKey || event.metaKey)
+    return undefined;
   if (
     typeof Element !== "undefined" &&
     event.target instanceof Element &&
@@ -125,7 +127,6 @@ export function cameraKeyCommand(
     return undefined;
   }
   if (event.code === "Space" || event.key === " ") return "center";
-  if (event.repeat) return undefined;
   if (event.code === "KeyY" || event.key === "y" || event.key === "Y") {
     return "toggle";
   }
