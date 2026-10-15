@@ -40,7 +40,14 @@ browsers play Web Audio, so their compositions hand over the same
 | `reveal`      | fog lifted from a cell, whoever lifted it     | a filter opening over noise, then two bells |
 | `achievement` | an achievement paid, or xSasha's reward flies | a bell arpeggio up an octave, chord held    |
 | `heard`       | a nearby Bond's spoken line arrived           | two soft, slightly distant notes            |
-| `failure`     | a failure notice opened                       | low, short, not alarming                    |
+| `failure`     | an error toast or failure notice opened       | low, short, not alarming                    |
+
+Every error toast is also felt where the host can say so (a heavy impact:
+Telegram's haptics, a vibration pulse, Safari's switch tick, or nothing). An
+error that reports something that happened (a find too big or with no room,
+a move not saved, a failure without a retry) leaves on its own after 3 s; an
+error about a state that lasts (no location, no map) or one that offers a
+retry stays until it is closed.
 
 Cues that go with a line follow the line (`lineCue` in `avaia-lines.ts`): the
 line is the fact, the cue only marks that it was said. A revealed cell has

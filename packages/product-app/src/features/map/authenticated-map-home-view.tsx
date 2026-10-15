@@ -57,6 +57,11 @@ import { oweBackpackScene, useBackpackGift } from "../inventory/backpack-gift";
 import { useCraftCompletion } from "../inventory/craft";
 import { pickUpFind } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
+import {
+  ERROR_TOAST_MS,
+  useErrorToastFeedback,
+  useTransientFlag,
+} from "../../shell/error-toast-feedback";
 import { thingName } from "../inventory/thing-name";
 import { useWorkshop } from "../inventory/workshops";
 import {
@@ -1073,6 +1078,10 @@ export function AuthenticatedMapHomeView({
       title: t(issue.title),
       description: t(issue.detail),
     }));
+  const manualBondFailedShown = useTransientFlag(
+    manualBondFailed,
+    ERROR_TOAST_MS,
+  );
   const statusToasts = [
     ...(statusToast === undefined || statusToast.id === dismissedStatus
       ? []
@@ -1080,7 +1089,7 @@ export function AuthenticatedMapHomeView({
     ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
     ...(findToast === undefined ? [] : [findToast]),
-    ...(manualBondFailed
+    ...(manualBondFailedShown
       ? [
           {
             id: "manual-bond-move-failed",
@@ -1156,7 +1165,6 @@ export function AuthenticatedMapHomeView({
         return;
       }
       if (event.kind === "orb-taken") {
-        cue("failure");
         setFindToast({
           id: `orb-taken-${event.orb}`,
           kind: "error",
@@ -1167,7 +1175,6 @@ export function AuthenticatedMapHomeView({
         return;
       }
       if (event.kind === "find-taken") {
-        cue("failure");
         setFindToast({
           id: `find-taken-${event.artifactId}`,
           kind: "error",
@@ -1506,7 +1513,7 @@ export function AuthenticatedMapHomeView({
     if (findToast === undefined) return;
     const fades = globalThis.setTimeout(
       () => setFindToast(undefined),
-      FIND_TOAST_MS,
+      findToast.kind === "error" ? ERROR_TOAST_MS : FIND_TOAST_MS,
     );
     return () => globalThis.clearTimeout(fades);
   }, [findToast]);
@@ -1564,6 +1571,7 @@ export function AuthenticatedMapHomeView({
   const systemInformer = useSystemInformer();
   useSystemInformerBlock(guideActive || achievementDialog !== undefined);
   useSystemErrorNotices(statusToasts);
+  useErrorToastFeedback(statusToasts, feedback, cue);
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
   // In a cutscene the characters who are not the person speak: xSasha says
   // her line when it opens. The person's own replies are never voiced.
