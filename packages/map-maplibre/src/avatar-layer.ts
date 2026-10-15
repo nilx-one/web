@@ -32,13 +32,17 @@ import {
   WebGLRenderer,
   type AnimationClip,
   type Object3D,
-  type Mesh,
 } from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 import { createPingModel } from "./ping-model";
-import { BACKPACK_ASSET_URL, mountBackpack } from "./backpack-model";
+import {
+  BACKPACK_ASSET_URL,
+  createBackpackSource,
+  disposeBackpack,
+  mountBackpack,
+} from "./backpack-model";
 
 import {
   loadedTerrainElevationMeters,
@@ -157,7 +161,10 @@ export function createAvatarLayer(
   const requestMount = options.requestMount ?? (() => undefined);
   const instances = new Map<string, AvatarInstance>();
   const assetCache = new Map<AvatarModelId, Promise<GLTF>>();
-  let backpackAsset: Promise<GLTF> | undefined;
+  const backpackSource = createBackpackSource(
+    () => new GLTFLoader().loadAsync(BACKPACK_ASSET_URL),
+    now,
+  );
   const abortController = new AbortController();
   const scene = new Scene();
   // Custom layers have their own Three scene: MapLibre's map lighting does
@@ -229,11 +236,12 @@ export function createAvatarLayer(
       instance.backpackLoading
     )
       return;
+    const request = backpackSource.request();
+    if (request === undefined) return;
     const root = instance.root;
     const localGeneration = instance.loadGeneration;
     instance.backpackLoading = true;
-    backpackAsset ??= new GLTFLoader().loadAsync(BACKPACK_ASSET_URL);
-    void backpackAsset
+    void request
       .then((asset) => {
         if (
           disposed ||
@@ -249,8 +257,17 @@ export function createAvatarLayer(
         }
       })
       .catch(() => {
-        // A carry asset must never prevent the body or map from rendering.
+        // A carry asset must never prevent the body or map from rendering;
+        // the source forgets a failed fetch, so a later sync tries again.
+        if (localGeneration === instance.loadGeneration)
+          instance.backpackLoading = false;
       });
+  }
+
+  function releaseBackpack(instance: AvatarInstance): void {
+    if (instance.backpack !== undefined) disposeBackpack(instance.backpack);
+    delete instance.backpack;
+    delete instance.backpackLoading;
   }
 
   function terrainAltitude(instance: AvatarInstance): number {
@@ -345,9 +362,8 @@ export function createAvatarLayer(
       const root = cloneSkeleton(asset.scene);
       const mixer = new AnimationMixer(root);
       instance.root?.removeFromParent();
+      releaseBackpack(instance);
       instance.root = root;
-      delete instance.backpack;
-      delete instance.backpackLoading;
       instance.mixer = mixer;
       instance.clips = new Map(
         asset.animations.map((clip) => [clip.name, clip]),
@@ -375,7 +391,10 @@ export function createAvatarLayer(
       return;
     }
     existing?.drone?.dispose();
-    if (existing !== undefined) existing.loadGeneration = ++generation;
+    if (existing !== undefined) {
+      existing.loadGeneration = ++generation;
+      releaseBackpack(existing);
+    }
     existing?.root?.removeFromParent();
     existing?.mixer?.stopAllAction();
     const instance: AvatarInstance = {
@@ -468,6 +487,7 @@ export function createAvatarLayer(
       instance.loadGeneration = ++generation;
       instance.mixer?.stopAllAction();
       instance.drone?.dispose();
+      releaseBackpack(instance);
       instance.root?.removeFromParent();
       instances.delete(id);
       map?.triggerRepaint();
@@ -490,22 +510,12 @@ export function createAvatarLayer(
       for (const instance of instances.values()) {
         instance.mixer?.stopAllAction();
         instance.drone?.dispose();
+        releaseBackpack(instance);
         instance.root?.removeFromParent();
       }
       instances.clear();
       assetCache.clear();
-      void backpackAsset
-        ?.then((asset) => {
-          asset.scene.traverse((object) => {
-            const mesh = object as Mesh;
-            mesh.geometry?.dispose();
-            const materials = Array.isArray(mesh.material)
-              ? mesh.material
-              : [mesh.material];
-            for (const material of materials) material?.dispose();
-          });
-        })
-        .catch(() => undefined);
+      backpackSource.release();
       renderer?.dispose();
       renderer = undefined;
       map = undefined;

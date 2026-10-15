@@ -1,14 +1,5 @@
 # Inventory
 
-The white aiaiaiai backpack is also drawn on the map. xSasha wears it in her
-scenes; Bond and Avaia wear it only while their committed Core inventory's
-equipped carry is `backpack`. The existing gift grants and equips both before
-the scene begins. Hiding or skipping the scene does not change that result.
-Switching back to pockets or to a bag removes the backpack from the body.
-The renderer follows the chest bone and never decides gift eligibility.
-
-![White aiaiaiai backpack mounted on the Dasha study](images/aiaiaiai-backpack-worn.png)
-
 What the Bond and its Avaia carry, and the Bond's Seeds ₴€£. Every rule is Core's (`docs/economy.md` and `docs/find-items.md` in `nilx-one/core`): what a find is, what fits where, what sells for what, what a craft takes. This client stores Core's answer and shows it.
 
 ## Two grids
@@ -19,6 +10,24 @@ The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (1×3, 3 
 - **Buying** (closed for now: carries will change only at home, later), under each grid: a backpack for **1,500** and a bag for **5,000** Seeds ₴€£, from the Bond's Seeds, for either of them. Something owned but not worn can be worn again from there. Real money for them comes later, through 0xda-market. On screen the Bond's grid is marked blue and the Avaia's purple, the colours of their experience.
 
 Legacy 5×1 pockets and 8×5 backpacks are normalized by Core v3. The migration preserves items and Seeds and upgrades old overfilled containers only where needed to preserve their contents. Web persists Core's result once its new economy catalog has loaded.
+
+## On the map
+
+The white aiaiaiai backpack is also drawn on the map. xSasha wears it in her
+scenes; Bond and Avaia wear it only while their committed Core inventory's
+equipped carry is `backpack`. The existing gift grants and equips both before
+the scene begins. Hiding or skipping the scene does not change that result.
+Switching back to pockets or to a bag removes the backpack from the body.
+
+The renderer fits it to each study from that study's own torso: the bag's top
+clears the shoulder line by the same 6 cm on every body, it rests on the back,
+and two shoulder straps run over the shoulders, down the chest and under the
+arms to the bag's base. It follows the chest bone and never decides gift
+eligibility.
+
+![White aiaiaiai backpack on the four studies, from behind](images/aiaiaiai-backpack-worn.png)
+
+![Its shoulder straps, from the front](images/aiaiaiai-backpack-straps.png)
 
 ## How things get in
 
