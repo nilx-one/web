@@ -1661,7 +1661,9 @@ export function AuthenticatedMapHomeView({
     at: MapPointSelection | undefined,
   ): MapObservedPositionLabel {
     const away =
-      wheel === "avaia" && at !== undefined && observedPosition !== undefined
+      wheel === "avaia" &&
+      at !== undefined &&
+      observedPosition !== undefined
         ? mapDistanceMeters(observedPosition, at)
         : 0;
     return {
@@ -2495,7 +2497,10 @@ export function AuthenticatedMapHomeView({
     const context = { presentation, dimension, safeArea };
     const current =
       observedPosition.declared === true
-        ? { ...observedPosition, ...manualBond.point(globalThis.performance.now()) }
+        ? {
+            ...observedPosition,
+            ...manualBond.point(globalThis.performance.now()),
+          }
         : observedPosition;
     renderer.setCamera(recenterCamera(current, camera, context), {
       motion: cameraMotion(prefersReducedMotion()),
