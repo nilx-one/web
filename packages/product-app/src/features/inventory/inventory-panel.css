@@ -1,82 +1,285 @@
 /* © 2026 aiaiaiai · aiaiaiai.org */
 /* SPDX-License-Identifier: MPL-2.0 */
 
-/* Two S.T.A.L.K.E.R.-style grids: every thing takes its own rectangle of
-   cells. Blue is the Bond's, purple the Avaia's, as their experience is. */
+/* Storage geometry belongs to Core. Every carry is framed at backpack size;
+   larger grids scroll inside the frame instead of shrinking touch targets. */
 .inventory {
-  --inventory-cell: 34px;
+  --inventory-cell: 48px;
   --inventory-bond: #3d8bfd;
   --inventory-avaia: #a970ff;
   display: grid;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.bond-dock__detail.bond-dock__detail--inventory > .bond-dock__scroll {
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.inventory-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding-block: 4px 12px;
+}
+
+.inventory-summary > .interface-settings__eyebrow {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.inventory-summary > .profile-edit__note {
+  margin: 0;
+  font-size: 12px;
 }
 
 .inventory__seeds {
+  justify-self: start;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.inventory__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .inventory__holder {
+  --inventory-accent: var(--inventory-bond);
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
   min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--inventory-accent) 4%, transparent);
+}
+
+.inventory__holder[data-holder="avaia"] {
+  --inventory-accent: var(--inventory-avaia);
 }
 
 .inventory__holder-title {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
-  border-left: 3px solid var(--inventory-bond);
-  padding-left: 8px;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.inventory__holder[data-holder="avaia"] .inventory__holder-title {
-  border-left-color: var(--inventory-avaia);
+.inventory__holder-title > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border-left: 3px solid var(--inventory-accent);
+  padding-left: 9px;
 }
 
+.inventory__holder-title strong {
+  font-size: 15px;
+}
+
+.inventory__holder-title small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.inventory__capacity {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory__capacity > span {
+  color: var(--muted);
+}
+
+.inventory__capacity-meter {
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--line);
+}
+
+.inventory__capacity-meter::-webkit-meter-bar {
+  height: 4px;
+  border: 0;
+  background: var(--line);
+}
+
+.inventory__capacity-meter::-webkit-meter-optimum-value {
+  background: var(--inventory-accent);
+}
+
+.inventory__capacity-meter::-moz-meter-bar {
+  background: var(--inventory-accent);
+}
+
+/* The viewport is always backpack-sized, so every carry reads at one scale:
+   a pocket lights a few cells inside it, a bag scrolls within it. */
 .inventory__grid-scroll {
+  --inventory-gap: 4px;
+  --inventory-pad: 3px;
+  box-sizing: border-box;
+  min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
+  width: calc(
+    var(--inventory-frame-columns) * var(--inventory-cell) +
+      (var(--inventory-frame-columns) - 1) * var(--inventory-gap) + 2 *
+      var(--inventory-pad)
+  );
+  height: calc(
+    var(--inventory-frame-rows) * var(--inventory-cell) +
+      (var(--inventory-frame-rows) - 1) * var(--inventory-gap) + 2 *
+      var(--inventory-pad)
+  );
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--inventory-pad);
+  scrollbar-width: thin;
+  scrollbar-color: var(--inventory-accent) transparent;
 }
 
 .inventory__grid {
   display: grid;
-  grid-auto-rows: var(--inventory-cell);
-  gap: 2px;
-  padding: 2px;
+  grid-template-columns: repeat(
+    var(--inventory-columns),
+    var(--inventory-cell)
+  );
+  grid-template-rows: repeat(var(--inventory-rows), var(--inventory-cell));
+  gap: var(--inventory-gap);
   width: max-content;
-  border-radius: 8px;
-  background: var(--line);
 }
 
 .inventory__cell {
-  border-radius: 4px;
-  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.inventory__cell--inactive {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--line) 50%, transparent);
+  background: none;
+  opacity: 0.5;
 }
 
 .inventory__thing {
+  position: relative;
   z-index: 1;
+  display: grid;
+  place-items: center;
   min-width: 0;
-  padding: 2px 4px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--inventory-accent) 55%, var(--line));
+  border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
-  font: inherit;
-  font-size: 11px;
-  line-height: 1.15;
-  text-align: left;
-  text-overflow: ellipsis;
+  box-shadow: inset 0 0 20px
+    color-mix(in srgb, var(--inventory-accent) 12%, transparent);
   cursor: pointer;
 }
 
-.inventory__thing[aria-pressed="true"] {
-  outline: 2px solid var(--inventory-bond);
+.inventory__icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
 }
 
-.inventory__holder[data-holder="avaia"] .inventory__thing[aria-pressed="true"] {
-  outline-color: var(--inventory-avaia);
+.inventory__thing-number {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory__thing[aria-pressed="true"] {
+  outline: 2px solid var(--inventory-accent);
+  outline-offset: 1px;
+}
+
+.inventory button:focus-visible,
+.inventory__grid-scroll:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.inventory__manifest {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inventory__manifest > li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.inventory__manifest-number {
+  flex: 0 0 18px;
+  text-align: center;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--inventory-accent) 15%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory__selection {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.inventory__selection-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inventory__selection-heading > strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.inventory__dismiss,
+.inventory__actions > button {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.inventory__dismiss {
+  flex: 0 0 44px;
+  font-size: 20px;
 }
 
 .inventory__actions {
@@ -84,6 +287,10 @@
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.inventory__actions > button {
+  flex: 1 1 120px;
 }
 
 .inventory__craft {
