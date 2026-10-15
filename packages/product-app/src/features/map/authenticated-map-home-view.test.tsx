@@ -1064,7 +1064,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
 
     const outer = container.querySelector(".bond-dock__scroll--avatar");
-    const editor = outer?.querySelector(".avatar-editor");
+    const editor = outer?.querySelector<HTMLElement>(".avatar-editor");
     const content = editor?.querySelector(".avatar-editor__content");
     const footer = editor?.querySelector(":scope > .avatar-editor__actions");
     const save = screen.getByRole("button", { name: "Save" });
