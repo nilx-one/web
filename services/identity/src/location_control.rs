@@ -1086,9 +1086,9 @@ mod tests {
             .oneshot(
                 Request::get("/api/v1/location-control")
                     .header(
-                    AUTHORIZATION,
-                    format!("tma {}", session_signed_init_data(7)),
-                )
+                        AUTHORIZATION,
+                        format!("tma {}", session_signed_init_data(7)),
+                    )
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -1104,9 +1104,9 @@ mod tests {
                 Request::post("/api/v1/location-control/manual-move")
                     .header(COOKIE, cookie.clone())
                     .header(
-                    AUTHORIZATION,
-                    format!("tma {}", session_signed_init_data(8)),
-                )
+                        AUTHORIZATION,
+                        format!("tma {}", session_signed_init_data(8)),
+                    )
                     .header("content-type", "application/json")
                     .body(Body::from(request_body.clone()))
                     .expect("request"),
@@ -1131,9 +1131,9 @@ mod tests {
                 Request::post("/api/v1/location-control/manual-move")
                     .header(COOKIE, cookie)
                     .header(
-                    AUTHORIZATION,
-                    format!("tma {}", session_signed_init_data(7)),
-                )
+                        AUTHORIZATION,
+                        format!("tma {}", session_signed_init_data(7)),
+                    )
                     .header("content-type", "application/json")
                     .body(Body::from(request_body.clone()))
                     .expect("request"),
