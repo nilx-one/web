@@ -153,12 +153,20 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                 }
                 None => None,
             };
+            let location = match state.repository.business_location(&owner).await {
+                Ok(value) => value.map(PublicStation::from),
+                Err(error) => {
+                    tracing::error!(%error, "public business location lookup failed");
+                    return unavailable();
+                }
+            };
             no_store_json(
                 StatusCode::OK,
                 PublicIdentityProjection {
                     pub_dress_url: record.readable_url(PUBLIC_ZONE),
                     pub_dress: record.identity.pub_dress,
                     avaia,
+                    location,
                     pub_info: PublicPubInfo {
                         experience: PublicExperience {
                             authority: crate::repository::EXPERIENCE_AUTHORITY,
@@ -184,14 +192,7 @@ async fn read_business_stations(State(state): State<PublicApiState>) -> Response
         Ok(stations) => no_store_json(
             StatusCode::OK,
             PublicStations {
-                stations: stations
-                    .into_iter()
-                    .map(|station| PublicStation {
-                        pub_dress: station.pub_dress,
-                        owner_pub_dress: station.owner_pub_dress,
-                        coordinate: station.coordinate,
-                    })
-                    .collect(),
+                stations: stations.into_iter().map(PublicStation::from).collect(),
             },
         ),
         Err(error) => {
@@ -307,6 +308,10 @@ struct PublicIdentityProjection {
     pub_dress: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     avaia: Option<PublicAvaiaProjection>,
+    /// The station a business Bond stands at. Absent for every other Bond:
+    /// a person's location is never public.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    location: Option<PublicStation>,
     pub_dress_url: String,
     /// The public slice of this Bond's `.bnd`. Experience totals are always
     /// present; zero is a Bond that has not published any. They are the
@@ -367,7 +372,20 @@ struct PublicStations {
 struct PublicStation {
     pub_dress: String,
     owner_pub_dress: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    caption: Option<String>,
     coordinate: GeoCoordinate,
+}
+
+impl From<crate::BusinessStation> for PublicStation {
+    fn from(station: crate::BusinessStation) -> Self {
+        Self {
+            pub_dress: station.pub_dress,
+            owner_pub_dress: station.owner_pub_dress,
+            caption: station.caption,
+            coordinate: station.coordinate,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -436,6 +454,8 @@ mod tests {
         assert_eq!(body["pub_dress_url"], "https://0x1небо.nilx.one");
         // A Bond publishes no Avaia until its owner creates one.
         assert!(body["avaia"].is_null());
+        // A person's location is never public.
+        assert!(body["location"].is_null());
         assert_eq!(body["pub_info"]["experience"]["authority"], "client");
         assert_eq!(body["pub_info"]["experience"]["bond_xp"], 0);
         assert_eq!(body["pub_info"]["experience"]["avaia_xp"], 0);
@@ -612,10 +632,10 @@ mod tests {
             .set_role(&owner, crate::BondAccessRole::Business)
             .await
             .expect("role");
-        let station: crate::AvaiaPubDress = "xda-market-zoloti-vorotai".parse().expect("station");
+        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
         let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
         repository
-            .station_business_avaia(&owner, &station, at, 101)
+            .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), at, 101)
             .await
             .expect("station");
 
@@ -631,11 +651,52 @@ mod tests {
         let body = json(response).await;
         let expected = serde_json::json!({
             "stations": [{
-                "pub_dress": "xda-market-zoloti-vorotai",
+                "pub_dress": "0xda-market-zoloti-vorota",
                 "owner_pub_dress": "0xda-market",
+                "caption": "xda-market Золоті Ворота",
                 "coordinate": serde_json::to_value(at).expect("coordinate"),
             }]
         });
         assert_eq!(body, expected);
+    }
+
+    #[tokio::test]
+    async fn a_business_card_says_which_station_it_stands_at() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let owner: PubDress = "0xda-market".parse().expect("pub_dress");
+        repository
+            .register_business(&owner, 100)
+            .await
+            .expect("register");
+        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
+        let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
+        repository
+            .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), at, 101)
+            .await
+            .expect("station");
+        repository
+            .locate_business(&owner, &station, 102)
+            .await
+            .expect("locate");
+
+        let response = router(repository)
+            .oneshot(
+                Request::get("/api/v1/identity/public")
+                    .header("host", "0xda-market.nilx.one")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json(response).await;
+        assert_eq!(body["location"]["pub_dress"], "0xda-market-zoloti-vorota");
+        assert_eq!(body["location"]["caption"], "xda-market Золоті Ворота");
+        assert_eq!(
+            body["location"]["coordinate"],
+            serde_json::to_value(at).expect("coordinate")
+        );
     }
 }
