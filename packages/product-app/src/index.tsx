@@ -45,7 +45,7 @@ import {
   type HostPort,
   type HostSnapshot,
 } from "@nilx-one/host-contract";
-import type { MapRenderer } from "@nilx-one/map-contract";
+import type { MapPointSelection, MapRenderer } from "@nilx-one/map-contract";
 import {
   QueryClient,
   QueryClientProvider,
@@ -132,6 +132,11 @@ export interface ProductAppDependencies {
   host: HostPort;
   identity: IdentityAccessPort;
   mapRenderer: MapRenderer;
+  /** Authenticated compare-and-set for a manually located Bond only. */
+  onManualBondMove?: (
+    expected: MapPointSelection,
+    target: MapPointSelection,
+  ) => Promise<boolean>;
   /**
    * The on-device model host, when this deployment has wired one — see
    * `./shell/local-model-host.ts` for why this package cannot build one itself. Omitted
@@ -1050,6 +1055,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         pubDress={viewModel.identity.pubDress}
         renderer={dependencies.mapRenderer}
         geolocation={dependencies.host.geolocation}
+        onManualBondMove={dependencies.onManualBondMove}
         feedback={dependencies.host}
         sound={dependencies.host.sound}
         runtime={viewModel.runtime}
@@ -1262,6 +1268,7 @@ export function ProductApp({
   host,
   identity,
   mapRenderer,
+  onManualBondMove,
   localModel,
   routerBasepath = "/",
 }: ProductAppProps) {
@@ -1285,6 +1292,7 @@ export function ProductApp({
           host,
           identity,
           mapRenderer,
+          ...(onManualBondMove === undefined ? {} : { onManualBondMove }),
           ...(localModel === undefined ? {} : { localModel }),
         },
       },
