@@ -988,23 +988,49 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn manual_map_moves_require_admin_and_refuse_stale_or_live_state() {
+    async fn manual_map_moves_restrict_reserved_admins_and_reject_conflicting_proofs() {
         let database = tempfile::NamedTempFile::new().expect("temporary database");
         let database_url = format!("sqlite://{}", database.path().display());
-        let identities = registered(&database_url, "0x0walker", 7).await;
+        let identities = registered(&database_url, "0x1walker", 8).await;
+
+        // Reserved addresses cannot be newly registered. Seed an historical
+        // human Bond from before the reservation, as the migration tests do.
+        let pool = sqlx::SqlitePool::connect(&database_url)
+            .await
+            .expect("database connection");
+        sqlx::query("DROP TRIGGER identities_reserved_admin_prefix_insert")
+            .execute(&pool)
+            .await
+            .expect("legacy schema");
+        sqlx::query(
+            "INSERT INTO identities (pub_dress, identity_kind, created_at) \
+             VALUES ('0x0walker', 'human', 10)",
+        )
+        .execute(&pool)
+        .await
+        .expect("legacy Bond");
+        sqlx::query(
+            "INSERT INTO identity_providers (provider, provider_subject, pub_dress) \
+             VALUES ('telegram', '7', '0x0walker')",
+        )
+        .execute(&pool)
+        .await
+        .expect("legacy provider");
+
         let locations = BondLocationRepository::connect(&database_url)
             .await
             .expect("Bond location repository");
         let origin = GeoCoordinate::from_degrees(30.5234, 50.4501).expect("origin");
         let target = GeoCoordinate::from_degrees(30.5244, 50.4501).expect("target");
-        locations
-            .write(
-                "0x0walker",
-                BondLocation::new(origin, BondLocationMode::Manual, DecimalU64::new(30)),
-            )
-            .await
-            .expect("manual setup");
-
+        for address in ["0x0walker", "0x1walker"] {
+            locations
+                .write(
+                    address,
+                    BondLocation::new(origin, BondLocationMode::Manual, DecimalU64::new(30)),
+                )
+                .await
+                .expect("manual setup");
+        }
         let app = session_test_app(&database_url).await;
         let request_body = serde_json::json!({
             "expected_longitude": 30.5234,
@@ -1013,68 +1039,40 @@ mod tests {
             "latitude": 50.4501,
         })
         .to_string();
-        let request = || {
+        let request = |user_id: i64| {
             Request::post("/api/v1/location-control/manual-move")
-                .header(
-                    AUTHORIZATION,
-                    format!("tma {}", session_signed_init_data(7)),
-                )
+                .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(user_id)))
                 .header("content-type", "application/json")
                 .body(Body::from(request_body.clone()))
                 .expect("request")
         };
 
-        let denied = app.clone().oneshot(request()).await.expect("response");
-        assert_eq!(denied.status(), StatusCode::FORBIDDEN);
+        // A stored Admin role outside 0x0 still cannot use the reserved
+        // gesture, even with a valid manual starting coordinate.
+        let outsider: PubDress = "0x1walker".parse().expect("valid address");
+        identities
+            .set_role(&outsider, BondAccessRole::Admin)
+            .await
+            .expect("assign admin");
+        let forbidden = app.clone().oneshot(request(8)).await.expect("response");
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
         assert_eq!(
-            locations
-                .read("0x0walker")
-                .await
-                .expect("location")
-                .expect("declared")
-                .coordinate,
+            locations.read("0x1walker").await.expect("location").expect("saved").coordinate,
             origin
         );
 
-        let bond: PubDress = "0x0walker".parse().expect("valid address");
-        identities
-            .set_role(&bond, BondAccessRole::Admin)
-            .await
-            .expect("assign admin");
-        // Even an explicitly assigned Admin outside the reserved namespace
-        // cannot move by tapping the map.
-        let others = registered(&database_url, "0x1walker", 8).await;
-        let other_bond: PubDress = "0x1walker".parse().expect("valid pub_dress");
-        others
-            .set_role(&other_bond, BondAccessRole::Admin)
-            .await
-            .expect("assign another admin");
-        locations
-            .write(
-                "0x1walker",
-                BondLocation::new(origin, BondLocationMode::Manual, DecimalU64::new(30)),
-            )
-            .await
-            .expect("other manual setup");
-        let outside = app
+        let no_proof = app
             .clone()
             .oneshot(
                 Request::post("/api/v1/location-control/manual-move")
-                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(8)))
                     .header("content-type", "application/json")
                     .body(Body::from(request_body.clone()))
                     .expect("request"),
             )
             .await
-            .expect("outside response");
-        assert_eq!(outside.status(), StatusCode::FORBIDDEN);
-        assert_eq!(
-            locations.read("0x1walker").await.expect("location").expect("declared").coordinate,
-            origin
-        );
+            .expect("unauthorized response");
+        assert_eq!(no_proof.status(), StatusCode::UNAUTHORIZED);
 
-        // Two individually valid proofs for different Bonds must not be
-        // resolved by silently preferring the cookie's admin authority.
         let cookie_response = app
             .clone()
             .oneshot(
@@ -1086,7 +1084,10 @@ mod tests {
             .await
             .expect("cookie response");
         let cookie = session_cookie_from(&cookie_response);
-        let mismatched_proofs = app
+
+        // Valid session for 0x0walker + valid header for a different Bond is
+        // an ambiguity, not permission to write as the cookie's Admin.
+        let mismatch = app
             .clone()
             .oneshot(
                 Request::post("/api/v1/location-control/manual-move")
@@ -1098,13 +1099,13 @@ mod tests {
             )
             .await
             .expect("conflicting response");
-        assert_eq!(mismatched_proofs.status(), StatusCode::FORBIDDEN);
+        assert_eq!(mismatch.status(), StatusCode::FORBIDDEN);
         assert_eq!(
-            locations.read("0x0walker").await.expect("location").expect("declared").coordinate,
+            locations.read("0x0walker").await.expect("location").expect("saved").coordinate,
             origin
         );
 
-        // Matching session and initData remain accepted.
+        // Matching session and provider header may move a legacy 0x0 Admin.
         let accepted = app
             .clone()
             .oneshot(
@@ -1126,15 +1127,10 @@ mod tests {
         assert_eq!(saved.coordinate, target);
         assert_eq!(saved.mode, BondLocationMode::Manual);
 
-        let stale = app.clone().oneshot(request()).await.expect("response");
+        let stale = app.clone().oneshot(request(7)).await.expect("response");
         assert_eq!(stale.status(), StatusCode::CONFLICT);
         assert_eq!(
-            locations
-                .read("0x0walker")
-                .await
-                .expect("location")
-                .expect("saved")
-                .coordinate,
+            locations.read("0x0walker").await.expect("location").expect("saved").coordinate,
             target
         );
 
@@ -1145,15 +1141,10 @@ mod tests {
             )
             .await
             .expect("switch to live");
-        let not_a_mode_toggle = app.oneshot(request()).await.expect("response");
-        assert_eq!(not_a_mode_toggle.status(), StatusCode::CONFLICT);
+        let no_toggle = app.oneshot(request(7)).await.expect("response");
+        assert_eq!(no_toggle.status(), StatusCode::CONFLICT);
         assert_eq!(
-            locations
-                .read("0x0walker")
-                .await
-                .expect("location")
-                .expect("live")
-                .mode,
+            locations.read("0x0walker").await.expect("location").expect("live").mode,
             BondLocationMode::Live
         );
     }
