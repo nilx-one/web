@@ -11,7 +11,10 @@ import {
   resolveTelegramWebApp,
   telegramLanguageTags,
 } from "@nilx-one/host-telegram";
-import { createIdentityHttpAdapter } from "@nilx-one/identity-http";
+import {
+  createIdentityHttpAdapter,
+  moveManualBondLocation,
+} from "@nilx-one/identity-http";
 import {
   MAP_BOOTSTRAP_CAMERA,
   createMapLibreRenderer,
@@ -163,6 +166,11 @@ async function bootstrap(): Promise<void> {
         host={host}
         identity={identity}
         mapRenderer={mapRenderer}
+        onManualBondMove={(from, to) =>
+          moveManualBondLocation(from, to, {
+            authorization: `tma ${telegramBridge?.initData ?? ""}`,
+          })
+        }
         routerBasepath="/telegram"
       />
     </StrictMode>,
