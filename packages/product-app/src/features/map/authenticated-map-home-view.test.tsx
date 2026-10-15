@@ -1731,6 +1731,34 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens on a readable manual identity rather than a distant marker", async () => {
+    const mapRenderer = renderer();
+    const declared = { longitude: 30.563, latitude: 50.4265 };
+    renderView({
+      mapRenderer,
+      geolocation: createDeclaredGeolocation(declared),
+    });
+    await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
+    const [camera, options] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
+    expect(camera?.center).toEqual([declared.longitude, declared.latitude]);
+    expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
+    expect(options?.motion).toBe("flight");
+  });
+
+  it("opens a coarse GPS location wide enough to include its uncertainty", async () => {
+    const mapRenderer = renderer();
+    const coarse = { ...observation(), accuracyMeters: 525 };
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: coarse }),
+    });
+    await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
+    const [camera] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
+    expect(camera?.center).toEqual([coarse.longitude, coarse.latitude]);
+    expect(camera?.zoom).toBeLessThan(MAP_BODY_HANDOVER_ZOOM);
+    expect(camera?.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.neighborhood);
+  });
+
   // Focusing an identity is the moment a person expects to see somebody. A
   // body is drawn at true human height, never larger than life, so this covers
   // the whole path: the camera arrives close enough to read it, and it
