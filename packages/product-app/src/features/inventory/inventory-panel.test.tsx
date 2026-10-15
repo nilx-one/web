@@ -90,6 +90,47 @@ describe("InventoryPanel", () => {
     );
   });
 
+  it("frames every carry at backpack size: pockets light five cells, bags scroll", () => {
+    const snapshot = useInventory("0x0sky", core);
+    vi.mocked(useInventory).mockReturnValueOnce({
+      ...snapshot,
+      model: {
+        ...snapshot.model,
+        bond: { ...snapshot.model.bond, carry: "bag" },
+      },
+    });
+    render(<InventoryPanel owner="0x0sky" core={core} committed />);
+
+    const holder = (name: string) => {
+      const region = screen.getByRole("region", { name });
+      const scroller = within(region).getByRole("group");
+      return {
+        scroller,
+        cells: region.querySelectorAll(".inventory__cell"),
+        active: region.querySelectorAll(
+          ".inventory__cell:not(.inventory__cell--inactive)",
+        ),
+      };
+    };
+
+    const pocket = holder("Avaia");
+    expect(pocket.cells).toHaveLength(40);
+    expect(pocket.active).toHaveLength(5);
+    expect(
+      pocket.scroller.style.getPropertyValue("--inventory-frame-columns"),
+    ).toBe("8");
+
+    const bag = holder("You");
+    expect(bag.cells).toHaveLength(120);
+    expect(bag.active).toHaveLength(120);
+    expect(
+      bag.scroller.style.getPropertyValue("--inventory-frame-columns"),
+    ).toBe("8");
+    expect(bag.scroller.style.getPropertyValue("--inventory-frame-rows")).toBe(
+      "5",
+    );
+  });
+
   it("does not invent occupied area before the catalog supplies item sizes", () => {
     const snapshot = useInventory("0x0sky", core);
     vi.mocked(useInventory).mockReturnValueOnce({

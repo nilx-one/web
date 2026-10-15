@@ -1,13 +1,14 @@
 /* © 2026 aiaiaiai · aiaiaiai.org */
 /* SPDX-License-Identifier: MPL-2.0 */
 
-/* Storage geometry belongs to Core. Large grids scroll instead of shrinking
-   their touch targets; pockets expand to the available mobile width. */
+/* Storage geometry belongs to Core. Every carry is framed at backpack size;
+   larger grids scroll inside the frame instead of shrinking touch targets. */
 .inventory {
   --inventory-cell: 48px;
   --inventory-bond: #3d8bfd;
   --inventory-avaia: #a970ff;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   min-width: 0;
   color: var(--ink);
@@ -58,6 +59,7 @@
 .inventory__holder {
   --inventory-accent: var(--inventory-bond);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
   padding: 12px;
@@ -126,12 +128,27 @@
   background: var(--inventory-accent);
 }
 
+/* The viewport is always backpack-sized, so every carry reads at one scale:
+   a pocket lights a few cells inside it, a bag scrolls within it. */
 .inventory__grid-scroll {
+  --inventory-gap: 4px;
+  --inventory-pad: 3px;
+  box-sizing: border-box;
   min-width: 0;
   max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding: 3px;
+  width: calc(
+    var(--inventory-frame-columns) * var(--inventory-cell) +
+      (var(--inventory-frame-columns) - 1) * var(--inventory-gap) + 2 *
+      var(--inventory-pad)
+  );
+  height: calc(
+    var(--inventory-frame-rows) * var(--inventory-cell) +
+      (var(--inventory-frame-rows) - 1) * var(--inventory-gap) + 2 *
+      var(--inventory-pad)
+  );
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--inventory-pad);
   scrollbar-width: thin;
   scrollbar-color: var(--inventory-accent) transparent;
 }
@@ -142,24 +159,22 @@
     var(--inventory-columns),
     var(--inventory-cell)
   );
-  grid-auto-rows: var(--inventory-cell);
-  gap: 4px;
+  grid-template-rows: repeat(var(--inventory-rows), var(--inventory-cell));
+  gap: var(--inventory-gap);
   width: max-content;
-}
-
-.inventory__holder[data-carry="pocket"] .inventory__grid {
-  width: 100%;
-  min-width: max-content;
-  grid-template-columns: repeat(
-    var(--inventory-columns),
-    minmax(var(--inventory-cell), 1fr)
-  );
 }
 
 .inventory__cell {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.inventory__cell--inactive {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--line) 50%, transparent);
+  background: none;
+  opacity: 0.5;
 }
 
 .inventory__thing {

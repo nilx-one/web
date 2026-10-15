@@ -116,6 +116,11 @@ export function InventoryPanel({
 
   function holderGrid(holder: CoreHolder, carried: CarriedGrid) {
     const { width, height } = carryGrid(carried.carry);
+    // Every carry is shown in a backpack-sized frame: a smaller carry lights
+    // only its own cells inside it, a larger one scrolls within it.
+    const frame = carryGrid("backpack");
+    const columns = Math.max(width, frame.width);
+    const rows = Math.max(height, frame.height);
     const used = carried.things.reduce<number | undefined>((total, thing) => {
       const size = sizeOf(catalog, thing.id);
       return total === undefined || size === undefined
@@ -127,7 +132,7 @@ export function InventoryPanel({
     )
       .replace("{used}", String(used))
       .replace("{total}", String(width * height));
-    const cells = Array.from({ length: width * height }, (_, index) => index);
+    const cells = Array.from({ length: columns * rows }, (_, index) => index);
     return (
       <section
         className="inventory__holder"
@@ -202,26 +207,35 @@ export function InventoryPanel({
             "{holder}",
             t(holder === "bond" ? "inventory.bond" : "inventory.avaia"),
           )}
+          style={
+            {
+              "--inventory-frame-columns": frame.width,
+              "--inventory-frame-rows": frame.height,
+            } as CSSProperties
+          }
         >
           <div
             className="inventory__grid"
             style={
               {
-                "--inventory-columns": width,
+                "--inventory-columns": columns,
+                "--inventory-rows": rows,
               } as CSSProperties
             }
           >
-            {cells.map((index) => (
-              <span
-                key={`cell-${index}`}
-                className="inventory__cell"
-                style={{
-                  gridColumn: (index % width) + 1,
-                  gridRow: Math.floor(index / width) + 1,
-                }}
-                aria-hidden="true"
-              />
-            ))}
+            {cells.map((index) => {
+              const x = index % columns;
+              const y = Math.floor(index / columns);
+              const usable = x < width && y < height;
+              return (
+                <span
+                  key={`cell-${index}`}
+                  className={`inventory__cell${usable ? "" : " inventory__cell--inactive"}`}
+                  style={{ gridColumn: x + 1, gridRow: y + 1 }}
+                  aria-hidden="true"
+                />
+              );
+            })}
             {carried.things.map((thing, index) => {
               const size = sizeOf(catalog, thing.id) ?? { width: 1, height: 1 };
               const pressed =
