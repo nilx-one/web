@@ -104,7 +104,9 @@ describe("useFollowCamera", () => {
     expect(fake.renderer.setZoomPivot).toHaveBeenLastCalledWith("center");
 
     act(() => fake.gesture({ center: [FAR.longitude, FAR.latitude] }));
+    expect(result.current.follow).toBe("locked");
 
+    act(() => result.current.release());
     expect(result.current.follow).toBe("free");
     expect(fake.renderer.setZoomPivot).toHaveBeenLastCalledWith("pointer");
   });
@@ -140,13 +142,14 @@ describe("useFollowCamera", () => {
     expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
   });
 
-  it("leaves a camera the person sent elsewhere where it is", () => {
+  it("lets Free pan independently without pulling back to the moving body", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
+    act(() => result.current.release());
     act(() => fake.gesture({ center: [FAR.longitude, FAR.latitude] }));
 
     result.current.track(AHEAD);
-
+    expect(result.current.follow).toBe("free");
     expect(fake.renderer.setCamera).not.toHaveBeenCalled();
   });
 
@@ -154,6 +157,7 @@ describe("useFollowCamera", () => {
     const fake = fakeRenderer();
     let body = HOME;
     const { result } = follow(fake, () => body);
+    act(() => result.current.release());
     act(() => fake.gesture({ center: [FAR.longitude, FAR.latitude] }));
     body = AHEAD;
 
@@ -181,12 +185,24 @@ describe("useFollowCamera", () => {
     expect(result.current.follow).toBe("free");
   });
 
+  it("holds focus and handovers without silently leaving the selected Free mode", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+
+    act(() => result.current.release());
+    act(() => result.current.holdFocus());
+
+    expect(result.current.follow).toBe("free");
+    result.current.track(AHEAD);
+    expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+  });
+
   it("lets the application's own move finish before following again", () => {
     vi.useFakeTimers();
     const fake = fakeRenderer();
     const { result } = follow(fake);
 
-    act(() => result.current.lock());
+    act(() => result.current.holdFocus());
     result.current.track(AHEAD);
     expect(fake.renderer.setCamera).not.toHaveBeenCalled();
 
@@ -200,7 +216,7 @@ describe("useFollowCamera", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
 
-    act(() => result.current.lock());
+    act(() => result.current.holdFocus());
     vi.advanceTimersByTime(FOLLOW_HOLD_MS + 1);
     result.current.track(AHEAD);
 
