@@ -138,6 +138,10 @@ describe("camera keys", () => {
       "<button>ok</button>",
       "<div contenteditable='true'></div>",
       "<div role='dialog'><span>line</span></div>",
+      "<dialog><span>modal content</span></dialog>",
+      "<div role='checkbox'>toggle</div>",
+      "<div role='switch'>toggle</div>",
+      "<div role='combobox'>choose</div>",
     ]) {
       const host = document.createElement("div");
       host.innerHTML = html;
