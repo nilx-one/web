@@ -175,10 +175,6 @@ impl BondLocationRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    /// Replaces the one active location projection for this Bond.
-    ///
-    /// Replacing `manual` with `live` is therefore an explicit new observation,
-    /// not a mode toggle that resurrects an older device coordinate.
     /// Commits a user-initiated manual walk only when the Bond still has the
     /// same declared starting point. This cannot enable manual mode, replace
     /// a live observation, or overwrite another host's move.
@@ -192,8 +188,8 @@ impl BondLocationRepository {
         let updated_at = i64::try_from(updated_at.get())
             .map_err(|_| BondLocationRepositoryError::TimestampOutOfRange)?;
         let result = sqlx::query(
-            "UPDATE bond_locations SET longitude_e7 = ?, latitude_e7 = ?, updated_at = ? \\
-             WHERE pub_dress = ? AND mode = 'manual' \\
+            "UPDATE bond_locations SET longitude_e7 = ?, latitude_e7 = ?, updated_at = ? \
+             WHERE pub_dress = ? AND mode = 'manual' \
              AND longitude_e7 = ? AND latitude_e7 = ?",
         )
         .bind(i64::from(target.longitude_e7()))
@@ -207,6 +203,9 @@ impl BondLocationRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Replaces the one active location projection for this Bond.
+    /// Replacing `manual` with `live` is an explicit new observation, not a
+    /// toggle that resurrects an older device coordinate.
     pub async fn write(
         &self,
         pub_dress: &str,
