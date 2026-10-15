@@ -3,7 +3,10 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { readBondLocationControl } from "./bond-location-control";
+import {
+  moveManualBondLocation,
+  readBondLocationControl,
+} from "./bond-location-control";
 
 function manualProjection(): Response {
   return new Response(
@@ -59,5 +62,48 @@ describe("readBondLocationControl", () => {
     await expect(
       readBondLocationControl({ fetch: fetchImpl as typeof fetch }),
     ).resolves.toEqual({ kind: "unavailable" });
+  });
+});
+
+describe("moveManualBondLocation", () => {
+  const expected = { longitude: 30.5234, latitude: 50.4501 };
+  const target = { longitude: 30.5244, latitude: 50.4501 };
+
+  it("persists a manual-only compare-and-set with host authorization", async () => {
+    const fetchImpl = vi.fn(async () => manualProjection());
+    await expect(
+      moveManualBondLocation(expected, target, {
+        fetch: fetchImpl as typeof fetch,
+        authorization: "tma signed",
+      }),
+    ).resolves.toBe(true);
+
+    const [url, init] = fetchImpl.mock.calls[0] ?? [];
+    expect(url).toBe("/api/v1/location-control/manual-move");
+    expect(init?.method).toBe("POST");
+    expect(init?.credentials).toBe("same-origin");
+    expect(init?.headers).toEqual({
+      "content-type": "application/json",
+      authorization: "tma signed",
+    });
+    expect(JSON.parse(init?.body as string)).toEqual({
+      expected_longitude: expected.longitude,
+      expected_latitude: expected.latitude,
+      longitude: target.longitude,
+      latitude: target.latitude,
+    });
+  });
+
+  it("fails closed on conflict or invalid coordinates", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 409 }));
+    await expect(
+      moveManualBondLocation(expected, target, { fetch: fetchImpl as typeof fetch }),
+    ).resolves.toBe(false);
+    await expect(
+      moveManualBondLocation(expected, { longitude: NaN, latitude: 1 }, {
+        fetch: fetchImpl as typeof fetch,
+      }),
+    ).resolves.toBe(false);
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });
