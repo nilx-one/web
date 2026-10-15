@@ -93,7 +93,10 @@ const { FakeMap } = vi.hoisted(() => {
     }
     fire() {}
     terrain: { tileManager: { releaseAllRTT: () => void } } | null = null;
+    /** Whether the style document is parsed; only then does it serialize. */
     styleLoaded = true;
+    /** Tiles in flight keep MapLibre's isStyleLoaded() false. */
+    tilesLoading = false;
     styleMetadata: Record<string, unknown> | undefined = undefined;
     styleLayers: { id: string; type: string }[] = [
       { id: "background", type: "background" },
@@ -121,17 +124,20 @@ const { FakeMap } = vi.hoisted(() => {
     }
 
     isStyleLoaded(): boolean {
-      return this.styleLoaded;
+      return this.styleLoaded && !this.tilesLoading;
     }
 
     getLayer(id: string): { readonly id: string } | undefined {
       return this.layers.get(id);
     }
 
-    getStyle(): {
-      layers: { id: string; type: string }[];
-      metadata?: Record<string, unknown>;
-    } {
+    getStyle():
+      | {
+          layers: { id: string; type: string }[];
+          metadata?: Record<string, unknown>;
+        }
+      | undefined {
+      if (!this.styleLoaded) return undefined;
       return {
         layers: this.styleLayers,
         ...(this.styleMetadata === undefined
@@ -368,6 +374,27 @@ describe("shade map factory", () => {
     map.styleLoaded = true;
     map.emit("styledata");
     expect(map.addLayerCalls).toHaveLength(2);
+  });
+
+  it("adds the fog when the journal resolves after load while tiles still stream", async () => {
+    let resolve!: (runtime: ShadeRuntime) => void;
+    const factory = createShadeMapFactory({
+      runtime: new Promise((done) => {
+        resolve = done;
+      }),
+      anchor: { lng: 30.5234, lat: 50.4501 },
+    });
+    const map = factory({} as MapOptions) as unknown as FakeMapInstance;
+    // `load` has already fired; an opening flight keeps tiles in flight, and
+    // no further style event is coming.
+    map.tilesLoading = true;
+    resolve(fakeRuntime([]));
+    await settle();
+
+    expect(map.addLayerCalls.map((call) => call.id)).toEqual([
+      WORLD_LAYER_ID,
+      "nilx-one-presence-shade",
+    ]);
   });
 
   it("lights the fog for the appearance the style declares, and relights on a swap", async () => {
