@@ -1041,7 +1041,10 @@ mod tests {
         .to_string();
         let request = |user_id: i64| {
             Request::post("/api/v1/location-control/manual-move")
-                .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(user_id)))
+                .header(
+                    AUTHORIZATION,
+                    format!("tma {}", session_signed_init_data(user_id)),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(request_body.clone()))
                 .expect("request")
@@ -1057,7 +1060,12 @@ mod tests {
         let forbidden = app.clone().oneshot(request(8)).await.expect("response");
         assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
         assert_eq!(
-            locations.read("0x1walker").await.expect("location").expect("saved").coordinate,
+            locations
+                .read("0x1walker")
+                .await
+                .expect("location")
+                .expect("saved")
+                .coordinate,
             origin
         );
 
@@ -1077,7 +1085,10 @@ mod tests {
             .clone()
             .oneshot(
                 Request::get("/api/v1/location-control")
-                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(7)))
+                    .header(
+                    AUTHORIZATION,
+                    format!("tma {}", session_signed_init_data(7)),
+                )
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -1092,7 +1103,10 @@ mod tests {
             .oneshot(
                 Request::post("/api/v1/location-control/manual-move")
                     .header(COOKIE, cookie.clone())
-                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(8)))
+                    .header(
+                    AUTHORIZATION,
+                    format!("tma {}", session_signed_init_data(8)),
+                )
                     .header("content-type", "application/json")
                     .body(Body::from(request_body.clone()))
                     .expect("request"),
@@ -1101,7 +1115,12 @@ mod tests {
             .expect("conflicting response");
         assert_eq!(mismatch.status(), StatusCode::FORBIDDEN);
         assert_eq!(
-            locations.read("0x0walker").await.expect("location").expect("saved").coordinate,
+            locations
+                .read("0x0walker")
+                .await
+                .expect("location")
+                .expect("saved")
+                .coordinate,
             origin
         );
 
@@ -1111,7 +1130,10 @@ mod tests {
             .oneshot(
                 Request::post("/api/v1/location-control/manual-move")
                     .header(COOKIE, cookie)
-                    .header(AUTHORIZATION, format!("tma {}", session_signed_init_data(7)))
+                    .header(
+                    AUTHORIZATION,
+                    format!("tma {}", session_signed_init_data(7)),
+                )
                     .header("content-type", "application/json")
                     .body(Body::from(request_body.clone()))
                     .expect("request"),
@@ -1130,7 +1152,12 @@ mod tests {
         let stale = app.clone().oneshot(request(7)).await.expect("response");
         assert_eq!(stale.status(), StatusCode::CONFLICT);
         assert_eq!(
-            locations.read("0x0walker").await.expect("location").expect("saved").coordinate,
+            locations
+                .read("0x0walker")
+                .await
+                .expect("location")
+                .expect("saved")
+                .coordinate,
             target
         );
 
@@ -1144,7 +1171,12 @@ mod tests {
         let no_toggle = app.oneshot(request(7)).await.expect("response");
         assert_eq!(no_toggle.status(), StatusCode::CONFLICT);
         assert_eq!(
-            locations.read("0x0walker").await.expect("location").expect("live").mode,
+            locations
+                .read("0x0walker")
+                .await
+                .expect("location")
+                .expect("live")
+                .mode,
             BondLocationMode::Live
         );
     }
