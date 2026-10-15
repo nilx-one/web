@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { FailureReport } from "@nilx-one/application";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -60,7 +60,7 @@ describe("FailureNoticeProvider", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("requests one light host impact for a newly published failure without repeating on rerender", async () => {
+  it("requests one heavy host impact for a newly published failure without repeating on rerender", async () => {
     const user = userEvent.setup();
     const impact = vi.fn();
     const report: FailureReport = {
@@ -74,7 +74,7 @@ describe("FailureNoticeProvider", () => {
     await user.click(screen.getByRole("button", { name: "Publish failure" }));
 
     expect(impact).toHaveBeenCalledOnce();
-    expect(impact).toHaveBeenCalledWith("light");
+    expect(impact).toHaveBeenCalledWith("heavy");
 
     view.rerender(
       <FailureNoticeProvider>
@@ -83,6 +83,65 @@ describe("FailureNoticeProvider", () => {
     );
 
     expect(impact).toHaveBeenCalledOnce();
+  });
+
+  it("lets a notice without a retry leave after three seconds, and keeps one with a retry", () => {
+    vi.useFakeTimers();
+    try {
+      const report: FailureReport = {
+        code: "contract_rejected",
+        kind: "rejected",
+        retryable: true,
+      };
+      const view = renderProducer({ report });
+      act(() => {
+        screen.getByRole("button", { name: "Publish failure" }).click();
+      });
+      expect(screen.getByText("Request rejected")).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(2_999);
+      });
+      expect(screen.getByText("Request rejected")).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(screen.queryByText("Request rejected")).toBeNull();
+
+      view.rerender(
+        <FailureNoticeProvider>
+          <Producer report={report} options={{ onRetry: () => undefined }} />
+        </FailureNoticeProvider>,
+      );
+      act(() => {
+        screen.getByRole("button", { name: "Publish failure" }).click();
+      });
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(screen.getByText("Request rejected")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is felt through the provider's host feedback when the producer brings none", async () => {
+    const user = userEvent.setup();
+    const impact = vi.fn();
+    render(
+      <FailureNoticeProvider feedback={{ impact }}>
+        <Producer
+          report={{
+            code: "contract_rejected",
+            kind: "rejected",
+            retryable: false,
+          }}
+        />
+      </FailureNoticeProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Publish failure" }));
+
+    expect(impact).toHaveBeenCalledWith("heavy");
   });
 
   it("keeps the failure visible when host feedback itself fails", async () => {
