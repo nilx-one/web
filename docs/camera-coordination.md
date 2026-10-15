@@ -29,39 +29,34 @@ Every accepted application focus gets a monotonically increasing generation. Ret
 
 A new map instance first frames geographic countries at zoom 3.3, backed by a genuine low-resolution global source. When the map becomes ready, the first observed position triggers a single 2.3-second MapLibre flight: accurate GPS (up to 50 m uncertainty) lands at the established local-cell zoom 18.5, coarser GPS observations progressively widen the view (one zoom step per uncertainty doubling, no farther out than neighborhood zoom 13), and manually declared positions land at zoom 20.25 to make the driver readable without claiming a device observation. Invalid sensor accuracy conservatively uses neighborhood zoom. Reduced motion skips the animation. A remembered on-device position can serve as the first flight target while current geolocation resolves; a nearby live fix must not restart the flight. This is camera presentation, not a Bond location mutation. A direct gesture claims camera ownership immediately, and a Telegram viewport resize refreshes the renderer without changing geography.
 
-## Following the body
+## Follow and Free camera
 
-The camera follows the body at the wheel the way a game camera follows its
-character (`follow-camera.ts`, `use-follow-camera.ts`). It opens **locked**:
-while the body walks, every frame keeps it in the middle of the world, and the
-person's zoom, bearing and pitch stay exactly as they left them.
+Two explicit camera modes are selected on the world overlay next to the
+location control (`follow-camera.ts`, `use-follow-camera.ts`).
 
-- **Orbit, tilt and zoom keep the lock** — the Lineage II chase camera. A
-  right-drag or a two-finger twist turns the camera around the body, and the
-  wheel or a pinch closes in on it: while locked the renderer pivots zoom on
-  the viewport centre (`MapRenderer.setZoomPivot`), so the body stays where it
-  is instead of sliding toward the pointer.
-- **A drag that leaves the body out of frame unlocks it** — the MOBA camera
-  unlocked from its hero. "Out of frame" is the same 48 px tolerance that
-  separates a centred location control from a displaced one. A walking body
-  then never pulls the camera back.
-- **Space** brings the camera back onto the body and locks it; **Y** (the
-  physical key, on any layout) locks or unlocks it. A key pressed into a
-  control, a dialog or with a modifier is left to it.
-- Focusing the body at the wheel and taking the wheel lock the camera, since
-  both land on the body. Recentring locks it when the Bond is at the wheel
-  and releases it when the Avaia is, because it goes to the Bond's place.
+- **Follow (default)** tracks the body at the wheel while it moves, retaining
+  the person's zoom, bearing and pitch. Orbit, tilt and zoom gestures pause
+  tracking while in progress; on the next body movement tracking resumes.
+  Zoom pivots around the viewport centre while Follow is active.
+- **Free (Dota-style)** detaches camera position from Bond/Avaia movement.
+  Dragging and touch panning explore the map independently; wheel and pinch
+  zoom toward the pointer. No body motion recentres it.
+- The on-screen **Follow / Free** control is available on mobile and desktop.
+  **Y** toggles modes; **Space** explicitly selects Follow and recentres on
+  the body. Repeating a held key never triggers another camera animation.
+  Keys inside controls or dialogs, or with modifiers, are left alone.
+- A camera focus, recenter or wheel handover performs its requested camera
+  move without silently changing the selected mode. Gestures do not change
+  the selected mode, either.
 
-A person's gesture still wins at once (rule 1): the renderer reports when a
-gesture starts (`MapCameraChange.phase`), and the follow stands still from
-then until it settles. An application move — a focus, a handover, the opening
-flight — is left to finish before the follow takes the camera again. The
-follow stands down entirely while a scene, an informer or a handover has the
-camera, and outside the world. It is presentation only: it moves the camera,
-never the body.
+The renderer reports gesture start and end (`MapCameraChange.phase`) and
+Follow never fights a gesture in progress. Opening flights and focus moves
+get time to settle before tracking resumes. Both modes stand down during
+cutscenes, the system informer, handovers and outside the world. This is
+presentation only: camera actions never change a body, Bond or presence state.
 
-A followed camera moves every frame by a fraction of a pixel, so the world
-reads it again only once it has moved 8 px or changed zoom, bearing or pitch.
+Camera readback into React is throttled until the centre moves 8 px or zoom,
+bearing or pitch changes, to avoid 60 view rerenders per second.
 
 ## Cell-bound fragments
 
