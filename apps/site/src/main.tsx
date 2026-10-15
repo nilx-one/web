@@ -20,6 +20,7 @@ import {
 import {
   createIdentityHttpAdapter,
   readBondLocationControl,
+  moveManualBondLocation,
 } from "@nilx-one/identity-http";
 import {
   MAP_BOOTSTRAP_CAMERA,
@@ -203,6 +204,13 @@ if (isPublicBondHostname(window.location.hostname)) {
         host={host}
         identity={identity}
         mapRenderer={mapRenderer}
+        onManualBondMove={(from, to) =>
+          moveManualBondLocation(from, to, {
+            ...(discordHandoff
+              ? { authorization: DISCORD_HANDOFF_AUTHORIZATION }
+              : {}),
+          })
+        }
         localModel={{
           host: createLocalModelHost(),
           catalog: LOCAL_MODEL_CATALOG.models,
