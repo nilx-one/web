@@ -3397,7 +3397,11 @@ export function AuthenticatedMapHomeView({
           handover === undefined &&
           !guideActive &&
           systemInformer.activeId === undefined ? (
-            <div className="camera-mode-control" role="group" aria-label={t("camera.mode")}>
+            <div
+              className="camera-mode-control"
+              role="group"
+              aria-label={t("camera.mode")}
+            >
               <button
                 type="button"
                 className="camera-mode-control__button"
