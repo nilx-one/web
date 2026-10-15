@@ -26,7 +26,7 @@ import { declareHostLanguages } from "@nilx-one/product-app/localization";
 import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
-  createDeclaredGeolocation,
+  createMutableDeclaredGeolocation,
   type ObservedGeolocation,
 } from "@nilx-one/host-contract";
 import { StrictMode } from "react";
@@ -84,6 +84,10 @@ async function bootstrap(): Promise<void> {
   // answers that point, marked declared, and never asks the device at all.
   // Telegram has no sound of its own; its embedded browser plays Web Audio.
   const sound = createBrowserSound();
+  const manualLocation =
+    locationControl.kind === "manual"
+      ? createMutableDeclaredGeolocation(locationControl.position)
+      : undefined;
   const host = createTelegramHost(
     telegramBridge,
     locationControl.kind === "live"
@@ -96,7 +100,7 @@ async function bootstrap(): Promise<void> {
         }
       : locationControl.kind === "manual"
         ? {
-            geolocation: createDeclaredGeolocation(locationControl.position),
+            geolocation: manualLocation!.geolocation,
             sound,
           }
         : { sound },
@@ -128,17 +132,45 @@ async function bootstrap(): Promise<void> {
   // bot. Re-read when it becomes visible; a changed mode needs a fresh
   // composition because geolocation authority is intentionally immutable for
   // the lifetime of one host instance.
-  const initialLocationFingerprint =
-    locationControlFingerprint(locationControl);
+  let currentLocationFingerprint = locationControlFingerprint(locationControl);
+  let manualMoveRevision = 0;
+  const onManualBondMove = async (
+    from: { readonly longitude: number; readonly latitude: number },
+    to: { readonly longitude: number; readonly latitude: number },
+  ): Promise<boolean> => {
+    if (manualLocation === undefined) return false;
+    const accepted = await moveManualBondLocation(from, to, {
+      authorization: `tma ${telegramBridge?.initData ?? ""}`,
+    });
+    if (!accepted) return false;
+    // The identity service stores integer E7 coordinates. Publish the same
+    // canonical value through the declared-only host capability so the game
+    // keeps moving without reloading or ever requesting physical GPS.
+    const stored = {
+      longitude: Math.round(to.longitude * 10_000_000) / 10_000_000,
+      latitude: Math.round(to.latitude * 10_000_000) / 10_000_000,
+    };
+    manualMoveRevision += 1;
+    currentLocationFingerprint = locationControlFingerprint({
+      kind: "manual",
+      position: stored,
+    });
+    manualLocation.update(stored);
+    return true;
+  };
   // Only a definite answer is a changed mode. `unavailable` is also what a
   // slow network or a Mini App left in the background past its initData's
   // lifetime reads as; reloading on it would restart the page with the same
   // initData and land on "Reopen 0x1 from Telegram" instead of the world.
   const recheckLocationControl = (): void => {
+    const startedAtRevision = manualMoveRevision;
     void readTelegramLocationControl(telegramBridge?.initData ?? "").then(
       (next) => {
+        // A read started before a successful local movement must not trigger
+        // a false "remote change" reload after the manual update.
+        if (startedAtRevision !== manualMoveRevision) return;
         if (next.kind === "unavailable") return;
-        if (locationControlFingerprint(next) !== initialLocationFingerprint) {
+        if (locationControlFingerprint(next) !== currentLocationFingerprint) {
           window.location.reload();
         }
       },
@@ -166,11 +198,7 @@ async function bootstrap(): Promise<void> {
         host={host}
         identity={identity}
         mapRenderer={mapRenderer}
-        onManualBondMove={(from, to) =>
-          moveManualBondLocation(from, to, {
-            authorization: `tma ${telegramBridge?.initData ?? ""}`,
-          })
-        }
+        onManualBondMove={onManualBondMove}
         routerBasepath="/telegram"
       />
     </StrictMode>,
