@@ -32,6 +32,13 @@ export interface MapCameraOptions {
    * own transition length. Ignored for `immediate`.
    */
   readonly durationMs?: number;
+  /**
+   * A background move, such as a camera following a walking body, that must
+   * never cost a person their gesture. While a finger or a mouse button is on
+   * the map it is skipped, because a camera change there would cancel the
+   * drag, the turn or the pinch that is just starting.
+   */
+  readonly yieldToGesture?: boolean;
 }
 
 /**

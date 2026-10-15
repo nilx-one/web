@@ -58,7 +58,11 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
 
 The renderer reports gesture start and end (`MapCameraChange.phase`) and
 whether a gesture came from a touch screen (`MapCameraChange.touch`). Follow
-never fights a gesture in progress. Opening flights and focus moves
+never fights a gesture in progress, nor one that is only starting: MapLibre
+cancels the gesture it is recognising whenever the camera is set, so Follow
+moves with `MapCameraOptions.yieldToGesture` and the renderer skips them while
+a finger or a mouse button is on the map. Otherwise turning the camera around
+a walking body would snap it straight back. Opening flights and focus moves
 get time to settle before tracking resumes. Both modes stand down during
 cutscenes, the system informer, handovers and outside the world. This is
 presentation only: camera actions never change a body, Bond or presence state.

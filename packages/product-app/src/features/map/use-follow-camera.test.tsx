@@ -95,12 +95,15 @@ describe("useFollowCamera", () => {
 
     result.current.track(AHEAD);
 
-    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith({
-      center: [AHEAD.longitude, AHEAD.latitude],
-      zoom: 18.5,
-      bearing: 30,
-      pitch: 48,
-    });
+    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
+      {
+        center: [AHEAD.longitude, AHEAD.latitude],
+        zoom: 18.5,
+        bearing: 30,
+        pitch: 48,
+      },
+      { yieldToGesture: true },
+    );
   });
 
   it("closes in on the body while locked and on the pointer once free", () => {
@@ -193,12 +196,15 @@ describe("useFollowCamera", () => {
     result.current.track(AHEAD);
 
     expect(result.current.follow).toBe("locked");
-    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith({
-      center: [AHEAD.longitude, AHEAD.latitude],
-      zoom: 17.5,
-      bearing: 200,
-      pitch: 60,
-    });
+    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
+      {
+        center: [AHEAD.longitude, AHEAD.latitude],
+        zoom: 17.5,
+        bearing: 200,
+        pitch: 60,
+      },
+      { yieldToGesture: true },
+    );
   });
 
   it("does not fight a gesture, then resumes when moveend lacks originalEvent", () => {

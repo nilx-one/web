@@ -102,7 +102,10 @@ export function useFollowCamera({
       ) {
         return;
       }
-      renderer.setCamera(followCamera(current, point));
+      // Following is background motion: it never takes a gesture away.
+      renderer.setCamera(followCamera(current, point), {
+        yieldToGesture: true,
+      });
     },
     [renderer],
   );

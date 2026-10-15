@@ -445,6 +445,8 @@ export function createMapLibreRenderer(
   let zoomPivot: MapZoomPivot = "pointer";
   let map: MapLibreMap | undefined;
   let viewportCleanup: (() => void) | undefined;
+  /** Fingers and mouse buttons on the map right now. */
+  const pressedPointers = new Set<number>();
   let avatarLayer: AvatarCustomLayer | undefined;
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
@@ -1406,7 +1408,27 @@ export function createMapLibreRenderer(
         globalThis.addEventListener("pageshow", scheduleViewportSync);
         document.addEventListener("visibilitychange", onVisible);
         scheduleViewportSync();
+        // MapLibre cancels any gesture it is recognising whenever the camera
+        // is set, so a background move has to know a person is pressing the
+        // map before MapLibre has decided that the press is a gesture. A
+        // release is heard on the window, wherever the pointer ended up.
+        const press = (event: PointerEvent) => {
+          pressedPointers.add(event.pointerId);
+        };
+        const release = (event: PointerEvent) => {
+          pressedPointers.delete(event.pointerId);
+        };
+        const releaseAll = () => pressedPointers.clear();
+        container.addEventListener("pointerdown", press, true);
+        globalThis.addEventListener("pointerup", release, true);
+        globalThis.addEventListener("pointercancel", release, true);
+        globalThis.addEventListener("blur", releaseAll);
         viewportCleanup = () => {
+          container.removeEventListener("pointerdown", press, true);
+          globalThis.removeEventListener("pointerup", release, true);
+          globalThis.removeEventListener("pointercancel", release, true);
+          globalThis.removeEventListener("blur", releaseAll);
+          pressedPointers.clear();
           observer?.disconnect();
           globalThis.removeEventListener("resize", scheduleViewportSync);
           globalThis.visualViewport?.removeEventListener(
@@ -1784,6 +1806,9 @@ export function createMapLibreRenderer(
     },
 
     setCamera(next: MapCamera, cameraOptions: MapCameraOptions = {}) {
+      if (cameraOptions.yieldToGesture === true && pressedPointers.size > 0) {
+        return;
+      }
       camera = next;
       avatars.setCamera(next);
 

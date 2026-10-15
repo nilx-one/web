@@ -789,6 +789,36 @@ describe("camera ownership", () => {
     expect(phases).toEqual(["start", "end"]);
   });
 
+  it("holds a background move back while a finger or button is on the map", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+    });
+    const container = document.createElement("div");
+    renderer.mount(container);
+    fakeMap.emit("load");
+    const follow = {
+      center: [1, 2] as const,
+      zoom: 18,
+      bearing: 40,
+      pitch: 30,
+    };
+    const pointer = (type: string) =>
+      Object.assign(new Event(type, { bubbles: true }), { pointerId: 7 });
+
+    container.dispatchEvent(pointer("pointerdown"));
+    renderer.setCamera(follow, { yieldToGesture: true });
+    expect(fakeMap.jumpTo).not.toHaveBeenCalled();
+
+    // A move the person asked for still happens while they press.
+    renderer.setCamera(follow, { motion: "eased" });
+    expect(fakeMap.easeTo).toHaveBeenCalledOnce();
+
+    globalThis.dispatchEvent(pointer("pointerup"));
+    renderer.setCamera(follow, { yieldToGesture: true });
+    expect(fakeMap.jumpTo).toHaveBeenCalledOnce();
+  });
+
   it("says when a gesture came from a touch screen", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);
