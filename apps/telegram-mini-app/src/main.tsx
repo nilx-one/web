@@ -99,9 +99,9 @@ async function bootstrap(): Promise<void> {
           ),
           sound,
         }
-      : locationControl.kind === "manual"
+      : manualLocation !== undefined
         ? {
-            geolocation: manualLocation!.geolocation,
+            geolocation: manualLocation.geolocation,
             sound,
           }
         : { sound },
@@ -140,8 +140,11 @@ async function bootstrap(): Promise<void> {
     to: { readonly longitude: number; readonly latitude: number },
   ): Promise<boolean> => {
     if (manualLocation === undefined) return false;
+    // Without initData there is no identity to authorize; send no header
+    // rather than an empty `tma ` credential, as the Web host does.
+    const initData = telegramBridge?.initData ?? "";
     const accepted = await moveManualBondLocation(from, to, {
-      authorization: `tma ${telegramBridge?.initData ?? ""}`,
+      authorization: initData.length > 0 ? `tma ${initData}` : undefined,
     });
     if (!accepted) return false;
     // The identity service stores integer E7 coordinates. Publish the same
