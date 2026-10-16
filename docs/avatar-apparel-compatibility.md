@@ -183,17 +183,49 @@ so sharing the skeleton is not evidence that a garment fits them.
    mockups show one row, and the zip mockup shows only three. Which layout is
    the contract?
 
+## Pullover hoodie (asset 0.4.0)
+
+`outerwear/hoodie-pullover` is one node with three materials: white `fleece`
+(body, sleeves, hood, pocket), `rib` (hem and cuffs) and `drawcord`. Body,
+hood and pocket bind to the torso family (hips → spine → chest), sleeves and
+cuffs to the arm family. Shoulders are dropped: each sleeve starts inside the
+body, so the tee's shoulder stays enclosed.
+
+**Print layout.** Only `fleece` carries `TEXCOORD_0`, in metres, so a repeat
+has one size on every panel. Each panel is centred on its own whole metre of
+U: front 0, back 1, sleeves 2 (`L`, her right) and 3 (`R`, her left), hood 4,
+pocket 5. V runs down the cloth from the panel's top edge. The body is cut at
+the side seams, so the back carries one uninterrupted panel for the emblem.
+On a sleeve, U equals its panel's whole metre along the top of the sleeve,
+so the shoulder mark sits at U = 3 near V = 0.05, where the sleeve leaves
+the body. `test_rig.py` checks that no panel reaches the next.
+
+**Fit, measured in the bind pose:**
+
+| Check                                                    | Result                                           |
+| -------------------------------------------------------- | ------------------------------------------------ |
+| Tee, shell and dress torso inside the body (max r/R)     | 0.966 / 0.845 / 0.816                            |
+| Trousers, skirt and dress waist inside the hem (max r/R) | 0.926 / 0.849 / 0.741                            |
+| Rays along the tee's normals that meet the hoodie        | 96 %; the rest leave through the neck opening    |
+| Cuff over the hand, which stays visible                  | Cuff ends at 0.976 m, the hand starts at 0.989 m |
+| Backpack back, default outfit → hoodie                   | z −0.107 → −0.146 m                              |
+
+The lowered hood lies where the bag's back panel sits, so a bag fitted over
+the hoodie stands about 4 cm off the back instead of cutting into it. Refit
+on a wardrobe change and the hood/bag overlap stay with P3. Deformation in
+the clips — a swinging sleeve meeting the body — and phone performance were
+not measured.
+
+**Size.** +10,284 vertices, +19,280 triangles, +791,648 bytes over 0.3.0.
+
 ## Next PRs
 
-1. **P1a** — `hoodie_pullover` geometry with UVs, routing, weights and
-   enclosure of the tee; `wardrobe.json` and catalog entry; asset `0.4.0`.
-   Shipped plain white, which is a complete item on its own.
-2. **P1b** — `hoodie_zip` on the same contract.
-3. **P2** — line masks and the shoulder relief behind one colour uniform;
+1. **P1b** — `hoodie_zip` on the same contract.
+2. **P2** — line masks and the shoulder relief behind one colour uniform;
    needs answers 1–4.
-4. **P3** — variants as (mesh, line) in `wardrobe.json` and the catalog;
+3. **P3** — variants as (mesh, line) in `wardrobe.json` and the catalog;
    backpack refit and hood overlap.
-5. **P4–P6** — preview, map and thumbnails from real assets; fit gates for
+4. **P4–P6** — preview, map and thumbnails from real assets; fit gates for
    other studies; phone measurements.
 
 © 2026 aiaiaiai · aiaiaiai.org
