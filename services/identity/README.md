@@ -92,23 +92,38 @@ ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role;
 ### Business stations
 
 A `business` Bond keeps one stationed Avaia per shop. A station never walks:
-it stands at its shop's point. Its address is an Avaia address with the
-owner's discriminator (`0xda-market` keeps `xda-market-zoloti-vorotai`) and
-takes the same global namespace as every other identity. It is not the
-Bond's own Avaia: that one stays the single Avaia the owner creates, and
-owner-keyed reads never see a station. A station leaves with its business.
+it stands at its shop's point. It is not the Bond's own Avaia: that one stays
+the single Avaia the owner creates, and owner-keyed reads never see a
+station. A station leaves with its business.
 
-Both the role and the stations are assigned out of band, by the service
-binary against its own database:
+A business names each station by a caption, kept as written. The station's
+address is formed from it once: the business's own full address, `-`, then
+the caption's place transliterated (Ukrainian by the 2010 national table),
+lowercased, whitespace to `-`, with no Avaia `ai` ending
+(`"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`). A
+leading business name in the caption (`0xda-market` or `xda-market`) is the
+prefix already and is not repeated; the address must fit the `pub_dress`
+grammar (a slug of at most 32 characters).
+
+A business Bond stands at one of its own stations: its location is declared
+(`manual`) at the station's point and follows it when the station moves. Its
+public card (`GET /api/v1/identity/public`) names that station under
+`location`; no other Bond's location is ever public.
+
+All of it is out of band, by the service binary against its own database:
 
 ```sh
-identity-bot business grant 0xda-market
-identity-bot business station 0xda-market xda-market-zoloti-vorotai 30.5131 50.4489
+identity-bot business register 0xda-market   # a business Bond, no sign-in yet
+identity-bot business grant 0x1shop          # or make an existing Bond a business
+identity-bot business station 0xda-market "xda-market Золоті Ворота" 30.5131 50.4489
+identity-bot business locate 0xda-market 0xda-market-zoloti-vorota
 ```
 
-Stationing an address the business already keeps restates its point.
+`register` creates a human Bond with the `business` role and no credential or
+provider; its owner signs in later through the ordinary paths. Stationing an
+address the business already keeps restates its point (and caption).
 `GET /api/v1/identity/stations` answers every station to anyone:
-`{ "stations": [{ "pub_dress": "…", "owner_pub_dress": "…", "coordinate": … }] }`.
+`{ "stations": [{ "pub_dress": "…", "owner_pub_dress": "…", "caption": "…", "coordinate": … }] }`.
 
 `Bond.location` has two modes. Every role may use `live`: it is entered only by an explicit current-location share in the bot, where Telegram asks for the device location. The Mini App's background `POST /api/v1/location-control` only refreshes a location that is already `live` and answers `409` for a `manual` one. `manual` is a declared point and needs `admin`, whose rights are exactly those of `user` plus setting a manual location.
 

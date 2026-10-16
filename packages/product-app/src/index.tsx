@@ -26,6 +26,7 @@ import {
   UpdateAvaiaProfile,
   formatPubDress,
   hasAvaiaProfileAccess,
+  hasBusinessStationAccess,
   hasNearbySpeechAccess,
   hasCommittedAwardAccess,
   hasPubInfoAccess,
@@ -1077,6 +1078,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         findItems={dependencies.core}
         {...(hasNearbySpeechAccess(dependencies.identity)
           ? { nearbySpeech: dependencies.identity }
+          : {})}
+        {...(hasBusinessStationAccess(dependencies.identity)
+          ? { businessStations: dependencies.identity }
           : {})}
         {...(providerConnections === undefined
           ? {}

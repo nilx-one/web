@@ -369,3 +369,18 @@ never the wheel — and Core, not the client, says what it allows
 Not covered here: Avaia choosing and opening cells by herself, and timing a
 reveal from her arrival rather than from the yes. Both build on this and are
 tracked separately.
+
+## Stationed Avaia
+
+A business Bond keeps one stationed Avaia per shop (`services/identity`,
+"Business stations"). A station is not this device's Avaia and never walks:
+the world reads the whole public list from `GET /api/v1/identity/stations`,
+for every Bond, and stands a station at its shop, idle. Its body is chosen
+from its own address, so a shop looks the same on every device.
+
+The list is global; the bodies are not. A station becomes a 3D body only at
+the zoom any body appears at and within 750 m of the camera centre, so a
+world of many shops costs only the few in view. A loaded body stays, hidden
+when the camera pulls back, until the camera is 1.5 km away. Where a station
+stands is what its business published. It is not presence, and a tap does
+not walk anyone to it.

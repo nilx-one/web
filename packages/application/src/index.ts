@@ -75,6 +75,11 @@ export {
   type AvaiaTravelResult,
 } from "./avaia-profile";
 export {
+  hasBusinessStationAccess,
+  type BusinessStationAccessPort,
+  type BusinessStationView,
+} from "./business-stations";
+export {
   hasNearbySpeechAccess,
   type NearbySpeechAccessPort,
   type SpokenLineView,
