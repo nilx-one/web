@@ -8,7 +8,6 @@
 //! identity-bot business register <pub_dress>
 //! identity-bot business grant <pub_dress>
 //! identity-bot business station <owner pub_dress> "<caption>" <longitude> <latitude>
-//! identity-bot business locate <owner pub_dress> <station address>
 //! ```
 //!
 //! A station's address is formed from its caption by Core
@@ -16,8 +15,8 @@
 //! `"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`.
 
 use crate::{
-    BondAccessRole, BusinessLocationOutcome, BusinessRegistrationOutcome, BusinessStationOutcome,
-    GeoCoordinate, IdentityRepository, PubDress, StationPubDress,
+    BondAccessRole, BusinessRegistrationOutcome, BusinessStationOutcome, GeoCoordinate,
+    IdentityRepository, PubDress, StationPubDress,
 };
 
 /// Runs one operation and answers the line to print. `Err` is a refusal or a
@@ -93,29 +92,6 @@ pub async fn run(
                 }
             }
         }
-        ["business", "locate", owner, station] => {
-            let owner = parse_pub_dress(owner)?;
-            let station = StationPubDress::for_owner(&owner, station)
-                .map_err(|error| format!("{station}: {error}"))?;
-            match repository
-                .locate_business(&owner, &station, now)
-                .await
-                .map_err(|error| error.to_string())?
-            {
-                BusinessLocationOutcome::Located(station) => Ok(format!(
-                    "{owner}: stands at {} at {}, {}",
-                    station.pub_dress,
-                    station.coordinate.longitude_degrees(),
-                    station.coordinate.latitude_degrees()
-                )),
-                BusinessLocationOutcome::BusinessRoleRequired => {
-                    Err(format!("{owner}: not a business"))
-                }
-                BusinessLocationOutcome::NotItsStation => {
-                    Err(format!("{station}: not a station {owner} keeps"))
-                }
-            }
-        }
         _ => Err(USAGE.to_owned()),
     }
 }
@@ -123,8 +99,7 @@ pub async fn run(
 const USAGE: &str = "usage:\n  \
     identity-bot business register <pub_dress>\n  \
     identity-bot business grant <pub_dress>\n  \
-    identity-bot business station <owner> \"<caption>\" <longitude> <latitude>\n  \
-    identity-bot business locate <owner> <station address>";
+    identity-bot business station <owner> \"<caption>\" <longitude> <latitude>";
 
 fn parse_pub_dress(value: &str) -> Result<PubDress, String> {
     value
@@ -153,7 +128,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn registers_stations_and_locates_the_first_business() {
+    async fn registers_the_first_business_with_two_points() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
@@ -209,7 +184,8 @@ mod tests {
             .map(|line| line.split(':').next().map(str::to_owned)),
             Ok(Some("0xda-market-batkivshchyna-maty".to_owned()))
         );
-        assert_eq!(
+        // A business has no single location to set: it is its points.
+        assert!(
             run(
                 &repository,
                 &args(&[
@@ -220,8 +196,8 @@ mod tests {
                 ]),
                 103
             )
-            .await,
-            Ok("0xda-market: stands at 0xda-market-zoloti-vorota at 30.5131, 50.4489".to_owned())
+            .await
+            .is_err()
         );
     }
 
@@ -249,7 +225,6 @@ mod tests {
                 "30.5",
                 "95",
             ],
-            &["business", "locate", "0xda-market", "not an address"],
             &["business"],
         ] {
             assert!(run(&repository, &args(line), 1).await.is_err(), "{line:?}");
