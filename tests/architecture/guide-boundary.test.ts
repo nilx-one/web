@@ -146,8 +146,23 @@ describe("xSasha stays presentation", () => {
         "rememberGuideTerritory",
         "openDetail",
         "handWheel",
+        "setDetailState",
+        "navigate",
       ]),
     );
+    // Returning from a declined exclusive offer may change only local Dock
+    // navigation. No other scene may acquire a new navigation side effect.
+    const exclusiveDismissal = ending.match(
+      /if \(scene === "exclusive" && outcome === "dismissed"\) \{([\s\S]*?)\n    \}/,
+    )?.[1];
+    expect(exclusiveDismissal).toBeDefined();
+    expect(exclusiveDismissal).toContain("returnToPickup.current = true");
+    expect(exclusiveDismissal).toContain("setDetailState(undefined)");
+    expect(exclusiveDismissal).toContain("navigate(SETTINGS_ROUTE)");
+    expect(ending.replace(exclusiveDismissal ?? "", "")).not.toMatch(
+      /\b(?:navigate|setDetailState)\s*\(/,
+    );
+
     // Handing the wheel over from a reply fetches nothing: only the Dock's own
     // gesture asks a device for the runtime.
     expect(functionBody(home, "handWheel")).not.toContain("onPrepareAvaia");
