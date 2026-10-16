@@ -678,7 +678,7 @@ export const AVATAR_ASSET_VERSIONS: Readonly<Record<AvatarModelId, string>> = {
   "sky-study": AVATAR_ASSET_VERSION,
   "dasha-study": AVATAR_ASSET_VERSION,
   "kai-study": AVATAR_ASSET_VERSION,
-  "dasha-v2-study": "0.3.0",
+  "dasha-v2-study": "0.4.0",
 };
 
 /** The still image a picker shows for a study, generated from that study. */

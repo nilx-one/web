@@ -78,12 +78,12 @@ function preview(
 
 const TEE = {
   key: "dasha-v2-study#tee",
-  assetUrl: "/avatars/0.3.0/dasha-v2-study.glb",
+  assetUrl: "/avatars/0.4.0/dasha-v2-study.glb",
   visibleNodes: ["body:head", "wear:top/tee-black"],
 };
 const DRESS = {
   key: "dasha-v2-study#dress",
-  assetUrl: "/avatars/0.3.0/dasha-v2-study.glb",
+  assetUrl: "/avatars/0.4.0/dasha-v2-study.glb",
   visibleNodes: ["body:head", "wear:dress/shift-indigo"],
 };
 const SKY = {
@@ -257,7 +257,7 @@ describe("when a body cannot be shown", () => {
 // rather than guesses. Synthetic objects carry `:` in their names, which a
 // loaded asset never does: the loader strips it, so only the real asset shows
 // that what is worn is what is drawn.
-const MODULAR_ASSET = "deploy/web/avatars/0.3.0/dasha-v2-study.glb";
+const MODULAR_ASSET = "deploy/web/avatars/0.4.0/dasha-v2-study.glb";
 
 async function loadModular(): Promise<GLTF> {
   const bytes = readFileSync(MODULAR_ASSET);

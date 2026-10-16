@@ -19,7 +19,9 @@ import trimesh
 from trimesh.visual.material import PBRMaterial
 from trimesh.visual.texture import TextureVisuals
 
-parser=argparse.ArgumentParser(); parser.add_argument('--output',default='deploy/web/avatars/0.3.0'); args=parser.parse_args()
+parser=argparse.ArgumentParser(); parser.add_argument('--output',default='deploy/web/avatars/0.4.0')
+# An earlier asset version is rebuilt byte for byte from the items it published.
+parser.add_argument('--version',default=None); args=parser.parse_args()
 OUT=Path(args.output).resolve(); OUT.mkdir(parents=True,exist_ok=True)
 PARTS=[]
 PALETTE={
@@ -36,7 +38,9 @@ PALETTE={
  # own cloth: nothing recolours a garment that is already on the body.
  'charcoal':('#3b3d43',.90,0), 'indigo':('#3c4570',.86,0),
  'canvas':('#eeece4',.88,0), 'rubber':('#cfccc2',.72,0),
- 'lace_cord':('#dedbd0',.95,0)
+ 'lace_cord':('#dedbd0',.95,0),
+ # The hoodie is white cloth; whatever is printed on it is not baked in here.
+ 'fleece':('#f3f3ef',.93,0), 'rib':('#e9e9e4',.96,0), 'drawcord':('#e2e2dd',.90,0)
 }
 def rgb(h): return [int(h[i:i+2],16) for i in (1,3,5)]
 MATERIALS={k:PBRMaterial(name=k,baseColorFactor=rgb(v[0])+[255],roughnessFactor=v[1],metallicFactor=v[2],doubleSided=True) for k,v in PALETTE.items()}
@@ -472,6 +476,137 @@ for s,side in [(-1,'L'),(1,'R')]:
     loft(side+'_sneaker_sock',[(.130,.032,.036,cx,.004),(.20,.035,.038,cx,.004),
          (.245,.033,.037,cx,.004)],'cotton',12,32,'shoes')
 
+# ── Pullover hoodie (aiaiaiai) ───────────────────────────────────────────────
+# A loose white pullover over whatever top she wears: every section clears the
+# black tee, its short sleeves and its shoulders, because a garment hides body
+# regions and never another garment. The hood is down and lies on the upper
+# back; the cuffs reach over the top of the hand and never hide it.
+#
+# Printed cloth carries UVs in metres, so a repeat keeps one size on every
+# panel. Each panel is centred on its own whole metre of U and never reaches
+# the next: front 0, back 1, sleeves 2 (L) and 3 (R), hood 4, pocket 5. V runs
+# down the cloth from the panel's top edge. The side suffix follows the rig: R
+# is the character's own left, so her left shoulder is the top of the R sleeve.
+from scipy.interpolate import interp1d
+HOODIE_SHELL=[(1.025,.163,.113,0,0),(1.10,.165,.112,0,0),(1.18,.168,.114,0,.002),
+              (1.25,.175,.121,0,.004),(1.32,.188,.113,0,.008),(1.37,.195,.091,0,.010),
+              (1.400,.160,.077,0,.010),(1.425,.080,.062,0,.010)]
+HOODIE_TOP=HOODIE_SHELL[-1][0]
+
+def printed(grid,uv):
+    """One cloth panel from a grid of rows, with its UVs, not yet a part."""
+    g=np.asarray(grid,float);n,m=g.shape[:2];faces=[]
+    for i in range(n-1):
+      for j in range(m-1):
+        a=i*m+j;b=a+1;c=b+m;d=a+m
+        faces.extend([[a,b,c],[a,c,d]])
+    verts=g.reshape(-1,3);faces=np.asarray(faces)
+    return verts,faces,np.asarray(uv,float).reshape(-1,2)
+
+def outward(verts,faces,centre):
+    """Wind faces so their normals point away from `centre(points)`."""
+    tri=verts[faces];normal=np.cross(tri[:,1]-tri[:,0],tri[:,2]-tri[:,0])
+    away=tri.mean(axis=1)-centre(tri.mean(axis=1))
+    return faces if np.einsum('ij,ij->',normal,away)>=0 else faces[:,::-1]
+
+def add_printed(name,parts,mat,centre,group='clothing'):
+    verts=[];faces=[];uv=[];offset=0
+    for v,f,t in parts:
+        verts.append(v);faces.append(f+offset);uv.append(t);offset+=len(v)
+    verts=np.vstack(verts);faces=outward(verts,np.vstack(faces),centre)
+    m=trimesh.Trimesh(vertices=verts,faces=faces,process=False,
+                      visual=TextureVisuals(uv=np.vstack(uv),material=MATERIALS[mat]))
+    m.metadata={'name':name,'group':group,'material':mat}
+    PARTS.append((name,m,mat,group));return m
+
+def shell_at(z,phi,push=0.):
+    """A point on the hoodie body at height z and angle phi (0 = front)."""
+    sec=np.asarray(HOODIE_SHELL);rx,ry,cx,cy=PchipInterpolator(sec[:,0],sec[:,1:],axis=0)(z).T
+    return np.stack([cx+(rx+push)*np.sin(phi),cy-(ry+push)*np.cos(phi),np.broadcast_to(z,np.shape(phi))],-1)
+
+def shell_normal(z,phi,eps=1e-4):
+    """The outward surface normal of the hoodie body, not merely its radius."""
+    du=shell_at(z,phi+eps)-shell_at(z,phi-eps);dz=shell_at(z+eps,phi)-shell_at(z-eps,phi)
+    n=np.cross(du,dz);return n/np.linalg.norm(n,axis=-1,keepdims=True)
+
+def ring_arc(points):
+    return np.r_[0,np.cumsum(np.linalg.norm(np.diff(points,axis=0),axis=1))]
+
+def body_axis(p):
+    return np.column_stack([np.zeros(len(p)),np.full(len(p),.006),p[:,2]])
+
+# Body: a front and a back panel joined at the side seams, so the back can
+# carry one uninterrupted emblem and the front one uninterrupted repeat.
+zs=np.linspace(HOODIE_SHELL[0][0],HOODIE_TOP,46)[::-1]
+panels=[]
+for offset,phis in [(0.,np.linspace(-np.pi/2,np.pi/2,37)),(1.,np.linspace(np.pi/2,3*np.pi/2,37))]:
+    grid=[];uv=[]
+    for z in zs:
+        ring=shell_at(z,phis);arc=ring_arc(ring);arc-=arc[len(arc)//2]
+        grid.append(ring);uv.append(np.column_stack([offset+arc,np.full(len(arc),HOODIE_TOP-z)]))
+    panels.append(printed(grid,uv))
+add_printed('hoodie_pullover_body',panels,'fleece',body_axis)
+
+# Ribbed hem: gathered a little under the body, never under the waistband.
+hem=[(.985,.158,.108,0,0),(1.000,.160,.110,0,0),(1.030,.161,.111,0,0),(1.040,.159,.109,0,0)]
+rib=loft('hoodie_pullover_hem',hem,'rib',10,96,'clothing')
+v=rib.vertices;theta=np.arctan2(v[:,0],-v[:,1]);ridge=.0012*np.cos(48*theta)
+v[:,0]+=ridge*np.sin(theta);v[:,1]-=ridge*np.cos(theta)
+
+for s,side in [(-1,'L'),(1,'R')]:
+    # Dropped shoulder: the sleeve starts inside the body, crosses the shoulder
+    # seam and is cut long, so the tee's shoulder and sleeve stay enclosed.
+    path=interp_path([[s*.128,.006,1.378],[s*.165,.005,1.352],[s*.200,.004,1.300],
+                      [s*.244,.002,1.172],[s*.266,-.005,1.079],[s*.280,-.010,1.022]],48)
+    radius=np.interp(np.linspace(0,1,48),np.linspace(0,1,6),[.060,.068,.070,.060,.050,.046])
+    tang=np.gradient(path,axis=0);tang/=np.linalg.norm(tang,axis=1)[:,None]
+    angles=np.linspace(0,2*np.pi,33);grid=[];uv=[];along=ring_arc(path)
+    for p,t,r,l in zip(path,tang,radius,along):
+        # The seam runs along the underside, toward the body; the top of the
+        # sleeve (angle pi) is the shoulder line the mark is placed on.
+        medial=np.cross(t,[0,1,0]);medial/=np.linalg.norm(medial)
+        if medial[0]*s>0:medial=-medial
+        front=np.cross(t,medial)
+        grid.append([p+r*(np.cos(a)*medial+np.sin(a)*front) for a in angles])
+        uv.append(np.column_stack([(2. if side=='L' else 3.)+r*(angles-np.pi),np.full(len(angles),l)]))
+    axis=interp1d(path[:,2],path,axis=0,bounds_error=False,fill_value=(path[-1],path[0]))
+    add_printed(side+'_hoodie_pullover_sleeve',[printed(grid,uv)],
+                'fleece',lambda q,axis=axis:axis(q[:,2]))
+    # The cuff overlaps the top of the hand: with the forearm hidden, a cuff
+    # that stopped at the wrist would leave the hand floating below it.
+    cuff=tube(side+'_hoodie_pullover_cuff',[[s*.279,-.0095,1.030],[s*.283,-.011,1.002],
+              [s*.286,-.012,.976]],[.034,.032,.030],'rib',10,48,'clothing')
+    v=cuff.vertices;centre=np.array([s*.282,-.011,0]);d=v-centre;d[:,2]=0
+    theta=np.arctan2(d[:,1],d[:,0]);v[:,:2]+=(.0009*np.cos(32*theta))[:,None]*d[:,:2]/np.linalg.norm(d[:,:2],axis=1)[:,None]
+
+# Hood, down: a cowl lying on the shoulders and the upper back, deepest at the
+# back and tapering to the front, where it opens above the drawcords.
+phis=np.linspace(.55,2*np.pi-.55,61);ts=np.linspace(0,1,17)
+back=np.sin((phis-.55)/(2*np.pi-1.1)*np.pi)
+depth=.020+.120*back**2;puff=.004+.034*back**1.5
+grid=[];uv=[]
+for t in ts:
+    z=HOODIE_TOP-.002-depth*t
+    lift=.006+puff*np.sin(np.pi*t)**.8
+    grid.append(shell_at(z,phis)+lift[:,None]*shell_normal(z,phis))
+arc=ring_arc(grid[0]);arc-=arc[len(arc)//2]
+for i,t in enumerate(ts):
+    uv.append(np.column_stack([4.+arc,depth*t]))
+add_printed('hoodie_pullover_hood',[printed(grid,uv)],'fleece',body_axis)
+
+# Kangaroo pocket: one panel stitched on the front, open at the slanted sides.
+a=np.linspace(-1,1,25);b=np.linspace(0,1,11);grid=[];uv=[]
+for bb in b[::-1]:
+    z=1.045+.125*bb;phi=a*(.62-.17*bb)
+    p=shell_at(z,phi,.005+.003*np.cos(a*np.pi/2))
+    grid.append(p);w=ring_arc(p);uv.append(np.column_stack([5.+w-w[-1]/2,np.full(len(a),1.17-z)]))
+add_printed('hoodie_pullover_pocket',[printed(grid,uv)],'fleece',body_axis)
+
+for s in (-1,1):
+    tube(('L' if s<0 else 'R')+'_hoodie_pullover_drawcord',
+         [[s*.025,-.060,1.425],[s*.030,-.095,1.390],[s*.032,-.118,1.330],[s*.033,-.122,1.290]],
+         [.0028,.0028],'drawcord',30,8,'clothing')
+
 # ── Which part of the character each piece of geometry belongs to ────────────
 # Routing is a table rather than a build order, so the geometry above stays
 # readable as anatomy and tailoring while the character it composes is
@@ -479,10 +614,22 @@ for s,side in [(-1,'L'),(1,'R')]:
 # that quietly belonged to nothing would be geometry nobody could ever see.
 import json
 WARDROBE_TABLE=json.loads((Path(__file__).resolve().parent/'wardrobe.json').read_text())
+# An item enters the wardrobe in the asset version named by its `since`. A build
+# of an earlier version leaves it out entirely, so that version's published
+# bytes stay exactly what they were.
+def semver(text):return tuple(int(x) for x in text.split('.'))
+VERSION=args.version or WARDROBE_TABLE['asset_version']
+UNRELEASED={item['id'] for item in WARDROBE_TABLE['items']
+            if semver(item.get('since','0.0.0'))>semver(VERSION)}
+WARDROBE_TABLE=dict(WARDROBE_TABLE,asset_version=VERSION,
+                    items=[item for item in WARDROBE_TABLE['items'] if item['id'] not in UNRELEASED])
 BODY_REGIONS=WARDROBE_TABLE['always_visible']+WARDROBE_TABLE['body_regions']
 WARDROBE=[item['id'] for item in WARDROBE_TABLE['items']]
 
 def route(name,group):
+    if 'hoodie_pullover' in name:
+        arm=any(x in name for x in ('_sleeve','_cuff'))
+        return 'wear:outerwear/hoodie-pullover',('arm' if arm else 'torso')
     if name.endswith('_earring'):return 'wear:accessory/earrings-silver','head'
     if group=='hair':
         loose=name.startswith('loose_') or '_loose_' in name
@@ -515,6 +662,7 @@ ORDER=['body:'+region for region in BODY_REGIONS]+['wear:'+item for item in WARD
 BUCKETS={key:[] for key in ORDER}
 for name,mesh,material,group in PARTS:
     node,family=route(name,group)
+    if node.split(':',1)[1] in UNRELEASED:continue
     BUCKETS[node].append((name,mesh,material,group,family))
 GROUPS=[(key,
          'body-region' if key.startswith('body:') else 'wardrobe-item',
@@ -538,4 +686,4 @@ for slot,worn in WARDROBE_TABLE['default_outfit'].items():
 
 SKELETON=LANDMARKS.skeleton()
 export_modular_avatar(GROUPS,PALETTE,SKELETON,OUT,'dasha-v2-study',
-                      version=WARDROBE_TABLE['asset_version'],wardrobe=WARDROBE_TABLE)
+                      version=VERSION,wardrobe=WARDROBE_TABLE)
