@@ -185,6 +185,7 @@ import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
   followCamera as chaseCamera,
+  isometricCamera,
   sameFollowCamera,
 } from "./follow-camera";
 import {
@@ -996,6 +997,17 @@ export function AuthenticatedMapHomeView({
           // Any zoom counts as centred: Free distance steps go below the
           // Follow floor, and a flat Free view on the body is still centred.
           camera.zoom,
+        ),
+      ) ||
+      sameFollowCamera(
+        camera,
+        isometricCamera(
+          camera,
+          {
+            ...observedPosition,
+            bearingDeg: camera.bearing,
+          },
+          dimension,
         ),
       ));
   const locationControl = createLocationControlViewModel(
@@ -3503,6 +3515,14 @@ export function AuthenticatedMapHomeView({
                 onClick={followCamera.selectFollow}
               >
                 {t("camera.follow")}
+              </button>
+              <button
+                type="button"
+                className="camera-mode-control__button"
+                aria-pressed={followCamera.follow === "isometric"}
+                onClick={followCamera.selectIsometric}
+              >
+                {t("camera.isometric")}
               </button>
               <button
                 type="button"

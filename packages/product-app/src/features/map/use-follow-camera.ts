@@ -17,9 +17,10 @@ import {
   cameraKeyCommand,
   followAfterPinch,
   followCamera,
+  isometricCamera,
   zoomPivotFor,
   sameFollowCamera,
-  smoothFollowCamera,
+  smoothIsometricCamera,
   type FollowBody,
   type CameraFollow,
 } from "./follow-camera";
@@ -53,6 +54,8 @@ export interface FollowCameraState {
   selectFollow(): void;
   /** Free button: focus the driver and step out/out/out/in/in/in. */
   selectFree(): void;
+  /** Select the independent smooth diagonal tracking mode. */
+  selectIsometric(): void;
 }
 
 export function useFollowCamera({
@@ -64,6 +67,7 @@ export function useFollowCamera({
 }: FollowCameraInput): FollowCameraState {
   const [follow, setFollow] = useState<CameraFollow>(INITIAL_CAMERA_FOLLOW);
   const followRef = useRef(follow);
+  const lastTrackingMode = useRef<"locked" | "isometric">("locked");
   // No explicit preset on entry: the next Follow press chooses the closest.
   const followDistance = useRef(-1);
   const freeCycle = useRef<{ zoom: number; step: number } | undefined>(
@@ -100,6 +104,7 @@ export function useFollowCamera({
     (next: CameraFollow) => {
       if (next !== followRef.current) stopTracking();
       if (next !== followRef.current) freeCycle.current = undefined;
+      if (next !== "free") lastTrackingMode.current = next;
       followRef.current = next;
       setFollow(next);
     },
@@ -137,6 +142,33 @@ export function useFollowCamera({
   }, [enabled, dimension, stopTracking]);
 
   const release = useCallback(() => choose("free"), [choose]);
+
+  const frameBody = useCallback(
+    (camera: MapCamera, point: FollowBody) =>
+      followRef.current === "isometric"
+        ? isometricCamera(camera, point, input.current.dimension)
+        : followCamera(camera, point, input.current.dimension),
+    [],
+  );
+
+  const selectIsometric = useCallback(() => {
+    if (!input.current.enabled) return;
+    choose("isometric");
+    const point = input.current.body();
+    if (point === undefined) return;
+    const current = renderer.getCamera();
+    hold(FOLLOW_HOLD_MS);
+    aim(
+      isometricCamera(
+        { ...current, zoom: targetZoom.current ?? current.zoom },
+        point,
+        input.current.dimension,
+      ),
+      {
+        motion: input.current.reducedMotion() ? "immediate" : "eased",
+      },
+    );
+  }, [aim, choose, hold, renderer]);
 
   const center = useCallback(() => {
     if (!input.current.enabled) return;
@@ -209,7 +241,7 @@ export function useFollowCamera({
       if (
         point === undefined ||
         !input.current.enabled ||
-        followRef.current !== "locked" ||
+        followRef.current !== "isometric" ||
         gesturing.current ||
         nowMs < heldUntil.current
       ) {
@@ -217,13 +249,13 @@ export function useFollowCamera({
         return;
       }
       const current = renderer.getCamera();
-      const target = followCamera(current, point, input.current.dimension);
+      const target = isometricCamera(current, point, input.current.dimension);
       const previous = trackingTime.current;
       trackingTime.current = nowMs;
       const next =
         previous === undefined || input.current.reducedMotion()
           ? target
-          : smoothFollowCamera(current, target, nowMs - previous);
+          : smoothIsometricCamera(current, target, nowMs - previous);
       if (!sameFollowCamera(current, next)) {
         renderer.setCamera(next, { yieldToGesture: true });
       }
@@ -238,10 +270,17 @@ export function useFollowCamera({
     (point: FollowBody) => {
       if (
         !input.current.enabled ||
-        followRef.current !== "locked" ||
+        followRef.current === "free" ||
         gesturing.current ||
         globalThis.performance.now() < heldUntil.current
       ) {
+        return;
+      }
+      if (followRef.current === "locked") {
+        const current = renderer.getCamera();
+        const target = followCamera(current, point, input.current.dimension);
+        if (!sameFollowCamera(current, target))
+          renderer.setCamera(target, { yieldToGesture: true });
         return;
       }
       trackedBody.current = point;
@@ -249,7 +288,7 @@ export function useFollowCamera({
         advanceTracking(globalThis.performance.now());
       }
     },
-    [advanceTracking],
+    [advanceTracking, renderer],
   );
 
   // A locked camera closes in on the body; a free one zooms where the
@@ -295,7 +334,8 @@ export function useFollowCamera({
               change.camera.zoom,
             );
             if (next === "locked" && followRef.current === "free") {
-              center();
+              if (lastTrackingMode.current === "isometric") selectIsometric();
+              else center();
               return;
             }
             if (next !== followRef.current) {
@@ -307,15 +347,12 @@ export function useFollowCamera({
           // Free is the mode for keeping an independent viewing angle.
           const point = input.current.body();
           if (
-            followRef.current === "locked" &&
+            followRef.current !== "free" &&
             point !== undefined &&
-            !sameFollowCamera(
-              change.camera,
-              followCamera(change.camera, point, input.current.dimension),
-            )
+            !sameFollowCamera(change.camera, frameBody(change.camera, point))
           ) {
             hold(FOLLOW_HOLD_MS);
-            aim(followCamera(change.camera, point, input.current.dimension), {
+            aim(frameBody(change.camera, point), {
               motion: input.current.reducedMotion() ? "immediate" : "eased",
             });
           }
@@ -333,7 +370,17 @@ export function useFollowCamera({
           if (point !== undefined) track(point);
         }
       }),
-    [aim, center, choose, hold, renderer, track, stopTracking],
+    [
+      aim,
+      center,
+      choose,
+      hold,
+      renderer,
+      track,
+      stopTracking,
+      frameBody,
+      selectIsometric,
+    ],
   );
 
   useEffect(() => {
@@ -343,15 +390,17 @@ export function useFollowCamera({
       const command = cameraKeyCommand(event);
       if (command === undefined) return;
       event.preventDefault();
-      if (command === "toggle" && followRef.current === "locked") {
+      if (command === "toggle" && followRef.current !== "free") {
         choose("free");
         return;
       }
-      center();
+      if (command === "toggle" && lastTrackingMode.current === "isometric")
+        selectIsometric();
+      else center();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [center, choose, enabled]);
+  }, [center, choose, enabled, selectIsometric]);
 
   return useMemo(
     () => ({
@@ -363,7 +412,18 @@ export function useFollowCamera({
       center,
       selectFollow,
       selectFree,
+      selectIsometric,
     }),
-    [center, follow, hold, holdFocus, release, track, selectFollow, selectFree],
+    [
+      center,
+      follow,
+      hold,
+      holdFocus,
+      release,
+      track,
+      selectFollow,
+      selectFree,
+      selectIsometric,
+    ],
   );
 }

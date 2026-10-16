@@ -198,6 +198,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Недоступно: этой модели нужно больше памяти, чем разрешено здесь.",
   "camera.mode": "Режим камеры",
   "camera.follow": "Слежение",
+  "camera.isometric": "Изометрия",
   "camera.free": "Свободная",
   "dock.edit": "изменить",
   "dock.ai": "ИИ",

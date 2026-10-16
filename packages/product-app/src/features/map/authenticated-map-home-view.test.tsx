@@ -1966,6 +1966,34 @@ describe("AuthenticatedMapHomeView", () => {
     expect(free).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("offers independent Follow, Isometric and Free buttons", async () => {
+    rememberWorld("0x0sky", { avaia: { ...observation(), bearingDeg: 120 } });
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+    });
+    const modes = await screen.findByRole("group", { name: "Camera mode" });
+    await act(async () => Promise.resolve());
+    const follow = within(modes).getByRole("button", { name: "Follow" });
+    const isometric = within(modes).getByRole("button", { name: "Isometric" });
+    const free = within(modes).getByRole("button", { name: "Free" });
+    expect(follow).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(isometric);
+    expect(isometric).toHaveAttribute("aria-pressed", "true");
+    expect(follow).toHaveAttribute("aria-pressed", "false");
+    expect(free).toHaveAttribute("aria-pressed", "false");
+    expect(mapRenderer.getCamera()).toMatchObject({ bearing: 45, pitch: 50 });
+    fireEvent.click(free);
+    expect(free).toHaveAttribute("aria-pressed", "true");
+    expect(isometric).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(follow);
+    expect(follow).toHaveAttribute("aria-pressed", "true");
+    expect(isometric).toHaveAttribute("aria-pressed", "false");
+    expect(mapRenderer.getCamera()).toMatchObject({ bearing: 120, pitch: 60 });
+  });
+
   it("cycles camera distance from repeated presses of the visible mode buttons", async () => {
     rememberWorld("0x0sky", { avaia: { ...observation(), bearingDeg: 0 } });
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
