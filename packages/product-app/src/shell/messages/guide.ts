@@ -131,6 +131,7 @@ export const GUIDE_EN = {
   "guide.choice.thanks.1": "That’s nice to hear.",
   "guide.choice.thanks.2": "That was easy.",
   "guide.choice.skip": "(skip)",
+  "guide.choice.notInterested": "Not interested",
   "guide.choice.continue": "(continue)",
 } as const;
 
@@ -250,6 +251,7 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.choice.thanks.1": "Приємно чути.",
   "guide.choice.thanks.2": "Це було легко.",
   "guide.choice.skip": "(пропустити)",
+  "guide.choice.notInterested": "Не цікаво",
   "guide.choice.continue": "(далі)",
 };
 
@@ -371,5 +373,6 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.choice.thanks.1": "Приятно слышать.",
   "guide.choice.thanks.2": "Это было легко.",
   "guide.choice.skip": "(пропустить)",
+  "guide.choice.notInterested": "Не интересно",
   "guide.choice.continue": "(далее)",
 };

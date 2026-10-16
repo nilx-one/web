@@ -35,6 +35,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
 
 import {
   UNSUPPORTED_GEOLOCATION_DOUBLE,
@@ -1571,6 +1572,84 @@ describe("AuthenticatedMapHomeView", () => {
       expect(window.localStorage.getItem("nilx-one.finds.pickup")).toBeNull();
     },
   );
+
+  it("returns to pickup settings and scrolls the new panel after Not interested", async () => {
+    vi.useFakeTimers();
+    const mapRenderer = renderer();
+    const pending = () => new Promise<never>(() => undefined);
+    const committedAwards = {
+      commitAwards: vi.fn(pending),
+      readClaims: vi.fn(pending),
+    };
+    const findItems = { picksUp: vi.fn(async () => true) };
+    const navigated = vi.fn();
+    window.localStorage.setItem("nilx-one.finds.pickup", "rare,legendary");
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return {
+          x: 0,
+          y: this.id === "pickup-settings" ? 600 : 100,
+          top: this.id === "pickup-settings" ? 600 : 100,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          toJSON: () => ({}),
+        };
+      },
+    );
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(100);
+    function Harness() {
+      const [section, setSection] = useState<ShellSection>("settings");
+      return (
+        <AuthenticatedMapHomeView
+          hostLabel="browser host"
+          pubDress="0x0sky"
+          avaiaPubDress="x0skai"
+          renderer={mapRenderer}
+          geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
+          runtime={{
+            tone: "ready",
+            label: "Shared Core ready",
+            detail: "Contract 0.1.0",
+          }}
+          safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          section={section}
+          findItems={findItems}
+          committedAwards={committedAwards}
+          onNavigate={(route) => {
+            navigated(route);
+            setSection(route === "/settings" ? "settings" : "world");
+          }}
+        />
+      );
+    }
+    const { container } = render(<Harness />);
+    fireEvent.change(screen.getByRole("slider", { name: "Pick up" }), {
+      target: { value: "0" },
+    });
+    expect(navigated).toHaveBeenLastCalledWith("/");
+    // Hurry arrival, then finish the typed line; no presentation timers need to run.
+    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
+    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
+    fireEvent.click(screen.getByRole("button", { name: "Not interested" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(container.querySelector(".guide-cutscene")).toBeNull();
+    expect(navigated).toHaveBeenLastCalledWith("/settings");
+    const slider = screen.getByRole("slider", { name: "Pick up" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(420);
+    });
+    expect(slider.closest(".bond-dock__scroll")?.scrollTop).toBe(500);
+    expect(slider).toHaveFocus();
+    expect(slider).toHaveValue("2");
+    expect(window.localStorage.getItem("nilx-one.finds.pickup")).toBe(
+      "rare,legendary",
+    );
+  });
 
   it("offers sound on the settings route and keeps the choice on this device", () => {
     const sound = soundDouble();

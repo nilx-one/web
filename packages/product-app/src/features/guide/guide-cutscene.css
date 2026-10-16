@@ -234,6 +234,7 @@
   outline: none;
 }
 
+.guide-cutscene__choice[data-reply="notInterested"],
 .guide-cutscene__choice[data-reply="skip"],
 .guide-cutscene__choice[data-reply="continue"] {
   color: var(--guide-ink-muted);

@@ -42,7 +42,7 @@ export function PickupSettings({
   const progress = (selectedIndex / (STOPS.length - 1)) * 100;
 
   return (
-    <fieldset className="interface-settings__appearance">
+    <fieldset id="pickup-settings" className="interface-settings__appearance">
       <legend>{t("settings.pickup.legend")}</legend>
       <small className="interface-settings__note">
         {t("settings.pickup.detail")}
