@@ -235,6 +235,11 @@ export const WARDROBE_ITEMS: readonly WardrobeItem[] = [
     "upper_arms",
     "lower_arms",
   ]),
+  dasha2Item("outerwear/hoodie-zip", "outerwear", "White zip hoodie", [
+    "torso",
+    "upper_arms",
+    "lower_arms",
+  ]),
 ];
 
 const WARDROBE_BY_ID: ReadonlyMap<string, WardrobeItem> = new Map(
@@ -281,7 +286,7 @@ export const AVATAR_CATALOG: readonly AvatarModelDefinition[] = [
     detail: "feminine study · changeable clothes",
     capability: "modular-appearance",
     editable: true,
-    assetVersion: "0.4.0",
+    assetVersion: "0.5.0",
     schema: DASHA_2_SCHEMA,
     defaultAppearance: DASHA_2_DEFAULT_APPEARANCE,
   },

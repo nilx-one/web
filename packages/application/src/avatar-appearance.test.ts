@@ -310,12 +310,15 @@ describe("body region visibility", () => {
     expect(hiddenBodyRegions(DASHA_2, inASkirt)).toContain("upper_legs");
   });
 
-  it("leaves the arms bare under a short sleeve; only the hoodie encloses them", () => {
+  it("leaves the arms bare under a short sleeve; only the hoodies enclose them", () => {
     const sleeved = WARDROBE_ITEMS.filter(
       (item) =>
         item.hides.includes("upper_arms") || item.hides.includes("lower_arms"),
     ).map((item) => item.id);
-    expect(sleeved).toEqual(["outerwear/hoodie-pullover"]);
+    expect(sleeved).toEqual([
+      "outerwear/hoodie-pullover",
+      "outerwear/hoodie-zip",
+    ]);
     const inAHoodie = equip(
       resolveAvatarAppearance(DASHA_2, undefined),
       "outerwear/hoodie-pullover",
