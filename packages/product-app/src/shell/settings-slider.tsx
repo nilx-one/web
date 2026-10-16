@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { SettingsSliderStops } from "./settings-slider-stops";
+
 /** Shared presentation-only range control for a small ordered set of choices. */
 export interface SettingsSliderOption<T extends string | number> {
   readonly value: T;
@@ -40,32 +42,27 @@ export function SettingsSlider<T extends string | number>({
         <strong>{title}</strong>
         {detail === undefined ? null : <small>{detail}</small>}
       </label>
-      <input
-        id={id}
-        type="range"
-        name={id}
-        min={0}
-        max={options.length - 1}
-        step={1}
-        value={index < 0 ? 0 : index}
-        aria-label={label}
-        aria-valuetext={title}
-        onChange={(event) => {
-          const next = options[Number(event.currentTarget.value)];
-          if (next !== undefined) onChange(next.value);
-        }}
-      />
-      <span
-        className="interface-settings__slider-stops"
-        data-stop-count={options.length}
-        aria-hidden="true"
-      >
-        {options.map((option, position) => (
-          <span key={option.value} data-current={position === index}>
-            {option.label}
-          </span>
-        ))}
-      </span>
+      <div className="interface-settings__range-control">
+        <input
+          id={id}
+          type="range"
+          name={id}
+          min={0}
+          max={options.length - 1}
+          step={1}
+          value={index < 0 ? 0 : index}
+          aria-label={label}
+          aria-valuetext={title}
+          onChange={(event) => {
+            const next = options[Number(event.currentTarget.value)];
+            if (next !== undefined) onChange(next.value);
+          }}
+        />
+        <SettingsSliderStops
+          labels={options.map((option) => option.label)}
+          current={index}
+        />
+      </div>
     </div>
   );
 }

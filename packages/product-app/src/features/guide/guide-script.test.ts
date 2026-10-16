@@ -28,6 +28,29 @@ const VOICES: readonly GuideVoice[] = ["feminine", "masculine", "neutral"];
 const NODES = Object.keys(GUIDE_NODES) as GuideNodeId[];
 
 describe("xSasha's script", () => {
+  it("offers the exclusive line with continue and dismissal, without granting a reward", () => {
+    const line = createGuideLineState(
+      GUIDE_OPENING.exclusive,
+      0,
+      uk,
+      names,
+      "neutral",
+    );
+    expect(line.text).toBe("Хочеш ексклюзивне? Я миттю — одразу, як купиш.");
+    expect(line.choices.map((choice) => choice.reply)).toEqual([
+      "continue",
+      "notInterested",
+    ]);
+    expect(GUIDE_NODES.exclusive.reward).toBeUndefined();
+    expect(isRecordedGuideLine(line.key)).toBe(false);
+    expect(followChoice("exclusive", "continue")).toEqual({ end: "done" });
+    expect(followChoice("exclusive", "notInterested")).toEqual({
+      end: "dismissed",
+    });
+    expect(line.choices[1]?.text).toBe("Не цікаво");
+    expect(isSpokenReply("notInterested")).toBe(false);
+  });
+
   it("opens the introduction with her greeting and two replies", () => {
     const line = createGuideLineState(
       GUIDE_OPENING.intro,
