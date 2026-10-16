@@ -9,7 +9,10 @@ use sqlx::{
 };
 use thiserror::Error;
 
-use crate::{AvaiaPubDress, BondAccessRole, DecimalU64, GeoCoordinate, PubDress, PubDressLabel};
+use crate::{
+    AvaiaPubDress, BondAccessRole, DecimalU64, GeoCoordinate, PubDress, PubDressLabel,
+    StationPubDress,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityProvider {

@@ -632,7 +632,8 @@ mod tests {
             .set_role(&owner, crate::BondAccessRole::Business)
             .await
             .expect("role");
-        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
+        let station = crate::StationPubDress::for_owner(&owner, "0xda-market-zoloti-vorota")
+            .expect("station");
         let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
         repository
             .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), at, 101)
@@ -670,7 +671,8 @@ mod tests {
             .register_business(&owner, 100)
             .await
             .expect("register");
-        let station: PubDress = "0xda-market-zoloti-vorota".parse().expect("station");
+        let station = crate::StationPubDress::for_owner(&owner, "0xda-market-zoloti-vorota")
+            .expect("station");
         let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
         repository
             .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), at, 101)
