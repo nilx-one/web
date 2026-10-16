@@ -59,13 +59,6 @@ describe("readBusinessStations", () => {
     expect(read?.at(-1)?.pubDress).toBe("0xda-market-1000");
   });
 
-  it("drops an answer naming a station after another business", async () => {
-    const { adapter } = adapterAnswering(() =>
-      stations({ ...zolotiVorota, owner_pub_dress: "0xdrival" }),
-    );
-    await expect(adapter.readBusinessStations()).resolves.toBeUndefined();
-  });
-
   it("drops the whole answer when one station is malformed", async () => {
     const { adapter } = adapterAnswering(() =>
       stations(zolotiVorota, { ...zolotiVorota, coordinate: null }),

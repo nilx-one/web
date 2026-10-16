@@ -9,7 +9,6 @@ pub mod api {
     include!("session_activation.rs");
 }
 pub mod browser_web_auth;
-pub mod business_caption;
 pub mod business_command;
 pub mod credentials;
 pub mod discord_oauth;
@@ -44,7 +43,8 @@ pub use location_control::{
 };
 pub use nilxone_contracts::{
     AvaiaPubDress, AvaiaPubDressError, BondLocation, BondLocationMode, DecimalU64, GeoCoordinate,
-    GeoCoordinateError, PubDress, PubDressError, PubDressLabel, PubDressLabelError,
+    GeoCoordinateError, PubDress, PubDressError, PubDressLabel, PubDressLabelError, StationCaption,
+    StationPubDress, StationPubDressError,
 };
 pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository, SelfDisconnectOutcome};
 pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};

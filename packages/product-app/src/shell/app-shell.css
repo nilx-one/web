@@ -50,6 +50,15 @@
   user-select: text;
 }
 
+/* Native application chrome shows a press through the control's own state, not
+   through the engine's grey tap flash painted over whatever was touched. Every
+   control in the game is covered, including range sliders, which otherwise
+   flash as a bar. Scoped to the shell so the marketing site keeps its own. */
+.app-shell,
+.app-shell * {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .app-shell[data-presentation="compact"] {
   --shell-dock-width: 100%;
   --shell-inset: 1rem;
