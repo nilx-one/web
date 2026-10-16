@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FOLLOW_HOLD_MS,
   FOLLOW_PITCH,
+  FOLLOW_BEARING,
   FOLLOW_MIN_ZOOM,
   followCamera,
   type FollowBody,
@@ -98,6 +99,68 @@ afterEach(() => {
 });
 
 describe("useFollowCamera", () => {
+  it("glides after acquisition and finishes catching up when the body stops", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    let body = HOME;
+    const { result } = follow(fake, () => body);
+    result.current.track(body);
+    const before = fake.renderer.getCamera();
+    body = { ...HOME, longitude: HOME.longitude + 0.00001 };
+    result.current.track(body);
+    act(() => vi.advanceTimersByTime(32));
+    const mid = fake.renderer.getCamera();
+    const target = followCamera(mid, body);
+    expect(mid.center[0]).toBeGreaterThan(before.center[0]);
+    expect(mid.center[0]).toBeLessThan(target.center[0]);
+    // No more track calls: the camera owns the small tail after the last step.
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(fake.renderer.getCamera()).toEqual(target);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["free", "gesture", "scene", "unmount"] as const)(
+    "cancels pending follow frames on %s",
+    (interruption) => {
+      vi.useFakeTimers();
+      const fake = fakeRenderer();
+      const { result, rerender, unmount } = follow(fake);
+      result.current.track(HOME);
+      result.current.track({ ...HOME, longitude: HOME.longitude + 0.00001 });
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      act(() => {
+        if (interruption === "free") result.current.release();
+        if (interruption === "gesture") fake.begin();
+        if (interruption === "scene") rerender({ on: false });
+        if (interruption === "unmount") unmount();
+      });
+      fake.renderer.setCamera.mockClear();
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("does not add a tracking tail for reduced motion", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    const { result } = renderHook(() =>
+      useFollowCamera({
+        renderer: fake.renderer,
+        enabled: true,
+        body: () => HOME,
+        dimension: "volumetric",
+        reducedMotion: () => true,
+      }),
+    );
+    result.current.track(HOME);
+    result.current.track(AHEAD);
+    expect(fake.renderer.getCamera()).toEqual(
+      followCamera(fake.renderer.getCamera(), AHEAD),
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("cycles three Follow distances and retains each through walking", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
@@ -106,13 +169,13 @@ describe("useFollowCamera", () => {
       expect(fake.renderer.getCamera()).toMatchObject({
         zoom,
         pitch: FOLLOW_PITCH,
-        bearing: HOME.bearingDeg,
+        bearing: FOLLOW_BEARING,
       });
       fake.settle();
       result.current.track(AHEAD);
       expect(fake.renderer.getCamera()).toMatchObject({
         zoom,
-        bearing: AHEAD.bearingDeg,
+        bearing: FOLLOW_BEARING,
       });
     }
   });
@@ -206,7 +269,7 @@ describe("useFollowCamera", () => {
     result.current.track(AHEAD);
     expect(fake.renderer.getCamera()).toMatchObject({
       zoom: 20,
-      bearing: AHEAD.bearingDeg,
+      bearing: FOLLOW_BEARING,
     });
     act(() => fake.gesture({ zoom: 23 }));
     expect(fake.renderer.getCamera().zoom).toBe(23);
@@ -336,7 +399,7 @@ describe("useFollowCamera", () => {
       {
         center: followCamera(fake.renderer.getCamera(), AHEAD).center,
         zoom: FOLLOW_MIN_ZOOM,
-        bearing: 90,
+        bearing: FOLLOW_BEARING,
         pitch: FOLLOW_PITCH,
       },
       { yieldToGesture: true },
@@ -436,7 +499,7 @@ describe("useFollowCamera", () => {
     expect(result.current.follow).toBe("locked");
     expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        bearing: HOME.bearingDeg,
+        bearing: FOLLOW_BEARING,
         pitch: FOLLOW_PITCH,
         zoom: 22,
       }),
@@ -444,14 +507,14 @@ describe("useFollowCamera", () => {
     );
   });
 
-  it("tracks a turn in place and does not write again once settled", () => {
+  it("keeps the world still when the body turns in place", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
     const turned = { ...HOME, bearingDeg: 270 };
     result.current.track(turned);
-    expect(fake.renderer.getCamera().bearing).toBe(270);
+    expect(fake.renderer.getCamera().bearing).toBe(FOLLOW_BEARING);
     result.current.track(turned);
-    expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
+    expect(fake.renderer.setCamera).not.toHaveBeenCalled();
   });
 
   it("does not fight a gesture, then resumes when moveend lacks originalEvent", () => {
@@ -539,7 +602,8 @@ describe("useFollowCamera", () => {
     fake.settle();
     fake.renderer.setCamera.mockClear();
     result.current.track(AHEAD);
-    expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
+    act(() => vi.advanceTimersByTime(32));
+    expect(fake.renderer.setCamera).toHaveBeenCalled();
   });
 
   it("frames a stationary body when an opening flight settles", () => {

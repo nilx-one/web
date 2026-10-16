@@ -19,6 +19,7 @@ import {
   followCamera,
   zoomPivotFor,
   sameFollowCamera,
+  smoothFollowCamera,
   type FollowBody,
   type CameraFollow,
 } from "./follow-camera";
@@ -77,23 +78,44 @@ export function useFollowCamera({
   /** The touch gesture under way, and the zoom it started from. */
   const touchStart = useRef<number | undefined>(undefined);
   const heldUntil = useRef(0);
+  const trackedBody = useRef<FollowBody | undefined>(undefined);
+  const trackingFrame = useRef<number | undefined>(undefined);
+  const trackingTime = useRef<number | undefined>(undefined);
   const input = useRef({ enabled, body, dimension, reducedMotion });
   useEffect(() => {
     input.current = { enabled, body, dimension, reducedMotion };
   });
 
-  const choose = useCallback((next: CameraFollow) => {
-    if (next !== followRef.current) freeCycle.current = undefined;
-    followRef.current = next;
-    setFollow(next);
+  const stopTracking = useCallback(() => {
+    if (trackingFrame.current !== undefined) {
+      globalThis.cancelAnimationFrame(trackingFrame.current);
+    }
+    trackingFrame.current = undefined;
+    trackingTime.current = undefined;
+    trackedBody.current = undefined;
   }, []);
+  useEffect(() => () => stopTracking(), [stopTracking]);
 
-  const hold = useCallback((durationMs: number) => {
-    heldUntil.current = Math.max(
-      heldUntil.current,
-      globalThis.performance.now() + durationMs,
-    );
-  }, []);
+  const choose = useCallback(
+    (next: CameraFollow) => {
+      if (next !== followRef.current) stopTracking();
+      if (next !== followRef.current) freeCycle.current = undefined;
+      followRef.current = next;
+      setFollow(next);
+    },
+    [stopTracking],
+  );
+
+  const hold = useCallback(
+    (durationMs: number) => {
+      stopTracking();
+      heldUntil.current = Math.max(
+        heldUntil.current,
+        globalThis.performance.now() + durationMs,
+      );
+    },
+    [stopTracking],
+  );
 
   const holdFocus = useCallback(() => hold(FOLLOW_HOLD_MS), [hold]);
 
@@ -109,9 +131,10 @@ export function useFollowCamera({
 
   // A scene or programmatic move while disabled invalidates both anchors.
   useEffect(() => {
+    stopTracking();
     freeCycle.current = undefined;
     targetZoom.current = undefined;
-  }, [enabled]);
+  }, [enabled, dimension, stopTracking]);
 
   const release = useCallback(() => choose("free"), [choose]);
 
@@ -179,6 +202,38 @@ export function useFollowCamera({
     );
   }, [aim, choose, renderer]);
 
+  const advanceTracking = useCallback(
+    function advance(nowMs: number) {
+      trackingFrame.current = undefined;
+      const point = trackedBody.current;
+      if (
+        point === undefined ||
+        !input.current.enabled ||
+        followRef.current !== "locked" ||
+        gesturing.current ||
+        nowMs < heldUntil.current
+      ) {
+        stopTracking();
+        return;
+      }
+      const current = renderer.getCamera();
+      const target = followCamera(current, point, input.current.dimension);
+      const previous = trackingTime.current;
+      trackingTime.current = nowMs;
+      const next =
+        previous === undefined || input.current.reducedMotion()
+          ? target
+          : smoothFollowCamera(current, target, nowMs - previous);
+      if (!sameFollowCamera(current, next)) {
+        renderer.setCamera(next, { yieldToGesture: true });
+      }
+      if (!sameFollowCamera(next, target)) {
+        trackingFrame.current = globalThis.requestAnimationFrame(advance);
+      }
+    },
+    [renderer, stopTracking],
+  );
+
   const track = useCallback(
     (point: FollowBody) => {
       if (
@@ -189,15 +244,12 @@ export function useFollowCamera({
       ) {
         return;
       }
-      const current = renderer.getCamera();
-      const target = followCamera(current, point, input.current.dimension);
-      if (sameFollowCamera(current, target)) return;
-      // Following is background motion: it never takes a gesture away.
-      renderer.setCamera(target, {
-        yieldToGesture: true,
-      });
+      trackedBody.current = point;
+      if (trackingFrame.current === undefined) {
+        advanceTracking(globalThis.performance.now());
+      }
     },
-    [renderer],
+    [advanceTracking],
   );
 
   // A locked camera closes in on the body; a free one zooms where the
@@ -211,6 +263,7 @@ export function useFollowCamera({
     () =>
       renderer.subscribeCamera((change) => {
         if (change.phase === "start" && change.gesture) {
+          stopTracking();
           gesturing.current = true;
           gestureStart.current = change.camera.zoom;
           heldUntil.current = 0;
@@ -250,7 +303,7 @@ export function useFollowCamera({
               return;
             }
           }
-          // Return behind the head after orbit/tilt/pan, even when stationary.
+          // Return to the stable game view after orbit/tilt/pan, even when stationary.
           // Free is the mode for keeping an independent viewing angle.
           const point = input.current.body();
           if (
@@ -280,7 +333,7 @@ export function useFollowCamera({
           if (point !== undefined) track(point);
         }
       }),
-    [aim, center, choose, hold, renderer, track],
+    [aim, center, choose, hold, renderer, track, stopTracking],
   );
 
   useEffect(() => {

@@ -15,8 +15,8 @@ import { distanceMeters } from "./location-camera-policy";
 /**
  * The camera that follows the body at the wheel, the way a game camera does.
  *
- * `locked` is the default Follow camera: it looks over the body's head,
- * tilted forward and aligned with the body's heading. `free` is a Dota-style
+ * `locked` is the default Follow camera: it glides with the body in a stable
+ * diagonal view, without rotating the world when the body turns. `free` is a Dota-style
  * independent map camera: dragging, touch panning and pointer zoom move the
  * camera without pulling it back to the body. An explicit selection, Space
  * or Y switches modes, and so does a two-finger pinch on a phone (out to
@@ -45,8 +45,13 @@ export interface FollowBody extends MapPointSelection {
   readonly bearingDeg: number;
 }
 
-/** Map pitch is measured from overhead: 60° looks down at 30° to the ground. */
-export const FOLLOW_PITCH = 60;
+/** An oblique game view: orientation belongs to the camera, not body facing. */
+export const FOLLOW_PITCH = 50;
+export const FOLLOW_BEARING = 45;
+/** Exponential catch-up time; independent of the display's refresh rate. */
+export const FOLLOW_RESPONSE_MS = 180;
+/** A relocation is a new shot, never a long chase through intervening geography. */
+export const FOLLOW_RELOCATION_METERS = 60;
 /**
  * Follow never goes wider than the scale a body is drawn from, so the body
  * stays on the world; any closer zoom the person chose is kept. A floor any
@@ -72,7 +77,7 @@ export function followCamera(
   dimension: MapDimension = "volumetric",
   minimumZoom: number = FOLLOW_MIN_ZOOM,
 ): MapCamera {
-  const bearing = ((body.bearingDeg % 360) + 360) % 360;
+  const bearing = FOLLOW_BEARING;
   const pitch = dimension === "flat" ? 0 : FOLLOW_PITCH;
   const distance = 1.6 * Math.tan((pitch * Math.PI) / 180);
   const angular = distance / 6_371_008.8;
@@ -98,6 +103,30 @@ export function followCamera(
     zoom: Math.max(current.zoom, minimumZoom),
     bearing,
     pitch,
+  };
+}
+
+/** Smooth the ground target, retaining distance and the stable camera angle. */
+export function smoothFollowCamera(
+  current: MapCamera,
+  target: MapCamera,
+  elapsedMs: number,
+): MapCamera {
+  const distance = distanceMeters(current.center, target.center);
+  if (
+    distance < 0.05 ||
+    distance > FOLLOW_RELOCATION_METERS ||
+    elapsedMs > 1_000
+  )
+    return target;
+  const alpha = 1 - Math.exp(-Math.max(0, elapsedMs) / FOLLOW_RESPONSE_MS);
+  const longitude = ((target.center[0] - current.center[0] + 540) % 360) - 180;
+  return {
+    ...target,
+    center: [
+      ((current.center[0] + longitude * alpha + 540) % 360) - 180,
+      current.center[1] + (target.center[1] - current.center[1]) * alpha,
+    ],
   };
 }
 

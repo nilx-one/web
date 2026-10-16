@@ -13,6 +13,9 @@ import {
   CAMERA_READ_PIXELS,
   FOLLOW_MIN_ZOOM,
   FOLLOW_PITCH,
+  FOLLOW_BEARING,
+  FOLLOW_RESPONSE_MS,
+  smoothFollowCamera,
   sameFollowCamera,
   cameraChangeVisible,
   cameraKeyCommand,
@@ -56,7 +59,7 @@ function key(overrides: Partial<CameraKeyEvent>): CameraKeyEvent {
 
 describe("follow camera", () => {
   it.each([0, 90, 180, 270, 359])(
-    "looks over the head along heading %s",
+    "keeps a diagonal view when the body faces %s",
     (bearingDeg) => {
       const body = { ...BODY, bearingDeg };
       const next = followCamera(
@@ -66,12 +69,12 @@ describe("follow camera", () => {
       const target = { longitude: next.center[0], latitude: next.center[1] };
       expect(next.pitch).toBe(FOLLOW_PITCH);
       expect(next.zoom).toBe(FOLLOW_MIN_ZOOM);
-      expect(next.bearing).toBe(bearingDeg);
+      expect(next.bearing).toBe(FOLLOW_BEARING);
       expect(
-        ((mapCompassBearing(body, target) - bearingDeg + 540) % 360) - 180,
+        ((mapCompassBearing(body, target) - FOLLOW_BEARING + 540) % 360) - 180,
       ).toBeCloseTo(0, 4);
       expect(mapDistanceMeters(body, target)).toBeCloseTo(
-        1.6 * Math.tan(Math.PI / 3),
+        1.6 * Math.tan((FOLLOW_PITCH * Math.PI) / 180),
         4,
       );
     },
@@ -82,14 +85,18 @@ describe("follow camera", () => {
     expect(followCamera(camera(), BODY, "flat")).toMatchObject({
       center: [BODY.longitude, BODY.latitude],
       pitch: 0,
-      bearing: 90,
+      bearing: FOLLOW_BEARING,
     });
   });
 
   it("settles without a feedback loop across wrapped headings", () => {
     const next = followCamera(camera(), { ...BODY, bearingDeg: 270 });
-    expect(sameFollowCamera({ ...next, bearing: -90 }, next)).toBe(true);
-    expect(sameFollowCamera({ ...next, bearing: -89 }, next)).toBe(false);
+    expect(
+      sameFollowCamera({ ...next, bearing: FOLLOW_BEARING - 360 }, next),
+    ).toBe(true);
+    expect(
+      sameFollowCamera({ ...next, bearing: FOLLOW_BEARING - 359 }, next),
+    ).toBe(false);
     expect(sameFollowCamera({ ...next, pitch: 0 }, next)).toBe(false);
   });
 
@@ -116,6 +123,47 @@ describe("follow camera", () => {
     expect(cameraChangeVisible(previous, camera({ zoom: 18.6 }))).toBe(true);
     expect(cameraChangeVisible(previous, camera({ bearing: 31 }))).toBe(true);
     expect(cameraChangeVisible(previous, camera({ pitch: 40 }))).toBe(true);
+  });
+});
+
+describe("follow glide", () => {
+  it("catches up without overshooting and gives the same result at 30 and 60 Hz", () => {
+    const start = camera();
+    const target = camera({ center: eastBy(15) });
+    const glide = (frames: number) => {
+      let current = start;
+      for (let i = 0; i < frames; i++)
+        current = smoothFollowCamera(
+          current,
+          target,
+          FOLLOW_RESPONSE_MS / frames,
+        );
+      return current;
+    };
+    const slow = glide(6);
+    const fast = glide(12);
+    expect(slow.center[0]).toBeCloseTo(fast.center[0], 10);
+    expect(slow.center[0]).toBeGreaterThan(start.center[0]);
+    expect(slow.center[0]).toBeLessThan(target.center[0]);
+    expect(
+      (slow.center[0] - start.center[0]) / (target.center[0] - start.center[0]),
+    ).toBeCloseTo(1 - Math.exp(-1), 5);
+  });
+
+  it("settles, resets after a background pause, and cuts directly to a relocation", () => {
+    const start = camera();
+    expect(smoothFollowCamera(start, start, 16)).toBe(start);
+    const far = camera({ center: [30.5, 50.4] });
+    expect(smoothFollowCamera(start, far, 16)).toBe(far);
+    const near = camera({ center: eastBy(15) });
+    expect(smoothFollowCamera(start, near, 1_100)).toBe(near);
+  });
+
+  it("crosses the antimeridian by the short path", () => {
+    const current = camera({ center: [179.9999, 0] });
+    const target = camera({ center: [-179.9999, 0] });
+    const next = smoothFollowCamera(current, target, 16);
+    expect(Math.abs(next.center[0])).toBeGreaterThan(179.999);
   });
 });
 
