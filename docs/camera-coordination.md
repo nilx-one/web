@@ -37,8 +37,9 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
 - **Follow (default)** looks over the head of the body at the wheel. Its
   bearing follows the rendered body's facing, including turns in place; no
   device compass heading is inferred. Pitch is 60° from overhead (30° down
-  towards the ground), never wider than the zoom bodies are drawn from (18.5); the person's own zoom
-  stays.
+  towards the ground), never wider than the zoom bodies are drawn from (18.5).
+  The opening view and the person's closer zoom stay until a distance is chosen
+  explicitly with the Follow button.
   The ground target lies about 2.77 m ahead, placing the sight line through a
   nominal 1.6 m head. This is framing, not a change to the body's position.
   Explicit flat/2D mode keeps pitch zero and centres on the body.
@@ -53,6 +54,18 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
   returns to Follow and eases onto the body. A smaller pinch, a pinch the way
   the mode already is, a mouse wheel or a trackpad pinch only zoom.
 - The on-screen **Follow / Free** control is available on mobile and desktop.
+  The first explicit Follow press, or selecting Follow from Free, chooses
+  the closest preset; further presses cycle close → medium → far → close
+  (zoom 21.5 → 21 → 20.5 → 21.5). Tracking retains the selected distance
+  until the person zooms; that zoom replaces the preset, so the next press
+  enters at close again.
+  Each Free button press focuses the current driver once and steps through
+  zoom offsets −1, −2, −3, −2, −1, 0 relative to the zoom the camera last
+  targeted (not an intermediate eased frame):
+  three steps away, three back. Free then remains detached from body motion.
+  A manual gesture, mode change or scene handover resets the Free sequence.
+  Repeated taps advance from the selected step even during an unfinished ease.
+  These button cycles do not change Space/Y or programmatic release semantics.
   **Y** toggles modes; **Space** explicitly selects Follow and recentres on
   the body. Repeating a held key never triggers another camera animation.
   Keys inside controls or dialogs, or with modifiers, are left alone.

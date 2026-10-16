@@ -993,6 +993,9 @@ export function AuthenticatedMapHomeView({
             bearingDeg: camera.bearing,
           },
           dimension,
+          // Any zoom counts as centred: Free distance steps go below the
+          // Follow floor, and a flat Free view on the body is still centred.
+          camera.zoom,
         ),
       ));
   const locationControl = createLocationControlViewModel(
@@ -3497,7 +3500,7 @@ export function AuthenticatedMapHomeView({
                 type="button"
                 className="camera-mode-control__button"
                 aria-pressed={followCamera.follow === "locked"}
-                onClick={followCamera.center}
+                onClick={followCamera.selectFollow}
               >
                 {t("camera.follow")}
               </button>
@@ -3505,7 +3508,7 @@ export function AuthenticatedMapHomeView({
                 type="button"
                 className="camera-mode-control__button"
                 aria-pressed={followCamera.follow === "free"}
-                onClick={followCamera.release}
+                onClick={followCamera.selectFree}
               >
                 {t("camera.free")}
               </button>

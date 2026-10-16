@@ -1,11 +1,18 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapDimension, MapRenderer } from "@nilx-one/map-contract";
+import type {
+  MapCamera,
+  MapCameraOptions,
+  MapDimension,
+  MapRenderer,
+} from "@nilx-one/map-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   FOLLOW_HOLD_MS,
+  FOLLOW_DISTANCE_ZOOMS,
+  FREE_DISTANCE_STEPS,
   INITIAL_CAMERA_FOLLOW,
   cameraKeyCommand,
   followAfterPinch,
@@ -41,6 +48,10 @@ export interface FollowCameraState {
   hold(durationMs: number): void;
   /** Bring the camera back onto the body and lock it there. */
   center(): void;
+  /** Follow button: enter close, or cycle the three distances when selected. */
+  selectFollow(): void;
+  /** Free button: focus the driver and step out/out/out/in/in/in. */
+  selectFree(): void;
 }
 
 export function useFollowCamera({
@@ -52,7 +63,18 @@ export function useFollowCamera({
 }: FollowCameraInput): FollowCameraState {
   const [follow, setFollow] = useState<CameraFollow>(INITIAL_CAMERA_FOLLOW);
   const followRef = useRef(follow);
+  // No explicit preset on entry: retain the wider opening camera from master.
+  // Array lookup at -1 yields undefined, so followCamera uses its normal floor.
+  const followDistance = useRef(-1);
+  const freeCycle = useRef<{ zoom: number; step: number } | undefined>(
+    undefined,
+  );
+  // The zoom this hook last asked for. An eased renderer reports intermediate
+  // frames, so a Free cycle anchors here rather than on a mid-transition zoom.
+  const targetZoom = useRef<number | undefined>(undefined);
   const gesturing = useRef(false);
+  /** The zoom the gesture under way started from. */
+  const gestureStart = useRef<number | undefined>(undefined);
   /** The touch gesture under way, and the zoom it started from. */
   const touchStart = useRef<number | undefined>(undefined);
   const heldUntil = useRef(0);
@@ -62,6 +84,7 @@ export function useFollowCamera({
   });
 
   const choose = useCallback((next: CameraFollow) => {
+    if (next !== followRef.current) freeCycle.current = undefined;
     followRef.current = next;
     setFollow(next);
   }, []);
@@ -75,6 +98,20 @@ export function useFollowCamera({
 
   const holdFocus = useCallback(() => hold(FOLLOW_HOLD_MS), [hold]);
 
+  const aim = useCallback(
+    (camera: MapCamera, options: MapCameraOptions) => {
+      targetZoom.current = camera.zoom;
+      renderer.setCamera(camera, options);
+    },
+    [renderer],
+  );
+
+  // A scene or programmatic move while disabled invalidates both anchors.
+  useEffect(() => {
+    freeCycle.current = undefined;
+    targetZoom.current = undefined;
+  }, [enabled]);
+
   const release = useCallback(() => choose("free"), [choose]);
 
   const center = useCallback(() => {
@@ -83,13 +120,71 @@ export function useFollowCamera({
     const point = input.current.body();
     if (point === undefined) return;
     hold(FOLLOW_HOLD_MS);
-    renderer.setCamera(
-      followCamera(renderer.getCamera(), point, input.current.dimension),
+    aim(
+      followCamera(
+        renderer.getCamera(),
+        point,
+        input.current.dimension,
+        FOLLOW_DISTANCE_ZOOMS[followDistance.current],
+      ),
       {
         motion: input.current.reducedMotion() ? "immediate" : "eased",
       },
     );
-  }, [choose, hold, renderer]);
+  }, [aim, choose, hold, renderer]);
+
+  const selectFollow = useCallback(() => {
+    if (!input.current.enabled) return;
+    const point = input.current.body();
+    if (point === undefined) {
+      // Without a body nothing is framed; the next press enters at close.
+      followDistance.current = -1;
+      choose("locked");
+      return;
+    }
+    followDistance.current =
+      followRef.current === "locked"
+        ? (followDistance.current + 1) % FOLLOW_DISTANCE_ZOOMS.length
+        : 0;
+    choose("locked");
+    const zoom = FOLLOW_DISTANCE_ZOOMS[followDistance.current]!;
+    hold(FOLLOW_HOLD_MS);
+    aim(
+      followCamera(
+        { ...renderer.getCamera(), zoom },
+        point,
+        input.current.dimension,
+        zoom,
+      ),
+      { motion: input.current.reducedMotion() ? "immediate" : "eased" },
+    );
+  }, [aim, choose, hold, renderer]);
+
+  const selectFree = useCallback(() => {
+    if (!input.current.enabled) return;
+    choose("free");
+    const point = input.current.body();
+    if (point === undefined) return;
+    const current = renderer.getCamera();
+    const cycle = freeCycle.current ?? {
+      zoom: targetZoom.current ?? current.zoom,
+      step: 0,
+    };
+    const zoom = Math.max(0, cycle.zoom + FREE_DISTANCE_STEPS[cycle.step]!);
+    freeCycle.current = {
+      zoom: cycle.zoom,
+      step: (cycle.step + 1) % FREE_DISTANCE_STEPS.length,
+    };
+    aim(
+      {
+        ...current,
+        center: [point.longitude, point.latitude],
+        zoom,
+        pitch: input.current.dimension === "flat" ? 0 : current.pitch,
+      },
+      { motion: input.current.reducedMotion() ? "immediate" : "eased" },
+    );
+  }, [aim, choose, renderer]);
 
   const track = useCallback(
     (point: FollowBody) => {
@@ -102,7 +197,12 @@ export function useFollowCamera({
         return;
       }
       const current = renderer.getCamera();
-      const target = followCamera(current, point, input.current.dimension);
+      const target = followCamera(
+        current,
+        point,
+        input.current.dimension,
+        FOLLOW_DISTANCE_ZOOMS[followDistance.current],
+      );
       if (sameFollowCamera(current, target)) return;
       // Following is background motion: it never takes a gesture away.
       renderer.setCamera(target, {
@@ -124,6 +224,7 @@ export function useFollowCamera({
       renderer.subscribeCamera((change) => {
         if (change.phase === "start" && change.gesture) {
           gesturing.current = true;
+          gestureStart.current = change.camera.zoom;
           heldUntil.current = 0;
           touchStart.current =
             change.touch === true ? change.camera.zoom : undefined;
@@ -136,7 +237,15 @@ export function useFollowCamera({
           gesturing.current = false;
           const startZoom = touchStart.current;
           touchStart.current = undefined;
+          const gestureZoom = gestureStart.current;
+          gestureStart.current = undefined;
           if (!input.current.enabled) return;
+          // After manual exploration, start the next Free cycle at that view.
+          freeCycle.current = undefined;
+          targetZoom.current = undefined;
+          // A person's zoom replaces the chosen preset; it is a distance, not
+          // a floor that would snap every later zoom-out back.
+          if (gestureZoom !== change.camera.zoom) followDistance.current = -1;
           // Two fingers on a phone choose the mode: out to Free, in to Follow.
           if (startZoom !== undefined) {
             const next = followAfterPinch(
@@ -161,12 +270,22 @@ export function useFollowCamera({
             point !== undefined &&
             !sameFollowCamera(
               change.camera,
-              followCamera(change.camera, point, input.current.dimension),
+              followCamera(
+                change.camera,
+                point,
+                input.current.dimension,
+                FOLLOW_DISTANCE_ZOOMS[followDistance.current],
+              ),
             )
           ) {
             hold(FOLLOW_HOLD_MS);
-            renderer.setCamera(
-              followCamera(change.camera, point, input.current.dimension),
+            aim(
+              followCamera(
+                change.camera,
+                point,
+                input.current.dimension,
+                FOLLOW_DISTANCE_ZOOMS[followDistance.current],
+              ),
               {
                 motion: input.current.reducedMotion() ? "immediate" : "eased",
               },
@@ -184,7 +303,7 @@ export function useFollowCamera({
           if (point !== undefined) track(point);
         }
       }),
-    [center, choose, hold, renderer, track],
+    [aim, center, choose, hold, renderer, track],
   );
 
   useEffect(() => {
@@ -205,7 +324,16 @@ export function useFollowCamera({
   }, [center, choose, enabled]);
 
   return useMemo(
-    () => ({ follow, track, holdFocus, release, hold, center }),
-    [center, follow, hold, holdFocus, release, track],
+    () => ({
+      follow,
+      track,
+      holdFocus,
+      release,
+      hold,
+      center,
+      selectFollow,
+      selectFree,
+    }),
+    [center, follow, hold, holdFocus, release, track, selectFollow, selectFree],
   );
 }
