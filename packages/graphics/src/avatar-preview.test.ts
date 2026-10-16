@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { existsSync, readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 import {
   AnimationClip,
@@ -11,13 +13,15 @@ import {
   SphereGeometry,
   Vector3,
 } from "three";
-import type { GLTF } from "three/addons/loaders/GLTFLoader.js";
+import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
+import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 import {
   applyPreviewVisibility,
   createAvatarPreview,
   framePreviewCamera,
   heldAvatarAssets,
+  rememberGltfNodeNames,
   type AvatarPreviewStatus,
 } from "./avatar-preview";
 
@@ -246,5 +250,53 @@ describe("when a body cannot be shown", () => {
     view.resize(100, 100);
     expect(renderer.render.mock.calls.length).toBe(drawn);
     expect(renderer.dispose).toHaveBeenCalled();
+  });
+});
+
+// The asset Full CI builds before these tests; a checkout without it skips
+// rather than guesses. Synthetic objects carry `:` in their names, which a
+// loaded asset never does: the loader strips it, so only the real asset shows
+// that what is worn is what is drawn.
+const MODULAR_ASSET = "deploy/web/avatars/0.3.0/dasha-v2-study.glb";
+
+async function loadModular(): Promise<GLTF> {
+  const bytes = readFileSync(MODULAR_ASSET);
+  // Copied into this realm's ArrayBuffer: the loader checks `instanceof`.
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return new GLTFLoader().parseAsync(buffer, "");
+}
+
+const WORN = [
+  "body:head",
+  "body:hands",
+  "body:upper_arms",
+  "body:lower_arms",
+  "body:feet",
+  "wear:hair/swept-bun",
+  "wear:top/tee-black",
+  "wear:bottom/trousers-ecru",
+  "wear:shoes/sneakers-white",
+];
+
+describe.skipIf(!existsSync(MODULAR_ASSET))("a loaded modular asset", () => {
+  it("wears exactly what it is told, by the asset's own node names", async () => {
+    const gltf = await loadModular();
+    expect(gltf.scene.getObjectByName("wear:top/tee-black")).toBeUndefined();
+    rememberGltfNodeNames(gltf);
+    const root = cloneSkeleton(gltf.scene);
+    applyPreviewVisibility(root, WORN);
+    const drawn: string[] = [];
+    const hidden: string[] = [];
+    root.traverse((object) => {
+      const name: unknown = object.userData.gltfNodeName;
+      if (typeof name !== "string" || !name.includes(":")) return;
+      (object.visible ? drawn : hidden).push(name);
+    });
+    expect(drawn.sort()).toEqual([...WORN].sort());
+    expect(hidden).toContain("wear:dress/shift-indigo");
+    expect(hidden).toContain("wear:top/shell-ecru");
+    expect(hidden).toContain("body:torso");
+    expect(root.getObjectByName("chest")?.visible).toBe(true);
   });
 });

@@ -148,8 +148,11 @@ export function mountBackpack(
 function readTorso(body: Object3D, chest: Object3D): Torso | undefined {
   let skeleton: SkinnedMesh["skeleton"] | undefined;
   const points: Vector3[] = [];
-  body.traverse((object) => {
-    if (!(object instanceof SkinnedMesh) || !object.visible) return;
+  // Only what is drawn: a garment hidden as a whole node keeps its own
+  // primitives `visible`, and fitting to it would hang the bag off cloth the
+  // body is not wearing.
+  body.traverseVisible((object) => {
+    if (!(object instanceof SkinnedMesh)) return;
     const bones = object.skeleton.bones;
     if (!bones.includes(chest as Bone)) return;
     skeleton = object.skeleton;
