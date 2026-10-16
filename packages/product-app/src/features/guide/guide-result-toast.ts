@@ -29,6 +29,7 @@ export function guideResultToast(
       ),
     );
   }
+  if (scene === "exclusive") lines.push(t("guide.exclusive.result"));
   if (scene === "territory") lines.push(t("guide.result.territory"));
   if (scene === "afterthought" && outcome === "together") {
     lines.push(t("guide.result.afterthought").replace("{avaia}", names.avaia));

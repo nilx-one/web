@@ -260,56 +260,94 @@
   accent-color: #8a63ff;
 }
 
+/* The rail and labels share the thumb's travel, with alternating rows.
+   End gutters let every label stay centred, including on narrow phones. */
+.interface-settings__range-control {
+  position: relative;
+  min-width: 0;
+  height: 7rem;
+  margin-inline: 2rem;
+  padding-top: 3rem;
+}
+
+.interface-settings__range-control input[type="range"] {
+  box-sizing: border-box;
+  height: 1.3rem;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.interface-settings__range-control
+  input[type="range"]::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 999px;
+  background: #8a63ff;
+}
+
+.interface-settings__range-control input[type="range"]::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 999px;
+  background: #8a63ff;
+}
+
+.interface-settings__range-control input[type="range"]::-webkit-slider-thumb {
+  box-sizing: border-box;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-top: -0.525rem;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid #ddd;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.interface-settings__range-control input[type="range"]::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 1.3rem;
+  height: 1.3rem;
+  border: 2px solid #ddd;
+  border-radius: 50%;
+  background: #fff;
+}
+
 .interface-settings__slider-stops {
-  display: flex;
-  justify-content: space-between;
+  position: absolute;
+  inset: 0 0.65rem;
+  pointer-events: none;
 }
 
-/* Four or five stops need equal columns on a narrow mobile Dock. */
-.interface-settings__slider-stops[data-stop-count="4"],
-.interface-settings__slider-stops[data-stop-count="5"] {
+.interface-settings__slider-stops > span {
+  position: absolute;
+  top: 0;
   display: grid;
-  grid-template-columns: repeat(var(--settings-stop-count), minmax(0, 1fr));
-  gap: 0.25rem;
-  font-size: 0.68rem;
-}
-
-.interface-settings__slider-stops[data-stop-count="4"] {
-  --settings-stop-count: 4;
-}
-
-.interface-settings__slider-stops[data-stop-count="5"] {
-  --settings-stop-count: 5;
-}
-
-.interface-settings__slider-stops[data-stop-count="4"] > span,
-.interface-settings__slider-stops[data-stop-count="5"] > span {
+  align-content: end;
+  height: 2.7rem;
+  width: max-content;
+  max-width: min(40%, 5.2rem);
+  transform: translateX(-50%);
   overflow-wrap: anywhere;
   text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.2;
 }
 
-.interface-settings__slider-stops[data-stop-count="4"] > span:first-child,
-.interface-settings__slider-stops[data-stop-count="5"] > span:first-child {
-  text-align: left;
-}
-
-.interface-settings__slider-stops[data-stop-count="4"] > span:last-child,
-.interface-settings__slider-stops[data-stop-count="5"] > span:last-child {
-  text-align: right;
+.interface-settings__slider-stops > span:nth-child(even) {
+  top: 4.6rem;
+  align-content: start;
 }
 
 /* The six-stop spectrum is only presentation; Special remains Core-reserved. */
 .interface-settings__pickup-spectrum-control {
   position: relative;
-  display: flex;
-  align-items: center;
-  height: 1.4rem;
 }
 
 .interface-settings__pickup-spectrum-track {
   position: absolute;
-  right: 0;
-  left: 0;
+  top: 3.435rem;
+  right: 0.65rem;
+  left: 0.65rem;
   height: 0.43rem;
   overflow: hidden;
   border-radius: 999px;
@@ -323,11 +361,11 @@
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    #f5f3f7 0%,
-    #e8b84c 20%,
-    #9b6cfa 40%,
-    #358ff0 60%,
-    #00bfd4 80%,
+    #e8b84c 0%,
+    #9b6cfa 20%,
+    #358ff0 40%,
+    #00bfd4 60%,
+    #899199 80%,
     #899199 100%
   );
 }
@@ -366,42 +404,16 @@
 }
 
 .interface-settings__pickup-spectrum input[type="range"]::-moz-range-thumb {
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 1.3rem;
+  height: 1.3rem;
   border: 3px solid #f5f3f7;
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.32);
 }
 
-.interface-settings__pickup-spectrum-stops {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  align-items: baseline;
-}
-
-.interface-settings__pickup-spectrum-stops > span {
-  min-width: 0;
-  white-space: nowrap;
-  font-size: clamp(0.46rem, 2.4vw, 0.68rem);
-  letter-spacing: -0.045em;
-  text-align: center;
-}
-
-.interface-settings__pickup-spectrum-stops > span:first-child {
-  text-align: left;
-}
-
-.interface-settings__pickup-spectrum-stops > span:last-child {
-  text-align: right;
-}
-
-.interface-settings__pickup-spectrum-stops [data-current="true"] {
-  font-weight: 800;
-}
-
-.interface-settings__pickup-spectrum-stops [data-pending="true"] {
-  opacity: 0.5;
+.interface-settings__slider-stops [data-pending="true"] {
+  opacity: 0.65;
 }
 
 .interface-settings__slider-stops [data-current="true"] {

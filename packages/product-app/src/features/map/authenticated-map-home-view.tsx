@@ -3025,7 +3025,13 @@ export function AuthenticatedMapHomeView({
                       )}
                       {committedAwards === undefined ||
                       findItems?.picksUp === undefined ? null : (
-                        <PickupSettings />
+                        <PickupSettings
+                          onExclusive={() => {
+                            setDetailState(undefined);
+                            navigate(WORLD_ROUTE);
+                            guide.play("exclusive");
+                          }}
+                        />
                       )}
                       <p className="interface-settings__note">
                         {t("settings.presentation")}

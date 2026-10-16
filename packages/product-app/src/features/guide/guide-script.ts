@@ -15,7 +15,7 @@ import type { GuideShot } from "./guide-stage";
  * she only says it out loud.
  */
 export type GuideSceneId =
-  "intro" | "reward" | "backpack" | "territory" | "afterthought";
+  "intro" | "reward" | "backpack" | "territory" | "afterthought" | "exclusive";
 
 export type GuideNodeId =
   | "greeting"
@@ -25,7 +25,8 @@ export type GuideNodeId =
   | "together"
   | "backpackGift"
   | "newGround"
-  | "afterthought";
+  | "afterthought"
+  | "exclusive";
 
 /**
  * How a scene ended, which is all the world is told about it.
@@ -116,6 +117,7 @@ export interface GuideNode {
 }
 
 export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
+  exclusive: "exclusive",
   intro: "greeting",
   reward: "almostForgot",
   backpack: "backpackGift",
@@ -124,6 +126,15 @@ export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
 };
 
 export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
+  exclusive: {
+    line: ["guide.exclusive.line"],
+    shot: "dasha",
+    recorded: false,
+    choices: [
+      { reply: "continue", next: { end: "done" } },
+      { reply: "skip", next: { end: "skipped" } },
+    ],
+  },
   greeting: {
     line: [
       inVoices("guide.intro.greeting.0"),

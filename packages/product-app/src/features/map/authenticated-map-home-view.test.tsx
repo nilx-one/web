@@ -1549,6 +1549,29 @@ describe("AuthenticatedMapHomeView", () => {
     );
   });
 
+  it.each(["0", "1"])(
+    "closes settings and starts xSasha's exclusive scene for stop %s",
+    (value) => {
+      const onNavigate = vi.fn();
+      const pending = () => new Promise<never>(() => undefined);
+      const { container } = renderView({
+        section: "settings",
+        onNavigate,
+        findItems: { picksUp: vi.fn(async () => true) },
+        committedAwards: {
+          commitAwards: vi.fn(pending),
+          readClaims: vi.fn(pending),
+        },
+      });
+      fireEvent.change(screen.getByRole("slider", { name: "Pick up" }), {
+        target: { value },
+      });
+      expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
+      expect(container.querySelector(".guide-cutscene")).not.toBeNull();
+      expect(window.localStorage.getItem("nilx-one.finds.pickup")).toBeNull();
+    },
+  );
+
   it("offers sound on the settings route and keeps the choice on this device", () => {
     const sound = soundDouble();
     renderView({ section: "settings", sound });
@@ -1558,7 +1581,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(soundLevel).toHaveValue("1");
     expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects");
 
-    fireEvent.change(soundLevel, { target: { value: "2" } });
+    fireEvent.change(soundLevel, { target: { value: "0" } });
     expect(soundLevel).toHaveAttribute("aria-valuetext", "Effects and world");
 
     expect(window.localStorage.getItem("nilx-one.interface.sound")).toBe("all");
@@ -1566,7 +1589,7 @@ describe("AuthenticatedMapHomeView", () => {
     const voices = screen.getByRole("slider", { name: /Character voices/ });
     expect(voices).toHaveValue("1");
     expect(voices).toHaveAttribute("aria-valuetext", "Cutscenes");
-    fireEvent.change(voices, { target: { value: "2" } });
+    fireEvent.change(voices, { target: { value: "0" } });
     expect(window.localStorage.getItem("nilx-one.interface.voice")).toBe("all");
     expect(voices).toHaveAttribute("aria-valuetext", "Everything");
     // The choice is the gesture a browser opens audio from, so the host is
@@ -1581,7 +1604,7 @@ describe("AuthenticatedMapHomeView", () => {
     renderView({ section: "settings", sound: soundDouble() });
     const voices = screen.getByRole("slider", { name: /Character voices/ });
     expect(voices).toBeDisabled();
-    expect(voices).toHaveValue("0");
+    expect(voices).toHaveValue("2");
     // The stored choice is kept for when sound comes back.
     expect(window.localStorage.getItem("nilx-one.interface.voice")).toBe("all");
   });
