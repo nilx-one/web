@@ -58,12 +58,13 @@ export function useFollowCamera({
 }: FollowCameraInput): FollowCameraState {
   const [follow, setFollow] = useState<CameraFollow>(INITIAL_CAMERA_FOLLOW);
   const followRef = useRef(follow);
-  // No explicit preset on entry: retain the wider opening camera from master.
-  // Array lookup at -1 yields undefined, so followCamera uses its normal floor.
+  // No explicit preset on entry: the next Follow press chooses the closest.
   const followDistance = useRef(-1);
   const freeCycle = useRef<{ zoom: number; step: number } | undefined>(
     undefined,
   );
+  /** Zoom of this hook's own unfinished transition; undefined once settled. */
+  const aimedZoom = useRef<number | undefined>(undefined);
   const gesturing = useRef(false);
   /** The touch gesture under way, and the zoom it started from. */
   const touchStart = useRef<number | undefined>(undefined);
@@ -72,6 +73,10 @@ export function useFollowCamera({
   useEffect(() => {
     input.current = { enabled, body, dimension, reducedMotion };
   });
+  // A scene that owned the camera may have left it anywhere.
+  useEffect(() => {
+    freeCycle.current = undefined;
+  }, [enabled]);
 
   const choose = useCallback((next: CameraFollow) => {
     if (next !== followRef.current) freeCycle.current = undefined;
@@ -97,12 +102,7 @@ export function useFollowCamera({
     if (point === undefined) return;
     hold(FOLLOW_HOLD_MS);
     renderer.setCamera(
-      followCamera(
-        renderer.getCamera(),
-        point,
-        input.current.dimension,
-        FOLLOW_DISTANCE_ZOOMS[followDistance.current],
-      ),
+      followCamera(renderer.getCamera(), point, input.current.dimension),
       {
         motion: input.current.reducedMotion() ? "immediate" : "eased",
       },
@@ -113,6 +113,8 @@ export function useFollowCamera({
     if (!input.current.enabled) return;
     const point = input.current.body();
     if (point === undefined) {
+      // Entering from Free still starts at the closest preset later.
+      if (followRef.current !== "locked") followDistance.current = -1;
       choose("locked");
       return;
     }
@@ -128,10 +130,10 @@ export function useFollowCamera({
         { ...renderer.getCamera(), zoom },
         point,
         input.current.dimension,
-        zoom,
       ),
       { motion: input.current.reducedMotion() ? "immediate" : "eased" },
     );
+    aimedZoom.current = zoom;
   }, [choose, hold, renderer]);
 
   const selectFree = useCallback(() => {
@@ -140,7 +142,11 @@ export function useFollowCamera({
     const point = input.current.body();
     if (point === undefined) return;
     const current = renderer.getCamera();
-    const cycle = freeCycle.current ?? { zoom: current.zoom, step: 0 };
+    // Start from where an unfinished ease is heading, not where it is now.
+    const cycle = freeCycle.current ?? {
+      zoom: aimedZoom.current ?? current.zoom,
+      step: 0,
+    };
     const zoom = Math.max(0, cycle.zoom + FREE_DISTANCE_STEPS[cycle.step]!);
     freeCycle.current = {
       zoom: cycle.zoom,
@@ -155,6 +161,7 @@ export function useFollowCamera({
       },
       { motion: input.current.reducedMotion() ? "immediate" : "eased" },
     );
+    aimedZoom.current = zoom;
   }, [choose, renderer]);
 
   const track = useCallback(
@@ -168,12 +175,7 @@ export function useFollowCamera({
         return;
       }
       const current = renderer.getCamera();
-      const target = followCamera(
-        current,
-        point,
-        input.current.dimension,
-        FOLLOW_DISTANCE_ZOOMS[followDistance.current],
-      );
+      const target = followCamera(current, point, input.current.dimension);
       if (sameFollowCamera(current, target)) return;
       // Following is background motion: it never takes a gesture away.
       renderer.setCamera(target, {
@@ -205,6 +207,7 @@ export function useFollowCamera({
         // matching end; otherwise the follow would remain paused forever.
         if (gesturing.current || change.gesture) {
           gesturing.current = false;
+          aimedZoom.current = undefined;
           const startZoom = touchStart.current;
           touchStart.current = undefined;
           if (!input.current.enabled) return;
@@ -234,22 +237,12 @@ export function useFollowCamera({
             point !== undefined &&
             !sameFollowCamera(
               change.camera,
-              followCamera(
-                change.camera,
-                point,
-                input.current.dimension,
-                FOLLOW_DISTANCE_ZOOMS[followDistance.current],
-              ),
+              followCamera(change.camera, point, input.current.dimension),
             )
           ) {
             hold(FOLLOW_HOLD_MS);
             renderer.setCamera(
-              followCamera(
-                change.camera,
-                point,
-                input.current.dimension,
-                FOLLOW_DISTANCE_ZOOMS[followDistance.current],
-              ),
+              followCamera(change.camera, point, input.current.dimension),
               {
                 motion: input.current.reducedMotion() ? "immediate" : "eased",
               },
@@ -257,6 +250,8 @@ export function useFollowCamera({
           }
           return;
         }
+        // A settled camera is where it was aimed; another move superseded it.
+        aimedZoom.current = undefined;
         // Only a purely programmatic settle releases an application hold.
         const wasHeld = heldUntil.current > 0;
         heldUntil.current = 0;

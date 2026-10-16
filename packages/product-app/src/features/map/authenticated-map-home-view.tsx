@@ -993,6 +993,7 @@ export function AuthenticatedMapHomeView({
             bearingDeg: camera.bearing,
           },
           dimension,
+          // Any zoom counts: Free distance steps go wider than Follow's floor.
           camera.zoom,
         ),
       ));

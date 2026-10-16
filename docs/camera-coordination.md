@@ -38,7 +38,7 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
   bearing follows the rendered body's facing, including turns in place; no
   device compass heading is inferred. Pitch is 60° from overhead (30° down
   towards the ground), never wider than the zoom bodies are drawn from (18.5).
-  The opening view and the person's closer zoom stay until a distance is chosen
+  The opening view and the person's own zoom stay; a distance is chosen only
   explicitly with the Follow button.
   The ground target lies about 2.77 m ahead, placing the sight line through a
   nominal 1.6 m head. This is framing, not a change to the body's position.
@@ -56,11 +56,15 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
 - The on-screen **Follow / Free** control is available on mobile and desktop.
   The first explicit Follow press, or selecting Follow from Free, chooses
   the closest preset; further presses cycle close → medium → far → close
-  (zoom 21.5 → 21 → 20.5 → 21.5). Tracking retains the selected distance.
+  (zoom 21.5 → 21 → 20.5 → 21.5). Tracking retains the selected distance, and
+  a later manual zoom either way is kept (down to the 18.5 floor), not
+  clamped to the preset.
   Each Free button press focuses the current driver once and steps through
   zoom offsets −1, −2, −3, −2, −1, 0 relative to the view where the cycle began:
   three steps away, three back. Free then remains detached from body motion.
-  A manual gesture or mode change resets the Free sequence to that view.
+  A manual gesture, mode change or scene taking the camera resets the Free
+  sequence to that view. A sequence begun during an unfinished ease starts
+  from where that ease is heading.
   Repeated taps advance from the selected step even during an unfinished ease.
   These button cycles do not change Space/Y or programmatic release semantics.
   **Y** toggles modes; **Space** explicitly selects Follow and recentres on
