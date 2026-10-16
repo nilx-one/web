@@ -857,3 +857,47 @@
     box-shadow: 0 0 1.35rem rgba(55, 215, 229, 0.28);
   }
 }
+
+/* The camera mode is an explicit, touch-accessible world control. It floats
+   above the location button instead of shrinking the Bond/Avaia Dock. */
+.camera-mode-control {
+  position: absolute;
+  right: calc(var(--shell-inset) + var(--safe-right, 0px));
+  bottom: calc(
+    var(--shell-inset) + var(--safe-bottom, 0px) +
+      var(--shell-bottom-height, 0px) + var(--shell-gap) + 52px
+  );
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--map-line);
+  border-radius: 12px;
+  background: var(--map-glass-strong);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 3px 12px var(--map-shadow);
+}
+
+.camera-mode-control__button {
+  min-height: 44px;
+  min-width: 64px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 0 9px;
+  color: var(--map-ink);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.camera-mode-control__button[aria-pressed="true"] {
+  border-color: var(--map-accent-spatial);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.camera-mode-control__button:focus-visible {
+  outline: 2px solid var(--map-accent-spatial);
+  outline-offset: 2px;
+}

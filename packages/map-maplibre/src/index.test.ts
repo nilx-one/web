@@ -777,6 +777,110 @@ describe("camera ownership", () => {
     expect(renderer.getCamera().zoom).toBe(15);
   });
 
+  it("says when a person's gesture starts and when it settles", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const phases: (string | undefined)[] = [];
+    renderer.subscribeCamera((change) => phases.push(change.phase));
+
+    fakeMap.emit("movestart", { originalEvent: { type: "mousedown" } });
+    fakeMap.emit("moveend", { originalEvent: { type: "mouseup" } });
+
+    expect(phases).toEqual(["start", "end"]);
+  });
+
+  it("holds a background move back while a finger or button is on the map", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+    });
+    const container = document.createElement("div");
+    renderer.mount(container);
+    fakeMap.emit("load");
+    const follow = {
+      center: [1, 2] as const,
+      zoom: 18,
+      bearing: 40,
+      pitch: 30,
+    };
+    const pointer = (type: string) =>
+      Object.assign(new Event(type, { bubbles: true }), { pointerId: 7 });
+
+    container.dispatchEvent(pointer("pointerdown"));
+    renderer.setCamera(follow, { yieldToGesture: true });
+    expect(fakeMap.jumpTo).not.toHaveBeenCalled();
+
+    // A move the person asked for still happens while they press.
+    renderer.setCamera(follow, { motion: "eased" });
+    expect(fakeMap.easeTo).toHaveBeenCalledOnce();
+
+    globalThis.dispatchEvent(pointer("pointerup"));
+    renderer.setCamera(follow, { yieldToGesture: true });
+    expect(fakeMap.jumpTo).toHaveBeenCalledOnce();
+  });
+
+  it("says when a gesture came from a touch screen", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const touches: (boolean | undefined)[] = [];
+    renderer.subscribeCamera((change) => touches.push(change.touch));
+
+    fakeMap.emit("movestart", { originalEvent: { type: "touchstart" } });
+    fakeMap.emit("moveend", {
+      originalEvent: { type: "pointerup", pointerType: "touch" },
+    });
+    fakeMap.emit("movestart", { originalEvent: { type: "wheel" } });
+    fakeMap.emit("moveend");
+
+    expect(touches).toEqual([true, true, undefined, undefined]);
+  });
+
+  it("closes zoom gestures in on the centre a followed camera keeps", () => {
+    const fakeMap = makeFakeMap();
+    let scrollOn = true;
+    const scrollZoom = {
+      isEnabled: () => scrollOn,
+      disable: vi.fn(() => {
+        scrollOn = false;
+      }),
+      enable: vi.fn(() => {
+        scrollOn = true;
+      }),
+    };
+    const touchZoomRotate = { isEnabled: () => true, enable: vi.fn() };
+    Object.assign(fakeMap, { scrollZoom, touchZoomRotate });
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setZoomPivot?.("center");
+    expect(scrollZoom.disable).toHaveBeenCalledOnce();
+    expect(scrollZoom.enable).toHaveBeenLastCalledWith({ around: "center" });
+    expect(touchZoomRotate.enable).toHaveBeenLastCalledWith({
+      around: "center",
+    });
+
+    renderer.setZoomPivot?.("center");
+    expect(scrollZoom.enable).toHaveBeenCalledOnce();
+
+    renderer.setZoomPivot?.("pointer");
+    expect(scrollZoom.enable).toHaveBeenLastCalledWith(undefined);
+    expect(touchZoomRotate.enable).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("leaves a zoom gesture switched off where it is", () => {
+    const fakeMap = makeFakeMap();
+    const scrollZoom = {
+      isEnabled: () => false,
+      disable: vi.fn(),
+      enable: vi.fn(),
+    };
+    Object.assign(fakeMap, { scrollZoom });
+    const renderer = readyRenderer(fakeMap);
+
+    renderer.setZoomPivot?.("center");
+
+    expect(scrollZoom.enable).not.toHaveBeenCalled();
+  });
+
   it("stops publishing camera changes after unsubscribe", () => {
     const fakeMap = makeFakeMap();
     const renderer = readyRenderer(fakeMap);

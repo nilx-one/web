@@ -29,6 +29,53 @@ Every accepted application focus gets a monotonically increasing generation. Ret
 
 A new map instance first frames geographic countries at zoom 3.3, backed by a genuine low-resolution global source. When the map becomes ready, the first observed position triggers a single 2.3-second MapLibre flight: accurate GPS (up to 50 m uncertainty) lands at the established local-cell zoom 18.5, coarser GPS observations progressively widen the view (one zoom step per uncertainty doubling, no farther out than neighborhood zoom 13), and manually declared positions land at zoom 20.25 to make the driver readable without claiming a device observation. Invalid sensor accuracy conservatively uses neighborhood zoom. Reduced motion skips the animation. A remembered on-device position can serve as the first flight target while current geolocation resolves; a nearby live fix must not restart the flight. This is camera presentation, not a Bond location mutation. A direct gesture claims camera ownership immediately, and a Telegram viewport resize refreshes the renderer without changing geography.
 
+## Follow and Free camera
+
+Two explicit camera modes are selected on the world overlay next to the
+location control (`follow-camera.ts`, `use-follow-camera.ts`).
+
+- **Follow (default)** looks over the head of the body at the wheel. Its
+  bearing follows the rendered body's facing, including turns in place; no
+  device compass heading is inferred. Pitch is 60° from overhead (30° down
+  towards the ground), never wider than the zoom bodies are drawn from (18.5); the person's own zoom
+  stays.
+  The ground target lies about 2.77 m ahead, placing the sight line through a
+  nominal 1.6 m head. This is framing, not a change to the body's position.
+  Explicit flat/2D mode keeps pitch zero and centres on the body.
+  Orbit, tilt and pan gestures pause tracking while in progress, then ease
+  back behind the head even if the body is stationary. Free retains arbitrary
+  viewing angles. Zoom pivots around the viewport centre while Follow is active.
+- **Free (Dota-style)** detaches camera position from Bond/Avaia movement.
+  Dragging and touch panning explore the map independently; wheel and pinch
+  zoom toward the pointer. No body motion recentres it.
+- **On a phone two fingers choose the mode**: pinching out by at least 0.35
+  zoom levels steps back from the body into Free, pinching in by as much
+  returns to Follow and eases onto the body. A smaller pinch, a pinch the way
+  the mode already is, a mouse wheel or a trackpad pinch only zoom.
+- The on-screen **Follow / Free** control is available on mobile and desktop.
+  **Y** toggles modes; **Space** explicitly selects Follow and recentres on
+  the body. Repeating a held key never triggers another camera animation.
+  Keys inside controls or dialogs, or with modifiers, are left alone.
+- A camera focus or wheel handover performs its requested camera move
+  without changing the selected mode. Recentring keeps the mode with the Bond
+  at the wheel; with the Avaia at the wheel it goes to the Bond's place, away
+  from the followed body, so it selects Free. Apart from the pinch above,
+  gestures do not change the mode.
+
+The renderer reports gesture start and end (`MapCameraChange.phase`) and
+whether a gesture came from a touch screen (`MapCameraChange.touch`). Follow
+never fights a gesture in progress, nor one that is only starting: MapLibre
+cancels the gesture it is recognising whenever the camera is set, so Follow
+moves with `MapCameraOptions.yieldToGesture` and the renderer skips them while
+a finger or a mouse button is on the map. Otherwise turning the camera around
+a walking body would snap it straight back. Opening flights and focus moves
+get time to settle before tracking resumes, including for a stationary body. Both modes stand down during
+cutscenes, the system informer, handovers and outside the world. This is
+presentation only: camera actions never change a body, Bond or presence state.
+
+Camera readback into React is throttled until the centre moves 8 px or zoom,
+bearing or pitch changes, to avoid 60 view rerenders per second.
+
 ## Cell-bound fragments
 
 H3 remains adapter-owned. `presence-geo` converts an opaque `CellIndex` into a `CellCameraAnchor` containing the same cell identifier and only the cell centre needed for presentation. Product code never imports H3 APIs.

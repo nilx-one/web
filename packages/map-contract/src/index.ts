@@ -32,6 +32,13 @@ export interface MapCameraOptions {
    * own transition length. Ignored for `immediate`.
    */
   readonly durationMs?: number;
+  /**
+   * A background move, such as a camera following a walking body, that must
+   * never cost a person their gesture. While a finger or a mouse button is on
+   * the map it is skipped, because a camera change there would cancel the
+   * drag, the turn or the pinch that is just starting.
+   */
+  readonly yieldToGesture?: boolean;
 }
 
 /**
@@ -42,7 +49,26 @@ export interface MapCameraOptions {
 export interface MapCameraChange {
   readonly camera: MapCamera;
   readonly gesture: boolean;
+  /**
+   * `start` when a person's gesture begins, `end` once a move has settled.
+   * Absent reads as `end`: a renderer that cannot tell the two apart only
+   * ever reports a camera at rest.
+   */
+  readonly phase?: "start" | "end";
+  /**
+   * The gesture came from a touch screen: a finger drag, a pinch or a tap
+   * zoom. Absent on application moves and on a renderer that cannot tell.
+   */
+  readonly touch?: boolean;
 }
+
+/**
+ * What a zoom gesture closes in on. `pointer` keeps the ground under the
+ * wheel or the pinch where it is, the way a map zooms; `center` keeps the
+ * viewport centre where it is, the way a game camera closes in on the body it
+ * follows.
+ */
+export type MapZoomPivot = "pointer" | "center";
 
 // Presentation appearance only. Appearance selects a published map style
 // variant; it never carries Bond, Relationship, or shared world meaning.
@@ -509,6 +535,11 @@ export interface MapRenderer {
   getCameraPadding?(): MapCameraPadding;
   setCamera(camera: MapCamera, options?: MapCameraOptions): void;
   subscribeCamera(listener: (change: MapCameraChange) => void): () => void;
+  /**
+   * What a person's zoom gesture closes in on. Optional: a renderer without
+   * it always zooms toward the pointer.
+   */
+  setZoomPivot?(pivot: MapZoomPivot): void;
   setAppearance(appearance: MapAppearance): void;
   setDimension(dimension: MapDimension): void;
   setObservedPosition(position: MapObservedPosition | null): void;

@@ -201,6 +201,9 @@ const EN_MESSAGES = {
     "The model you chose is no longer offered, so the default is used.",
   "settings.localModel.status.unsupportedOverBudget":
     "Unavailable: this model needs more memory than this surface allows.",
+  "camera.mode": "Camera mode",
+  "camera.follow": "Follow",
+  "camera.free": "Free",
   "dock.edit": "edit",
   "dock.ai": "AI",
   "dock.unconfigured": "unconfigured",
@@ -535,6 +538,9 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Обрану модель більше не пропонують, тож працює типова.",
   "settings.localModel.status.unsupportedOverBudget":
     "Недоступно: цій моделі потрібно більше пам’яті, ніж дозволено тут.",
+  "camera.mode": "Режим камери",
+  "camera.follow": "Стеження",
+  "camera.free": "Вільна",
   "dock.edit": "змінити",
   "dock.ai": "ШІ",
   "dock.unconfigured": "не налаштовано",

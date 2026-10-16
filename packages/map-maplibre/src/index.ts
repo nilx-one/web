@@ -12,6 +12,7 @@ import {
   type MapCamera,
   type MapCameraChange,
   type MapCameraOptions,
+  type MapZoomPivot,
   type MapDimension,
   MAP_BODY_HANDOVER_ZOOM,
   MAP_BODY_HEIGHT_METERS,
@@ -327,6 +328,22 @@ function createMapLibreSelectionMarker(
   };
 }
 
+/**
+ * Whether a MapLibre gesture's DOM event came from a finger: a touch event,
+ * or a pointer event a touch screen produced.
+ */
+function isTouchEvent(event: unknown): boolean {
+  if (typeof event !== "object" || event === null) return false;
+  const { type, pointerType } = event as {
+    readonly type?: unknown;
+    readonly pointerType?: unknown;
+  };
+  return (
+    pointerType === "touch" ||
+    (typeof type === "string" && type.startsWith("touch"))
+  );
+}
+
 export function resolvePmtilesProtocolUrl(
   url: string,
   baseUrl: string,
@@ -425,8 +442,11 @@ export function createMapLibreRenderer(
   let dimension = options.initialDimension ?? DEFAULT_MAP_DIMENSION;
   let status: MapRendererStatus = { kind: "unmounted" };
   let camera: MapCamera = initialCamera;
+  let zoomPivot: MapZoomPivot = "pointer";
   let map: MapLibreMap | undefined;
   let viewportCleanup: (() => void) | undefined;
+  /** Fingers and mouse buttons on the map right now. */
+  const pressedPointers = new Set<number>();
   let avatarLayer: AvatarCustomLayer | undefined;
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
@@ -647,15 +667,34 @@ export function createMapLibreRenderer(
     };
   }
 
-  function publishCamera(gesture: boolean): void {
+  function publishCamera(
+    gesture: boolean,
+    phase: "start" | "end",
+    originalEvent?: unknown,
+  ): void {
     if (map === undefined) {
       return;
     }
     camera = readCamera(map);
     avatars.setCamera(camera);
+    const touch = isTouchEvent(originalEvent);
     for (const listener of cameraListeners) {
-      listener({ camera, gesture });
+      listener({ camera, gesture, phase, ...(touch ? { touch } : {}) });
     }
+  }
+
+  // MapLibre reads `around` only as a handler is enabled, and its scroll
+  // handler ignores a second enable, so a new pivot re-enables what is on.
+  function applyZoomPivot(mounted: MapLibreMap): void {
+    const around =
+      zoomPivot === "center" ? { around: "center" as const } : undefined;
+    const scroll = mounted.scrollZoom;
+    if (scroll?.isEnabled()) {
+      scroll.disable();
+      scroll.enable(around);
+    }
+    const touch = mounted.touchZoomRotate;
+    if (touch?.isEnabled()) touch.enable(around);
   }
 
   function applyDimension(mounted: MapLibreMap): void {
@@ -1337,6 +1376,7 @@ export function createMapLibreRenderer(
           pitch: camera.pitch,
         });
         map = mountedMap;
+        if (zoomPivot !== "pointer") applyZoomPivot(mountedMap);
         // Telegram can resize the WebView without a window resize event.
         // Coalesce host changes into a single canvas update each frame.
         let resizeFrame: number | undefined;
@@ -1368,7 +1408,27 @@ export function createMapLibreRenderer(
         globalThis.addEventListener("pageshow", scheduleViewportSync);
         document.addEventListener("visibilitychange", onVisible);
         scheduleViewportSync();
+        // MapLibre cancels any gesture it is recognising whenever the camera
+        // is set, so a background move has to know a person is pressing the
+        // map before MapLibre has decided that the press is a gesture. A
+        // release is heard on the window, wherever the pointer ended up.
+        const press = (event: PointerEvent) => {
+          pressedPointers.add(event.pointerId);
+        };
+        const release = (event: PointerEvent) => {
+          pressedPointers.delete(event.pointerId);
+        };
+        const releaseAll = () => pressedPointers.clear();
+        container.addEventListener("pointerdown", press, true);
+        globalThis.addEventListener("pointerup", release, true);
+        globalThis.addEventListener("pointercancel", release, true);
+        globalThis.addEventListener("blur", releaseAll);
         viewportCleanup = () => {
+          container.removeEventListener("pointerdown", press, true);
+          globalThis.removeEventListener("pointerup", release, true);
+          globalThis.removeEventListener("pointercancel", release, true);
+          globalThis.removeEventListener("blur", releaseAll);
+          pressedPointers.clear();
           observer?.disconnect();
           globalThis.removeEventListener("resize", scheduleViewportSync);
           globalThis.visualViewport?.removeEventListener(
@@ -1430,12 +1490,18 @@ export function createMapLibreRenderer(
         // Claim camera ownership as soon as a user gesture begins, not after
         // it finishes and could be overwritten by an opening flight.
         mountedMap.on("movestart", (event: { originalEvent?: unknown }) => {
-          if (event?.originalEvent !== undefined) publishCamera(true);
+          if (event?.originalEvent !== undefined) {
+            publishCamera(true, "start", event.originalEvent);
+          }
         });
         // moveend rather than move: final camera state is published once per
         // gesture instead of every animation frame.
         mountedMap.on("moveend", (event: { originalEvent?: unknown }) => {
-          publishCamera(event?.originalEvent !== undefined);
+          publishCamera(
+            event?.originalEvent !== undefined,
+            "end",
+            event?.originalEvent,
+          );
         });
         // "idle" is MapLibre saying every tile the view needs has loaded and
         // painted: the one moment new landmarks can have become readable. It
@@ -1740,6 +1806,9 @@ export function createMapLibreRenderer(
     },
 
     setCamera(next: MapCamera, cameraOptions: MapCameraOptions = {}) {
+      if (cameraOptions.yieldToGesture === true && pressedPointers.size > 0) {
+        return;
+      }
       camera = next;
       avatars.setCamera(next);
 
@@ -1771,6 +1840,12 @@ export function createMapLibreRenderer(
       }
 
       map?.jumpTo(target);
+    },
+
+    setZoomPivot(next: MapZoomPivot) {
+      if (next === zoomPivot) return;
+      zoomPivot = next;
+      if (map !== undefined) applyZoomPivot(map);
     },
 
     setAppearance(next: MapAppearance) {
