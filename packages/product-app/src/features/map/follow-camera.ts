@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  MAP_BODY_HANDOVER_ZOOM,
   mapMetersPerPixel,
   type MapCamera,
   type MapPointSelection,
@@ -46,7 +47,14 @@ export interface FollowBody extends MapPointSelection {
 
 /** Map pitch is measured from overhead: 60° looks down at 30° to the ground. */
 export const FOLLOW_PITCH = 60;
-export const FOLLOW_MIN_ZOOM = 21.5;
+/**
+ * Follow never goes wider than the scale a body is drawn from, so the body
+ * stays on the world; any closer zoom the person chose is kept. A floor any
+ * higher would hold a phone at a dozen metres of ground: in an open park or
+ * under the fog that reads as an empty screen, and since pinching out leaves
+ * Follow, there would be no way to see more while staying in it.
+ */
+export const FOLLOW_MIN_ZOOM = MAP_BODY_HANDOVER_ZOOM;
 
 /**
  * Aim along the line through a nominal 1.6 m head above the ground. MapCamera

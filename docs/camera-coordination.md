@@ -37,7 +37,8 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
 - **Follow (default)** looks over the head of the body at the wheel. Its
   bearing follows the rendered body's facing, including turns in place; no
   device compass heading is inferred. Pitch is 60° from overhead (30° down
-  towards the ground), with a minimum zoom of 21.5; a closer chosen zoom stays.
+  towards the ground), never wider than the zoom bodies are drawn from (18.5); the person's own zoom
+  stays.
   The ground target lies about 2.77 m ahead, placing the sight line through a
   nominal 1.6 m head. This is framing, not a change to the body's position.
   Explicit flat/2D mode keeps pitch zero and centres on the body.
