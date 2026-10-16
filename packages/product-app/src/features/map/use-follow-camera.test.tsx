@@ -681,6 +681,26 @@ describe("isometric tracking", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("starts a new glide from rest instead of jumping over the time at rest", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    let body = HOME;
+    const { result } = isometricFollow(fake, () => body);
+    result.current.track(body);
+    const rest = fake.renderer.getCamera();
+    act(() => vi.advanceTimersByTime(600));
+    body = { ...HOME, longitude: HOME.longitude + 0.00001 };
+    result.current.track(body);
+    expect(fake.renderer.getCamera()).toEqual(rest);
+    act(() => vi.advanceTimersByTime(16));
+    const first = fake.renderer.getCamera();
+    const target = isometricCamera(first, body);
+    const progress =
+      (first.center[0] - rest.center[0]) / (target.center[0] - rest.center[0]);
+    expect(progress).toBeGreaterThan(0);
+    expect(progress).toBeLessThan(0.3);
+  });
+
   it.each(["free", "follow", "gesture", "scene", "unmount"] as const)(
     "cancels pending follow frames on %s",
     (interruption) => {

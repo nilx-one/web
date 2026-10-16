@@ -64,6 +64,8 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
   onto the body. A smaller pinch, a pinch the way
   the mode already is, a mouse wheel or a trackpad pinch only zoom.
 - The on-screen **Follow / Isometric / Free** control is available on mobile and desktop.
+  Its selection travels from the mode being left to the one chosen, on the
+  Dock window's 420 ms curve; reduced motion moves it without travel.
   The first explicit Follow press, or selecting Follow from Free, chooses
   the closest preset; further presses cycle close → medium → far → close
   (zoom 21.5 → 21 → 20.5 → 21.5). Each preset is applied once on the press.
