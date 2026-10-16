@@ -223,7 +223,8 @@ impl IdentityRepository {
                 .execute(&self.pool)
                 .await?;
         }
-        sqlx::raw_sql(include_str!("../migrations/0026_business_locations.sql"))
+        // A business is many points, not one location: 0026's table is gone.
+        sqlx::raw_sql(include_str!("../migrations/0027_drop_business_locations.sql"))
             .execute(&self.pool)
             .await?;
         if !self.has_avaia_location_column("travel_revision").await? {

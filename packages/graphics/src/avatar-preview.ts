@@ -6,12 +6,12 @@ import {
   Box3,
   DirectionalLight,
   HemisphereLight,
+  Object3D,
   PerspectiveCamera,
   Scene,
   Vector3,
   WebGLRenderer,
   type AnimationClip,
-  type Object3D,
 } from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
@@ -141,6 +141,30 @@ export function disposeTree(root: Object3D): void {
   });
 }
 
+const GLTF_NODE_NAME = "gltfNodeName";
+
+/**
+ * Keep each glTF node's own name on the object it became. Three's loader
+ * strips `:` and `/` from object names, so `wear:top/tee-black` would arrive as
+ * `weartoptee-black`; the map layer records names the same way.
+ */
+export function rememberGltfNodeNames(gltf: GLTF): void {
+  const nodes = (gltf.parser?.json?.nodes ?? []) as readonly {
+    name?: string;
+  }[];
+  for (const [object, reference] of gltf.parser?.associations ?? []) {
+    if (!(object instanceof Object3D) || reference.nodes === undefined)
+      continue;
+    const name = nodes[reference.nodes]?.name;
+    if (typeof name === "string") object.userData[GLTF_NODE_NAME] = name;
+  }
+}
+
+function nodeName(object: Object3D): string {
+  const recorded: unknown = object.userData[GLTF_NODE_NAME];
+  return typeof recorded === "string" ? recorded : object.name;
+}
+
 /**
  * Show what this body is wearing, and only that. Namespaced nodes belong to
  * the application; a bare name is the asset's own and is never touched.
@@ -151,8 +175,9 @@ export function applyPreviewVisibility(
 ): void {
   if (visibleNodes.length === 0) return;
   root.traverse((object) => {
-    if (!object.name.includes(":")) return;
-    object.visible = visibleNodes.includes(object.name);
+    const name = nodeName(object);
+    if (!name.includes(":")) return;
+    object.visible = visibleNodes.includes(name);
   });
 }
 
@@ -289,6 +314,7 @@ export function createAvatarPreview(
 
   function stand(gltf: GLTF, next: AvatarPreviewBody): void {
     clearBody();
+    rememberGltfNodeNames(gltf);
     const instance = cloneSkeleton(gltf.scene);
     applyPreviewVisibility(instance, next.visibleNodes);
     scene.add(instance);

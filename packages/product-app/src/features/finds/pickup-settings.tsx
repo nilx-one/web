@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { SettingsSliderStops } from "../../shell/settings-slider-stops";
 import { useLocalization, type TranslationKey } from "../../shell/localization";
 import {
   choosePickupThreshold,
@@ -13,20 +14,28 @@ const STOPS: readonly {
   readonly key: TranslationKey;
   readonly color: string;
 }[] = [
-  { key: "settings.pickup.off", color: "#f5f3f7" },
   { key: "settings.pickup.legendary", color: "#e8b84c" },
   { key: "settings.pickup.special", color: "#9b6cfa" },
   { key: "settings.pickup.rare", color: "#358ff0" },
   { key: "settings.pickup.uncommon", color: "#00bfd4" },
   { key: "settings.pickup.common", color: "#899199" },
+  { key: "settings.pickup.off", color: "#899199" },
 ];
 
-/** Core has five thresholds; the sixth visual stop is intentionally inactive. */
+/**
+ * Maps a Core threshold level (0 Off … 4 every rarity) to its stop. Level 1
+ * (legendary only) sits on the far left beside the locked Special stop, and
+ * Off sits on the far right.
+ */
 function displayIndex(level: number): number {
-  return level <= 1 ? level : level + 1;
+  return level === 0 ? 5 : level === 1 ? 0 : level;
 }
 
-export function PickupSettings() {
+export function PickupSettings({
+  onExclusive,
+}: {
+  readonly onExclusive: () => void;
+}) {
   const { t } = useLocalization();
   const stored = usePickup();
   const level = pickupThresholdLevel(stored);
@@ -37,13 +46,10 @@ export function PickupSettings() {
   const progress = (selectedIndex / (STOPS.length - 1)) * 100;
 
   return (
-    <fieldset className="interface-settings__appearance">
+    <fieldset id="pickup-settings" className="interface-settings__appearance">
       <legend>{t("settings.pickup.legend")}</legend>
       <small className="interface-settings__note">
         {t("settings.pickup.detail")}
-      </small>
-      <small className="interface-settings__note">
-        {t("settings.pickup.specialPending")}
       </small>
       <div className="interface-settings__slider interface-settings__pickup-spectrum">
         <label htmlFor="pickup-level">
@@ -52,7 +58,7 @@ export function PickupSettings() {
             <small>{t("settings.pickup.customDetail")}</small>
           ) : null}
         </label>
-        <div className="interface-settings__pickup-spectrum-control">
+        <div className="interface-settings__range-control interface-settings__pickup-spectrum-control">
           <span
             className="interface-settings__pickup-spectrum-track"
             aria-hidden="true"
@@ -77,33 +83,22 @@ export function PickupSettings() {
             aria-valuetext={currentLabel}
             onChange={(event) => {
               const next = Number(event.currentTarget.value);
-              // A gesture across Special skips it instead of writing a fake rarity.
-              if (next === 2) {
-                choosePickupThreshold(selectedIndex < 2 ? 2 : 1);
+              if (next < 2) {
+                onExclusive();
+                // A locked stop never writes a threshold or claims a purchase.
+                event.currentTarget.value = String(selectedIndex);
               } else {
-                choosePickupThreshold(next > 2 ? next - 1 : next);
+                choosePickupThreshold(next === 5 ? 0 : next);
               }
             }}
           />
+          <SettingsSliderStops
+            labels={STOPS.map(({ key }) => t(key))}
+            colors={STOPS.map(({ color }) => color)}
+            current={selectedIndex}
+            pending={2}
+          />
         </div>
-        <span
-          className="interface-settings__pickup-spectrum-stops"
-          aria-hidden="true"
-        >
-          {STOPS.map(({ key, color }, index) => (
-            <span
-              key={key}
-              data-current={index === selectedIndex}
-              data-pending={index === 2}
-              style={{ color }}
-              title={
-                index === 2 ? t("settings.pickup.specialPending") : undefined
-              }
-            >
-              {t(key)}
-            </span>
-          ))}
-        </span>
       </div>
     </fieldset>
   );

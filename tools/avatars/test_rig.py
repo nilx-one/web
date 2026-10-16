@@ -5,14 +5,20 @@
 import hashlib
 import json
 import struct
+import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
+import trimesh
+from trimesh.visual import TextureVisuals
 
-from rig import TOPOLOGY, INDEX, weights_for
+from rig import TOPOLOGY, INDEX, export_modular_avatar, weights_for
 
 ASSETS = Path(__file__).resolve().parents[2] / "deploy/web/avatars/0.1.0"
+# The Dasha 2.0 version clients load now. Earlier versions are rebuilt and
+# pinned by hash; the checks below are about the asset the runtime draws.
+DASHA2 = ASSETS.parent / "0.4.0"
 GAIT = (Path(__file__).resolve().parents[2]
         / "packages/product-app/src/features/map/avatar-gait.json")
 
@@ -27,7 +33,7 @@ def read_glb(path):
     def accessor(index):
         a = doc["accessors"][index]
         view = doc["bufferViews"][a["bufferView"]]
-        width = {"SCALAR": 1, "VEC3": 3, "VEC4": 4, "MAT4": 16}[a["type"]]
+        width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}[a["type"]]
         dtype = {5126: "<f4", 5123: "<u2", 5125: "<u4"}[a["componentType"]]
         return np.frombuffer(binary, dtype=dtype, count=a["count"] * width,
                              offset=view.get("byteOffset", 0) + a.get("byteOffset", 0)).reshape(-1, width)
@@ -88,7 +94,7 @@ class RigTests(unittest.TestCase):
         gait = json.loads(GAIT.read_text())
         for model in ("sky", "dasha", "kai", "dasha-v2"):
             with self.subTest(model=model):
-                directory = ASSETS if model != "dasha-v2" else ASSETS.parent / "0.3.0"
+                directory = ASSETS if model != "dasha-v2" else DASHA2
                 measured, footfalls = measure_gait(*read_glb(directory / (model + "-study.glb")))
                 recorded = gait["studies"][model + "-study"]
                 for key, value in measured.items():
@@ -98,7 +104,7 @@ class RigTests(unittest.TestCase):
     def test_exported_assets(self):
         for model in ("sky", "dasha", "kai", "dasha-v2"):
             with self.subTest(model=model):
-                directory = ASSETS if model != "dasha-v2" else ASSETS.parent / "0.3.0"
+                directory = ASSETS if model != "dasha-v2" else DASHA2
                 path = directory / (model + "-study.glb")
                 manifest = json.loads(path.with_suffix(".manifest.json").read_text())
                 doc, read = read_glb(path)
@@ -168,7 +174,7 @@ class RigTests(unittest.TestCase):
         # choosing a model changes the body and nothing about how it moves.
         a, read_a = read_glb(ASSETS / "sky-study.glb")
         for model in ("dasha", "kai", "dasha-v2"):
-            directory = ASSETS if model != "dasha-v2" else ASSETS.parent / "0.3.0"
+            directory = ASSETS if model != "dasha-v2" else DASHA2
             b, read_b = read_glb(directory / (model + "-study.glb"))
             for clip_a, clip_b in zip(a["animations"], b["animations"], strict=True):
                 self.assertEqual(clip_a["channels"], clip_b["channels"])
@@ -180,7 +186,7 @@ class RigTests(unittest.TestCase):
         # is a visibility change, never a second character being fetched. What
         # a person can choose and what actually has geometry are checked
         # against the one table both the asset build and Web read.
-        directory = ASSETS.parent / "0.3.0"
+        directory = DASHA2
         manifest = json.loads((directory / "dasha-v2-study.manifest.json").read_text())
         table = json.loads((Path(__file__).resolve().parent / "dasha2/wardrobe.json").read_text())
         doc, _ = read_glb(directory / "dasha-v2-study.glb")
@@ -208,6 +214,44 @@ class RigTests(unittest.TestCase):
         # same body afterwards.
         self.assertEqual(set(table["always_visible"]) & published, set())
 
+    def test_earlier_version_never_gains_a_later_item(self):
+        # A client still holding the 0.3.0 path must get the asset it was
+        # published with: an item enters only the version its `since` names.
+        table = json.loads((Path(__file__).resolve().parent / "dasha2/wardrobe.json").read_text())
+        later = {item["id"] for item in table["items"] if "since" in item}
+        self.assertIn("outerwear/hoodie-pullover", later)
+        earlier = json.loads((ASSETS.parent / "0.3.0/dasha-v2-study.manifest.json").read_text())
+        current = json.loads((DASHA2 / "dasha-v2-study.manifest.json").read_text())
+        self.assertEqual({item["id"] for item in earlier["wardrobe"]} & later, set())
+        self.assertLessEqual(later, {item["id"] for item in current["wardrobe"]})
+
+    def test_hoodie_print_panels_never_overlap(self):
+        # Printed cloth is laid out in metres, one panel centred on each whole
+        # metre of U, so a repeat keeps one size and an emblem one place.
+        manifest = json.loads((DASHA2 / "dasha-v2-study.manifest.json").read_text())
+        doc, read = read_glb(DASHA2 / "dasha-v2-study.glb")
+        by_node = {mesh["name"]: mesh["primitives"] for mesh in doc["meshes"]}
+        panels = {"hoodie_pullover_body": {0, 1}, "L_hoodie_pullover_sleeve": {2},
+                  "R_hoodie_pullover_sleeve": {3}, "hoodie_pullover_hood": {4},
+                  "hoodie_pullover_pocket": {5}}
+        seen = set()
+        for part in manifest["parts"]:
+            if part["material"] != "fleece":
+                continue
+            attrs = by_node[part["node"]][part["primitive"]]["attributes"]
+            uv = read(attrs["TEXCOORD_0"])[part["vertex_offset"]:part["vertex_offset"] + part["vertex_count"]]
+            centre = np.round(uv[:, 0])
+            self.assertEqual(set(centre.astype(int)), panels[part["name"]], part["name"])
+            self.assertLess(np.abs(uv[:, 0] - centre).max(), .45, part["name"])
+            self.assertGreaterEqual(uv[:, 1].min(), 0, part["name"])
+            seen.add(part["name"])
+        self.assertEqual(seen, set(panels))
+        # Cloth that carries no print carries no coordinates either.
+        for part in manifest["parts"]:
+            if part["node"] == "wear:outerwear/hoodie-pullover" and part["material"] != "fleece":
+                attrs = by_node[part["node"]][part["primitive"]]["attributes"]
+                self.assertNotIn("TEXCOORD_0", attrs, part["name"])
+
     def test_hard_part_uses_one_bone_even_across_nearest_joint_boundary(self):
         skeleton = np.arange(66).reshape(22, 3)
         vertices = np.array([[0., 0., 0.], [63., 64., 65.]])
@@ -228,6 +272,66 @@ class RigTests(unittest.TestCase):
         self.assertTrue((joints[:, 0] == INDEX["hand_R"]).all())
         with self.assertRaises(ValueError):
             weights_for(vertices, "x", "bare", skeleton, "not-a-family")
+
+
+def sleeve(uv=True):
+    """A ring of cloth whose texture seam repeats one column of vertices."""
+    sides, rings = 8, 3
+    angles = np.linspace(0, 2 * np.pi, sides + 1)
+    grid = np.array([[[np.cos(a), np.sin(a), z] for a in angles] for z in (0., .5, 1.)])
+    faces = []
+    for i in range(rings - 1):
+        for j in range(sides):
+            a, b = i * (sides + 1) + j, i * (sides + 1) + j + 1
+            c, d = b + sides + 1, a + sides + 1
+            faces.extend([[a, b, c], [a, c, d]])
+    coords = np.array([[j / sides, i / (rings - 1)] for i in range(rings) for j in range(sides + 1)])
+    visual = TextureVisuals(uv=coords) if uv else TextureVisuals()
+    return trimesh.Trimesh(grid.reshape(-1, 3), faces, visual=visual, process=False)
+
+
+WARDROBE = {"rig_version": "test", "slots": [], "body_regions": [], "always_visible": [],
+            "default_outfit": {}, "items": []}
+
+
+class TextureCoordinateTests(unittest.TestCase):
+    def export(self, parts):
+        skeleton = np.arange(66).reshape(22, 3).astype(float)
+        palette = {"cloth": ("#ffffff", .9, 0), "rib": ("#f4f4f4", .95, 0)}
+        out = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        export_modular_avatar([("wear:test", "wardrobe-item", "test", parts)], palette,
+                              skeleton, out, "test", version="0", wardrobe=WARDROBE)
+        return read_glb(out / "test.glb")
+
+    def test_textured_part_exports_its_coordinates(self):
+        mesh = sleeve()
+        doc, read = self.export([("ring", mesh, "cloth", "clothing", "torso")])
+        attrs = doc["meshes"][0]["primitives"][0]["attributes"]
+        self.assertEqual(doc["accessors"][attrs["TEXCOORD_0"]]["type"], "VEC2")
+        np.testing.assert_allclose(read(attrs["TEXCOORD_0"]), mesh.visual.uv, atol=1e-7)
+
+    def test_texture_seam_is_not_a_crease_in_the_lighting(self):
+        doc, read = self.export([("ring", sleeve(), "cloth", "clothing", "torso")])
+        normals = read(doc["meshes"][0]["primitives"][0]["attributes"]["NORMAL"]).reshape(3, 9, 3)
+        # The first and last column are the same place on either side of the seam.
+        np.testing.assert_allclose(normals[:, 0], normals[:, -1], atol=1e-7)
+
+    def test_untextured_cloth_keeps_its_layout(self):
+        mesh = sleeve(uv=False)
+        doc, read = self.export([("ring", mesh, "cloth", "clothing", "torso")])
+        attrs = doc["meshes"][0]["primitives"][0]["attributes"]
+        self.assertNotIn("TEXCOORD_0", attrs)
+        np.testing.assert_allclose(read(attrs["NORMAL"]), mesh.vertex_normals[:, [0, 2, 1]] * [1, 1, -1], atol=1e-6)
+
+    def test_print_never_covers_half_a_primitive(self):
+        with self.assertRaises(ValueError):
+            self.export([("ring", sleeve(), "cloth", "clothing", "torso"),
+                         ("plain", sleeve(uv=False), "cloth", "clothing", "torso")])
+        # Different cloth is a different primitive, so it may stay plain.
+        doc, _ = self.export([("ring", sleeve(), "cloth", "clothing", "torso"),
+                              ("hem", sleeve(uv=False), "rib", "clothing", "torso")])
+        textured = ["TEXCOORD_0" in p["attributes"] for p in doc["meshes"][0]["primitives"]]
+        self.assertEqual(sorted(textured), [False, True])
 
 
 if __name__ == "__main__":

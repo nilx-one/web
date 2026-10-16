@@ -15,7 +15,7 @@ import type { GuideShot } from "./guide-stage";
  * she only says it out loud.
  */
 export type GuideSceneId =
-  "intro" | "reward" | "backpack" | "territory" | "afterthought";
+  "intro" | "reward" | "backpack" | "territory" | "afterthought" | "exclusive";
 
 export type GuideNodeId =
   | "greeting"
@@ -25,7 +25,8 @@ export type GuideNodeId =
   | "together"
   | "backpackGift"
   | "newGround"
-  | "afterthought";
+  | "afterthought"
+  | "exclusive";
 
 /**
  * How a scene ended, which is all the world is told about it.
@@ -33,14 +34,16 @@ export type GuideNodeId =
  * - `later` — she comes back, on a schedule that doubles each time;
  * - `skipped` — a person cut the scene short; whatever it was paying or
  *   giving was already paid;
+ * - `dismissed` — an exclusive offer was declined; return to pickup settings;
  * - `create` — a person went to create their Avaia, so its screen opens;
  * - `done` — the scene said what it had to;
  * - `together` — the Bond and its new Avaia take it from here.
  */
-export type GuideOutcome = "later" | "skipped" | "create" | "done" | "together";
+export type GuideOutcome =
+  "later" | "skipped" | "dismissed" | "create" | "done" | "together";
 
 export type GuideReply =
-  "curious" | "later" | "go" | "thanks" | "skip" | "continue";
+  "curious" | "later" | "go" | "thanks" | "skip" | "continue" | "notInterested";
 
 /**
  * The grammatical gender a line is said in. A study speaks in its own: Sky in
@@ -116,6 +119,7 @@ export interface GuideNode {
 }
 
 export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
+  exclusive: "exclusive",
   intro: "greeting",
   reward: "almostForgot",
   backpack: "backpackGift",
@@ -124,6 +128,15 @@ export const GUIDE_OPENING: Readonly<Record<GuideSceneId, GuideNodeId>> = {
 };
 
 export const GUIDE_NODES: Readonly<Record<GuideNodeId, GuideNode>> = {
+  exclusive: {
+    line: ["guide.exclusive.line"],
+    shot: "dasha",
+    recorded: false,
+    choices: [
+      { reply: "continue", next: { end: "done" } },
+      { reply: "notInterested", next: { end: "dismissed" } },
+    ],
+  },
   greeting: {
     line: [
       inVoices("guide.intro.greeting.0"),
@@ -239,6 +252,7 @@ const REPLY_KEYS: Readonly<Record<GuideReply, readonly GuideWording[]>> = {
     "guide.choice.thanks.1",
     "guide.choice.thanks.2",
   ],
+  notInterested: ["guide.choice.notInterested"],
   skip: ["guide.choice.skip"],
   continue: ["guide.choice.continue"],
 };
@@ -248,7 +262,7 @@ const REPLY_KEYS: Readonly<Record<GuideReply, readonly GuideWording[]>> = {
  * followed by a line of their own.
  */
 export function isSpokenReply(reply: GuideReply): boolean {
-  return reply !== "skip" && reply !== "continue";
+  return reply !== "skip" && reply !== "continue" && reply !== "notInterested";
 }
 
 function saltOf(value: string): number {

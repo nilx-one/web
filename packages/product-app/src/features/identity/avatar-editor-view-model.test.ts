@@ -43,7 +43,7 @@ describe("the four-model picker", () => {
       "/avatars/0.1.0/sky-study.png",
       "/avatars/0.1.0/dasha-study.png",
       "/avatars/0.1.0/kai-study.png",
-      "/avatars/0.3.0/dasha-v2-study.png",
+      "/avatars/0.4.0/dasha-v2-study.png",
     ]);
   });
 
@@ -96,6 +96,7 @@ describe("Dasha 2.0's wardrobe", () => {
       "top",
       "bottom",
       "dress",
+      "outerwear",
       "shoes",
       "accessories",
     ]);
@@ -103,7 +104,7 @@ describe("Dasha 2.0's wardrobe", () => {
     expect(hair?.label).toBe("Hair");
     expect(hair?.multiple).toBe(false);
     expect(hair?.items[0]?.thumbnailUrl).toBe(
-      "/avatars/0.3.0/dasha-v2-study.hair-swept-bun.png",
+      "/avatars/0.4.0/dasha-v2-study.hair-swept-bun.png",
     );
     expect(hair?.items.filter((item) => item.selected)).toHaveLength(1);
   });

@@ -208,7 +208,7 @@ export const WARDROBE_ITEMS: readonly WardrobeItem[] = [
   dasha2Item("hair/swept-bun", "hair", "Swept bun", []),
   dasha2Item("hair/loose-long", "hair", "Loose length", []),
   // A short sleeve does not enclose the arm below its hem, so the arm regions
-  // stay published for a long-sleeved item and hidden by nothing yet.
+  // stay published for a long-sleeved item: the hoodie is the first to hide them.
   dasha2Item("top/tee-black", "top", "Black tee", ["torso"]),
   dasha2Item("top/shell-ecru", "top", "Ecru shell", ["torso"]),
   dasha2Item("bottom/trousers-ecru", "bottom", "Ecru trousers", [
@@ -228,6 +228,13 @@ export const WARDROBE_ITEMS: readonly WardrobeItem[] = [
   dasha2Item("shoes/loafers-black", "shoes", "Black loafers", ["feet"]),
   dasha2Item("shoes/sneakers-white", "shoes", "White sneakers", ["feet"]),
   dasha2Item("accessory/earrings-silver", "accessories", "Silver earrings", []),
+  // Worn over any top: it encloses the tee and its sleeves rather than hiding
+  // them, because covering hides body regions and never another garment.
+  dasha2Item("outerwear/hoodie-pullover", "outerwear", "White hoodie", [
+    "torso",
+    "upper_arms",
+    "lower_arms",
+  ]),
 ];
 
 const WARDROBE_BY_ID: ReadonlyMap<string, WardrobeItem> = new Map(
@@ -274,7 +281,7 @@ export const AVATAR_CATALOG: readonly AvatarModelDefinition[] = [
     detail: "feminine study · changeable clothes",
     capability: "modular-appearance",
     editable: true,
-    assetVersion: "0.3.0",
+    assetVersion: "0.4.0",
     schema: DASHA_2_SCHEMA,
     defaultAppearance: DASHA_2_DEFAULT_APPEARANCE,
   },

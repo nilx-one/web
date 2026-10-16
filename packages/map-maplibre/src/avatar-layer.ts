@@ -27,11 +27,11 @@ import {
   DirectionalLight,
   HemisphereLight,
   Matrix4,
+  Object3D,
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
   type AnimationClip,
-  type Object3D,
 } from "three";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
@@ -73,6 +73,7 @@ type AssetLoader = (
  * the application's to know.
  */
 const APPLICATION_NODE_MARK = ":";
+const GLTF_NODE_NAME = "gltfNodeName";
 
 type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly modelId: AvatarModelId | "system-ping";
@@ -134,6 +135,32 @@ function defaultLoadAsset(
 }
 
 /**
+ * Keep each glTF node's own name on the object it became.
+ *
+ * Three's loader strips the characters it reserves for animation bindings —
+ * `:` and `/` among them — from object names, so `wear:top/tee-black` arrives
+ * as `weartoptee-black` and could never be matched against the names the
+ * application uses. The asset's name is recorded once per loaded asset and,
+ * living in `userData`, survives every clone of it.
+ */
+export function rememberGltfNodeNames(gltf: GLTF): void {
+  const nodes = (gltf.parser?.json?.nodes ?? []) as readonly {
+    name?: string;
+  }[];
+  for (const [object, reference] of gltf.parser?.associations ?? []) {
+    if (!(object instanceof Object3D) || reference.nodes === undefined)
+      continue;
+    const name = nodes[reference.nodes]?.name;
+    if (typeof name === "string") object.userData[GLTF_NODE_NAME] = name;
+  }
+}
+
+function nodeName(object: Object3D): string {
+  const recorded: unknown = object.userData[GLTF_NODE_NAME];
+  return typeof recorded === "string" ? recorded : object.name;
+}
+
+/**
  * Show what this body is wearing, and only that.
  *
  * A modular study carries every wearable it publishes in the one asset, so
@@ -148,8 +175,9 @@ export function applyAvatarNodeVisibility(
 ): void {
   if (visibleNodes === undefined || visibleNodes.length === 0) return;
   root.traverse((object) => {
-    if (!object.name.includes(APPLICATION_NODE_MARK)) return;
-    object.visible = visibleNodes.includes(object.name);
+    const name = nodeName(object);
+    if (!name.includes(APPLICATION_NODE_MARK)) return;
+    object.visible = visibleNodes.includes(name);
   });
 }
 
@@ -359,6 +387,7 @@ export function createAvatarLayer(
     try {
       const asset = await requestAsset(instance.handle.modelId);
       if (disposed || localGeneration !== instance.loadGeneration) return;
+      rememberGltfNodeNames(asset);
       const root = cloneSkeleton(asset.scene);
       const mixer = new AnimationMixer(root);
       instance.root?.removeFromParent();

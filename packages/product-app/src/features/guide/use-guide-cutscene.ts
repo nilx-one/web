@@ -438,7 +438,10 @@ export function useGuideCutscene({
       case "leaving": {
         // A skipped scene is cut, not played out: no walk off, the camera
         // simply back where it was. What it carried was given before she spoke.
-        if (playingRef.current?.outcome === "skipped") {
+        if (
+          playingRef.current?.outcome === "skipped" ||
+          playingRef.current?.outcome === "dismissed"
+        ) {
           motionRef.current = undefined;
           const origin = baseCameraRef.current;
           if (origin !== undefined) shoot(origin, 0);

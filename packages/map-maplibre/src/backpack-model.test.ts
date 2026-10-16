@@ -20,6 +20,10 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  applyAvatarNodeVisibility,
+  rememberGltfNodeNames,
+} from "./avatar-layer";
+import {
   createBackpackSource,
   disposeBackpack,
   mountBackpack,
@@ -30,7 +34,7 @@ const STUDIES = [
   "deploy/web/avatars/0.1.0/sky-study.glb",
   "deploy/web/avatars/0.1.0/dasha-study.glb",
   "deploy/web/avatars/0.1.0/kai-study.glb",
-  "deploy/web/avatars/0.3.0/dasha-v2-study.glb",
+  "deploy/web/avatars/0.4.0/dasha-v2-study.glb",
 ];
 
 function parse(path: string): Promise<GLTF> {
@@ -77,6 +81,42 @@ function syntheticBody(): { body: Object3D; chest: Bone } {
   body.updateMatrixWorld(true);
   torso.bind(new Skeleton([root, spine, chest, ...arms]));
   return { body, chest };
+}
+
+interface ModularManifest {
+  readonly modular?: boolean;
+  readonly always_visible: readonly string[];
+  readonly body_regions: readonly string[];
+  readonly default_outfit: Readonly<Record<string, string | readonly string[]>>;
+  readonly wardrobe: readonly { id: string; hides: readonly string[] }[];
+}
+
+/**
+ * Dress a modular study the way it is published before anything is fitted to
+ * it. A body showing every wearable at once is not an outfit anyone wears, and
+ * the runtime only ever fits a bag to what a body is actually wearing.
+ */
+function wearPublishedOutfit(path: string, study: GLTF): void {
+  const manifestPath = path.replace(/\.glb$/, ".manifest.json");
+  if (!existsSync(manifestPath)) return;
+  const manifest = JSON.parse(
+    readFileSync(manifestPath, "utf8"),
+  ) as ModularManifest;
+  if (manifest.modular !== true) return;
+  rememberGltfNodeNames(study);
+  const worn = Object.values(manifest.default_outfit).flat();
+  const hidden = new Set(
+    manifest.wardrobe
+      .filter((item) => worn.includes(item.id))
+      .flatMap((item) => item.hides),
+  );
+  applyAvatarNodeVisibility(study.scene, [
+    ...manifest.always_visible.map((region) => `body:${region}`),
+    ...manifest.body_regions
+      .filter((region) => !hidden.has(region))
+      .map((region) => `body:${region}`),
+    ...worn.map((id) => `wear:${id}`),
+  ]);
 }
 
 function authoredBag(): Object3D {
@@ -148,6 +188,27 @@ describe("backpack attachment", () => {
     }
   });
 
+  it("fits what is worn, not cloth hidden with its whole node", () => {
+    const { body } = syntheticBody();
+    const torso = body.children.find(
+      (child): child is SkinnedMesh => child instanceof SkinnedMesh,
+    )!;
+    // A coat the body is not wearing: deeper than the torso, its primitive
+    // left visible inside a hidden node, as a loaded multi-material item is.
+    const coat = new SkinnedMesh(
+      torso.geometry.clone().scale(1.1, 1, 2),
+      new MeshStandardMaterial(),
+    );
+    const node = new Object3D();
+    node.visible = false;
+    node.add(coat);
+    body.add(node);
+    body.updateMatrixWorld(true);
+    coat.bind(torso.skeleton, torso.bindMatrix);
+    const mounted = mountBackpack(body, authoredBag())!;
+    expect(worldBox(mounted.children[0]!).max.z).toBeCloseTo(-0.11 - 0.006, 2);
+  });
+
   it("does not float an item on an unsupported rig", () => {
     const body = new Object3D();
     const chest = new Bone();
@@ -198,6 +259,7 @@ describe.skipIf(!STUDIES.every((path) => existsSync(path)))(
     it.each(STUDIES)("fits %s", async (path) => {
       const [study, backpack] = await Promise.all([parse(path), parse(ASSET)]);
       const body = study.scene;
+      wearPublishedOutfit(path, study);
       body.updateMatrixWorld(true);
       const mounted = mountBackpack(body, backpack.scene)!;
       expect(mounted).toBeDefined();

@@ -82,6 +82,7 @@ import type { LocalModelDependency } from "../../shell/local-model-host";
 import { LocalModelSettings } from "../../shell/local-model-settings";
 import {
   IDENTITY_ROUTE,
+  SETTINGS_ROUTE,
   WORLD_ROUTE,
   type ShellRoute,
   type ShellSection,
@@ -774,6 +775,7 @@ export function AuthenticatedMapHomeView({
 }: AuthenticatedMapHomeViewProps) {
   const mapHostRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLElement>(null);
+  const returnToPickup = useRef(false);
   const renderedDetailScreenKey = useRef<string | undefined>(undefined);
   const location = useDeviceLocation(geolocation);
   const [detailState, setDetailState] = useState<
@@ -1575,6 +1577,41 @@ export function AuthenticatedMapHomeView({
     );
     if (scroller === null) return;
     scroller.scrollTop = 0;
+    if (section !== "settings" || !returnToPickup.current) return;
+    // The return belongs to this visit only: leaving settings before the
+    // screen settles drops it instead of jumping on a later, unrelated visit.
+    returnToPickup.current = false;
+    // Wait for the incoming Dock screen to settle; an outgoing screen may
+    // still contain the same settings controls during a transition.
+    const restore = () => {
+      const screen = dock.querySelector<HTMLElement>(
+        ".bond-dock__screen[data-phase='settled']",
+      );
+      const target = screen?.querySelector<HTMLElement>("#pickup-settings");
+      const scroll = screen?.querySelector<HTMLElement>(".bond-dock__scroll");
+      if (
+        target === null ||
+        target === undefined ||
+        scroll === null ||
+        scroll === undefined
+      )
+        return;
+      scroll.scrollTop +=
+        target.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
+      target
+        .querySelector<HTMLInputElement>("input")
+        ?.focus({ preventScroll: true });
+      observer.disconnect();
+    };
+    const observer = new MutationObserver(restore);
+    observer.observe(dock, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-phase"],
+    });
+    restore();
+    return () => observer.disconnect();
   }, [activeDetail, section]);
   const avaiaSpeech =
     wheel === "avaia" && handover === undefined
@@ -2511,6 +2548,12 @@ export function AuthenticatedMapHomeView({
       { bond: pubDress, avaia: avaiaLabel },
     );
     setSceneToasts((current) => [...current, toast]);
+    if (scene === "exclusive" && outcome === "dismissed") {
+      returnToPickup.current = true;
+      setDetailState(undefined);
+      navigate(SETTINGS_ROUTE);
+      return;
+    }
     if (scene === "afterthought") {
       // Its receipt is the wheel changing hands; what the reward paid was
       // left by the reward's own.
@@ -3096,7 +3139,13 @@ export function AuthenticatedMapHomeView({
                       )}
                       {committedAwards === undefined ||
                       findItems?.picksUp === undefined ? null : (
-                        <PickupSettings />
+                        <PickupSettings
+                          onExclusive={() => {
+                            setDetailState(undefined);
+                            navigate(WORLD_ROUTE);
+                            guide.play("exclusive");
+                          }}
+                        />
                       )}
                       <p className="interface-settings__note">
                         {t("settings.presentation")}

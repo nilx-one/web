@@ -12,6 +12,9 @@
  * marks none of these; it carries every voice so the three catalogues agree.
  */
 export const GUIDE_EN = {
+  "guide.exclusive.line":
+    "Want something exclusive? I’ll be right over, as soon as you buy it.",
+  "guide.exclusive.result": "Pickup preference unchanged.",
   "system.ping.error": "Something went wrong",
   "system.ping.name": "xPing",
   "system.ping.asideLabel": "Muttering to himself",
@@ -128,10 +131,13 @@ export const GUIDE_EN = {
   "guide.choice.thanks.1": "That’s nice to hear.",
   "guide.choice.thanks.2": "That was easy.",
   "guide.choice.skip": "(skip)",
+  "guide.choice.notInterested": "Not interested",
   "guide.choice.continue": "(continue)",
 } as const;
 
 export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
+  "guide.exclusive.line": "Хочеш ексклюзивне? Я миттю — одразу, як купиш.",
+  "guide.exclusive.result": "Налаштування підбирання не змінено.",
   "system.ping.error": "Виникла помилка",
   "system.ping.name": "xPing",
   "system.ping.asideLabel": "Бурмоче сам до себе",
@@ -245,10 +251,13 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.choice.thanks.1": "Приємно чути.",
   "guide.choice.thanks.2": "Це було легко.",
   "guide.choice.skip": "(пропустити)",
+  "guide.choice.notInterested": "Не цікаво",
   "guide.choice.continue": "(далі)",
 };
 
 export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
+  "guide.exclusive.line": "Хочешь эксклюзивное? Я мигом — сразу, как купишь.",
+  "guide.exclusive.result": "Настройка подбора не изменена.",
   "system.ping.error": "Произошла ошибка",
   "system.ping.name": "xPing",
   "system.ping.asideLabel": "Бормочет себе под нос",
@@ -364,5 +373,6 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "guide.choice.thanks.1": "Приятно слышать.",
   "guide.choice.thanks.2": "Это было легко.",
   "guide.choice.skip": "(пропустить)",
+  "guide.choice.notInterested": "Не интересно",
   "guide.choice.continue": "(далее)",
 };

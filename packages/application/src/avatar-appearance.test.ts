@@ -310,11 +310,20 @@ describe("body region visibility", () => {
     expect(hiddenBodyRegions(DASHA_2, inASkirt)).toContain("upper_legs");
   });
 
-  it("leaves the arms bare: no published item encloses one yet", () => {
-    for (const item of WARDROBE_ITEMS) {
-      expect(item.hides).not.toContain("upper_arms");
-      expect(item.hides).not.toContain("lower_arms");
-    }
+  it("leaves the arms bare under a short sleeve; only the hoodie encloses them", () => {
+    const sleeved = WARDROBE_ITEMS.filter(
+      (item) =>
+        item.hides.includes("upper_arms") || item.hides.includes("lower_arms"),
+    ).map((item) => item.id);
+    expect(sleeved).toEqual(["outerwear/hoodie-pullover"]);
+    const inAHoodie = equip(
+      resolveAvatarAppearance(DASHA_2, undefined),
+      "outerwear/hoodie-pullover",
+    );
+    expect(hiddenBodyRegions(DASHA_2, inAHoodie)).toEqual(
+      expect.arrayContaining(["torso", "upper_arms", "lower_arms"]),
+    );
+    expect(inAHoodie.top).toBe("top/tee-black");
   });
 
   it("hides nothing for a study that wears nothing separately", () => {
