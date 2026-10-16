@@ -11,12 +11,13 @@
 //! identity-bot business locate <owner pub_dress> <station address>
 //! ```
 //!
-//! A station's address is formed from its caption (`business_caption`):
+//! A station's address is formed from its caption by Core
+//! (`StationPubDress::from_caption`, `docs/business-station.md` in nilx-one/core):
 //! `"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`.
 
 use crate::{
     BondAccessRole, BusinessLocationOutcome, BusinessRegistrationOutcome, BusinessStationOutcome,
-    GeoCoordinate, IdentityRepository, PubDress, business_caption,
+    GeoCoordinate, IdentityRepository, PubDress, StationPubDress,
 };
 
 /// Runs one operation and answers the line to print. `Err` is a refusal or a
@@ -63,10 +64,9 @@ pub async fn run(
         }
         ["business", "station", owner, caption, longitude, latitude] => {
             let owner = parse_pub_dress(owner)?;
-            let written = business_caption::normalize_caption(caption)
+            let formed = StationPubDress::from_caption(&owner, caption)
                 .map_err(|error| format!("\"{caption}\": {error}"))?;
-            let station = business_caption::station_address(&owner, &written)
-                .map_err(|error| format!("\"{caption}\": {error}"))?;
+            let (station, written) = (formed.address, formed.caption);
             let coordinate = parse_coordinate(longitude, latitude)?;
             match repository
                 .station_business_avaia(&owner, &station, Some(&written), coordinate, now)
@@ -95,7 +95,8 @@ pub async fn run(
         }
         ["business", "locate", owner, station] => {
             let owner = parse_pub_dress(owner)?;
-            let station = parse_pub_dress(station)?;
+            let station = StationPubDress::for_owner(&owner, station)
+                .map_err(|error| format!("{station}: {error}"))?;
             match repository
                 .locate_business(&owner, &station, now)
                 .await

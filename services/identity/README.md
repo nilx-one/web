@@ -97,13 +97,11 @@ the single Avaia the owner creates, and owner-keyed reads never see a
 station. A station leaves with its business.
 
 A business names each station by a caption, kept as written. The station's
-address is formed from it once: the business's own full address, `-`, then
-the caption's place transliterated (Ukrainian by the 2010 national table),
-lowercased, whitespace to `-`, with no Avaia `ai` ending
-(`"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`). A
-leading business name in the caption (`0xda-market` or `xda-market`) is the
-prefix already and is not repeated; the address must fit the `pub_dress`
-grammar (a slug of at most 32 characters).
+address is formed from it once by Core (`StationPubDress::from_caption`,
+`docs/business-station.md` in nilx-one/core): the business's own full address,
+`-`, then the caption's place transliterated, with no Avaia `ai` ending
+(`"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`). This
+service only stores what Core forms and allocates it in the global namespace.
 
 A business Bond stands at one of its own stations: its location is declared
 (`manual`) at the station's point and follows it when the station moves. Its

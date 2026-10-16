@@ -216,11 +216,12 @@ function parseBusinessStations(
   for (const station of body.stations as readonly unknown[]) {
     if (
       !isRecord(station) ||
+      // The service checks a station's address by Core's grammar
+      // (`StationPubDress`); this reader only takes the shape it is given.
       typeof station.pub_dress !== "string" ||
-      // A station is named after its business: `0xda-market-zoloti-vorota`.
-      !station.pub_dress.startsWith(`${String(station.owner_pub_dress)}-`) ||
+      station.pub_dress.length === 0 ||
       typeof station.owner_pub_dress !== "string" ||
-      !station.owner_pub_dress.startsWith("0x")
+      station.owner_pub_dress.length === 0
     ) {
       return undefined;
     }
