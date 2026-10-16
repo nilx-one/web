@@ -1559,6 +1559,9 @@ export function AuthenticatedMapHomeView({
     if (scroller === null) return;
     scroller.scrollTop = 0;
     if (section !== "settings" || !returnToPickup.current) return;
+    // The return belongs to this visit only: leaving settings before the
+    // screen settles drops it instead of jumping on a later, unrelated visit.
+    returnToPickup.current = false;
     // Wait for the incoming Dock screen to settle; an outgoing screen may
     // still contain the same settings controls during a transition.
     const restore = () => {
@@ -1579,7 +1582,6 @@ export function AuthenticatedMapHomeView({
       target
         .querySelector<HTMLInputElement>("input")
         ?.focus({ preventScroll: true });
-      returnToPickup.current = false;
       observer.disconnect();
     };
     const observer = new MutationObserver(restore);

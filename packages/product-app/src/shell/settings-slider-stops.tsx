@@ -16,7 +16,7 @@ export function SettingsSliderStops({
     <span className="interface-settings__slider-stops" aria-hidden="true">
       {labels.map((label, index) => (
         <span
-          key={label}
+          key={index}
           data-current={index === current}
           data-pending={index < pending}
           style={{

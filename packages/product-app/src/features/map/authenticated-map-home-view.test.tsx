@@ -1651,6 +1651,88 @@ describe("AuthenticatedMapHomeView", () => {
     );
   });
 
+  it("drops the pickup return when that settings visit has no pickup panel", async () => {
+    vi.useFakeTimers();
+    const mapRenderer = renderer();
+    const pending = () => new Promise<never>(() => undefined);
+    const committedAwards = {
+      commitAwards: vi.fn(pending),
+      readClaims: vi.fn(pending),
+    };
+    const findItems = { picksUp: vi.fn(async () => true) };
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return {
+          x: 0,
+          y: this.id === "pickup-settings" ? 600 : 100,
+          top: this.id === "pickup-settings" ? 600 : 100,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: 0,
+          height: 0,
+          toJSON: () => ({}),
+        };
+      },
+    );
+    let goTo: (section: ShellSection) => void = () => undefined;
+    let showPickup: (shown: boolean) => void = () => undefined;
+    function Harness() {
+      const [section, setSection] = useState<ShellSection>("settings");
+      const [withPickup, setWithPickup] = useState(true);
+      goTo = setSection;
+      showPickup = setWithPickup;
+      return (
+        <AuthenticatedMapHomeView
+          hostLabel="browser host"
+          pubDress="0x0sky"
+          avaiaPubDress="x0skai"
+          renderer={mapRenderer}
+          geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
+          runtime={{
+            tone: "ready",
+            label: "Shared Core ready",
+            detail: "Contract 0.1.0",
+          }}
+          safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          section={section}
+          {...(withPickup ? { findItems } : {})}
+          committedAwards={committedAwards}
+          onNavigate={(route) => {
+            // The return lands on a settings screen without the pickup panel.
+            if (route === "/settings") setWithPickup(false);
+            setSection(route === "/settings" ? "settings" : "world");
+          }}
+        />
+      );
+    }
+    const { container } = render(<Harness />);
+    fireEvent.change(screen.getByRole("slider", { name: "Pick up" }), {
+      target: { value: "0" },
+    });
+    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
+    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
+    fireEvent.click(screen.getByRole("button", { name: "Not interested" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.queryByRole("slider", { name: "Pick up" })).toBeNull();
+    act(() => goTo("world"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(420);
+    });
+    act(() => {
+      showPickup(true);
+      goTo("settings");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(420);
+    });
+    const slider = screen.getByRole("slider", { name: "Pick up" });
+    expect(slider.closest(".bond-dock__scroll")?.scrollTop).toBe(0);
+    expect(slider).not.toHaveFocus();
+  });
+
   it("offers sound on the settings route and keeps the choice on this device", () => {
     const sound = soundDouble();
     renderView({ section: "settings", sound });

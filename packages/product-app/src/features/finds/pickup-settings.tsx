@@ -22,7 +22,11 @@ const STOPS: readonly {
   { key: "settings.pickup.off", color: "#899199" },
 ];
 
-/** Core has five thresholds; the sixth visual stop is intentionally inactive. */
+/**
+ * Maps a Core threshold level (0 Off … 4 every rarity) to its stop. Level 1
+ * (legendary only) sits on the far left beside the locked Special stop, and
+ * Off sits on the far right.
+ */
 function displayIndex(level: number): number {
   return level === 0 ? 5 : level === 1 ? 0 : level;
 }
