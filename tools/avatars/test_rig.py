@@ -5,12 +5,15 @@
 import hashlib
 import json
 import struct
+import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
+import trimesh
+from trimesh.visual import TextureVisuals
 
-from rig import TOPOLOGY, INDEX, weights_for
+from rig import TOPOLOGY, INDEX, export_modular_avatar, weights_for
 
 ASSETS = Path(__file__).resolve().parents[2] / "deploy/web/avatars/0.1.0"
 GAIT = (Path(__file__).resolve().parents[2]
@@ -27,7 +30,7 @@ def read_glb(path):
     def accessor(index):
         a = doc["accessors"][index]
         view = doc["bufferViews"][a["bufferView"]]
-        width = {"SCALAR": 1, "VEC3": 3, "VEC4": 4, "MAT4": 16}[a["type"]]
+        width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}[a["type"]]
         dtype = {5126: "<f4", 5123: "<u2", 5125: "<u4"}[a["componentType"]]
         return np.frombuffer(binary, dtype=dtype, count=a["count"] * width,
                              offset=view.get("byteOffset", 0) + a.get("byteOffset", 0)).reshape(-1, width)
@@ -228,6 +231,66 @@ class RigTests(unittest.TestCase):
         self.assertTrue((joints[:, 0] == INDEX["hand_R"]).all())
         with self.assertRaises(ValueError):
             weights_for(vertices, "x", "bare", skeleton, "not-a-family")
+
+
+def sleeve(uv=True):
+    """A ring of cloth whose texture seam repeats one column of vertices."""
+    sides, rings = 8, 3
+    angles = np.linspace(0, 2 * np.pi, sides + 1)
+    grid = np.array([[[np.cos(a), np.sin(a), z] for a in angles] for z in (0., .5, 1.)])
+    faces = []
+    for i in range(rings - 1):
+        for j in range(sides):
+            a, b = i * (sides + 1) + j, i * (sides + 1) + j + 1
+            c, d = b + sides + 1, a + sides + 1
+            faces.extend([[a, b, c], [a, c, d]])
+    coords = np.array([[j / sides, i / (rings - 1)] for i in range(rings) for j in range(sides + 1)])
+    visual = TextureVisuals(uv=coords) if uv else TextureVisuals()
+    return trimesh.Trimesh(grid.reshape(-1, 3), faces, visual=visual, process=False)
+
+
+WARDROBE = {"rig_version": "test", "slots": [], "body_regions": [], "always_visible": [],
+            "default_outfit": {}, "items": []}
+
+
+class TextureCoordinateTests(unittest.TestCase):
+    def export(self, parts):
+        skeleton = np.arange(66).reshape(22, 3).astype(float)
+        palette = {"cloth": ("#ffffff", .9, 0), "rib": ("#f4f4f4", .95, 0)}
+        out = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        export_modular_avatar([("wear:test", "wardrobe-item", "test", parts)], palette,
+                              skeleton, out, "test", version="0", wardrobe=WARDROBE)
+        return read_glb(out / "test.glb")
+
+    def test_textured_part_exports_its_coordinates(self):
+        mesh = sleeve()
+        doc, read = self.export([("ring", mesh, "cloth", "clothing", "torso")])
+        attrs = doc["meshes"][0]["primitives"][0]["attributes"]
+        self.assertEqual(doc["accessors"][attrs["TEXCOORD_0"]]["type"], "VEC2")
+        np.testing.assert_allclose(read(attrs["TEXCOORD_0"]), mesh.visual.uv, atol=1e-7)
+
+    def test_texture_seam_is_not_a_crease_in_the_lighting(self):
+        doc, read = self.export([("ring", sleeve(), "cloth", "clothing", "torso")])
+        normals = read(doc["meshes"][0]["primitives"][0]["attributes"]["NORMAL"]).reshape(3, 9, 3)
+        # The first and last column are the same place on either side of the seam.
+        np.testing.assert_allclose(normals[:, 0], normals[:, -1], atol=1e-7)
+
+    def test_untextured_cloth_keeps_its_layout(self):
+        mesh = sleeve(uv=False)
+        doc, read = self.export([("ring", mesh, "cloth", "clothing", "torso")])
+        attrs = doc["meshes"][0]["primitives"][0]["attributes"]
+        self.assertNotIn("TEXCOORD_0", attrs)
+        np.testing.assert_allclose(read(attrs["NORMAL"]), mesh.vertex_normals[:, [0, 2, 1]] * [1, 1, -1], atol=1e-6)
+
+    def test_print_never_covers_half_a_primitive(self):
+        with self.assertRaises(ValueError):
+            self.export([("ring", sleeve(), "cloth", "clothing", "torso"),
+                         ("plain", sleeve(uv=False), "cloth", "clothing", "torso")])
+        # Different cloth is a different primitive, so it may stay plain.
+        doc, _ = self.export([("ring", sleeve(), "cloth", "clothing", "torso"),
+                              ("hem", sleeve(uv=False), "rib", "clothing", "torso")])
+        textured = ["TEXCOORD_0" in p["attributes"] for p in doc["meshes"][0]["primitives"]]
+        self.assertEqual(sorted(textured), [False, True])
 
 
 if __name__ == "__main__":
