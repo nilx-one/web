@@ -1782,6 +1782,30 @@ describe("AuthenticatedMapHomeView", () => {
     expect(free).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("cycles camera distance from repeated presses of the visible mode buttons", async () => {
+    rememberWorld("0x0sky", { avaia: { ...observation(), bearingDeg: 0 } });
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    await act(async () => Promise.resolve());
+    const follow = screen.getByRole("button", { name: "Follow" });
+    const free = screen.getByRole("button", { name: "Free" });
+    for (const zoom of [21.5, 21, 20.5, 21.5]) {
+      fireEvent.click(follow);
+      expect(mapRenderer.getCamera().zoom).toBe(zoom);
+      expect(follow).toHaveAttribute("aria-pressed", "true");
+    }
+    for (const zoom of [20.5, 19.5, 18.5, 19.5, 20.5, 21.5]) {
+      fireEvent.click(free);
+      expect(mapRenderer.getCamera().zoom).toBe(zoom);
+      expect(free).toHaveAttribute("aria-pressed", "true");
+    }
+  });
+
   it("opens on a readable manual identity rather than a distant marker", async () => {
     const mapRenderer = renderer();
     const declared = { longitude: 30.563, latitude: 50.4265 };

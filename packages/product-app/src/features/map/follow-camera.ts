@@ -55,6 +55,10 @@ export const FOLLOW_PITCH = 60;
  * Follow, there would be no way to see more while staying in it.
  */
 export const FOLLOW_MIN_ZOOM = MAP_BODY_HANDOVER_ZOOM;
+/** Explicit button distances; opening Follow retains the world's wider view. */
+export const FOLLOW_DISTANCE_ZOOMS = [21.5, 21, 20.5] as const;
+/** Three steps away, then three steps back to the starting distance. */
+export const FREE_DISTANCE_STEPS = [-1, -2, -3, -2, -1, 0] as const;
 
 /**
  * Aim along the line through a nominal 1.6 m head above the ground. MapCamera
@@ -66,6 +70,7 @@ export function followCamera(
   current: MapCamera,
   body: FollowBody,
   dimension: MapDimension = "volumetric",
+  minimumZoom: number = FOLLOW_MIN_ZOOM,
 ): MapCamera {
   const bearing = ((body.bearingDeg % 360) + 360) % 360;
   const pitch = dimension === "flat" ? 0 : FOLLOW_PITCH;
@@ -90,7 +95,7 @@ export function followCamera(
               180,
             (targetLatitude * 180) / Math.PI,
           ],
-    zoom: Math.max(current.zoom, FOLLOW_MIN_ZOOM),
+    zoom: Math.max(current.zoom, minimumZoom),
     bearing,
     pitch,
   };
