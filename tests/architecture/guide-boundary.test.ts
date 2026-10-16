@@ -153,7 +153,7 @@ describe("xSasha stays presentation", () => {
     // Returning from a declined exclusive offer may change only local Dock
     // navigation. No other scene may acquire a new navigation side effect.
     const exclusiveDismissal = ending.match(
-      /if \(scene === "exclusive" && outcome === "dismissed"\) \{([\s\S]*?)\n    \}/,
+      /if \(scene === "exclusive" && outcome === "dismissed"\) \{([\s\S]*?)\n {4}\}/,
     )?.[1];
     expect(exclusiveDismissal).toBeDefined();
     expect(exclusiveDismissal).toContain("returnToPickup.current = true");
