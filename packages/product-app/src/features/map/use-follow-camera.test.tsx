@@ -197,6 +197,67 @@ describe("useFollowCamera", () => {
     expect(fake.renderer.getCamera().zoom).toBe(21.5);
   });
 
+  it("keeps manual Follow zoom in either direction down to the normal floor", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    act(() => result.current.selectFollow());
+    fake.settle();
+    act(() => fake.gesture({ zoom: 20 }));
+    result.current.track(AHEAD);
+    expect(fake.renderer.getCamera()).toMatchObject({
+      zoom: 20,
+      bearing: AHEAD.bearingDeg,
+    });
+    act(() => fake.gesture({ zoom: 23 }));
+    expect(fake.renderer.getCamera().zoom).toBe(23);
+    act(() => fake.gesture({ zoom: 17 }));
+    expect(fake.renderer.getCamera().zoom).toBe(FOLLOW_MIN_ZOOM);
+  });
+
+  it("uses the normal Follow floor for Space and tracking after a preset", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    act(() => result.current.selectFollow());
+    fake.settle();
+    act(() => result.current.selectFree());
+    fake.settle();
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }));
+    });
+    expect(result.current.follow).toBe("locked");
+    expect(fake.renderer.getCamera().zoom).toBe(20.5);
+    fake.settle();
+    result.current.track(AHEAD);
+    expect(fake.renderer.getCamera().zoom).toBe(20.5);
+  });
+
+  it("starts a new Free cycle at the actual zoom after another move settles", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    act(() => result.current.selectFollow());
+    fake.settle();
+    fake.renderer.setCamera({ ...fake.renderer.getCamera(), zoom: 16 });
+    fake.settle();
+    act(() => result.current.selectFree());
+    expect(fake.renderer.getCamera().zoom).toBe(15);
+  });
+
+  it("keeps the new zoom target when starting an ease settles the previous move", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    // MapLibre stops the previous ease synchronously inside the new easeTo.
+    // The renderer still reports the previous camera in that moveend event.
+    fake.renderer.setCamera.mockImplementation(() => fake.settle());
+    act(() => {
+      result.current.selectFollow();
+      result.current.selectFollow();
+      result.current.selectFree();
+    });
+    expect(
+      fake.renderer.setCamera.mock.calls.map(([camera]) => camera.zoom),
+    ).toEqual([21.5, 21, 20]);
+  });
+
   it("uses immediate distance changes with reduced motion and preserves flat mode", () => {
     const fake = fakeRenderer();
     const { result } = renderHook(() =>

@@ -56,12 +56,12 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
 - The on-screen **Follow / Free** control is available on mobile and desktop.
   The first explicit Follow press, or selecting Follow from Free, chooses
   the closest preset; further presses cycle close → medium → far → close
-  (zoom 21.5 → 21 → 20.5 → 21.5). Tracking retains the selected distance
-  until the person zooms; that zoom replaces the preset, so the next press
-  enters at close again.
+  (zoom 21.5 → 21 → 20.5 → 21.5). Each preset is applied once on the press.
+  Tracking and recentring keep the current zoom down to the normal 18.5 floor.
+  A person's zoom replaces the preset, so the next press enters at close again.
   Each Free button press focuses the current driver once and steps through
-  zoom offsets −1, −2, −3, −2, −1, 0 relative to the zoom the camera last
-  targeted (not an intermediate eased frame):
+  zoom offsets −1, −2, −3, −2, −1, 0 relative to the current zoom, or the zoom
+  an unfinished camera ease is targeting (not an intermediate eased frame):
   three steps away, three back. Free then remains detached from body motion.
   A manual gesture, mode change or scene handover resets the Free sequence.
   Repeated taps advance from the selected step even during an unfinished ease.
