@@ -25,7 +25,7 @@ describe("avatar presentation contract", () => {
       "/avatars/0.1.0/dasha-study.glb",
     );
     expect(AVATAR_ASSET_URLS["dasha-v2-study"]).toBe(
-      "/avatars/0.4.0/dasha-v2-study.glb",
+      "/avatars/0.5.0/dasha-v2-study.glb",
     );
   });
 
@@ -123,7 +123,7 @@ describe("drawing what a body is wearing", () => {
 // rather than guesses. Synthetic objects carry `:` in their names, which a
 // loaded asset never does: the loader strips it, so only the real asset shows
 // that what is worn is what is drawn.
-const MODULAR_ASSET = "deploy/web/avatars/0.4.0/dasha-v2-study.glb";
+const MODULAR_ASSET = "deploy/web/avatars/0.5.0/dasha-v2-study.glb";
 
 async function loadModular(): Promise<GLTF> {
   const bytes = readFileSync(MODULAR_ASSET);

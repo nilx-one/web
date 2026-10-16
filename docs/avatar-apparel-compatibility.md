@@ -218,14 +218,31 @@ not measured.
 
 **Size.** +10,284 vertices, +19,280 triangles, +791,648 bytes over 0.3.0.
 
+## Zip hoodie (asset 0.5.0)
+
+`outerwear/hoodie-zip` is the pullover's cut built by the same function, so
+body, sleeves, hood, hem and cuffs are the same shapes and the same print
+layout. Two things differ:
+
+- the kangaroo pocket is split into two halves either side of the zip, both
+  still on panel 5;
+- a full-length front zip of a fourth, unprinted material (`zipper`): a
+  tape and teeth down the centre front over body and hem, and a pull at the
+  neck.
+
+The two hoodies share one slot, so they are never drawn together. The
+geometry is two nodes, not one shared mesh, because a modular study changes
+clothes by visibility alone. The tee is enclosed exactly as under the
+pullover. Size: +12,439 vertices, +23,536 triangles and +946,272 bytes over
+0.4.0 (whole asset 12,305,544).
+
 ## Next PRs
 
-1. **P1b** — `hoodie_zip` on the same contract.
-2. **P2** — line masks and the shoulder relief behind one colour uniform;
+1. **P2** — line masks and the shoulder relief behind one colour uniform;
    needs answers 1–4.
-3. **P3** — variants as (mesh, line) in `wardrobe.json` and the catalog;
+2. **P3** — variants as (mesh, line) in `wardrobe.json` and the catalog;
    backpack refit and hood overlap.
-4. **P4–P6** — preview, map and thumbnails from real assets; fit gates for
+3. **P4–P6** — preview, map and thumbnails from real assets; fit gates for
    other studies; phone measurements.
 
 © 2026 aiaiaiai · aiaiaiai.org
