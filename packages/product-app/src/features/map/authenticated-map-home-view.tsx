@@ -993,6 +993,8 @@ export function AuthenticatedMapHomeView({
             bearingDeg: camera.bearing,
           },
           dimension,
+          // Any zoom counts as centred: Free distance steps go below the
+          // Follow floor, and a flat Free view on the body is still centred.
           camera.zoom,
         ),
       ));

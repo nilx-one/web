@@ -149,12 +149,13 @@ describe("useFollowCamera", () => {
       fake.renderer.setCamera.mock.calls.map(([camera]) => camera.zoom),
     ).toEqual([21.5, 21, 20.5]);
     fake.renderer.setCamera.mockClear();
+    // Free anchors on the last Follow target (20.5), not the stale 18.5.
     act(() => {
       for (let i = 0; i < 6; i++) result.current.selectFree();
     });
     expect(
       fake.renderer.setCamera.mock.calls.map(([camera]) => camera.zoom),
-    ).toEqual([17.5, 16.5, 15.5, 16.5, 17.5, 18.5]);
+    ).toEqual([19.5, 18.5, 17.5, 18.5, 19.5, 20.5]);
   });
 
   it("restarts the Free cycle after exploration and enters Follow at the close preset", () => {
@@ -217,6 +218,51 @@ describe("useFollowCamera", () => {
       expect.objectContaining({ zoom: 20.5, pitch: 0 }),
       { motion: "immediate" },
     );
+  });
+
+  it("lets a person zoom out after choosing a Follow distance", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    act(() => result.current.selectFollow());
+    fake.settle();
+    act(() => fake.gesture({ zoom: 20 }));
+    expect(fake.renderer.getCamera().zoom).toBe(20);
+    result.current.track(AHEAD);
+    expect(fake.renderer.getCamera().zoom).toBe(20);
+    act(() => result.current.center());
+    expect(fake.renderer.getCamera().zoom).toBe(20);
+    // The manual zoom replaced the preset, so the next press enters close.
+    act(() => result.current.selectFollow());
+    expect(fake.renderer.getCamera().zoom).toBe(21.5);
+  });
+
+  it("enters Follow at the close preset after a press without a body", () => {
+    const fake = fakeRenderer();
+    const body = { current: HOME as FollowBody | undefined };
+    const { result } = follow(fake, () => body.current);
+    act(() => {
+      result.current.selectFollow();
+      result.current.selectFollow();
+    });
+    expect(fake.renderer.getCamera().zoom).toBe(21);
+    act(() => result.current.release());
+    body.current = undefined;
+    act(() => result.current.selectFollow());
+    body.current = HOME;
+    act(() => result.current.selectFollow());
+    expect(fake.renderer.getCamera().zoom).toBe(21.5);
+  });
+
+  it("restarts the Free cycle when a scene hands the camera back", () => {
+    const fake = fakeRenderer();
+    const { result, rerender } = follow(fake);
+    act(() => result.current.selectFree());
+    expect(fake.renderer.getCamera().zoom).toBe(17.5);
+    rerender({ on: false });
+    fake.renderer.setCamera({ ...fake.renderer.getCamera(), zoom: 14 });
+    rerender({ on: true });
+    act(() => result.current.selectFree());
+    expect(fake.renderer.getCamera().zoom).toBe(13);
   });
 
   it("keeps a walking body in the middle of the world", () => {
