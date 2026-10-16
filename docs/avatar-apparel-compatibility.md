@@ -102,6 +102,12 @@ The current asset has no `TEXCOORD_0`, no images and no textures: 24 flat
 `baseColorFactor` materials, all double-sided. The prints need UVs, so only
 the hoodie nodes gain `TEXCOORD_0`; existing nodes keep their geometry.
 
+`export_modular_avatar` writes `TEXCOORD_0` for any part whose mesh carries
+UVs, in glTF's top-left convention. Normals are averaged across the vertices a
+texture seam repeats, so a seam never shows as a crease in the lighting, and
+untextured cloth may not share a primitive with textured cloth. Parts without
+UVs are written exactly as before: every pinned asset hash is unchanged.
+
 - The white cloth is a plain material. Each line is a single-channel mask
   (`ai_v1` repeat, `emblem_v1` back panel, the shared 4×`ai` shoulder relief
   as a normal/height map) tinted by one colour uniform at runtime, so one

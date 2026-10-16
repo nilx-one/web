@@ -327,6 +327,34 @@ def _skeleton_nodes(skeleton):
     return nodes, positions
 
 
+def _surface(mesh):
+    """Texture coordinates and normals for one part, or no coordinates at all.
+
+    A part that carries UVs repeats a vertex wherever a texture seam crosses
+    it. Its normals are averaged across those repeats, as if the seam were not
+    there, so a print seam never shows up as a crease in the lighting. A part
+    without UVs keeps exactly the normals it always had. Coordinates are
+    written as given, in glTF's convention: (0, 0) is the image's top-left.
+    """
+    uv = getattr(mesh.visual, "uv", None)
+    if uv is None:
+        return None, mesh.vertex_normals
+    uv = np.asarray(uv, dtype=float)
+    if uv.shape != (len(mesh.vertices), 2) or not np.isfinite(uv).all():
+        raise ValueError("texture coordinates do not match vertices: " + str(mesh.metadata.get("name")))
+    _, welded = np.unique(np.round(mesh.vertices, 9), axis=0, return_inverse=True)
+    welded = welded.reshape(-1)
+    corners = mesh.vertices[mesh.faces]
+    faces = np.cross(corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0])
+    lengths = np.linalg.norm(faces, axis=1, keepdims=True)
+    faces = np.divide(faces, lengths, out=np.zeros_like(faces), where=lengths > 0)
+    summed = np.zeros((welded.max() + 1, 3))
+    for corner in range(3):
+        np.add.at(summed, welded[mesh.faces[:, corner]], faces)
+    summed /= np.maximum(np.linalg.norm(summed, axis=1, keepdims=True), 1e-12)
+    return uv, summed[welded]
+
+
 def export_modular_avatar(groups, palette, skeleton, out, model_id, *, version, wardrobe):
     """Export one character whose body regions and wearables are separate nodes.
 
@@ -371,12 +399,14 @@ def export_modular_avatar(groups, palette, skeleton, out, model_id, *, version, 
             grouped[part[2]].append(part)
         primitives = []
         for material, entries in grouped.items():
-            vertices, normals, indices, joints, weights = [], [], [], [], []
+            vertices, normals, indices, joints, weights, uvs = [], [], [], [], [], []
             offset = 0
             for name, mesh, _, part_group, family in entries:
                 js, ws = weights_for(mesh.vertices, name, part_group, skeleton, family)
+                uv, vertex_normals = _surface(mesh)
+                uvs.append(uv)
                 vertices.append(mesh.vertices @ Y_UP.T)
-                normals.append(mesh.vertex_normals @ Y_UP.T)
+                normals.append(vertex_normals @ Y_UP.T)
                 indices.append(mesh.faces + offset)
                 joints.append(js)
                 weights.append(ws)
@@ -385,11 +415,21 @@ def export_modular_avatar(groups, palette, skeleton, out, model_id, *, version, 
                                 "primitive": len(primitives), "vertex_offset": offset,
                                 "vertex_count": len(mesh.vertices)})
                 offset += len(mesh.vertices)
-            primitives.append({"attributes": {
+            attributes = {
                 "POSITION": glb.accessor(np.vstack(vertices).astype("<f4"), "VEC3", bounds=True),
                 "NORMAL": glb.accessor(np.vstack(normals).astype("<f4"), "VEC3"),
                 "JOINTS_0": glb.accessor(np.vstack(joints), "VEC4", 5123),
-                "WEIGHTS_0": glb.accessor(np.vstack(weights), "VEC4")},
+                "WEIGHTS_0": glb.accessor(np.vstack(weights), "VEC4")}
+            # One primitive is one vertex layout: a print cannot cover half of
+            # it, so cloth that shares a material either all carries UVs or
+            # none of it does.
+            textured = [uv is not None for uv in uvs]
+            if any(textured) and not all(textured):
+                bare = [entry[0] for entry, flag in zip(entries, textured) if not flag]
+                raise ValueError("untextured part shares a textured primitive: " + ", ".join(bare))
+            if all(textured):
+                attributes["TEXCOORD_0"] = glb.accessor(np.vstack(uvs).astype("<f4"), "VEC2")
+            primitives.append({"attributes": attributes,
                 "indices": glb.accessor(np.vstack(indices).reshape(-1).astype("<u4"), "SCALAR", 5125),
                 "material": material_for(material)})
         all_primitives.extend(primitives)
