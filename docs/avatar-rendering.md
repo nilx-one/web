@@ -88,6 +88,10 @@ target. Runtime WebGL deformation and physical phone performance have not been
 visually measured for this model. Neither hair nor cloth simulation is
 implemented: loose hair follows the head bone like the bun does.
 
+How the aiaiaiai hoodies join this wardrobe — slot, regions, binding and what
+is still undecided — is recorded in
+[the hoodie compatibility gate](avatar-apparel-compatibility.md).
+
 Identity contract 9 expands the persisted avatar catalog through migration 0008. It preserves existing choices, owned identities and provider links, and
 is idempotent on reopen. Deploy identity contract 9 before a Web package
 requiring it. This migration does not reset the identity database.
