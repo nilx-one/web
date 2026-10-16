@@ -99,8 +99,10 @@ export function useFollowCamera({
 
   const aim = useCallback(
     (camera: MapCamera, options: MapCameraOptions) => {
-      targetZoom.current = camera.zoom;
       renderer.setCamera(camera, options);
+      // Starting an ease may synchronously settle the previous move. Publish
+      // the new target afterwards so that old moveend cannot erase it.
+      targetZoom.current = camera.zoom;
     },
     [renderer],
   );

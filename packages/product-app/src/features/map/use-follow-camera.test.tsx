@@ -242,6 +242,22 @@ describe("useFollowCamera", () => {
     expect(fake.renderer.getCamera().zoom).toBe(15);
   });
 
+  it("keeps the new zoom target when starting an ease settles the previous move", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    // MapLibre stops the previous ease synchronously inside the new easeTo.
+    // The renderer still reports the previous camera in that moveend event.
+    fake.renderer.setCamera.mockImplementation(() => fake.settle());
+    act(() => {
+      result.current.selectFollow();
+      result.current.selectFollow();
+      result.current.selectFree();
+    });
+    expect(
+      fake.renderer.setCamera.mock.calls.map(([camera]) => camera.zoom),
+    ).toEqual([21.5, 21, 20]);
+  });
+
   it("uses immediate distance changes with reduced motion and preserves flat mode", () => {
     const fake = fakeRenderer();
     const { result } = renderHook(() =>
