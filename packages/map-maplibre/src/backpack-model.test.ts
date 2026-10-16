@@ -34,7 +34,7 @@ const STUDIES = [
   "deploy/web/avatars/0.1.0/sky-study.glb",
   "deploy/web/avatars/0.1.0/dasha-study.glb",
   "deploy/web/avatars/0.1.0/kai-study.glb",
-  "deploy/web/avatars/0.4.0/dasha-v2-study.glb",
+  "deploy/web/avatars/0.5.0/dasha-v2-study.glb",
 ];
 
 function parse(path: string): Promise<GLTF> {

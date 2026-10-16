@@ -40,7 +40,8 @@ PALETTE={
  'canvas':('#eeece4',.88,0), 'rubber':('#cfccc2',.72,0),
  'lace_cord':('#dedbd0',.95,0),
  # The hoodie is white cloth; whatever is printed on it is not baked in here.
- 'fleece':('#f3f3ef',.93,0), 'rib':('#e9e9e4',.96,0), 'drawcord':('#e2e2dd',.90,0)
+ 'fleece':('#f3f3ef',.93,0), 'rib':('#e9e9e4',.96,0), 'drawcord':('#e2e2dd',.90,0),
+ 'zipper':('#e4e4df',.45,0)
 }
 def rgb(h): return [int(h[i:i+2],16) for i in (1,3,5)]
 MATERIALS={k:PBRMaterial(name=k,baseColorFactor=rgb(v[0])+[255],roughnessFactor=v[1],metallicFactor=v[2],doubleSided=True) for k,v in PALETTE.items()}
@@ -535,77 +536,99 @@ def ring_arc(points):
 def body_axis(p):
     return np.column_stack([np.zeros(len(p)),np.full(len(p),.006),p[:,2]])
 
-# Body: a front and a back panel joined at the side seams, so the back can
-# carry one uninterrupted emblem and the front one uninterrupted repeat.
-zs=np.linspace(HOODIE_SHELL[0][0],HOODIE_TOP,46)[::-1]
-panels=[]
-for offset,phis in [(0.,np.linspace(-np.pi/2,np.pi/2,37)),(1.,np.linspace(np.pi/2,3*np.pi/2,37))]:
+def hoodie(kind):
+    """One hoodie: the pullover, or the same cut opened by a front zip."""
+    def name(part,side=''):
+        return (side+'_' if side else '')+'hoodie_'+kind+'_'+part
+    # Body: a front and a back panel joined at the side seams, so the back can
+    # carry one uninterrupted emblem and the front one uninterrupted repeat.
+    zs=np.linspace(HOODIE_SHELL[0][0],HOODIE_TOP,46)[::-1]
+    panels=[]
+    for offset,phis in [(0.,np.linspace(-np.pi/2,np.pi/2,37)),(1.,np.linspace(np.pi/2,3*np.pi/2,37))]:
+        grid=[];uv=[]
+        for z in zs:
+            ring=shell_at(z,phis);arc=ring_arc(ring);arc-=arc[len(arc)//2]
+            grid.append(ring);uv.append(np.column_stack([offset+arc,np.full(len(arc),HOODIE_TOP-z)]))
+        panels.append(printed(grid,uv))
+    add_printed(name('body'),panels,'fleece',body_axis)
+
+    # Ribbed hem: gathered a little under the body, never under the waistband.
+    hem=[(.985,.158,.108,0,0),(1.000,.160,.110,0,0),(1.030,.161,.111,0,0),(1.040,.159,.109,0,0)]
+    rib=loft(name('hem'),hem,'rib',10,96,'clothing')
+    v=rib.vertices;theta=np.arctan2(v[:,0],-v[:,1]);ridge=.0012*np.cos(48*theta)
+    v[:,0]+=ridge*np.sin(theta);v[:,1]-=ridge*np.cos(theta)
+
+    for s,side in [(-1,'L'),(1,'R')]:
+        # Dropped shoulder: the sleeve starts inside the body, crosses the shoulder
+        # seam and is cut long, so the tee's shoulder and sleeve stay enclosed.
+        path=interp_path([[s*.128,.006,1.378],[s*.165,.005,1.352],[s*.200,.004,1.300],
+                          [s*.244,.002,1.172],[s*.266,-.005,1.079],[s*.280,-.010,1.022]],48)
+        radius=np.interp(np.linspace(0,1,48),np.linspace(0,1,6),[.060,.068,.070,.060,.050,.046])
+        tang=np.gradient(path,axis=0);tang/=np.linalg.norm(tang,axis=1)[:,None]
+        angles=np.linspace(0,2*np.pi,33);grid=[];uv=[];along=ring_arc(path)
+        for p,t,r,l in zip(path,tang,radius,along):
+            # The seam runs along the underside, toward the body; the top of the
+            # sleeve (angle pi) is the shoulder line the mark is placed on.
+            medial=np.cross(t,[0,1,0]);medial/=np.linalg.norm(medial)
+            if medial[0]*s>0:medial=-medial
+            front=np.cross(t,medial)
+            grid.append([p+r*(np.cos(a)*medial+np.sin(a)*front) for a in angles])
+            uv.append(np.column_stack([(2. if side=='L' else 3.)+r*(angles-np.pi),np.full(len(angles),l)]))
+        axis=interp1d(path[:,2],path,axis=0,bounds_error=False,fill_value=(path[-1],path[0]))
+        add_printed(name('sleeve',side),[printed(grid,uv)],
+                    'fleece',lambda q,axis=axis:axis(q[:,2]))
+        # The cuff overlaps the top of the hand: with the forearm hidden, a cuff
+        # that stopped at the wrist would leave the hand floating below it.
+        cuff=tube(name('cuff',side),[[s*.279,-.0095,1.030],[s*.283,-.011,1.002],
+                  [s*.286,-.012,.976]],[.034,.032,.030],'rib',10,48,'clothing')
+        v=cuff.vertices;centre=np.array([s*.282,-.011,0]);d=v-centre;d[:,2]=0
+        theta=np.arctan2(d[:,1],d[:,0]);v[:,:2]+=(.0009*np.cos(32*theta))[:,None]*d[:,:2]/np.linalg.norm(d[:,:2],axis=1)[:,None]
+
+    # Hood, down: a cowl lying on the shoulders and the upper back, deepest at the
+    # back and tapering to the front, where it opens above the drawcords.
+    phis=np.linspace(.55,2*np.pi-.55,61);ts=np.linspace(0,1,17)
+    back=np.sin((phis-.55)/(2*np.pi-1.1)*np.pi)
+    depth=.020+.120*back**2;puff=.004+.034*back**1.5
     grid=[];uv=[]
-    for z in zs:
-        ring=shell_at(z,phis);arc=ring_arc(ring);arc-=arc[len(arc)//2]
-        grid.append(ring);uv.append(np.column_stack([offset+arc,np.full(len(arc),HOODIE_TOP-z)]))
-    panels.append(printed(grid,uv))
-add_printed('hoodie_pullover_body',panels,'fleece',body_axis)
+    for t in ts:
+        z=HOODIE_TOP-.002-depth*t
+        lift=.006+puff*np.sin(np.pi*t)**.8
+        grid.append(shell_at(z,phis)+lift[:,None]*shell_normal(z,phis))
+    arc=ring_arc(grid[0]);arc-=arc[len(arc)//2]
+    for i,t in enumerate(ts):
+        uv.append(np.column_stack([4.+arc,depth*t]))
+    add_printed(name('hood'),[printed(grid,uv)],'fleece',body_axis)
 
-# Ribbed hem: gathered a little under the body, never under the waistband.
-hem=[(.985,.158,.108,0,0),(1.000,.160,.110,0,0),(1.030,.161,.111,0,0),(1.040,.159,.109,0,0)]
-rib=loft('hoodie_pullover_hem',hem,'rib',10,96,'clothing')
-v=rib.vertices;theta=np.arctan2(v[:,0],-v[:,1]);ridge=.0012*np.cos(48*theta)
-v[:,0]+=ridge*np.sin(theta);v[:,1]-=ridge*np.cos(theta)
+    # Pocket: one kangaroo panel stitched on the front, open at the slanted
+    # sides; a zip splits it into two halves either side of the zipper.
+    a=np.linspace(-1,1,25);b=np.linspace(0,1,11);grid=[];uv=[]
+    for bb in b[::-1]:
+        z=1.045+.125*bb;phi=a*(.62-.17*bb)
+        p=shell_at(z,phi,.005+.003*np.cos(a*np.pi/2))
+        grid.append(p);w=ring_arc(p);uv.append(np.column_stack([5.+w-w[-1]/2,np.full(len(a),1.17-z)]))
+    grid=np.asarray(grid);uv=np.asarray(uv)
+    halves=[slice(None)] if kind=='pullover' else [slice(0,10),slice(15,None)]
+    add_printed(name('pocket'),[printed(grid[:,h],uv[:,h]) for h in halves],'fleece',body_axis)
+    if kind=='zip':
+        # Full-length front zip: a tape and its teeth running down the centre
+        # front over the body and the ribbed hem, with a pull at the neck.
+        zs=np.linspace(.986,HOODIE_TOP-.004,60)
+        sec=np.asarray(HOODIE_SHELL)
+        front=np.where(zs>=sec[0,0],
+                       PchipInterpolator(sec[:,0],sec[:,2]-sec[:,4])(np.maximum(zs,sec[0,0])),
+                       np.interp(zs,[.985,1.000,1.030],[.108,.110,.111]))+.003
+        path=np.column_stack([np.zeros_like(zs),-front,zs])
+        strip(name('zip_tape'),path,[.014]*4,.0024,'zipper',n=60,group='clothing')
+        strip(name('zip_teeth'),path-[0,.0022,0],[.0055]*4,.0026,'zipper',n=60,group='clothing')
+        top=path[-1]-[0,.006,.018]
+        ellipsoid(name('zip_pull'),top,[.0045,.0018,.011],'zipper','clothing')
+    for s in (-1,1):
+        tube(name('drawcord','L' if s<0 else 'R'),
+             [[s*.025,-.060,1.425],[s*.030,-.095,1.390],[s*.032,-.118,1.330],[s*.033,-.122,1.290]],
+             [.0028,.0028],'drawcord',30,8,'clothing')
 
-for s,side in [(-1,'L'),(1,'R')]:
-    # Dropped shoulder: the sleeve starts inside the body, crosses the shoulder
-    # seam and is cut long, so the tee's shoulder and sleeve stay enclosed.
-    path=interp_path([[s*.128,.006,1.378],[s*.165,.005,1.352],[s*.200,.004,1.300],
-                      [s*.244,.002,1.172],[s*.266,-.005,1.079],[s*.280,-.010,1.022]],48)
-    radius=np.interp(np.linspace(0,1,48),np.linspace(0,1,6),[.060,.068,.070,.060,.050,.046])
-    tang=np.gradient(path,axis=0);tang/=np.linalg.norm(tang,axis=1)[:,None]
-    angles=np.linspace(0,2*np.pi,33);grid=[];uv=[];along=ring_arc(path)
-    for p,t,r,l in zip(path,tang,radius,along):
-        # The seam runs along the underside, toward the body; the top of the
-        # sleeve (angle pi) is the shoulder line the mark is placed on.
-        medial=np.cross(t,[0,1,0]);medial/=np.linalg.norm(medial)
-        if medial[0]*s>0:medial=-medial
-        front=np.cross(t,medial)
-        grid.append([p+r*(np.cos(a)*medial+np.sin(a)*front) for a in angles])
-        uv.append(np.column_stack([(2. if side=='L' else 3.)+r*(angles-np.pi),np.full(len(angles),l)]))
-    axis=interp1d(path[:,2],path,axis=0,bounds_error=False,fill_value=(path[-1],path[0]))
-    add_printed(side+'_hoodie_pullover_sleeve',[printed(grid,uv)],
-                'fleece',lambda q,axis=axis:axis(q[:,2]))
-    # The cuff overlaps the top of the hand: with the forearm hidden, a cuff
-    # that stopped at the wrist would leave the hand floating below it.
-    cuff=tube(side+'_hoodie_pullover_cuff',[[s*.279,-.0095,1.030],[s*.283,-.011,1.002],
-              [s*.286,-.012,.976]],[.034,.032,.030],'rib',10,48,'clothing')
-    v=cuff.vertices;centre=np.array([s*.282,-.011,0]);d=v-centre;d[:,2]=0
-    theta=np.arctan2(d[:,1],d[:,0]);v[:,:2]+=(.0009*np.cos(32*theta))[:,None]*d[:,:2]/np.linalg.norm(d[:,:2],axis=1)[:,None]
-
-# Hood, down: a cowl lying on the shoulders and the upper back, deepest at the
-# back and tapering to the front, where it opens above the drawcords.
-phis=np.linspace(.55,2*np.pi-.55,61);ts=np.linspace(0,1,17)
-back=np.sin((phis-.55)/(2*np.pi-1.1)*np.pi)
-depth=.020+.120*back**2;puff=.004+.034*back**1.5
-grid=[];uv=[]
-for t in ts:
-    z=HOODIE_TOP-.002-depth*t
-    lift=.006+puff*np.sin(np.pi*t)**.8
-    grid.append(shell_at(z,phis)+lift[:,None]*shell_normal(z,phis))
-arc=ring_arc(grid[0]);arc-=arc[len(arc)//2]
-for i,t in enumerate(ts):
-    uv.append(np.column_stack([4.+arc,depth*t]))
-add_printed('hoodie_pullover_hood',[printed(grid,uv)],'fleece',body_axis)
-
-# Kangaroo pocket: one panel stitched on the front, open at the slanted sides.
-a=np.linspace(-1,1,25);b=np.linspace(0,1,11);grid=[];uv=[]
-for bb in b[::-1]:
-    z=1.045+.125*bb;phi=a*(.62-.17*bb)
-    p=shell_at(z,phi,.005+.003*np.cos(a*np.pi/2))
-    grid.append(p);w=ring_arc(p);uv.append(np.column_stack([5.+w-w[-1]/2,np.full(len(a),1.17-z)]))
-add_printed('hoodie_pullover_pocket',[printed(grid,uv)],'fleece',body_axis)
-
-for s in (-1,1):
-    tube(('L' if s<0 else 'R')+'_hoodie_pullover_drawcord',
-         [[s*.025,-.060,1.425],[s*.030,-.095,1.390],[s*.032,-.118,1.330],[s*.033,-.122,1.290]],
-         [.0028,.0028],'drawcord',30,8,'clothing')
+hoodie('pullover')
+hoodie('zip')
 
 # ── Which part of the character each piece of geometry belongs to ────────────
 # Routing is a table rather than a build order, so the geometry above stays
@@ -627,9 +650,10 @@ BODY_REGIONS=WARDROBE_TABLE['always_visible']+WARDROBE_TABLE['body_regions']
 WARDROBE=[item['id'] for item in WARDROBE_TABLE['items']]
 
 def route(name,group):
-    if 'hoodie_pullover' in name:
-        arm=any(x in name for x in ('_sleeve','_cuff'))
-        return 'wear:outerwear/hoodie-pullover',('arm' if arm else 'torso')
+    for kind in ('pullover','zip'):
+        if 'hoodie_'+kind+'_' in name:
+            arm=any(x in name for x in ('_sleeve','_cuff'))
+            return 'wear:outerwear/hoodie-'+kind,('arm' if arm else 'torso')
     if name.endswith('_earring'):return 'wear:accessory/earrings-silver','head'
     if group=='hair':
         loose=name.startswith('loose_') or '_loose_' in name

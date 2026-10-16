@@ -13,7 +13,7 @@ python tools/avatars/preview.py --thumbnails deploy/web/avatars/0.1.0
 # cloth nobody rendered. Every version she was published under is rebuilt from
 # the items it carried, so a client still holding an earlier path never meets
 # a 404 or different bytes under it.
-for version in 0.3.0 0.4.0; do
+for version in 0.3.0 0.4.0 0.5.0; do
     python tools/avatars/dasha2/build_model.py --version "$version" --output "deploy/web/avatars/$version"
     python tools/avatars/preview.py --models dasha-v2 --asset-dir "deploy/web/avatars/$version" --thumbnails "deploy/web/avatars/$version" --wardrobe
 done

@@ -87,7 +87,7 @@ describe("avatar choice previews", () => {
       "/avatars/0.1.0/sky-study.png",
       "/avatars/0.1.0/dasha-study.png",
       "/avatars/0.1.0/kai-study.png",
-      "/avatars/0.4.0/dasha-v2-study.png",
+      "/avatars/0.5.0/dasha-v2-study.png",
     ]);
   });
 });

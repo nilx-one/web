@@ -42,7 +42,7 @@ planting or locomotion-speed synchronization. Turn is an anticipatory gesture;
 the caller supplies actual bearing. Mode names select presentation clips only;
 they do not activate AI authority or create interactions.
 
-## Dasha 2.0 — modular asset contract 0.4.0
+## Dasha 2.0 — modular asset contract 0.5.0
 
 `tools/avatars/dasha2/build_model.py` authors a separate fourth study,
 `dasha-v2-study`: grey-green eyes, silver earrings, and clothes that come off.
@@ -62,14 +62,14 @@ never a second character fetched and swapped in. Identity and wardrobe cannot
 come apart, because there is one skeleton, one bind pose and one set of clips
 for all of them.
 
-Eleven items ship across seven slots: two hairstyles, two tops, two bottoms,
-one dress, one hoodie, two pairs of shoes and one accessory. Covering is
+Twelve items ship across seven slots: two hairstyles, two tops, two bottoms,
+one dress, two hoodies, two pairs of shoes and one accessory. Covering is
 visibility and never geometry — a garment hides the region it encloses and
 unequipping it restores exactly what was there, so no sequence of changes is
 destructive. A short sleeve does not enclose the arm below its hem, so the arm
-regions stay published for a long-sleeved item; the hoodie is the first to
-hide them. It is worn over any top and encloses it, because covering hides
-body regions and never another garment.
+regions stay published for a long-sleeved item; the hoodies are the first to
+hide them. A hoodie is worn over any top and encloses it, because covering
+hides body regions and never another garment.
 
 `tools/avatars/dasha2/wardrobe.json` is the one table both sides read: the
 asset build proves every item in it has geometry and that every routed node is
@@ -79,15 +79,15 @@ exists therefore cannot drift apart. Slot compatibility lives there too — a
 dress is the whole garment, so it is the same cloth as a top and a bottom
 rather than a layer over them.
 
-This model is served from `/avatars/0.4.0/`. The 0.3.0 asset it was first
-published under is rebuilt byte for byte from the items that version carried
-(an item names the version it entered in `since`), so a client still holding
-that path never meets a 404 or different bytes. The original three retain
+This model is served from `/avatars/0.5.0/`. Every earlier version it was
+published under, 0.3.0 and 0.4.0, is rebuilt byte for byte from the items that
+version carried (an item names the version it entered in `since`), so a client
+still holding an earlier path never meets a 404 or different bytes. The original three retain
 their immutable 0.1.0 URLs and bytes; the pinned hashes prove all of it. The picker
 thumbnail is rasterized from the actual GLB, and so is a still per wardrobe
 item — cropped to the item, on a body dressed the way this study is published,
 so a picker never stands a swatch in for cloth nobody rendered. The asset has
-157,658 vertices, 305,590 triangles and 11,359,272 bytes for the whole
+170,097 vertices, 329,126 triangles and 12,305,544 bytes for the whole
 wardrobe (0.3.0: 147,374, 286,310 and 10,567,624), which is less than Sky or
 Dasha and still exceeds the draft's 6 MB target. Runtime WebGL deformation and physical phone performance have not been
 visually measured for this model. Neither hair nor cloth simulation is
@@ -130,7 +130,7 @@ validation. Release packaging reproduces the same hashes. A geometry, rig,
 material or clip change after publication requires a new asset version/path.
 
 The runtime serves `/avatars/0.1.0/{modelId}.glb` — `sky-study`, `dasha-study`
-and `kai-study` — and `/avatars/0.4.0/dasha-v2-study.glb` (0.3.0 still served), from its own static
+and `kai-study` — and `/avatars/0.5.0/dasha-v2-study.glb` (0.3.0 and 0.4.0 still served), from its own static
 origin,
 independently of the selected Web host, with immutable caching and real 404s.
 No decoder, texture, animation, photograph or reference image is downloaded from

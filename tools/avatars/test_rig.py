@@ -18,7 +18,7 @@ from rig import TOPOLOGY, INDEX, export_modular_avatar, weights_for
 ASSETS = Path(__file__).resolve().parents[2] / "deploy/web/avatars/0.1.0"
 # The Dasha 2.0 version clients load now. Earlier versions are rebuilt and
 # pinned by hash; the checks below are about the asset the runtime draws.
-DASHA2 = ASSETS.parent / "0.4.0"
+DASHA2 = ASSETS.parent / "0.5.0"
 GAIT = (Path(__file__).resolve().parents[2]
         / "packages/product-app/src/features/map/avatar-gait.json")
 
@@ -218,12 +218,13 @@ class RigTests(unittest.TestCase):
         # A client still holding the 0.3.0 path must get the asset it was
         # published with: an item enters only the version its `since` names.
         table = json.loads((Path(__file__).resolve().parent / "dasha2/wardrobe.json").read_text())
-        later = {item["id"] for item in table["items"] if "since" in item}
-        self.assertIn("outerwear/hoodie-pullover", later)
-        earlier = json.loads((ASSETS.parent / "0.3.0/dasha-v2-study.manifest.json").read_text())
-        current = json.loads((DASHA2 / "dasha-v2-study.manifest.json").read_text())
-        self.assertEqual({item["id"] for item in earlier["wardrobe"]} & later, set())
-        self.assertLessEqual(later, {item["id"] for item in current["wardrobe"]})
+        since = {item["id"]: item.get("since", "0.0.0") for item in table["items"]}
+        self.assertEqual(since["outerwear/hoodie-zip"], "0.5.0")
+        for version in ("0.3.0", "0.4.0", DASHA2.name):
+            manifest = json.loads((ASSETS.parent / version / "dasha-v2-study.manifest.json").read_text())
+            released = {item_id for item_id, first in since.items()
+                        if tuple(map(int, first.split("."))) <= tuple(map(int, version.split(".")))}
+            self.assertEqual({item["id"] for item in manifest["wardrobe"]}, released, version)
 
     def test_hoodie_print_panels_never_overlap(self):
         # Printed cloth is laid out in metres, one panel centred on each whole
@@ -231,9 +232,9 @@ class RigTests(unittest.TestCase):
         manifest = json.loads((DASHA2 / "dasha-v2-study.manifest.json").read_text())
         doc, read = read_glb(DASHA2 / "dasha-v2-study.glb")
         by_node = {mesh["name"]: mesh["primitives"] for mesh in doc["meshes"]}
-        panels = {"hoodie_pullover_body": {0, 1}, "L_hoodie_pullover_sleeve": {2},
-                  "R_hoodie_pullover_sleeve": {3}, "hoodie_pullover_hood": {4},
-                  "hoodie_pullover_pocket": {5}}
+        panels = {name % kind: centres for kind in ("pullover", "zip") for name, centres in (
+            ("hoodie_%s_body", {0, 1}), ("L_hoodie_%s_sleeve", {2}), ("R_hoodie_%s_sleeve", {3}),
+            ("hoodie_%s_hood", {4}), ("hoodie_%s_pocket", {5}))}
         seen = set()
         for part in manifest["parts"]:
             if part["material"] != "fleece":
@@ -248,7 +249,7 @@ class RigTests(unittest.TestCase):
         self.assertEqual(seen, set(panels))
         # Cloth that carries no print carries no coordinates either.
         for part in manifest["parts"]:
-            if part["node"] == "wear:outerwear/hoodie-pullover" and part["material"] != "fleece":
+            if part["node"].startswith("wear:outerwear/hoodie-") and part["material"] != "fleece":
                 attrs = by_node[part["node"]][part["primitive"]]["attributes"]
                 self.assertNotIn("TEXCOORD_0", attrs, part["name"])
 

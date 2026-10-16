@@ -1,6 +1,6 @@
 {
   "model_id": "dasha-v2-study",
-  "asset_version": "0.4.0",
+  "asset_version": "0.5.0",
   "rig_version": "study-rig-1",
   "note": "The wardrobe Dasha 2.0 publishes. The asset build proves every item here has geometry and every routed node is listed here; the Web catalog is checked against the same file, so the clothes a person can choose and the clothes that exist cannot drift apart.",
   "slots": [
@@ -129,6 +129,13 @@
       "name": "White hoodie",
       "hides": ["torso", "upper_arms", "lower_arms"],
       "since": "0.4.0"
+    },
+    {
+      "id": "outerwear/hoodie-zip",
+      "slot": "outerwear",
+      "name": "White zip hoodie",
+      "hides": ["torso", "upper_arms", "lower_arms"],
+      "since": "0.5.0"
     }
   ]
 }
