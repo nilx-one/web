@@ -148,6 +148,27 @@ describe("backpack attachment", () => {
     }
   });
 
+  it("fits what is worn, not cloth hidden with its whole node", () => {
+    const { body } = syntheticBody();
+    const torso = body.children.find(
+      (child): child is SkinnedMesh => child instanceof SkinnedMesh,
+    )!;
+    // A coat the body is not wearing: deeper than the torso, its primitive
+    // left visible inside a hidden node, as a loaded multi-material item is.
+    const coat = new SkinnedMesh(
+      torso.geometry.clone().scale(1.1, 1, 2),
+      new MeshStandardMaterial(),
+    );
+    const node = new Object3D();
+    node.visible = false;
+    node.add(coat);
+    body.add(node);
+    body.updateMatrixWorld(true);
+    coat.bind(torso.skeleton, torso.bindMatrix);
+    const mounted = mountBackpack(body, authoredBag())!;
+    expect(worldBox(mounted.children[0]!).max.z).toBeCloseTo(-0.11 - 0.006, 2);
+  });
+
   it("does not float an item on an unsupported rig", () => {
     const body = new Object3D();
     const chest = new Bone();
