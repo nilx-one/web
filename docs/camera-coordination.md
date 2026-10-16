@@ -64,6 +64,13 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
   onto the body. A smaller pinch, a pinch the way
   the mode already is, a mouse wheel or a trackpad pinch only zoom.
 - The on-screen **Follow / Isometric / Free** control is available on mobile and desktop.
+  It opens expanded, then collapses to the current mode after three seconds
+  without panel interaction. A map gesture or ground tap collapses it at once;
+  automatic tracking and camera flights do not count as input. Pressing the
+  collapsed chip opens all three choices without consuming a distance step.
+  Changing mode reveals the panel again, including Free entered by pinch-out,
+  and starts a fresh idle period. Expanded mode buttons retain their selection
+  and distance-cycle behavior. Pending timers and subscriptions end on unmount.
   The first explicit Follow press, or selecting Follow from Free, chooses
   the closest preset; further presses cycle close → medium → far → close
   (zoom 21.5 → 21 → 20.5 → 21.5). Each preset is applied once on the press.
