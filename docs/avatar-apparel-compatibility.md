@@ -68,9 +68,12 @@ Consequences:
 | Influences | 4 per vertex, assigned from final positions and a semantic family per part (`weights_for`)                                                                                      |
 | Clips      | `idle`, `walk`, `turn_in_place`, `wake`, `quiesce`; in place, no root motion                                                                                                    |
 
-The `_L` side is the character's own left. The shoulder mark therefore sits
-on geometry weighted to `shoulder_L`/`upperarm_L`, whatever side it appears on
-in a back-view mockup.
+Side suffixes are named from a viewer facing the character, not from the
+character. The exported body faces +Z (`toe_L` rests at +Z from `foot_L`) and
+`shoulder_L` rests at −X, which is the character's own right. The shoulder
+mark belongs on the character's own left, so it sits on geometry weighted to
+`shoulder_R`/`upperarm_R`. In the mockups it is on the image's left in back
+views and on the image's right in front views — the same shoulder.
 
 ## Slot, regions and layering
 
