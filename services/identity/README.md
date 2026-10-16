@@ -103,10 +103,11 @@ address is formed from it once by Core (`StationPubDress::from_caption`,
 (`"xda-market Золоті Ворота"` stations `0xda-market-zoloti-vorota`). This
 service only stores what Core forms and allocates it in the global namespace.
 
-A business Bond stands at one of its own stations: its location is declared
-(`manual`) at the station's point and follows it when the station moves. Its
-public card (`GET /api/v1/identity/public`) names that station under
-`location`; no other Bond's location is ever public.
+A business is its own identity with many points on the map, one per shop,
+and no single location of its own: it declares no `bond_locations` row. Its
+public card (`GET /api/v1/identity/public`) lists every station it keeps
+under `stations`; a person keeps none, and a person's location is never
+public.
 
 All of it is out of band, by the service binary against its own database:
 
@@ -114,7 +115,7 @@ All of it is out of band, by the service binary against its own database:
 identity-bot business register 0xda-market   # a business Bond, no sign-in yet
 identity-bot business grant 0x1shop          # or make an existing Bond a business
 identity-bot business station 0xda-market "xda-market Золоті Ворота" 30.5131 50.4489
-identity-bot business locate 0xda-market 0xda-market-zoloti-vorota
+identity-bot business station 0xda-market "xda-market Батьківщина-Мати" 30.5632 50.4265
 ```
 
 `register` creates a human Bond with the `business` role and no credential or

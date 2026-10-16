@@ -153,10 +153,10 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                 }
                 None => None,
             };
-            let location = match state.repository.business_location(&owner).await {
-                Ok(value) => value.map(PublicStation::from),
+            let stations = match state.repository.business_stations_of(&owner).await {
+                Ok(value) => value.into_iter().map(PublicStation::from).collect(),
                 Err(error) => {
-                    tracing::error!(%error, "public business location lookup failed");
+                    tracing::error!(%error, "public business stations lookup failed");
                     return unavailable();
                 }
             };
@@ -166,7 +166,7 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                     pub_dress_url: record.readable_url(PUBLIC_ZONE),
                     pub_dress: record.identity.pub_dress,
                     avaia,
-                    location,
+                    stations,
                     pub_info: PublicPubInfo {
                         experience: PublicExperience {
                             authority: crate::repository::EXPERIENCE_AUTHORITY,
@@ -308,10 +308,11 @@ struct PublicIdentityProjection {
     pub_dress: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     avaia: Option<PublicAvaiaProjection>,
-    /// The station a business Bond stands at. Absent for every other Bond:
-    /// a person's location is never public.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    location: Option<PublicStation>,
+    /// A business's points on the map, one per shop. Absent for every other
+    /// Bond: a person keeps no stations, and a person's location is never
+    /// public.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    stations: Vec<PublicStation>,
     pub_dress_url: String,
     /// The public slice of this Bond's `.bnd`. Experience totals are always
     /// present; zero is a Bond that has not published any. They are the
@@ -454,7 +455,8 @@ mod tests {
         assert_eq!(body["pub_dress_url"], "https://0x1небо.nilx.one");
         // A Bond publishes no Avaia until its owner creates one.
         assert!(body["avaia"].is_null());
-        // A person's location is never public.
+        // A person keeps no stations, and no location is public.
+        assert!(body["stations"].is_null());
         assert!(body["location"].is_null());
         assert_eq!(body["pub_info"]["experience"]["authority"], "client");
         assert_eq!(body["pub_info"]["experience"]["bond_xp"], 0);
@@ -662,7 +664,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_business_card_says_which_station_it_stands_at() {
+    async fn a_business_card_lists_every_point_it_keeps() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
@@ -671,17 +673,17 @@ mod tests {
             .register_business(&owner, 100)
             .await
             .expect("register");
-        let station = crate::StationPubDress::for_owner(&owner, "0xda-market-zoloti-vorota")
-            .expect("station");
-        let at = crate::GeoCoordinate::from_degrees(30.5131, 50.4489).expect("coordinate");
-        repository
-            .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), at, 101)
-            .await
-            .expect("station");
-        repository
-            .locate_business(&owner, &station, 102)
-            .await
-            .expect("locate");
+        for (at_time, caption, longitude, latitude) in [
+            (101, "xda-market Золоті Ворота", 30.5131, 50.4489),
+            (102, "xda-market Батьківщина-Мати", 30.5632, 50.4265),
+        ] {
+            let formed = crate::StationPubDress::from_caption(&owner, caption).expect("caption");
+            let at = crate::GeoCoordinate::from_degrees(longitude, latitude).expect("coordinate");
+            repository
+                .station_business_avaia(&owner, &formed.address, Some(&formed.caption), at, at_time)
+                .await
+                .expect("station");
+        }
 
         let response = router(repository)
             .oneshot(
@@ -694,11 +696,11 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         let body = json(response).await;
-        assert_eq!(body["location"]["pub_dress"], "0xda-market-zoloti-vorota");
-        assert_eq!(body["location"]["caption"], "xda-market Золоті Ворота");
-        assert_eq!(
-            body["location"]["coordinate"],
-            serde_json::to_value(at).expect("coordinate")
-        );
+        assert!(body["location"].is_null());
+        let stations = body["stations"].as_array().expect("stations");
+        assert_eq!(stations.len(), 2);
+        assert_eq!(stations[0]["pub_dress"], "0xda-market-zoloti-vorota");
+        assert_eq!(stations[0]["caption"], "xda-market Золоті Ворота");
+        assert_eq!(stations[1]["pub_dress"], "0xda-market-batkivshchyna-maty");
     }
 }

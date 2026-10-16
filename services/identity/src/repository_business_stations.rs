@@ -34,15 +34,6 @@ pub enum BusinessRegistrationOutcome {
     PublicLabelUnavailable,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum BusinessLocationOutcome {
-    Located(BusinessStation),
-    /// The owner is not a business Bond.
-    BusinessRoleRequired,
-    /// The station is not one this business keeps.
-    NotItsStation,
-}
-
 impl IdentityRepository {
     /// Registers a business Bond out of band: a human identity with the
     /// `business` role and no sign-in yet. Its owner signs in later through
@@ -92,62 +83,21 @@ impl IdentityRepository {
         Ok(BusinessRegistrationOutcome::Registered(record))
     }
 
-    /// Stands a business Bond at one of its own stations: its declared
-    /// (`manual`) location becomes the station's point, and follows it when
-    /// the business restates the station.
-    pub async fn locate_business(
+    /// The stations one business keeps. A business is many points on the map,
+    /// one per shop, and no single location of its own.
+    pub async fn business_stations_of(
         &self,
         owner: &PubDress,
-        station: &StationPubDress,
-        now: u64,
-    ) -> Result<BusinessLocationOutcome, RepositoryError> {
-        let now = i64::try_from(now).map_err(|_| RepositoryError::CorruptAvaiaLocation)?;
-        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        if !is_business_in(&mut transaction, owner).await? {
-            transaction.rollback().await?;
-            return Ok(BusinessLocationOutcome::BusinessRoleRequired);
-        }
-        let row = sqlx::query(
+    ) -> Result<Vec<BusinessStation>, RepositoryError> {
+        let rows = sqlx::query(
             "SELECT avaia_pub_dress, owner_pub_dress, caption, longitude_e7, latitude_e7 \
-             FROM business_stations WHERE avaia_pub_dress = ? AND owner_pub_dress = ?",
-        )
-        .bind(station.as_str())
-        .bind(owner.as_str())
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let Some(row) = row else {
-            transaction.rollback().await?;
-            return Ok(BusinessLocationOutcome::NotItsStation);
-        };
-        let located = business_station_from_row(&row)?;
-        sqlx::query(
-            "INSERT INTO business_locations (owner_pub_dress, avaia_pub_dress) VALUES (?, ?) \
-             ON CONFLICT(owner_pub_dress) DO UPDATE SET avaia_pub_dress = excluded.avaia_pub_dress",
+             FROM business_stations WHERE owner_pub_dress = ? \
+             ORDER BY created_at, avaia_pub_dress COLLATE BINARY",
         )
         .bind(owner.as_str())
-        .bind(station.as_str())
-        .execute(&mut *transaction)
+        .fetch_all(&self.pool)
         .await?;
-        declare_bond_point_in(&mut transaction, owner.as_str(), located.coordinate, now).await?;
-        transaction.commit().await?;
-        Ok(BusinessLocationOutcome::Located(located))
-    }
-
-    /// The station a business Bond stands at, if it stands at one.
-    pub async fn business_location(
-        &self,
-        owner: &PubDress,
-    ) -> Result<Option<BusinessStation>, RepositoryError> {
-        let row = sqlx::query(
-            "SELECT s.avaia_pub_dress, s.owner_pub_dress, s.caption, s.longitude_e7, s.latitude_e7 \
-             FROM business_locations l \
-             JOIN business_stations s ON s.avaia_pub_dress = l.avaia_pub_dress \
-             WHERE l.owner_pub_dress = ?",
-        )
-        .bind(owner.as_str())
-        .fetch_optional(&self.pool)
-        .await?;
-        row.as_ref().map(business_station_from_row).transpose()
+        rows.iter().map(business_station_from_row).collect()
     }
 
     /// Stations a business Bond's Avaia at a shop, or restates the point (and
@@ -209,19 +159,6 @@ impl IdentityRepository {
                 .bind(station.as_str())
                 .execute(&mut *transaction)
                 .await?;
-                // A business standing at this station moves with it.
-                let stands_here = sqlx::query_scalar::<_, bool>(
-                    "SELECT EXISTS(SELECT 1 FROM business_locations \
-                     WHERE owner_pub_dress = ? AND avaia_pub_dress = ?)",
-                )
-                .bind(owner.as_str())
-                .bind(station.as_str())
-                .fetch_one(&mut *transaction)
-                .await?;
-                if stands_here {
-                    declare_bond_point_in(&mut transaction, owner.as_str(), coordinate, now)
-                        .await?;
-                }
             }
             None => {
                 sqlx::query("INSERT INTO business_station_intents (avaia_pub_dress) VALUES (?)")
@@ -302,43 +239,6 @@ fn business_station_from_row(
     })
 }
 
-async fn is_business_in(
-    transaction: &mut Transaction<'_, Sqlite>,
-    owner: &PubDress,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM identities i \
-         JOIN bond_roles r ON r.pub_dress = i.pub_dress \
-         WHERE i.pub_dress = ? AND i.identity_kind = 'human' AND r.role = ?)",
-    )
-    .bind(owner.as_str())
-    .bind(BondAccessRole::Business.as_str())
-    .fetch_one(&mut **transaction)
-    .await
-}
-
-/// A business's declared point: `manual`, so no device ever moves it.
-async fn declare_bond_point_in(
-    transaction: &mut Transaction<'_, Sqlite>,
-    owner: &str,
-    coordinate: GeoCoordinate,
-    now: i64,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO bond_locations (pub_dress, mode, longitude_e7, latitude_e7, updated_at) \
-         VALUES (?, 'manual', ?, ?, ?) \
-         ON CONFLICT(pub_dress) DO UPDATE SET mode = 'manual', \
-         longitude_e7 = excluded.longitude_e7, latitude_e7 = excluded.latitude_e7, \
-         updated_at = excluded.updated_at",
-    )
-    .bind(owner)
-    .bind(i64::from(coordinate.longitude_e7()))
-    .bind(i64::from(coordinate.latitude_e7()))
-    .bind(now)
-    .execute(&mut **transaction)
-    .await?;
-    Ok(())
-}
 
 #[cfg(test)]
 mod business_station_repository_tests {
@@ -569,7 +469,7 @@ mod business_station_repository_tests {
     }
 
     #[tokio::test]
-    async fn registers_a_business_without_a_sign_in_and_stands_it_at_a_station() {
+    async fn registers_a_business_without_a_sign_in_as_many_points() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
@@ -594,10 +494,15 @@ mod business_station_repository_tests {
             BusinessRegistrationOutcome::AlreadyBusiness(_)
         ));
 
-        let station = station_of(&owner, "0xda-market-zoloti-vorota");
-        let gate = point(30.5131, 50.4489);
+        let gate = station_of(&owner, "0xda-market-zoloti-vorota");
         let stationed = repository
-            .station_business_avaia(&owner, &station, Some("xda-market Золоті Ворота"), gate, 102)
+            .station_business_avaia(
+                &owner,
+                &gate,
+                Some("xda-market Золоті Ворота"),
+                point(30.5131, 50.4489),
+                102,
+            )
             .await
             .expect("station");
         assert!(matches!(
@@ -605,31 +510,36 @@ mod business_station_repository_tests {
             BusinessStationOutcome::Stationed(ref s)
                 if s.caption.as_deref() == Some("xda-market Золоті Ворота")
         ));
-        assert!(matches!(
-            repository.locate_business(&owner, &station, 103).await.expect("locate"),
-            BusinessLocationOutcome::Located(_)
-        ));
-        let location = repository.business_location(&owner).await.expect("location");
-        assert_eq!(location.map(|s| s.pub_dress), Some(station.to_string()));
-        let declared = sqlx::query_as::<_, (String, i64, i64)>(
-            "SELECT mode, longitude_e7, latitude_e7 FROM bond_locations WHERE pub_dress = '0xda-market'",
+        let mother = station_of(&owner, "0xda-market-batkivshchyna-maty");
+        repository
+            .station_business_avaia(
+                &owner,
+                &mother,
+                Some("xda-market Батьківщина-Мати"),
+                point(30.5632, 50.4265),
+                103,
+            )
+            .await
+            .expect("station");
+
+        // A business is its points: every one of its stations, in order made.
+        let points = repository.business_stations_of(&owner).await.expect("points");
+        assert_eq!(
+            points.iter().map(|s| s.pub_dress.as_str()).collect::<Vec<_>>(),
+            ["0xda-market-zoloti-vorota", "0xda-market-batkivshchyna-maty"]
+        );
+        // And it declares no single location of its own.
+        let declared = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM bond_locations WHERE pub_dress = '0xda-market'",
         )
         .fetch_one(&repository.pool)
         .await
         .expect("bond location");
-        assert_eq!(
-            declared,
-            (
-                "manual".to_owned(),
-                i64::from(gate.longitude_e7()),
-                i64::from(gate.latitude_e7())
-            )
-        );
+        assert_eq!(declared, 0);
 
-        // Restating the station moves the business with it and keeps the caption.
-        let moved = point(30.5133, 50.4490);
+        // Restating a point keeps its caption.
         let restated = repository
-            .station_business_avaia(&owner, &station, None, moved, 104)
+            .station_business_avaia(&owner, &gate, None, point(30.5133, 50.4490), 104)
             .await
             .expect("restate");
         assert!(matches!(
@@ -637,17 +547,10 @@ mod business_station_repository_tests {
             BusinessStationOutcome::Stationed(ref s)
                 if s.caption.as_deref() == Some("xda-market Золоті Ворота")
         ));
-        let longitude = sqlx::query_scalar::<_, i64>(
-            "SELECT longitude_e7 FROM bond_locations WHERE pub_dress = '0xda-market'",
-        )
-        .fetch_one(&repository.pool)
-        .await
-        .expect("moved");
-        assert_eq!(longitude, i64::from(moved.longitude_e7()));
     }
 
     #[tokio::test]
-    async fn a_business_stands_only_at_its_own_station_and_never_over_a_person() {
+    async fn a_business_never_registers_over_a_person() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
@@ -665,23 +568,39 @@ mod business_station_repository_tests {
             repository.register_business(&reserved, 101).await.expect("reserved"),
             BusinessRegistrationOutcome::Unavailable
         );
+        // A person keeps no stations.
+        assert!(
+            repository
+                .business_stations_of(&person)
+                .await
+                .expect("none")
+                .is_empty()
+        );
+    }
 
-        let owner: PubDress = "0xda-market".parse().expect("owner");
-        repository.register_business(&owner, 102).await.expect("register");
-        let rival: PubDress = "0xdrival".parse().expect("rival");
-        repository.register_business(&rival, 102).await.expect("register");
-        let theirs = station_of(&rival, "0xdrival-shop");
-        repository
-            .station_business_avaia(&rival, &theirs, None, point(30.5, 50.4), 103)
-            .await
-            .expect("station");
-        assert_eq!(
-            repository.locate_business(&owner, &theirs, 104).await.expect("theirs"),
-            BusinessLocationOutcome::NotItsStation
-        );
-        assert_eq!(
-            repository.locate_business(&person, &theirs, 104).await.expect("person"),
-            BusinessLocationOutcome::BusinessRoleRequired
-        );
+    #[tokio::test]
+    async fn a_deployed_single_location_table_is_dropped_on_start() {
+        let database = tempfile::NamedTempFile::new().expect("database");
+        let url = format!("sqlite://{}", database.path().display());
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        // The shape 0026 left in production.
+        sqlx::query(
+            "CREATE TABLE business_locations (owner_pub_dress TEXT PRIMARY KEY, \
+             avaia_pub_dress TEXT NOT NULL UNIQUE) STRICT",
+        )
+        .execute(&repository.pool)
+        .await
+        .expect("legacy table");
+        drop(repository);
+
+        let repository = IdentityRepository::connect(&url).await.expect("reopen");
+        let present = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema \
+             WHERE type = 'table' AND name = 'business_locations')",
+        )
+        .fetch_one(&repository.pool)
+        .await
+        .expect("schema");
+        assert!(!present);
     }
 }
