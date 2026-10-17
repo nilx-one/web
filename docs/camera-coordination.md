@@ -112,8 +112,10 @@ a finger or a mouse button is on the map. Otherwise turning the camera around
 a walking body would snap it straight back. Opening flights and focus moves
 get time to settle before tracking resumes, including for a stationary body. All three modes stand down during
 cutscenes, the system informer, handovers and outside the world. Tracking
-takes the driver stance or observed Bond position independently of whether
-an avatar is loaded or visible; hiding a model cannot disable camera follow.
+takes the driver's independent stance where available, or the observed
+device position for a Bond with no declared position or an Avaia with no
+independent stance. It does not depend on an avatar study being loaded;
+hiding a rendered body does not itself interrupt follow.
 This is presentation only: camera actions never change a body, Bond or
 presence state.
 
