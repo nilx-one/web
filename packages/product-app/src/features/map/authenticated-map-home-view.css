@@ -867,6 +867,8 @@
   --camera-mode-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --camera-mode-gap: 2px;
   --camera-mode-padding: 3px;
+  /* Measured and animated widths are both border-box widths. */
+  box-sizing: border-box;
   position: absolute;
   right: calc(var(--shell-inset) + var(--safe-right, 0px));
   bottom: calc(
@@ -875,7 +877,7 @@
   );
   display: grid;
   /* Equal slots, so one translation per index lands on every button. */
-  grid-template-columns: repeat(3, minmax(64px, 1fr));
+  grid-template-columns: repeat(var(--camera-mode-slots, 3), minmax(64px, 1fr));
   gap: var(--camera-mode-gap);
   padding: var(--camera-mode-padding);
   border: 1px solid var(--map-line);
@@ -892,7 +894,11 @@
   bottom: var(--camera-mode-padding);
   left: var(--camera-mode-padding);
   width: calc(
-    (100% - 2 * var(--camera-mode-padding) - 2 * var(--camera-mode-gap)) / 3
+    (
+        100% - 2 * var(--camera-mode-padding) -
+          (var(--camera-mode-slots, 3) - 1) * var(--camera-mode-gap)
+      ) /
+      var(--camera-mode-slots, 3)
   );
   border: 1px solid var(--map-accent-spatial);
   border-radius: 9px;
@@ -926,8 +932,24 @@
   color: var(--accent-ink);
 }
 
+.camera-mode-control__button[hidden] {
+  display: none;
+}
+
+/* Expanding or collapsing travels from one width to the other. The chip
+   moves with its button, so only the panel's edge is seen to travel. */
+.camera-mode-control[data-resizing] {
+  overflow: hidden;
+  transition: width var(--camera-mode-duration) var(--camera-mode-ease);
+}
+
+.camera-mode-control[data-resizing] > .camera-mode-control__thumb {
+  transition: none;
+}
+
 /* Asking for less motion removes the travel, never the destination. */
 @media (prefers-reduced-motion: reduce) {
+  .camera-mode-control,
   .camera-mode-control__thumb,
   .camera-mode-control__button {
     transition: none;

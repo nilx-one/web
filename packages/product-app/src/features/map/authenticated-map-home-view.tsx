@@ -37,7 +37,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type CSSProperties,
   type UIEvent,
 } from "react";
 
@@ -182,13 +181,13 @@ import {
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFollowCamera } from "./use-follow-camera";
+import { CameraModeControl } from "./camera-mode-control";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
   followCamera as chaseCamera,
   isometricCamera,
   sameFollowCamera,
-  type CameraFollow,
 } from "./follow-camera";
 import {
   useBondManualWalk,
@@ -411,13 +410,6 @@ interface IdentityDetailState {
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
 
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
-
-/** Camera buttons left to right; the highlight travels between these slots. */
-const CAMERA_MODE_ORDER: readonly CameraFollow[] = [
-  "locked",
-  "isometric",
-  "free",
-];
 
 /** Closer than this, a body is still standing at this device. */
 const AT_DEVICE_METERS = 5;
@@ -3512,44 +3504,13 @@ export function AuthenticatedMapHomeView({
           handover === undefined &&
           !guideActive &&
           systemInformer.activeId === undefined ? (
-            <div
-              className="camera-mode-control"
-              role="group"
-              aria-label={t("camera.mode")}
-              style={
-                {
-                  "--camera-mode-index": CAMERA_MODE_ORDER.indexOf(
-                    followCamera.follow,
-                  ),
-                } as CSSProperties
-              }
-            >
-              <span className="camera-mode-control__thumb" aria-hidden="true" />
-              <button
-                type="button"
-                className="camera-mode-control__button"
-                aria-pressed={followCamera.follow === "locked"}
-                onClick={followCamera.selectFollow}
-              >
-                {t("camera.follow")}
-              </button>
-              <button
-                type="button"
-                className="camera-mode-control__button"
-                aria-pressed={followCamera.follow === "isometric"}
-                onClick={followCamera.selectIsometric}
-              >
-                {t("camera.isometric")}
-              </button>
-              <button
-                type="button"
-                className="camera-mode-control__button"
-                aria-pressed={followCamera.follow === "free"}
-                onClick={followCamera.selectFree}
-              >
-                {t("camera.free")}
-              </button>
-            </div>
+            <CameraModeControl
+              renderer={renderer}
+              mode={followCamera.follow}
+              onFollow={followCamera.selectFollow}
+              onIsometric={followCamera.selectIsometric}
+              onFree={followCamera.selectFree}
+            />
           ) : null}
           <LocationControl
             viewModel={locationControl}

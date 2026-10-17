@@ -2119,6 +2119,8 @@ describe("AuthenticatedMapHomeView", () => {
     const close = upsert.mock.lastCall?.[0];
     expect(close).toMatchObject({ visible: true, scale: 1 });
 
+    // The preceding map gesture leaves only the active mode chip visible.
+    fireEvent.click(screen.getByRole("button", { name: "Follow" }));
     fireEvent.click(screen.getByRole("button", { name: "Free" }));
     act(() => {
       mapRenderer.moveCamera(
