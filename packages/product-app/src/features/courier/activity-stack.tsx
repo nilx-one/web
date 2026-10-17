@@ -5,7 +5,7 @@ import type { CourierPlan } from "@nilx-one/application";
 import { mapDistanceMeters } from "@nilx-one/map-contract";
 import type { MapFogCell, MapPointSelection } from "@nilx-one/map-contract";
 import type { FogRevealJob } from "../map/fog-reveal";
-import { revealRemainingMs } from "../map/fog-reveal";
+import { FOG_REVEAL_CONCURRENCY, revealRemainingMs } from "../map/fog-reveal";
 import { useLocalization } from "../../shell/localization";
 import "./courier.css";
 import type { Flyover } from "../flyover/use-flyover";
@@ -95,7 +95,7 @@ export function ActivityStack({
       label: jobs.length
         ? t("fog.status.revealing")
             .replace("{count}", String(jobs.length))
-            .replace("{limit}", "3") +
+            .replace("{limit}", String(FOG_REVEAL_CONCURRENCY)) +
           " · " +
           clock(Math.min(...jobs.map((j) => revealRemainingMs(j, now))))
         : t("courier.cellsDone"),
