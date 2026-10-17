@@ -2270,6 +2270,11 @@ export function AuthenticatedMapHomeView({
   // where they are, so coming back is a flag flip rather than a fresh fetch and
   // clone. Only the renderer going away drops them.
   const drawnBodies = useRef<Partial<Record<DockSeat, AvatarHandle>>>({});
+  // A moving Bond's body and card render on every frame, but their geographic
+  // GeoJSON source (H3 cell + accuracy ring) must not be rebuilt at 60 fps.
+  // Keep the latest local marker sample separate from the authoritative
+  // declared position; the normal observation effect publishes the final fix.
+  const lastMovingBondMarkerFrame = useRef(Number.NEGATIVE_INFINITY);
   useEffect(() => {
     const avatars = renderer.avatars;
     if (avatars === undefined) return;
@@ -2359,8 +2364,16 @@ export function AuthenticatedMapHomeView({
       }
       if (moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
-        if (body.seat === "bond" && declaredPosition) {
-          // This moves the manual *presentation*, not a device observation.
+        if (
+          body.seat === "bond" &&
+          declaredPosition &&
+          nowMs - lastMovingBondMarkerFrame.current >= 100
+        ) {
+          // MapLibre's GeoJSON setData retriangulates the H3 cell and accuracy
+          // layers. Coalesce those expensive updates to at most 10 Hz, while
+          // the avatar, camera and DOM card still track every animation frame.
+          // This is local presentation, not a new location observation.
+          lastMovingBondMarkerFrame.current = nowMs;
           renderer.setObservedPosition({
             center: [stance.point.longitude, stance.point.latitude],
             accuracyMeters: 0,
