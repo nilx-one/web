@@ -82,10 +82,10 @@ different from the earlier check.
 
 One rule, no judgement calls:
 
-| Who                 | Identity in Git                    |
-| ------------------- | ---------------------------------- |
-| Claude Code (agent) | `x0skai <x0skai@aiaiaiai.org>`     |
-| Account owner       | `0x0sky <0x0sky@aiaiaiai.org>`     |
+| Who                 | Identity in Git                |
+| ------------------- | ------------------------------ |
+| Claude Code (agent) | `x0skai <x0skai@aiaiaiai.org>` |
+| Account owner       | `0x0sky <0x0sky@aiaiaiai.org>` |
 
 - **Claude Code commits only as `x0skai <x0skai@aiaiaiai.org>`**, as author
   and committer. That is the session's git identity; never override it, and
