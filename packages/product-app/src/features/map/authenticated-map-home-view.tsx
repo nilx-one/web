@@ -2435,6 +2435,23 @@ export function AuthenticatedMapHomeView({
     };
   });
 
+  // A ground tap gets one ephemeral mark in the current driver's color.
+  // Routing, fog reveal, position and ownership remain with their existing
+  // listeners; this observes the same tap without consuming or altering it.
+  useEffect(() => {
+    if (section !== "world") return;
+    const subscribe = renderer.subscribeGroundTap;
+    const show = renderer.showGroundTapFeedback;
+    if (subscribe === undefined || show === undefined) return;
+    return subscribe.call(renderer, (tap) =>
+      show.call(
+        renderer,
+        { longitude: tap.longitude, latitude: tap.latitude },
+        wheel,
+      ),
+    );
+  }, [renderer, section, wheel]);
+
   // With the Bond at the wheel nobody walks, but reachable fog still answers
   // a tap: the Avaia does the revealing either way.
   useEffect(() => {
