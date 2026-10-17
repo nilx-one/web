@@ -30,7 +30,7 @@ export const FIRST_FIX_ZOOM = 18.5;
 export const DECLARED_OPENING_ZOOM = 20.25;
 
 /** Above this uncertainty, keep more of the real surrounding world in frame. */
-const OPENING_ACCURACY_BASE_METERS = 50;
+export const OPENING_ACCURACY_BASE_METERS = 50;
 
 /**
  * A coarse GPS observation cannot justify the same tight framing as a precise
