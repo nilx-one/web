@@ -270,7 +270,7 @@ export type MapSelectionMarkerFactory = (
 /** A single geographic tap acknowledgement: no route or selection ownership. */
 export type MapTapFeedbackMarkerFactory = MapLabelMarkerFactory;
 export const TAP_FEEDBACK_LIFETIME_MS = 3_000;
-export const TAP_FEEDBACK_FADE_MS = 300;
+export const TAP_FEEDBACK_FADE_MS = 1_000;
 export const TAP_FEEDBACK_COLORS = {
   bond: "#37d7e5",
   avaia: "#9b6cfa",
