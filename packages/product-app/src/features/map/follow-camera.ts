@@ -59,6 +59,11 @@ export function cameraModesFor(
   return IDENTITY_CAMERA_MODES[identity];
 }
 
+/** The first camera mode of an identity, before the person chooses another. */
+export function defaultCameraModeFor(identity: CameraIdentity): CameraFollow {
+  return identity === "xping" ? "locked" : "isometric";
+}
+
 /**
  * How long a camera move the application has just started is left to finish
  * before the follow takes the camera again. It covers the renderer's own

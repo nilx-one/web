@@ -42,6 +42,8 @@ export interface FollowCameraInput {
    * always available; nothing here switches into a mode outside this set.
    */
   readonly modes?: readonly CameraFollow[];
+  /** First mode at mount; an unavailable mode falls back to Follow. */
+  readonly initialMode?: CameraFollow;
 }
 
 export interface FollowCameraState {
@@ -71,10 +73,15 @@ export function useFollowCamera({
   dimension,
   reducedMotion,
   modes = CAMERA_MODES,
+  initialMode = INITIAL_CAMERA_FOLLOW,
 }: FollowCameraInput): FollowCameraState {
-  const [follow, setFollow] = useState<CameraFollow>(INITIAL_CAMERA_FOLLOW);
+  const [follow, setFollow] = useState<CameraFollow>(() =>
+    modes.includes(initialMode) ? initialMode : "locked",
+  );
   const followRef = useRef(follow);
-  const lastTrackingMode = useRef<"locked" | "isometric">("locked");
+  const lastTrackingMode = useRef<"locked" | "isometric">(
+    follow === "isometric" ? "isometric" : "locked",
+  );
   // No explicit preset on entry: the next Follow press chooses the closest.
   const followDistance = useRef(-1);
   const freeCycle = useRef<{ zoom: number; step: number } | undefined>(

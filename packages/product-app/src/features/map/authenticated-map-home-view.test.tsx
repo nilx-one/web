@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { followCamera } from "./follow-camera";
+import { followCamera, isometricCamera } from "./follow-camera";
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveCommand,
@@ -1939,7 +1939,7 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
-  it("starts in Follow mode and offers an explicit Free camera toggle", async () => {
+  it("starts in Isometric mode and offers independent Free and Follow", async () => {
     const mapRenderer = renderer();
     renderView({
       mapRenderer,
@@ -1949,7 +1949,9 @@ describe("AuthenticatedMapHomeView", () => {
     const modes = await screen.findByRole("group", { name: "Camera mode" });
     const follow = within(modes).getByRole("button", { name: "Follow" });
     const free = within(modes).getByRole("button", { name: "Free" });
-    expect(follow).toHaveAttribute("aria-pressed", "true");
+    const isometric = within(modes).getByRole("button", { name: "Isometric" });
+    expect(isometric).toHaveAttribute("aria-pressed", "true");
+    expect(follow).toHaveAttribute("aria-pressed", "false");
     expect(free).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(free);
@@ -1975,6 +1977,9 @@ describe("AuthenticatedMapHomeView", () => {
     const isometric = within(modes).getByRole("button", { name: "Isometric" });
     const free = within(modes).getByRole("button", { name: "Free" });
     const slot = () => modes.style.getPropertyValue("--camera-mode-index");
+    expect(isometric).toHaveAttribute("aria-pressed", "true");
+    expect(slot()).toBe("1");
+    fireEvent.click(follow);
     expect(follow).toHaveAttribute("aria-pressed", "true");
     expect(slot()).toBe("0");
     fireEvent.click(isometric);
@@ -2016,6 +2021,29 @@ describe("AuthenticatedMapHomeView", () => {
       expect(mapRenderer.getCamera().zoom).toBe(zoom);
       expect(free).toHaveAttribute("aria-pressed", "true");
     }
+  });
+
+  it("tracks the Bond's next fix without needing a rendered avatar", async () => {
+    const mapRenderer = renderer();
+    const geolocation = createGeolocationDouble({ position: observation() });
+    renderView({ mapRenderer, geolocation });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    expect(screen.getByRole("button", { name: "Isometric" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    const next = observation({ longitude: 30.5334 });
+    act(() => geolocation.publish({ kind: "observed", position: next }));
+    await vi.waitFor(() => {
+      const target = isometricCamera(mapRenderer.getCamera(), {
+        ...next,
+        bearingDeg: 0,
+      });
+      expect(mapRenderer.getCamera().center[0]).toBeCloseTo(target.center[0], 6);
+      expect(mapRenderer.getCamera().bearing).toBe(45);
+    });
+    expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
   });
 
   it("opens on a readable manual identity rather than a distant marker", async () => {
