@@ -15,8 +15,8 @@ import { distanceMeters } from "./location-camera-policy";
 /**
  * The camera that follows the body at the wheel, the way a game camera does.
  *
- * `locked` is the default Follow camera: it looks over the body's head,
- * tilted forward and aligned with the body's heading. `free` is a Dota-style
+ * `locked` follows behind the head. `isometric` glides with the body in a stable
+ * diagonal view, without rotating the world when the body turns. `free` is a Dota-style
  * independent map camera: dragging, touch panning and pointer zoom move the
  * camera without pulling it back to the body. An explicit selection, Space
  * or Y switches modes, and so does a two-finger pinch on a phone (out to
@@ -25,7 +25,7 @@ import { distanceMeters } from "./location-camera-policy";
  * Presentation only: following never moves a body, records presence or
  * changes who owns the camera beyond what `camera-coordination.md` says.
  */
-export type CameraFollow = "locked" | "free";
+export type CameraFollow = "locked" | "isometric" | "free";
 
 /** A world opens with the camera on the body at the wheel. */
 export const INITIAL_CAMERA_FOLLOW: CameraFollow = "locked";
@@ -45,8 +45,15 @@ export interface FollowBody extends MapPointSelection {
   readonly bearingDeg: number;
 }
 
-/** Map pitch is measured from overhead: 60° looks down at 30° to the ground. */
+/** Follow looks forward from behind the body's head. */
 export const FOLLOW_PITCH = 60;
+/** Isometric orientation belongs to the camera, not body facing. */
+export const ISOMETRIC_PITCH = 50;
+export const ISOMETRIC_BEARING = 45;
+/** Exponential catch-up time; independent of the display's refresh rate. */
+export const ISOMETRIC_RESPONSE_MS = 180;
+/** A relocation is a new shot, never a long chase through intervening geography. */
+export const ISOMETRIC_RELOCATION_METERS = 60;
 /**
  * Follow never goes wider than the scale a body is drawn from, so the body
  * stays on the world; any closer zoom the person chose is kept. A floor any
@@ -72,8 +79,36 @@ export function followCamera(
   dimension: MapDimension = "volumetric",
   minimumZoom: number = FOLLOW_MIN_ZOOM,
 ): MapCamera {
-  const bearing = ((body.bearingDeg % 360) + 360) % 360;
-  const pitch = dimension === "flat" ? 0 : FOLLOW_PITCH;
+  return framedBodyCamera(
+    current,
+    body,
+    minimumZoom,
+    ((body.bearingDeg % 360) + 360) % 360,
+    dimension === "flat" ? 0 : FOLLOW_PITCH,
+  );
+}
+
+export function isometricCamera(
+  current: MapCamera,
+  body: FollowBody,
+  dimension: MapDimension = "volumetric",
+): MapCamera {
+  return framedBodyCamera(
+    current,
+    body,
+    FOLLOW_MIN_ZOOM,
+    ISOMETRIC_BEARING,
+    dimension === "flat" ? 0 : ISOMETRIC_PITCH,
+  );
+}
+
+function framedBodyCamera(
+  current: MapCamera,
+  body: FollowBody,
+  minimumZoom: number,
+  bearing: number,
+  pitch: number,
+): MapCamera {
   const distance = 1.6 * Math.tan((pitch * Math.PI) / 180);
   const angular = distance / 6_371_008.8;
   const heading = (bearing * Math.PI) / 180;
@@ -98,6 +133,30 @@ export function followCamera(
     zoom: Math.max(current.zoom, minimumZoom),
     bearing,
     pitch,
+  };
+}
+
+/** Smooth the ground target, retaining distance and the stable camera angle. */
+export function smoothIsometricCamera(
+  current: MapCamera,
+  target: MapCamera,
+  elapsedMs: number,
+): MapCamera {
+  const distance = distanceMeters(current.center, target.center);
+  if (
+    distance < 0.05 ||
+    distance > ISOMETRIC_RELOCATION_METERS ||
+    elapsedMs > 1_000
+  )
+    return target;
+  const alpha = 1 - Math.exp(-Math.max(0, elapsedMs) / ISOMETRIC_RESPONSE_MS);
+  const longitude = ((target.center[0] - current.center[0] + 540) % 360) - 180;
+  return {
+    ...target,
+    center: [
+      ((current.center[0] + longitude * alpha + 540) % 360) - 180,
+      current.center[1] + (target.center[1] - current.center[1]) * alpha,
+    ],
   };
 }
 
@@ -134,14 +193,14 @@ export function followAfterPinch(
   endZoom: number,
 ): CameraFollow {
   const zoomed = endZoom - startZoom;
-  if (follow === "locked" && zoomed <= -PINCH_MODE_ZOOM) return "free";
+  if (follow !== "free" && zoomed <= -PINCH_MODE_ZOOM) return "free";
   if (follow === "free" && zoomed >= PINCH_MODE_ZOOM) return "locked";
   return follow;
 }
 
 /** A locked camera closes in on the body it is centred on. */
 export function zoomPivotFor(follow: CameraFollow): MapZoomPivot {
-  return follow === "locked" ? "center" : "pointer";
+  return follow === "free" ? "pointer" : "center";
 }
 
 /**

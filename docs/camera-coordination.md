@@ -31,7 +31,7 @@ A new map instance first frames geographic countries at zoom 3.3, backed by a ge
 
 ## Follow and Free camera
 
-Two explicit camera modes are selected on the world overlay next to the
+Three explicit camera modes are selected on the world overlay next to the
 location control (`follow-camera.ts`, `use-follow-camera.ts`).
 
 - **Follow (default)** looks over the head of the body at the wheel. Its
@@ -46,14 +46,34 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
   Orbit, tilt and pan gestures pause tracking while in progress, then ease
   back behind the head even if the body is stationary. Free retains arbitrary
   viewing angles. Zoom pivots around the viewport centre while Follow is active.
+- **Isometric** is a separate tracking mode inspired by the gameplay reference.
+  It holds bearing 45° and pitch 50° from overhead, so a body turn does not
+  rotate the world. Its ground target lies about 1.91 m along the camera axis.
+  Exponential damping (180 ms response) glides after movement and finishes a
+  short catch-up after the last body step, independently of frame rate.
+  Acquisition, relocations over 60 m and pauses over one second take the target
+  directly. Reduced motion also tracks directly; explicit flat mode stays flat.
+  Switching to Follow or Free, gestures, focus holds, scene ownership, dimension
+  changes and unmount cancel pending tracking frames.
 - **Free (Dota-style)** detaches camera position from Bond/Avaia movement.
   Dragging and touch panning explore the map independently; wheel and pinch
   zoom toward the pointer. No body motion recentres it.
 - **On a phone two fingers choose the mode**: pinching out by at least 0.35
   zoom levels steps back from the body into Free, pinching in by as much
-  returns to Follow and eases onto the body. A smaller pinch, a pinch the way
+  returns to the last selected tracking mode (Follow or Isometric) and eases
+  onto the body. A smaller pinch, a pinch the way
   the mode already is, a mouse wheel or a trackpad pinch only zoom.
-- The on-screen **Follow / Free** control is available on mobile and desktop.
+- The on-screen **Follow / Isometric / Free** control is available on mobile and desktop.
+  It opens expanded, then collapses to the current mode after three seconds
+  without panel interaction. A map gesture or ground tap collapses it at once;
+  automatic tracking and camera flights do not count as input. Pressing the
+  collapsed chip opens all three choices without consuming a distance step.
+  Changing mode reveals the panel again, including Free entered by pinch-out,
+  and starts a fresh idle period. Expanded mode buttons retain their selection
+  and distance-cycle behavior. Pending timers and subscriptions end on unmount.
+  Its selection travels from the mode being left to the one chosen, and the
+  panel widens or narrows from one size to the other, on the Dock window's
+  420 ms curve; reduced motion moves both without travel.
   The first explicit Follow press, or selecting Follow from Free, chooses
   the closest preset; further presses cycle close → medium → far → close
   (zoom 21.5 → 21 → 20.5 → 21.5). Each preset is applied once on the press.
@@ -66,7 +86,7 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
   A manual gesture, mode change or scene handover resets the Free sequence.
   Repeated taps advance from the selected step even during an unfinished ease.
   These button cycles do not change Space/Y or programmatic release semantics.
-  **Y** toggles modes; **Space** explicitly selects Follow and recentres on
+  **Y** toggles Free and the last tracking mode; **Space** explicitly selects Follow and recentres on
   the body. Repeating a held key never triggers another camera animation.
   Keys inside controls or dialogs, or with modifiers, are left alone.
 - A camera focus or wheel handover performs its requested camera move
@@ -82,7 +102,7 @@ cancels the gesture it is recognising whenever the camera is set, so Follow
 moves with `MapCameraOptions.yieldToGesture` and the renderer skips them while
 a finger or a mouse button is on the map. Otherwise turning the camera around
 a walking body would snap it straight back. Opening flights and focus moves
-get time to settle before tracking resumes, including for a stationary body. Both modes stand down during
+get time to settle before tracking resumes, including for a stationary body. All three modes stand down during
 cutscenes, the system informer, handovers and outside the world. This is
 presentation only: camera actions never change a body, Bond or presence state.
 

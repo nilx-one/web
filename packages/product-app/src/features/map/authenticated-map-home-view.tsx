@@ -181,10 +181,12 @@ import {
 import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFollowCamera } from "./use-follow-camera";
+import { CameraModeControl } from "./camera-mode-control";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
   followCamera as chaseCamera,
+  isometricCamera,
   sameFollowCamera,
 } from "./follow-camera";
 import {
@@ -996,6 +998,17 @@ export function AuthenticatedMapHomeView({
           // Any zoom counts as centred: Free distance steps go below the
           // Follow floor, and a flat Free view on the body is still centred.
           camera.zoom,
+        ),
+      ) ||
+      sameFollowCamera(
+        camera,
+        isometricCamera(
+          camera,
+          {
+            ...observedPosition,
+            bearingDeg: camera.bearing,
+          },
+          dimension,
         ),
       ));
   const locationControl = createLocationControlViewModel(
@@ -3491,28 +3504,13 @@ export function AuthenticatedMapHomeView({
           handover === undefined &&
           !guideActive &&
           systemInformer.activeId === undefined ? (
-            <div
-              className="camera-mode-control"
-              role="group"
-              aria-label={t("camera.mode")}
-            >
-              <button
-                type="button"
-                className="camera-mode-control__button"
-                aria-pressed={followCamera.follow === "locked"}
-                onClick={followCamera.selectFollow}
-              >
-                {t("camera.follow")}
-              </button>
-              <button
-                type="button"
-                className="camera-mode-control__button"
-                aria-pressed={followCamera.follow === "free"}
-                onClick={followCamera.selectFree}
-              >
-                {t("camera.free")}
-              </button>
-            </div>
+            <CameraModeControl
+              renderer={renderer}
+              mode={followCamera.follow}
+              onFollow={followCamera.selectFollow}
+              onIsometric={followCamera.selectIsometric}
+              onFree={followCamera.selectFree}
+            />
           ) : null}
           <LocationControl
             viewModel={locationControl}

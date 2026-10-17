@@ -1966,6 +1966,39 @@ describe("AuthenticatedMapHomeView", () => {
     expect(free).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("offers independent Follow, Isometric and Free buttons", async () => {
+    rememberWorld("0x0sky", { avaia: { ...observation(), bearingDeg: 120 } });
+    const mapRenderer = createMapRendererDouble({ kind: "ready" });
+    renderView({
+      mapRenderer,
+      geolocation: createGeolocationDouble({ position: observation() }),
+      avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+    });
+    const modes = await screen.findByRole("group", { name: "Camera mode" });
+    await act(async () => Promise.resolve());
+    const follow = within(modes).getByRole("button", { name: "Follow" });
+    const isometric = within(modes).getByRole("button", { name: "Isometric" });
+    const free = within(modes).getByRole("button", { name: "Free" });
+    const slot = () => modes.style.getPropertyValue("--camera-mode-index");
+    expect(follow).toHaveAttribute("aria-pressed", "true");
+    expect(slot()).toBe("0");
+    fireEvent.click(isometric);
+    expect(slot()).toBe("1");
+    expect(isometric).toHaveAttribute("aria-pressed", "true");
+    expect(follow).toHaveAttribute("aria-pressed", "false");
+    expect(free).toHaveAttribute("aria-pressed", "false");
+    expect(mapRenderer.getCamera()).toMatchObject({ bearing: 45, pitch: 50 });
+    fireEvent.click(free);
+    expect(slot()).toBe("2");
+    expect(free).toHaveAttribute("aria-pressed", "true");
+    expect(isometric).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(follow);
+    expect(slot()).toBe("0");
+    expect(follow).toHaveAttribute("aria-pressed", "true");
+    expect(isometric).toHaveAttribute("aria-pressed", "false");
+    expect(mapRenderer.getCamera()).toMatchObject({ bearing: 120, pitch: 60 });
+  });
+
   it("cycles camera distance from repeated presses of the visible mode buttons", async () => {
     rememberWorld("0x0sky", { avaia: { ...observation(), bearingDeg: 0 } });
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
@@ -2086,6 +2119,8 @@ describe("AuthenticatedMapHomeView", () => {
     const close = upsert.mock.lastCall?.[0];
     expect(close).toMatchObject({ visible: true, scale: 1 });
 
+    // The preceding map gesture leaves only the active mode chip visible.
+    fireEvent.click(screen.getByRole("button", { name: "Follow" }));
     fireEvent.click(screen.getByRole("button", { name: "Free" }));
     act(() => {
       mapRenderer.moveCamera(

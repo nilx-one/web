@@ -13,6 +13,11 @@ import {
   CAMERA_READ_PIXELS,
   FOLLOW_MIN_ZOOM,
   FOLLOW_PITCH,
+  ISOMETRIC_BEARING,
+  ISOMETRIC_PITCH,
+  ISOMETRIC_RESPONSE_MS,
+  isometricCamera,
+  smoothIsometricCamera,
   sameFollowCamera,
   cameraChangeVisible,
   cameraKeyCommand,
@@ -185,5 +190,64 @@ describe("camera keys", () => {
     expect(
       cameraKeyCommand(key({ key: " ", code: "Space", target: document.body })),
     ).toBe("center");
+  });
+});
+
+describe("follow glide", () => {
+  it("catches up without overshooting and gives the same result at 30 and 60 Hz", () => {
+    const start = camera();
+    const target = camera({ center: eastBy(15) });
+    const glide = (frames: number) => {
+      let current = start;
+      for (let i = 0; i < frames; i++)
+        current = smoothIsometricCamera(
+          current,
+          target,
+          ISOMETRIC_RESPONSE_MS / frames,
+        );
+      return current;
+    };
+    const slow = glide(6);
+    const fast = glide(12);
+    expect(slow.center[0]).toBeCloseTo(fast.center[0], 10);
+    expect(slow.center[0]).toBeGreaterThan(start.center[0]);
+    expect(slow.center[0]).toBeLessThan(target.center[0]);
+    expect(
+      (slow.center[0] - start.center[0]) / (target.center[0] - start.center[0]),
+    ).toBeCloseTo(1 - Math.exp(-1), 5);
+  });
+
+  it("settles, resets after a background pause, and cuts directly to a relocation", () => {
+    const start = camera();
+    expect(smoothIsometricCamera(start, start, 16)).toBe(start);
+    const far = camera({ center: [30.5, 50.4] });
+    expect(smoothIsometricCamera(start, far, 16)).toBe(far);
+    const near = camera({ center: eastBy(15) });
+    expect(smoothIsometricCamera(start, near, 1_100)).toBe(near);
+  });
+
+  it("crosses the antimeridian by the short path", () => {
+    const current = camera({ center: [179.9999, 0] });
+    const target = camera({ center: [-179.9999, 0] });
+    const next = smoothIsometricCamera(current, target, 16);
+    expect(Math.abs(next.center[0])).toBeGreaterThan(179.999);
+  });
+});
+
+describe("isometric camera", () => {
+  it.each([0, 90, 180, 270])(
+    "keeps its angle when the body faces %s",
+    (bearingDeg) => {
+      const body = { ...BODY, bearingDeg };
+      const next = isometricCamera(camera(), body);
+      expect(next.bearing).toBe(ISOMETRIC_BEARING);
+      expect(next.pitch).toBe(ISOMETRIC_PITCH);
+      expect(isometricCamera(camera(), body, "flat").pitch).toBe(0);
+    },
+  );
+  it("uses a centred zoom pivot and can pinch out to Free", () => {
+    expect(zoomPivotFor("isometric")).toBe("center");
+    expect(followAfterPinch("isometric", 20, 19)).toBe("free");
+    expect(followAfterPinch("isometric", 20, 20.1)).toBe("isometric");
   });
 });

@@ -12,6 +12,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FOLLOW_HOLD_MS,
   FOLLOW_PITCH,
+  ISOMETRIC_BEARING,
+  ISOMETRIC_PITCH,
+  isometricCamera,
   FOLLOW_MIN_ZOOM,
   followCamera,
   type FollowBody,
@@ -606,5 +609,169 @@ describe("useFollowCamera", () => {
 
     expect(result.current.follow).toBe("free");
     expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+  });
+});
+
+function isometricFollow(
+  fake: ReturnType<typeof fakeRenderer>,
+  body: () => FollowBody | undefined = () => HOME,
+) {
+  const hook = follow(fake, body);
+  act(() => hook.result.current.selectIsometric());
+  fake.settle();
+  fake.renderer.setCamera.mockClear();
+  return hook;
+}
+
+describe("isometric tracking", () => {
+  it("keeps a pending Follow distance when selecting Isometric", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    fake.renderer.setCamera.mockImplementation(() => undefined);
+    act(() => result.current.selectFollow());
+    act(() => result.current.selectIsometric());
+    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        zoom: 21.5,
+        bearing: ISOMETRIC_BEARING,
+        pitch: ISOMETRIC_PITCH,
+      }),
+      { motion: "eased" },
+    );
+  });
+
+  it("toggles Isometric and Free on Y while Space explicitly chooses Follow", () => {
+    const fake = fakeRenderer();
+    const { result } = isometricFollow(fake);
+    const key = (code: string) =>
+      act(() =>
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", { code, bubbles: true }),
+        ),
+      );
+    key("KeyY");
+    expect(result.current.follow).toBe("free");
+    key("KeyY");
+    expect(result.current.follow).toBe("isometric");
+    key("Space");
+    expect(result.current.follow).toBe("locked");
+    expect(fake.renderer.getCamera()).toMatchObject({
+      bearing: HOME.bearingDeg,
+      pitch: FOLLOW_PITCH,
+    });
+  });
+
+  it("glides after acquisition and finishes catching up when the body stops", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    let body = HOME;
+    const { result } = isometricFollow(fake, () => body);
+    result.current.track(body);
+    const before = fake.renderer.getCamera();
+    body = { ...HOME, longitude: HOME.longitude + 0.00001 };
+    result.current.track(body);
+    act(() => vi.advanceTimersByTime(32));
+    const mid = fake.renderer.getCamera();
+    const target = isometricCamera(mid, body);
+    expect(mid.center[0]).toBeGreaterThan(before.center[0]);
+    expect(mid.center[0]).toBeLessThan(target.center[0]);
+    // No more track calls: the camera owns the small tail after the last step.
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(fake.renderer.getCamera()).toEqual(target);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("starts a new glide from rest instead of jumping over the time at rest", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    let body = HOME;
+    const { result } = isometricFollow(fake, () => body);
+    result.current.track(body);
+    const rest = fake.renderer.getCamera();
+    act(() => vi.advanceTimersByTime(600));
+    body = { ...HOME, longitude: HOME.longitude + 0.00001 };
+    result.current.track(body);
+    expect(fake.renderer.getCamera()).toEqual(rest);
+    act(() => vi.advanceTimersByTime(16));
+    const first = fake.renderer.getCamera();
+    const target = isometricCamera(first, body);
+    const progress =
+      (first.center[0] - rest.center[0]) / (target.center[0] - rest.center[0]);
+    expect(progress).toBeGreaterThan(0);
+    expect(progress).toBeLessThan(0.3);
+  });
+
+  it.each(["free", "follow", "gesture", "scene", "unmount"] as const)(
+    "cancels pending follow frames on %s",
+    (interruption) => {
+      vi.useFakeTimers();
+      const fake = fakeRenderer();
+      const { result, rerender, unmount } = isometricFollow(fake);
+      result.current.track(HOME);
+      result.current.track({ ...HOME, longitude: HOME.longitude + 0.00001 });
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      act(() => {
+        if (interruption === "free") result.current.release();
+        if (interruption === "follow") result.current.selectFollow();
+        if (interruption === "gesture") fake.begin();
+        if (interruption === "scene") rerender({ on: false });
+        if (interruption === "unmount") unmount();
+      });
+      fake.renderer.setCamera.mockClear();
+      act(() => vi.advanceTimersByTime(2_000));
+      expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("does not add a tracking tail for reduced motion", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    const { result } = renderHook(() =>
+      useFollowCamera({
+        renderer: fake.renderer,
+        enabled: true,
+        body: () => HOME,
+        dimension: "volumetric",
+        reducedMotion: () => true,
+      }),
+    );
+    act(() => result.current.selectIsometric());
+    fake.settle();
+    result.current.track(HOME);
+    result.current.track(AHEAD);
+    expect(fake.renderer.getCamera()).toEqual(
+      isometricCamera(fake.renderer.getCamera(), AHEAD),
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps Follow, Isometric and Free independent and restores the last tracking mode", () => {
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    expect(result.current.follow).toBe("locked");
+    result.current.track({ ...HOME, bearingDeg: 270 });
+    expect(fake.renderer.getCamera().bearing).toBe(270);
+    act(() => result.current.selectIsometric());
+    expect(result.current.follow).toBe("isometric");
+    expect(fake.renderer.getCamera()).toMatchObject({
+      bearing: ISOMETRIC_BEARING,
+      pitch: ISOMETRIC_PITCH,
+    });
+    fake.settle();
+    fake.renderer.setCamera.mockClear();
+    result.current.track({ ...HOME, bearingDeg: 180 });
+    expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+    act(() => fake.pinch(-1));
+    expect(result.current.follow).toBe("free");
+    act(() => fake.pinch(1));
+    expect(result.current.follow).toBe("isometric");
+    act(() => result.current.selectFollow());
+    expect(result.current.follow).toBe("locked");
+    expect(fake.renderer.getCamera()).toMatchObject({
+      bearing: HOME.bearingDeg,
+      pitch: FOLLOW_PITCH,
+      zoom: 21.5,
+    });
   });
 });
