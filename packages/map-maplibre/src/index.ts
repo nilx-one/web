@@ -1485,28 +1485,30 @@ export function createMapLibreRenderer(
   }
 
   function releaseTapFeedback(entry: TapFeedbackEntry): void {
-    if (entry.fadeTimer !== undefined)
+    if (entry.fadeTimer !== undefined) {
       globalThis.clearTimeout(entry.fadeTimer);
-    if (entry.removeTimer !== undefined)
+    }
+    if (entry.removeTimer !== undefined) {
       globalThis.clearTimeout(entry.removeTimer);
+    }
     entry.marker.remove();
     const index = tapFeedbackEntries.indexOf(entry);
     if (index !== -1) tapFeedbackEntries.splice(index, 1);
   }
 
   function fadeTapFeedback(entry: TapFeedbackEntry): void {
-    if (entry.fadeTimer !== undefined)
+    if (entry.fadeTimer !== undefined) {
       globalThis.clearTimeout(entry.fadeTimer);
+    }
     if (entry.element.style.opacity === "0") return;
     entry.element.style.opacity = "0";
-    if (entry.removeTimer !== undefined)
+    if (entry.removeTimer !== undefined) {
       globalThis.clearTimeout(entry.removeTimer);
+    }
     // A second tap accelerates the previous fade, but can never extend the
     // original three-second lifetime.
-    const remaining = Math.max(
-      0,
-      entry.expiresAt - globalThis.performance.now(),
-    );
+    const now = globalThis.performance.now();
+    const remaining = Math.max(0, entry.expiresAt - now);
     entry.removeTimer = globalThis.setTimeout(
       () => releaseTapFeedback(entry),
       Math.min(TAP_FEEDBACK_FADE_MS, remaining),
