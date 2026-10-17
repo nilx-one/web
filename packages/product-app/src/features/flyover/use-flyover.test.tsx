@@ -103,6 +103,8 @@ describe("useFlyover", () => {
     });
     act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 2_000));
     const flying = lastDrone(drone)!;
+    expect(hook.result.current.progress?.remainingMs).toBeGreaterThan(0);
+    expect(hook.result.current.progress?.arrivedAt).toBeUndefined();
     expect(flying.lngLat[0]).toBeGreaterThan(FROM.longitude);
     expect(flying.heightMeters).toBeGreaterThan(5);
     expect(flying.bearingDeg).toBeCloseTo(90, 0);
@@ -138,6 +140,7 @@ describe("useFlyover", () => {
     const hovering = lastDrone(drone)!;
     expect(hovering.lngLat[0]).toBeCloseTo(TO.longitude, 5);
     expect(hook.result.current.active).toBe(true);
+    expect(hook.result.current.progress?.arrivedAt).toBeDefined();
     act(() => vi.advanceTimersByTime(FLYOVER_ARRIVAL_MS));
     expect(hook.result.current.active).toBe(false);
     expect(drone.remove).toHaveBeenCalledWith(FLYOVER_DRONE_ID);
@@ -163,6 +166,24 @@ describe("useFlyover", () => {
     drone.upsert.mockClear();
     act(() => vi.advanceTimersByTime(5_000));
     expect(drone.upsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps flying during an activity overview and resumes the same chase", async () => {
+    const { renderer, drone, hook } = setup();
+    await begin(hook);
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 500));
+    const before = lastDrone(drone)!.lngLat[0];
+    act(() => hook.result.current.setFollowing(false));
+    renderer.setCamera(BASE);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(renderer.getCamera()).toEqual(BASE);
+    expect(lastDrone(drone)!.lngLat[0]).toBeGreaterThan(before);
+    act(() => hook.result.current.setFollowing(true));
+    act(() => vi.advanceTimersByTime(1000));
+    expect(renderer.getCamera()).not.toEqual(BASE);
+    expect(renderer.preloadRoads).toHaveBeenCalledOnce();
+    act(() => hook.result.current.leave());
+    expect(hook.result.current.progress).toBeUndefined();
   });
 
   it("shows the whole route still under reduced motion", async () => {

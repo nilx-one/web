@@ -15,6 +15,7 @@ import { prefersReducedMotion } from "../../shell/motion";
 import { offsetPoint } from "../guide/guide-stage";
 import {
   flightObstacles,
+  FLYOVER_SPEED_MPS,
   flightPath,
   flightPoint,
   localFrame,
@@ -113,12 +114,22 @@ export interface FlyoverRequest {
 export interface Flyover {
   /** A flight is under way: the world's own camera stands down. */
   readonly active: boolean;
+  readonly following: boolean;
+  readonly progress: FlyoverProgress | undefined;
+  setFollowing(value: boolean): void;
   /** Starts the flight; ignored while one is under way. */
   start(request: FlyoverRequest): void;
   /** Steps xPing a lane aside; the route pulls it back once let go. */
   steer(direction: -1 | 1): void;
   /** Leaves the flight at once. */
   leave(): void;
+}
+
+/** Presentation telemetry from the actual route, never a purchase receipt. */
+export interface FlyoverProgress {
+  readonly point: MapPointSelection;
+  readonly remainingMs: number;
+  readonly arrivedAt?: number;
 }
 
 /**
@@ -128,16 +139,27 @@ export interface Flyover {
  */
 export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
   const [request, setRequest] = useState<FlyoverRequest | undefined>();
+  const [progress, setProgress] = useState<FlyoverProgress>();
+  const [following, setFollowing] = useState(true);
+  const followingRef = useRef(following);
+  useEffect(() => {
+    followingRef.current = following;
+  }, [following]);
   const flight = useRef<{ state: FlightState } | undefined>(undefined);
 
   const start = useCallback(
     (next: FlyoverRequest) => {
-      if (!ready) return;
+      if (!ready || request !== undefined) return;
+      setProgress(undefined);
+      setFollowing(true);
       setRequest((current) => current ?? next);
     },
-    [ready],
+    [ready, request],
   );
-  const leave = useCallback(() => setRequest(undefined), []);
+  const leave = useCallback(() => {
+    setRequest(undefined);
+    setProgress(undefined);
+  }, []);
   const steer = useCallback((direction: -1 | 1) => {
     const current = flight.current;
     if (current === undefined) return;
@@ -189,6 +211,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       const started = globalThis.performance.now();
       let last = started;
       let cameraBearing = state.bearingDeg;
+      let publishedAt = -Infinity;
       renderer.setCamera(
         chaseCamera(request.from, state.bearingDeg, state.height),
         { motion: "eased", durationMs: FLYOVER_TAKEOFF_MS },
@@ -225,6 +248,17 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
           ? state.height
           : state.height * Math.min(1, (now - started) / FLYOVER_TAKEOFF_MS);
         const [longitude, latitude] = plane.toLonLat(flightPoint(path, state));
+        if (state.arrived || now - publishedAt >= 250) {
+          publishedAt = now;
+          setProgress({
+            point: { longitude, latitude },
+            remainingMs:
+              Math.max(0, FLYOVER_TAKEOFF_MS - (now - started)) +
+              (Math.max(0, path.length - state.distance) / FLYOVER_SPEED_MPS) *
+                1000,
+            ...(state.arrived ? { arrivedAt: Date.now() } : {}),
+          });
+        }
         try {
           drone?.upsert({
             id: FLYOVER_DRONE_ID,
@@ -237,7 +271,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             pitchDeg: flying ? state.pitchDeg : 0,
             scale: FLYOVER_DRONE_SCALE,
           });
-          if (flying) {
+          if (flying && followingRef.current) {
             const turn = ((state.bearingDeg - cameraBearing + 540) % 360) - 180;
             cameraBearing +=
               turn * Math.min(1, (CHASE_TURN_RATE * elapsed) / 1000);
@@ -279,7 +313,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.code === "Escape") {
         event.preventDefault();
-        setRequest(undefined);
+        leave();
         return;
       }
       const direction =
@@ -315,11 +349,11 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         /* A lost renderer has nothing left to put back. */
       }
     };
-  }, [ready, renderer, request, steer]);
+  }, [ready, renderer, request, steer, leave]);
 
   const active = request !== undefined;
   return useMemo(
-    () => ({ active, start, steer, leave }),
-    [active, leave, start, steer],
+    () => ({ active, start, steer, leave, progress, following, setFollowing }),
+    [active, leave, start, steer, progress, following],
   );
 }

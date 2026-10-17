@@ -26,7 +26,7 @@ describe("PickupSettings slider", () => {
         document.querySelectorAll(".interface-settings__slider-stops > span"),
         (label) => label.textContent,
       ),
-    ).toEqual(["legendary", "special", "rare", "uncommon", "common", "Off"]);
+    ).toEqual(["exclusive", "special", "rare", "uncommon", "common", "Off"]);
   });
 
   it("keeps Core's thresholds and can disable pickup at the rightmost stop", () => {

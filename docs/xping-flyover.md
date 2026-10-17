@@ -9,8 +9,35 @@ Web carries it out (`features/flyover`).
 `useFlyover(renderer, ready).start({ from, to })` starts a flight: `from` is
 where the Bond and its Avaia stand, `to` the business station the
 subscription concerns. Only Agreed in the Exclusive or Special subscription
-cutscene may call it. That cutscene is not built yet, so nothing in the
-product calls `start` today.
+cutscene may call it. The courier offer in Settings calls this same hook
+after a destination has been resolved. It requires the optional courier
+directory and Core destination planner. The built-in Kyiv game catalog also
+offers a preview for older runtimes; a missing binding uses that explicit
+preview. External directories without a preview report route unavailability.
+
+## Courier integration
+
+The offer, activity stack and nearest-destination selection are separate
+from this flight engine. They reuse #452's camera controls, #453's drone
+and route renderer, and #454's route and motion. There is no second drone
+flight or straight-line animation in the courier feature.
+
+`progress` reports the actual route's remaining duration and current point.
+Only `arrivedAt`, emitted by the flight reaching its end, enables the
+activity's completion mark. Core's preliminary straight-line estimate is
+not used for the visible countdown or completion. Leaving clears progress
+without reporting success. During route loading (and the static reduced
+motion preview), no arrival is inferred from elapsed wall-clock time.
+
+Activity overview temporarily releases the chase camera with
+`setFollowing(false)` but does not stop the flight or compute another route.
+Selecting xPing restores the chase. The courier and cell-opening activities
+remain peers even while Avaia's travel prompt is shown.
+
+Commerce is deferred: neither arrival nor agreement grants a subscription.
+The default Kyiv map can dispatch to its author-seeded pins without commerce.
+A verified business directory remains separate from these game destinations;
+see [the catalog and its sources](market-points.md).
 
 ## Route
 

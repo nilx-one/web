@@ -1552,7 +1552,7 @@ describe("AuthenticatedMapHomeView", () => {
   });
 
   it.each(["0", "1"])(
-    "closes settings and starts xSasha's exclusive scene for stop %s",
+    "closes settings and starts xPing's courier offer for stop %s",
     (value) => {
       const onNavigate = vi.fn();
       const pending = () => new Promise<never>(() => undefined);
@@ -1569,7 +1569,7 @@ describe("AuthenticatedMapHomeView", () => {
         target: { value },
       });
       expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
-      expect(container.querySelector(".guide-cutscene")).not.toBeNull();
+      expect(container.querySelector(".courier-offer")).not.toBeNull();
       expect(window.localStorage.getItem("nilx-one.finds.pickup")).toBeNull();
     },
   );
@@ -1631,14 +1631,11 @@ describe("AuthenticatedMapHomeView", () => {
       target: { value: "0" },
     });
     expect(navigated).toHaveBeenLastCalledWith("/");
-    // Hurry arrival, then finish the typed line; no presentation timers need to run.
-    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
-    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
     fireEvent.click(screen.getByRole("button", { name: "Not interested" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
-    expect(container.querySelector(".guide-cutscene")).toBeNull();
+    expect(container.querySelector(".courier-offer")).toBeNull();
     expect(navigated).toHaveBeenLastCalledWith("/settings");
     const slider = screen.getByRole("slider", { name: "Pick up" });
     await act(async () => {
@@ -1707,12 +1704,10 @@ describe("AuthenticatedMapHomeView", () => {
         />
       );
     }
-    const { container } = render(<Harness />);
+    render(<Harness />);
     fireEvent.change(screen.getByRole("slider", { name: "Pick up" }), {
       target: { value: "0" },
     });
-    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
-    fireEvent.click(container.querySelector(".guide-cutscene__advance")!);
     fireEvent.click(screen.getByRole("button", { name: "Not interested" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);

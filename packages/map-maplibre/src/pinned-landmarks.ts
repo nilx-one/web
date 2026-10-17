@@ -22,6 +22,7 @@ export const PINNED_LANDMARK_COLORS: Readonly<
 > = {
   monument: "#37d7e5",
   civic: "#37d7e5",
+  business: "#37d7e5",
   sacred: "#e3be62",
   nature: "#4ccf8a",
 };

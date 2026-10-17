@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { CourierDirectoryPort } from "@nilx-one/application";
 import {
   AcknowledgeRecoveryKey,
   ChooseAvatarModel,
@@ -131,6 +132,7 @@ export type {
 export type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 
 export interface ProductAppDependencies {
+  courierDirectory?: CourierDirectoryPort;
   core: CoreRuntimePort;
   host: HostPort;
   identity: IdentityAccessPort;
@@ -1076,6 +1078,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           ? { committedAwards: dependencies.identity }
           : {})}
         findItems={dependencies.core}
+        {...(dependencies.courierDirectory === undefined
+          ? {}
+          : { courierDirectory: dependencies.courierDirectory })}
         {...(hasNearbySpeechAccess(dependencies.identity)
           ? { nearbySpeech: dependencies.identity }
           : {})}
@@ -1278,6 +1283,7 @@ export function ProductApp({
   mapRenderer,
   onManualBondMove,
   localModel,
+  courierDirectory,
   routerBasepath = "/",
 }: ProductAppProps) {
   const [queryClient] = useState(
@@ -1302,6 +1308,7 @@ export function ProductApp({
           mapRenderer,
           ...(onManualBondMove === undefined ? {} : { onManualBondMove }),
           ...(localModel === undefined ? {} : { localModel }),
+          ...(courierDirectory === undefined ? {} : { courierDirectory }),
         },
       },
     }),

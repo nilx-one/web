@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useLocalization } from "../../shell/localization";
 import "./fog-reveal-prompt.css";
@@ -19,6 +19,7 @@ function formatClock(ms: number): string {
 }
 
 export interface FogRevealPromptProps {
+  readonly activities?: ReactNode;
   readonly prompt: Prompt | undefined;
   readonly jobs: readonly FogRevealJob[];
   /** Whose work this is, as the prompt names it. */
@@ -35,6 +36,7 @@ export interface FogRevealPromptProps {
  */
 export function FogRevealPrompt({
   prompt,
+  activities,
   jobs,
   avaia,
   onConfirm,
@@ -49,7 +51,8 @@ export function FogRevealPrompt({
     return () => globalThis.clearInterval(beat);
   }, [jobs.length]);
 
-  if (prompt === undefined && jobs.length === 0) return null;
+  if (prompt === undefined && jobs.length === 0 && activities === undefined)
+    return null;
 
   const limit = String(FOG_REVEAL_CONCURRENCY);
   const next =
@@ -109,19 +112,20 @@ export function FogRevealPrompt({
           </div>
         </section>
       )}
-      {jobs.length === 0 ? null : (
-        <p className="fog-reveal__status" role="status">
-          <span className="fog-reveal__pulse" aria-hidden="true" />
-          {t("fog.status.revealing")
-            .replace("{count}", String(jobs.length))
-            .replace("{limit}", limit)}
-          {next === undefined ? null : (
-            <span className="fog-reveal__next">
-              {` · ${t("fog.status.next").replace("{time}", formatClock(next))}`}
-            </span>
-          )}
-        </p>
-      )}
+      {activities ??
+        (jobs.length === 0 ? null : (
+          <p className="fog-reveal__status" role="status">
+            <span className="fog-reveal__pulse" aria-hidden="true" />
+            {t("fog.status.revealing")
+              .replace("{count}", String(jobs.length))
+              .replace("{limit}", limit)}
+            {next === undefined ? null : (
+              <span className="fog-reveal__next">
+                {` · ${t("fog.status.next").replace("{time}", formatClock(next))}`}
+              </span>
+            )}
+          </p>
+        ))}
     </div>
   );
 }

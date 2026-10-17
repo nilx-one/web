@@ -92,6 +92,7 @@ const EN_MESSAGES = {
   "landmark.pinnedKind.monument": "Monument",
   "landmark.pinnedKind.sacred": "Sacred place",
   "landmark.pinnedKind.civic": "Square",
+  "landmark.pinnedKind.business": "0xda-market · xPing destination",
   "landmark.pinnedKind.nature": "Green space",
   "fog.prompt.title": "Reveal this patch of fog?",
   "fog.prompt.detail":
@@ -432,6 +433,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "landmark.pinnedKind.monument": "Пам'ятка",
   "landmark.pinnedKind.sacred": "Святиня",
   "landmark.pinnedKind.civic": "Площа",
+  "landmark.pinnedKind.business": "0xda-market · пункт призначення xPing",
   "landmark.pinnedKind.nature": "Зелена зона",
   "fog.prompt.title": "Відкрити цю клітинку туману?",
   "fog.prompt.detail":

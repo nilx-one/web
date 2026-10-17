@@ -1,0 +1,75 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+.activity-stack {
+  display: grid;
+  gap: 8px;
+}
+.activity-stack__row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  animation: activity-in 0.25s ease-out both;
+}
+.activity-stack__row button {
+  min-height: 44px;
+  border: 1px solid var(--map-night-border);
+  border-radius: 20px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.8rem;
+  background: var(--map-night-raised);
+  color: var(--map-ink);
+  cursor: pointer;
+}
+.activity-stack__row button:focus-visible {
+  outline: 2px solid #00bfd4;
+  outline-offset: 2px;
+}
+.activity-stack__row[data-exiting] {
+  animation: activity-out 0.5s ease-in both;
+}
+.courier-offer {
+  position: fixed;
+  inset: auto 1rem calc(var(--shell-bottom-height, 70px) + 1rem);
+  max-width: 32rem;
+  border: 1px solid var(--map-night-border);
+  border-radius: 20px;
+  padding: 20px;
+  background: var(--map-night-raised, #10212a);
+  color: var(--map-ink, white);
+}
+.courier-offer::backdrop {
+  background: #0005;
+}
+.courier-offer h2 {
+  font-size: 1.1rem;
+}
+.courier-offer button {
+  min-height: 44px;
+  margin: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+}
+@keyframes activity-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes activity-out {
+  to {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-stack__row,
+  .activity-stack__row[data-exiting] {
+    animation: none;
+  }
+}

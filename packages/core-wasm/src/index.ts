@@ -1,6 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import {
+  decodeCourierPlan,
+  CourierCapabilityUnavailable,
+  type CourierPlan,
+  type CourierRequest,
+} from "@nilx-one/application";
+
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveCommand,
@@ -640,6 +647,7 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
 }
 
 export interface CoreWasmBindings {
+  planCourier?(request: CourierRequest): CourierPlan;
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
@@ -676,6 +684,7 @@ export interface CoreWasmBindings {
 }
 
 export interface GeneratedCoreWasmModule {
+  courier_plan?(input: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;
   fixture_corpus_version(): string;
@@ -859,6 +868,12 @@ export async function loadGeneratedCoreWasmBindings(
               ),
             );
           },
+        }),
+    ...(runtime.courier_plan === undefined
+      ? {}
+      : {
+          planCourier: (request: CourierRequest) =>
+            decodeCourierPlan(runtime.courier_plan!(JSON.stringify(request))),
         }),
     ...(runtime.orb_world === undefined
       ? {}
@@ -1047,6 +1062,13 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm backpack gift binding is missing");
     }
     return bindings.backpackGiftDue(state, bondLevel);
+  }
+
+  public async planCourier(request: CourierRequest): Promise<CourierPlan> {
+    const bindings = await this.loadBindings();
+    if (bindings.planCourier === undefined)
+      throw new CourierCapabilityUnavailable();
+    return bindings.planCourier(request);
   }
 
   public async orbWorld(

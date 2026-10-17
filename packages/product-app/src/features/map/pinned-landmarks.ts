@@ -21,6 +21,7 @@ const KIND_KEYS: Readonly<Record<MapPinnedLandmarkKind, TranslationKey>> = {
   monument: "landmark.pinnedKind.monument",
   sacred: "landmark.pinnedKind.sacred",
   civic: "landmark.pinnedKind.civic",
+  business: "landmark.pinnedKind.business",
   nature: "landmark.pinnedKind.nature",
 };
 
