@@ -353,12 +353,12 @@ function createMapLibreTapFeedbackMarker(
   center: [longitude: number, latitude: number],
 ): MapLabelMarker {
   // The centre remains at the tapped geographic coordinate as the camera
-  // moves. The ring faces the viewport and never captures a second tap.
+  // moves. Like collectible orbs, this bead lies in the map plane.
   const marker = new Marker({
     element,
     anchor: "center",
-    pitchAlignment: "viewport",
-    rotationAlignment: "viewport",
+    pitchAlignment: "map",
+    rotationAlignment: "map",
   })
     .setLngLat(center)
     .addTo(map);
@@ -374,24 +374,44 @@ function tapFeedbackElement(seat: "bond" | "avaia"): HTMLElement {
   element.className = "map-ground-tap-feedback";
   element.dataset.seat = seat;
   element.setAttribute("aria-hidden", "true");
-  element.style.width = "22px";
-  element.style.height = "22px";
-  element.style.boxSizing = "border-box";
-  element.style.borderRadius = "50%";
-  element.style.border = `2px solid ${color}`;
-  element.style.backgroundColor = `${color}33`;
-  element.style.boxShadow = `0 0 0 5px ${color}40, 0 0 16px ${color}8c`;
+  element.style.position = "relative";
+  element.style.width = "28px";
+  element.style.height = "28px";
   element.style.pointerEvents = "none";
   element.style.opacity = "1";
   element.style.transition = `opacity ${TAP_FEEDBACK_FADE_MS}ms ease-out`;
 
-  const core = globalThis.document.createElement("span");
-  core.style.display = "block";
-  core.style.position = "absolute";
-  core.style.inset = "6px";
-  core.style.borderRadius = "50%";
-  core.style.backgroundColor = color;
-  element.append(core);
+  // Follow the collectible orb's visual language: a pale, luminous core
+  // inside a soft seat-colored halo, rather than a destination-pin outline.
+  const halo = globalThis.document.createElement("span");
+  halo.className = "map-ground-tap-feedback__halo";
+  halo.style.position = "absolute";
+  halo.style.inset = "0";
+  halo.style.borderRadius = "50%";
+  halo.style.backgroundColor = `${color}20`;
+  halo.style.backgroundImage =
+    `radial-gradient(circle, ${color}80 0%, ${color}42 26%, transparent 72%)`;
+  halo.style.filter = "blur(2px)";
+  halo.style.pointerEvents = "none";
+
+  const orb = globalThis.document.createElement("span");
+  orb.className = "map-ground-tap-feedback__orb";
+  orb.style.position = "absolute";
+  orb.style.left = "50%";
+  orb.style.top = "50%";
+  orb.style.transform = "translate(-50%, -50%)";
+  orb.style.width = "10px";
+  orb.style.height = "10px";
+  orb.style.boxSizing = "border-box";
+  orb.style.border = `1px solid ${color}`;
+  orb.style.borderRadius = "50%";
+  orb.style.backgroundColor = "#f2fdff";
+  orb.style.backgroundImage =
+    `radial-gradient(circle at 30% 25%, #ffffff 0%, #f2fdff 29%, ${color} 100%)`;
+  orb.style.boxShadow = `0 0 4px ${color}b3, 0 0 10px ${color}80`;
+  orb.style.pointerEvents = "none";
+
+  element.append(halo, orb);
   return element;
 }
 
