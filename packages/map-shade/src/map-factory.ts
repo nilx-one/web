@@ -48,6 +48,9 @@ export interface ShadeMapFactoryOptions {
   readonly pageVisibility?: PageVisibility;
 }
 
+/** Where cell fog takes over from the public country overview. */
+const FOG_MIN_ZOOM = 8;
+
 /** Web Mercator's equator, which a 512-pixel tile spans at zoom 0. */
 const EARTH_CIRCUMFERENCE_M = 40_075_016.686;
 
@@ -211,8 +214,14 @@ export function createShadeMapFactory(
                   animate: false,
                 });
               }
-              const firstSymbol = style?.layers?.find(
-                (candidate) => candidate.type === "symbol",
+              // Over all the ground, under the first label drawn where the fog
+              // is. Not under the first symbol: the country overview's names
+              // (shown only below the fog's zoom) sit beneath the whole local
+              // basemap, and fog placed there is buried under the ground.
+              const firstSymbol = style.layers.find(
+                (candidate) =>
+                  candidate.type === "symbol" &&
+                  (candidate.maxzoom ?? Infinity) > FOG_MIN_ZOOM,
               )?.id;
               if (map.getLayer(worldId) === undefined) {
                 worldPalette = palette;
@@ -221,7 +230,7 @@ export function createShadeMapFactory(
                     id: worldId,
                     type: "fill",
                     source: worldId,
-                    minzoom: 8,
+                    minzoom: FOG_MIN_ZOOM,
                     paint: {
                       "fill-color": fogFloorCss(palette),
                       // Opaque, as the atlas is along its edge: the two overlap
@@ -247,7 +256,7 @@ export function createShadeMapFactory(
                   id: layer.id,
                   type: "raster",
                   source: sourceId,
-                  minzoom: 8,
+                  minzoom: FOG_MIN_ZOOM,
                   paint: { "raster-fade-duration": 0 },
                 },
                 firstSymbol,
