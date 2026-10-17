@@ -666,9 +666,7 @@ describe("transient ground-tap feedback", () => {
       expect(markers).toHaveLength(1);
       expect(markers[0]?.center).toEqual([30.5234, 50.4501]);
       expect(markers[0]?.element.dataset.seat).toBe("bond");
-      expect(markers[0]?.element.style.borderColor).toBe(
-        "rgb(55, 215, 229)",
-      );
+      expect(markers[0]?.element.style.borderColor).toBe("rgb(55, 215, 229)");
       expect(TAP_FEEDBACK_COLORS.bond).toBe("#37d7e5");
 
       vi.advanceTimersByTime(1_000);
@@ -681,9 +679,7 @@ describe("transient ground-tap feedback", () => {
       expect(markers[0]?.removed).toBe(false);
       expect(markers[1]?.center).toEqual([30.524, 50.451]);
       expect(markers[1]?.element.dataset.seat).toBe("avaia");
-      expect(markers[1]?.element.style.borderColor).toBe(
-        "rgb(155, 108, 250)",
-      );
+      expect(markers[1]?.element.style.borderColor).toBe("rgb(155, 108, 250)");
       expect(TAP_FEEDBACK_COLORS.avaia).toBe("#9b6cfa");
 
       vi.advanceTimersByTime(TAP_FEEDBACK_FADE_MS);
