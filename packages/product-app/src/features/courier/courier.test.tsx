@@ -8,10 +8,16 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { CourierPlan, CourierDirectoryPort } from "@nilx-one/application";
+import type {
+  BusinessPoint,
+  BusinessPointProjection,
+  CourierPlan,
+  CourierDirectoryPort,
+} from "@nilx-one/application";
 import {
   CourierCapabilityUnavailable,
-  decodeCourierPlan,
+  courierDestinationRequest,
+  decodeCourierDestination,
 } from "@nilx-one/application";
 import { seededMarketDirectory } from "./market-points";
 import type { MapRenderer } from "@nilx-one/map-contract";
@@ -20,19 +26,18 @@ import { activityCamera } from "./courier-map";
 import { ActivityStack } from "./activity-stack";
 import { useCourier } from "./use-courier";
 const origin = { longitude_e7: "305000000", latitude_e7: "504000000" };
-const destination = {
-  business_id: "market",
-  point_id: "one",
+const destination: BusinessPoint = {
+  id: { owner_pub_dress: "0xda-market", number: 7 },
+  pub_dress: "0xda-market-one",
+  description: "One",
+  isVerified: false,
   coordinate: { longitude_e7: "305010000", latitude_e7: "504010000" },
 };
-const plan: CourierPlan = {
-  tier: "exclusive",
-  origin,
-  destination,
-  started_at_ms: "1000",
-  arrives_at_ms: "11000",
-  distance_m: "120",
+const projection: BusinessPointProjection = {
+  owner_pub_dress: "0xda-market",
+  points: [destination],
 };
+const plan: CourierPlan = { origin, destination, started_at_ms: "1000" };
 beforeEach(() => {
   chooseLocale("en");
   vi.useFakeTimers();
@@ -42,12 +47,33 @@ afterEach(() => {
   vi.useRealTimers();
 });
 it("validates Core output and handles dateline flight and camera bounds", () => {
-  expect(decodeCourierPlan(JSON.stringify(plan))).toEqual(plan);
+  expect(courierDestinationRequest(origin, projection)).toEqual({
+    origin,
+    candidates: [{ point_id: "007", coordinate: destination.coordinate }],
+  });
+  expect(
+    decodeCourierDestination('{"ok":true,"point_id":"007"}', projection),
+  ).toBe(destination);
   expect(() =>
-    decodeCourierPlan('{"error":"destination_unavailable"}'),
+    decodeCourierDestination(
+      '{"ok":false,"error":"no_candidates"}',
+      projection,
+    ),
   ).toThrow();
   expect(() =>
-    decodeCourierPlan(JSON.stringify({ ...plan, arrives_at_ms: "-1" })),
+    decodeCourierDestination('{"ok":true,"point_id":"008"}', projection),
+  ).toThrow();
+  expect(() =>
+    courierDestinationRequest(origin, {
+      ...projection,
+      points: [{ ...destination, id: { ...destination.id, number: 256 } }],
+    }),
+  ).toThrow();
+  expect(() =>
+    courierDestinationRequest(origin, {
+      ...projection,
+      owner_pub_dress: "someone-else",
+    }),
   ).toThrow();
   const camera = activityCamera(
     [
@@ -119,10 +145,7 @@ it("keeps both activity rows oldest first and confirms only actual completion", 
   expect(vi.getTimerCount()).toBe(0);
 });
 const directory: CourierDirectoryPort = {
-  destinations: async () => ({
-    business_id: "market",
-    destinations: [destination],
-  }),
+  points: async () => projection,
 };
 it("does not confirm a cancelled sibling and accepts the final cell callback after job removal", () => {
   const cell = {
@@ -176,7 +199,7 @@ function renderer() {
   } as unknown as MapRenderer;
 }
 it("does not invent a destination when the adapter is missing", async () => {
-  const core = { planCourier: vi.fn(async () => plan) };
+  const core = { courierDestination: vi.fn(async () => destination) };
   const { result } = renderHook(() =>
     useCourier({
       renderer: renderer(),
@@ -189,13 +212,13 @@ it("does not invent a destination when the adapter is missing", async () => {
   act(() => result.current.open("exclusive"));
   await act(() => result.current.accept());
   expect(result.current.error).toBe(true);
-  expect(core.planCourier).not.toHaveBeenCalled();
+  expect(core.courierDestination).not.toHaveBeenCalled();
   expect(result.current.plan).toBeUndefined();
 });
 it("dispatches to an author-seeded pin on an older Core and preserves real Core failures", async () => {
   const map = renderer();
   const core = {
-    planCourier: vi.fn(async (): Promise<CourierPlan> => {
+    courierDestination: vi.fn(async (): Promise<BusinessPoint> => {
       throw new CourierCapabilityUnavailable();
     }),
   };
@@ -210,14 +233,15 @@ it("dispatches to an author-seeded pin on an older Core and preserves real Core 
   );
   act(() => result.current.open("special"));
   await act(() => result.current.accept());
-  expect(result.current.plan?.destination.point_id).toBe(
+  expect(result.current.plan?.destination.pub_dress).toBe(
     "0xda-market-osokorky",
   );
+  expect(result.current.plan?.destination.isVerified).toBe(false);
   expect(result.current.flyover.active).toBe(true);
   expect(result.current.offer).toBeUndefined();
   unmount();
 
-  core.planCourier.mockRejectedValue(new Error("Invalid Core output"));
+  core.courierDestination.mockRejectedValue(new Error("Invalid Core output"));
   const failed = renderHook(() =>
     useCourier({
       renderer: map,
@@ -233,13 +257,13 @@ it("dispatches to an author-seeded pin on an older Core and preserves real Core 
   expect(failed.result.current.flyover.active).toBe(false);
   expect(failed.result.current.plan).toBeUndefined();
 });
-it("uses Core plan, blocks duplicate dispatch, and cancels stale asynchronous results", async () => {
+it("uses Core's destination, blocks duplicate dispatch, and cancels stale asynchronous results", async () => {
   const map = renderer();
-  let resolve!: (value: CourierPlan) => void;
+  let resolve!: (value: BusinessPoint) => void;
   const core = {
-    planCourier: vi.fn(
+    courierDestination: vi.fn(
       () =>
-        new Promise<CourierPlan>((r) => {
+        new Promise<BusinessPoint>((r) => {
           resolve = r;
         }),
     ),
@@ -261,19 +285,21 @@ it("uses Core plan, blocks duplicate dispatch, and cancels stale asynchronous re
   act(() => {
     void result.current.accept();
   });
-  expect(core.planCourier).toHaveBeenCalledOnce();
+  expect(core.courierDestination).toHaveBeenCalledOnce();
   act(() => result.current.close());
-  await act(async () => resolve({ ...plan, tier: "special" }));
+  await act(async () => resolve(destination));
   expect(result.current.plan).toBeUndefined();
   act(() => result.current.open("special"));
   await act(async () => {
     void result.current.accept();
     await Promise.resolve();
   });
-  await act(async () => resolve({ ...plan, tier: "special" }));
-  expect(result.current.plan?.tier).toBe("special");
-  expect(core.planCourier).toHaveBeenLastCalledWith(
-    expect.objectContaining({ tier: "special", business_id: "market" }),
+  await act(async () => resolve(destination));
+  expect(result.current.plan?.destination).toBe(destination);
+  expect(result.current.plan?.started_at_ms).toBe("2000");
+  expect(core.courierDestination).toHaveBeenLastCalledWith(
+    { longitude_e7: "305000000", latitude_e7: "504000000" },
+    projection,
   );
   expect(map.systemDrone!.upsert).toHaveBeenCalled();
   unmount();
@@ -307,7 +333,7 @@ it("listens for taps on the flying xPing only, never on a parked offer drone", a
   const unsubscribe = vi.fn();
   const subscribeActivation = vi.fn(() => unsubscribe);
   Object.assign(map.systemDrone!, { subscribeActivation });
-  const core = { planCourier: vi.fn(async () => plan) };
+  const core = { courierDestination: vi.fn(async () => destination) };
   const { result, unmount } = renderHook(() =>
     useCourier({
       renderer: map,
