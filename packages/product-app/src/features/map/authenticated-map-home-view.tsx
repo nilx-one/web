@@ -1725,7 +1725,11 @@ export function AuthenticatedMapHomeView({
             : undefined;
       if (stance !== undefined)
         return { ...stance.point, bearingDeg: stance.bearingDeg };
-      if (wheel === "avaia" || observedPosition === undefined) return undefined;
+      if (
+        observedPosition === undefined ||
+        (wheel === "avaia" && declaredPosition)
+      )
+        return undefined;
       return { ...observedPosition, bearingDeg: 0 };
     },
     dimension,
@@ -2116,8 +2120,9 @@ export function AuthenticatedMapHomeView({
   ]);
 
   // Tracking belongs to the identity at the wheel, not to an avatar mesh.
-  // A Bond with no study (or a body hidden at this zoom) still moves the
-  // camera when its observed position changes; Avaia uses her own stance.
+  // A Bond with no study still tracks an observed fix. Until Avaia has an
+  // independent stance, she tracks the same device point the body displays;
+  // a declared Bond position must never become Avaia's fallback.
   useEffect(() => {
     if (
       section !== "world" ||
@@ -2138,7 +2143,8 @@ export function AuthenticatedMapHomeView({
       const point =
         stance !== undefined
           ? { ...stance.point, bearingDeg: stance.bearingDeg }
-          : wheel === "bond" && observedPosition !== undefined
+          : observedPosition !== undefined &&
+              !(wheel === "avaia" && declaredPosition)
             ? { ...observedPosition, bearingDeg: 0 }
             : undefined;
       if (point !== undefined) followCameraRef.current.track(point);
