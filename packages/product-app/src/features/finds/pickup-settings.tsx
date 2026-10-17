@@ -34,7 +34,7 @@ function displayIndex(level: number): number {
 export function PickupSettings({
   onExclusive,
 }: {
-  readonly onExclusive: () => void;
+  readonly onExclusive: (tier: "exclusive" | "special") => void;
 }) {
   const { t } = useLocalization();
   const stored = usePickup();
@@ -84,7 +84,7 @@ export function PickupSettings({
             onChange={(event) => {
               const next = Number(event.currentTarget.value);
               if (next < 2) {
-                onExclusive();
+                onExclusive(next === 0 ? "exclusive" : "special");
                 // A locked stop never writes a threshold or claims a purchase.
                 event.currentTarget.value = String(selectedIndex);
               } else {

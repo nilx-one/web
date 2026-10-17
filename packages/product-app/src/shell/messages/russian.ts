@@ -84,6 +84,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "landmark.pinnedKind.monument": "Памятник",
   "landmark.pinnedKind.sacred": "Святыня",
   "landmark.pinnedKind.civic": "Площадь",
+  "landmark.pinnedKind.business": "0xda-market · пункт назначения xPing",
   "landmark.pinnedKind.nature": "Зелёная зона",
   "fog.prompt.title": "Открыть эту клетку тумана?",
   "fog.prompt.detail":

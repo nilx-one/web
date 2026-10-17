@@ -345,7 +345,8 @@ export interface MapArea {
  * What a pinned landmark is, as far as its colour goes: something built, a
  * place of worship, a square people gather on, or ground that is green.
  */
-export type MapPinnedLandmarkKind = "monument" | "sacred" | "civic" | "nature";
+export type MapPinnedLandmarkKind =
+  "monument" | "sacred" | "civic" | "nature" | "business";
 
 /**
  * A landmark the product names on the world at its real coordinates, drawn
@@ -792,6 +793,11 @@ export interface SystemDroneHandle {
   readonly scale?: number;
 }
 export interface SystemDroneLayerContract {
+  /**
+   * Taps on the drone with this id. Only drones someone listens to are hit
+   * tested, so a parked prop never takes a tap meant for a body beneath it.
+   */
+  subscribeActivation?(id: string, listener: () => void): () => void;
   /** True only once the prop has a mounted, hydrated 3D layer. */
   upsert(handle: SystemDroneHandle): boolean;
   remove(id: string): void;

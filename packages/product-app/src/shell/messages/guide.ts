@@ -12,6 +12,21 @@
  * marks none of these; it carries every voice so the three catalogues agree.
  */
 export const GUIDE_EN = {
+  "courier.offer":
+    "I can fly to the nearest 0xda-market for the subscription. Shall I go?",
+  "courier.boundary":
+    "This trip does not purchase or activate a subscription yet.",
+  "courier.unavailable":
+    "No verified market route or compatible Core is available yet.",
+  "courier.send": "Send xPing",
+  "courier.decline": "Not interested",
+  "courier.flight": "xPing · flying to 0xda-market",
+  "courier.arrived": "xPing arrived · subscription not purchased",
+  "courier.cellsDone": "Cells opened",
+  "courier.activities": "Map activities",
+  "courier.follow": "Follow xPing",
+  "courier.distance": "{meters} m from {avaia}",
+
   "guide.exclusive.line":
     "Want something exclusive? I’ll be right over, as soon as you buy it.",
   "guide.exclusive.result": "Pickup preference unchanged.",
@@ -136,6 +151,20 @@ export const GUIDE_EN = {
 } as const;
 
 export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
+  "courier.offer":
+    "Злітати до найближчого 0xda-market по підписку? Скотч наче тримається.",
+  "courier.boundary": "Цей політ поки не купує й не активує підписку.",
+  "courier.unavailable":
+    "Підтверджений маршрут до маркету або сумісний Core поки недоступний.",
+  "courier.send": "Відправити xPing",
+  "courier.decline": "Не цікаво",
+  "courier.flight": "xPing · летить до 0xda-market",
+  "courier.arrived": "xPing прибув · підписку не придбано",
+  "courier.cellsDone": "Клітинки відкрито",
+  "courier.activities": "Активності на карті",
+  "courier.follow": "Стежити за xPing",
+  "courier.distance": "{meters} м від {avaia}",
+
   "guide.exclusive.line": "Хочеш ексклюзивне? Я миттю — одразу, як купиш.",
   "guide.exclusive.result": "Налаштування підбирання не змінено.",
   "system.ping.error": "Виникла помилка",
@@ -256,6 +285,20 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
 };
 
 export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
+  "courier.offer":
+    "Слетать в ближайший 0xda-market за подпиской? Скотч вроде держится.",
+  "courier.boundary": "Этот полёт пока не покупает и не активирует подписку.",
+  "courier.unavailable":
+    "Подтверждённый маршрут к маркету или совместимый Core пока недоступен.",
+  "courier.send": "Отправить xPing",
+  "courier.decline": "Не интересно",
+  "courier.flight": "xPing · летит в 0xda-market",
+  "courier.arrived": "xPing прибыл · подписка не приобретена",
+  "courier.cellsDone": "Клетки открыты",
+  "courier.activities": "Активности на карте",
+  "courier.follow": "Следовать за xPing",
+  "courier.distance": "{meters} м от {avaia}",
+
   "guide.exclusive.line": "Хочешь эксклюзивное? Я мигом — сразу, как купишь.",
   "guide.exclusive.result": "Настройка подбора не изменена.",
   "system.ping.error": "Произошла ошибка",

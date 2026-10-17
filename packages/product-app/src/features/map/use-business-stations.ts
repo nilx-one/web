@@ -127,6 +127,8 @@ export function stationRenderSet(
 }
 
 export interface BusinessStationsOptions {
+  /** Owners currently drawn as map pins rather than stationed bodies. */
+  readonly markerOnlyOwners?: readonly string[];
   /** Absent means this host offers no stations, which is a normal state. */
   readonly port?: BusinessStationAccessPort | undefined;
   readonly avatars?: AvatarLayerContract | undefined;
@@ -143,6 +145,7 @@ export interface BusinessStationsOptions {
  * the stations already known.
  */
 export function useBusinessStations({
+  markerOnlyOwners,
   port,
   avatars,
   camera,
@@ -186,7 +189,11 @@ export function useBusinessStations({
     if (avatars === undefined) return;
     const bodies = held.current;
     const wanted = stationRenderSet(
-      stations,
+      markerOnlyOwners === undefined
+        ? stations
+        : stations.filter(
+            (station) => !markerOnlyOwners.includes(station.ownerPubDress),
+          ),
       { center: [longitude, latitude], zoom },
       new Set(bodies.keys()),
     );
@@ -204,7 +211,7 @@ export function useBusinessStations({
       avatars.remove(id);
       bodies.delete(id);
     }
-  }, [avatars, stations, longitude, latitude, zoom]);
+  }, [avatars, stations, longitude, latitude, zoom, markerOnlyOwners]);
 
   return stations;
 }

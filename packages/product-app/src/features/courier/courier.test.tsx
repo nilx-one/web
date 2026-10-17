@@ -1,0 +1,364 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { CourierPlan, CourierDirectoryPort } from "@nilx-one/application";
+import {
+  CourierCapabilityUnavailable,
+  decodeCourierPlan,
+} from "@nilx-one/application";
+import { seededMarketDirectory } from "./market-points";
+import type { MapRenderer } from "@nilx-one/map-contract";
+import { chooseLocale } from "../../shell/localization";
+import { activityCamera } from "./courier-map";
+import { ActivityStack } from "./activity-stack";
+import { useCourier } from "./use-courier";
+const origin = { longitude_e7: "305000000", latitude_e7: "504000000" };
+const destination = {
+  business_id: "market",
+  point_id: "one",
+  coordinate: { longitude_e7: "305010000", latitude_e7: "504010000" },
+};
+const plan: CourierPlan = {
+  tier: "exclusive",
+  origin,
+  destination,
+  started_at_ms: "1000",
+  arrives_at_ms: "11000",
+  distance_m: "120",
+};
+beforeEach(() => {
+  chooseLocale("en");
+  vi.useFakeTimers();
+  vi.setSystemTime(2000);
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+it("validates Core output and handles dateline flight and camera bounds", () => {
+  expect(decodeCourierPlan(JSON.stringify(plan))).toEqual(plan);
+  expect(() =>
+    decodeCourierPlan('{"error":"destination_unavailable"}'),
+  ).toThrow();
+  expect(() =>
+    decodeCourierPlan(JSON.stringify({ ...plan, arrives_at_ms: "-1" })),
+  ).toThrow();
+  const camera = activityCamera(
+    [
+      { longitude: 179.9, latitude: 0 },
+      { longitude: -179.9, latitude: 0 },
+    ],
+    390,
+    844,
+  )!;
+  expect(Math.abs(camera.center[0])).toBeCloseTo(180);
+  expect(camera.zoom).toBeGreaterThan(8);
+});
+it("keeps both activity rows oldest first and confirms only actual completion", () => {
+  const cell = {
+    id: "cell",
+    center: { longitude: 30.5, latitude: 50.4 },
+    boundary: [
+      [30.5, 50.4],
+      [30.6, 50.5],
+    ] as const,
+  };
+  const job = { cell, startedAt: 500, durationMs: 60000, landmarks: 0 };
+  const focus = vi.fn(),
+    follow = vi.fn();
+  const props = {
+    onFlight: focus,
+    onFollow: follow,
+    onCells: focus,
+    flight: {
+      active: true,
+      progress: {
+        point: { longitude: 30.5, latitude: 50.4 },
+        remainingMs: 9000,
+      },
+    },
+  };
+  const view = render(
+    <ActivityStack {...props} jobs={[job]} plan={plan} completed={undefined} />,
+  );
+  expect(screen.getAllByRole("status")[0]).toHaveTextContent("Revealing");
+  fireEvent.click(screen.getByRole("button", { name: "Follow xPing" }));
+  expect(follow).toHaveBeenCalledOnce();
+  view.rerender(
+    <ActivityStack {...props} jobs={[]} plan={plan} completed={undefined} />,
+  );
+  expect(screen.queryByText(/Cells opened/)).toBeNull();
+  act(() => vi.advanceTimersByTime(9000));
+  expect(screen.queryByText(/xPing arrived/)).toBeNull();
+  view.rerender(
+    <ActivityStack
+      {...props}
+      jobs={[]}
+      plan={plan}
+      completed={undefined}
+      flight={{
+        active: false,
+        progress: {
+          ...props.flight.progress,
+          remainingMs: 0,
+          arrivedAt: Date.now(),
+        },
+      }}
+    />,
+  );
+  expect(screen.getByText(/xPing arrived/)).toHaveTextContent("✅");
+  act(() => vi.advanceTimersByTime(5000));
+  expect(screen.queryByRole("status")).toBeNull();
+  view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});
+const directory: CourierDirectoryPort = {
+  destinations: async () => ({
+    business_id: "market",
+    destinations: [destination],
+  }),
+};
+it("does not confirm a cancelled sibling and accepts the final cell callback after job removal", () => {
+  const cell = {
+    id: "first",
+    center: { longitude: 30.5, latitude: 50.4 },
+    boundary: [],
+  };
+  const second = { ...cell, id: "second" };
+  const firstJob = { cell, startedAt: 500, durationMs: 60000, landmarks: 0 };
+  const secondJob = { ...firstJob, cell: second, startedAt: 600 };
+  const props = {
+    plan: undefined,
+    flight: { active: false, progress: undefined },
+    onFlight: vi.fn(),
+    onFollow: vi.fn(),
+    onCells: vi.fn(),
+  };
+  const view = render(
+    <ActivityStack
+      {...props}
+      jobs={[firstJob, secondJob]}
+      completed={undefined}
+    />,
+  );
+  const earlier = { cell, at: Date.now() };
+  view.rerender(
+    <ActivityStack {...props} jobs={[secondJob]} completed={earlier} />,
+  );
+  view.rerender(<ActivityStack {...props} jobs={[]} completed={earlier} />);
+  expect(screen.queryByText(/Cells opened/)).toBeNull();
+  // The fog store removes a job before the callback updates the parent.
+  view.rerender(
+    <ActivityStack {...props} jobs={[secondJob]} completed={earlier} />,
+  );
+  view.rerender(<ActivityStack {...props} jobs={[]} completed={earlier} />);
+  view.rerender(
+    <ActivityStack
+      {...props}
+      jobs={[]}
+      completed={{ cell: second, at: Date.now() }}
+    />,
+  );
+  expect(screen.getByText(/Cells opened/)).toHaveTextContent("✅");
+});
+function renderer() {
+  return {
+    systemDrone: { upsert: vi.fn(() => true), remove: vi.fn() },
+    getCamera: () => ({ center: [0, 0], zoom: 10, bearing: 0, pitch: 0 }),
+    setCamera: vi.fn(),
+    subscribeCamera: () => () => {},
+  } as unknown as MapRenderer;
+}
+it("does not invent a destination when the adapter is missing", async () => {
+  const core = { planCourier: vi.fn(async () => plan) };
+  const { result } = renderHook(() =>
+    useCourier({
+      renderer: renderer(),
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core,
+      directory: undefined,
+      suspended: false,
+    }),
+  );
+  act(() => result.current.open("exclusive"));
+  await act(() => result.current.accept());
+  expect(result.current.error).toBe(true);
+  expect(core.planCourier).not.toHaveBeenCalled();
+  expect(result.current.plan).toBeUndefined();
+});
+it("dispatches to an author-seeded pin on an older Core and preserves real Core failures", async () => {
+  const map = renderer();
+  const core = {
+    planCourier: vi.fn(async (): Promise<CourierPlan> => {
+      throw new CourierCapabilityUnavailable();
+    }),
+  };
+  const { result, unmount } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.61625, latitude: 50.39519 },
+      core,
+      directory: seededMarketDirectory,
+      suspended: false,
+    }),
+  );
+  act(() => result.current.open("special"));
+  await act(() => result.current.accept());
+  expect(result.current.plan?.destination.point_id).toBe(
+    "0xda-market-osokorky",
+  );
+  expect(result.current.flyover.active).toBe(true);
+  expect(result.current.offer).toBeUndefined();
+  unmount();
+
+  core.planCourier.mockRejectedValue(new Error("Invalid Core output"));
+  const failed = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.61625, latitude: 50.39519 },
+      core,
+      directory: seededMarketDirectory,
+      suspended: false,
+    }),
+  );
+  act(() => failed.result.current.open("exclusive"));
+  await act(() => failed.result.current.accept());
+  expect(failed.result.current.error).toBe(true);
+  expect(failed.result.current.flyover.active).toBe(false);
+  expect(failed.result.current.plan).toBeUndefined();
+});
+it("uses Core plan, blocks duplicate dispatch, and cancels stale asynchronous results", async () => {
+  const map = renderer();
+  let resolve!: (value: CourierPlan) => void;
+  const core = {
+    planCourier: vi.fn(
+      () =>
+        new Promise<CourierPlan>((r) => {
+          resolve = r;
+        }),
+    ),
+  };
+  const { result, unmount } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core,
+      directory,
+      suspended: false,
+    }),
+  );
+  act(() => result.current.open("special"));
+  await act(async () => {
+    void result.current.accept();
+    await Promise.resolve();
+  });
+  act(() => {
+    void result.current.accept();
+  });
+  expect(core.planCourier).toHaveBeenCalledOnce();
+  act(() => result.current.close());
+  await act(async () => resolve({ ...plan, tier: "special" }));
+  expect(result.current.plan).toBeUndefined();
+  act(() => result.current.open("special"));
+  await act(async () => {
+    void result.current.accept();
+    await Promise.resolve();
+  });
+  await act(async () => resolve({ ...plan, tier: "special" }));
+  expect(result.current.plan?.tier).toBe("special");
+  expect(core.planCourier).toHaveBeenLastCalledWith(
+    expect.objectContaining({ tier: "special", business_id: "market" }),
+  );
+  expect(map.systemDrone!.upsert).toHaveBeenCalled();
+  unmount();
+  expect(map.systemDrone!.remove).toHaveBeenCalledWith("system:xPing:courier");
+});
+it("stages the offer shot once per offer and hands back the camera from before it", () => {
+  const map = renderer();
+  const before = map.getCamera();
+  const { result, rerender } = renderHook(
+    ({ at }) =>
+      useCourier({
+        renderer: map,
+        origin: at,
+        core: undefined,
+        directory,
+        suspended: false,
+      }),
+    { initialProps: { at: { longitude: 30.5, latitude: 50.4 } } },
+  );
+  act(() => result.current.open("exclusive"));
+  expect(map.setCamera).toHaveBeenCalledOnce();
+  rerender({ at: { longitude: 30.5001, latitude: 50.4001 } });
+  rerender({ at: { longitude: 30.5002, latitude: 50.4002 } });
+  expect(map.setCamera).toHaveBeenCalledOnce();
+  act(() => result.current.close());
+  expect(map.setCamera).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(map.setCamera).mock.lastCall?.[0]).toEqual(before);
+});
+it("listens for taps on the flying xPing only, never on a parked offer drone", async () => {
+  const map = renderer();
+  const unsubscribe = vi.fn();
+  const subscribeActivation = vi.fn(() => unsubscribe);
+  Object.assign(map.systemDrone!, { subscribeActivation });
+  const core = { planCourier: vi.fn(async () => plan) };
+  const { result, unmount } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core,
+      directory,
+      suspended: false,
+    }),
+  );
+  act(() => result.current.open("exclusive"));
+  expect(subscribeActivation).not.toHaveBeenCalled();
+  await act(() => result.current.accept());
+  expect(result.current.flyover.active).toBe(true);
+  expect(subscribeActivation).toHaveBeenCalledOnce();
+  expect(subscribeActivation).toHaveBeenCalledWith(
+    "flyover:xPing",
+    expect.any(Function),
+  );
+  unmount();
+  expect(unsubscribe).toHaveBeenCalled();
+});
+it("tells flight progress as Avaia's distance in whole 50 m steps", () => {
+  const avaia = { longitude: 30.5, latitude: 50.4 };
+  // About 111.2 m per 0.001° of latitude.
+  const at = (latitude: number) => ({
+    active: true,
+    progress: { point: { longitude: 30.5, latitude }, remainingMs: 9000 },
+  });
+  const props = {
+    jobs: [],
+    plan,
+    completed: undefined,
+    avaia: { name: "Avaia", point: () => avaia },
+    onFlight: vi.fn(),
+    onFollow: vi.fn(),
+    onCells: vi.fn(),
+  };
+  const view = render(<ActivityStack {...props} flight={at(50.401)} />);
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "xPing · flying to 0xda-market · 100 m from Avaia",
+  );
+  view.rerender(<ActivityStack {...props} flight={at(50.4013)} />);
+  expect(screen.getByRole("status")).toHaveTextContent("· 100 m from Avaia");
+  view.rerender(<ActivityStack {...props} flight={at(50.4014)} />);
+  expect(screen.getByRole("status")).toHaveTextContent("· 150 m from Avaia");
+  view.rerender(
+    <ActivityStack
+      {...props}
+      avaia={{ name: "Avaia", point: () => undefined }}
+      flight={at(50.4014)}
+    />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("· 0:09");
+});

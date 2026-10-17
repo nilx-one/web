@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { OrbWorldInput, OrbWorldView } from "./orb-world";
+import type { CourierPlan, CourierRequest } from "./courier";
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveInput,
@@ -138,6 +139,7 @@ export type CoreInventoryAnswer =
  * code must fail closed when they are absent rather than reimplement UTS-46.
  */
 export interface CoreRuntimePort {
+  planCourier?(request: CourierRequest): Promise<CourierPlan>;
   probe(): Promise<CoreRuntimeStatus>;
   derivePubDressLabel?(pubDress: string): Promise<CorePubDressLabelResult>;
   composePubDressLabel?(

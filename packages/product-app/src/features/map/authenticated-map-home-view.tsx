@@ -1,6 +1,14 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { CourierDirectoryPort } from "@nilx-one/application";
+import { useCourier } from "../courier/use-courier";
+import { CourierOffer } from "../courier/courier-offer";
+import {
+  ActivityStack,
+  type RevealCompletion,
+} from "../courier/activity-stack";
+import { activityCamera, courierPoint } from "../courier/courier-map";
 import {
   AVATAR_CATALOG,
   type AvaiaProfileUpdateResult,
@@ -179,11 +187,15 @@ import {
   type AchievementDialogState,
 } from "../progression/achievement-dialog";
 import { pinnedLandmarks } from "./pinned-landmarks";
+import {
+  marketMapPoints,
+  seededMarketDirectory,
+  MARKET_MARKER_ONLY_OWNERS,
+} from "../courier/market-points";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFollowCamera } from "./use-follow-camera";
 import { CameraModeControl } from "./camera-mode-control";
 import { FlyoverControls } from "../flyover/flyover-controls";
-import { useFlyover } from "../flyover/use-flyover";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
@@ -292,6 +304,7 @@ export interface AuthenticatedMapHomeViewProps {
    * Core, naming what a find is and reading the pick-up setting. Absent or
    * older, finds are still paid; the toast then names the tier, not the item.
    */
+  readonly courierDirectory?: CourierDirectoryPort;
   readonly findItems?: Pick<
     CoreRuntimePort,
     | "findItem"
@@ -303,6 +316,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "applyAvaiaLife"
     | "avaiaProximity"
     | "orbWorld"
+    | "planCourier"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -759,6 +773,7 @@ export function AuthenticatedMapHomeView({
   pubInfo,
   committedAwards,
   findItems,
+  courierDirectory,
   nearbySpeech,
   businessStations,
   connectedProviders,
@@ -1106,6 +1121,7 @@ export function AuthenticatedMapHomeView({
     onHeard: () => cue("heard"),
   });
   useBusinessStations({
+    markerOnlyOwners: MARKET_MARKER_ONLY_OWNERS,
     port: businessStations,
     avatars: renderer.avatars,
     camera,
@@ -1498,6 +1514,7 @@ export function AuthenticatedMapHomeView({
   });
   // Her word on new ground is owed from the first cell opened beyond the
   // starting one, and said once the Avaia it speaks of exists.
+  const [completedReveal, setCompletedReveal] = useState<RevealCompletion>();
   const [territoryVersion, setTerritoryVersion] = useState(0);
   const territoryOwed = territoryVersion >= 0 && guideTerritoryOwed(pubDress);
   const fogReveal = useFogReveal({
@@ -1508,6 +1525,7 @@ export function AuthenticatedMapHomeView({
     observed: deviceObservation,
     owner: pubDress,
     onRevealed: (cell, via) => {
+      if (via === "avaia") setCompletedReveal({ cell, at: Date.now() });
       setFogAnnouncement(t("fog.announce.revealed"));
       cue("reveal");
       orbSpills.spill(cell);
@@ -1658,7 +1676,22 @@ export function AuthenticatedMapHomeView({
   });
   const guideActive = guide.state !== undefined;
   const systemInformer = useSystemInformer();
-  useSystemInformerBlock(guideActive || achievementDialog !== undefined);
+  const courier = useCourier({
+    renderer,
+    origin: observedPosition,
+    core: findItems,
+    directory: courierDirectory ?? seededMarketDirectory,
+    suspended:
+      guideActive ||
+      achievementDialog !== undefined ||
+      systemInformer.activeId !== undefined ||
+      mapStatus.kind !== "ready",
+  });
+  useSystemInformerBlock(
+    guideActive ||
+      achievementDialog !== undefined ||
+      courier.offer !== undefined,
+  );
   useSystemErrorNotices(statusToasts);
   useErrorToastFeedback(statusToasts, feedback, cue);
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
@@ -1666,10 +1699,7 @@ export function AuthenticatedMapHomeView({
   // its character. It stands down while a scene or an informer stages shots.
   // The xPing flyover (core docs/xping-flyover.md) owns the camera while it
   // flies; Agreed in the subscription cutscene is what starts it.
-  const flyover = useFlyover(
-    renderer,
-    mapStatus.kind === "ready" && section === "world",
-  );
+  const flyover = courier.flyover;
   const cameraModes = cameraModesFor(wheel);
   const followCamera = useFollowCamera({
     renderer,
@@ -1680,6 +1710,8 @@ export function AuthenticatedMapHomeView({
       !flyover.active &&
       handover === undefined &&
       !guideActive &&
+      !courier.following &&
+      courier.offer === undefined &&
       systemInformer.activeId === undefined,
     body: () => {
       const now = globalThis.performance.now();
@@ -1741,6 +1773,7 @@ export function AuthenticatedMapHomeView({
     mapStatus.kind === "ready" &&
     (focusState === "focused" || focusState === "unavailable") &&
     !guideActive &&
+    courier.offer === undefined &&
     !systemInformer.pending &&
     achievementDialog === undefined;
   // She introduces herself to a Bond whose Avaia nobody has configured yet.
@@ -1872,9 +1905,13 @@ export function AuthenticatedMapHomeView({
   // Pinned landmarks are fixed geography with localized names: they follow the
   // locale, nothing else, and clear with the world that drew them.
   useEffect(() => {
-    renderer.setPinnedLandmarks?.(
-      pinnedLandmarks((key) => translate(locale, key)),
-    );
+    renderer.setPinnedLandmarks?.([
+      ...pinnedLandmarks((key) => translate(locale, key)),
+      ...marketMapPoints(
+        locale,
+        translate(locale, "landmark.pinnedKind.business"),
+      ),
+    ]);
   }, [renderer, locale]);
   useEffect(() => () => renderer.setPinnedLandmarks?.([]), [renderer]);
 
@@ -3167,10 +3204,10 @@ export function AuthenticatedMapHomeView({
                       {committedAwards === undefined ||
                       findItems?.picksUp === undefined ? null : (
                         <PickupSettings
-                          onExclusive={() => {
+                          onExclusive={(tier) => {
                             setDetailState(undefined);
                             navigate(WORLD_ROUTE);
-                            guide.play("exclusive");
+                            courier.open(tier);
                           }}
                         />
                       )}
@@ -3538,15 +3575,75 @@ export function AuthenticatedMapHomeView({
             }
             onActivate={activateLocationControl}
           />
-          {travelPrompt === undefined ? (
-            <FogRevealPrompt
-              prompt={fogReveal.prompt}
-              jobs={fogReveal.jobs}
-              avaia={avaiaLabel}
-              onConfirm={confirmFogReveal}
-              onDismiss={fogReveal.dismiss}
-            />
-          ) : (
+          <FogRevealPrompt
+            prompt={travelPrompt === undefined ? fogReveal.prompt : undefined}
+            jobs={fogReveal.jobs}
+            avaia={avaiaLabel}
+            activities={
+              <ActivityStack
+                jobs={fogReveal.jobs}
+                plan={courier.plan}
+                flight={flyover}
+                completed={completedReveal}
+                avaia={{
+                  name: avaiaLabel,
+                  point: () =>
+                    avaiaWalk.stance(globalThis.performance.now())?.point,
+                }}
+                onFlight={() => {
+                  if (!courier.plan) return;
+                  courier.setFollowing(false);
+                  followCamera.release();
+                  const points = [
+                    courierPoint(courier.plan.origin),
+                    courierPoint(courier.plan.destination.coordinate),
+                    flyover.progress?.point ??
+                      courierPoint(courier.plan.origin),
+                  ];
+                  if (observedPosition) points.push(observedPosition);
+                  const camera = activityCamera(
+                    points,
+                    globalThis.innerWidth,
+                    globalThis.innerHeight,
+                  );
+                  if (camera)
+                    renderer.setCamera(camera, {
+                      motion: reducedMotion ? "immediate" : "eased",
+                    });
+                }}
+                onFollow={() => {
+                  followCamera.release();
+                  courier.setFollowing(true);
+                }}
+                onCells={() => {
+                  courier.setFollowing(false);
+                  followCamera.release();
+                  const cells = fogReveal.jobs.length
+                    ? fogReveal.jobs.map((job) => job.cell)
+                    : completedReveal
+                      ? [completedReveal.cell]
+                      : [];
+                  const camera = activityCamera(
+                    cells.flatMap((cell) =>
+                      cell.boundary.map(([longitude, latitude]) => ({
+                        longitude,
+                        latitude,
+                      })),
+                    ),
+                    globalThis.innerWidth,
+                    globalThis.innerHeight,
+                  );
+                  if (camera)
+                    renderer.setCamera(camera, {
+                      motion: reducedMotion ? "immediate" : "eased",
+                    });
+                }}
+              />
+            }
+            onConfirm={confirmFogReveal}
+            onDismiss={fogReveal.dismiss}
+          />
+          {travelPrompt !== undefined ? (
             <AvaiaTravelPrompt
               avaia={avaiaLabel}
               busy={travelBusy}
@@ -3555,6 +3652,19 @@ export function AuthenticatedMapHomeView({
               onDismiss={() => {
                 setTravelPrompt(undefined);
                 setTravelError(false);
+              }}
+            />
+          ) : null}
+          {courier.offer === undefined ? null : (
+            <CourierOffer
+              busy={courier.busy}
+              error={courier.error}
+              onAccept={() => void courier.accept()}
+              onDecline={() => {
+                courier.close();
+                returnToPickup.current = true;
+                setDetailState(undefined);
+                navigate(SETTINGS_ROUTE);
               }}
             />
           )}

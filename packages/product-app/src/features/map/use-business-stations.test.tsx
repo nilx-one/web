@@ -114,6 +114,35 @@ describe("stationRenderSet", () => {
 });
 
 describe("useBusinessStations", () => {
+  it("keeps marker-only owners out of the model layer while other businesses remain", async () => {
+    const { avatars, upsert, remove } = layer();
+    const other = {
+      ...zolotiVorota,
+      pubDress: "other-shop",
+      ownerPubDress: "other",
+    };
+    const stations = port([zolotiVorota, other]);
+    const { result, rerender } = renderHook(
+      ({ markerOnlyOwners }: { markerOnlyOwners: readonly string[] }) =>
+        useBusinessStations({
+          port: stations,
+          avatars,
+          camera: over(zolotiVorota),
+          markerOnlyOwners,
+        }),
+      { initialProps: { markerOnlyOwners: [] as readonly string[] } },
+    );
+    await waitFor(() => expect(result.current).toHaveLength(2));
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ id: stationHandleId(zolotiVorota) }),
+    );
+    upsert.mockClear();
+    rerender({ markerOnlyOwners: ["0xda-market"] });
+    expect(remove).toHaveBeenCalledWith(stationHandleId(zolotiVorota));
+    expect(remove).not.toHaveBeenCalledWith(stationHandleId(other));
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it("hydrates only the shop in view out of many distant ones", async () => {
     const { avatars, upsert } = layer();
     const stations = port([...distantStations(1_000), zolotiVorota]);

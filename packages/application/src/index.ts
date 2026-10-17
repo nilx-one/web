@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+export { CourierCapabilityUnavailable } from "./courier";
 export {
   AVATAR_BODY_REGIONS,
   AVATAR_CATALOG,
@@ -269,3 +270,12 @@ export {
   type PubDressLabelRejection,
   type PubDressLabelStem,
 } from "./pub-dress-url";
+
+export {
+  decodeCourierPlan,
+  type CourierPlan,
+  type CourierRequest,
+  type CourierDirectoryPort,
+  type CourierCoordinate,
+  type CourierDestination,
+} from "./courier";

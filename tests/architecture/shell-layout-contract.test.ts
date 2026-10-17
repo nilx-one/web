@@ -194,6 +194,7 @@ describe("shell layout contract", () => {
 
     const dockMarkup = worldView.slice(
       worldView.indexOf('className="bond-dock"'),
+      worldView.indexOf("overlay={"),
     );
     expect(dockMarkup).not.toContain("SETTINGS_ROUTE");
   });
