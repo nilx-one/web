@@ -229,10 +229,9 @@ export function sameFollowCamera(
 export const PINCH_MODE_ZOOM = 0.35;
 
 /**
- * What a finished touch zoom asks of the mode, the way a phone game camera
- * answers two fingers: pinching out steps back from the body into Free to
- * look around, pinching in returns to Follow. A pinch the same way as the
- * mode it is already in, or one too small to mean anything, changes nothing.
+ * A finished touch zoom may detach the camera: pinching out from a tracking
+ * mode selects Free. Pinching in only changes zoom and never re-enters a
+ * tracking mode. Isometric is selected explicitly in the mode control.
  */
 export function followAfterPinch(
   follow: CameraFollow,
@@ -241,7 +240,6 @@ export function followAfterPinch(
 ): CameraFollow {
   const zoomed = endZoom - startZoom;
   if (follow !== "free" && zoomed <= -PINCH_MODE_ZOOM) return "free";
-  if (follow === "free" && zoomed >= PINCH_MODE_ZOOM) return "locked";
   return follow;
 }
 
