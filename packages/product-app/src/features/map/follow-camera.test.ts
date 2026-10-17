@@ -245,6 +245,17 @@ describe("isometric camera", () => {
       expect(isometricCamera(camera(), body, "flat").pitch).toBe(0);
     },
   );
+  it("keeps a coarse observed fix wide without losing Isometric framing", () => {
+    const wide = camera({ zoom: 15.2 });
+    expect(
+      isometricCamera(wide, { ...BODY, accuracyMeters: 525 }),
+    ).toMatchObject({ zoom: 15.2, bearing: 45, pitch: 50 });
+    expect(
+      isometricCamera(wide, { ...BODY, accuracyMeters: 24 }),
+    ).toMatchObject({ zoom: FOLLOW_MIN_ZOOM, bearing: 45, pitch: 50 });
+    expect(isometricCamera(wide, BODY).zoom).toBe(FOLLOW_MIN_ZOOM);
+  });
+
   it("uses a centred zoom pivot and can pinch out to Free", () => {
     expect(zoomPivotFor("isometric")).toBe("center");
     expect(followAfterPinch("isometric", 20, 19)).toBe("free");
