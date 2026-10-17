@@ -21,9 +21,9 @@ import {
  * `locked` follows behind the head. `isometric` glides with the body in a stable
  * diagonal view, without rotating the world when the body turns. `free` is a Dota-style
  * independent map camera: dragging, touch panning and pointer zoom move the
- * camera without pulling it back to the body. An explicit selection, Space
- * or Y switches modes, and so does a two-finger pinch on a phone (out to
- * Free, in to Follow); a pan gesture never changes the mode.
+ * camera without pulling it back to the body. The mode control selects
+ * Isometric explicitly; Space and Y can enter Follow, while a two-finger
+ * pinch out enters Free. A pinch in only zooms; panning never changes mode.
  *
  * Presentation only: following never moves a body, records presence or
  * changes who owns the camera beyond what `camera-coordination.md` says.
