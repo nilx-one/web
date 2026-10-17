@@ -2361,7 +2361,10 @@ describe("AuthenticatedMapHomeView", () => {
 
     it("marks an Avaia ground tap in her own violet, without consuming the tap", async () => {
       const mapRenderer = await renderWorld();
-      const point = { longitude: here.longitude + 0.0002, latitude: here.latitude };
+      const point = {
+        longitude: here.longitude + 0.0002,
+        latitude: here.latitude,
+      };
       act(() => mapRenderer.tapGround({ ...point, ground: "building" }));
       expect(mapRenderer.showGroundTapFeedback).toHaveBeenCalledWith(
         point,
