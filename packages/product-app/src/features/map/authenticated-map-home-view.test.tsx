@@ -2040,8 +2040,9 @@ describe("AuthenticatedMapHomeView", () => {
         ...next,
         bearingDeg: 0,
       });
-      expect(mapRenderer.getCamera().center[0]).toBeCloseTo(target.center[0], 6);
-      expect(mapRenderer.getCamera().bearing).toBe(45);
+      const actual = mapRenderer.getCamera();
+      expect(actual.center[0]).toBeCloseTo(target.center[0], 6);
+      expect(actual.bearing).toBe(45);
     });
     expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
   });
