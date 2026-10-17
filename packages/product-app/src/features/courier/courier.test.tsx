@@ -124,6 +124,49 @@ const directory: CourierDirectoryPort = {
     destinations: [destination],
   }),
 };
+it("does not confirm a cancelled sibling and accepts the final cell callback after job removal", () => {
+  const cell = {
+    id: "first",
+    center: { longitude: 30.5, latitude: 50.4 },
+    boundary: [],
+  };
+  const second = { ...cell, id: "second" };
+  const firstJob = { cell, startedAt: 500, durationMs: 60000, landmarks: 0 };
+  const secondJob = { ...firstJob, cell: second, startedAt: 600 };
+  const props = {
+    plan: undefined,
+    flight: { active: false, progress: undefined },
+    onFlight: vi.fn(),
+    onFollow: vi.fn(),
+    onCells: vi.fn(),
+  };
+  const view = render(
+    <ActivityStack
+      {...props}
+      jobs={[firstJob, secondJob]}
+      completed={undefined}
+    />,
+  );
+  const earlier = { cell, at: Date.now() };
+  view.rerender(
+    <ActivityStack {...props} jobs={[secondJob]} completed={earlier} />,
+  );
+  view.rerender(<ActivityStack {...props} jobs={[]} completed={earlier} />);
+  expect(screen.queryByText(/Cells opened/)).toBeNull();
+  // The fog store removes a job before the callback updates the parent.
+  view.rerender(
+    <ActivityStack {...props} jobs={[secondJob]} completed={earlier} />,
+  );
+  view.rerender(<ActivityStack {...props} jobs={[]} completed={earlier} />);
+  view.rerender(
+    <ActivityStack
+      {...props}
+      jobs={[]}
+      completed={{ cell: second, at: Date.now() }}
+    />,
+  );
+  expect(screen.getByText(/Cells opened/)).toHaveTextContent("✅");
+});
 function renderer() {
   return {
     systemDrone: { upsert: vi.fn(() => true), remove: vi.fn() },

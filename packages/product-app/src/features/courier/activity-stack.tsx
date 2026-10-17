@@ -36,12 +36,32 @@ export function ActivityStack({
   const { t } = useLocalization();
   const [now, setNow] = useState(Date.now);
   const [groupStart, setGroupStart] = useState<number>();
+  const ids = jobs
+    .map((job) => job.cell.id)
+    .sort()
+    .join("\n");
+  const latestStart = Math.max(...jobs.map((job) => job.startedAt));
+  const [previous, setPrevious] = useState({ ids, startedAt: latestStart });
+  if (
+    jobs.length &&
+    (ids !== previous.ids || latestStart !== previous.startedAt)
+  )
+    setPrevious({ ids, startedAt: latestStart });
+  // Retain the last active cell across the reveal store's synchronous update:
+  // its completion callback may arrive one render after the job disappears.
+  // A completed sibling cannot confirm cancellation of the remaining cell.
+  const confirmed =
+    !jobs.length &&
+    completed?.cell.id === previous.ids &&
+    completed.at >= previous.startedAt
+      ? completed
+      : undefined;
   const arrivedAt = flight.progress?.arrivedAt;
   const showFlight =
     plan !== undefined &&
     (flight.active || (arrivedAt !== undefined && now - arrivedAt < 5000));
   const hasCells =
-    jobs.length > 0 || (completed !== undefined && now - completed.at < 5000);
+    jobs.length > 0 || (confirmed !== undefined && now - confirmed.at < 5000);
   if (jobs.length && groupStart === undefined)
     setGroupStart(Math.min(...jobs.map((j) => j.startedAt)));
   else if (!hasCells && groupStart !== undefined) setGroupStart(undefined);
@@ -60,12 +80,12 @@ export function ActivityStack({
     focus(): void;
     follow?: () => void;
   }[] = [];
-  if (jobs.length || (completed && now - completed.at < 5000))
+  if (jobs.length || (confirmed && now - confirmed.at < 5000))
     rows.push({
       id: "cells",
-      at: groupStart ?? completed?.at ?? now,
+      at: groupStart ?? confirmed?.at ?? now,
       done: jobs.length === 0,
-      exiting: jobs.length === 0 && now - (completed?.at ?? now) > 4500,
+      exiting: jobs.length === 0 && now - (confirmed?.at ?? now) > 4500,
       label: jobs.length
         ? t("fog.status.revealing")
             .replace("{count}", String(jobs.length))
