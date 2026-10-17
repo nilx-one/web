@@ -96,15 +96,33 @@ One rule, no judgement calls:
   metadata. If an API connector overrides the verified email, do not pass
   the commit off as canonical; use a Git-capable transport or leave the PR
   blocked until one is available.
-- **End every Claude Code commit with**
-  `Co-authored-by: Claude <noreply@anthropic.com>` whenever Claude wrote any
-  of it. Add `Co-authored-by: Codex <codex@openai.com>` only when Codex
-  contributed substantive changes to that exact commit. `Assisted-by` is not
-  GitHub co-authorship.
+- **Mandatory for every Claude Code-authored commit:** whenever Claude Code
+  wrote code, tests, documentation or an incorporated patch, append exactly
+  one `Co-authored-by: Claude <noreply@anthropic.com>` to the commit message
+  **before pushing**. The rule applies even when another tool performs the
+  commit. Neither the pull request description nor `Assisted-by` substitutes
+  for the actual Git trailer.
+- Add `Co-authored-by: Codex <codex@openai.com>` only when Codex also
+  contributed substantive changes to that exact commit. Never credit an agent
+  that did not contribute.
 - **Claude Code never adds `0x0sky` as a co-author.** When `0x0sky`
   contributes to a commit, `0x0sky` adds its own `Co-authored-by` trailer.
 - Trailers go in the final paragraph, one per line, never duplicated, and the
   commit's author never appears among its own co-authors.
+- Verify the actual message with `git log -1 --format=%B` before pushing; a
+  missing mandatory Claude trailer blocks delivery until the commit is
+  corrected. Preserve genuine agent trailers in the squash commit message.
+
+A Claude Code-authored commit must end with:
+
+```text
+fix(scope): describe the change
+
+Co-authored-by: Claude <noreply@anthropic.com>
+```
+
+Use one blank line before the trailer paragraph, with any additional
+co-authors on consecutive lines.
 - **Squash merges:** GitHub makes the PR's author the squash commit's author.
   Write the final message explicitly: keep genuine Claude and Codex co-author
   trailers from the branch, plus credited account contributors (only for

@@ -189,14 +189,31 @@ account ID:
 AI-tool co-authorship is separate from GitHub account credit. Credit only
 substantive work incorporated into the exact commit:
 
-- `Co-authored-by: Codex <codex@openai.com>` when OpenAI Codex contributed.
-- `Co-authored-by: Claude <noreply@anthropic.com>` when Claude contributed.
+- **Mandatory for every Codex-authored commit:** if OpenAI Codex wrote code,
+  tests, documentation or an incorporated patch, include exactly one
+  `Co-authored-by: Codex <codex@openai.com>` trailer in that commit message,
+  regardless of which account or tool performs the commit.
+- **Mandatory for every Claude-authored commit:** when Claude contributed
+  substantive changes, include exactly one
+  `Co-authored-by: Claude <noreply@anthropic.com>` trailer.
+- If both agents contributed substantive changes to the same commit, include
+  both trailers. Never attribute an agent that did not contribute.
 
-`Assisted-by: OpenAI Codex` does **not** produce GitHub co-authorship and must
-not replace the Codex `Co-authored-by` trailer. In particular, a commit authored
-by `0x0sky` with genuine Codex changes must contain the Codex trailer in the
-**commit message**, not only in a pull request description. Do not add tool
-co-authors when that tool did not contribute to the commit.
+For a commit containing Codex work, the message must end like this:
+
+```text
+fix(scope): describe the change
+
+Co-authored-by: Codex <codex@openai.com>
+```
+
+Separate the trailer block from the message body with one blank line. Put
+multiple trailers on consecutive lines, without blank lines between them.
+Add these trailers **before pushing**, and verify the actual commit message
+(`git log -1 --format=%B`). A pull request description, review or
+`Assisted-by: OpenAI Codex` is **not** equivalent to the required trailer.
+Ensure the genuine trailer survives squash merges; do not claim the credit if
+it was dropped.
 
 Rules:
 
