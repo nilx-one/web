@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
-  decodeCourierPlan,
+  courierDestinationRequest,
+  decodeCourierDestination,
   CourierCapabilityUnavailable,
-  type CourierPlan,
-  type CourierRequest,
+  type BusinessPoint,
+  type BusinessPointProjection,
+  type CourierCoordinate,
 } from "@nilx-one/application";
 
 import type {
@@ -647,7 +649,10 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
 }
 
 export interface CoreWasmBindings {
-  planCourier?(request: CourierRequest): CourierPlan;
+  courierDestination?(
+    origin: CourierCoordinate,
+    projection: BusinessPointProjection,
+  ): BusinessPoint;
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
@@ -684,8 +689,8 @@ export interface CoreWasmBindings {
 }
 
 export interface GeneratedCoreWasmModule {
-  /** Not exported by any Core release yet: a target shape until Core owns it. */
-  courier_plan?(input: string): string;
+  /** Absent from a runtime built before Core's courier destination. */
+  courier_destination?(request: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;
   fixture_corpus_version(): string;
@@ -870,11 +875,19 @@ export async function loadGeneratedCoreWasmBindings(
             );
           },
         }),
-    ...(runtime.courier_plan === undefined
+    ...(runtime.courier_destination === undefined
       ? {}
       : {
-          planCourier: (request: CourierRequest) =>
-            decodeCourierPlan(runtime.courier_plan!(JSON.stringify(request))),
+          courierDestination: (
+            origin: CourierCoordinate,
+            projection: BusinessPointProjection,
+          ) =>
+            decodeCourierDestination(
+              runtime.courier_destination!(
+                JSON.stringify(courierDestinationRequest(origin, projection)),
+              ),
+              projection,
+            ),
         }),
     ...(runtime.orb_world === undefined
       ? {}
@@ -1065,11 +1078,14 @@ class CoreWasmClient implements CoreRuntimePort {
     return bindings.backpackGiftDue(state, bondLevel);
   }
 
-  public async planCourier(request: CourierRequest): Promise<CourierPlan> {
+  public async courierDestination(
+    origin: CourierCoordinate,
+    projection: BusinessPointProjection,
+  ): Promise<BusinessPoint> {
     const bindings = await this.loadBindings();
-    if (bindings.planCourier === undefined)
+    if (bindings.courierDestination === undefined)
       throw new CourierCapabilityUnavailable();
-    return bindings.planCourier(request);
+    return bindings.courierDestination(origin, projection);
   }
 
   public async orbWorld(

@@ -598,6 +598,55 @@ describe("CoreWasmClient", () => {
     expect(() => bindings.orbWorld?.(world, -1)).toThrow(RangeError);
   });
 
+  it("asks Core for a courier destination by point number and maps it back", async () => {
+    const coordinate = { longitude_e7: "305131000", latitude_e7: "504491000" };
+    const point = (number: number) => ({
+      id: { owner_pub_dress: "0xda-market", number },
+      pub_dress: `0xda-market-p${number}`,
+      description: `P${number}`,
+      isVerified: false,
+      coordinate,
+    });
+    const projection = {
+      owner_pub_dress: "0xda-market",
+      points: [point(3), point(12)],
+    };
+    const origin = { longitude_e7: "305130000", latitude_e7: "504490000" };
+    const seen: string[] = [];
+    let answer = '{"ok":true,"point_id":"012"}';
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          courier_destination: (request) => {
+            seen.push(request);
+            return answer;
+          },
+        }),
+    });
+    expect(bindings.courierDestination?.(origin, projection)).toBe(
+      projection.points[1],
+    );
+    expect(JSON.parse(seen[0]!)).toEqual({
+      origin,
+      candidates: [
+        { point_id: "003", coordinate },
+        { point_id: "012", coordinate },
+      ],
+    });
+    for (const bad of [
+      '{"ok":false,"error":"duplicate_point_id"}',
+      '{"ok":true,"point_id":"099"}',
+      '{"ok":true,"point_id":12}',
+    ]) {
+      answer = bad;
+      expect(() => bindings.courierDestination?.(origin, projection)).toThrow();
+    }
+    const older = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime({}),
+    });
+    expect(older.courierDestination).toBeUndefined();
+  });
+
   it("has no proximity on a runtime built before it", async () => {
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () => generatedRuntime(),

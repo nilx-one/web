@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { OrbWorldInput, OrbWorldView } from "./orb-world";
-import type { CourierPlan, CourierRequest } from "./courier";
+import type {
+  BusinessPoint,
+  BusinessPointProjection,
+  CourierCoordinate,
+} from "./courier";
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveInput,
@@ -139,7 +143,11 @@ export type CoreInventoryAnswer =
  * code must fail closed when they are absent rather than reimplement UTS-46.
  */
 export interface CoreRuntimePort {
-  planCourier?(request: CourierRequest): Promise<CourierPlan>;
+  /** Core `courier_destination`: the nearest point of the projection. */
+  courierDestination?(
+    origin: CourierCoordinate,
+    projection: BusinessPointProjection,
+  ): Promise<BusinessPoint>;
   probe(): Promise<CoreRuntimeStatus>;
   derivePubDressLabel?(pubDress: string): Promise<CorePubDressLabelResult>;
   composePubDressLabel?(

@@ -316,7 +316,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "applyAvaiaLife"
     | "avaiaProximity"
     | "orbWorld"
-    | "planCourier"
+    | "courierDestination"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this

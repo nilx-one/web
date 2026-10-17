@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  BusinessPoint,
+  BusinessPointProjection,
+  CourierCoordinate,
   CourierDirectoryPort,
-  CourierPlan,
-  CourierRequest,
 } from "@nilx-one/application";
 import {
   mapDistanceMeters,
@@ -13,11 +14,15 @@ import {
 import type { ProductLocale } from "../../shell/localization";
 import { courierCoordinate, courierPoint } from "./courier-map";
 
-export const MARKET_BUSINESS_ID = "0xda-market";
-export const MARKET_MARKER_ONLY_OWNERS = [MARKET_BUSINESS_ID] as const;
+/** The owning 0xda-market BBond's `pub_dress`. */
+export const MARKET_OWNER_PUB_DRESS = "0xda-market";
+export const MARKET_MARKER_ONLY_OWNERS = [MARKET_OWNER_PUB_DRESS] as const;
 
 export interface MarketPoint {
+  /** The place component of the seeded point `pub_dress`. */
   readonly id: string;
+  /** The point's `UInt8` number: allocated once, never reassigned. */
+  readonly number: number;
   readonly longitude: number;
   readonly latitude: number;
   readonly uk: string;
@@ -25,10 +30,14 @@ export interface MarketPoint {
   readonly ru: string;
 }
 
-/** Author-seeded game destinations. Sources and approximate placements: docs/market-points.md. */
+/**
+ * Author-seeded, unverified BusinessPoints of 0xda-market for local preview.
+ * Sources and approximate placements: docs/market-points.md.
+ */
 export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   {
     id: "zoloti-vorota",
+    number: 0,
     longitude: 30.5131,
     latitude: 50.4489,
     uk: "Золоті Ворота",
@@ -37,6 +46,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "batkivshchyna",
+    number: 1,
     longitude: 30.5632,
     latitude: 50.4265,
     uk: "Батьківщина-Мати",
@@ -45,6 +55,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "peizazhna-aleia",
+    number: 2,
     longitude: 30.51562,
     latitude: 50.45642,
     uk: "Пейзажна алея",
@@ -53,6 +64,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "cosmopolite",
+    number: 3,
     longitude: 30.44237,
     latitude: 50.4506,
     uk: "Космополіт · Шулявка",
@@ -61,6 +73,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "gorodok-gallery",
+    number: 4,
     longitude: 30.49582,
     latitude: 50.48974,
     uk: "Gorodok Gallery",
@@ -69,6 +82,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "smart-plaza-polytech",
+    number: 5,
     longitude: 30.46827,
     latitude: 50.45135,
     uk: "SmartPlaza Polytech",
@@ -77,6 +91,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "raion",
+    number: 6,
     longitude: 30.60187,
     latitude: 50.51648,
     uk: "РайON · Троєщина",
@@ -85,6 +100,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "mandarin-plaza",
+    number: 7,
     longitude: 30.52153,
     latitude: 50.44137,
     uk: "Mandarin Plaza",
@@ -93,6 +109,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "respublika-park",
+    number: 8,
     longitude: 30.44626,
     latitude: 50.37355,
     uk: "Respublika Park",
@@ -101,6 +118,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "lavina-mall",
+    number: 9,
     longitude: 30.36049,
     latitude: 50.49555,
     uk: "Lavina Mall",
@@ -109,6 +127,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "river-mall",
+    number: 10,
     longitude: 30.61195,
     latitude: 50.40531,
     uk: "River Mall",
@@ -117,6 +136,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "retroville",
+    number: 11,
     longitude: 30.41658,
     latitude: 50.50359,
     uk: "Retroville",
@@ -125,6 +145,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "tsum",
+    number: 12,
     longitude: 30.52047,
     latitude: 50.44546,
     uk: "ЦУМ 🤍",
@@ -133,6 +154,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "skymall",
+    number: 13,
     longitude: 30.55936,
     latitude: 50.49304,
     uk: "SkyMall",
@@ -141,6 +163,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "dream-berry",
+    number: 14,
     longitude: 30.49865,
     latitude: 50.51681,
     uk: "DREAM berry",
@@ -149,6 +172,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "dream-yellow",
+    number: 15,
     longitude: 30.49837,
     latitude: 50.50753,
     uk: "DREAM yellow",
@@ -157,6 +181,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "gulliver",
+    number: 16,
     longitude: 30.52312,
     latitude: 50.43869,
     uk: "Gulliver 🖤",
@@ -165,6 +190,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "osokorky",
+    number: 17,
     longitude: 30.61625,
     latitude: 50.39519,
     uk: "метро Осокорки",
@@ -173,6 +199,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "pozniaky",
+    number: 18,
     longitude: 30.63466,
     latitude: 50.3979,
     uk: "метро Позняки",
@@ -181,6 +208,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "troieshchyna-centre",
+    number: 19,
     longitude: 30.62306,
     latitude: 50.52167,
     uk: "Троєщина · Молодіжний парк",
@@ -189,6 +217,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "livoberezhna",
+    number: 20,
     longitude: 30.59817,
     latitude: 50.45186,
     uk: "метро Лівобережна",
@@ -197,6 +226,7 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
   {
     id: "petra-zaporozhtsia",
+    number: 21,
     longitude: 30.59755,
     latitude: 50.47938,
     uk: "вул. Чорних Запорожців",
@@ -205,15 +235,44 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   },
 ];
 
-export const marketPointId = (point: MarketPoint) =>
-  `${MARKET_BUSINESS_ID}-${point.id}`;
+/**
+ * The seeded point `pub_dress`, `<owner>-<place>`. It is an author-seeded
+ * constant: Web derives no point address until Core defines that contract.
+ * It is also the reference these pins used before the BusinessPoint model.
+ */
+export const marketPointPubDress = (point: MarketPoint) =>
+  `${MARKET_OWNER_PUB_DRESS}-${point.id}`;
+
+const description = (point: MarketPoint) => point.en;
+
+export const KYIV_MARKET_BUSINESS_POINTS: readonly BusinessPoint[] =
+  KYIV_MARKET_POINTS.map((point) => ({
+    id: { owner_pub_dress: MARKET_OWNER_PUB_DRESS, number: point.number },
+    pub_dress: marketPointPubDress(point),
+    description: description(point),
+    isVerified: false,
+    coordinate: courierCoordinate(point),
+  }));
+
+/**
+ * Explicit compatibility mapping from the pre-BusinessPoint reference
+ * (`0xda-market-<place>`) to the stable point ID. Nothing persisted the old
+ * reference; the mapping is kept so any that surfaces resolves, not guessed.
+ */
+export const LEGACY_MARKET_POINT_NUMBERS: ReadonlyMap<string, number> = new Map(
+  KYIV_MARKET_POINTS.map((point) => [marketPointPubDress(point), point.number]),
+);
+
+/** One map pin per BusinessPoint, keyed by its stable ID. */
+export const marketPinId = (point: BusinessPoint) =>
+  `business-point:${point.id.owner_pub_dress}:${point.id.number}`;
 
 export function marketMapPoints(
   locale: ProductLocale,
   detail: string,
 ): MapPinnedLandmark[] {
-  return KYIV_MARKET_POINTS.map((point) => ({
-    id: `market:${marketPointId(point)}`,
+  return KYIV_MARKET_POINTS.map((point, index) => ({
+    id: marketPinId(KYIV_MARKET_BUSINESS_POINTS[index]!),
     longitude: point.longitude,
     latitude: point.latitude,
     kind: "business",
@@ -223,53 +282,42 @@ export function marketMapPoints(
   }));
 }
 
-const destinations = KYIV_MARKET_POINTS.map((point) => ({
-  business_id: MARKET_BUSINESS_ID,
-  point_id: marketPointId(point),
-  coordinate: courierCoordinate(point),
-}));
+const projection: BusinessPointProjection = {
+  owner_pub_dress: MARKET_OWNER_PUB_DRESS,
+  points: KYIV_MARKET_BUSINESS_POINTS,
+};
 
-/** A local game map, never an authenticated shop/ownership projection. */
+/** A local preview of unverified points, never an authenticated projection. */
 export const seededMarketDirectory: CourierDirectoryPort = {
-  async destinations() {
-    return { business_id: MARKET_BUSINESS_ID, destinations };
+  async points() {
+    return projection;
   },
-  previewPlan(request) {
-    return seededMarketPlan(request);
+  previewDestination(origin, requested) {
+    if (requested !== projection) throw new Error("Not the seeded preview");
+    return seededMarketDestination(origin);
   },
 };
 
-/** Presentation fallback for these exact author-seeded pins on an older runtime. */
-export function seededMarketPlan(request: CourierRequest): CourierPlan {
-  const origin = courierPoint(request.origin);
+/**
+ * Presentation fallback over these exact seeded points on a runtime without
+ * `courier_destination`: nearest first, then the smallest point number, as
+ * Core decides.
+ */
+export function seededMarketDestination(
+  origin: CourierCoordinate,
+): BusinessPoint {
+  const from = courierPoint(origin);
   if (
-    !Number.isFinite(origin.longitude) ||
-    !Number.isFinite(origin.latitude) ||
-    Math.abs(origin.longitude) > 180 ||
-    Math.abs(origin.latitude) > 90 ||
-    request.business_id !== MARKET_BUSINESS_ID
+    !Number.isFinite(from.longitude) ||
+    !Number.isFinite(from.latitude) ||
+    Math.abs(from.longitude) > 180 ||
+    Math.abs(from.latitude) > 90
   )
     throw new Error("Invalid map preview");
-  const ranked = destinations
-    .map((destination) => ({
-      destination,
-      distance: Math.ceil(
-        mapDistanceMeters(origin, courierPoint(destination.coordinate)),
-      ),
-    }))
-    .sort(
-      (a, b) =>
-        a.distance - b.distance ||
-        a.destination.point_id.localeCompare(b.destination.point_id),
-    );
-  const nearest = ranked[0]!;
-  // The flyover publishes the actual road-route ETA and arrival event.
-  return {
-    tier: request.tier,
-    origin: request.origin,
-    destination: nearest.destination,
-    started_at_ms: request.started_at_ms,
-    arrives_at_ms: request.started_at_ms,
-    distance_m: String(nearest.distance),
-  };
+  return KYIV_MARKET_BUSINESS_POINTS.map((point) => ({
+    point,
+    distance: mapDistanceMeters(from, courierPoint(point.coordinate)),
+  })).sort(
+    (a, b) => a.distance - b.distance || a.point.id.number - b.point.id.number,
+  )[0]!.point;
 }
