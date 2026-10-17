@@ -69,6 +69,19 @@ Colour says what kind of place it is: built things (`monument`, `civic`) share t
 
 In volumetric presentation the Motherland pin shares its point with the procedural monument model, which stands over it.
 
+## Routes
+
+`MapRenderer.setRoute` draws one route as a dash-dot line (dash, gap, dot,
+gap) in the spatial accent `#37d7e5` over a soft dark casing, so it reads on
+light ground, dark ground and the roofs it crosses. It lies over the ground,
+beneath orbs, pins and the Bond's own marker. `null` clears it. Drawing a
+route is presentation only: it moves no body and records nothing.
+
+xPing can fly as well as hover: `SystemDroneHandle.heightMeters` raises it
+over the drawn ground, `pitchDeg` lowers its nose into speed, `rollDeg` banks
+its right side down into a right turn, and `scale` sizes it against its
+1.2 m self.
+
 ## Reaching for a body
 
 A body is the most direct thing on the screen, so activating it means what a person means by pointing at it: bring the world to that identity. The camera goes to the closest scale the policy allows, and the Dock returns to the pair — a body belongs to that screen, not to whatever surface happened to be open.
