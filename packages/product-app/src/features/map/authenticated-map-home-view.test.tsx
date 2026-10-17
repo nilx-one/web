@@ -600,7 +600,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
 
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
-    expect(camera?.center).toEqual(followCamera(camera!, avaiaAt).center);
+    expect(camera?.center).toEqual(isometricCamera(camera!, avaiaAt).center);
   });
 
   it("comes in far enough to see the identity that just took the wheel", async () => {
@@ -2026,7 +2026,16 @@ describe("AuthenticatedMapHomeView", () => {
   it("tracks the Bond's next fix without needing a rendered avatar", async () => {
     const mapRenderer = renderer();
     const geolocation = createGeolocationDouble({ position: observation() });
-    renderView({ mapRenderer, geolocation });
+    const unconfiguredAvaia = createAvaiaSetupViewState({
+      load: { kind: "unsupported" },
+      pending: false,
+      fallbackAddress: "x0skai",
+    });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: { ...unconfiguredAvaia, configuration: "unconfigured" },
+    });
     await screen.findByRole("button", { name: "Map centred on this device" });
     expect(screen.getByRole("button", { name: "Isometric" })).toHaveAttribute(
       "aria-pressed",
@@ -2111,7 +2120,7 @@ describe("AuthenticatedMapHomeView", () => {
     await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
     await act(async () => Promise.resolve());
     const [camera] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
-    expect(camera?.center).toEqual(followCamera(camera!, avaia).center);
+    expect(camera?.center).toEqual(isometricCamera(camera!, avaia).center);
     expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
   });
 
@@ -2144,7 +2153,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(close).toMatchObject({ visible: true, scale: 1 });
 
     // The preceding map gesture leaves only the active mode chip visible.
-    fireEvent.click(screen.getByRole("button", { name: "Follow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Isometric" }));
     fireEvent.click(screen.getByRole("button", { name: "Free" }));
     act(() => {
       mapRenderer.moveCamera(
