@@ -73,8 +73,8 @@ map plane, stays anchored to the geographic point as the camera moves, and
 does not capture pointer input.
 
 The most recent bead lasts **at most three seconds**. It begins fading after
-2.7 seconds and is removed at three seconds. A second tap immediately fades
-the previous bead over 300 ms and draws a fresh one. Only the active bead and
+2 seconds and is removed at three seconds. A second tap immediately fades
+the previous bead over one second and draws a fresh one. Only the active bead and
 one outgoing bead may coexist; repeated rapid taps cannot accumulate markers
 or timers. Changing the wheel does not recolor a previous tap.
 
