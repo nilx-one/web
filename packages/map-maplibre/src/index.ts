@@ -508,11 +508,20 @@ export function createMapLibreRenderer(
     return avatarLayerPromise;
   }
 
-  const droneActivationListeners = new Set<(id: string) => void>();
+  const droneActivationListeners = new Map<string, Set<() => void>>();
   const systemDrone: SystemDroneLayerContract = {
-    subscribeActivation(listener) {
-      droneActivationListeners.add(listener);
-      return () => droneActivationListeners.delete(listener);
+    subscribeActivation(id, listener) {
+      const listeners = droneActivationListeners.get(id) ?? new Set();
+      listeners.add(listener);
+      droneActivationListeners.set(id, listeners);
+      return () => {
+        listeners.delete(listener);
+        if (
+          listeners.size === 0 &&
+          droneActivationListeners.get(id) === listeners
+        )
+          droneActivationListeners.delete(id);
+      };
     },
     upsert(handle) {
       droneHandles.set(handle.id, handle);
@@ -1600,6 +1609,7 @@ export function createMapLibreRenderer(
             if (point === undefined) return;
             if (droneActivationListeners.size && avatarLayer !== undefined) {
               const hit = [...droneHandles.values()].find((handle) => {
+                if (!droneActivationListeners.has(handle.id)) return false;
                 const screen = mountedMap.project(
                   handle.lngLat as [number, number],
                 );
@@ -1617,8 +1627,10 @@ export function createMapLibreRenderer(
                 );
               });
               if (hit) {
-                for (const listener of droneActivationListeners)
-                  listener(hit.id);
+                for (const listener of [
+                  ...(droneActivationListeners.get(hit.id) ?? []),
+                ])
+                  listener();
                 return;
               }
             }

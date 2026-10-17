@@ -279,3 +279,86 @@ it("uses Core plan, blocks duplicate dispatch, and cancels stale asynchronous re
   unmount();
   expect(map.systemDrone!.remove).toHaveBeenCalledWith("system:xPing:courier");
 });
+it("stages the offer shot once per offer and hands back the camera from before it", () => {
+  const map = renderer();
+  const before = map.getCamera();
+  const { result, rerender } = renderHook(
+    ({ at }) =>
+      useCourier({
+        renderer: map,
+        origin: at,
+        core: undefined,
+        directory,
+        suspended: false,
+      }),
+    { initialProps: { at: { longitude: 30.5, latitude: 50.4 } } },
+  );
+  act(() => result.current.open("exclusive"));
+  expect(map.setCamera).toHaveBeenCalledOnce();
+  rerender({ at: { longitude: 30.5001, latitude: 50.4001 } });
+  rerender({ at: { longitude: 30.5002, latitude: 50.4002 } });
+  expect(map.setCamera).toHaveBeenCalledOnce();
+  act(() => result.current.close());
+  expect(map.setCamera).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(map.setCamera).mock.lastCall?.[0]).toEqual(before);
+});
+it("listens for taps on the flying xPing only, never on a parked offer drone", async () => {
+  const map = renderer();
+  const unsubscribe = vi.fn();
+  const subscribeActivation = vi.fn(() => unsubscribe);
+  Object.assign(map.systemDrone!, { subscribeActivation });
+  const core = { planCourier: vi.fn(async () => plan) };
+  const { result, unmount } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core,
+      directory,
+      suspended: false,
+    }),
+  );
+  act(() => result.current.open("exclusive"));
+  expect(subscribeActivation).not.toHaveBeenCalled();
+  await act(() => result.current.accept());
+  expect(result.current.flyover.active).toBe(true);
+  expect(subscribeActivation).toHaveBeenCalledOnce();
+  expect(subscribeActivation).toHaveBeenCalledWith(
+    "flyover:xPing",
+    expect.any(Function),
+  );
+  unmount();
+  expect(unsubscribe).toHaveBeenCalled();
+});
+it("tells flight progress as Avaia's distance in whole 50 m steps", () => {
+  const avaia = { longitude: 30.5, latitude: 50.4 };
+  // About 111.2 m per 0.001° of latitude.
+  const at = (latitude: number) => ({
+    active: true,
+    progress: { point: { longitude: 30.5, latitude }, remainingMs: 9000 },
+  });
+  const props = {
+    jobs: [],
+    plan,
+    completed: undefined,
+    avaia: { name: "Avaia", point: () => avaia },
+    onFlight: vi.fn(),
+    onFollow: vi.fn(),
+    onCells: vi.fn(),
+  };
+  const view = render(<ActivityStack {...props} flight={at(50.401)} />);
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "xPing · flying to 0xda-market · 100 m from Avaia",
+  );
+  view.rerender(<ActivityStack {...props} flight={at(50.4013)} />);
+  expect(screen.getByRole("status")).toHaveTextContent("· 100 m from Avaia");
+  view.rerender(<ActivityStack {...props} flight={at(50.4014)} />);
+  expect(screen.getByRole("status")).toHaveTextContent("· 150 m from Avaia");
+  view.rerender(
+    <ActivityStack
+      {...props}
+      avaia={{ name: "Avaia", point: () => undefined }}
+      flight={at(50.4014)}
+    />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("· 0:09");
+});

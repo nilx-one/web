@@ -793,7 +793,11 @@ export interface SystemDroneHandle {
   readonly scale?: number;
 }
 export interface SystemDroneLayerContract {
-  subscribeActivation?(listener: (id: string) => void): () => void;
+  /**
+   * Taps on the drone with this id. Only drones someone listens to are hit
+   * tested, so a parked prop never takes a tap meant for a body beneath it.
+   */
+  subscribeActivation?(id: string, listener: () => void): () => void;
   /** True only once the prop has a mounted, hydrated 3D layer. */
   upsert(handle: SystemDroneHandle): boolean;
   remove(id: string): void;

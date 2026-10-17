@@ -29,6 +29,16 @@ not used for the visible countdown or completion. Leaving clears progress
 without reporting success. During route loading (and the static reduced
 motion preview), no arrival is inferred from elapsed wall-clock time.
 
+The activity row tells progress as xPing's ground distance from Avaia's
+body, in whole 50 m steps, so it changes once per step rather than every
+frame. Without a body for Avaia it falls back to the remaining duration.
+
+Only the flying xPing takes taps, and only while it flies: the renderer
+hit-tests a drone just when something has subscribed to that drone's id.
+The offer drone parked on the Bond and the hint drones beside it leave
+Bond and Avaia their taps. The offer shot reads the latest fix but is
+staged once per offer; closing it restores the camera from before it.
+
 Activity overview temporarily releases the chase camera with
 `setFollowing(false)` but does not stop the flight or compute another route.
 Selecting xPing restores the chase. The courier and cell-opening activities

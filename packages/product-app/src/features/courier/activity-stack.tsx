@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 import { useEffect, useState } from "react";
 import type { CourierPlan } from "@nilx-one/application";
-import type { MapFogCell } from "@nilx-one/map-contract";
+import { mapDistanceMeters } from "@nilx-one/map-contract";
+import type { MapFogCell, MapPointSelection } from "@nilx-one/map-contract";
 import type { FogRevealJob } from "../map/fog-reveal";
 import { revealRemainingMs } from "../map/fog-reveal";
 import { useLocalization } from "../../shell/localization";
@@ -16,11 +17,14 @@ const clock = (ms: number) => {
   const s = Math.ceil(Math.max(0, ms) / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
+/** Flight progress is told in whole 50 m steps, not a running number. */
+export const FLIGHT_DISTANCE_STEP_METERS = 50;
 export function ActivityStack({
   jobs,
   plan,
   flight,
   completed,
+  avaia,
   onFlight,
   onFollow,
   onCells,
@@ -29,6 +33,8 @@ export function ActivityStack({
   plan: CourierPlan | undefined;
   flight: Pick<Flyover, "active" | "progress">;
   completed: RevealCompletion | undefined;
+  /** Where xPing is measured from; without her point, time remaining shows. */
+  avaia?: { name: string; point(): MapPointSelection | undefined };
   onFlight(): void;
   onFollow(): void;
   onCells(): void;
@@ -95,6 +101,19 @@ export function ActivityStack({
         : t("courier.cellsDone"),
       focus: onCells,
     });
+  const flightProgress = () => {
+    if (!flight.progress) return "…";
+    const from = avaia?.point();
+    if (!from) return clock(flight.progress.remainingMs);
+    const meters =
+      Math.floor(
+        mapDistanceMeters(from, flight.progress.point) /
+          FLIGHT_DISTANCE_STEP_METERS,
+      ) * FLIGHT_DISTANCE_STEP_METERS;
+    return t("courier.distance")
+      .replace("{meters}", String(meters))
+      .replace("{avaia}", avaia!.name);
+  };
   if (plan && showFlight)
     rows.push({
       id: "flight",
@@ -104,9 +123,7 @@ export function ActivityStack({
       label:
         arrivedAt !== undefined
           ? t("courier.arrived")
-          : t("courier.flight") +
-            " · " +
-            (flight.progress ? clock(flight.progress.remainingMs) : "…"),
+          : t("courier.flight") + " · " + flightProgress(),
       focus: onFlight,
       ...(flight.active && arrivedAt === undefined ? { follow: onFollow } : {}),
     });

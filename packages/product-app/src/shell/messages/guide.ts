@@ -25,6 +25,7 @@ export const GUIDE_EN = {
   "courier.cellsDone": "Cells opened",
   "courier.activities": "Map activities",
   "courier.follow": "Follow xPing",
+  "courier.distance": "{meters} m from {avaia}",
 
   "guide.exclusive.line":
     "Want something exclusive? I’ll be right over, as soon as you buy it.",
@@ -162,6 +163,7 @@ export const GUIDE_UK: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "courier.cellsDone": "Клітинки відкрито",
   "courier.activities": "Активності на карті",
   "courier.follow": "Стежити за xPing",
+  "courier.distance": "{meters} м від {avaia}",
 
   "guide.exclusive.line": "Хочеш ексклюзивне? Я миттю — одразу, як купиш.",
   "guide.exclusive.result": "Налаштування підбирання не змінено.",
@@ -295,6 +297,7 @@ export const GUIDE_RU: Readonly<Record<keyof typeof GUIDE_EN, string>> = {
   "courier.cellsDone": "Клетки открыты",
   "courier.activities": "Активности на карте",
   "courier.follow": "Следовать за xPing",
+  "courier.distance": "{meters} м от {avaia}",
 
   "guide.exclusive.line": "Хочешь эксклюзивное? Я мигом — сразу, как купишь.",
   "guide.exclusive.result": "Настройка подбора не изменена.",

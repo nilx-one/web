@@ -3585,6 +3585,11 @@ export function AuthenticatedMapHomeView({
                 plan={courier.plan}
                 flight={flyover}
                 completed={completedReveal}
+                avaia={{
+                  name: avaiaLabel,
+                  point: () =>
+                    avaiaWalk.stance(globalThis.performance.now())?.point,
+                }}
                 onFlight={() => {
                   if (!courier.plan) return;
                   courier.setFollowing(false);

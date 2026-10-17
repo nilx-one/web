@@ -103,14 +103,20 @@ export function useCourier(input: {
       }
     }
   }, [active, start, close, offer]);
+  // Each GPS fix is a new origin object: the shot reads it from the ref so a
+  // fix neither re-stages nor restores it, and the camera from before the
+  // offer is the one it hands back (as useSystemDroneScene does).
+  const hasOrigin = input.origin !== undefined;
+  const { renderer, suspended } = input;
   useEffect(() => {
-    if (!offer || input.suspended || !input.origin) return;
+    const origin = latest.current.origin;
+    if (!offer || suspended || !origin) return;
     let restore: ReturnType<MapRenderer["getCamera"]>;
     try {
-      restore = input.renderer.getCamera();
-      input.renderer.setCamera(
+      restore = renderer.getCamera();
+      renderer.setCamera(
         {
-          center: [input.origin.longitude, input.origin.latitude],
+          center: [origin.longitude, origin.latitude],
           zoom: 20,
           bearing: 0,
           pitch: 55,
@@ -122,27 +128,30 @@ export function useCourier(input: {
     }
     return () => {
       try {
-        input.renderer.setCamera(restore, {
+        renderer.setCamera(restore, {
           motion: prefersReducedMotion() ? "immediate" : "eased",
         });
       } catch {
         /* context loss */
       }
     };
-  }, [offer, input.renderer, input.suspended, input.origin]);
+  }, [offer, renderer, suspended, hasOrigin]);
+  // Only the flying xPing takes taps, and only while it flies: a hint or
+  // offer drone parked on the Bond must leave Bond and Avaia their taps.
   useEffect(() => {
-    return input.renderer.systemDrone?.subscribeActivation?.((id) => {
-      if (id === FLYOVER_DRONE_ID && flyover.active) setFollowing(true);
-    });
-  }, [flyover.active, input.renderer, setFollowing]);
+    if (!flyover.active) return;
+    return renderer.systemDrone?.subscribeActivation?.(FLYOVER_DRONE_ID, () =>
+      setFollowing(true),
+    );
+  }, [flyover.active, renderer, setFollowing]);
   useEffect(() => {
-    const drone = input.renderer.systemDrone;
-    if (!drone || input.suspended || !offer || flyover.active) return;
+    const drone = renderer.systemDrone;
+    if (!drone || suspended || !offer || flyover.active) return;
     const id = "system:xPing:courier";
     let frame: number | undefined;
     const draw = () => {
       const now = Date.now();
-      const point = input.origin;
+      const point = latest.current.origin;
       if (point) {
         try {
           drone.upsert({
@@ -167,7 +176,7 @@ export function useCourier(input: {
         /* detached renderer */
       }
     };
-  }, [input.renderer, input.origin, input.suspended, offer, flyover.active]);
+  }, [renderer, suspended, offer, flyover.active]);
   return {
     offer,
     plan,
