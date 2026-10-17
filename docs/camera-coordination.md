@@ -71,6 +71,9 @@ location control (`follow-camera.ts`, `use-follow-camera.ts`).
   Changing mode reveals the panel again, including Free entered by pinch-out,
   and starts a fresh idle period. Expanded mode buttons retain their selection
   and distance-cycle behavior. Pending timers and subscriptions end on unmount.
+  Its selection travels from the mode being left to the one chosen, and the
+  panel widens or narrows from one size to the other, on the Dock window's
+  420 ms curve; reduced motion moves both without travel.
   The first explicit Follow press, or selecting Follow from Free, chooses
   the closest preset; further presses cycle close → medium → far → close
   (zoom 21.5 → 21 → 20.5 → 21.5). Each preset is applied once on the press.

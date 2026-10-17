@@ -2,7 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { MapRenderer } from "@nilx-one/map-contract";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
 import { useLocalization } from "../../shell/localization";
 import type { CameraFollow } from "./follow-camera";
@@ -68,6 +75,45 @@ export function CameraModeControl({
     armIdle();
   }, [armIdle, mode]);
 
+  // Expanding or collapsing travels from the old width to the new one, the
+  // way the Dock window travels between screen heights.
+  const width = useRef<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const panel = root.current;
+    if (panel === null) return;
+    const from = width.current;
+    // Mark the move before measuring, so the highlight lands with its chip.
+    panel.dataset.resizing = "";
+    panel.style.width = "";
+    const to = panel.getBoundingClientRect().width;
+    width.current = to;
+    const settle = () => {
+      panel.style.width = "";
+      delete panel.dataset.resizing;
+    };
+    if (
+      from === undefined ||
+      from === to ||
+      globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    ) {
+      settle();
+      return;
+    }
+    panel.style.width = `${from}px`;
+    void panel.getBoundingClientRect();
+    panel.style.width = `${to}px`;
+    const end = (event: TransitionEvent) => {
+      if (event.target === panel && event.propertyName === "width") settle();
+    };
+    panel.addEventListener("transitionend", end);
+    panel.addEventListener("transitioncancel", end);
+    return () => {
+      panel.removeEventListener("transitionend", end);
+      panel.removeEventListener("transitioncancel", end);
+      settle();
+    };
+  }, [expanded]);
+
   useEffect(() => {
     armIdle();
     const camera = renderer.subscribeCamera((change) => {
@@ -95,6 +141,14 @@ export function CameraModeControl({
       role="group"
       aria-label={t("camera.mode")}
       data-expanded={expanded}
+      style={
+        {
+          "--camera-mode-slots": expanded ? buttons.length : 1,
+          "--camera-mode-index": expanded
+            ? buttons.findIndex((button) => button.mode === mode)
+            : 0,
+        } as CSSProperties
+      }
       onPointerDown={armIdle}
       onKeyDown={armIdle}
       onFocus={armIdle}
@@ -102,6 +156,7 @@ export function CameraModeControl({
         if (!expanded && event.target === event.currentTarget) expand();
       }}
     >
+      <span className="camera-mode-control__thumb" aria-hidden="true" />
       {buttons.map((button) => (
         <button
           key={button.mode}

@@ -152,6 +152,21 @@ describe("CameraModeControl", () => {
     expect(screen.getByRole("button", { name: "Follow" })).toHaveFocus();
   });
 
+  it("moves the highlight to the chosen slot and onto the collapsed chip", () => {
+    const { renderer, rerender, props } = setup("locked");
+    const group = screen.getByRole("group");
+    const slot = () => [
+      group.style.getPropertyValue("--camera-mode-slots"),
+      group.style.getPropertyValue("--camera-mode-index"),
+    ];
+    expect(slot()).toEqual(["3", "0"]);
+    rerender(<CameraModeControl {...props} mode="free" />);
+    expect(slot()).toEqual(["3", "2"]);
+    act(() => renderer.moveCamera(renderer.getCamera(), true));
+    expect(slot()).toEqual(["1", "0"]);
+    expect(group).not.toHaveAttribute("data-resizing");
+  });
+
   it("clears the idle timer on unmount", () => {
     const { unmount } = setup();
     const timers = vi.getTimerCount();

@@ -283,10 +283,18 @@ export function useFollowCamera({
           renderer.setCamera(target, { yieldToGesture: true });
         return;
       }
+      const acquiring = trackedBody.current === undefined;
       trackedBody.current = point;
-      if (trackingFrame.current === undefined) {
+      if (trackingFrame.current !== undefined) return;
+      // Acquisition and reduced motion take the body directly. A step after
+      // the glide settled starts a new glide on the next frame; measuring from
+      // the last settled frame would turn the time at rest into one jump.
+      if (acquiring || input.current.reducedMotion()) {
         advanceTracking(globalThis.performance.now());
+        return;
       }
+      trackingTime.current = globalThis.performance.now();
+      trackingFrame.current = globalThis.requestAnimationFrame(advanceTracking);
     },
     [advanceTracking, renderer],
   );
