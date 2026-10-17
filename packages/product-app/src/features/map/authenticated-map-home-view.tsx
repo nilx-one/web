@@ -182,6 +182,8 @@ import { pinnedLandmarks } from "./pinned-landmarks";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFollowCamera } from "./use-follow-camera";
 import { CameraModeControl } from "./camera-mode-control";
+import { FlyoverControls } from "../flyover/flyover-controls";
+import { useFlyover } from "../flyover/use-flyover";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
@@ -1662,6 +1664,12 @@ export function AuthenticatedMapHomeView({
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
   // The camera follows the body at the wheel the way a game camera follows
   // its character. It stands down while a scene or an informer stages shots.
+  // The xPing flyover (core docs/xping-flyover.md) owns the camera while it
+  // flies; Agreed in the subscription cutscene is what starts it.
+  const flyover = useFlyover(
+    renderer,
+    mapStatus.kind === "ready" && section === "world",
+  );
   const cameraModes = cameraModesFor(wheel);
   const followCamera = useFollowCamera({
     renderer,
@@ -1669,6 +1677,7 @@ export function AuthenticatedMapHomeView({
     enabled:
       mapStatus.kind === "ready" &&
       section === "world" &&
+      !flyover.active &&
       handover === undefined &&
       !guideActive &&
       systemInformer.activeId === undefined,
@@ -3506,6 +3515,7 @@ export function AuthenticatedMapHomeView({
           mapStatus.kind === "ready" &&
           handover === undefined &&
           !guideActive &&
+          !flyover.active &&
           systemInformer.activeId === undefined ? (
             <CameraModeControl
               renderer={renderer}
@@ -3515,6 +3525,9 @@ export function AuthenticatedMapHomeView({
               onIsometric={followCamera.selectIsometric}
               onFree={followCamera.selectFree}
             />
+          ) : null}
+          {flyover.active ? (
+            <FlyoverControls onSteer={flyover.steer} onLeave={flyover.leave} />
           ) : null}
           <LocationControl
             viewModel={locationControl}
