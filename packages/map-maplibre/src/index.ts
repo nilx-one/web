@@ -389,8 +389,7 @@ function tapFeedbackElement(seat: "bond" | "avaia"): HTMLElement {
   halo.style.inset = "0";
   halo.style.borderRadius = "50%";
   halo.style.backgroundColor = `${color}20`;
-  halo.style.backgroundImage =
-    `radial-gradient(circle, ${color}80 0%, ${color}42 26%, transparent 72%)`;
+  halo.style.backgroundImage = `radial-gradient(circle, ${color}80 0%, ${color}42 26%, transparent 72%)`;
   halo.style.filter = "blur(2px)";
   halo.style.pointerEvents = "none";
 
@@ -406,8 +405,7 @@ function tapFeedbackElement(seat: "bond" | "avaia"): HTMLElement {
   orb.style.border = `1px solid ${color}`;
   orb.style.borderRadius = "50%";
   orb.style.backgroundColor = "#f2fdff";
-  orb.style.backgroundImage =
-    `radial-gradient(circle at 30% 25%, #ffffff 0%, #f2fdff 29%, ${color} 100%)`;
+  orb.style.backgroundImage = `radial-gradient(circle at 30% 25%, #ffffff 0%, #f2fdff 29%, ${color} 100%)`;
   orb.style.boxShadow = `0 0 4px ${color}b3, 0 0 10px ${color}80`;
   orb.style.pointerEvents = "none";
 
