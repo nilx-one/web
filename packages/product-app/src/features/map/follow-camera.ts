@@ -30,6 +30,35 @@ export type CameraFollow = "locked" | "isometric" | "free";
 /** A world opens with the camera on the body at the wheel. */
 export const INITIAL_CAMERA_FOLLOW: CameraFollow = "locked";
 
+/** Every camera mode, in the order the mode control shows them. */
+export const CAMERA_MODES: readonly CameraFollow[] = [
+  "locked",
+  "isometric",
+  "free",
+];
+
+/** Who is at the wheel, as far as the camera is concerned. */
+export type CameraIdentity = "bond" | "avaia" | "xping";
+
+/**
+ * The modes each identity offers. Follow is always among them; the control
+ * still shows the rest, unavailable, so the set reads the same everywhere.
+ */
+const IDENTITY_CAMERA_MODES: Readonly<
+  Record<CameraIdentity, readonly CameraFollow[]>
+> = {
+  bond: CAMERA_MODES,
+  avaia: CAMERA_MODES,
+  // xPing is only ever followed: Isometric and Free stay out of reach.
+  xping: ["locked"],
+};
+
+export function cameraModesFor(
+  identity: CameraIdentity,
+): readonly CameraFollow[] {
+  return IDENTITY_CAMERA_MODES[identity];
+}
+
 /**
  * How long a camera move the application has just started is left to finish
  * before the follow takes the camera again. It covers the renderer's own

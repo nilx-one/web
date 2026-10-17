@@ -936,6 +936,12 @@
   display: none;
 }
 
+/* A mode this identity does not offer stays in its place, out of reach. */
+.camera-mode-control__button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 /* Expanding or collapsing travels from one width to the other. The chip
    moves with its button, so only the panel's edge is seen to travel. */
 .camera-mode-control[data-resizing] {

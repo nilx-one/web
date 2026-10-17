@@ -185,6 +185,7 @@ import { CameraModeControl } from "./camera-mode-control";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
+  cameraModesFor,
   followCamera as chaseCamera,
   isometricCamera,
   sameFollowCamera,
@@ -1661,8 +1662,10 @@ export function AuthenticatedMapHomeView({
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
   // The camera follows the body at the wheel the way a game camera follows
   // its character. It stands down while a scene or an informer stages shots.
+  const cameraModes = cameraModesFor(wheel);
   const followCamera = useFollowCamera({
     renderer,
+    modes: cameraModes,
     enabled:
       mapStatus.kind === "ready" &&
       section === "world" &&
@@ -3507,6 +3510,7 @@ export function AuthenticatedMapHomeView({
             <CameraModeControl
               renderer={renderer}
               mode={followCamera.follow}
+              available={cameraModes}
               onFollow={followCamera.selectFollow}
               onIsometric={followCamera.selectIsometric}
               onFree={followCamera.selectFree}

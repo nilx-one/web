@@ -167,6 +167,24 @@ describe("CameraModeControl", () => {
     expect(group).not.toHaveAttribute("data-resizing");
   });
 
+  it("shows modes the identity does not offer as unavailable", () => {
+    const renderer = createMapRendererDouble();
+    const props = {
+      renderer,
+      mode: "locked" as const,
+      available: ["locked"] as const,
+      onFollow: vi.fn(),
+      onIsometric: vi.fn(),
+      onFree: vi.fn(),
+    };
+    render(<CameraModeControl {...props} />);
+    expect(screen.getByRole("button", { name: "Follow" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Isometric" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Free" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Free" }));
+    expect(props.onFree).not.toHaveBeenCalled();
+  });
+
   it("clears the idle timer on unmount", () => {
     const { unmount } = setup();
     const timers = vi.getTimerCount();
