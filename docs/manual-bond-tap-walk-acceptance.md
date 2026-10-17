@@ -21,6 +21,7 @@ On a signed-in website and a Telegram Mini App on real devices:
 4. Switch the server from manual to live during the walk. Verify that the write is refused, and that GPS is requested only from a newly composed live-mode host.
 5. In Telegram, return from the bot after `/set_position`; confirm the manual position is used without physical GPS and a successful move updates the in-app world without a reload.
 6. In Web, confirm the immediate location refresh after acceptance/conflict (without waiting for the normal polling interval). Confirm `0x1*` and non-Admin accounts cannot move by tapping.
+7. On an iPhone Telegram Mini App, walk a manual Bond for at least 30 seconds in Follow, Free and Isometric. Confirm the moving body, card, geographic H3 cell and accuracy ring do not blink or leave transient holes. Frame-by-frame card/body tracking remains smooth; the GeoJSON geometry may refresh at 10 Hz. Verify the final confirmed coordinate and a second move after the first arrival.
 
 Browser CI and deploy-package checks do not replace these tests. Do not mark the real-device section complete without a recorded device, host, revision and outcome.
 

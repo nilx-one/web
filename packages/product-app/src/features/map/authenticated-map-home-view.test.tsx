@@ -2311,7 +2311,18 @@ describe("AuthenticatedMapHomeView", () => {
           }
         ).tapGround({ ...there, ground: "open" }),
       );
+      vi.mocked(mapRenderer.setObservedPosition).mockClear();
+      vi.mocked(mapRenderer.setObservedPositionLabel).mockClear();
       act(() => vi.advanceTimersByTime(1_000));
+      // The body and the DOM card remain smooth, but the expensive H3 and
+      // accuracy GeoJSON updates are capped, not pushed on every frame.
+      const markerUpdates = vi.mocked(mapRenderer.setObservedPosition).mock
+        .calls.length;
+      expect(markerUpdates).toBeGreaterThan(0);
+      expect(markerUpdates).toBeLessThanOrEqual(11);
+      expect(
+        vi.mocked(mapRenderer.setObservedPositionLabel).mock.calls.length,
+      ).toBeGreaterThan(markerUpdates);
       const bond = vi
         .mocked(mapRenderer.avatars!.upsert)
         .mock.calls.map(([handle]) => handle)
