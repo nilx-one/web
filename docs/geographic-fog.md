@@ -6,9 +6,11 @@ onto the DEM terrain used by the streets. There is no independent sea-level
 quad or camera matrix in the fog renderer.
 
 WebGPU is preferred for the fog material. Missing adapters, rejected devices,
-pipeline failures, initialization timeouts and device loss select a fresh WebGL2
-canvas. Both consume the same mask, world distances and palette parameters. A
-stable presentation canvas keeps the MapLibre source intact across fallback.
+pipeline failures, initialization timeouts, device loss and a frame that reads
+back transparent over closed ground (iOS Safari can copy a WebGPU canvas out
+empty) select a fresh WebGL2 canvas. Both consume the same mask, world
+distances and palette parameters. A stable presentation canvas keeps the
+MapLibre source intact across fallback.
 MapLibre's basemap compositor itself still uses WebGL; this does not migrate the
 whole map engine to WebGPU.
 
