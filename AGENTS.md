@@ -183,8 +183,8 @@ account ID:
 
 | GitHub account | Account ID | Canonical author and committer email |
 | -------------- | ---------- | ------------------------------------ |
-| `0x0sky`       | 75973992   | `0x0sky@aiaiaiai.org`               |
-| `x0skai`       | 300452669  | `x0skai@aiaiaiai.org`               |
+| `0x0sky`       | 75973992   | `0x0sky@aiaiaiai.org`                |
+| `x0skai`       | 300452669  | `x0skai@aiaiaiai.org`                |
 
 AI-tool co-authorship is separate from GitHub account credit. Credit only
 substantive work incorporated into the exact commit:
