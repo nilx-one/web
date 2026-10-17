@@ -112,6 +112,14 @@ One rule, no judgement calls:
 - Verify the actual message with `git log -1 --format=%B` before pushing; a
   missing mandatory Claude trailer blocks delivery until the commit is
   corrected. Preserve genuine agent trailers in the squash commit message.
+- **Squash merges:** GitHub makes the PR's author the squash commit's author.
+  Write the final message explicitly: keep genuine Claude and Codex co-author
+  trailers from the branch, plus credited account contributors (only for
+  incorporated work). Never repeat the squash author among its co-authors.
+  Verify the actual merged commit's author and trailer lines afterwards.
+- Never rewrite merged history, manufacture commits or change merge methods
+  to create credit. The commit-attribution check validates identities and
+  trailer format; it cannot prove a contribution happened.
 
 A Claude Code-authored commit must end with:
 
@@ -123,14 +131,6 @@ Co-authored-by: Claude <noreply@anthropic.com>
 
 Use one blank line before the trailer paragraph, with any additional
 co-authors on consecutive lines.
-- **Squash merges:** GitHub makes the PR's author the squash commit's author.
-  Write the final message explicitly: keep genuine Claude and Codex co-author
-  trailers from the branch, plus credited account contributors (only for
-  incorporated work). Never repeat the squash author among its co-authors.
-  Verify the actual merged commit's author and trailer lines afterwards.
-- Never rewrite merged history, manufacture commits or change merge methods
-  to create credit. The commit-attribution check validates identities and
-  trailer format; it cannot prove a contribution happened.
 
 ### Efficiency
 
