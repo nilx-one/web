@@ -267,6 +267,15 @@ export type MapSelectionMarkerFactory = (
   center: [longitude: number, latitude: number],
 ) => MapLabelMarker;
 
+/** A single geographic tap acknowledgement: no route or selection ownership. */
+export type MapTapFeedbackMarkerFactory = MapLabelMarkerFactory;
+export const TAP_FEEDBACK_LIFETIME_MS = 3_000;
+export const TAP_FEEDBACK_FADE_MS = 1_000;
+export const TAP_FEEDBACK_COLORS = {
+  bond: "#37d7e5",
+  avaia: "#9b6cfa",
+} as const;
+
 export interface MapLibreRenderer extends MapRenderer {
   readonly avatars: AvatarLayerContract;
 }
@@ -279,6 +288,7 @@ export interface MapLibreRendererOptions {
   readonly createMap?: MapFactory;
   readonly createLabelMarker?: MapLabelMarkerFactory;
   readonly createSelectionMarker?: MapSelectionMarkerFactory;
+  readonly createTapFeedbackMarker?: MapTapFeedbackMarkerFactory;
   readonly loadTimeoutMs?: number;
   /**
    * Whether this device has revealed the ground at a point. The composition
@@ -335,6 +345,72 @@ function createMapLibreSelectionMarker(
     setLngLat: (next) => marker.setLngLat(next),
     remove: () => marker.remove(),
   };
+}
+
+function createMapLibreTapFeedbackMarker(
+  map: MapLibreMap,
+  element: HTMLElement,
+  center: [longitude: number, latitude: number],
+): MapLabelMarker {
+  // The centre remains at the tapped geographic coordinate as the camera
+  // moves. Like collectible orbs, this bead lies in the map plane.
+  const marker = new Marker({
+    element,
+    anchor: "center",
+    pitchAlignment: "map",
+    rotationAlignment: "map",
+  })
+    .setLngLat(center)
+    .addTo(map);
+  return {
+    setLngLat: (next) => marker.setLngLat(next),
+    remove: () => marker.remove(),
+  };
+}
+
+function tapFeedbackElement(seat: "bond" | "avaia"): HTMLElement {
+  const element = globalThis.document.createElement("div");
+  const color = TAP_FEEDBACK_COLORS[seat];
+  element.className = "map-ground-tap-feedback";
+  element.dataset.seat = seat;
+  element.setAttribute("aria-hidden", "true");
+  element.style.position = "relative";
+  element.style.width = "28px";
+  element.style.height = "28px";
+  element.style.pointerEvents = "none";
+  element.style.opacity = "1";
+  element.style.transition = `opacity ${TAP_FEEDBACK_FADE_MS}ms ease-out`;
+
+  // Follow the collectible orb's visual language: a pale, luminous core
+  // inside a soft seat-colored halo, rather than a destination-pin outline.
+  const halo = globalThis.document.createElement("span");
+  halo.className = "map-ground-tap-feedback__halo";
+  halo.style.position = "absolute";
+  halo.style.inset = "0";
+  halo.style.borderRadius = "50%";
+  halo.style.backgroundColor = `${color}20`;
+  halo.style.backgroundImage = `radial-gradient(circle, ${color}80 0%, ${color}42 26%, transparent 72%)`;
+  halo.style.filter = "blur(2px)";
+  halo.style.pointerEvents = "none";
+
+  const orb = globalThis.document.createElement("span");
+  orb.className = "map-ground-tap-feedback__orb";
+  orb.style.position = "absolute";
+  orb.style.left = "50%";
+  orb.style.top = "50%";
+  orb.style.transform = "translate(-50%, -50%)";
+  orb.style.width = "10px";
+  orb.style.height = "10px";
+  orb.style.boxSizing = "border-box";
+  orb.style.border = `1px solid ${color}`;
+  orb.style.borderRadius = "50%";
+  orb.style.backgroundColor = "#f2fdff";
+  orb.style.backgroundImage = `radial-gradient(circle at 30% 25%, #ffffff 0%, #f2fdff 29%, ${color} 100%)`;
+  orb.style.boxShadow = `0 0 4px ${color}b3, 0 0 10px ${color}80`;
+  orb.style.pointerEvents = "none";
+
+  element.append(halo, orb);
+  return element;
 }
 
 /**
@@ -424,6 +500,8 @@ export function createMapLibreRenderer(
     options.createLabelMarker ?? createMapLibreLabelMarker;
   const createSelectionMarker =
     options.createSelectionMarker ?? createMapLibreSelectionMarker;
+  const createTapFeedbackMarker =
+    options.createTapFeedbackMarker ?? createMapLibreTapFeedbackMarker;
   // The archive is opened on the first road tile asked for, not before.
   let archiveRoads: FetchRoadTile | undefined;
   const roadTiles = createRoadTileCache({
@@ -575,6 +653,14 @@ export function createMapLibreRenderer(
   let labelElement: HTMLElement | undefined;
   let selectionPoint: MapPointSelection | null = null;
   let selectionMarker: MapLabelMarker | undefined;
+  interface TapFeedbackEntry {
+    readonly marker: MapLabelMarker;
+    readonly element: HTMLElement;
+    readonly expiresAt: number;
+    fadeTimer?: ReturnType<typeof globalThis.setTimeout>;
+    removeTimer?: ReturnType<typeof globalThis.setTimeout>;
+  }
+  const tapFeedbackEntries: TapFeedbackEntry[] = [];
   let fogMarks: readonly MapFogMark[] = [];
   let fogPulseFrame: number | undefined;
   let pinnedLandmarks: readonly MapPinnedLandmark[] = [];
@@ -1416,6 +1502,41 @@ export function createMapLibreRenderer(
     selectionMarker = undefined;
   }
 
+  function releaseTapFeedback(entry: TapFeedbackEntry): void {
+    if (entry.fadeTimer !== undefined) {
+      globalThis.clearTimeout(entry.fadeTimer);
+    }
+    if (entry.removeTimer !== undefined) {
+      globalThis.clearTimeout(entry.removeTimer);
+    }
+    entry.marker.remove();
+    const index = tapFeedbackEntries.indexOf(entry);
+    if (index !== -1) tapFeedbackEntries.splice(index, 1);
+  }
+
+  function fadeTapFeedback(entry: TapFeedbackEntry): void {
+    if (entry.fadeTimer !== undefined) {
+      globalThis.clearTimeout(entry.fadeTimer);
+    }
+    if (entry.element.style.opacity === "0") return;
+    entry.element.style.opacity = "0";
+    if (entry.removeTimer !== undefined) {
+      globalThis.clearTimeout(entry.removeTimer);
+    }
+    // A second tap accelerates the previous fade, but can never extend the
+    // original three-second lifetime.
+    const now = globalThis.performance.now();
+    const remaining = Math.max(0, entry.expiresAt - now);
+    entry.removeTimer = globalThis.setTimeout(
+      () => releaseTapFeedback(entry),
+      Math.min(TAP_FEEDBACK_FADE_MS, remaining),
+    );
+  }
+
+  function clearTapFeedback(): void {
+    for (const entry of [...tapFeedbackEntries]) releaseTapFeedback(entry);
+  }
+
   return {
     avatars,
     systemDrone,
@@ -1676,6 +1797,7 @@ export function createMapLibreRenderer(
       stopOrbFall();
       releaseLabel();
       releaseSelectionMarker();
+      clearTapFeedback();
       releasePinnedLabels();
       map?.remove();
       map = undefined;
@@ -1722,6 +1844,37 @@ export function createMapLibreRenderer(
     subscribeGroundTap(listener) {
       groundTapListeners.add(listener);
       return () => groundTapListeners.delete(listener);
+    },
+
+    showGroundTapFeedback(point, seat) {
+      if (map === undefined || !validPoint(point)) return;
+
+      // At most one current mark and one outgoing mark. Faster repeated taps
+      // never accumulate markers or leave their timers behind.
+      for (const entry of [...tapFeedbackEntries]) fadeTapFeedback(entry);
+      while (tapFeedbackEntries.length >= 2) {
+        releaseTapFeedback(tapFeedbackEntries[0]!);
+      }
+
+      const element = tapFeedbackElement(seat);
+      const marker = createTapFeedbackMarker(map, element, [
+        point.longitude,
+        point.latitude,
+      ]);
+      const entry: TapFeedbackEntry = {
+        marker,
+        element,
+        expiresAt: globalThis.performance.now() + TAP_FEEDBACK_LIFETIME_MS,
+      };
+      tapFeedbackEntries.push(entry);
+      entry.fadeTimer = globalThis.setTimeout(
+        () => fadeTapFeedback(entry),
+        TAP_FEEDBACK_LIFETIME_MS - TAP_FEEDBACK_FADE_MS,
+      );
+      entry.removeTimer = globalThis.setTimeout(
+        () => releaseTapFeedback(entry),
+        TAP_FEEDBACK_LIFETIME_MS,
+      );
     },
 
     landmarksNear(point, radiusMeters) {

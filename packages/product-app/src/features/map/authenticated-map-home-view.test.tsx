@@ -2386,6 +2386,10 @@ describe("AuthenticatedMapHomeView", () => {
           }
         ).tapGround({ ...there, ground: "open" }),
       );
+      expect(mapRenderer.showGroundTapFeedback).toHaveBeenCalledWith(
+        there,
+        "bond",
+      );
       vi.mocked(mapRenderer.setObservedPosition).mockClear();
       vi.mocked(mapRenderer.setObservedPositionLabel).mockClear();
       act(() => vi.advanceTimersByTime(1_000));
@@ -2440,6 +2444,19 @@ describe("AuthenticatedMapHomeView", () => {
       );
       return mapRenderer;
     }
+
+    it("marks an Avaia ground tap in her own violet, without consuming the tap", async () => {
+      const mapRenderer = await renderWorld();
+      const point = {
+        longitude: here.longitude + 0.0002,
+        latitude: here.latitude,
+      };
+      act(() => mapRenderer.tapGround({ ...point, ground: "building" }));
+      expect(mapRenderer.showGroundTapFeedback).toHaveBeenCalledWith(
+        point,
+        "avaia",
+      );
+    });
 
     const voice = avaiaStudy("x0skai", "dasha-study");
     const lastLabel = (mapRenderer: MapRenderer) =>

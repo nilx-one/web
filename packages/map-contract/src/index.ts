@@ -590,6 +590,15 @@ export interface MapRenderer {
    */
   subscribeGroundTap?(listener: (tap: MapGroundTap) => void): () => void;
   /**
+   * Ephemeral geographic tap acknowledgement, colored by the current driver.
+   * This is display-only: not a waypoint, selection, position observation,
+   * route decision, Interaction or BondChain entry.
+   */
+  showGroundTapFeedback?(
+    point: MapPointSelection,
+    seat: "bond" | "avaia",
+  ): void;
+  /**
    * The landmarks the basemap carries within a radius of a point, nearest
    * first. It reads tiles already loaded, for the current view or read ahead
    * by `preloadLandmarks`, and nothing else: no request is made on its

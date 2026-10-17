@@ -61,6 +61,28 @@ The **card** and the body take turns. Closer than street scale the body is on th
 
 One number decides which of the two is on the world, and the map contract publishes it. The renderer hides the card by it and the application draws the body by it, so the turn is a single fact rather than two that could drift into a width showing both or neither.
 
+## Ground-tap acknowledgement
+
+A tap on the world, where neither an editor nor a body owns the gesture, adds
+one small **luminous bead** at the tapped geographic coordinate — never a
+destination pin or hollow target ring. It borrows the collectible orb's palette:
+a pale `#f2fdff` pearl core, a brighter coloured rim, and a diffused halo.
+The hue follows the current driver's Dock identity: Bond cyan (`#37d7e5`) or
+Avaia violet (`#9b6cfa`). Like the collectible orbs it is aligned to the
+map plane, stays anchored to the geographic point as the camera moves, and
+does not capture pointer input.
+
+The most recent bead lasts **at most three seconds**. It begins fading after
+2 seconds and is removed at three seconds. A second tap immediately fades
+the previous bead over one second and draws a fresh one. Only the active bead and
+one outgoing bead may coexist; repeated rapid taps cannot accumulate markers
+or timers. Changing the wheel does not recolor a previous tap.
+
+This is a local acknowledgement, not a route destination, selected location,
+Bond position, verified presence, counterpart acceptance, Interaction,
+BondChain event or Relationship state. Ground-tap listeners retain their
+existing navigation and fog behavior.
+
 ## Pinned landmarks
 
 A short, hand-seeded list of Kyiv's anchors is pinned on the world the way this device's own position is: a point lying flat on the ground, a soft halo around it, and a card over it (`setPinnedLandmarks`, drawn by `pinned-landmarks.ts` in `map-maplibre`). The seed lives in the product (`KYIV_PINNED_LANDMARKS`), at each landmark's real coordinates, with its name in the locale catalog. These are real places at the points they stand on, not geometry invented to imitate a reference image, and like the observed position they are presentation only.
