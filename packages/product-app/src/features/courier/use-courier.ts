@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  BusinessPoint,
   CoreRuntimePort,
   CourierDirectoryPort,
   CourierPlan,
@@ -15,7 +16,7 @@ import { prefersReducedMotion } from "../../shell/motion";
 export function useCourier(input: {
   renderer: MapRenderer;
   origin: MapPointSelection | undefined;
-  core: Pick<CoreRuntimePort, "planCourier"> | undefined;
+  core: Pick<CoreRuntimePort, "courierDestination"> | undefined;
   directory: CourierDirectoryPort | undefined;
   suspended: boolean;
 }) {
@@ -57,7 +58,7 @@ export function useCourier(input: {
     if (
       !directory ||
       !origin ||
-      (!core?.planCourier && !directory.previewPlan)
+      (!core?.courierDestination && !directory.previewDestination)
     ) {
       setError(true);
       return;
@@ -67,27 +68,27 @@ export function useCourier(input: {
     setBusy(true);
     setError(false);
     try {
-      const projection = await directory.destinations();
+      const projection = await directory.points();
       if (ticket !== generation.current) return;
-      const request = {
-        ...projection,
-        tier: offer,
-        origin: courierCoordinate(origin),
-        started_at_ms: String(Date.now()),
-      };
-      let next: CourierPlan;
+      const from = courierCoordinate(origin);
+      let destination: BusinessPoint;
       try {
-        if (!core?.planCourier) throw new CourierCapabilityUnavailable();
-        next = await core.planCourier(request);
+        if (!core?.courierDestination) throw new CourierCapabilityUnavailable();
+        destination = await core.courierDestination(from, projection);
       } catch (failure) {
         if (
           !(failure instanceof CourierCapabilityUnavailable) ||
-          !directory.previewPlan
+          !directory.previewDestination
         )
           throw failure;
-        next = directory.previewPlan(request);
+        destination = directory.previewDestination(from, projection);
       }
       if (ticket !== generation.current) return;
+      const next: CourierPlan = {
+        origin: from,
+        destination,
+        started_at_ms: String(Date.now()),
+      };
       setPlan(next);
       setOffer(undefined);
       start({

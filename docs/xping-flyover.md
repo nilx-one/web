@@ -10,10 +10,10 @@ Web carries it out (`features/flyover`).
 where the Bond and its Avaia stand, `to` the business station the
 subscription concerns. Only Agreed in the Exclusive or Special subscription
 cutscene may call it. The courier offer in Settings calls this same hook
-after a destination has been resolved. Core does not export a destination
-planner yet, so the built-in Kyiv game catalog's explicit preview is the path
-that runs; a future `courier_plan` binding would take precedence once Core
-defines it. External directories without a preview report route unavailability.
+after Core's `courier_destination` has chosen a BusinessPoint. On a runtime
+without that export, the built-in Kyiv catalog's explicit preview chooses
+instead; malformed Core output and other failures stay failures. External
+directories without a preview report route unavailability.
 
 ## Courier integration
 
@@ -24,8 +24,8 @@ flight or straight-line animation in the courier feature.
 
 `progress` reports the actual route's remaining duration and current point.
 Only `arrivedAt`, emitted by the flight reaching its end, enables the
-activity's completion mark. Core's preliminary straight-line estimate is
-not used for the visible countdown or completion. Leaving clears progress
+activity's completion mark. Choosing the destination yields no estimate:
+nothing but the flight drives the visible progress or completion. Leaving clears progress
 without reporting success. During route loading (and the static reduced
 motion preview), no arrival is inferred from elapsed wall-clock time.
 

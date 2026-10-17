@@ -272,10 +272,15 @@ export {
 } from "./pub-dress-url";
 
 export {
-  decodeCourierPlan,
-  type CourierPlan,
-  type CourierRequest,
-  type CourierDirectoryPort,
+  courierDestinationRequest,
+  courierPointId,
+  decodeCourierDestination,
+  validBusinessPointId,
+  type BusinessPoint,
+  type BusinessPointId,
+  type BusinessPointProjection,
   type CourierCoordinate,
-  type CourierDestination,
+  type CourierDestinationRequest,
+  type CourierDirectoryPort,
+  type CourierPlan,
 } from "./courier";

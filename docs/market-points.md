@@ -1,15 +1,28 @@
 # 0xda-market · Kyiv map points
 
-These 22 author-requested game destinations are drawn as labelled points, with
-no shop or stationed-Avaia model. They are not registered businesses, verified
-BusinessPoints, proof of ownership, visits, purchases or subscription providers.
-Real landmarks are navigation anchors for fictional 0xda-market destinations.
-Coordinates are approximate site anchors, not surveyed entrances.
+These 22 author-requested points are **unverified BusinessPoints** of the
+0xda-market BBond (0x1 `13-business-bonds-and-presence.md`), seeded for a local
+preview with `isVerified: false` and drawn as labelled points, with no shop or
+stationed-Avaia model. They are not registered businesses, verified listings,
+proof of ownership, visits, purchases or subscription providers. Real landmarks
+are navigation anchors; coordinates are approximate site anchors, not surveyed
+entrances.
 
-`features/courier/market-points.ts` is the single list used by both map pins and
-the courier directory. IDs are stable; the original two retain their legacy
-station addresses. Built-in points do not populate the business-station API.
-Other business owners' station models continue to work.
+`features/courier/market-points.ts` holds the one BusinessPoint record per
+point, used by the map pins and as the courier destination; there is no
+separate destination entity. Each point's ID is `{ owner_pub_dress:
+"0xda-market", number }`, its `UInt8` number following the table order below
+(Золоті Ворота is 0, вул. Чорних Запорожців 21). Numbers are allocated once and
+never reassigned; a new point takes the next one. The point `pub_dress` is the
+seeded constant `0xda-market-<place>`, not derived by Web: point-address
+derivation waits for Core's address contract.
+
+Before this model the same points were referenced as `0xda-market-<place>`.
+That reference is now each point's seeded `pub_dress`, and
+`LEGACY_MARKET_POINT_NUMBERS` maps it explicitly to the stable number. Nothing
+persisted the old reference. Map pins are keyed by the BusinessPoint ID.
+Built-in points do not populate the business-station API, and other business
+owners' station models continue to work.
 
 | Point                      | Latitude, longitude | Placement source                                                                                                                           |
 | -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -46,14 +59,16 @@ stable game ID retains the original spelling.
 
 ## Dispatch and old runtimes
 
-Only agreement in the Exclusive/Special offer dispatches xPing. No Core release
-exports a courier selector yet: `courier_plan` and its wire shape are a Web-side
-target until Core defines the contract (0x1
-[xPing courier](https://github.com/nilx-one/0x1/blob/master/documents/product-direction/xping-courier.md)).
-Web detects the binding only so that a future Core can take over; today the
-built-in directory's presentation-only preview always chooses, using the
-renderer contract's existing distance function and stable ID tie breaking.
-This preview always uses this fixed list, never arbitrary incoming candidates.
+Only agreement in the Exclusive/Special offer dispatches xPing. Core's
+[`courier_destination`](https://github.com/nilx-one/core/blob/master/docs/courier-destination.md)
+chooses the nearest point: Web sends the trip's origin and the projection's
+points as `{ point_id, coordinate }`, with `point_id` the zero-padded point
+number (`"000"`–`"255"`) within the one owner, and maps the answer back to that
+BusinessPoint. The selector owns no tier, flight time or arrival. On a runtime
+without the export, the built-in directory's presentation-only preview chooses
+the same way (nearest, then smallest number), using the renderer contract's
+distance function. This preview always uses this fixed list, never arbitrary
+incoming candidates.
 It is used only for an absent binding, not malformed Core output or service
 errors. An external directory without a preview still requires Core.
 
