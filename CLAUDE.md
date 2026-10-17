@@ -82,14 +82,20 @@ different from the earlier check.
 
 One rule, no judgement calls:
 
-| Who                 | Identity in Git                                     |
-| ------------------- | --------------------------------------------------- |
-| Claude Code (agent) | `x0skai <x0skai@aiaiaiai.org>`                      |
-| Account owner       | `0x0sky <75973992+0x0sky@users.noreply.github.com>` |
+| Who                 | Identity in Git                    |
+| ------------------- | ---------------------------------- |
+| Claude Code (agent) | `x0skai <x0skai@aiaiaiai.org>`     |
+| Account owner       | `0x0sky <0x0sky@aiaiaiai.org>`     |
 
 - **Claude Code commits only as `x0skai <x0skai@aiaiaiai.org>`**, as author
   and committer. That is the session's git identity; never override it, and
   never commit as `0x0sky`.
+- **The account owner commits as `0x0sky <0x0sky@aiaiaiai.org>`** when acting
+  through the `0x0sky` account. GitHub ID-based noreply addresses are
+  historical only, not accepted for new account author/committer/co-author
+  metadata. If an API connector overrides the verified email, do not pass
+  the commit off as canonical; use a Git-capable transport or leave the PR
+  blocked until one is available.
 - **End every Claude Code commit with**
   `Co-authored-by: Claude <noreply@anthropic.com>` whenever Claude wrote any
   of it. Add `Co-authored-by: Codex <codex@openai.com>` only when Codex

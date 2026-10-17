@@ -181,10 +181,10 @@ deployment results without evidence from the corresponding operation.
 Commit as the GitHub account that actually did the work, identified by its
 account ID:
 
-| GitHub account | Account ID | Git author (ID-based noreply)               |
-| -------------- | ---------- | ------------------------------------------- |
-| `0x0sky`       | 75973992   | `75973992+0x0sky@users.noreply.github.com`  |
-| `x0skai`       | 300452669  | `300452669+x0skai@users.noreply.github.com` |
+| GitHub account | Account ID | Canonical author and committer email |
+| -------------- | ---------- | ------------------------------------ |
+| `0x0sky`       | 75973992   | `0x0sky@aiaiaiai.org`               |
+| `x0skai`       | 300452669  | `x0skai@aiaiaiai.org`               |
 
 AI-tool co-authorship is separate from GitHub account credit. Credit only
 substantive work incorporated into the exact commit:
@@ -200,7 +200,7 @@ co-authors when that tool did not contribute to the commit.
 
 Rules:
 
-- Add the other account as `Co-authored-by: <login> <<ID>+<login>@users.noreply.github.com>`
+- Add the other account as `Co-authored-by: <login> <login@aiaiaiai.org>`
   only when it contributed code, tests, documentation or an incorporated patch
   to that exact commit. A review, approval, prompt or account ownership alone
   does not qualify.
@@ -209,10 +209,17 @@ Rules:
 - Never add the primary author as its own co-author, and never duplicate a
   trailer.
 - Put trailers in the final paragraph of the commit message, one per line.
+- Both author and committer identities belonging to these accounts use their
+  verified `@aiaiaiai.org` address for every new source commit. The platform-
+  managed `web-flow <noreply@github.com>` committer on GitHub squash merges
+  is not the account author's email and is not a substitute for it.
+- Legacy GitHub ID-based noreply addresses remain historical identifiers only;
+  never use them in new account author, committer or co-author metadata.
 - Never label a commit as an unknown author to avoid this rule. If the connected
-  GitHub API cannot author as the correct account, commit from a shell with the
-  correct repository-local identity. If no such shell exists, state the
-  limitation in the PR and do not claim the attribution.
+  GitHub API cannot author using the canonical email, use a Git-capable shell
+  with the correct repository-local author and committer identity. If no such
+  transport exists, keep the PR blocked, state the limitation, and do not
+  misrepresent the actual commit metadata or relax validation.
 - The commit-attribution check validates identities, trailer format, and
   duplicate or self credit. It cannot prove that a contribution happened; the
   author and reviewers establish that.

@@ -13,6 +13,23 @@ ZERO, OTHER = module.ACCOUNTS["0x0sky"], module.ACCOUNTS["x0skai"]
 
 
 class AttributionTests(unittest.TestCase):
+    def test_canonical_account_addresses(self):
+        self.assertEqual(ZERO, "0x0sky@aiaiaiai.org")
+        self.assertEqual(OTHER, "x0skai@aiaiaiai.org")
+
+    def test_legacy_noreply_author_and_committer_are_rejected(self):
+        for legacy in module.LEGACY_ACCOUNTS:
+            self.assertTrue(module.validate(legacy, "fix: example\n"))
+            self.assertTrue(module.validate(ZERO, "fix: example\n", legacy))
+
+    def test_platform_managed_squash_committer_is_not_an_account_address(self):
+        self.assertEqual(module.validate(ZERO, "fix: example\n", "noreply@github.com"), [])
+
+    def test_old_noreply_coauthor_is_rejected(self):
+        for old, name in module.LEGACY_ACCOUNTS.items():
+            message = f"fix: example\n\nCo-authored-by: {name} <{old}>\n"
+            self.assertTrue(module.validate(OTHER if name == "0x0sky" else ZERO, message))
+
     def test_solo_account_needs_no_tool_credit(self):
         self.assertEqual(module.validate(ZERO, "fix: example\n"), [])
 
