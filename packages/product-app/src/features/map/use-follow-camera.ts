@@ -427,9 +427,11 @@ export function useFollowCamera({
       event.preventDefault();
       // Y leaves Free for Follow. It never re-enters Isometric: that mode
       // is an explicit on-screen selection after the opening default.
-      if (command === "toggle" && followRef.current !== "free")
+      if (command === "toggle" && followRef.current !== "free") {
         choose("free");
-      else center();
+      } else {
+        center();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
