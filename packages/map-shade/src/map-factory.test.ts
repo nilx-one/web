@@ -98,7 +98,7 @@ const { FakeMap } = vi.hoisted(() => {
     /** Tiles in flight keep MapLibre's isStyleLoaded() false. */
     tilesLoading = false;
     styleMetadata: Record<string, unknown> | undefined = undefined;
-    styleLayers: { id: string; type: string }[] = [
+    styleLayers: { id: string; type: string; maxzoom?: number }[] = [
       { id: "background", type: "background" },
       { id: "roads", type: "line" },
       { id: "place-labels", type: "symbol" },
@@ -133,7 +133,7 @@ const { FakeMap } = vi.hoisted(() => {
 
     getStyle():
       | {
-          layers: { id: string; type: string }[];
+          layers: { id: string; type: string; maxzoom?: number }[];
           metadata?: Record<string, unknown>;
         }
       | undefined {
@@ -278,6 +278,25 @@ describe("shade map factory", () => {
     // takes over. Both fog layers are local-only presentation.
     expect(map.layers.get(WORLD_LAYER_ID)).toMatchObject({ minzoom: 8 });
     expect(map.layers.get(SHADE_LAYER_ID)).toMatchObject({ minzoom: 8 });
+  });
+
+  it("stays over the local ground when the country overview labels come first", async () => {
+    // The published style: the overview's country names end at zoom 7 and
+    // sit under the whole local basemap. Fog under them is buried.
+    const map = build(fakeRuntime([]));
+    map.styleLayers = [
+      { id: "background", type: "background" },
+      { id: "world-land", type: "fill" },
+      { id: "world-country-label", type: "symbol", maxzoom: 7 },
+      { id: "earth", type: "fill" },
+      { id: "buildings", type: "fill-extrusion" },
+      { id: "water-labels", type: "symbol" },
+    ];
+    await settle();
+    expect(map.addLayerCalls).toEqual([
+      { id: WORLD_LAYER_ID, before: "water-labels" },
+      { id: SHADE_LAYER_ID, before: "water-labels" },
+    ]);
   });
 
   it("fogs the whole Earth beyond the atlas, holed only where it was revealed", async () => {
