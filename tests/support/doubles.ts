@@ -97,6 +97,7 @@ export function createMapRendererDouble(
     setDimension: vi.fn(),
     setObservedPosition: vi.fn(),
     setObservedPositionLabel: vi.fn(),
+    showGroundTapFeedback: vi.fn(),
     setPinnedLandmarks: vi.fn(),
     moveCamera(next, gesture) {
       camera = next;

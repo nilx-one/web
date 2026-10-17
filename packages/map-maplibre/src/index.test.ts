@@ -18,6 +18,9 @@ import {
   MAP_OPENING_FLIGHT_MS,
   MAP_STYLE_URL,
   MAP_STYLE_URLS,
+  TAP_FEEDBACK_COLORS,
+  TAP_FEEDBACK_FADE_MS,
+  TAP_FEEDBACK_LIFETIME_MS,
   TERRAIN_EXAGGERATION,
   TERRAIN_SOURCE_ID,
   OBSERVED_POSITION_ACCURACY_LAYER_ID,
@@ -641,6 +644,100 @@ describe("observed position label", () => {
     renderer.setObservedPositionLabel({ title: "0x0sky" });
 
     expect(markers).toHaveLength(0);
+  });
+});
+
+describe("transient ground-tap feedback", () => {
+  it("uses Bond cyan and Avaia violet, fading the previous tap on a second tap", () => {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      createTapFeedbackMarker: createLabelMarker,
+    });
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    vi.useFakeTimers();
+    try {
+      renderer.showGroundTapFeedback?.(
+        { longitude: 30.5234, latitude: 50.4501 },
+        "bond",
+      );
+      expect(markers).toHaveLength(1);
+      expect(markers[0]?.center).toEqual([30.5234, 50.4501]);
+      expect(markers[0]?.element.dataset.seat).toBe("bond");
+      const firstOrb = markers[0]?.element.querySelector<HTMLElement>(
+        ".map-ground-tap-feedback__orb",
+      );
+      const firstHalo = markers[0]?.element.querySelector<HTMLElement>(
+        ".map-ground-tap-feedback__halo",
+      );
+      expect(firstOrb?.style.backgroundColor).toBe("rgb(242, 253, 255)");
+      expect(firstOrb?.style.borderColor).toBe("rgb(55, 215, 229)");
+      expect(firstHalo?.style.filter).toBe("blur(2px)");
+      expect(TAP_FEEDBACK_COLORS.bond).toBe("#37d7e5");
+
+      vi.advanceTimersByTime(1_000);
+      renderer.showGroundTapFeedback?.(
+        { longitude: 30.524, latitude: 50.451 },
+        "avaia",
+      );
+      expect(markers).toHaveLength(2);
+      expect(markers[0]?.element.style.opacity).toBe("0");
+      expect(markers[0]?.removed).toBe(false);
+      expect(markers[1]?.center).toEqual([30.524, 50.451]);
+      expect(markers[1]?.element.dataset.seat).toBe("avaia");
+      const secondOrb = markers[1]?.element.querySelector<HTMLElement>(
+        ".map-ground-tap-feedback__orb",
+      );
+      expect(secondOrb?.style.borderColor).toBe("rgb(155, 108, 250)");
+      expect(markers[1]?.element.style.borderStyle).toBe("");
+      expect(TAP_FEEDBACK_COLORS.avaia).toBe("#9b6cfa");
+
+      vi.advanceTimersByTime(TAP_FEEDBACK_FADE_MS);
+      expect(markers[0]?.removed).toBe(true);
+      expect(markers[1]?.removed).toBe(false);
+      vi.advanceTimersByTime(
+        TAP_FEEDBACK_LIFETIME_MS - TAP_FEEDBACK_FADE_MS * 2,
+      );
+      expect(markers[1]?.element.style.opacity).toBe("0");
+      expect(markers[1]?.removed).toBe(false);
+      vi.advanceTimersByTime(TAP_FEEDBACK_FADE_MS);
+      expect(markers[1]?.removed).toBe(true);
+    } finally {
+      renderer.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds rapid taps to two markers and clears pending fades on unmount", () => {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      createTapFeedbackMarker: createLabelMarker,
+    });
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    vi.useFakeTimers();
+    try {
+      const point = { longitude: 30.5234, latitude: 50.4501 };
+      renderer.showGroundTapFeedback?.(point, "bond");
+      renderer.showGroundTapFeedback?.(point, "bond");
+      renderer.showGroundTapFeedback?.(point, "bond");
+      expect(markers).toHaveLength(3);
+      expect(markers[0]?.removed).toBe(true);
+      expect(markers[1]?.element.style.opacity).toBe("0");
+      expect(markers[2]?.removed).toBe(false);
+
+      renderer.unmount();
+      expect(markers[1]?.removed).toBe(true);
+      expect(markers[2]?.removed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      renderer.unmount();
+      vi.useRealTimers();
+    }
   });
 });
 
