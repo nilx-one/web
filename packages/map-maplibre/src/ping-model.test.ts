@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { AVATAR_MODEL_IDS } from "@nilx-one/map-contract";
-import { Box3, Mesh } from "three";
+import { Box3, Mesh, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import { createPingModel } from "./ping-model";
-import { createAvatarLayer } from "./avatar-layer";
+import { bodyOrientation, createAvatarLayer } from "./avatar-layer";
 
 describe("xPing system prop", () => {
   it("has actual bounded 3D geometry and deterministic reduced motion", () => {
@@ -54,5 +54,26 @@ describe("xPing system prop", () => {
     layer.remove("system:xPing");
     expect(layer.hasInstances()).toBe(false);
     layer.dispose();
+  });
+  it("leans its nose down and banks its right side down", () => {
+    // Mercator: x east, y south, z up.
+    const nose = (q: ReturnType<typeof bodyOrientation>) =>
+      new Vector3(0, 0, 1).applyQuaternion(q);
+    const right = (q: ReturnType<typeof bodyOrientation>) =>
+      new Vector3(1, 0, 0).applyQuaternion(q);
+    const level = bodyOrientation(0);
+    expect(nose(level).y).toBeCloseTo(-1);
+    expect(nose(level).z).toBeCloseTo(0);
+    expect(right(level).x).toBeCloseTo(1);
+    expect(nose(bodyOrientation(90)).x).toBeCloseTo(1);
+    expect(nose(bodyOrientation(0, 0, 20)).z).toBeLessThan(-0.3);
+    expect(nose(bodyOrientation(0, 0, 20)).y).toBeLessThan(-0.9);
+    expect(right(bodyOrientation(0, 0, 0, 30)).z).toBeLessThan(-0.45);
+    expect(right(bodyOrientation(0, 0, 0, -30)).z).toBeGreaterThan(0.45);
+    // A turn east still banks the side on its right: the south.
+    expect(right(bodyOrientation(90, 0, 0, 30))).toMatchObject({
+      y: expect.closeTo(0.866, 2),
+      z: expect.closeTo(-0.5, 2),
+    });
   });
 });

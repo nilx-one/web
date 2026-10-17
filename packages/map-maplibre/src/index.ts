@@ -30,6 +30,7 @@ import {
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapOrb,
+  type MapRoute,
   type MapPinnedLandmark,
   type MapPointSelection,
   type MapRenderer,
@@ -106,6 +107,14 @@ import {
   orbsLayers,
   orbsSource,
 } from "./orb-layer";
+import {
+  ROUTE_CASING_LAYER_ID,
+  ROUTE_LINE_LAYER_ID,
+  ROUTE_SOURCE_ID,
+  routeData,
+  routeLayers,
+  routeSource,
+} from "./route-layer";
 import {
   PINNED_LANDMARKS_GLOW_LAYER_ID,
   PINNED_LANDMARKS_POINT_LAYER_ID,
@@ -556,6 +565,7 @@ export function createMapLibreRenderer(
   let fogPulseFrame: number | undefined;
   let pinnedLandmarks: readonly MapPinnedLandmark[] = [];
   let orbs: readonly MapOrb[] = [];
+  let route: MapRoute | null = null;
   let orbFallFrame: number | undefined;
   const pinnedLabels = new Map<
     string,
@@ -1129,6 +1139,44 @@ export function createMapLibreRenderer(
     }
   }
 
+  function applyRoute(mounted: MapLibreMap): void {
+    if (route === null) {
+      for (const layerId of [ROUTE_LINE_LAYER_ID, ROUTE_CASING_LAYER_ID]) {
+        if (mounted.getLayer(layerId) !== undefined)
+          mounted.removeLayer(layerId);
+      }
+      if (mounted.getSource(ROUTE_SOURCE_ID) !== undefined) {
+        mounted.removeSource(ROUTE_SOURCE_ID);
+      }
+      return;
+    }
+    const source = mounted.getSource(ROUTE_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    if (source === undefined) {
+      mounted.addSource(
+        ROUTE_SOURCE_ID,
+        routeSource(route) as unknown as SourceSpecification,
+      );
+    } else {
+      source.setData(
+        routeData(route) as Parameters<GeoJSONSource["setData"]>[0],
+      );
+    }
+    // Over the ground and the roofs it crosses, beneath the pins and the
+    // Bond's own marker.
+    const before = [
+      ORBS_GLOW_LAYER_ID,
+      PINNED_LANDMARKS_GLOW_LAYER_ID,
+      OBSERVED_POSITION_CELL_LAYER_ID,
+      OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
+    ].find((id) => mounted.getLayer(id) !== undefined);
+    for (const layer of routeLayers()) {
+      if (mounted.getLayer(String(layer.id)) === undefined) {
+        mounted.addLayer(layer as unknown as LayerSpecification, before);
+      }
+    }
+  }
+
   function ensureAvatarLayer(mounted: MapLibreMap): void {
     if (avatarLayer === undefined) return;
     if (mounted.getLayer(avatarLayer.id) !== undefined) return;
@@ -1144,6 +1192,7 @@ export function createMapLibreRenderer(
   function applyPresentation(mounted: MapLibreMap): void {
     applyDimension(mounted);
     applyFogMarks(mounted);
+    applyRoute(mounted);
     applyOrbs(mounted);
     applyPinnedLandmarks(mounted);
     applyObservedPosition(mounted);
@@ -1919,6 +1968,14 @@ export function createMapLibreRenderer(
     setOrbs(next: readonly MapOrb[]) {
       orbs = next.map((orb) => ({ ...orb }));
       if (map !== undefined && presentationApplied) applyOrbs(map);
+    },
+
+    setRoute(next: MapRoute | null) {
+      route =
+        next === null
+          ? null
+          : { points: next.points.map(([lng, lat]) => [lng, lat] as const) };
+      if (map !== undefined && presentationApplied) applyRoute(map);
     },
   };
 }

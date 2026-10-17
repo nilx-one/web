@@ -25,10 +25,12 @@ import {
 import {
   AnimationMixer,
   DirectionalLight,
+  Euler,
   HemisphereLight,
   Matrix4,
   Object3D,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   WebGLRenderer,
   type AnimationClip,
@@ -78,6 +80,11 @@ const GLTF_NODE_NAME = "gltfNodeName";
 type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly modelId: AvatarModelId | "system-ping";
   readonly reducedMotion?: boolean;
+  /** Metres above the drawn ground, for a prop that flies. */
+  readonly liftMeters?: number;
+  /** Banking and leaning in the model's own frame, in degrees. */
+  readonly rollDeg?: number;
+  readonly pitchDeg?: number;
 };
 interface AvatarInstance {
   backpack?: Object3D;
@@ -95,6 +102,37 @@ interface AvatarInstance {
       }
     | undefined;
   loadGeneration: number;
+}
+
+/**
+ * How a body is turned in Mercator's Z-up frame. glTF is Y-up, so it is
+ * rotated upright, then turned to its bearing. The studies face glTF +Z,
+ * which lands on Mercator north; Mercator's y grows southward, so a positive
+ * turn about its Z axis is clockwise on the ground, as a compass reads.
+ * Leaning and banking happen in the model's own frame, facing +Z with +Y up
+ * and its +X on the east when it faces north: a positive pitch lowers the
+ * nose, a positive roll lowers that +X side, the right one on the ground.
+ */
+export function bodyOrientation(
+  bearingDeg: number,
+  terrainPitchRadians = 0,
+  pitchDeg = 0,
+  rollDeg = 0,
+): Quaternion {
+  const orientation = new Quaternion().setFromEuler(
+    new Euler(
+      Math.PI / 2 + terrainPitchRadians,
+      0,
+      (bearingDeg * Math.PI) / 180,
+      "ZXY",
+    ),
+  );
+  if (pitchDeg === 0 && rollDeg === 0) return orientation;
+  return orientation.multiply(
+    new Quaternion().setFromEuler(
+      new Euler((pitchDeg * Math.PI) / 180, 0, (-rollDeg * Math.PI) / 180),
+    ),
+  );
 }
 
 export interface AvatarCustomLayer
@@ -329,7 +367,8 @@ export function createAvatarLayer(
     // ground MapLibre actually draws". An explicit altitude remains absolute
     // metres above sea level and is never silently offset by terrain.
     const altitude =
-      instance.handle.altitudeMeters ?? terrainAltitude(instance);
+      instance.handle.altitudeMeters ??
+      terrainAltitude(instance) + (instance.handle.liftMeters ?? 0);
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
       altitude,
@@ -341,20 +380,18 @@ export function createAvatarLayer(
       (coordinate.z - origin.z) / origin.metres,
     );
     root.scale.setScalar((metres / origin.metres) * scale);
-    // glTF is Y-up. Rotate it into Mercator's Z-up frame, then apply bearing.
-    // The studies face glTF +Z, which lands on Mercator north; Mercator's y
-    // grows southward, so a positive turn about its Z axis is clockwise on the
-    // ground — the same sense a compass bearing turns in.
     const terrainPitch =
       instance.handle.altitudeMeters === undefined &&
       instance.handle.modelId !== "system-ping"
         ? terrainBodyPitchRadians(map, lngLat, bearingDeg)
         : 0;
-    root.rotation.set(
-      Math.PI / 2 + terrainPitch,
-      0,
-      (bearingDeg * Math.PI) / 180,
-      "ZXY",
+    root.quaternion.copy(
+      bodyOrientation(
+        bearingDeg,
+        terrainPitch,
+        instance.handle.pitchDeg,
+        instance.handle.rollDeg,
+      ),
     );
     root.visible = instance.handle.visible;
     root.updateMatrixWorld(true);
@@ -501,7 +538,12 @@ export function createAvatarLayer(
         bearingDeg: handle.bearingDeg,
         clipId: "idle",
         clipPhase: handle.phase,
-        scale: 1,
+        scale: handle.scale ?? 1,
+        ...(handle.heightMeters === undefined
+          ? {}
+          : { liftMeters: handle.heightMeters }),
+        ...(handle.rollDeg === undefined ? {} : { rollDeg: handle.rollDeg }),
+        ...(handle.pitchDeg === undefined ? {} : { pitchDeg: handle.pitchDeg }),
         visible: true,
         reducedMotion: handle.reducedMotion,
       });

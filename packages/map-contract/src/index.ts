@@ -417,6 +417,14 @@ export interface MapRoadPreload {
   readonly failed: number;
 }
 
+/**
+ * A route drawn on the world as a dash-dot line, first point to last.
+ * Presentation only: drawing one moves nothing and records nothing.
+ */
+export interface MapRoute {
+  readonly points: readonly (readonly [longitude: number, latitude: number])[];
+}
+
 /** A geographic box, west to east and south to north. */
 export interface MapBounds {
   readonly west: number;
@@ -661,6 +669,8 @@ export interface MapRenderer {
   setPinnedLandmarks?(landmarks: readonly MapPinnedLandmark[]): void;
   /** Lays orbs on the world; an empty list clears them. */
   setOrbs?(orbs: readonly MapOrb[]): void;
+  /** Draws one route on the world; `null` clears it. */
+  setRoute?(route: MapRoute | null): void;
 }
 
 /**
@@ -769,6 +779,17 @@ export interface SystemDroneHandle {
   readonly bearingDeg: number;
   readonly phase: number;
   readonly reducedMotion: boolean;
+  /**
+   * Metres the drone is raised over the ground the map draws, beneath its
+   * own hover of 1.9 m at scale 1. Omitted, it hovers just over that ground.
+   */
+  readonly heightMeters?: number;
+  /** Banking into a turn: degrees, positive lowers the right side. */
+  readonly rollDeg?: number;
+  /** Leaning into speed: degrees, positive lowers the nose. */
+  readonly pitchDeg?: number;
+  /** Size against the 1.2 m drone; omitted, 1. */
+  readonly scale?: number;
 }
 export interface SystemDroneLayerContract {
   /** True only once the prop has a mounted, hydrated 3D layer. */
