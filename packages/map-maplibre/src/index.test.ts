@@ -694,7 +694,10 @@ describe("transient ground-tap feedback", () => {
       expect(markers[1]?.element.style.borderStyle).toBe("");
       expect(TAP_FEEDBACK_COLORS.avaia).toBe("#9b6cfa");
 
-      vi.advanceTimersByTime(TAP_FEEDBACK_FADE_MS);
+      vi.advanceTimersByTime(TAP_FEEDBACK_FADE_MS - 1);
+      expect(markers[0]?.removed).toBe(false);
+      expect(markers[1]?.removed).toBe(false);
+      vi.advanceTimersByTime(1);
       expect(markers[0]?.removed).toBe(true);
       expect(markers[1]?.removed).toBe(false);
       vi.advanceTimersByTime(
