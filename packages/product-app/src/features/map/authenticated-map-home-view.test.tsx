@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { followCamera, isometricCamera } from "./follow-camera";
+import { isometricCamera } from "./follow-camera";
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveCommand,
