@@ -666,7 +666,15 @@ describe("transient ground-tap feedback", () => {
       expect(markers).toHaveLength(1);
       expect(markers[0]?.center).toEqual([30.5234, 50.4501]);
       expect(markers[0]?.element.dataset.seat).toBe("bond");
-      expect(markers[0]?.element.style.borderColor).toBe("rgb(55, 215, 229)");
+      const firstOrb = markers[0]?.element.querySelector<HTMLElement>(
+        ".map-ground-tap-feedback__orb",
+      );
+      const firstHalo = markers[0]?.element.querySelector<HTMLElement>(
+        ".map-ground-tap-feedback__halo",
+      );
+      expect(firstOrb?.style.backgroundColor).toBe("rgb(242, 253, 255)");
+      expect(firstOrb?.style.borderColor).toBe("rgb(55, 215, 229)");
+      expect(firstHalo?.style.backgroundColor).toBe("rgba(55, 215, 229, 0.125)");
       expect(TAP_FEEDBACK_COLORS.bond).toBe("#37d7e5");
 
       vi.advanceTimersByTime(1_000);
@@ -679,7 +687,11 @@ describe("transient ground-tap feedback", () => {
       expect(markers[0]?.removed).toBe(false);
       expect(markers[1]?.center).toEqual([30.524, 50.451]);
       expect(markers[1]?.element.dataset.seat).toBe("avaia");
-      expect(markers[1]?.element.style.borderColor).toBe("rgb(155, 108, 250)");
+      const secondOrb = markers[1]?.element.querySelector<HTMLElement>(
+        ".map-ground-tap-feedback__orb",
+      );
+      expect(secondOrb?.style.borderColor).toBe("rgb(155, 108, 250)");
+      expect(markers[1]?.element.style.borderStyle).toBe("");
       expect(TAP_FEEDBACK_COLORS.avaia).toBe("#9b6cfa");
 
       vi.advanceTimersByTime(TAP_FEEDBACK_FADE_MS);
