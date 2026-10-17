@@ -35,6 +35,7 @@ import {
   createMapLibreRenderer,
   resolvePmtilesProtocolUrl,
   type MapLabelMarker,
+  type MapLabelBodyPreview,
   type MapLabelMarkerFactory,
 } from "./index";
 
@@ -1068,6 +1069,106 @@ describe("presentation dimension", () => {
     expect(
       fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
     ).toBe("none");
+  });
+});
+
+describe("the card's own body", () => {
+  function cardBody() {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const preview = {
+      show: vi.fn(),
+      setClip: vi.fn(),
+      setHidden: vi.fn(),
+      resize: vi.fn(),
+      dispose: vi.fn(),
+    } satisfies MapLabelBodyPreview;
+    let ready: ((value: boolean) => void) | undefined;
+    const createLabelBodyPreview = vi.fn(
+      (_canvas: HTMLCanvasElement, options: { onReady: typeof ready }) => {
+        ready = options.onReady;
+        return Promise.resolve(preview);
+      },
+    );
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      createLabelMarker,
+      createLabelBodyPreview,
+    });
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    const card = () => markers[0]?.element;
+    const body = (visible: boolean, clipId: "idle" | "walk" = "walk") =>
+      renderer.avatars?.upsert({
+        id: "avaia",
+        modelId: "kai-study",
+        lngLat: [30.5234, 50.4501],
+        bearingDeg: 0,
+        clipId,
+        clipPhase: 0,
+        scale: 1,
+        visible,
+      });
+    return {
+      renderer,
+      preview,
+      createLabelBodyPreview,
+      card,
+      body,
+      markReady: () => ready?.(true),
+    };
+  }
+
+  it("stands the body live only while the world hides it", async () => {
+    const { renderer, preview, card, body, markReady } = cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(false);
+    await vi.waitFor(() => expect(preview.resize).toHaveBeenCalled());
+    body(false);
+    markReady();
+
+    expect(preview.show).toHaveBeenCalledWith(
+      expect.objectContaining({ assetUrl: expect.stringContaining("kai") }),
+    );
+    expect(preview.setClip).toHaveBeenLastCalledWith("walk");
+    expect(preview.setHidden).toHaveBeenLastCalledWith(false);
+    expect(card()?.dataset.body).toBe("model");
+
+    body(true);
+    expect(preview.setHidden).toHaveBeenLastCalledWith(true);
+    expect(card()?.dataset.body).toBe("none");
+  });
+
+  it("is made once and only shown and hidden after that", async () => {
+    const { renderer, preview, createLabelBodyPreview, body, markReady } =
+      cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(false);
+    await vi.waitFor(() => expect(preview.resize).toHaveBeenCalled());
+    markReady();
+
+    for (const visible of [true, false, true, false]) body(visible);
+    renderer.setObservedPositionLabel(null);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(false);
+
+    expect(createLabelBodyPreview).toHaveBeenCalledOnce();
+    expect(preview.dispose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the still while the live body cannot draw", () => {
+    const { renderer, card, body } = cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({
+      title: "0x0sky",
+      bodyId: "avaia",
+      avatarUrl: "/avatars/0.1.0/kai-study.png",
+    });
+    body(false);
+
+    expect(card()?.dataset.body).toBe("still");
   });
 });
 

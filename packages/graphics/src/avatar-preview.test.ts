@@ -191,6 +191,46 @@ describe("what a preview costs", () => {
   });
 });
 
+describe("hiding a body that already stands here", () => {
+  it("stops drawing while hidden and resumes without loading again", async () => {
+    const loadAsset = vi.fn(() => Promise.resolve(asset()));
+    const stop = vi.fn();
+    const schedule = vi.fn(() => stop);
+    const { view, renderer } = preview({
+      reducedMotion: false,
+      clipId: "idle",
+      loadAsset,
+      schedule,
+    });
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+    expect(schedule).toHaveBeenCalledTimes(1);
+
+    view.setHidden(true);
+    expect(stop).toHaveBeenCalledTimes(1);
+    const drawn = renderer.render.mock.calls.length;
+    view.setClip("walk");
+    view.resize(100, 100);
+    expect(renderer.render.mock.calls.length).toBe(drawn);
+
+    view.setHidden(false);
+    expect(schedule).toHaveBeenCalledTimes(2);
+    expect(loadAsset).toHaveBeenCalledTimes(1);
+    view.dispose();
+  });
+
+  it("loads while hidden and draws only once shown", async () => {
+    const { view, renderer } = preview();
+    view.setHidden(true);
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+    expect(renderer.render).not.toHaveBeenCalled();
+    view.setHidden(false);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    view.dispose();
+  });
+});
+
 describe("when a body cannot be shown", () => {
   it("says so instead of leaving a blank frame", async () => {
     const { view, statuses } = preview({

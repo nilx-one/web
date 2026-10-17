@@ -488,7 +488,13 @@ export function createAvatarLayer(
       });
       renderer.autoClear = false;
       lastFrame = now();
-      for (const instance of instances.values()) void hydrate(instance);
+      // A style swap takes the layer off the map and puts it back; the bodies
+      // already standing in this scene stay as they are. Only a body that has
+      // never been drawn is loaded and cloned: everything after that first
+      // draw is a flag on `visible`, never a fresh clone of the same study.
+      for (const instance of instances.values()) {
+        if (instance.root === undefined) void hydrate(instance);
+      }
     },
 
     render(_gl: WebGL2RenderingContext, frame: CustomRenderMethodInput) {

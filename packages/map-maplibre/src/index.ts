@@ -15,6 +15,7 @@ import {
   type MapZoomPivot,
   type MapDimension,
   MAP_BODY_HANDOVER_ZOOM,
+  avatarAssetUrl,
   MAP_BODY_HEIGHT_METERS,
   mapMetersPerPixel,
   type MapBodyActivation,
@@ -131,6 +132,11 @@ import {
 import {
   applyObservedPositionLabel,
   createObservedPositionLabelElement,
+  LABEL_BODY_HEIGHT,
+  LABEL_BODY_WIDTH,
+  labelBodyCanvas,
+  prefersReducedMotion,
+  setLabelBody,
   setPartShown,
 } from "./observed-position-label";
 import {
@@ -250,6 +256,44 @@ type MapFactory = (options: MapOptions) => MapLibreMap;
 /** A feature the view's loaded tiles hold, with the tile it was read from. */
 type ViewFeature = ReturnType<MapLibreMap["querySourceFeatures"]>[number];
 
+/**
+ * The card's live body: one off-map preview, made once per card and only shown
+ * and hidden after that. `@nilx-one/graphics` answers it by default.
+ */
+export interface MapLabelBodyPreview {
+  show(body: {
+    readonly key: string;
+    readonly assetUrl: string;
+    readonly visibleNodes: readonly string[];
+  }): void;
+  setClip(clipId: string | undefined): void;
+  setHidden(hidden: boolean): void;
+  resize(width: number, height: number): void;
+  dispose(): void;
+}
+
+export type MapLabelBodyPreviewFactory = (
+  canvas: HTMLCanvasElement,
+  options: {
+    readonly reducedMotion: boolean;
+    /** Whether the preview has a body standing and can draw it. */
+    readonly onReady: (ready: boolean) => void;
+  },
+) => Promise<MapLabelBodyPreview>;
+
+// The scene library stays out of what everyone downloads to reach the world
+// until a card actually has a body to stand in it.
+const createGraphicsLabelBodyPreview: MapLabelBodyPreviewFactory = (
+  canvas,
+  { reducedMotion, onReady },
+) =>
+  import("@nilx-one/graphics").then(({ createAvatarPreview }) =>
+    createAvatarPreview(canvas, {
+      reducedMotion,
+      onStatus: (status) => onReady(status.kind === "ready"),
+    }),
+  );
+
 /** The part of a MapLibre marker the observed-position label depends on. */
 export interface MapLabelMarker {
   setLngLat(center: [longitude: number, latitude: number]): void;
@@ -287,6 +331,7 @@ export interface MapLibreRendererOptions {
   readonly initialCamera?: MapCamera;
   readonly createMap?: MapFactory;
   readonly createLabelMarker?: MapLabelMarkerFactory;
+  readonly createLabelBodyPreview?: MapLabelBodyPreviewFactory;
   readonly createSelectionMarker?: MapSelectionMarkerFactory;
   readonly createTapFeedbackMarker?: MapTapFeedbackMarkerFactory;
   readonly loadTimeoutMs?: number;
@@ -498,6 +543,8 @@ export function createMapLibreRenderer(
     options.createMap ?? ((mapOptions) => new MapLibreMap(mapOptions));
   const createLabelMarker =
     options.createLabelMarker ?? createMapLibreLabelMarker;
+  const createLabelBodyPreview =
+    options.createLabelBodyPreview ?? createGraphicsLabelBodyPreview;
   const createSelectionMarker =
     options.createSelectionMarker ?? createMapLibreSelectionMarker;
   const createTapFeedbackMarker =
@@ -624,10 +671,12 @@ export function createMapLibreRenderer(
       avatarHandles.set(handle.id, handle);
       if (avatarLayer !== undefined) avatarLayer.upsert(handle);
       else void requestAvatarLayer();
+      if (handle.id === observedLabel?.bodyId) applyLabelBody();
     },
     remove(id) {
       avatarHandles.delete(id);
       avatarLayer?.remove(id);
+      if (id === observedLabel?.bodyId) applyLabelBody();
     },
     setCamera(next) {
       avatarCamera = next;
@@ -651,6 +700,9 @@ export function createMapLibreRenderer(
   let observedLabel: MapObservedPositionLabel | null = null;
   let labelMarker: MapLabelMarker | undefined;
   let labelElement: HTMLElement | undefined;
+  let labelBody: MapLabelBodyPreview | undefined;
+  let labelBodyRequested = false;
+  let labelBodyReady = false;
   let selectionPoint: MapPointSelection | null = null;
   let selectionMarker: MapLabelMarker | undefined;
   interface TapFeedbackEntry {
@@ -877,13 +929,80 @@ export function createMapLibreRenderer(
       speaking || mounted.getZoom() < MAP_BODY_HANDOVER_ZOOM,
       "flex",
     );
+    applyLabelBody();
+  }
+
+  function requestLabelBody(element: HTMLElement): void {
+    const canvas = labelBodyCanvas(element);
+    if (labelBodyRequested || canvas === null) return;
+    // Asked for once per card. A host that cannot draw it keeps the still.
+    labelBodyRequested = true;
+    void createLabelBodyPreview(canvas, {
+      reducedMotion: prefersReducedMotion(globalThis.document),
+      onReady: (ready) => {
+        labelBodyReady = ready;
+        applyLabelBody();
+      },
+    })
+      .then((preview) => {
+        if (labelElement !== element) {
+          preview.dispose();
+          return;
+        }
+        const density = globalThis.devicePixelRatio || 1;
+        preview.resize(LABEL_BODY_WIDTH * density, LABEL_BODY_HEIGHT * density);
+        labelBody = preview;
+        applyLabelBody();
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * The card's own body takes turns with the world's. While the world draws
+   * the body the card speaks for, the card does not; while the world hides it,
+   * the card stands the same study, outfit and clip beside its text. Both were
+   * drawn once and are only shown and hidden after that.
+   */
+  function applyLabelBody(): void {
+    const element = labelElement;
+    if (element === undefined) return;
+    const bodyId = observedLabel?.bodyId;
+    const handle = bodyId === undefined ? undefined : avatarHandles.get(bodyId);
+    const worldHidden = handle?.visible !== true;
+    const live =
+      handle !== undefined &&
+      worldHidden &&
+      labelMarker !== undefined &&
+      !element.hidden;
+    if (live) {
+      requestLabelBody(element);
+      const visibleNodes = handle.visibleNodes ?? [];
+      labelBody?.show({
+        key: `${handle.modelId}#${visibleNodes.join("|")}`,
+        assetUrl: avatarAssetUrl(handle.modelId),
+        visibleNodes,
+      });
+      labelBody?.setClip(handle.clipId);
+    }
+    const drawn = live && labelBody !== undefined && labelBodyReady;
+    labelBody?.setHidden(!drawn);
+    setLabelBody(
+      element,
+      drawn
+        ? "model"
+        : worldHidden && observedLabel?.avatarUrl !== undefined
+          ? "still"
+          : "none",
+    );
   }
 
   function applyLabel(mounted: MapLibreMap): void {
     if (observedPosition === null || observedLabel === null) {
+      // The marker goes; the card and the body standing in it are kept,
+      // hidden, so the next card is the same one rather than a fresh load.
       labelMarker?.remove();
       labelMarker = undefined;
-      labelElement = undefined;
+      applyLabelBody();
       return;
     }
 
@@ -1495,6 +1614,10 @@ export function createMapLibreRenderer(
     labelMarker?.remove();
     labelMarker = undefined;
     labelElement = undefined;
+    labelBody?.dispose();
+    labelBody = undefined;
+    labelBodyRequested = false;
+    labelBodyReady = false;
   }
 
   function releaseSelectionMarker(): void {

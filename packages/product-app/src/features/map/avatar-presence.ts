@@ -15,6 +15,7 @@ import {
   type AvatarModelId,
 } from "@nilx-one/map-contract";
 
+import type { TranslationKey } from "../../shell/localization";
 import type { DockSeat } from "./bond-dock-view-model";
 import type { DeviceLocationState } from "./device-location";
 import { deviceLocationPosition } from "./device-location";
@@ -36,6 +37,20 @@ type PublishedAvatarModel = (typeof AVATAR_MODELS)[number];
 export const BODY_HANDLE_IDS: Readonly<Record<DockSeat, string>> = {
   bond: "bond",
   avaia: "avaia",
+};
+
+/**
+ * What a body is doing, in words, read off the clip it is drawn with — so the
+ * card never says one thing while the body on the world does another.
+ */
+export const BODY_ACTIVITY_KEYS: Readonly<
+  Record<AvatarClipId, TranslationKey>
+> = {
+  idle: "map.card.activity.idle",
+  walk: "map.card.activity.walk",
+  turn_in_place: "map.card.activity.turn",
+  wake: "map.card.activity.wake",
+  quiesce: "map.card.activity.quiesce",
 };
 
 /** A study is a body, not a name: an Avaia never wears its Bond's own. */

@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyObservedPositionLabel,
   createObservedPositionLabelElement,
+  labelBodyCanvas,
+  setLabelBody,
 } from "./observed-position-label";
 
 function label() {
@@ -28,6 +30,7 @@ describe("the observed position card", () => {
       { title: "0x0sky", detail: "This device", avatarUrl: url },
       "light",
     );
+    setLabelBody(element, "still");
 
     const study = part("study") as HTMLImageElement;
     expect(study.hidden).toBe(false);
@@ -39,6 +42,41 @@ describe("the observed position card", () => {
     const card = part("card");
     expect(card?.firstElementChild).toBe(part("text"));
     expect(card?.lastElementChild).toBe(study);
+  });
+
+  it("says what the body is doing beside how far away it is", () => {
+    const { element, part } = label();
+
+    applyObservedPositionLabel(
+      element,
+      { title: "0x0sky", activity: "Walking", detail: "40m from this device" },
+      "light",
+    );
+
+    expect(part("activity")?.textContent).toBe("Walking");
+    expect(part("activity")?.hidden).toBe(false);
+    applyObservedPositionLabel(element, { title: "0x0sky" }, "light");
+    expect(part("activity")?.hidden).toBe(true);
+  });
+
+  // The live body and its still are both made with the card, once; showing
+  // one or the other is a flag on parts that never leave it.
+  it("takes turns between the live body and its still without new parts", () => {
+    const { element, part } = label();
+    const canvas = labelBodyCanvas(element);
+
+    setLabelBody(element, "model");
+    expect(canvas?.hidden).toBe(false);
+    expect(part("study")?.hidden).toBe(true);
+
+    setLabelBody(element, "still");
+    expect(canvas?.hidden).toBe(true);
+    expect(part("study")?.hidden).toBe(false);
+
+    setLabelBody(element, "none");
+    expect(canvas?.hidden).toBe(true);
+    expect(part("study")?.hidden).toBe(true);
+    expect(labelBodyCanvas(element)).toBe(canvas);
   });
 
   it("is text alone when there is no study to show", () => {

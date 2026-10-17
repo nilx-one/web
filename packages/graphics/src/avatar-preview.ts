@@ -57,6 +57,13 @@ export interface AvatarPreview {
   show(body: AvatarPreviewBody): void;
   setFraming(framing: AvatarPreviewFraming): void;
   resize(width: number, height: number): void;
+  /** Play this clip on the body already standing here, or stand still. */
+  setClip(clipId: string | undefined): void;
+  /**
+   * Hidden keeps the loaded body, its skeleton and its mixer, and only stops
+   * drawing: showing it again is a flag, never a fresh fetch and clone.
+   */
+  setHidden(hidden: boolean): void;
   getStatus(): AvatarPreviewStatus;
   dispose(): void;
 }
@@ -254,6 +261,8 @@ export function createAvatarPreview(
   let mixer: AnimationMixer | undefined;
   let clips: readonly AnimationClip[] = [];
   let held: string | undefined;
+  let clipId = options.clipId;
+  let hidden = false;
   let generation = 0;
   let disposed = false;
   let lastFrame = 0;
@@ -280,7 +289,7 @@ export function createAvatarPreview(
 
   function draw(): void {
     const target = ensureRenderer();
-    if (target === undefined || root === undefined) return;
+    if (hidden || target === undefined || root === undefined) return;
     const now = globalThis.performance?.now?.() ?? 0;
     if (mixer !== undefined && options.reducedMotion !== true) {
       const delta = Math.min(0.1, Math.max(0, now - lastFrame) / 1000);
@@ -291,7 +300,7 @@ export function createAvatarPreview(
   }
 
   function startLoop(): void {
-    if (stopLoop !== undefined || disposed) return;
+    if (stopLoop !== undefined || disposed || hidden) return;
     if (options.reducedMotion === true) {
       // Standing still is one frame, not a loop that redraws the same pose.
       draw();
@@ -312,6 +321,18 @@ export function createAvatarPreview(
     clips = [];
   }
 
+  function playClip(): void {
+    if (root === undefined) return;
+    mixer?.stopAllAction();
+    const clip =
+      clipId === undefined
+        ? undefined
+        : clips.find((entry) => entry.name === clipId);
+    if (clip === undefined) return;
+    mixer ??= new AnimationMixer(root);
+    mixer.clipAction(clip).reset().play();
+  }
+
   function stand(gltf: GLTF, next: AvatarPreviewBody): void {
     clearBody();
     rememberGltfNodeNames(gltf);
@@ -320,14 +341,7 @@ export function createAvatarPreview(
     scene.add(instance);
     root = instance;
     clips = gltf.animations;
-    const clip =
-      options.clipId === undefined
-        ? undefined
-        : clips.find((entry) => entry.name === options.clipId);
-    if (clip !== undefined) {
-      mixer = new AnimationMixer(instance);
-      mixer.clipAction(clip).reset().play();
-    }
+    playClip();
     instance.updateMatrixWorld(true);
     framePreviewCamera(camera, new Box3().setFromObject(instance), framing);
     announce({ kind: "ready" });
@@ -385,6 +399,24 @@ export function createAvatarPreview(
       camera.updateProjectionMatrix();
       ensureRenderer()?.setSize(width, height, false);
       draw();
+    },
+
+    setClip(next) {
+      if (disposed || next === clipId) return;
+      clipId = next;
+      playClip();
+      draw();
+    },
+
+    setHidden(next) {
+      if (disposed || next === hidden) return;
+      hidden = next;
+      if (hidden) {
+        stopLoop?.();
+        stopLoop = undefined;
+        return;
+      }
+      if (root !== undefined) startLoop();
     },
 
     getStatus() {

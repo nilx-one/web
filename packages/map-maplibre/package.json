@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
+    "@nilx-one/graphics": "workspace:*",
     "@nilx-one/map-contract": "workspace:*",
     "@types/three": "^0.185.4",
     "maplibre-gl": "^6.6.0",
