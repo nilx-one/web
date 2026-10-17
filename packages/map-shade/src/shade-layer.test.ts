@@ -116,6 +116,12 @@ beforeEach(() => {
     }),
     clearRect: vi.fn(),
     drawImage: vi.fn(),
+    // Closed ground, drawn opaque: what every real frame reads back.
+    getImageData: vi.fn((_x: number, _y: number, width: number) => ({
+      data: new Uint8ClampedArray(width * 4)
+        .fill(255)
+        .map((value, index) => (index % 4 === 3 ? value : 0)),
+    })),
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
@@ -317,6 +323,29 @@ describe("geographic fog surface", () => {
     expect(context.drawImage).toHaveBeenCalledOnce();
     expect(gpu.render).toHaveBeenCalledTimes(2);
     expect(onFrame).toHaveBeenCalledTimes(2); // opaque reset + new complete frame
+  });
+  it("falls back to WebGL2 when a WebGPU frame reads back empty", async () => {
+    // iOS Safari: drawImage copies the WebGPU canvas out transparent.
+    vi.mocked(context.getImageData).mockImplementation(
+      (_x, _y, width) =>
+        ({ data: new Uint8ClampedArray(width * 4) }) as ImageData,
+    );
+    const { onFrame, onError } = mount();
+    await vi.runAllTimersAsync();
+    // The empty frame is never published: the surface goes back to mist
+    // (the second veil) and the only frame published is WebGL2's.
+    expect(fills().filter((fill) => fill === MIST)).toHaveLength(2);
+    expect(gpu.dispose).toHaveBeenCalled();
+    expect(gl.render).toHaveBeenCalledOnce();
+    expect(onFrame).toHaveBeenCalledOnce();
+    expect(onError).not.toHaveBeenCalled();
+  });
+  it("never reads a WebGL2 frame back", async () => {
+    vi.mocked(createWebGpuFog).mockRejectedValue(new Error("no GPU"));
+    mount();
+    await vi.runAllTimersAsync();
+    expect(gl.render).toHaveBeenCalledOnce();
+    expect(context.getImageData).not.toHaveBeenCalled();
   });
   it("reports both backends failing instead of claiming a rendered frame", async () => {
     vi.mocked(createWebGpuFog).mockRejectedValue(new Error("no GPU"));

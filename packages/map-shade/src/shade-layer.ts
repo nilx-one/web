@@ -109,11 +109,32 @@ export function createShadeLayer(options: ShadeLayerOptions): ShadeLayer {
     context.globalCompositeOperation = "source-over";
   };
   veil();
+  const maskContext = atlas.mask.getContext("2d");
+  if (maskContext === null) throw new Error("Fog mask canvas unavailable");
   const present = (frame: HTMLCanvasElement) => {
     // Replace, never blend: a frame is the whole surface.
     context.globalCompositeOperation = "copy";
     context.drawImage(frame, 0, 0);
     context.globalCompositeOperation = "source-over";
+    // iOS Safari can hand drawImage a WebGPU canvas as a transparent image
+    // even within the task it was drawn in: the frame "succeeds" and the
+    // whole map shows unveiled. Treat that as the execution failure it is.
+    if (backend?.kind === "webgpu" && density > 0 && readsBackEmpty())
+      throw new Error("Fog GPU frame read back empty");
+  };
+  // Every ground the mask keeps closed is at least `density` opaque in a real
+  // frame, so one closed texel read back transparent proves the copy failed.
+  // A few sampled rows cost a phone nothing next to the frame itself.
+  const readsBackEmpty = () => {
+    const rows = 8;
+    for (let row = 0; row < rows; row += 1) {
+      const y = Math.floor(((row + 0.5) * atlas.size) / rows);
+      const closed = maskContext.getImageData(0, y, atlas.size, 1).data;
+      const drawn = context.getImageData(0, y, atlas.size, 1).data;
+      for (let index = 0; index < closed.length; index += 4)
+        if (closed[index] === 0 && drawn[index + 3] === 0) return true;
+    }
+    return false;
   };
   const motion = options.motion ?? "still";
   const visibility = options.visibility ?? documentVisibility();
