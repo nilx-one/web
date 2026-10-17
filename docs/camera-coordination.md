@@ -115,7 +115,10 @@ cutscenes, the system informer, handovers and outside the world. Tracking
 takes the driver's independent stance where available, or the observed
 device position for a Bond with no declared position or an Avaia with no
 independent stance. It does not depend on an avatar study being loaded;
-hiding a rendered body does not itself interrupt follow.
+hiding a rendered body does not itself interrupt follow. When an
+observed device fix has more than 50 m of uncertainty, Isometric tracking
+retains the wider opening zoom instead of forcing the body-visible floor;
+this does not make the observation any more precise.
 This is presentation only: camera actions never change a body, Bond or
 presence state.
 
