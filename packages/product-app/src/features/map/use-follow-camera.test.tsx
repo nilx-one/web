@@ -10,8 +10,10 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CAMERA_MODES,
   FOLLOW_HOLD_MS,
   FOLLOW_PITCH,
+  cameraModesFor,
   ISOMETRIC_BEARING,
   ISOMETRIC_PITCH,
   isometricCamera,
@@ -772,6 +774,62 @@ describe("isometric tracking", () => {
       bearing: HOME.bearingDeg,
       pitch: FOLLOW_PITCH,
       zoom: 21.5,
+    });
+  });
+});
+
+describe("identity camera modes", () => {
+  function followOnly(fake: ReturnType<typeof fakeRenderer>) {
+    return renderHook(
+      ({ modes }) =>
+        useFollowCamera({
+          renderer: fake.renderer,
+          enabled: true,
+          body: () => HOME,
+          dimension: "volumetric",
+          reducedMotion: () => false,
+          modes,
+        }),
+      { initialProps: { modes: cameraModesFor("xping") } },
+    );
+  }
+
+  it("offers xPing Follow alone while Bond and Avaia keep every mode", () => {
+    expect(cameraModesFor("xping")).toEqual(["locked"]);
+    expect(cameraModesFor("bond")).toEqual(CAMERA_MODES);
+    expect(cameraModesFor("avaia")).toEqual(CAMERA_MODES);
+  });
+
+  it("never leaves Follow through a button, pinch, Y or a release", () => {
+    const fake = fakeRenderer();
+    const { result } = followOnly(fake);
+    act(() => result.current.selectIsometric());
+    act(() => result.current.selectFree());
+    expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+    act(() => fake.pinch(-1));
+    expect(result.current.follow).toBe("locked");
+    const y = new KeyboardEvent("keydown", {
+      code: "KeyY",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => document.body.dispatchEvent(y));
+    expect(y.defaultPrevented).toBe(false);
+    act(() => result.current.release());
+    expect(result.current.follow).toBe("locked");
+  });
+
+  it("returns to Follow when the new identity does not offer the mode in use", () => {
+    const fake = fakeRenderer();
+    const { result, rerender } = followOnly(fake);
+    rerender({ modes: CAMERA_MODES });
+    act(() => result.current.selectIsometric());
+    expect(result.current.follow).toBe("isometric");
+    rerender({ modes: cameraModesFor("xping") });
+    expect(result.current.follow).toBe("locked");
+    expect(fake.renderer.getCamera()).toMatchObject({
+      bearing: HOME.bearingDeg,
+      pitch: FOLLOW_PITCH,
     });
   });
 });

@@ -34,6 +34,14 @@ A new map instance first frames geographic countries at zoom 3.3, backed by a ge
 Three explicit camera modes are selected on the world overlay next to the
 location control (`follow-camera.ts`, `use-follow-camera.ts`).
 
+Each identity at the wheel offers its own set of modes (`cameraModesFor`).
+Bond and Avaia offer all three. xPing offers Follow alone: Isometric and Free
+still show in the control, unavailable. Follow is in every set. Without a
+mode, nothing switches into it: its button, a pinch out, Y and an application
+release all keep the camera following, and a pinch out only zooms. When the
+identity changes and the mode in use is not offered, the camera returns to
+Follow.
+
 - **Follow (default)** looks over the head of the body at the wheel. Its
   bearing follows the rendered body's facing, including turns in place; no
   device compass heading is inferred. Pitch is 60° from overhead (30° down

@@ -13,6 +13,7 @@ import {
   FOLLOW_HOLD_MS,
   FOLLOW_DISTANCE_ZOOMS,
   FREE_DISTANCE_STEPS,
+  CAMERA_MODES,
   INITIAL_CAMERA_FOLLOW,
   cameraKeyCommand,
   followAfterPinch,
@@ -36,6 +37,11 @@ export interface FollowCameraInput {
   readonly body: () => FollowBody | undefined;
   readonly dimension: MapDimension;
   readonly reducedMotion: () => boolean;
+  /**
+   * The modes the identity at the wheel offers (`cameraModesFor`). Follow is
+   * always available; nothing here switches into a mode outside this set.
+   */
+  readonly modes?: readonly CameraFollow[];
 }
 
 export interface FollowCameraState {
@@ -64,6 +70,7 @@ export function useFollowCamera({
   body,
   dimension,
   reducedMotion,
+  modes = CAMERA_MODES,
 }: FollowCameraInput): FollowCameraState {
   const [follow, setFollow] = useState<CameraFollow>(INITIAL_CAMERA_FOLLOW);
   const followRef = useRef(follow);
@@ -85,10 +92,15 @@ export function useFollowCamera({
   const trackedBody = useRef<FollowBody | undefined>(undefined);
   const trackingFrame = useRef<number | undefined>(undefined);
   const trackingTime = useRef<number | undefined>(undefined);
-  const input = useRef({ enabled, body, dimension, reducedMotion });
+  const input = useRef({ enabled, body, dimension, reducedMotion, modes });
   useEffect(() => {
-    input.current = { enabled, body, dimension, reducedMotion };
+    input.current = { enabled, body, dimension, reducedMotion, modes };
   });
+  const available = useCallback(
+    (mode: CameraFollow) =>
+      mode === "locked" || input.current.modes.includes(mode),
+    [],
+  );
 
   const stopTracking = useCallback(() => {
     if (trackingFrame.current !== undefined) {
@@ -141,7 +153,12 @@ export function useFollowCamera({
     targetZoom.current = undefined;
   }, [enabled, dimension, stopTracking]);
 
-  const release = useCallback(() => choose("free"), [choose]);
+  // An identity without Free keeps following: the application's own move is
+  // given its time, then the camera returns to the body.
+  const release = useCallback(() => {
+    if (available("free")) choose("free");
+    else holdFocus();
+  }, [available, choose, holdFocus]);
 
   const frameBody = useCallback(
     (camera: MapCamera, point: FollowBody) =>
@@ -152,7 +169,7 @@ export function useFollowCamera({
   );
 
   const selectIsometric = useCallback(() => {
-    if (!input.current.enabled) return;
+    if (!input.current.enabled || !available("isometric")) return;
     choose("isometric");
     const point = input.current.body();
     if (point === undefined) return;
@@ -168,7 +185,7 @@ export function useFollowCamera({
         motion: input.current.reducedMotion() ? "immediate" : "eased",
       },
     );
-  }, [aim, choose, hold, renderer]);
+  }, [aim, available, choose, hold, renderer]);
 
   const center = useCallback(() => {
     if (!input.current.enabled) return;
@@ -209,7 +226,7 @@ export function useFollowCamera({
   }, [aim, choose, hold, renderer]);
 
   const selectFree = useCallback(() => {
-    if (!input.current.enabled) return;
+    if (!input.current.enabled || !available("free")) return;
     choose("free");
     const point = input.current.body();
     if (point === undefined) return;
@@ -232,7 +249,22 @@ export function useFollowCamera({
       },
       { motion: input.current.reducedMotion() ? "immediate" : "eased" },
     );
-  }, [aim, choose, renderer]);
+  }, [aim, available, choose, renderer]);
+
+  /** Back from Free to the last tracking mode the identity still offers. */
+  const resume = useCallback(() => {
+    if (lastTrackingMode.current === "isometric" && available("isometric"))
+      selectIsometric();
+    else center();
+  }, [available, center, selectIsometric]);
+
+  // A new identity at the wheel may not offer the mode in use.
+  const modesKey = modes.join();
+  useEffect(() => {
+    if (available(followRef.current)) return;
+    if (input.current.enabled) center();
+    else choose("locked");
+  }, [available, center, choose, modesKey]);
 
   const advanceTracking = useCallback(
     function advance(nowMs: number) {
@@ -342,11 +374,11 @@ export function useFollowCamera({
               change.camera.zoom,
             );
             if (next === "locked" && followRef.current === "free") {
-              if (lastTrackingMode.current === "isometric") selectIsometric();
-              else center();
+              resume();
               return;
             }
-            if (next !== followRef.current) {
+            // Without Free, pinching out only zooms.
+            if (next !== followRef.current && available(next)) {
               choose(next);
               return;
             }
@@ -387,7 +419,8 @@ export function useFollowCamera({
       track,
       stopTracking,
       frameBody,
-      selectIsometric,
+      available,
+      resume,
     ],
   );
 
@@ -397,18 +430,19 @@ export function useFollowCamera({
       if (event.defaultPrevented) return;
       const command = cameraKeyCommand(event);
       if (command === undefined) return;
+      // Y has nothing to toggle to for an identity without Free.
+      if (command === "toggle" && !available("free")) return;
       event.preventDefault();
       if (command === "toggle" && followRef.current !== "free") {
         choose("free");
         return;
       }
-      if (command === "toggle" && lastTrackingMode.current === "isometric")
-        selectIsometric();
+      if (command === "toggle") resume();
       else center();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [center, choose, enabled, selectIsometric]);
+  }, [available, center, choose, enabled, resume]);
 
   return useMemo(
     () => ({

@@ -12,13 +12,15 @@ import {
 } from "react";
 
 import { useLocalization } from "../../shell/localization";
-import type { CameraFollow } from "./follow-camera";
+import { CAMERA_MODES, type CameraFollow } from "./follow-camera";
 
 export const CAMERA_MODE_IDLE_MS = 3_000;
 
 export interface CameraModeControlProps {
   readonly renderer: MapRenderer;
   readonly mode: CameraFollow;
+  /** Modes the identity at the wheel offers; the others show unavailable. */
+  readonly available?: readonly CameraFollow[];
   readonly onFollow: () => void;
   readonly onIsometric: () => void;
   readonly onFree: () => void;
@@ -28,6 +30,7 @@ export interface CameraModeControlProps {
 export function CameraModeControl({
   renderer,
   mode,
+  available = CAMERA_MODES,
   onFollow,
   onIsometric,
   onFree,
@@ -164,6 +167,7 @@ export function CameraModeControl({
           className="camera-mode-control__button"
           hidden={!expanded && button.mode !== mode}
           aria-pressed={button.mode === mode}
+          disabled={!available.includes(button.mode)}
           aria-expanded={button.mode === mode ? expanded : undefined}
           onClick={() => {
             // Opening the chip never changes mode or consumes a distance step.
