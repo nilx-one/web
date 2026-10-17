@@ -2129,7 +2129,9 @@ describe("AuthenticatedMapHomeView", () => {
     });
 
     await vi.waitFor(() =>
-      expect(vi.mocked(mapRenderer.setCamera).mock.calls.length).toBeGreaterThanOrEqual(2),
+      expect(
+        vi.mocked(mapRenderer.setCamera).mock.calls.length,
+      ).toBeGreaterThanOrEqual(2),
     );
     const calls = vi.mocked(mapRenderer.setCamera).mock.calls;
     expect(calls[0]?.[0].center).toEqual([near.longitude, near.latitude]);
