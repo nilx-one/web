@@ -10,7 +10,10 @@ import {
   type MapZoomPivot,
 } from "@nilx-one/map-contract";
 
-import { distanceMeters } from "./location-camera-policy";
+import {
+  distanceMeters,
+  OPENING_ACCURACY_BASE_METERS,
+} from "./location-camera-policy";
 
 /**
  * The camera that follows the body at the wheel, the way a game camera does.
@@ -59,6 +62,11 @@ export function cameraModesFor(
   return IDENTITY_CAMERA_MODES[identity];
 }
 
+/** The first camera mode of an identity, before the person chooses another. */
+export function defaultCameraModeFor(identity: CameraIdentity): CameraFollow {
+  return identity === "xping" ? "locked" : "isometric";
+}
+
 /**
  * How long a camera move the application has just started is left to finish
  * before the follow takes the camera again. It covers the renderer's own
@@ -72,6 +80,8 @@ export const FOLLOW_FLIGHT_HOLD_MS = 2_300;
 /** The rendered body's position and facing, never device compass evidence. */
 export interface FollowBody extends MapPointSelection {
   readonly bearingDeg: number;
+  /** Device-fix uncertainty, when tracking a real observation rather than a stance. */
+  readonly accuracyMeters?: number;
 }
 
 /** Follow looks forward from behind the body's head. */
@@ -122,10 +132,18 @@ export function isometricCamera(
   body: FollowBody,
   dimension: MapDimension = "volumetric",
 ): MapCamera {
+  // An uncertain device fix is deliberately opened wide by location-camera
+  // policy. Tracking may orient and follow it, not pretend its coordinate
+  // justifies a readable body at street scale.
+  const minimumZoom =
+    body.accuracyMeters !== undefined &&
+    body.accuracyMeters > OPENING_ACCURACY_BASE_METERS
+      ? Math.min(current.zoom, FOLLOW_MIN_ZOOM)
+      : FOLLOW_MIN_ZOOM;
   return framedBodyCamera(
     current,
     body,
-    FOLLOW_MIN_ZOOM,
+    minimumZoom,
     ISOMETRIC_BEARING,
     dimension === "flat" ? 0 : ISOMETRIC_PITCH,
   );

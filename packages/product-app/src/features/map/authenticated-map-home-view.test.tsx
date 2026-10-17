@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { followCamera } from "./follow-camera";
+import { isometricCamera } from "./follow-camera";
 import type {
   AvaiaDriveAnswer,
   AvaiaDriveCommand,
@@ -576,7 +576,7 @@ describe("AuthenticatedMapHomeView", () => {
       screen.getByRole("button", { name: "Focus the world on x0skai" }),
     );
 
-    expect(setCamera.mock.calls.length).toBe(firstFix + 1);
+    expect(setCamera.mock.calls.length).toBeGreaterThan(firstFix);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
     expect(camera?.zoom).toBeGreaterThan(15);
   });
@@ -600,7 +600,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
 
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
-    expect(camera?.center).toEqual(followCamera(camera!, avaiaAt).center);
+    expect(camera?.center).toEqual(isometricCamera(camera!, avaiaAt).center);
   });
 
   it("comes in far enough to see the identity that just took the wheel", async () => {
@@ -625,7 +625,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByRole("button", { name: "Hand the wheel to x0skai" }),
     ).toBeVisible();
-    expect(setCamera.mock.calls.length).toBe(firstFix + 1);
+    expect(setCamera.mock.calls.length).toBeGreaterThan(firstFix);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
     expect(camera?.zoom).toBeGreaterThanOrEqual(MAP_SCALE_ZOOM.street);
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
@@ -643,7 +643,7 @@ describe("AuthenticatedMapHomeView", () => {
 
     act(() => mapRenderer.activateBody("bond"));
 
-    expect(setCamera.mock.calls.length).toBe(firstFix + 1);
+    expect(setCamera.mock.calls.length).toBeGreaterThan(firstFix);
     const [camera] = setCamera.mock.calls.at(-1) ?? [];
     expect(camera?.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.street);
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
@@ -1915,11 +1915,11 @@ describe("AuthenticatedMapHomeView", () => {
       center: [30.5234, 50.4501],
       accuracyMeters: 24,
     });
-    expect(mapRenderer.setCamera).toHaveBeenCalledOnce();
     expect(mapRenderer.setCamera).toHaveBeenCalledWith(
       expect.objectContaining({ zoom: 18.5 }),
       expect.objectContaining({ motion: "flight" }),
     );
+    const beforeRecenter = vi.mocked(mapRenderer.setCamera).mock.calls.length;
     expect(geolocation.requestPosition).toHaveBeenCalledOnce();
 
     fireEvent.click(
@@ -1928,7 +1928,9 @@ describe("AuthenticatedMapHomeView", () => {
 
     // Recentering reuses the observation it already holds.
     expect(geolocation.requestPosition).toHaveBeenCalledOnce();
-    expect(mapRenderer.setCamera).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(mapRenderer.setCamera).mock.calls.length).toBeGreaterThan(
+      beforeRecenter,
+    );
     // The country-to-Bond flight is an opening event, never the action
     // attached to an ordinary recenter button.
     expect(
@@ -1939,7 +1941,7 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeInTheDocument();
   });
 
-  it("starts in Follow mode and offers an explicit Free camera toggle", async () => {
+  it("starts in Isometric mode and offers independent Free and Follow", async () => {
     const mapRenderer = renderer();
     renderView({
       mapRenderer,
@@ -1949,7 +1951,9 @@ describe("AuthenticatedMapHomeView", () => {
     const modes = await screen.findByRole("group", { name: "Camera mode" });
     const follow = within(modes).getByRole("button", { name: "Follow" });
     const free = within(modes).getByRole("button", { name: "Free" });
-    expect(follow).toHaveAttribute("aria-pressed", "true");
+    const isometric = within(modes).getByRole("button", { name: "Isometric" });
+    expect(isometric).toHaveAttribute("aria-pressed", "true");
+    expect(follow).toHaveAttribute("aria-pressed", "false");
     expect(free).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(free);
@@ -1975,6 +1979,9 @@ describe("AuthenticatedMapHomeView", () => {
     const isometric = within(modes).getByRole("button", { name: "Isometric" });
     const free = within(modes).getByRole("button", { name: "Free" });
     const slot = () => modes.style.getPropertyValue("--camera-mode-index");
+    expect(isometric).toHaveAttribute("aria-pressed", "true");
+    expect(slot()).toBe("1");
+    fireEvent.click(follow);
     expect(follow).toHaveAttribute("aria-pressed", "true");
     expect(slot()).toBe("0");
     fireEvent.click(isometric);
@@ -2018,6 +2025,67 @@ describe("AuthenticatedMapHomeView", () => {
     }
   });
 
+  it("tracks the Bond's next fix without needing a rendered avatar", async () => {
+    const mapRenderer = renderer();
+    const geolocation = createGeolocationDouble({ position: observation() });
+    const unconfiguredAvaia = createAvaiaSetupViewState({
+      load: { kind: "unsupported" },
+      pending: false,
+      fallbackAddress: "x0skai",
+    });
+    renderView({
+      mapRenderer,
+      geolocation,
+      avaiaSetup: { ...unconfiguredAvaia, configuration: "unconfigured" },
+    });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    expect(screen.getByRole("button", { name: "Isometric" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    const next = observation({ longitude: 30.5334 });
+    act(() => geolocation.publish({ kind: "observed", position: next }));
+    await vi.waitFor(() => {
+      const target = isometricCamera(mapRenderer.getCamera(), {
+        ...next,
+        bearingDeg: 0,
+      });
+      const actual = mapRenderer.getCamera();
+      expect(actual.center[0]).toBeCloseTo(target.center[0], 6);
+      expect(actual.bearing).toBe(45);
+    });
+    expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
+  });
+
+  it("tracks an Avaia with no independent stance using the observed device position", async () => {
+    const mapRenderer = renderer();
+    const geolocation = createGeolocationDouble({ position: observation() });
+    renderView({ mapRenderer, geolocation });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    expect(screen.getByRole("button", { name: "Isometric" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    const next = observation({ longitude: 30.5334 });
+    act(() => geolocation.publish({ kind: "observed", position: next }));
+    await vi.waitFor(() => {
+      const target = isometricCamera(mapRenderer.getCamera(), {
+        ...next,
+        bearingDeg: 0,
+      });
+      expect(mapRenderer.getCamera().center[0]).toBeCloseTo(
+        target.center[0],
+        6,
+      );
+      expect(mapRenderer.getCamera().bearing).toBe(45);
+    });
+    // A missing study does not suppress tracking and does not invent an
+    // independent Avaia position or presence report.
+    expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
+  });
+
   it("opens on a readable manual identity rather than a distant marker", async () => {
     const mapRenderer = renderer();
     const declared = { longitude: 30.563, latitude: 50.4265 };
@@ -2042,7 +2110,9 @@ describe("AuthenticatedMapHomeView", () => {
     });
     await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
     const [camera] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
-    expect(camera?.center).toEqual([coarse.longitude, coarse.latitude]);
+    expect(camera?.center).toEqual(
+      isometricCamera(camera!, { ...coarse, bearingDeg: 0 }).center,
+    );
     expect(camera?.zoom).toBeLessThan(MAP_BODY_HANDOVER_ZOOM);
     expect(camera?.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.neighborhood);
   });
@@ -2059,13 +2129,18 @@ describe("AuthenticatedMapHomeView", () => {
     });
 
     await vi.waitFor(() =>
-      expect(mapRenderer.setCamera).toHaveBeenCalledTimes(2),
+      expect(
+        vi.mocked(mapRenderer.setCamera).mock.calls.length,
+      ).toBeGreaterThanOrEqual(2),
     );
     const calls = vi.mocked(mapRenderer.setCamera).mock.calls;
     expect(calls[0]?.[0].center).toEqual([near.longitude, near.latitude]);
     expect(calls[0]?.[0].zoom).toBe(18.5);
-    expect(calls[1]?.[0].zoom).toBeLessThan(16);
-    expect(calls[1]?.[0].center).toEqual([near.longitude, near.latitude]);
+    expect(calls.some(([camera]) => camera.zoom < 16)).toBe(true);
+    const lastCamera = calls.at(-1)?.[0];
+    expect(lastCamera?.center).toEqual(
+      isometricCamera(lastCamera!, { ...near, bearingDeg: 0 }).center,
+    );
   });
 
   it("frames Avaia's remembered home rather than treating coarse Bond GPS as her accuracy", async () => {
@@ -2082,7 +2157,7 @@ describe("AuthenticatedMapHomeView", () => {
     await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
     await act(async () => Promise.resolve());
     const [camera] = vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
-    expect(camera?.center).toEqual(followCamera(camera!, avaia).center);
+    expect(camera?.center).toEqual(isometricCamera(camera!, avaia).center);
     expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
   });
 
@@ -2115,7 +2190,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(close).toMatchObject({ visible: true, scale: 1 });
 
     // The preceding map gesture leaves only the active mode chip visible.
-    fireEvent.click(screen.getByRole("button", { name: "Follow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Isometric" }));
     fireEvent.click(screen.getByRole("button", { name: "Free" }));
     act(() => {
       mapRenderer.moveCamera(
@@ -2315,7 +2390,18 @@ describe("AuthenticatedMapHomeView", () => {
         there,
         "bond",
       );
+      vi.mocked(mapRenderer.setObservedPosition).mockClear();
+      vi.mocked(mapRenderer.setObservedPositionLabel).mockClear();
       act(() => vi.advanceTimersByTime(1_000));
+      // The body and the DOM card remain smooth, but the expensive H3 and
+      // accuracy GeoJSON updates are capped, not pushed on every frame.
+      const markerUpdates = vi.mocked(mapRenderer.setObservedPosition).mock
+        .calls.length;
+      expect(markerUpdates).toBeGreaterThan(0);
+      expect(markerUpdates).toBeLessThanOrEqual(11);
+      expect(
+        vi.mocked(mapRenderer.setObservedPositionLabel).mock.calls.length,
+      ).toBeGreaterThan(markerUpdates);
       const bond = vi
         .mocked(mapRenderer.avatars!.upsert)
         .mock.calls.map(([handle]) => handle)

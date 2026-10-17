@@ -200,6 +200,7 @@ import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
   cameraModesFor,
+  defaultCameraModeFor,
   followCamera as chaseCamera,
   isometricCamera,
   sameFollowCamera,
@@ -1704,6 +1705,7 @@ export function AuthenticatedMapHomeView({
   const followCamera = useFollowCamera({
     renderer,
     modes: cameraModes,
+    initialMode: defaultCameraModeFor(wheel),
     enabled:
       mapStatus.kind === "ready" &&
       section === "world" &&
@@ -1723,7 +1725,11 @@ export function AuthenticatedMapHomeView({
             : undefined;
       if (stance !== undefined)
         return { ...stance.point, bearingDeg: stance.bearingDeg };
-      if (wheel === "avaia" || observedPosition === undefined) return undefined;
+      if (
+        observedPosition === undefined ||
+        (wheel === "avaia" && declaredPosition)
+      )
+        return undefined;
       return { ...observedPosition, bearingDeg: 0 };
     },
     dimension,
@@ -2113,6 +2119,59 @@ export function AuthenticatedMapHomeView({
     safeArea,
   ]);
 
+  // Tracking belongs to the identity at the wheel, not to an avatar mesh.
+  // A Bond with no study still tracks an observed fix. Until Avaia has an
+  // independent stance, she tracks the same device point the body displays;
+  // a declared Bond position must never become Avaia's fallback.
+  useEffect(() => {
+    if (
+      section !== "world" ||
+      mapStatus.kind !== "ready" ||
+      handover !== undefined
+    )
+      return;
+
+    let frame: number | undefined;
+    function trackDriver(nowMs: number): void {
+      frame = undefined;
+      const stance =
+        wheel === "avaia"
+          ? avaiaWalk.stance(nowMs)
+          : declaredPosition
+            ? manualBondStance(nowMs)
+            : undefined;
+      const point =
+        stance !== undefined
+          ? { ...stance.point, bearingDeg: stance.bearingDeg }
+          : observedPosition !== undefined &&
+              !(wheel === "avaia" && declaredPosition)
+            ? { ...observedPosition, bearingDeg: 0 }
+            : undefined;
+      if (point !== undefined) followCameraRef.current.track(point);
+      if (wheel === "avaia" ? avaiaWalk.moving : manualBondMoving)
+        frame = globalThis.requestAnimationFrame(trackDriver);
+    }
+
+    trackDriver(globalThis.performance.now());
+    const ambient = globalThis.setInterval(() => {
+      if (frame === undefined) trackDriver(globalThis.performance.now());
+    }, AVATAR_AMBIENT_REFRESH_MS);
+    return () => {
+      if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
+      globalThis.clearInterval(ambient);
+    };
+  }, [
+    avaiaWalk,
+    declaredPosition,
+    handover,
+    manualBondMoving,
+    manualBondStance,
+    mapStatus.kind,
+    observedPosition,
+    section,
+    wheel,
+  ]);
+
   // Where this device last observed itself is kept on this device alone, so
   // the next opening of the world starts there. A declared point is the
   // service's to hold and is not copied here.
@@ -2270,6 +2329,11 @@ export function AuthenticatedMapHomeView({
   // where they are, so coming back is a flag flip rather than a fresh fetch and
   // clone. Only the renderer going away drops them.
   const drawnBodies = useRef<Partial<Record<DockSeat, AvatarHandle>>>({});
+  // A moving Bond's body and card render on every frame, but their geographic
+  // GeoJSON source (H3 cell + accuracy ring) must not be rebuilt at 60 fps.
+  // Keep the latest local marker sample separate from the authoritative
+  // declared position; the normal observation effect publishes the final fix.
+  const lastMovingBondMarkerFrame = useRef(Number.NEGATIVE_INFINITY);
   useEffect(() => {
     const avatars = renderer.avatars;
     if (avatars === undefined) return;
@@ -2350,17 +2414,18 @@ export function AuthenticatedMapHomeView({
       // Only the driver carries its own card as the body traverses the map.
       const moving =
         body.seat === "avaia" ? avaiaWalk.moving : manualBondMoving;
-      if (handle !== null && handover === undefined) {
-        followCameraRef.current.track({
-          longitude: handle.lngLat[0],
-          latitude: handle.lngLat[1],
-          bearingDeg: handle.bearingDeg,
-        });
-      }
       if (moving && stance !== undefined) {
         renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
-        if (body.seat === "bond" && declaredPosition) {
-          // This moves the manual *presentation*, not a device observation.
+        if (
+          body.seat === "bond" &&
+          declaredPosition &&
+          nowMs - lastMovingBondMarkerFrame.current >= 100
+        ) {
+          // MapLibre's GeoJSON setData retriangulates the H3 cell and accuracy
+          // layers. Coalesce those expensive updates to at most 10 Hz, while
+          // the avatar, camera and DOM card still track every animation frame.
+          // This is local presentation, not a new location observation.
+          lastMovingBondMarkerFrame.current = nowMs;
           renderer.setObservedPosition({
             center: [stance.point.longitude, stance.point.latitude],
             accuracyMeters: 0,

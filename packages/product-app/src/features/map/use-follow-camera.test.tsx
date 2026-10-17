@@ -103,6 +103,37 @@ afterEach(() => {
 });
 
 describe("useFollowCamera", () => {
+  it("accepts an available initial Isometric mode, but not a disabled one", () => {
+    const fake = fakeRenderer();
+    const { result, unmount } = renderHook(() =>
+      useFollowCamera({
+        renderer: fake.renderer,
+        enabled: true,
+        body: () => HOME,
+        dimension: "volumetric",
+        reducedMotion: () => false,
+        initialMode: "isometric",
+      }),
+    );
+    expect(result.current.follow).toBe("isometric");
+    unmount();
+
+    const xping = fakeRenderer();
+    const limited = renderHook(() =>
+      useFollowCamera({
+        renderer: xping.renderer,
+        enabled: true,
+        body: () => HOME,
+        dimension: "volumetric",
+        reducedMotion: () => false,
+        modes: cameraModesFor("xping"),
+        initialMode: "isometric",
+      }),
+    );
+    expect(limited.result.current.follow).toBe("locked");
+    limited.unmount();
+  });
+
   it("cycles three Follow distances and retains each through walking", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);

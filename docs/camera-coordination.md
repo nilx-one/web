@@ -35,14 +35,14 @@ Three explicit camera modes are selected on the world overlay next to the
 location control (`follow-camera.ts`, `use-follow-camera.ts`).
 
 Each identity at the wheel offers its own set of modes (`cameraModesFor`).
-Bond and Avaia offer all three. xPing offers Follow alone: Isometric and Free
-still show in the control, unavailable. Follow is in every set. Without a
-mode, nothing switches into it: its button, a pinch out, Y and an application
-release all keep the camera following, and a pinch out only zooms. When the
-identity changes and the mode in use is not offered, the camera returns to
-Follow.
+Bond and Avaia offer all three and open in Isometric. xPing opens in
+Follow alone: Isometric and Free still show in the control, unavailable.
+Without a mode, nothing switches into it: its button, a pinch out, Y and
+an application release all keep the camera following, and a pinch out
+only zooms. When the identity changes and the mode in use is not offered,
+the camera returns to Follow.
 
-- **Follow (default)** looks over the head of the body at the wheel. Its
+- **Follow** looks over the head of the body at the wheel. Its
   bearing follows the rendered body's facing, including turns in place; no
   device compass heading is inferred. Pitch is 60° from overhead (30° down
   towards the ground), never wider than the zoom bodies are drawn from (18.5).
@@ -54,7 +54,7 @@ Follow.
   Orbit, tilt and pan gestures pause tracking while in progress, then ease
   back behind the head even if the body is stationary. Free retains arbitrary
   viewing angles. Zoom pivots around the viewport centre while Follow is active.
-- **Isometric** is a separate tracking mode inspired by the gameplay reference.
+- **Isometric (Bond/Avaia default)** is a separate tracking mode inspired by the gameplay reference.
   It holds bearing 45° and pitch 50° from overhead, so a body turn does not
   rotate the world. Its ground target lies about 1.91 m along the camera axis.
   Exponential damping (180 ms response) glides after movement and finishes a
@@ -111,8 +111,16 @@ moves with `MapCameraOptions.yieldToGesture` and the renderer skips them while
 a finger or a mouse button is on the map. Otherwise turning the camera around
 a walking body would snap it straight back. Opening flights and focus moves
 get time to settle before tracking resumes, including for a stationary body. All three modes stand down during
-cutscenes, the system informer, handovers and outside the world. This is
-presentation only: camera actions never change a body, Bond or presence state.
+cutscenes, the system informer, handovers and outside the world. Tracking
+takes the driver's independent stance where available, or the observed
+device position for a Bond with no declared position or an Avaia with no
+independent stance. It does not depend on an avatar study being loaded;
+hiding a rendered body does not itself interrupt follow. When an
+observed device fix has more than 50 m of uncertainty, Isometric tracking
+retains the wider opening zoom instead of forcing the body-visible floor;
+this does not make the observation any more precise.
+This is presentation only: camera actions never change a body, Bond or
+presence state.
 
 Camera readback into React is throttled until the centre moves 8 px or zoom,
 bearing or pitch changes, to avoid 60 view rerenders per second.
