@@ -64,15 +64,18 @@ One number decides which of the two is on the world, and the map contract publis
 ## Ground-tap acknowledgement
 
 A tap on the world, where neither an editor nor a body owns the gesture, adds
-one small ring at the tapped geographic coordinate. Its hue follows the current
-driver's Dock identity: Bond cyan (`#37d7e5`) or Avaia violet (`#9b6cfa`).
-The circle has a soft halo, does not capture pointer input and remains anchored
-to the ground coordinate when the camera pans.
+one small **luminous bead** at the tapped geographic coordinate — never a
+destination pin or hollow target ring. It borrows the collectible orb's palette:
+a pale `#f2fdff` pearl core, a brighter coloured rim, and a diffused halo.
+The hue follows the current driver's Dock identity: Bond cyan (`#37d7e5`) or
+Avaia violet (`#9b6cfa`). Like the collectible orbs it is aligned to the
+map plane, stays anchored to the geographic point as the camera moves, and
+does not capture pointer input.
 
-The most recent ring lasts **at most three seconds**. It begins fading after
+The most recent bead lasts **at most three seconds**. It begins fading after
 2.7 seconds and is removed at three seconds. A second tap immediately fades
-the previous ring over 300 ms and draws a fresh one. Only the active ring and
-one outgoing ring may coexist; repeated rapid taps cannot accumulate markers
+the previous bead over 300 ms and draws a fresh one. Only the active bead and
+one outgoing bead may coexist; repeated rapid taps cannot accumulate markers
 or timers. Changing the wheel does not recolor a previous tap.
 
 This is a local acknowledgement, not a route destination, selected location,
