@@ -2056,6 +2056,34 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
   });
 
+  it("tracks an Avaia with no independent stance using the observed device position", async () => {
+    const mapRenderer = renderer();
+    const geolocation = createGeolocationDouble({ position: observation() });
+    renderView({ mapRenderer, geolocation });
+    await screen.findByRole("button", { name: "Map centred on this device" });
+    expect(screen.getByRole("button", { name: "Isometric" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    const next = observation({ longitude: 30.5334 });
+    act(() => geolocation.publish({ kind: "observed", position: next }));
+    await vi.waitFor(() => {
+      const target = isometricCamera(mapRenderer.getCamera(), {
+        ...next,
+        bearingDeg: 0,
+      });
+      expect(mapRenderer.getCamera().center[0]).toBeCloseTo(
+        target.center[0],
+        6,
+      );
+      expect(mapRenderer.getCamera().bearing).toBe(45);
+    });
+    // A missing study does not suppress tracking and does not invent an
+    // independent Avaia position or presence report.
+    expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
+  });
+
   it("opens on a readable manual identity rather than a distant marker", async () => {
     const mapRenderer = renderer();
     const declared = { longitude: 30.563, latitude: 50.4265 };
