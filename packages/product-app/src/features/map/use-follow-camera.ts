@@ -79,9 +79,6 @@ export function useFollowCamera({
     modes.includes(initialMode) ? initialMode : "locked",
   );
   const followRef = useRef(follow);
-  const lastTrackingMode = useRef<"locked" | "isometric">(
-    follow === "isometric" ? "isometric" : "locked",
-  );
   // No explicit preset on entry: the next Follow press chooses the closest.
   const followDistance = useRef(-1);
   const freeCycle = useRef<{ zoom: number; step: number } | undefined>(
@@ -123,7 +120,6 @@ export function useFollowCamera({
     (next: CameraFollow) => {
       if (next !== followRef.current) stopTracking();
       if (next !== followRef.current) freeCycle.current = undefined;
-      if (next !== "free") lastTrackingMode.current = next;
       followRef.current = next;
       setFollow(next);
     },
@@ -258,13 +254,6 @@ export function useFollowCamera({
     );
   }, [aim, available, choose, renderer]);
 
-  /** Back from Free to the last tracking mode the identity still offers. */
-  const resume = useCallback(() => {
-    if (lastTrackingMode.current === "isometric" && available("isometric"))
-      selectIsometric();
-    else center();
-  }, [available, center, selectIsometric]);
-
   // A new identity at the wheel may not offer the mode in use.
   const modesKey = modes.join();
   useEffect(() => {
@@ -373,17 +362,14 @@ export function useFollowCamera({
           // A person's zoom replaces the chosen preset; it is a distance, not
           // a floor that would snap every later zoom-out back.
           if (gestureZoom !== change.camera.zoom) followDistance.current = -1;
-          // Two fingers on a phone choose the mode: out to Free, in to Follow.
+          // A pinch out can detach the camera; zooming in never selects a
+          // tracking mode. Only the on-screen mode control selects Isometric.
           if (startZoom !== undefined) {
             const next = followAfterPinch(
               followRef.current,
               startZoom,
               change.camera.zoom,
             );
-            if (next === "locked" && followRef.current === "free") {
-              resume();
-              return;
-            }
             // Without Free, pinching out only zooms.
             if (next !== followRef.current && available(next)) {
               choose(next);
@@ -427,7 +413,6 @@ export function useFollowCamera({
       stopTracking,
       frameBody,
       available,
-      resume,
     ],
   );
 
@@ -440,16 +425,17 @@ export function useFollowCamera({
       // Y has nothing to toggle to for an identity without Free.
       if (command === "toggle" && !available("free")) return;
       event.preventDefault();
+      // Y leaves Free for Follow. It never re-enters Isometric: that mode
+      // is an explicit on-screen selection after the opening default.
       if (command === "toggle" && followRef.current !== "free") {
         choose("free");
-        return;
+      } else {
+        center();
       }
-      if (command === "toggle") resume();
-      else center();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [available, center, choose, enabled, resume]);
+  }, [available, center, choose, enabled]);
 
   return useMemo(
     () => ({

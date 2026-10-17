@@ -66,11 +66,11 @@ the camera returns to Follow.
 - **Free (Dota-style)** detaches camera position from Bond/Avaia movement.
   Dragging and touch panning explore the map independently; wheel and pinch
   zoom toward the pointer. No body motion recentres it.
-- **On a phone two fingers choose the mode**: pinching out by at least 0.35
-  zoom levels steps back from the body into Free, pinching in by as much
-  returns to the last selected tracking mode (Follow or Isometric) and eases
-  onto the body. A smaller pinch, a pinch the way
-  the mode already is, a mouse wheel or a trackpad pinch only zoom.
+- **On a phone two fingers can detach the camera**: pinching out by at least
+  0.35 zoom levels from Follow or Isometric enters Free. Pinching in — even
+  by several zoom levels — only zooms and leaves Free detached. A smaller
+  pinch, a mouse wheel or a trackpad pinch only zooms. Re-enter Isometric
+  only by pressing its mode button (apart from the initial Isometric default).
 - The on-screen **Follow / Isometric / Free** control is available on mobile and desktop.
   It opens expanded, then collapses to the current mode after three seconds
   without panel interaction. A map gesture or ground tap collapses it at once;
@@ -93,8 +93,9 @@ the camera returns to Follow.
   three steps away, three back. Free then remains detached from body motion.
   A manual gesture, mode change or scene handover resets the Free sequence.
   Repeated taps advance from the selected step even during an unfinished ease.
-  These button cycles do not change Space/Y or programmatic release semantics.
-  **Y** toggles Free and the last tracking mode; **Space** explicitly selects Follow and recentres on
+  These button cycles do not change programmatic release semantics.
+  **Y** switches a tracking camera into Free and returns from Free to Follow,
+  never to Isometric. **Space** explicitly selects Follow and recentres on
   the body. Repeating a held key never triggers another camera animation.
   Keys inside controls or dialogs, or with modifiers, are left alone.
 - A camera focus or wheel handover performs its requested camera move

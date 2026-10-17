@@ -21,9 +21,9 @@ import {
  * `locked` follows behind the head. `isometric` glides with the body in a stable
  * diagonal view, without rotating the world when the body turns. `free` is a Dota-style
  * independent map camera: dragging, touch panning and pointer zoom move the
- * camera without pulling it back to the body. An explicit selection, Space
- * or Y switches modes, and so does a two-finger pinch on a phone (out to
- * Free, in to Follow); a pan gesture never changes the mode.
+ * camera without pulling it back to the body. The mode control selects
+ * Isometric explicitly; Space and Y can enter Follow, while a two-finger
+ * pinch out enters Free. A pinch in only zooms; panning never changes mode.
  *
  * Presentation only: following never moves a body, records presence or
  * changes who owns the camera beyond what `camera-coordination.md` says.
@@ -229,10 +229,9 @@ export function sameFollowCamera(
 export const PINCH_MODE_ZOOM = 0.35;
 
 /**
- * What a finished touch zoom asks of the mode, the way a phone game camera
- * answers two fingers: pinching out steps back from the body into Free to
- * look around, pinching in returns to Follow. A pinch the same way as the
- * mode it is already in, or one too small to mean anything, changes nothing.
+ * A finished touch zoom may detach the camera: pinching out from a tracking
+ * mode selects Free. Pinching in only changes zoom and never re-enters a
+ * tracking mode. Isometric is selected explicitly in the mode control.
  */
 export function followAfterPinch(
   follow: CameraFollow,
@@ -241,7 +240,6 @@ export function followAfterPinch(
 ): CameraFollow {
   const zoomed = endZoom - startZoom;
   if (follow !== "free" && zoomed <= -PINCH_MODE_ZOOM) return "free";
-  if (follow === "free" && zoomed >= PINCH_MODE_ZOOM) return "locked";
   return follow;
 }
 

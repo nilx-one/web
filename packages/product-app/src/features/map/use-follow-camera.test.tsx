@@ -419,23 +419,20 @@ describe("useFollowCamera", () => {
     expect(fake.renderer.setCamera).not.toHaveBeenCalled();
   });
 
-  it("returns to Follow on the body when two fingers pinch in", () => {
+  it("keeps Free detached when two fingers pinch in", () => {
     const fake = fakeRenderer();
     let body = HOME;
     const { result } = follow(fake, () => body);
     act(() => result.current.release());
     act(() => fake.gesture({ center: [FAR.longitude, FAR.latitude] }, true));
     body = AHEAD;
+    fake.renderer.setCamera.mockClear();
 
     act(() => fake.pinch(1));
 
-    expect(result.current.follow).toBe("locked");
-    expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        center: followCamera(fake.renderer.getCamera(), AHEAD).center,
-      }),
-      { motion: "eased" },
-    );
+    expect(result.current.follow).toBe("free");
+    expect(fake.renderer.setCamera).not.toHaveBeenCalled();
+    expect(fake.renderer.setZoomPivot).toHaveBeenLastCalledWith("pointer");
   });
 
   it("keeps the mode for a small pinch, a pinch the same way, or a wheel", () => {
@@ -673,7 +670,7 @@ describe("isometric tracking", () => {
     );
   });
 
-  it("toggles Isometric and Free on Y while Space explicitly chooses Follow", () => {
+  it("Y exits Isometric to Free, but only the button can restore Isometric", () => {
     const fake = fakeRenderer();
     const { result } = isometricFollow(fake);
     const key = (code: string) =>
@@ -685,6 +682,8 @@ describe("isometric tracking", () => {
     key("KeyY");
     expect(result.current.follow).toBe("free");
     key("KeyY");
+    expect(result.current.follow).toBe("locked");
+    act(() => result.current.selectIsometric());
     expect(result.current.follow).toBe("isometric");
     key("Space");
     expect(result.current.follow).toBe("locked");
@@ -779,7 +778,7 @@ describe("isometric tracking", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("keeps Follow, Isometric and Free independent and restores the last tracking mode", () => {
+  it("keeps Follow, Isometric and Free independent until explicitly selected", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
     expect(result.current.follow).toBe("locked");
@@ -798,6 +797,8 @@ describe("isometric tracking", () => {
     act(() => fake.pinch(-1));
     expect(result.current.follow).toBe("free");
     act(() => fake.pinch(1));
+    expect(result.current.follow).toBe("free");
+    act(() => result.current.selectIsometric());
     expect(result.current.follow).toBe("isometric");
     act(() => result.current.selectFollow());
     expect(result.current.follow).toBe("locked");
