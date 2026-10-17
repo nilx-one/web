@@ -125,9 +125,11 @@ describe("follow camera", () => {
 });
 
 describe("pinch mode", () => {
-  it("pinching out steps back into Free, pinching in returns to Follow", () => {
+  it("pinching out selects Free, but pinching in only changes zoom", () => {
     expect(followAfterPinch("locked", 18.5, 17.5)).toBe("free");
-    expect(followAfterPinch("free", 16, 17)).toBe("locked");
+    expect(followAfterPinch("isometric", 18.5, 17.5)).toBe("free");
+    expect(followAfterPinch("free", 16, 17)).toBe("free");
+    expect(followAfterPinch("free", 16, 21)).toBe("free");
   });
 
   it("changes nothing for a nudge or a pinch the way the mode already is", () => {
