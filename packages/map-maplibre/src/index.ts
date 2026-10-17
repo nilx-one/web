@@ -1503,7 +1503,10 @@ export function createMapLibreRenderer(
       globalThis.clearTimeout(entry.removeTimer);
     // A second tap accelerates the previous fade, but can never extend the
     // original three-second lifetime.
-    const remaining = Math.max(0, entry.expiresAt - globalThis.performance.now());
+    const remaining = Math.max(
+      0,
+      entry.expiresAt - globalThis.performance.now(),
+    );
     entry.removeTimer = globalThis.setTimeout(
       () => releaseTapFeedback(entry),
       Math.min(TAP_FEEDBACK_FADE_MS, remaining),
