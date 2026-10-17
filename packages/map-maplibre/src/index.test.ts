@@ -674,7 +674,7 @@ describe("transient ground-tap feedback", () => {
       );
       expect(firstOrb?.style.backgroundColor).toBe("rgb(242, 253, 255)");
       expect(firstOrb?.style.borderColor).toBe("rgb(55, 215, 229)");
-      expect(firstHalo?.style.backgroundColor).toBe("rgba(55, 215, 229, 0.125)");
+      expect(firstHalo?.style.filter).toBe("blur(2px)");
       expect(TAP_FEEDBACK_COLORS.bond).toBe("#37d7e5");
 
       vi.advanceTimersByTime(1_000);
