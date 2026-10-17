@@ -10,10 +10,10 @@ Web carries it out (`features/flyover`).
 where the Bond and its Avaia stand, `to` the business station the
 subscription concerns. Only Agreed in the Exclusive or Special subscription
 cutscene may call it. The courier offer in Settings calls this same hook
-after a destination has been resolved. It requires the optional courier
-directory and Core destination planner. The built-in Kyiv game catalog also
-offers a preview for older runtimes; a missing binding uses that explicit
-preview. External directories without a preview report route unavailability.
+after a destination has been resolved. Core does not export a destination
+planner yet, so the built-in Kyiv game catalog's explicit preview is the path
+that runs; a future `courier_plan` binding would take precedence once Core
+defines it. External directories without a preview report route unavailability.
 
 ## Courier integration
 

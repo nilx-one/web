@@ -684,6 +684,7 @@ export interface CoreWasmBindings {
 }
 
 export interface GeneratedCoreWasmModule {
+  /** Not exported by any Core release yet: a target shape until Core owns it. */
   courier_plan?(input: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;

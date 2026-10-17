@@ -46,10 +46,13 @@ stable game ID retains the original spelling.
 
 ## Dispatch and old runtimes
 
-Only agreement in the Exclusive/Special offer dispatches xPing. Core chooses
-the nearest destination when its optional courier binding exists. The built-in
-directory also provides a presentation-only preview on older runtimes, using
-the renderer contract's existing distance function and stable ID tie breaking.
+Only agreement in the Exclusive/Special offer dispatches xPing. No Core release
+exports a courier selector yet: `courier_plan` and its wire shape are a Web-side
+target until Core defines the contract (0x1
+[xPing courier](https://github.com/nilx-one/0x1/blob/master/documents/product-direction/xping-courier.md)).
+Web detects the binding only so that a future Core can take over; today the
+built-in directory's presentation-only preview always chooses, using the
+renderer contract's existing distance function and stable ID tie breaking.
 This preview always uses this fixed list, never arbitrary incoming candidates.
 It is used only for an absent binding, not malformed Core output or service
 errors. An external directory without a preview still requires Core.
