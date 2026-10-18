@@ -572,6 +572,8 @@ export function useFlyover(
         }
         try {
           const wear = request.forcing?.wear();
+          const speedMps = FLYOVER_SPEED_MPS *
+            (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * state.boost);
           drone?.upsert({
             id: FLYOVER_DRONE_ID,
             lngLat: [longitude, latitude],
@@ -583,6 +585,7 @@ export function useFlyover(
             pitchDeg: flying ? state.pitchDeg : 0,
             scale: FLYOVER_DRONE_SCALE,
             ...(wear === undefined ? {} : { wear }),
+            ...(flying ? { speedMps } : {}),
             ...(brightest === undefined ? {} : { lootAura: brightest }),
           });
           if (flying && openRef.current && followingRef.current) {
