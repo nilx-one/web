@@ -15,7 +15,10 @@ import {
   type FlightLootSpawn,
 } from "./flight-loot";
 
-const path = flightPath([[0, 0], [0, 1_000]]);
+const path = flightPath([
+  [0, 0],
+  [0, 1_000],
+]);
 const frame = localFrame([30.5, 50.45]);
 const spawn = (
   lane: FlightLootSpawn["lane"],
@@ -41,9 +44,9 @@ describe("xPing flight loot presentation", () => {
     expect(seen[0]?.near).toBe(true);
     expect(LOOT_MIN_VISIBLE_METERS).toBe(150);
     expect(LOOT_NEAR_METERS).toBe(30);
-    expect(
-      visibleFlightLoot(path, frame, items, 120, 75, empty)[0]?.near,
-    ).toBe(false);
+    expect(visibleFlightLoot(path, frame, items, 120, 75, empty)[0]?.near).toBe(
+      false,
+    );
     expect(visibleFlightLoot(path, frame, items, 0, 75, empty)).toHaveLength(1);
   });
 
@@ -59,12 +62,12 @@ describe("xPing flight loot presentation", () => {
     const before: [number, number, number] = [14, 130, 14];
     const after: [number, number, number] = [14, 195, 14];
     expect(crossedFlightLoot(path, item, before, after)).toBe(true);
-    expect(
-      crossedFlightLoot(path, item, [0, 130, 14], [0, 195, 14]),
-    ).toBe(false);
-    expect(
-      crossedFlightLoot(path, item, [14, 130, 35], [14, 195, 35]),
-    ).toBe(false);
+    expect(crossedFlightLoot(path, item, [0, 130, 14], [0, 195, 14])).toBe(
+      false,
+    );
+    expect(crossedFlightLoot(path, item, [14, 130, 35], [14, 195, 35])).toBe(
+      false,
+    );
     expect(crossedFlightLoot(path, item, before, before)).toBe(false);
     expect(pathAt(path, item.distanceMeters).point[1]).toBe(160);
   });
@@ -77,18 +80,18 @@ describe("xPing flight loot presentation", () => {
       { ...spawn(0, 190), id: "far" },
     ];
     expect(LOOT_LASER_RANGE_METERS).toBe(45);
-    expect(
-      laserLootTargets(path, items, 130, [0, 130, 14], new Set()),
-    ).toEqual(["centre", "left"]);
+    expect(laserLootTargets(path, items, 130, [0, 130, 14], new Set())).toEqual(
+      ["centre", "left"],
+    );
     expect(
       laserLootTargets(path, items, 130, [0, 130, 14], new Set(["centre"])),
     ).toEqual(["left", "right"]);
     expect(
       laserLootTargets(path, items, 130, [0, 130, 120], new Set()),
     ).toEqual([]);
-    expect(
-      laserLootTargets(path, items, 160, [0, 160, 14], new Set()),
-    ).toEqual(["far"]);
+    expect(laserLootTargets(path, items, 160, [0, 160, 14], new Set())).toEqual(
+      ["far"],
+    );
   });
 
   it("never shows a collected item twice, or a stronger aura from a lesser rarity", () => {
