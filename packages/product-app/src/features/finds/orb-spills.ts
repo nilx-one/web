@@ -140,8 +140,7 @@ export function landmarkWaypoint(
     )
     .sort((a, b) => {
       const preferred =
-        Number(HERITAGE_KINDS.has(b.kind)) -
-        Number(HERITAGE_KINDS.has(a.kind));
+        Number(HERITAGE_KINDS.has(b.kind)) - Number(HERITAGE_KINDS.has(a.kind));
       if (preferred !== 0) return preferred;
       const target = { longitude, latitude };
       return (
