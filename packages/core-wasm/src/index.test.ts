@@ -567,12 +567,12 @@ describe("CoreWasmClient", () => {
     await expect(
       createCoreWasmClient({
         loadBindings: async () => oldBindings,
-      }).orbSpillVersion(),
+      }).orbSpillVersion!(),
     ).resolves.toBe(1);
     await expect(
       createCoreWasmClient({
         loadBindings: async () => newBindings,
-      }).orbSpillVersion(),
+      }).orbSpillVersion!(),
     ).resolves.toBe(2);
   });
 
