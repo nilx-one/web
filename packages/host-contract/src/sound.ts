@@ -38,7 +38,11 @@ export type SoundCue =
   /** A nearby Bond's spoken line arrived. */
   | "heard"
   /** A failure notice opened. */
-  | "failure";
+  | "failure"
+  /** xPing acquired up to two collectible laser targets. */
+  | "loot-lock"
+  /** One or more actual flight pickups. */
+  | "loot-pickup";
 
 export const SOUND_CUES: readonly SoundCue[] = Object.freeze([
   "tap",
@@ -51,6 +55,8 @@ export const SOUND_CUES: readonly SoundCue[] = Object.freeze([
   "achievement",
   "heard",
   "failure",
+  "loot-lock",
+  "loot-pickup",
 ]);
 
 /**
