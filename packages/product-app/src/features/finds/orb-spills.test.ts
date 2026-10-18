@@ -117,7 +117,13 @@ describe("orbs between the map and Core", () => {
     const spill = knownSpill(view, roll, () => center, 1_000, select());
     const legacy = orbWorldInput([spill], new Set(), undefined, undefined);
     expect(legacy.spills[0]).not.toHaveProperty("via");
-    const guided = orbWorldInput([spill], new Set(), undefined, undefined, true);
+    const guided = orbWorldInput(
+      [spill],
+      new Set(),
+      undefined,
+      undefined,
+      true,
+    );
     expect(guided.spills[0]).toMatchObject({
       via: toCoordinate([longitude + 0.0003, latitude]),
       to: toCoordinate(findPoint(roll)),
