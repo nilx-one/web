@@ -655,6 +655,28 @@ async fn handle_admin_role_callback(
     callback: CallbackQuery,
     state: Arc<TelegramBotState>,
 ) -> ResponseResult<()> {
+    // A callback is only a requested action, never authority. The intent is
+    // private, bound to callback.from.id and expires after five minutes.
+    if let Some(action @ ("ul:y" | "ul:n")) = callback.data.as_deref() {
+        let Ok(telegram_user_id) = i64::try_from(callback.from.id.0) else {
+            bot.answer_callback_query(callback.id)
+                .text("Невідомий Telegram-акаунт.").await?;
+            return Ok(());
+        };
+        bot.answer_callback_query(callback.id).await?;
+        let compact = CompactBot::new(
+            bot.clone(), ChatId(telegram_user_id), Arc::clone(&state.surfaces)
+        );
+        if action == "ul:y" {
+            confirm_unlink_for_user(&compact, state.as_ref(), telegram_user_id).await?;
+        } else if state.pending_unlinks.consume(telegram_user_id).await {
+            compact.send_message(ChatId(telegram_user_id), "Від'єднання скасовано.").await?;
+        } else {
+            compact.send_message(ChatId(telegram_user_id), "Запит уже неактивний.").await?;
+        }
+        sync_command_menu(&bot, ChatId(telegram_user_id), state.as_ref(), telegram_user_id).await;
+        return Ok(());
+    }
     let Some((approve, request_token)) = callback
         .data
         .as_deref()
@@ -770,6 +792,11 @@ async fn handle_message(
     }
 
     let Some(text) = message.text() else {
+        bot.send_message(message.chat.id, "Підтримуються команди та геолокація Telegram. Для 0x1 використовуйте /open.")
+            .await?;
+        if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
+            error!(%error, "could not remove unsupported Telegram input");
+        }
         return Ok(());
     };
 
@@ -898,15 +925,23 @@ async fn ensure_command_menu(
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) {
+    sync_command_menu(bot, message.chat.id, state, telegram_user_id).await;
+}
+
+async fn sync_command_menu(
+    bot: &Bot,
+    chat_id: ChatId,
+    state: &TelegramBotState,
+    telegram_user_id: i64,
+) {
     let Some(menu) = command_menu_for_telegram(&state.repository, telegram_user_id).await else {
         return;
     };
-    let chat_id = message.chat.id.0;
     if state
         .synced_command_menus
         .lock()
         .await
-        .get(&chat_id)
+        .get(&chat_id.0)
         .copied()
         == Some(menu)
     {
@@ -914,7 +949,7 @@ async fn ensure_command_menu(
     }
 
     let scope = BotCommandScope::Chat {
-        chat_id: message.chat.id.into(),
+        chat_id: chat_id.into(),
     };
     let result = match menu {
         CommandMenu::Unregistered => bot.delete_my_commands().scope(scope).await,
@@ -928,7 +963,7 @@ async fn ensure_command_menu(
         .synced_command_menus
         .lock()
         .await
-        .insert(chat_id, menu);
+        .insert(chat_id.0, menu);
 }
 
 async fn registered_identity(
@@ -1260,74 +1295,87 @@ async fn begin_unlink(
     state.pending_unlinks.begin(telegram_user_id).await;
     bot.send_message(
         message.chat.id,
-        "Це від'єднає Telegram від цього Bond: цей чат більше не зможе увійти в нього чи керувати ним. Щоб підтвердити, надішліть /unlink_confirm протягом 5 хвилин.",
+        "Це від'єднає Telegram від цього Bond. Підтвердьте протягом 5 хвилин. Якщо Telegram — єдиний спосіб входу, від'єднання буде відхилено.",
     )
+    .reply_markup(InlineKeyboardMarkup::new([[
+        InlineKeyboardButton::callback("✅ Від'єднати", "ul:y"),
+        InlineKeyboardButton::callback("Скасувати", "ul:n"),
+    ]]))
     .await?;
     Ok(())
 }
 
-/// Second step: performs the actual, atomic self-disconnect only when
-/// `/unlink` armed it. [`ProviderLinkRepository::unlink_self_service`]
-/// refuses the write when Telegram is this Bond's only way back in — the
-/// same guard the Mini App Settings surface's disconnect button relies on.
+/// `/unlink` arms an expiring, single-use confirmation. Both the inline
+/// button and the backwards-compatible typed command use the same operation.
+/// Only the server-side provider-link repository may decide disconnection.
+async fn confirm_unlink_for_user(
+    bot: &CompactBot,
+    state: &TelegramBotState,
+    telegram_user_id: i64,
+) -> ResponseResult<()> {
+    let chat_id = ChatId(telegram_user_id);
+    if !state.pending_unlinks.consume(telegram_user_id).await {
+        bot.send_message(chat_id, "Запит на від'єднання відсутній або прострочений. Повторіть /unlink.")
+            .await?;
+        return Ok(());
+    }
+    let identity = match state.repository.find_by_telegram(telegram_user_id).await {
+        Ok(Some(identity)) => identity,
+        Ok(None) => {
+            bot.send_message(chat_id, "Telegram не прив'язаний до Bond. Відкрийте /open.")
+                .await?;
+            return Ok(());
+        }
+        Err(error) => {
+            error!(%error, "Telegram identity lookup failed during unlink");
+            bot.send_message(chat_id, "Identity тимчасово недоступний.").await?;
+            return Ok(());
+        }
+    };
+    let pub_dress = match identity.pub_dress.parse() {
+        Ok(value) => value,
+        Err(error) => {
+            error!(%error, "stored Bond pub_dress is invalid");
+            bot.send_message(chat_id, "Bond тимчасово недоступний.").await?;
+            return Ok(());
+        }
+    };
+    match state.provider_links
+        .unlink_self_service(&pub_dress, IdentityProvider::Telegram)
+        .await
+    {
+        Ok(SelfDisconnectOutcome::Disconnected) => {
+            bot.send_message(
+                chat_id,
+                "Telegram від'єднано від Bond. Відкрийте /open для входу або реєстрації.",
+            ).await?;
+        }
+        Ok(SelfDisconnectOutcome::NotLinked) => {
+            bot.send_message(chat_id, "Telegram уже не прив'язаний до Bond.").await?;
+        }
+        Ok(SelfDisconnectOutcome::SoleAccessPath) => {
+            bot.send_message(
+                chat_id,
+                "Telegram — єдиний спосіб увійти в Bond. Спочатку встановіть пароль або прив'яжіть інший акаунт у 0x1; стан не змінено.",
+            ).await?;
+        }
+        Err(error) => {
+            error!(%error, "self-disconnect failed");
+            bot.send_message(chat_id, "Від'єднання тимчасово недоступне.").await?;
+        }
+    }
+    Ok(())
+}
+
+/// Compatibility path for clients that already know /unlink_confirm.
 async fn confirm_unlink(
     bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
 ) -> ResponseResult<()> {
-    if !state.pending_unlinks.consume(telegram_user_id).await {
-        bot.send_message(
-            message.chat.id,
-            "Немає активного запиту на відв'язання. Спочатку надішліть /unlink.",
-        )
-        .await?;
-        return Ok(());
-    }
-    let Some((identity, _role)) =
-        registered_identity(bot, message, &state.repository, telegram_user_id).await?
-    else {
-        return Ok(());
-    };
-    let pub_dress = match identity.pub_dress.parse() {
-        Ok(value) => value,
-        Err(error) => {
-            error!(%error, "stored Bond pub_dress is invalid");
-            bot.send_message(message.chat.id, "Bond тимчасово недоступний.")
-                .await?;
-            return Ok(());
-        }
-    };
-    match state
-        .provider_links
-        .unlink_self_service(&pub_dress, IdentityProvider::Telegram)
-        .await
-    {
-        Ok(SelfDisconnectOutcome::Disconnected) => {
-            bot.send_message(
-                message.chat.id,
-                "Telegram від'єднано від цього Bond. Щоб знову користуватись 0x1 з цього чату, зареєструйте новий Bond через /start або увійдіть іншим прив'язаним способом.",
-            )
-            .await?;
-            ensure_command_menu(bot, message, state, telegram_user_id).await;
-        }
-        Ok(SelfDisconnectOutcome::NotLinked) => {
-            bot.send_message(message.chat.id, "Спочатку зареєструйте Bond через /start.")
-                .await?;
-        }
-        Ok(SelfDisconnectOutcome::SoleAccessPath) => {
-            bot.send_message(
-                message.chat.id,
-                "Telegram — єдиний спосіб увійти в цей Bond: немає пароля чи іншого прив'язаного провайдера. Спочатку встановіть пароль або прив'яжіть інший акаунт у 0x1, потім повторіть /unlink.",
-            )
-            .await?;
-        }
-        Err(error) => {
-            error!(%error, "self-disconnect failed");
-            bot.send_message(message.chat.id, "Від'єднання тимчасово недоступне.")
-                .await?;
-        }
-    }
+    confirm_unlink_for_user(bot, state, telegram_user_id).await?;
+    sync_command_menu(bot, message.chat.id, state, telegram_user_id).await;
     Ok(())
 }
 
@@ -1400,8 +1448,7 @@ async fn start_registration(
 /// `/open` remains the topmost command for every chat. The compact
 /// presenter reuses its Open and Status messages without requiring a Bond.
 async fn open_app(bot: &CompactBot, message: &Message) -> ResponseResult<()> {
-    bot.send_message(message.chat.id, "Open 0x1")
-        .reply_markup(registration_keyboard())
+    bot.send_message(message.chat.id, "0x1 готовий. Mini App відкривається кнопкою у повідомленні Open.")
         .await?;
     Ok(())
 }
