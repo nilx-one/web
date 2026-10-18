@@ -63,6 +63,14 @@ The default Kyiv map can dispatch to its author-seeded pins without commerce.
 A verified business directory remains separate from these game destinations;
 see [the catalog and its sources](market-points.md).
 
+## Flight loot rendering and feedback (not entitlement issuance)
+
+The proposed [flight-loot contract](https://github.com/nilx-one/0x1/blob/master/documents/product-direction/xping-flight-loot.md) owns the future game rules. Web now accepts **optional externally supplied** `FlyoverRequest.loot` placements and `onLootCollected` for local collision reports. **No producer is enabled by default**: the existing courier does not invent loot, award XP/Seeds or issue Exclusive vouchers. A caller must provide real drop authorization and its own validated receipt flow before shipping a reward-bearing experience.
+
+When supplied, loot is rendered as world-anchored 3D models in the existing avatar/drone custom layer, in the same terrain-aware coordinate system as xPing. Each shape is visible at least 150 m ahead (5 seconds at 30 m/s, expanded with forcing speed); full rarity emission starts in the last 30 m at normal path speed. The collection test sweeps xPing's actual 3D path through the item volume, not through its screen projection. The flight reports each local collision once. Such a report is **not** a service-issued reward: a future adapter must validate and issue it separately. The callback must never be used to grant a subscription locally.
+
+After local contact, capable clients produce a single light haptic per simulation tick (Telegram Mini App `HapticFeedback`, then optional Web Vibration API); iOS Safari may have no usable API. xPing's halo keeps the highest rarity locally collected **for the current flight**, surviving the return leg but never upgrading account entitlement. A reduced-motion flight keeps its existing static preview and issues no synthetic pick-up. Aborted flights and detached renderers clear remaining props.
+
 ## Route
 
 Before the flight, the roads in a box around both ends (400 m of margin) are
