@@ -150,11 +150,14 @@ jobs:
             exit 1
           fi
 
-          grep -Fq "gh secret set" "$file"
-          grep -Fq "gh secret delete" "$file"
-
-          if ! grep -A1 -F "name: Revoke transient provider environment" "$file" | grep -Fq "if: always()"; then
-            echo "::error file=$file::the transient provider environment must be revoked even when the deployment fails"
+          # The provider credentials are encrypted to the infra Environment's
+          # SSH public key. They are never copied into infra repository secrets.
+          grep -Fq 'age --armor --recipient' "$file"
+          grep -Fq 'secrets_age: $envelope' "$file"
+          ! grep -Fq 'gh secret set' "$file"
+          ! grep -Fq 'gh secret delete' "$file"
+          if ! grep -A1 -F "name: Clean transient encrypted provider material" "$file" | grep -Fq "if: always()"; then
+            echo "::error file=$file::temporary payload must be removed even when deployment fails"
             exit 1
           fi
 
@@ -206,6 +209,9 @@ jobs:
           grep -Fq 'ref: $ref' "$file"
           grep -Fq "IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-web" "$file"
           grep -Fq 'sha-$RELEASE_SHA' "$file"
+          grep -Fq 'secrets_age: $envelope' "$file"
+          grep -Fq 'age --armor --recipient' "$file"
+          ! grep -Fq 'gh secret set' "$file"
 
       - name: Validate infra activation is awaited
         shell: bash
@@ -261,7 +267,7 @@ jobs:
             echo "- repository boundary: validated"
             echo "- production orchestrator: validated"
             echo "- identity handoff: validated"
-            echo "- provider environment: transient"
+            echo "- provider environment: encrypted per deployment"
             echo "- client handoff: validated"
             echo "- infra activation: awaited"
             echo "- deployment: not performed"
