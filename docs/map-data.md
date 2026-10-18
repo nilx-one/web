@@ -207,17 +207,21 @@ spatial map with restrained cyan accents. The map is the spatial substrate of
 | -------------------- | --------------------- | --------------------- |
 | Background           | `#f7f9fa`             | `#070c0e`             |
 | Land                 | `#f1f4f5`             | `#0c1417`             |
-| Parks and green mass | `#eaf2ef`             | `#10201d`             |
+| Parks and green mass | `#d2e9cd`             | `#10201d`             |
 | Building footprints  | `#d8e2e5`             | `#203036`             |
 | Building faces       | `#eef3f4`             | `#26383f`             |
 | Primary roads        | `#bccfd4`             | `#344a52`             |
 | Secondary roads      | `#cedcdf`             | `#26383e`             |
-| Water                | `#d9f4f7`             | `#05222a`             |
+| Water                | `#c8ecf3`             | `#05222a`             |
 | Accent               | `#37d7e5`             | `#37d7e5`             |
 | Label (reserved)     | `#536166` / `#7d8a90` | `#a8b6bb` / `#78898f` |
 
 Each row is the value the published style metadata carries, and
 `tests/deployment/map-assets.test.ts` locks the palette against this table.
+
+Green mass is the one hue the light ground carries besides water. It has to
+separate a park or forest from bare land at city scale, so it sits well clear
+of the land tone instead of a near-white tint the eye cannot find.
 
 Cyan is an accent, not a global fill. In the map it is spent only on water
 outlines and river lines, which is what makes the Dnipro read as the dominant
