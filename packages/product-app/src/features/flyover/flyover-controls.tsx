@@ -1,7 +1,12 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useRef, type ReactNode } from "react";
+import {
+  useRef,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { useLocalization } from "../../shell/localization";
 import "./flyover-controls.css";
@@ -14,6 +19,17 @@ export interface FlyoverControlsProps {
   readonly onLeave: () => void;
   /** The flight's activity row, the lowest element under the steering. */
   readonly activities?: ReactNode;
+  /** Push to force: absent, the flight cannot be forced. */
+  readonly force?: {
+    /** What is left of the engine, from 0 to 1, as it is spent. */
+    readonly engine: {
+      energy(): number;
+      subscribe(listener: () => void): () => void;
+    };
+    /** Whether forcing is possible now: not on the way back. */
+    readonly available: boolean;
+    readonly onHold: (holding: boolean) => void;
+  };
 }
 
 /**
@@ -25,6 +41,7 @@ export function FlyoverControls({
   onSteer,
   onLeave,
   activities,
+  force,
 }: FlyoverControlsProps) {
   const { t } = useLocalization();
   const swipe = useRef<{ x: number; y: number } | undefined>(undefined);
@@ -65,6 +82,7 @@ export function FlyoverControls({
           >
             ◀
           </button>
+          {force === undefined ? null : <ForceButton {...force} />}
           <button
             type="button"
             className="flyover__button"
@@ -79,5 +97,52 @@ export function FlyoverControls({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Push to force, filled with what is left of the engine. It reads the
+ * engine itself, a whole percent at a time, so a held button redraws only
+ * itself, not the world around it.
+ */
+function ForceButton({
+  engine,
+  available,
+  onHold,
+}: NonNullable<FlyoverControlsProps["force"]>) {
+  const { t } = useLocalization();
+  const percent = useSyncExternalStore(
+    engine.subscribe,
+    () => Math.round(engine.energy() * 100),
+    () => Math.round(engine.energy() * 100),
+  );
+  return (
+    <button
+      type="button"
+      className="flyover__button flyover__force"
+      aria-label={t("flyover.force")}
+      disabled={!available}
+      style={{ "--flyover-energy": `${percent}%` } as CSSProperties}
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        onHold(true);
+      }}
+      onPointerUp={() => onHold(false)}
+      onPointerCancel={() => onHold(false)}
+      onLostPointerCapture={() => onHold(false)}
+      onKeyDown={(event) => {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          if (!event.repeat) onHold(true);
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.key === " " || event.key === "Enter") onHold(false);
+      }}
+      onBlur={() => onHold(false)}
+    >
+      <span aria-hidden="true">⚡</span>
+      <span className="flyover__force-level">{percent}%</span>
+    </button>
   );
 }

@@ -95,6 +95,28 @@ are one still view, xPing at the station, until the person leaves.
 
 Presentation only: no body moves and nothing is recorded.
 
+## Forcing and the way back
+
+The steering row holds **push to force** between ◀ and ▶, filled with what
+is left of the engine. While it is held, and the engine allows it, xPing
+builds up over three seconds (`FLYOVER_FORCE_RAMP_MS`) to 2.5× its speed and
+twice its height, and flies straight at the destination: the drawn route
+becomes that straight line. Let go, it slows back down over the same three
+seconds and joins the road route where it is nearest, the offset pulled back
+in like a lane step. The drone smokes and sparks more as the engine empties.
+
+Forcing is counted as it happens and told to the identity service a second at
+a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On
+empty, two more seconds of forcing break the engine: the report that crosses
+it is sent at once, the service records the breakdown at its own clock, and
+the flight is called off ("xPing broke down · flight called off"). A broken
+engine keeps xPing in its dock: the offer says so until it mends or is
+repaired.
+
+After hovering at the station xPing always flies back to where it set off,
+along the same roads and never forced; only then does the world get its
+camera back. The activity row tells the way back as the distance to the start.
+
 ## Engine, smoke and repair
 
 xPing's engine is Core's rules (`docs/xping-engine.md` in core), stored by the

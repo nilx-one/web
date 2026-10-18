@@ -390,3 +390,120 @@ it("tells flight progress as the distance to the named target in 50 m steps", ()
     "xPing · flying to 0xda-market · 0:09",
   );
 });
+
+it("keeps xPing in its dock while its engine is broken", async () => {
+  const map = renderer();
+  const engine = {
+    readXpingEngine: vi.fn(async () => ({
+      kind: "read" as const,
+      state: { energy_permille: 0, at_ms: "0", broken_at_ms: "0" },
+      view: {
+        energyPermille: 0,
+        smokePermille: 1000,
+        broken: true,
+        emptyMarginMs: 0,
+        fullAtMs: 43_200_000,
+        repairSeeds: 50,
+      },
+      nowMs: 0,
+    })),
+    forceXpingEngine: vi.fn(),
+    repairXpingEngine: vi.fn(),
+  };
+  const core = { courierDestination: vi.fn(async () => destination) };
+  const { result } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core,
+      directory,
+      suspended: false,
+      engine,
+    }),
+  );
+  act(() => result.current.open("exclusive"));
+  await act(() => result.current.accept());
+  expect(result.current.blocked).toBe("broken");
+  expect(result.current.error).toBe(true);
+  expect(core.courierDestination).not.toHaveBeenCalled();
+  expect(result.current.flyover.active).toBe(false);
+});
+
+it("gives a flight forcing from a working engine", async () => {
+  const map = renderer();
+  const engine = {
+    readXpingEngine: vi.fn(async () => ({
+      kind: "read" as const,
+      state: { energy_permille: 500, at_ms: "0" },
+      view: {
+        energyPermille: 500,
+        smokePermille: 500,
+        broken: false,
+        emptyMarginMs: 2000,
+        fullAtMs: 21_600_000,
+        repairSeeds: 25,
+      },
+      nowMs: 0,
+    })),
+    forceXpingEngine: vi.fn(),
+    repairXpingEngine: vi.fn(),
+  };
+  const { result } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core: { courierDestination: vi.fn(async () => destination) },
+      directory,
+      suspended: false,
+      engine,
+    }),
+  );
+  act(() => result.current.open("exclusive"));
+  await act(() => result.current.accept());
+  expect(result.current.flyover.active).toBe(true);
+  expect(result.current.forcing?.energy()).toBeCloseTo(0.5);
+  expect(result.current.forcing?.allowed()).toBe(true);
+});
+
+it("tells the way back, and a breakdown, in the flight row", () => {
+  const props = {
+    jobs: [],
+    plan,
+    completed: undefined,
+    target: "0xda-market Golden Gate",
+    onFlight: vi.fn(),
+    onFollow: vi.fn(),
+    onCells: vi.fn(),
+  };
+  const view = render(
+    <ActivityStack
+      {...props}
+      flight={{
+        active: true,
+        progress: {
+          // The plan set off from 30.5, 50.4.
+          point: { longitude: 30.5, latitude: 50.401 },
+          remainingMs: 3000,
+          arrivedAt: Date.now(),
+          returning: true,
+        },
+      }}
+    />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "xPing · flying back · 150 m",
+  );
+  expect(screen.getByRole("button", { name: "Follow xPing" })).toBeDefined();
+  view.rerender(
+    <ActivityStack
+      {...props}
+      brokenAt={Date.now()}
+      flight={{ active: false, progress: undefined }}
+    />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "xPing broke down · flight called off",
+  );
+  act(() => vi.advanceTimersByTime(5000));
+  expect(screen.queryByRole("status")).toBeNull();
+});

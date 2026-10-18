@@ -14,6 +14,7 @@ import {
   chaseCamera,
   routeOverview,
   useFlyover,
+  type FlyoverForcing,
 } from "./use-flyover";
 
 /** About 330 m due east, so a whole flight fits in a test. */
@@ -53,9 +54,16 @@ function setup() {
   return { renderer, drone, hook };
 }
 
-async function begin(hook: ReturnType<typeof setup>["hook"]) {
+async function begin(
+  hook: ReturnType<typeof setup>["hook"],
+  forcing?: FlyoverForcing,
+) {
   await act(async () => {
-    hook.result.current.start({ from: FROM, to: TO });
+    hook.result.current.start({
+      from: FROM,
+      to: TO,
+      ...(forcing === undefined ? {} : { forcing }),
+    });
     await Promise.resolve();
   });
   await act(async () => {
@@ -133,14 +141,22 @@ describe("useFlyover", () => {
     expect(Math.abs(FROM.latitude - back.lngLat[1]) * 111_195).toBeLessThan(2);
   });
 
-  it("hovers at the station, then puts the world back", async () => {
+  it("hovers at the station, flies back to the start, then puts the world back", async () => {
     const { renderer, drone, hook } = setup();
     await begin(hook);
     act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 12_000));
     const hovering = lastDrone(drone)!;
     expect(hovering.lngLat[0]).toBeCloseTo(TO.longitude, 5);
     expect(hook.result.current.active).toBe(true);
-    expect(hook.result.current.progress?.arrivedAt).toBeDefined();
+    const arrivedAt = hook.result.current.progress?.arrivedAt;
+    expect(arrivedAt).toBeDefined();
+    // The way back is part of the flight, and cannot be forced.
+    act(() => vi.advanceTimersByTime(FLYOVER_ARRIVAL_MS + 1_000));
+    expect(hook.result.current.active).toBe(true);
+    expect(hook.result.current.progress?.returning).toBe(true);
+    expect(hook.result.current.progress?.arrivedAt).toBe(arrivedAt);
+    act(() => vi.advanceTimersByTime(12_000));
+    expect(lastDrone(drone)!.lngLat[0]).toBeCloseTo(FROM.longitude, 5);
     act(() => vi.advanceTimersByTime(FLYOVER_ARRIVAL_MS));
     expect(hook.result.current.active).toBe(false);
     expect(drone.remove).toHaveBeenCalledWith(FLYOVER_DRONE_ID);
@@ -149,6 +165,43 @@ describe("useFlyover", () => {
       BASE,
       expect.objectContaining({ motion: "eased" }),
     );
+  });
+
+  it("forces only while held and allowed, straight at the station, and smokes", async () => {
+    const { renderer, drone, hook } = setup();
+    let allowed = false;
+    const forcing = {
+      allowed: vi.fn(() => allowed),
+      spent: vi.fn(),
+      wear: vi.fn(() => 0.4),
+    };
+    await begin(hook, forcing);
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 200));
+    act(() => hook.result.current.force(true));
+    act(() => vi.advanceTimersByTime(500));
+    // Held but not allowed: nothing spent, still on the roads.
+    expect(forcing.spent).not.toHaveBeenCalled();
+    expect(hook.result.current.progress?.forced).toBeUndefined();
+    allowed = true;
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(forcing.spent).toHaveBeenCalled();
+    const spent = forcing.spent.mock.calls.reduce((sum, [ms]) => sum + ms, 0);
+    expect(spent).toBeGreaterThan(900);
+    expect(spent).toBeLessThanOrEqual(1_000);
+    expect(hook.result.current.progress?.forced).toBe(true);
+    const road = vi.mocked(renderer.setRoute).mock.calls[0]?.[0];
+    const straight = vi.mocked(renderer.setRoute).mock.lastCall?.[0];
+    expect(straight).not.toBe(road);
+    expect(straight?.points).toHaveLength(2);
+    expect(straight?.points[1]).toEqual([TO.longitude, TO.latitude]);
+    expect(lastDrone(drone)!.wear).toBe(0.4);
+    // Let go: back on the roads, spending nothing more.
+    act(() => hook.result.current.force(false));
+    forcing.spent.mockClear();
+    act(() => vi.advanceTimersByTime(500));
+    expect(forcing.spent).not.toHaveBeenCalled();
+    expect(hook.result.current.progress?.forced).toBeUndefined();
+    expect(vi.mocked(renderer.setRoute).mock.lastCall?.[0]).toEqual(road);
   });
 
   it("can be left at any moment, with Escape too", async () => {

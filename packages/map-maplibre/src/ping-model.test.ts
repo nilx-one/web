@@ -25,6 +25,36 @@ describe("xPing system prop", () => {
     expect(AVATAR_MODEL_IDS).not.toContain("system-ping");
     model.dispose();
   });
+  it("smokes thicker and sparks oftener the more worn its engine is", () => {
+    const model = createPingModel();
+    const part = (name: string) => {
+      let found: Mesh | undefined;
+      model.root.traverse((node) => {
+        if (node instanceof Mesh && node.name === name) found = node;
+      });
+      return found!;
+    };
+    const smoke = part("ping-smoke");
+    const spark = part("ping-spark");
+    const opacity = (mesh: Mesh) =>
+      (mesh.material as { opacity: number }).opacity;
+    model.sample(0.25, true, 0);
+    const soundOpacity = opacity(smoke);
+    const soundScale = smoke.scale.x;
+    model.sample(0.25, true, 1);
+    expect(opacity(smoke)).toBeGreaterThan(soundOpacity * 3);
+    expect(smoke.scale.x).toBeGreaterThan(soundScale * 3);
+    // At this phase a sound engine does not spark; a spent one does.
+    model.sample(0.4, true, 0);
+    expect(spark.visible).toBe(false);
+    model.sample(0.4, true, 1);
+    expect(spark.visible).toBe(true);
+    // Reduced motion draws no smoke or sparks, worn or not.
+    model.sample(0.4, false, 1);
+    expect(smoke.visible).toBe(false);
+    expect(spark.visible).toBe(false);
+    model.dispose();
+  });
   it("disposes its owned geometry and materials", () => {
     const model = createPingModel();
     const disposals: ReturnType<typeof vi.fn>[] = [];

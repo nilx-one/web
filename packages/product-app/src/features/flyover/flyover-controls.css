@@ -71,3 +71,42 @@
   outline: 2px solid var(--map-accent-spatial);
   outline-offset: 2px;
 }
+
+/* Push to force: filled with what is left of the engine, emptying as it is
+   held. */
+.flyover__force {
+  min-width: 72px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+  background:
+    linear-gradient(
+      to top,
+      var(--map-accent-spatial, #00bfd4) var(--flyover-energy, 100%),
+      transparent var(--flyover-energy, 100%)
+    ),
+    var(--map-glass-strong);
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.flyover__force-level {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flyover__force:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flyover__force:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flyover__force:active:not(:disabled) {
+    transform: none;
+  }
+}

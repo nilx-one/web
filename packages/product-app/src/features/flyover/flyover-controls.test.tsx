@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chooseLocale } from "../../shell/localization";
@@ -57,5 +57,58 @@ describe("FlyoverControls", () => {
     expect(bottom.lastElementChild).toHaveTextContent(
       "150 m to 0xda-market Golden Gate",
     );
+  });
+
+  it("forces while the button is held, filled with what is left", () => {
+    let energy = 0.8;
+    const listeners = new Set<() => void>();
+    const onHold = vi.fn();
+    const view = render(
+      <FlyoverControls
+        onSteer={vi.fn()}
+        onLeave={vi.fn()}
+        force={{
+          engine: {
+            energy: () => energy,
+            subscribe: (listener) => {
+              listeners.add(listener);
+              return () => listeners.delete(listener);
+            },
+          },
+          available: true,
+          onHold,
+        }}
+      />,
+    );
+    const button = screen.getByRole("button", {
+      name: "Force xPing: hold to fly faster and higher",
+    });
+    expect(button).toHaveTextContent("80%");
+    fireEvent.pointerDown(button, { pointerId: 1 });
+    expect(onHold).toHaveBeenLastCalledWith(true);
+    energy = 0.35;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+    expect(button).toHaveTextContent("35%");
+    expect(button.getAttribute("style")).toContain("--flyover-energy: 35%");
+    fireEvent.pointerUp(button, { pointerId: 1 });
+    expect(onHold).toHaveBeenLastCalledWith(false);
+    view.rerender(
+      <FlyoverControls
+        onSteer={vi.fn()}
+        onLeave={vi.fn()}
+        force={{
+          engine: { energy: () => energy, subscribe: () => () => {} },
+          available: false,
+          onHold,
+        }}
+      />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Force xPing: hold to fly faster and higher",
+      }),
+    ).toBeDisabled();
   });
 });

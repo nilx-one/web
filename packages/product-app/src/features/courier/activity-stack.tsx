@@ -26,6 +26,7 @@ export function ActivityStack({
   flight,
   completed,
   target,
+  brokenAt,
   onFlight,
   onFollow,
   onCells,
@@ -36,6 +37,8 @@ export function ActivityStack({
   completed: RevealCompletion | undefined;
   /** The destination's display name; progress is told as distance to it. */
   target?: string | undefined;
+  /** When forcing on empty broke xPing's engine and called the flight off. */
+  brokenAt?: number | undefined;
   onFlight(): void;
   onFollow(): void;
   onCells(): void;
@@ -64,9 +67,13 @@ export function ActivityStack({
       ? completed
       : undefined;
   const arrivedAt = flight.progress?.arrivedAt;
+  const returning = flight.progress?.returning === true;
+  const brokeRecently = brokenAt !== undefined && now - brokenAt < 5000;
   const showFlight =
     plan !== undefined &&
-    (flight.active || (arrivedAt !== undefined && now - arrivedAt < 5000));
+    (flight.active ||
+      (arrivedAt !== undefined && now - arrivedAt < 5000) ||
+      brokeRecently);
   const hasCells =
     jobs.length > 0 || (confirmed !== undefined && now - confirmed.at < 5000);
   if (jobs.length && groupStart === undefined)
@@ -117,16 +124,35 @@ export function ActivityStack({
       .replace("{meters}", String(meters))
       .replace("{target}", target);
   };
-  if (plan && showFlight)
+  const backProgress = () => {
+    if (!flight.progress || !plan) return t("courier.returning") + " · …";
+    const meters =
+      Math.ceil(
+        mapDistanceMeters(flight.progress.point, courierPoint(plan.origin)) /
+          FLIGHT_DISTANCE_STEP_METERS,
+      ) * FLIGHT_DISTANCE_STEP_METERS;
+    return `${t("courier.returning")} · ${meters} ${t("courier.meters")}`;
+  };
+  if (plan && showFlight) {
+    const ended = brokeRecently ? brokenAt : arrivedAt;
     rows.push({
       id: "flight",
       at: Number(plan.started_at_ms),
-      done: arrivedAt !== undefined,
-      exiting: arrivedAt !== undefined && now >= arrivedAt + 4500,
-      label: arrivedAt !== undefined ? t("courier.arrived") : flightProgress(),
+      done: arrivedAt !== undefined && !brokeRecently,
+      exiting: !flight.active && ended !== undefined && now >= ended + 4500,
+      label: brokeRecently
+        ? t("courier.broken")
+        : returning
+          ? backProgress()
+          : arrivedAt !== undefined
+            ? t("courier.arrived")
+            : flightProgress(),
       focus: onFlight,
-      ...(flight.active && arrivedAt === undefined ? { follow: onFollow } : {}),
+      ...(flight.active && (arrivedAt === undefined || returning)
+        ? { follow: onFollow }
+        : {}),
     });
+  }
   rows.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
   return (
     <div
