@@ -226,6 +226,11 @@ describe("useOrbSpills", () => {
       result.current.spill(cell);
       await vi.advanceTimersByTimeAsync(2);
     });
+    // Preloading, service spill, and the resulting React state update each
+    // complete asynchronously before the next Core projection is scheduled.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
     expect(world.preloadLandmarks).toHaveBeenCalledOnce();
     expect(versionedCore.orbWorld).toHaveBeenCalledWith(
       expect.objectContaining({
