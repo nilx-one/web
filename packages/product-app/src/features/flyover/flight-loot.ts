@@ -12,6 +12,10 @@ export const LOOT_MIN_VISIBLE_METERS = 150;
 export const LOOT_NEAR_METERS = 30;
 /** Three-dimensional collision radius, including xPing's body and the item. */
 export const LOOT_PICKUP_RADIUS_METERS = 3;
+/** Two lasers can acquire reachable objects, but never award them. */
+export const LOOT_LASER_RANGE_METERS = 45;
+/** Post-contact 3D intake lasts a quarter of a second. */
+export const LOOT_INTAKE_MS = 250;
 
 export type FlightLootKind = MapFlightLoot["kind"];
 
@@ -127,6 +131,40 @@ export function crossedFlightLoot(
     return sum + offset * offset;
   }, 0);
   return separationSquared <= LOOT_PICKUP_RADIUS_METERS ** 2;
+}
+
+/**
+ * Only targets in front of xPing and in three-dimensional reach may receive
+ * a laser. A stable ID breaks equal-distance ties. No pickup is implied.
+ */
+export function laserLootTargets(
+  path: FlightPath,
+  spawns: readonly FlightLootSpawn[],
+  distanceMeters: number,
+  point: readonly [x: number, y: number, height: number],
+  alreadyCollected: ReadonlySet<string>,
+): string[] {
+  return spawns
+    .filter(
+      (item) =>
+        !alreadyCollected.has(item.id) &&
+        item.distanceMeters >= distanceMeters - LOOT_PICKUP_RADIUS_METERS,
+    )
+    .map((item) => {
+      const [x, y] = lootPosition(path, item);
+      return {
+        id: item.id,
+        distance: Math.hypot(
+          x - point[0],
+          y - point[1],
+          item.heightMeters - point[2],
+        ),
+      };
+    })
+    .filter(({ distance }) => distance <= LOOT_LASER_RANGE_METERS)
+    .sort((a, b) => a.distance - b.distance || a.id.localeCompare(b.id))
+    .slice(0, 2)
+    .map(({ id }) => id);
 }
 
 /** Ignore malformed and duplicate display spawns rather than generating wins. */
