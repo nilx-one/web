@@ -88,10 +88,9 @@ export function distanceToFogCellEdgeMeters(
   const metresPerDegreeLat = 111_195;
   const metresPerDegreeLng =
     metresPerDegreeLat * Math.cos((point.latitude * Math.PI) / 180);
-  const relative = ([longitude, latitude]: readonly [
-    number,
-    number,
-  ]): readonly [number, number] => [
+  const relative = (
+    [longitude, latitude]: readonly [number, number],
+  ): readonly [number, number] => [
     (((longitude - point.longitude + 540) % 360) - 180) *
       metresPerDegreeLng,
     (latitude - point.latitude) * metresPerDegreeLat,
