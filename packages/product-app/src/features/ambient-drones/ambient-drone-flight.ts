@@ -17,6 +17,7 @@ import {
 import {
   AMBIENT_HOVER_MS,
   AMBIENT_LEG_MS,
+  type AmbientDroneKind,
   type AmbientLegTime,
 } from "./ambient-drone-schedule";
 
@@ -45,6 +46,16 @@ const MAX_PITCH_DEG = 11;
 const GRAVITY = 9.81;
 const HEADING_PROBE_METERS = 6;
 const DEG = 180 / Math.PI;
+const STREET_ROAD_KINDS: ReadonlySet<string> = new Set([
+  "minor_road",
+  "medium_road",
+  "major_road",
+]);
+/** Minor roads that are courtyard lanes rather than streets. */
+const YARD_LANE_DETAILS: ReadonlySet<string> = new Set([
+  "service",
+  "living_street",
+]);
 
 export interface AmbientLeg {
   readonly frame: LocalFrame;
@@ -88,6 +99,24 @@ export function turnBetween(from: number, to: number): number {
 function smoothstep(value: number): number {
   const x = Math.min(1, Math.max(0, value));
   return x * x * (3 - 2 * x);
+}
+
+/**
+ * The roads a kind of drone may follow. A street drone keeps to the roads
+ * cars use. A yard scout keeps off them: paths, footways and steps, and the
+ * service lanes and living streets that are a city's courtyards.
+ */
+export function ambientRoads<T extends { kind: string; kindDetail?: string }>(
+  kind: AmbientDroneKind,
+  roads: readonly T[],
+): T[] {
+  return roads.filter((road) =>
+    kind === "street"
+      ? STREET_ROAD_KINDS.has(road.kind)
+      : road.kind === "path" ||
+        (road.kind === "minor_road" &&
+          YARD_LANE_DETAILS.has(road.kindDetail ?? "")),
+  );
 }
 
 export function planAmbientLeg(

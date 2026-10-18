@@ -155,8 +155,8 @@ describe("ambient drones", () => {
     render(<World renderer={fake.renderer} clock={clock} />);
     paint(10);
     expect(fake.shown.size).toBeGreaterThan(0);
+    // Off at once, without waiting for a frame a background page never gets.
     setVisibility("hidden");
-    paint();
     expect(fake.shown.size).toBe(0);
     expect(frames.size).toBe(0);
     const calls = fake.upsert.mock.calls.length;

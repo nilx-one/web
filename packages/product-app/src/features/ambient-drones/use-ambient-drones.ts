@@ -6,6 +6,7 @@ import { buildWalkGraph, type WalkGraph } from "@nilx-one/walk-graph";
 import { useEffect } from "react";
 import { prefersReducedMotion } from "../../shell/motion";
 import {
+  ambientRoads,
   arrivalOf,
   planAmbientLeg,
   sampleAmbientLeg,
@@ -35,11 +36,6 @@ const GRAPH_REFRESH_MS = 3_000;
 const SETTLE_MS = 2_500;
 /** Room around the drones' hubs the road graph is read over. */
 const GRAPH_MARGIN_METERS = 650;
-const STREET_KINDS: ReadonlySet<string> = new Set([
-  "minor_road",
-  "medium_road",
-  "major_road",
-]);
 
 export interface AmbientDronesOptions {
   readonly renderer: MapRenderer;
@@ -167,10 +163,8 @@ export function useAmbientDrones({
       const roads = renderer.roadsWithin?.(bounds) ?? [];
       tilesChanged = false;
       graphs = {
-        street: buildWalkGraph(
-          roads.filter((road) => STREET_KINDS.has(road.kind)),
-        ),
-        yard: buildWalkGraph(roads),
+        street: buildWalkGraph(ambientRoads("street", roads)),
+        yard: buildWalkGraph(ambientRoads("yard", roads)),
         bounds,
         builtAt: now,
       };
@@ -307,14 +301,28 @@ export function useAmbientDrones({
     const unsubscribeTiles = renderer.subscribeLandmarksChanged?.(() => {
       tilesChanged = true;
     });
-    globalThis.document?.addEventListener("visibilitychange", wake);
+    // A hidden page takes its drones off at once rather than on a frame the
+    // browser may hold back while it is in the background.
+    const onVisibility = () => {
+      if (pageVisible()) {
+        wake();
+        return;
+      }
+      if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
+      frame = undefined;
+      clear();
+    };
+    globalThis.document?.addEventListener("visibilitychange", onVisibility);
     wake();
     return () => {
       stopped = true;
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       unsubscribeCamera();
       unsubscribeTiles?.();
-      globalThis.document?.removeEventListener("visibilitychange", wake);
+      globalThis.document?.removeEventListener(
+        "visibilitychange",
+        onVisibility,
+      );
       clear();
     };
   }, [renderer, ready, suspended, clock]);

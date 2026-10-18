@@ -5,6 +5,7 @@ import { buildWalkGraph, type LonLat } from "@nilx-one/walk-graph";
 import { describe, expect, it } from "vitest";
 import {
   AMBIENT_ROOFTOP_METERS,
+  ambientRoads,
   arrivalOf,
   heightAlong,
   planAmbientLeg,
@@ -106,6 +107,65 @@ describe("an ambient drone's leg", () => {
     const bend = sampleAmbientLeg(leg, flying(0.5), 10);
     expect(bend.rollDeg).toBeLessThan(-3);
     expect(bend.pitchDeg).toBeGreaterThan(3);
+  });
+
+  it("keeps a yard scout off the roads cars use, and a street drone on them", () => {
+    // A straight avenue from (0, 0) to (300, 0), and a footway around it
+    // through a courtyard lane: (0, 0) up to (0, 60), along to (300, 60),
+    // down to (300, 0).
+    const roads = [
+      {
+        kind: "major_road",
+        kindDetail: "primary",
+        lines: [[at(0, 0), at(300, 0)]],
+      },
+      {
+        kind: "path",
+        kindDetail: "footway",
+        lines: [[at(0, 0), at(0, 60), at(150, 60)]],
+      },
+      {
+        kind: "minor_road",
+        kindDetail: "service",
+        lines: [[at(150, 60), at(300, 60), at(300, 0)]],
+      },
+      {
+        kind: "minor_road",
+        kindDetail: "residential",
+        lines: [[at(0, -80), at(300, -80)]],
+      },
+    ];
+    expect(ambientRoads("yard", roads).map((road) => road.kindDetail)).toEqual([
+      "footway",
+      "service",
+    ]);
+    expect(
+      ambientRoads("street", roads).map((road) => road.kindDetail),
+    ).toEqual(["primary", "service", "residential"]);
+    const scout = planAmbientLeg(
+      at(0, 0),
+      at(300, 0),
+      buildWalkGraph(ambientRoads("yard", roads)),
+    );
+    expect(scout.routed).toBe(true);
+    // Through the courtyard, never along the avenue.
+    expect(
+      metersBetween(
+        sampleAmbientLeg(scout, flying(0.5), 10).lngLat,
+        at(150, 60),
+      ),
+    ).toBeLessThan(15);
+    const cargo = planAmbientLeg(
+      at(0, 0),
+      at(300, 0),
+      buildWalkGraph(ambientRoads("street", roads)),
+    );
+    expect(
+      metersBetween(
+        sampleAmbientLeg(cargo, flying(0.5), 18).lngLat,
+        at(150, 0),
+      ),
+    ).toBeLessThan(5);
   });
 
   it("turns the short way round", () => {

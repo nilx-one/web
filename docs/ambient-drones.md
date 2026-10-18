@@ -8,10 +8,10 @@ them (`features/ambient-drones`).
 
 ## Two kinds
 
-| Kind     | Looks like                           | Flies                               | Height  |
-| -------- | ------------------------------------ | ----------------------------------- | ------- |
-| `street` | graphite, yellow trim, with a parcel | along minor, medium and major roads | 16–22 m |
-| `yard`   | small, white, orange trim            | footways, yards and park paths      | 9–13 m  |
+| Kind     | Looks like                           | Flies                                                     | Height  |
+| -------- | ------------------------------------ | --------------------------------------------------------- | ------- |
+| `street` | graphite, yellow trim, with a parcel | along minor, medium and major roads                       | 16–22 m |
+| `yard`   | small, white, orange trim            | paths, footways and courtyard lanes, never roads for cars | 9–13 m  |
 
 Both are drawn at five times the 1.2 m drone, so one reads at street zoom.
 They use the system prop surface (`SystemDroneHandle.kind`), never the avatar
@@ -62,8 +62,10 @@ wakes the loop again. While it runs:
   away never stutters.
 - The roads come from the same self-hosted basemap archive the map draws.
   When the drones move to new ground, the roads of the tiles around them are
-  read ahead once (`preloadRoads`: zoom 14, the renderer's own cache of at
-  most 32 tiles, nothing fetched twice). A leg waits up to 2.5 s for them,
+  read ahead once (`preloadRoads`: zoom 14, through the renderer's own cache
+  of at most 32 tiles, oldest dropped first). A request already in flight is
+  not made again, and a tile still held is reused, but one dropped from the
+  cache is fetched again when needed. A leg waits up to 2.5 s for them,
   then settles for what is loaded. The road graph is rebuilt at most every
   3 s when new tiles arrive.
 - A drone keeps low only over the road graph. A waypoint more than 15 m from
