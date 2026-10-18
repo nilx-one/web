@@ -19,11 +19,11 @@
     "nilx-one:appearance-dark-url": "/map/0.1.0/style-dark.json",
     "nilx-one:surface-background": "#f7f9fa",
     "nilx-one:surface-land": "#f1f4f5",
-    "nilx-one:surface-parks": "#eaf2ef",
+    "nilx-one:surface-parks": "#d2e9cd",
     "nilx-one:surface-buildings": "#d8e2e5",
     "nilx-one:road-primary": "#bccfd4",
     "nilx-one:road-secondary": "#cedcdf",
-    "nilx-one:water-base": "#d9f4f7",
+    "nilx-one:water-base": "#c8ecf3",
     "nilx-one:accent-primary": "#37d7e5",
     "nilx-one:label-primary": "#536166",
     "nilx-one:label-secondary": "#7d8a90",
@@ -139,7 +139,7 @@
           "match",
           ["get", "kind"],
           ["forest", "scrub", "grassland"],
-          "#eaf2ef",
+          "#d2e9cd",
           ["urban_area"],
           "#e8edef",
           "#f1f4f5"
@@ -179,7 +179,7 @@
         ]
       ],
       "paint": {
-        "fill-color": "#eaf2ef",
+        "fill-color": "#d2e9cd",
         "fill-opacity": ["interpolate", ["linear"], ["zoom"], 6, 0, 10, 1]
       }
     },
@@ -233,7 +233,7 @@
       "source-layer": "water",
       "filter": ["==", ["geometry-type"], "Polygon"],
       "paint": {
-        "fill-color": "#d9f4f7"
+        "fill-color": "#c8ecf3"
       }
     },
     {

@@ -475,11 +475,11 @@ describe("map deployment assets", () => {
     expect(style.metadata?.["nilx-one:visual-language"]).toBe("0x1-spatial");
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#f7f9fa");
     expect(style.metadata?.["nilx-one:surface-land"]).toBe("#f1f4f5");
-    expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#eaf2ef");
+    expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#d2e9cd");
     expect(style.metadata?.["nilx-one:surface-buildings"]).toBe("#d8e2e5");
     expect(style.metadata?.["nilx-one:road-primary"]).toBe("#bccfd4");
     expect(style.metadata?.["nilx-one:road-secondary"]).toBe("#cedcdf");
-    expect(style.metadata?.["nilx-one:water-base"]).toBe("#d9f4f7");
+    expect(style.metadata?.["nilx-one:water-base"]).toBe("#c8ecf3");
     expect(style.metadata?.["nilx-one:label-primary"]).toBe("#536166");
     expect(style.metadata?.["nilx-one:label-secondary"]).toBe("#7d8a90");
     expect(style.metadata?.["nilx-one:accent-semantics"]).toBe(
