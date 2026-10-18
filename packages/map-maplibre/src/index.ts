@@ -2423,7 +2423,8 @@ export function createMapLibreRenderer(
 
     setFlightLoot(next: readonly MapFlightLoot[]) {
       flightLootHandles = next.map((item) => ({ ...item }));
-      if (avatarLayer !== undefined) avatarLayer.setFlightLoot(flightLootHandles);
+      if (avatarLayer !== undefined)
+        avatarLayer.setFlightLoot(flightLootHandles);
       else if (flightLootHandles.length > 0) void requestAvatarLayer();
     },
 
