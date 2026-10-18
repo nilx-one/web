@@ -44,6 +44,15 @@
   font-size: 13px;
 }
 
+.flyover__action--cancel {
+  color: var(--map-ink);
+  border-color: #cc4949;
+}
+
+.flyover__action--cancel:hover {
+  background: color-mix(in srgb, #cc4949 14%, var(--map-glass-strong));
+}
+
 .authenticated-map-home--flight {
   --flight-toast-inset: calc(44px + var(--shell-gap));
 }
@@ -122,27 +131,23 @@
   outline-offset: 2px;
 }
 
-/* Push to force: filled with what is left of the engine, emptying as it is
-   held. */
+/* A solid engine gauge: yellow at 100%, orange midway, red at 0%.
+   The whole button changes colour, not its filled fraction. */
 .flyover__force {
   min-width: 72px;
   display: grid;
   place-items: center;
+  color: #191919;
+  background: var(--flyover-energy-color, #f5cb0d);
   font-size: 18px;
   line-height: 1;
-  background:
-    linear-gradient(
-      to top,
-      var(--map-accent-spatial, #00bfd4) var(--flyover-energy, 100%),
-      transparent var(--flyover-energy, 100%)
-    ),
-    var(--map-glass-strong);
   touch-action: none;
   -webkit-touch-callout: none;
 }
 
 .flyover__force-level {
-  font-size: 11px;
+  font-size: 16px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
