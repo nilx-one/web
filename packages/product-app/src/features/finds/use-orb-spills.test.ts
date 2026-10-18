@@ -4,7 +4,12 @@
 import type { OrbSpillAccessPort } from "@nilx-one/application";
 import type { OrbWorldInput, OrbWorldView } from "@nilx-one/application";
 import { artifactSha, type ArtifactId } from "@nilx-one/artifact-contract";
-import type { MapFogCell, MapOrb, MapRenderer } from "@nilx-one/map-contract";
+import type {
+  MapFogCell,
+  MapFogField,
+  MapOrb,
+  MapRenderer,
+} from "@nilx-one/map-contract";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -188,8 +193,9 @@ describe("useOrbSpills", () => {
       kind: "monument" as const,
       facts: {},
     };
+    const fog = { cellAt: () => cell } as unknown as MapFogField;
     const world = Object.assign(renderer(), {
-      fog: { cellAt: () => cell },
+      fog,
       landmarksNear: vi.fn(() => [waypoint]),
       preloadLandmarks: vi.fn(async () => ({
         covering: 1,
