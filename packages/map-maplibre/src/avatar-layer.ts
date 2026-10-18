@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { AVATAR_ASSET_VERSIONS, FLIGHT_LOOT_COLORS } from "@nilx-one/map-contract";
+import {
+  AVATAR_ASSET_VERSIONS,
+  FLIGHT_LOOT_COLORS,
+} from "@nilx-one/map-contract";
 import type {
   AvatarClipId,
   AvatarHandle,
@@ -458,11 +461,15 @@ export function createAvatarLayer(
   }
 
   function placeFlightLoot(
-    entry: { handle: MapFlightLoot; model: ReturnType<typeof createFlightLootModel> },
+    entry: {
+      handle: MapFlightLoot;
+      model: ReturnType<typeof createFlightLootModel>;
+    },
   ): void {
     if (map === undefined) return;
     const { lngLat, heightMeters } = entry.handle;
-    const altitude = (loadedTerrainElevationMeters(map, lngLat) ?? 0) + heightMeters;
+    const altitude =
+      (loadedTerrainElevationMeters(map, lngLat) ?? 0) + heightMeters;
     const coordinate = MercatorCoordinate.fromLngLat(
       { lng: lngLat[0], lat: lngLat[1] },
       altitude,
@@ -483,7 +490,10 @@ export function createAvatarLayer(
   function updateLootLasers(): void {
     const source = instances.get("flyover:xPing")?.root;
     const targets = [...flightLoot.values()]
-      .filter(({ handle }) => handle.laserTarget && handle.intakeProgress === undefined)
+      .filter(
+        ({ handle }) =>
+          handle.laserTarget && handle.intakeProgress === undefined,
+      )
       .slice(0, 2);
     for (const [index, beam] of laserBeams.entries()) {
       const target = targets[index];
@@ -495,10 +505,18 @@ export function createAvatarLayer(
         beam.visible = false;
         continue;
       }
-      beam.position.copy(source.position).add(target.model.root.position).multiplyScalar(0.5);
-      beam.quaternion.setFromUnitVectors(beamOrigin, beamDirection.multiplyScalar(1 / distance));
+      beam.position
+        .copy(source.position)
+        .add(target.model.root.position)
+        .multiplyScalar(0.5);
+      beam.quaternion.setFromUnitVectors(
+        beamOrigin,
+        beamDirection.multiplyScalar(1 / distance),
+      );
       beam.scale.set(1, distance, 1);
-      (beam.material as MeshBasicMaterial).color.setHex(FLIGHT_LOOT_COLORS[target.handle.rarity]);
+      (beam.material as MeshBasicMaterial).color.setHex(
+        FLIGHT_LOOT_COLORS[target.handle.rarity],
+      );
     }
   }
 
@@ -517,7 +535,10 @@ export function createAvatarLayer(
       const target = instances.get("flyover:xPing")?.root;
       if (pull !== undefined && target !== undefined) {
         const amount = Math.max(0, Math.min(1, pull));
-        entry.model.root.position.lerp(target.position, amount * amount * (3 - 2 * amount));
+        entry.model.root.position.lerp(
+          target.position,
+          amount * amount * (3 - 2 * amount),
+        );
         entry.model.root.scale.multiplyScalar(1 - 0.85 * amount);
       }
     }
