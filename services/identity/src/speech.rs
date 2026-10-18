@@ -747,7 +747,10 @@ mod tests {
         // The historical Bond's administrator role is a persisted grant,
         // never a side effect of the newly public 0x0 discriminator.
         identities
-            .set_role(&"0x0sky".parse().expect("legacy Bond"), crate::BondAccessRole::Admin)
+            .set_role(
+                &"0x0sky".parse().expect("legacy Bond"),
+                crate::BondAccessRole::Admin,
+            )
             .await
             .expect("legacy admin grant");
         for (pub_dress, telegram) in [("0x0sky", 1), ("0xfrSb", 2)] {

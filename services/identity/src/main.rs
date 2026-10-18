@@ -1668,15 +1668,24 @@ mod tests {
     fn admin_role_callbacks_use_unpredictable_request_tokens() {
         let token = "0123456789abcdef0123456789abcdef";
         assert_eq!(
-            super::parse_admin_role_decision_callback(&super::admin_role_decision_callback_data(true, token)),
+            super::parse_admin_role_decision_callback(&super::admin_role_decision_callback_data(
+                true, token
+            )),
             Some((true, token.to_owned()))
         );
         assert_eq!(
-            super::parse_admin_role_decision_callback(&super::admin_role_decision_callback_data(false, token)),
+            super::parse_admin_role_decision_callback(&super::admin_role_decision_callback_data(
+                false, token
+            )),
             Some((false, token.to_owned()))
         );
-        for invalid in ["ar:y:12", "ar:y:0", "ar:yes:0123456789abcdef0123456789abcdef",
-                        "ar:y:0000000000000000000000000000000g", "ar:y:0123456789abcdef0123456789abcdef:extra"] {
+        for invalid in [
+            "ar:y:12",
+            "ar:y:0",
+            "ar:yes:0123456789abcdef0123456789abcdef",
+            "ar:y:0000000000000000000000000000000g",
+            "ar:y:0123456789abcdef0123456789abcdef:extra",
+        ] {
             assert_eq!(super::parse_admin_role_decision_callback(invalid), None);
         }
     }
