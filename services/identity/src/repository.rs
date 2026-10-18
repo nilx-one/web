@@ -2062,8 +2062,6 @@ mod tests {
         let database = tempfile::NamedTempFile::new().expect("database");
         let url = format!("sqlite://{}", database.path().display());
         let repository = IdentityRepository::connect(&url).await.expect("repository");
-        sqlx::query("DROP TRIGGER identities_reserved_admin_prefix_insert")
-            .execute(&repository.pool).await.expect("legacy schema");
         for address in ["0x0нуль", "0x0other"] {
             sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES (?, 'human', 1)")
                 .bind(address).execute(&repository.pool).await.expect("legacy human");

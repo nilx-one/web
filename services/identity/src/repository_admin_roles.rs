@@ -110,8 +110,6 @@ mod admin_role_tests {
     #[tokio::test]
     async fn a_reserved_bond_needs_a_real_admin_decision() {
         let repository = IdentityRepository::connect("sqlite::memory:").await.expect("repository");
-        sqlx::query("DROP TRIGGER identities_reserved_admin_prefix_insert")
-            .execute(&repository.pool).await.expect("legacy fixture");
         for address in ["0x0admin", "0x0candidate", "0x1ordinary"] {
             sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES (?, 'human', 1)")
                 .bind(address).execute(&repository.pool).await.expect("fixture identity");
@@ -145,8 +143,6 @@ mod admin_role_tests {
     #[tokio::test]
     async fn denial_does_not_grant_privileges_or_reopen_on_login() {
         let repository = IdentityRepository::connect("sqlite::memory:").await.expect("repository");
-        sqlx::query("DROP TRIGGER identities_reserved_admin_prefix_insert")
-            .execute(&repository.pool).await.expect("fixture");
         for address in ["0x0admin", "0x0pending"] {
             sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES (?, 'human', 1)")
                 .bind(address).execute(&repository.pool).await.expect("fixture identity");
