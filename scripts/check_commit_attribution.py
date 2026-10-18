@@ -7,16 +7,32 @@ import sys
 
 
 ACCOUNTS = {
-    "0x0sky": "75973992+0x0sky@users.noreply.github.com",
+    "0x0sky": "0x0sky@aiaiaiai.org",
     "x0skai": "x0skai@aiaiaiai.org",
 }
-ACCOUNT_BY_ADDRESS = {address.lower(): name for name, address in ACCOUNTS.items()}
+# Historical aliases are recognized for self-credit detection, never permitted
+# as identities in new commits.
+LEGACY_ACCOUNTS = {
+    "75973992+0x0sky@users.noreply.github.com": "0x0sky",
+    "300452669+x0skai@users.noreply.github.com": "x0skai",
+}
+ACCOUNT_BY_ADDRESS = {
+    **{address.lower(): name for name, address in ACCOUNTS.items()},
+    **LEGACY_ACCOUNTS,
+}
 CLAUDE = "Claude <noreply@anthropic.com>"
 CODEX = "Codex <codex@openai.com>"
 
 
-def validate(email, message):
+def validate(email, message, committer_email=None):
     errors = []
+    author_address = email.lower()
+    if author_address in LEGACY_ACCOUNTS:
+        account = LEGACY_ACCOUNTS[author_address]
+        errors.append(f"noncanonical author email for {account}; use {ACCOUNTS[account]}")
+    if committer_email is not None and committer_email.lower() in LEGACY_ACCOUNTS:
+        account = LEGACY_ACCOUNTS[committer_email.lower()]
+        errors.append(f"noncanonical committer email for {account}; use {ACCOUNTS[account]}")
     parsed = subprocess.run(
         ["git", "interpret-trailers", "--parse"], input=message,
         text=True, capture_output=True, check=True,
@@ -64,9 +80,11 @@ def main():
     ).splitlines()
     failed = False
     for sha in commits:
-        raw = subprocess.check_output(["git", "show", "-s", "--format=%ae%x00%B", sha], text=True)
-        email, message = raw.split("\0", 1)
-        for error in validate(email.strip(), message):
+        raw = subprocess.check_output(
+            ["git", "show", "-s", "--format=%ae%x00%ce%x00%B", sha], text=True
+        )
+        email, committer_email, message = raw.split("\0", 2)
+        for error in validate(email.strip(), message, committer_email.strip()):
             print(f"{sha}: {error}")
             failed = True
     if failed:
