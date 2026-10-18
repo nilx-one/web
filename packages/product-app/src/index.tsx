@@ -377,6 +377,36 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     retry: false,
   });
 
+  const adminIdentity =
+    browserHost
+      ? nativeContextQuery.data?.kind === "authenticated"
+        ? nativeContextQuery.data.identity.pubDress
+        : undefined
+      : providerIdentityQuery.data?.kind === "registered"
+        ? providerIdentityQuery.data.identity.pubDress
+        : undefined;
+  const adminInboxQuery = useQuery({
+    queryKey: ["admin-role-inbox", adminIdentity],
+    queryFn: () =>
+      dependencies.identity.listAdminRoleRequests?.() ??
+      Promise.resolve({ kind: "service-unavailable" as const }),
+    enabled:
+      adminIdentity !== undefined &&
+      dependencies.identity.listAdminRoleRequests !== undefined,
+    retry: false,
+    refetchInterval: 30_000,
+  });
+  const adminRoleDecision = useMutation({
+    mutationFn: (decision: { pubDress: string; approve: boolean }) =>
+      dependencies.identity.decideAdminRoleRequest?.(
+        decision.pubDress,
+        decision.approve,
+      ) ?? Promise.resolve({ kind: "service-unavailable" as const }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-role-inbox"] });
+    },
+  });
+
   // Contract 8 answers for the Avaia its owner configured. A host whose identity
   // client does not publish that capability simply has no profile to read, and
   // the Dock stays what it was.
@@ -1243,6 +1273,18 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       selection={selection}
       viewModel={viewModel}
       {...(browserProviderAuth === undefined ? {} : { browserProviderAuth })}
+      {...(adminInboxQuery.data?.kind === "available"
+        ? {
+            adminRoleInbox: {
+              requests: adminInboxQuery.data.requests,
+              busy: adminRoleDecision.isPending,
+              failed: adminRoleDecision.data?.kind === "service-unavailable" ||
+                adminRoleDecision.isError,
+              onDecide: (pubDress: string, approve: boolean) =>
+                adminRoleDecision.mutate({ pubDress, approve }),
+            },
+          }
+        : {})}
       onCredentialAutofill={applyAutofilledCredential}
       onAvatarChoice={(model) => {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
