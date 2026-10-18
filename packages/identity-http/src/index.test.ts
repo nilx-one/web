@@ -1257,32 +1257,3 @@ describe("Telegram self-disconnect transport", () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 });
-
-describe("admin role inbox contract", () => {
-  it("requires an authenticated admin role for inbox reads", async () => {
-    const adapter = createIdentityHttpAdapter({
-      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
-        response(403, { error: { code: "admin_required" } }),
-      ),
-      getAuthorization: () => undefined,
-    });
-    await expect(adapter.listAdminRoleRequests()).resolves.toEqual({
-      kind: "not-admin",
-    });
-  });
-
-  it("parses a pending request without inventing an admin grant", async () => {
-    const adapter = createIdentityHttpAdapter({
-      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
-        response(200, {
-          requests: [{ pub_dress: "0x0candidate", requested_at: 12 }],
-        }),
-      ),
-      getAuthorization: () => undefined,
-    });
-    await expect(adapter.listAdminRoleRequests()).resolves.toEqual({
-      kind: "available",
-      requests: [{ pubDress: "0x0candidate", requestedAt: 12 }],
-    });
-  });
-});

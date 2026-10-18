@@ -1345,7 +1345,6 @@ export function IdentityFoundationView({
                     {t("header.signOut")}
                   </button>
                 ) : null}
-
               </section>
             ) : (
               <section className="identity-message" aria-live="polite">
