@@ -4,7 +4,12 @@
 import type { OrbSpillAccessPort } from "@nilx-one/application";
 import type { OrbWorldInput, OrbWorldView } from "@nilx-one/application";
 import { artifactSha, type ArtifactId } from "@nilx-one/artifact-contract";
-import type { MapFogCell, MapOrb, MapRenderer } from "@nilx-one/map-contract";
+import type {
+  MapFogCell,
+  MapFogField,
+  MapOrb,
+  MapRenderer,
+} from "@nilx-one/map-contract";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -163,6 +168,83 @@ describe("useOrbSpills", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(world.orbs.map((orb) => orb.id)).not.toContain(drawn[0]!.id);
+  });
+
+  it("preloads real local landmarks and passes a waypoint only to v2 Core", async () => {
+    const cell = cellWithFind();
+    const [find] = findsWithin(cell.boundary, NOW);
+    const sha = await artifactSha(find!.artifactId);
+    const port: OrbSpillAccessPort = {
+      spillOrbs: vi.fn(async () => ({
+        kind: "spilled" as const,
+        spill: {
+          sha,
+          count: 7,
+          expiresAt: NOW + 30 * 60_000,
+          taken: [],
+        },
+      })),
+      readOrbSpills: vi.fn(async () => ({ kind: "read" as const, spills: [] })),
+    };
+    const waypoint = {
+      id: "monument:local",
+      longitude: center.longitude + 0.0002,
+      latitude: center.latitude,
+      kind: "monument" as const,
+      facts: {},
+    };
+    const fog = { cellAt: () => cell } as unknown as MapFogField;
+    const world = Object.assign(renderer(), {
+      fog,
+      landmarksNear: vi.fn(() => [waypoint]),
+      preloadLandmarks: vi.fn(async () => ({
+        covering: 1,
+        refused: 0,
+        skipped: 0,
+        cached: 0,
+        fetched: 1,
+        failed: 0,
+      })),
+    });
+    const versionedCore = {
+      ...core,
+      orbSpillVersion: vi.fn(async () => 2),
+    };
+    const { result } = renderHook(() =>
+      useOrbSpills({
+        owner: "0x0sky",
+        port,
+        core: versionedCore,
+        renderer: world,
+        near: undefined,
+        bond: undefined,
+        avaiaPoint: () => undefined,
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve(); // The Core capability handshake completes.
+      result.current.spill(cell);
+      await vi.advanceTimersByTimeAsync(2);
+    });
+    // Preloading, service spill, and the resulting React state update each
+    // complete asynchronously before the next Core projection is scheduled.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(world.preloadLandmarks).toHaveBeenCalledOnce();
+    expect(versionedCore.orbWorld).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spills: expect.arrayContaining([
+          expect.objectContaining({
+            via: {
+              longitude_e7: String(Math.round(waypoint.longitude * 1e7)),
+              latitude_e7: String(Math.round(waypoint.latitude * 1e7)),
+            },
+          }),
+        ]),
+      }),
+      expect.any(Number),
+    );
   });
 
   it.each([

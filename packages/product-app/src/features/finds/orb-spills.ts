@@ -18,7 +18,13 @@ import {
   type FindRoll,
   type LonLat,
 } from "@nilx-one/artifact-contract";
-import type { MapOrb, MapPointSelection } from "@nilx-one/map-contract";
+import {
+  mapDistanceMeters,
+  type MapFogField,
+  type MapLandmark,
+  type MapOrb,
+  type MapPointSelection,
+} from "@nilx-one/map-contract";
 
 /**
  * Orb spills as this device holds them. Every orb rule is Core's
@@ -37,6 +43,8 @@ export interface KnownSpill {
   readonly taken: readonly number[];
   /** Where the trail starts: the middle of the cell the find lies in. */
   readonly from: LonLat;
+  /** A real archive landmark in the find's cell, never the find itself. */
+  readonly via?: LonLat;
   /** The find the trail leads to. */
   readonly to: LonLat;
   /** When this device first drew it, so its orbs fall once, then lie. */
@@ -95,12 +103,64 @@ export function fromCoordinate(at: OrbCoordinate): LonLat {
   return [Number(at.longitude_e7) / 1e7, Number(at.latitude_e7) / 1e7];
 }
 
+/** Prefer monuments and memorials, then other real local landmarks. */
+const HERITAGE_KINDS: ReadonlySet<string> = new Set([
+  "monument",
+  "memorial",
+  "artwork",
+  "museum",
+  "historic",
+  "archaeological_site",
+]);
+
+/**
+ * Deterministic navigation waypoint, only from the same archive cell as
+ * the original artifact. No invented POI and no change to artifact placement.
+ * The cache may legitimately have no landmark, giving the legacy trail.
+ */
+type LandmarkLookup = (
+  point: MapPointSelection,
+  radiusMeters: number,
+) => readonly MapLandmark[];
+
+export function landmarkWaypoint(
+  roll: Pick<FindRoll, "segment" | "placement">,
+  fog: MapFogField | undefined,
+  near: LandmarkLookup | undefined,
+): LonLat | undefined {
+  if (fog === undefined || near === undefined) return undefined;
+  const [longitude, latitude] = findPoint(roll);
+  const cell = fog.cellAt({ longitude, latitude });
+  const candidates = near(cell.center, 220)
+    .filter(
+      (landmark) =>
+        Number.isFinite(landmark.longitude) &&
+        Number.isFinite(landmark.latitude) &&
+        fog.cellAt(landmark).id === cell.id,
+    )
+    .sort((a, b) => {
+      const preferred =
+        Number(HERITAGE_KINDS.has(b.kind)) - Number(HERITAGE_KINDS.has(a.kind));
+      if (preferred !== 0) return preferred;
+      const target = { longitude, latitude };
+      return (
+        mapDistanceMeters(target, a) - mapDistanceMeters(target, b) ||
+        a.id.localeCompare(b.id)
+      );
+    });
+  const selected = candidates[0];
+  return selected === undefined
+    ? undefined
+    : [selected.longitude, selected.latitude];
+}
+
 /** A spill as the service answered it, for a find this device rolled. */
 export function knownSpill(
   view: OrbSpillView,
   roll: Pick<FindRoll, "artifactId" | "segment" | "placement">,
   cellCenter: (point: LonLat) => LonLat | undefined,
   appearedAt: number,
+  via?: LonLat,
 ): KnownSpill {
   const to = findPoint(roll);
   return {
@@ -110,6 +170,7 @@ export function knownSpill(
     expiresAt: view.expiresAt,
     taken: [...view.taken],
     from: cellCenter(to) ?? to,
+    ...(via === undefined ? {} : { via }),
     to,
     appearedAt,
   };
@@ -134,6 +195,7 @@ export function orbWorldInput(
   picked: ReadonlySet<string>,
   bond: MapPointSelection | undefined,
   avaia: MapPointSelection | undefined,
+  waypointsEnabled = false,
 ): OrbWorldInput {
   const at = (point: MapPointSelection | undefined) =>
     point === undefined
@@ -143,6 +205,9 @@ export function orbWorldInput(
     spills: spills.map((spill) => ({
       artifact_id: spill.artifactId,
       from: toCoordinate(spill.from),
+      ...(waypointsEnabled && spill.via !== undefined
+        ? { via: toCoordinate(spill.via) }
+        : {}),
       to: toCoordinate(spill.to),
       appeared_at: String(Math.max(0, Math.trunc(spill.appearedAt))),
       expires_at: String(Math.max(0, Math.trunc(spill.expiresAt))),

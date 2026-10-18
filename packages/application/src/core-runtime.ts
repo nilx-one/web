@@ -222,6 +222,8 @@ export interface CoreRuntimePort {
    * claims what is in reach; it decides nothing about an orb itself.
    */
   orbWorld?(world: OrbWorldInput, nowMs: number): Promise<OrbWorldView>;
+  /** v2 permits an optional real-landmark `via` waypoint in orb worlds. */
+  orbSpillVersion?(): Promise<number>;
 }
 
 export type CoreHolder = "bond" | "avaia";

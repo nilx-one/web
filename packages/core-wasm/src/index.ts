@@ -712,6 +712,7 @@ export interface CoreWasmBindings {
     previouslyBlocked: boolean,
   ): AvaiaProximityPolicy;
   orbWorld?(world: OrbWorldInput, nowMs: number): OrbWorldView;
+  orbSpillVersion?(): number;
   derivePubDressLabel?(pubDress: string): CorePubDressLabelResult;
   composePubDressLabel?(
     pubDress: string,
@@ -756,6 +757,8 @@ export interface GeneratedCoreWasmModule {
     artifacts: number,
     previously_blocked: boolean,
   ): string;
+  /** Absent from Core runtimes before landmark-directed orbs. */
+  orb_spill_version?(): number;
   /** Absent from a runtime built before Core's orb spills. */
   orb_world?(world: string, now_ms: string): string;
   /** Absent from a runtime built before Core's Avaia drive. */
@@ -934,6 +937,9 @@ export async function loadGeneratedCoreWasmBindings(
               projection,
             ),
         }),
+    ...(runtime.orb_spill_version === undefined
+      ? {}
+      : { orbSpillVersion: () => runtime.orb_spill_version!() }),
     ...(runtime.orb_world === undefined
       ? {}
       : {
@@ -1143,6 +1149,16 @@ class CoreWasmClient implements CoreRuntimePort {
     if (bindings.courierDestination === undefined)
       throw new CourierCapabilityUnavailable();
     return bindings.courierDestination(origin, projection);
+  }
+
+  /** Older verified 0.1.0 runtimes have no optional-waypoint export. */
+  public async orbSpillVersion(): Promise<number> {
+    const bindings = await this.loadBindings();
+    const version = bindings.orbSpillVersion?.() ?? 1;
+    if (!Number.isInteger(version) || version < 1) {
+      throw new Error("0x1 Core returned an invalid orb spill version");
+    }
+    return version;
   }
 
   public async orbWorld(

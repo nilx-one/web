@@ -26,6 +26,7 @@ import { queueWorldAwards } from "../progression/committed-sync";
 import {
   findsWithin,
   knownSpill,
+  landmarkWaypoint,
   mapOrbs,
   orbWorldInput,
   refreshSpill,
@@ -48,7 +49,8 @@ export interface OrbSpillsInput {
   /** The identity service; spills need it to be one that has them. */
   readonly port: unknown;
   /** Core, which owns every orb rule. Without it no orb is drawn. */
-  readonly core: Pick<CoreRuntimePort, "orbWorld"> | undefined;
+  readonly core:
+    Pick<CoreRuntimePort, "orbWorld" | "orbSpillVersion"> | undefined;
   readonly renderer: MapRenderer;
   /** Where the Bond stands, observed or declared: spills are read around it. */
   readonly near: MapPointSelection | undefined;
@@ -91,6 +93,28 @@ export function useOrbSpills({
     ? port
     : undefined;
   const orbWorld = useMemo(() => core?.orbWorld?.bind(core), [core]);
+  // Capability is read from the actual verified runtime, never assumed from
+  // the Web bundle's version. Older Core rejects unknown `via` fields.
+  const [capability, setCapability] = useState<{
+    readonly runtime: OrbSpillsInput["core"];
+    readonly version: number;
+  }>({ runtime: undefined, version: 1 });
+  useEffect(() => {
+    let live = true;
+    void core
+      ?.orbSpillVersion?.()
+      .then((version) => {
+        if (live && Number.isInteger(version) && version >= 2) {
+          setCapability({ runtime: core, version });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [core]);
+  const waypointsEnabled =
+    capability.runtime === core && capability.version >= 2;
   const [spills, setSpills] = useState<ReadonlyMap<string, KnownSpill>>(
     () => new Map(),
   );
@@ -118,6 +142,14 @@ export function useOrbSpills({
     [renderer],
   );
 
+  const waypoint = useCallback(
+    (roll: FindRoll): LonLat | undefined => {
+      const near = renderer.landmarksNear?.bind(renderer);
+      return landmarkWaypoint(roll, renderer.fog, near);
+    },
+    [renderer],
+  );
+
   const adopt = useCallback(
     (entries: readonly (readonly [FindRoll, OrbSpillView])[]) => {
       if (entries.length === 0) return;
@@ -130,21 +162,40 @@ export function useOrbSpills({
           next.set(
             view.sha,
             known === undefined
-              ? knownSpill(view, roll, cellCenter, now)
+              ? knownSpill(view, roll, cellCenter, now, waypoint(roll))
               : refreshSpill(known, view),
           );
         }
         return next;
       });
     },
-    [cellCenter],
+    [cellCenter, waypoint],
   );
 
   const spill = useCallback(
     (cell: MapFogCell) => {
       if (spillPort === undefined) return;
-      const rolls = findsWithin(cell.boundary, Date.now());
       void (async () => {
+        // Read the real POIs in this opened cell before choosing waypoints.
+        // A failed or missing archive is not a reason to suppress the orbs.
+        const longitudes = cell.boundary.map(([lng]) => lng);
+        const latitudes = cell.boundary.map(([, lat]) => lat);
+        if (
+          longitudes.length >= 3 &&
+          Math.max(...longitudes) - Math.min(...longitudes) < 1
+        ) {
+          try {
+            await renderer.preloadLandmarks?.({
+              west: Math.min(...longitudes),
+              east: Math.max(...longitudes),
+              south: Math.min(...latitudes),
+              north: Math.max(...latitudes),
+            });
+          } catch {
+            // Preserve the legacy direct trail when offline.
+          }
+        }
+        const rolls = findsWithin(cell.boundary, Date.now());
         const entries: [FindRoll, OrbSpillView][] = [];
         for (const roll of rolls) {
           const result = await spillPort
@@ -157,7 +208,7 @@ export function useOrbSpills({
         adopt(entries);
       })().catch(() => undefined);
     },
-    [adopt, spillPort],
+    [adopt, renderer, spillPort],
   );
 
   // The spills of the finds around the Bond, read by sha bucket on a slow
@@ -249,6 +300,7 @@ export function useOrbSpills({
         state.picked,
         bondPoint,
         state.avaiaPoint(),
+        waypointsEnabled,
       ),
       now,
     )
@@ -262,7 +314,7 @@ export function useOrbSpills({
         pickUp(view.avaia_reach, "avaia");
       })
       .catch(() => undefined);
-  }, [orbWorld, pickUp, renderer]);
+  }, [orbWorld, pickUp, renderer, waypointsEnabled]);
 
   const bondLongitude = bond?.longitude;
   const bondLatitude = bond?.latitude;
