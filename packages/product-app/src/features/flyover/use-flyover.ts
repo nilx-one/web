@@ -447,7 +447,8 @@ export function useFlyover(
           }
           if (pickups) {
             try {
-              if (feedbackRef.current?.impact) feedbackRef.current.impact("light");
+              if (feedbackRef.current?.impact)
+                feedbackRef.current.impact("light");
               else flightLootHaptic();
             } catch {
               // An unavailable host haptic is always optional.
@@ -469,7 +470,13 @@ export function useFlyover(
             speed,
             pickedLoot,
           );
-          const selected = laserLootTargets(path, loot, distance, here, pickedLoot);
+          const selected = laserLootTargets(
+            path,
+            loot,
+            distance,
+            here,
+            pickedLoot,
+          );
           const newlyAcquired = selected.some((id) => !previousTargets.has(id));
           previousTargets = new Set(selected);
           if (newlyAcquired && now - lastLockCueAt >= 200) {
