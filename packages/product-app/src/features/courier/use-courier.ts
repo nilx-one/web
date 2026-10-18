@@ -22,8 +22,8 @@ export function useCourier(input: {
   core: Pick<CoreRuntimePort, "courierDestination"> | undefined;
   directory: CourierDirectoryPort | undefined;
   suspended: boolean;
-  cue?: (moment: SoundCue) => void;
-  feedback?: Pick<HostPort, "impact">;
+  cue?: ((moment: SoundCue) => void) | undefined;
+  feedback?: Pick<HostPort, "impact"> | undefined;
   /** xPing's engine; absent, a flight cannot be forced. */
   engine?: XpingEngineAccessPort | undefined;
 }) {
