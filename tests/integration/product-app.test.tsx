@@ -222,7 +222,7 @@ describe("ProductApp identity", () => {
       name: "pub_dress hexadecimal discriminator",
     });
     expect(discriminator).toHaveValue("1");
-    expect(discriminator.querySelector('option[value="0"]')).toBeNull();
+    expect(discriminator.querySelector('option[value="0"]')).toBeInTheDocument();
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
     await screen.findByText(
