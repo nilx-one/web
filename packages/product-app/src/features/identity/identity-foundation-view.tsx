@@ -984,12 +984,7 @@ function IdentityForm({
               }
               disabled={identity.busy}
             >
-              {displayedSelection.discriminator === "0" && (
-                <option value="0" disabled>
-                  0
-                </option>
-              )}
-              {"123456789abcdef".split("").map((value) => (
+              {"0123456789abcdef".split("").map((value) => (
                 <option key={value} value={value}>
                   {value}
                 </option>

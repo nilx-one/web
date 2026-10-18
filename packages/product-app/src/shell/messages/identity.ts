@@ -63,6 +63,13 @@ export const IDENTITY_EN = {
     "8–128 Unicode characters · no leading/trailing whitespace · no line breaks",
   "identity.form.notYou": "Not you?",
   "identity.authenticated": "Authenticated Bond",
+  "identity.adminInbox.title": "Admin access requests",
+  "identity.adminInbox.description":
+    "A reserved 0x0 Bond signed in. Should this Bond receive admin privileges?",
+  "identity.adminInbox.review": "Review",
+  "identity.adminInbox.approve": "Grant admin",
+  "identity.adminInbox.deny": "Keep user role",
+  "identity.adminInbox.failure": "The decision could not be saved. Try again.",
   "identity.password.confirm": "Confirm password",
   "identity.password.show": "Show passwords",
   "identity.password.hide": "Hide passwords",
@@ -237,6 +244,14 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
     "8–128 символів Unicode · без пробілів на початку й у кінці · без розривів рядка",
   "identity.form.notYou": "Не ви?",
   "identity.authenticated": "Автентифікований Bond",
+  "identity.adminInbox.title": "Запити на права адміністратора",
+  "identity.adminInbox.description":
+    "Здійснено вхід Bond з 0x0. Надати йому права адміністратора?",
+  "identity.adminInbox.review": "Переглянути",
+  "identity.adminInbox.approve": "Надати admin",
+  "identity.adminInbox.deny": "Залишити user",
+  "identity.adminInbox.failure":
+    "Не вдалося зберегти рішення. Повторіть спробу.",
   "identity.password.confirm": "Підтвердьте пароль",
   "identity.password.show": "Показати паролі",
   "identity.password.hide": "Сховати паролі",

@@ -33,7 +33,7 @@ import "./system-informer.css";
 /** Only safe user-facing copy belongs here: never raw exceptions or credentials. */
 export interface SystemNotice {
   readonly id: string;
-  readonly kind: "error" | "maintenance";
+  readonly kind: "error" | "maintenance" | "admin-review";
   readonly action?: ToastAction;
   /** Retain a historical failure receipt across retry until explicitly dismissed. */
   readonly retainOnAction?: boolean;

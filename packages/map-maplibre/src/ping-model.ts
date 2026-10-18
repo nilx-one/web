@@ -12,6 +12,21 @@ import {
   TorusGeometry,
 } from "three";
 
+/** xPing's cruise: no air gathers ahead of it yet. */
+export const PING_AIR_FROM_MPS = 30;
+/** xPing's top speed, forced in full: the air is at its thickest. */
+export const PING_AIR_TOP_MPS = 90;
+/** How many clots of air are shed at once, and how often each comes round. */
+const AIR_CLOTS = 4;
+const AIR_CYCLES = 4;
+
+/** How thick the air gathers at `speedMps`, from 0 at cruise to 1 at top. */
+export function airDensity(speedMps: number) {
+  const density =
+    (speedMps - PING_AIR_FROM_MPS) / (PING_AIR_TOP_MPS - PING_AIR_FROM_MPS);
+  return Number.isFinite(density) ? Math.min(1, Math.max(0, density)) : 0;
+}
+
 /** A procedural 1.2 m drone. It is a system prop, never a selectable Bond body. */
 export function createPingModel() {
   const root = new Group();
@@ -77,6 +92,24 @@ export function createPingModel() {
   spark.position.set(-0.24, 0.025, 0.12);
   spark.rotation.z = 0.6;
   body.add(spark);
+  // Clots of compressed air: rings that gather at the nose and are shed
+  // back past the body, more of them, wider and denser the faster it flies.
+  const airMaterials: MeshBasicMaterial[] = [];
+  const airClots: Mesh[] = [];
+  for (let index = 0; index < AIR_CLOTS; index += 1) {
+    const material = new MeshBasicMaterial({
+      color: 0xdff4fa,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    const clot = new Mesh(new TorusGeometry(0.3, 0.035, 6, 28), material);
+    clot.name = "ping-air";
+    clot.visible = false;
+    body.add(clot);
+    airMaterials.push(material);
+    airClots.push(clot);
+  }
   const rotors: Mesh[] = [];
   for (const x of [-1, 1])
     for (const z of [-1, 1]) {
@@ -99,8 +132,10 @@ export function createPingModel() {
     /**
      * `wear`, 0 to 1, is how much of its engine is spent: the puff grows
      * thicker and darker and the sparks come oftener the more it is.
+     * `speedMps` is how fast it flies: above its 30 m/s cruise the air
+     * gathers into clots shed past it, thickest at its 90 m/s top.
      */
-    sample(phase: number, moving: boolean, wear = 0) {
+    sample(phase: number, moving: boolean, wear = 0, speedMps = 0) {
       const worn = Math.min(1, Math.max(0, wear));
       body.position.y =
         1.9 + (moving ? Math.sin(phase * Math.PI * 2) * 0.055 : 0);
@@ -134,6 +169,19 @@ export function createPingModel() {
         ? Math.sin(((phase - sparkFrom) / sparkWindow) * Math.PI) *
           (0.7 + worn * 0.3)
         : 0;
+      const density = moving ? airDensity(speedMps) : 0;
+      for (const [index, clot] of airClots.entries()) {
+        // Each clot comes round AIR_CYCLES times a phase, staggered so they
+        // trail one another; a thin air sheds only the first of them.
+        const age = (phase * AIR_CYCLES + index / AIR_CLOTS) % 1;
+        const shown = density > index / AIR_CLOTS;
+        clot.visible = shown;
+        clot.position.set(0, 0, 0.32 - age * (0.6 + density * 1.4));
+        clot.scale.setScalar(0.7 + age * (0.6 + density * 1.1));
+        airMaterials[index]!.opacity = shown
+          ? Math.sin(age * Math.PI) * (0.12 + density * 0.38)
+          : 0;
+      }
     },
     dispose() {
       root.traverse((node) => {
@@ -146,6 +194,7 @@ export function createPingModel() {
       tapeMaterial.dispose();
       smokeMaterial.dispose();
       sparkMaterial.dispose();
+      for (const material of airMaterials) material.dispose();
       root.removeFromParent();
     },
   };

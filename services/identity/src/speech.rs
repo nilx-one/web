@@ -740,15 +740,19 @@ mod tests {
             .await
             .expect("legacy pool");
         sqlx::raw_sql(
-            "DROP TRIGGER identities_reserved_admin_prefix_insert;
-             INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES ('0x0sky', 'human', 10);
+            "INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES ('0x0sky', 'human', 10);
              INSERT INTO identity_providers (provider, provider_subject, pub_dress) VALUES ('telegram', '1', '0x0sky');",
         ).execute(&legacy).await.expect("legacy administrator");
-        sqlx::raw_sql(include_str!("../migrations/0021_reserved_admin_prefix.sql"))
-            .execute(&legacy)
-            .await
-            .expect("restore reservation");
         legacy.close().await;
+        // The historical Bond's administrator role is a persisted grant,
+        // never a side effect of the newly public 0x0 discriminator.
+        identities
+            .set_role(
+                &"0x0sky".parse().expect("legacy Bond"),
+                crate::BondAccessRole::Admin,
+            )
+            .await
+            .expect("legacy admin grant");
         for (pub_dress, telegram) in [("0x0sky", 1), ("0xfrSb", 2)] {
             register(&identities, pub_dress, telegram).await;
         }

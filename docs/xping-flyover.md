@@ -110,11 +110,17 @@ Presentation only: no body moves and nothing is recorded.
 
 The steering row holds **push to force** between ◀ and ▶, filled with what
 is left of the engine. While it is held, and the engine allows it, xPing
-builds up over three seconds (`FLYOVER_FORCE_RAMP_MS`) to 2.5× its speed and
-twice its height, and flies straight at the destination: the drawn route
-becomes that straight line. Let go, it slows back down over the same three
+builds up over three seconds (`FLYOVER_FORCE_RAMP_MS`) to 3× its speed,
+xPing's top of 90 m/s, and twice its height, and flies straight at the
+destination: the drawn route becomes that straight line. Let go, it slows back down over the same three
 seconds and joins the road route where it is nearest, the offset pulled back
 in like a lane step. The drone smokes and sparks more as the engine empties.
+
+Above its 30 m/s cruise the air gathers ahead of xPing into clots, rings
+shed from its nose back past its body. They grow with its speed (the
+renderer's `speedMps`): one thin clot just past cruise, up to four, wider,
+denser and trailing further, at its 90 m/s top. They fade as it slows back
+down, and reduced motion draws none.
 
 Forcing is counted as it happens and told to the identity service a second at
 a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On

@@ -19,6 +19,9 @@ import {
   approachPoint,
   FOG_APPROACH_ACCURACY_METERS,
   FOG_FRONTIER_RINGS,
+  FOG_NEARBY_ACCURACY_METERS,
+  FOG_NEARBY_REVEAL_METERS,
+  distanceToFogCellEdgeMeters,
   artifactsInCell,
   fogMarks,
   freezeUnattended,
@@ -58,7 +61,7 @@ export interface FogRevealPrompt {
 export type FogTapOutcome =
   "offered" | "busy" | "revealing" | "out-of-reach" | "no-fog";
 
-export type FogRevealVia = "avaia" | "approach";
+export type FogRevealVia = "avaia" | "approach" | "nearby";
 
 export interface FogRevealInput {
   readonly renderer: MapRenderer;
@@ -110,7 +113,9 @@ const NO_FOG_SUBSCRIPTION = (): (() => void) => () => undefined;
  * A yes starts a reveal that runs on the wall clock — a minute, and up to five
  * where the archive draws landmarks — three at most at once, and it survives
  * the page being reopened. This device observing itself inside a fogged cell
- * reveals that cell at once, with no Avaia and no wait: the person is there.
+ * reveals that cell at once, with no Avaia and no wait. An accurate fix
+ * also lifts adjacent cells within 15 metres of their actual boundary, but
+ * approaching does not claim the Bond already walked inside them.
  */
 export function useFogReveal({
   renderer,
@@ -328,7 +333,9 @@ export function useFogReveal({
     return () => globalThis.clearTimeout(timer);
   }, [canReveal, fog, jobs, updateJobs]);
 
-  // Standing in a fogged cell reveals it: no Avaia, no wait, one cell.
+  // Standing in a cell lifts its fog; accurately approaching another cell
+  // also lifts that cell within 15 m of its boundary. Neither is presence
+  // evidence, and approaching does not earn the "zone_walked" event.
   const observedLongitude = observed?.longitude;
   const observedLatitude = observed?.latitude;
   const observedAccuracy = observed?.accuracyMeters;
@@ -343,15 +350,28 @@ export function useFogReveal({
     ) {
       return;
     }
-    const cell = fog.cellAt({
+    const point = {
       longitude: observedLongitude,
       latitude: observedLatitude,
-    });
-    if (fog.isRevealed(cell.id)) return;
-    // The fog field tells its subscribers, which is what drops this cell from
-    // the frontier, from the prompt, and from any reveal working on it.
-    fog.reveal(cell.id);
-    onRevealedRef.current?.(cell, "approach");
+    };
+    const occupied = fog.cellAt(point);
+    if (!fog.isRevealed(occupied.id)) {
+      fog.reveal(occupied.id);
+      onRevealedRef.current?.(occupied, "approach");
+    }
+    if (observedAccuracy > FOG_NEARBY_ACCURACY_METERS) return;
+    // The current cell is not a target. At most the adjacent frontier is:
+    // no viewport-dependent mask, no teleport, and no bulk distant unlock.
+    for (const neighbour of fog.frontier(point, 1)) {
+      if (
+        !fog.isRevealed(neighbour.id) &&
+        distanceToFogCellEdgeMeters(point, neighbour) <=
+          FOG_NEARBY_REVEAL_METERS
+      ) {
+        fog.reveal(neighbour.id);
+        onRevealedRef.current?.(neighbour, "nearby");
+      }
+    }
   }, [active, fog, observedAccuracy, observedLatitude, observedLongitude]);
 
   // A prompt for a cell that left reach — the Bond moved, or the fog lifted

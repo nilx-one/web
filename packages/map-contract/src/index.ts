@@ -827,6 +827,11 @@ export interface SystemDroneHandle {
    * more is spent. Omitted, the faint puff of a tired but sound drone.
    */
   readonly wear?: number;
+  /**
+   * How fast it flies, in m/s. Above xPing's 30 m/s cruise the air gathers
+   * into clots shed past it, thickest at its 90 m/s top. Omitted, none.
+   */
+  readonly speedMps?: number;
 }
 export interface SystemDroneLayerContract {
   /**

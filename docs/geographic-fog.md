@@ -21,6 +21,17 @@ cells. This is a raster representation of H3, not a change to H3 membership.
 The inherited 20 km region and 2048-square texture limit geographic extent and
 edge precision; tiling/streaming beyond that region is not implemented here.
 
+An accurately observed Bond position opens its occupied cell immediately. If the
+observation reports at most 15 m horizontal accuracy, any eligible adjacent
+fog cell whose polygon edge is within 15 m of that position also opens
+immediately, without a tap or Avaia delay. The threshold measures the edge,
+not the cell centre or a rendered screen distance. A manually declared
+position is never a GPS observation and cannot unlock nearby cells. Nearby
+opening is a local reveal, not evidence that the Bond entered that cell:
+it triggers the normal orb spill and a reveal award, not a `zone_walked`
+award. Repeated fixes do not produce repeated completions for an open cell.
+No opening establishes physical presence, a BondChain, or a Relationship.
+
 The Bond's occupied cell is temporarily open in the same presentation source.
 Moving removes the previous transient opening unless a real visit or completed
 reveal already opened it. Occupancy never writes a presence record or a saved

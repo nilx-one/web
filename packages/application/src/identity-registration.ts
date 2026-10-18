@@ -291,7 +291,30 @@ export type PubDressRenameResult =
     }
   | { kind: "service-unavailable" };
 
+/** Server-authoritative operational requests, not BondChain interactions. */
+export interface AdminRoleInboxItem {
+  pubDress: string;
+  requestedAt: number;
+}
+
+export type AdminRoleInboxResult =
+  | { kind: "available"; requests: AdminRoleInboxItem[] }
+  | { kind: "not-admin" }
+  | { kind: "service-unavailable" };
+
+export type AdminRoleDecisionResult =
+  | { kind: "decided"; status: "approved" | "denied" }
+  | { kind: "already-decided" }
+  | { kind: "not-admin" }
+  | { kind: "service-unavailable" };
+
 export interface IdentityAccessPort {
+  /** Only a session with a stored admin role receives this inbox. */
+  listAdminRoleRequests?(): Promise<AdminRoleInboxResult>;
+  decideAdminRoleRequest?(
+    pubDress: string,
+    approve: boolean,
+  ): Promise<AdminRoleDecisionResult>;
   chooseAvatarModel(model: AvatarModel): Promise<AvatarModelResult>;
   renameAvaiaSlug(slug: string): Promise<PubDressRenameResult>;
   renamePubDressSlug(slug: string): Promise<PubDressRenameResult>;

@@ -16,6 +16,8 @@ import {
   type BrowserProviderDisconnectResult,
   type BrowserProviderLinkResult,
   type IdentityAccessPort,
+  type AdminRoleInboxResult,
+  type AdminRoleDecisionResult,
   type IdentityProjection,
   type NativeAuthenticationResult,
   type NativeIdentityContextResult,
@@ -260,6 +262,78 @@ class IdentityHttpAdapter
 
   public constructor(private readonly options: IdentityHttpAdapterOptions) {
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  public async listAdminRoleRequests(): Promise<AdminRoleInboxResult> {
+    try {
+      const authorization = this.authorization();
+      const response = await this.fetch("/api/v1/admin/role-requests", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: authorization === undefined ? {} : { authorization },
+      });
+      if (response.status === 403) return { kind: "not-admin" };
+      if (!response.ok) return { kind: "service-unavailable" };
+      const body: unknown = await response.json();
+      if (!isRecord(body) || !Array.isArray(body.requests)) {
+        return { kind: "service-unavailable" };
+      }
+      const requests = [];
+      for (const item of body.requests) {
+        if (
+          !isRecord(item) ||
+          typeof item.pub_dress !== "string" ||
+          typeof item.requested_at !== "number"
+        ) {
+          return { kind: "service-unavailable" };
+        }
+        requests.push({
+          pubDress: item.pub_dress,
+          requestedAt: item.requested_at,
+        });
+      }
+      return { kind: "available", requests };
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+
+  public async decideAdminRoleRequest(
+    pubDress: string,
+    approve: boolean,
+  ): Promise<AdminRoleDecisionResult> {
+    try {
+      const authorization = this.authorization();
+      const response = await this.fetch(
+        `/api/v1/admin/role-requests/${encodeURIComponent(pubDress)}/decision`,
+        {
+          method: "POST",
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: {
+            "content-type": "application/json",
+            "x-0x1-csrf": "1",
+            ...(authorization === undefined ? {} : { authorization }),
+          },
+          body: JSON.stringify({ approve }),
+        },
+      );
+      if (response.ok) {
+        const body: unknown = await response.json().catch(() => undefined);
+        if (
+          isRecord(body) &&
+          (body.status === "approved" || body.status === "denied")
+        ) {
+          return { kind: "decided", status: body.status };
+        }
+      }
+      if (response.status === 403) return { kind: "not-admin" };
+      if (response.status === 409) return { kind: "already-decided" };
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    return { kind: "service-unavailable" };
   }
 
   public async resolvePubDress(
