@@ -216,34 +216,34 @@ impl CompactBot {
 
     /// Refresh only when the stored Telegram binding resolves to an actual
     /// admin. Never derive authorization from a pub_dress prefix or callback.
-    pub async fn refresh_admin(&self, recent: Option<&str>) -> ResponseResult<()> {
+    pub async fn refresh_admin(&self, recent: Option<&str>) -> ResponseResult<bool> {
         let identity = match self.surfaces.repository.find_by_telegram(self.chat.0).await {
             Ok(Some(identity)) => identity,
             Ok(None) => {
                 self.revoke_admin_slot().await;
-                return Ok(());
+                return Ok(false);
             }
             Err(error) => {
                 error!(%error, "Admin Telegram identity read failed");
-                return Ok(());
+                return Ok(false);
             }
         };
         match self.surfaces.repository.role_for(&identity.pub_dress).await {
             Ok(BondAccessRole::Admin) => {}
             Ok(_) => {
                 self.revoke_admin_slot().await;
-                return Ok(());
+                return Ok(false);
             }
             Err(error) => {
                 error!(%error, "Admin Telegram role read failed");
-                return Ok(());
+                return Ok(false);
             }
         }
         let inbox = match self.surfaces.repository.telegram_admin_inbox().await {
             Ok(inbox) => inbox,
             Err(error) => {
                 error!(%error, "Admin inbox read failed");
-                return Ok(());
+                return Ok(false);
             }
         };
         let mut text = String::from("🔐 0x1 · Admin");
@@ -277,6 +277,7 @@ impl CompactBot {
         let inline = (!rows.is_empty()).then(|| InlineKeyboardMarkup::new(rows));
         self.edit_or_send(TelegramMessageSlot::Admin, text, inline)
             .await
+            .map(|_| true)
     }
 
     async fn revoke_admin_slot(&self) {
