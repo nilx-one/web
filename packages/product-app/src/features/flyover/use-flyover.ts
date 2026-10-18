@@ -9,6 +9,8 @@ import type {
   MapRenderer,
 } from "@nilx-one/map-contract";
 import type { LonLat } from "@nilx-one/walk-graph";
+import type { HostPort, SoundCue } from "@nilx-one/host-contract";
+import type { MapFlightLoot } from "@nilx-one/map-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { prefersReducedMotion } from "../../shell/motion";
@@ -31,6 +33,9 @@ import {
 import { flyoverRoadBounds, planFlyoverRoute } from "./flyover-route";
 import {
   crossedFlightLoot,
+  laserLootTargets,
+  LOOT_INTAKE_MS,
+  lootPosition,
   rarerLoot,
   validFlightLoot,
   visibleFlightLoot,
@@ -146,6 +151,7 @@ export interface Flyover {
   readonly expanded: boolean;
   readonly following: boolean;
   readonly progress: FlyoverProgress | undefined;
+  readonly lootNotice: "rare" | "special" | "exclusive" | undefined;
   setFollowing(value: boolean): void;
   /** Starts the flight; ignored while one is under way. */
   start(request: FlyoverRequest): void;
@@ -178,9 +184,21 @@ export interface FlyoverProgress {
  * route, the prop and the camera are all it touches, and all of them are
  * put back when it ends. No body moves and nothing is recorded.
  */
-export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
+export interface FlyoverFeedback {
+  readonly playCue?: (cue: SoundCue) => void;
+  readonly impact?: Pick<HostPort, "impact">["impact"];
+}
+
+export function useFlyover(
+  renderer: MapRenderer,
+  ready: boolean,
+  feedback?: FlyoverFeedback,
+): Flyover {
   const [request, setRequest] = useState<FlyoverRequest | undefined>();
   const [progress, setProgress] = useState<FlyoverProgress>();
+  const [lootNotice, setLootNotice] = useState<Flyover["lootNotice"]>();
+  const feedbackRef = useRef(feedback);
+  feedbackRef.current = feedback;
   const [following, setFollowing] = useState(true);
   const [open, setOpen] = useState(true);
   const openRef = useRef(open);
@@ -204,6 +222,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     (next: FlyoverRequest) => {
       if (!ready || request !== undefined) return;
       setProgress(undefined);
+      setLootNotice(undefined);
       followingRef.current = true;
       openRef.current = true;
       setFollowing(true);
@@ -215,6 +234,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
   const leave = useCallback(() => {
     setRequest(undefined);
     setProgress(undefined);
+    setLootNotice(undefined);
   }, []);
   const collapse = useCallback(() => {
     if (!openRef.current) return;
@@ -315,6 +335,12 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         ? validFlightLoot(request.loot ?? [], path.length)
         : [];
       const pickedLoot = new Set<string>();
+      const intakes = new Map<string, { item: FlightLootSpawn; at: number }>();
+      const noticed = new Set<string>();
+      let previousTargets = new Set<string>();
+      let lastNoticeAt = -Infinity;
+      let noticeShown = false;
+      let lastLockCueAt = -Infinity;
       let brightest: FlightLootSpawn["rarity"] | undefined;
       flight.current = { state };
       let obstacles: FlightObstacle[] = [];
@@ -340,6 +366,8 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         road = [...route].reverse();
         renderer.setRoute?.({ points: road });
         renderer.setFlightLoot?.([]);
+        previousTargets.clear();
+        intakes.clear();
         path = flightPath(road.map(plane.toLocal));
         state = { ...startFlight(path), height: state.height };
         flight.current = { state };
@@ -396,7 +424,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             previousLootPoint[1],
             previousLootHeight,
           ];
-          const currentPoint: [number, number, number] = [
+          const here: [number, number, number] = [
             actualLootPoint[0],
             actualLootPoint[1],
             state.height,
@@ -404,19 +432,28 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
           for (const item of loot) {
             if (
               pickedLoot.has(item.id) ||
-              !crossedFlightLoot(path, item, previous, currentPoint)
+              !crossedFlightLoot(path, item, previous, here)
             )
               continue;
             pickedLoot.add(item.id);
+            intakes.set(item.id, { item, at: now });
             brightest = rarerLoot(brightest, item.rarity);
             pickups++;
             try {
               request.onLootCollected?.(item);
             } catch {
-              // A consumer failing to process an event must not break flight.
+              // A callback exception does not change the flight outcome.
             }
           }
-          if (pickups) flightLootHaptic(); // one light impact per simulation tick
+          if (pickups) {
+            try {
+              if (feedbackRef.current?.impact) feedbackRef.current.impact("light");
+              else flightLootHaptic();
+            } catch {
+              // An unavailable host haptic is always optional.
+            }
+            feedbackRef.current?.playCue?.("loot-pickup");
+          }
           const distance =
             state.free === undefined
               ? state.distance
@@ -432,12 +469,63 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             speed,
             pickedLoot,
           );
-          renderer.setFlightLoot?.(
+          const selected = laserLootTargets(path, loot, distance, here, pickedLoot);
+          const newlyAcquired = selected.some((id) => !previousTargets.has(id));
+          previousTargets = new Set(selected);
+          if (newlyAcquired && now - lastLockCueAt >= 200) {
+            feedbackRef.current?.playCue?.("loot-lock");
+            lastLockCueAt = now;
+          }
+          const targeted = new Set(selected);
+          const candidates = loot.filter(
+            (item) =>
+              targeted.has(item.id) &&
+              !noticed.has(item.id) &&
+              (item.rarity === "rare" ||
+                item.rarity === "special" ||
+                item.rarity === "exclusive"),
+          );
+          if (candidates.length > 0 && now - lastNoticeAt >= 2_000) {
+            const rank = { rare: 1, special: 2, exclusive: 3 };
+            candidates.sort(
+              (a, b) =>
+                (rank[b.rarity as keyof typeof rank] ?? 0) -
+                  (rank[a.rarity as keyof typeof rank] ?? 0) ||
+                a.id.localeCompare(b.id),
+            );
+            const selectedNotice = candidates[0]!;
+            noticed.add(selectedNotice.id);
+            setLootNotice(selectedNotice.rarity as Flyover["lootNotice"]);
+            lastNoticeAt = now;
+            noticeShown = true;
+          }
+          if (noticeShown && now - lastNoticeAt >= 2_000) {
+            noticeShown = false;
+            setLootNotice(undefined);
+          }
+          const intakeModels: MapFlightLoot[] = [];
+          for (const [id, { item, at }] of intakes) {
+            const progress = (now - at) / LOOT_INTAKE_MS;
+            if (progress >= 1) {
+              intakes.delete(id);
+              continue;
+            }
+            const [lng, lat] = plane.toLonLat(lootPosition(path, item));
+            intakeModels.push({
+              id,
+              lngLat: [lng, lat],
+              heightMeters: item.heightMeters,
+              kind: item.kind,
+              rarity: item.rarity,
+              near: true,
+              intakeProgress: Math.max(0, progress),
+            });
+          }
+          const items: MapFlightLoot[] =
             state.free === undefined
               ? shown
               : shown.map((item) => {
                   const at = plane.toLocal(item.lngLat);
-                  // On a forced detour, do not illuminate distant road props.
                   return {
                     ...item,
                     near:
@@ -447,7 +535,11 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
                         at[1] - actualLootPoint[1],
                       ) <= 30,
                   };
-                }),
+                });
+          renderer.setFlightLoot?.(
+            items
+              .map((item) => ({ ...item, laserTarget: targeted.has(item.id) }))
+              .concat(intakeModels),
           );
         }
         // Forced, the route drawn is the straight line it flies; let go, the
@@ -565,6 +657,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       restoreCamera.current = undefined;
       try {
         drone?.remove(FLYOVER_DRONE_ID);
+        setLootNotice(undefined);
         renderer.setFlightLoot?.([]);
         renderer.setRoute?.(null);
       } catch {
@@ -588,6 +681,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       expand,
       leave,
       progress,
+      lootNotice,
       following,
       setFollowing,
     }),
@@ -601,6 +695,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       collapse,
       expand,
       progress,
+      lootNotice,
       following,
     ],
   );
