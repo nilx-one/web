@@ -8,6 +8,7 @@ import type {
   AvatarLayerContract,
   AvatarModelId,
   SystemDroneHandle,
+  SystemDroneKind,
   MapCamera,
 } from "@nilx-one/map-contract";
 // The ambient sampler is contract-level policy: the application chooses the
@@ -39,6 +40,10 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 import { createPingModel } from "./ping-model";
+import {
+  createAmbientDroneKit,
+  type AmbientDroneKit,
+} from "./ambient-drone-model";
 import {
   BACKPACK_ASSET_URL,
   createBackpackSource,
@@ -84,15 +89,24 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly liftMeters?: number;
   /** A system drone's engine wear, 0 to 1. */
   readonly wear?: number;
+  /** Which system drone this is; omitted, xPing. */
+  readonly droneKind?: SystemDroneKind;
   /** Banking and leaning in the model's own frame, in degrees. */
   readonly rollDeg?: number;
   readonly pitchDeg?: number;
 };
+/** What the layer needs of a drone model, xPing's or an ambient one. */
+interface DroneModel {
+  readonly root: Object3D;
+  sample(phase: number, moving: boolean, wear?: number): void;
+  dispose(): void;
+}
+
 interface AvatarInstance {
   backpack?: Object3D;
   backpackLoading?: boolean;
   handle: SceneHandle;
-  drone?: ReturnType<typeof createPingModel>;
+  drone?: DroneModel;
   root?: Object3D;
   mixer?: AnimationMixer;
   clips?: ReadonlyMap<string, AnimationClip>;
@@ -257,6 +271,14 @@ export function createAvatarLayer(
   let disposed = false;
   let generation = 0;
   let lastFrame = now();
+  // Made on the first ambient drone and shared by all of them after.
+  let ambientKit: AmbientDroneKit | undefined;
+
+  function buildDrone(kind: SystemDroneKind | undefined): DroneModel {
+    if (kind === undefined || kind === "xping") return createPingModel();
+    ambientKit ??= createAmbientDroneKit();
+    return ambientKit.build(kind);
+  }
 
   function requestAsset(modelId: AvatarModelId): Promise<GLTF> {
     const cached = assetCache.get(modelId);
@@ -414,7 +436,7 @@ export function createAvatarLayer(
     const localGeneration = instance.loadGeneration;
     if (instance.handle.modelId === "system-ping") {
       instance.drone?.dispose();
-      const drone = createPingModel();
+      const drone = buildDrone(instance.handle.droneKind);
       instance.drone = drone;
       instance.root = drone.root;
       drone.sample(
@@ -453,7 +475,11 @@ export function createAvatarLayer(
   function upsertBody(handle: SceneHandle): void {
     if (disposed) return;
     const existing = instances.get(handle.id);
-    if (existing !== undefined && existing.handle.modelId === handle.modelId) {
+    if (
+      existing !== undefined &&
+      existing.handle.modelId === handle.modelId &&
+      existing.handle.droneKind === handle.droneKind
+    ) {
       existing.handle = handle;
       existing.drone?.sample(
         handle.clipPhase,
@@ -561,6 +587,7 @@ export function createAvatarLayer(
         ...(handle.rollDeg === undefined ? {} : { rollDeg: handle.rollDeg }),
         ...(handle.pitchDeg === undefined ? {} : { pitchDeg: handle.pitchDeg }),
         ...(handle.wear === undefined ? {} : { wear: handle.wear }),
+        ...(handle.kind === undefined ? {} : { droneKind: handle.kind }),
         visible: true,
         reducedMotion: handle.reducedMotion,
       });
@@ -602,6 +629,8 @@ export function createAvatarLayer(
         instance.root?.removeFromParent();
       }
       instances.clear();
+      ambientKit?.dispose();
+      ambientKit = undefined;
       assetCache.clear();
       backpackSource.release();
       renderer?.dispose();
