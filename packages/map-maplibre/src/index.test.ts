@@ -2117,3 +2117,88 @@ describe("fog marks", () => {
     ]);
   });
 });
+
+describe("bridge structures", () => {
+  const line = (...points: [number, number][]) => ({
+    geometry: { type: "LineString", coordinates: points },
+  });
+  function bridgeMap(): FakeMap {
+    const fakeMap = makeFakeMap();
+    fakeMap.camera.zoom = 16;
+    fakeMap.layers.set("roads", { id: "roads", source: "basemap" });
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    Object.assign(fakeMap, {
+      querySourceFeatures: vi.fn(() => [
+        {
+          ...line([30.58, 50.43], [30.585, 50.43], [30.59, 50.43]),
+          properties: { kind: "major_road", is_bridge: true },
+        },
+        {
+          ...line([30.575, 50.43], [30.58, 50.43]),
+          properties: { kind: "major_road" },
+        },
+      ]),
+    });
+    return fakeMap;
+  }
+
+  it("raises decks and piers once the view's roads have loaded", () => {
+    const fakeMap = bridgeMap();
+    readyRenderer(fakeMap);
+    expect(fakeMap.sources.has("nilx-one-bridge-structures")).toBe(false);
+
+    fakeMap.emit("idle");
+
+    expect(fakeMap.sources.has("nilx-one-bridge-structures")).toBe(true);
+    expect(fakeMap.layers.has("nilx-one-bridge-decks")).toBe(true);
+    expect(fakeMap.layers.has("nilx-one-bridge-piers")).toBe(true);
+  });
+
+  it("builds nothing zoomed out, where the flat deck says enough", () => {
+    const fakeMap = bridgeMap();
+    fakeMap.camera.zoom = 12;
+    readyRenderer(fakeMap);
+    fakeMap.emit("idle");
+    expect(fakeMap.sources.has("nilx-one-bridge-structures")).toBe(false);
+  });
+
+  it("hides them in flat presentation and restores them after a style swap", () => {
+    const fakeMap = bridgeMap();
+    const renderer = readyRenderer(fakeMap);
+    fakeMap.emit("idle");
+
+    renderer.setDimension("flat");
+    expect(fakeMap.layout.get("nilx-one-bridge-decks.visibility")).toBe("none");
+    expect(fakeMap.layout.get("nilx-one-bridge-piers.visibility")).toBe("none");
+
+    renderer.setAppearance("dark");
+    fakeMap.reloadStyle();
+    expect(fakeMap.layers.has("nilx-one-bridge-decks")).toBe(true);
+    // Repainted for the new appearance.
+    expect(
+      (
+        fakeMap.layers.get("nilx-one-bridge-decks")?.paint as Record<
+          string,
+          unknown
+        >
+      )["fill-extrusion-color"],
+    ).toBe("#33474e");
+    expect(
+      (
+        fakeMap.layers.get("nilx-one-bridge-decks")?.layout as {
+          visibility?: string;
+        }
+      )?.visibility,
+    ).toBe("none");
+  });
+
+  it("does not upload the same bridges again when the view settles unchanged", () => {
+    const fakeMap = bridgeMap();
+    readyRenderer(fakeMap);
+    fakeMap.emit("idle");
+    const source = fakeMap.sources.get("nilx-one-bridge-structures");
+    fakeMap.emit("idle");
+    fakeMap.emit("idle");
+    expect(source?.setData).not.toHaveBeenCalled();
+  });
+});
