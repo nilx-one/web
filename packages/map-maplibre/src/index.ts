@@ -88,6 +88,16 @@ import {
 } from "./road-tiles";
 
 import type { AvatarCustomLayer } from "./avatar-layer";
+import {
+  BRIDGE_DECK_LAYER_ID,
+  BRIDGE_PALETTES,
+  BRIDGE_PIER_LAYER_ID,
+  BRIDGE_STRUCTURE_MIN_ZOOM,
+  BRIDGE_STRUCTURE_SOURCE_ID,
+  bridgeStructureLayers,
+  bridgeStructures,
+  type BridgeStructures,
+} from "./bridge-structures";
 import type { MonumentCustomLayer } from "./monument-layer";
 import {
   FOG_MARKS_FILL_LAYER_ID,
@@ -732,6 +742,13 @@ export function createMapLibreRenderer(
   // presentation the application already set has to be reapplied rather than
   // silently lost. This flag is what a style reload resets.
   let presentationApplied = false;
+  // Bridges built from the loaded roads, and a fingerprint of what was last
+  // handed to the source so an unchanged view is not uploaded again.
+  let bridgeData: BridgeStructures = {
+    type: "FeatureCollection",
+    features: [],
+  };
+  let bridgeFingerprint = "";
   let observedPosition: MapObservedPosition | null = null;
   let observedLabel: MapObservedPositionLabel | null = null;
   let labelMarker: MapLabelMarker | undefined;
@@ -914,6 +931,16 @@ export function createMapLibreRenderer(
       });
     } else {
       mounted.setTerrain(null);
+    }
+
+    // A bridge's deck and piers are depth too; the style's flat deck stays.
+    for (const id of [BRIDGE_DECK_LAYER_ID, BRIDGE_PIER_LAYER_ID]) {
+      if (mounted.getLayer(id) !== undefined)
+        mounted.setLayoutProperty(
+          id,
+          "visibility",
+          dimension === "flat" ? "none" : "visible",
+        );
     }
 
     // The footprints remain underneath the extrusion, so hiding depth never
@@ -1435,6 +1462,97 @@ export function createMapLibreRenderer(
     }
   }
 
+  /**
+   * The bridges' decks and piers, standing with the buildings: beneath their
+   * extrusion in the layer order, above every flat layer and road.
+   */
+  function applyBridgeStructures(mounted: MapLibreMap): void {
+    // Nothing is added to a map until it has a bridge to show.
+    if (bridgeData.features.length === 0) return;
+    if (mounted.getSource(BRIDGE_STRUCTURE_SOURCE_ID) === undefined) {
+      mounted.addSource(BRIDGE_STRUCTURE_SOURCE_ID, {
+        type: "geojson",
+        data: bridgeData,
+      } as unknown as SourceSpecification);
+    }
+    // Beneath the building extrusion, or the first of what draws above it.
+    const before = [
+      BUILDING_EXTRUSION_LAYER_ID,
+      "boundaries",
+      "pois",
+      "water-labels",
+    ].find((id) => mounted.getLayer(id) !== undefined);
+    for (const layer of bridgeStructureLayers(BRIDGE_PALETTES[appearance])) {
+      if (mounted.getLayer(String(layer.id)) !== undefined) continue;
+      mounted.addLayer(
+        {
+          ...layer,
+          layout: { visibility: dimension === "flat" ? "none" : "visible" },
+        } as unknown as LayerSpecification,
+        before,
+      );
+    }
+  }
+
+  /** Builds the bridges again from the roads the view has loaded. */
+  function refreshBridgeStructures(mounted: MapLibreMap): void {
+    if (mounted.getZoom() < BRIDGE_STRUCTURE_MIN_ZOOM - 0.5) return;
+    const next = bridgeStructures(loadedRoads(mounted, () => true));
+    let fingerprint = String(next.features.length);
+    for (const feature of next.features) {
+      const [longitude, latitude] = feature.geometry.coordinates[0]![0]!;
+      fingerprint += `|${longitude.toFixed(6)},${latitude.toFixed(6)},${feature.properties.top.toFixed(1)}`;
+    }
+    if (fingerprint === bridgeFingerprint) return;
+    bridgeFingerprint = fingerprint;
+    bridgeData = next;
+    const source = mounted.getSource(BRIDGE_STRUCTURE_SOURCE_ID) as
+      GeoJSONSource | undefined;
+    if (source === undefined) applyBridgeStructures(mounted);
+    else source.setData(bridgeData as Parameters<GeoJSONSource["setData"]>[0]);
+  }
+
+  /**
+   * The roads in the tiles the view has loaded whose lines `keep` takes. The
+   * same street arrives once per tile it crosses; callers join the copies.
+   */
+  function loadedRoads(
+    mounted: MapLibreMap,
+    keep: (line: readonly (readonly [number, number])[]) => boolean,
+  ): MapRoad[] {
+    const sourceId = mounted.getLayer(ROAD_SOURCE_LAYER)?.source ?? "basemap";
+    if (mounted.getSource(sourceId) === undefined) return [];
+    const roads: MapRoad[] = [];
+    for (const feature of mounted.querySourceFeatures(sourceId, {
+      sourceLayer: ROAD_SOURCE_LAYER,
+    })) {
+      const kind = feature.properties?.["kind"];
+      if (typeof kind !== "string") continue;
+      const geometry = feature.geometry as {
+        readonly type: string;
+        readonly coordinates: unknown;
+      };
+      const lines = (
+        geometry.type === "LineString"
+          ? [geometry.coordinates as [number, number][]]
+          : geometry.type === "MultiLineString"
+            ? (geometry.coordinates as [number, number][][])
+            : []
+      ).filter((line) => line.length >= 2 && keep(line));
+      if (lines.length === 0) continue;
+      const detail = feature.properties?.["kind_detail"];
+      roads.push({
+        kind,
+        ...(typeof detail === "string" ? { kindDetail: detail } : {}),
+        ...(feature.properties?.["is_bridge"] === true
+          ? { isBridge: true }
+          : {}),
+        lines,
+      });
+    }
+    return roads;
+  }
+
   function ensureAvatarLayer(mounted: MapLibreMap): void {
     if (avatarLayer === undefined) return;
     if (mounted.getLayer(avatarLayer.id) !== undefined) return;
@@ -1448,6 +1566,7 @@ export function createMapLibreRenderer(
   }
 
   function applyPresentation(mounted: MapLibreMap): void {
+    applyBridgeStructures(mounted);
     applyDimension(mounted);
     applyFogMarks(mounted);
     applyRoute(mounted);
@@ -1853,6 +1972,11 @@ export function createMapLibreRenderer(
         // painted: the one moment new landmarks can have become readable. It
         // fires once per settle, not once per tile.
         mountedMap.on("idle", () => {
+          try {
+            refreshBridgeStructures(mountedMap);
+          } catch {
+            // Bridges are presentation over the map; they never break it.
+          }
           for (const listener of [...landmarkListeners]) listener();
         });
         mountedMap.on("zoom", () => {
@@ -2159,37 +2283,10 @@ export function createMapLibreRenderer(
       // in both arrives twice; the walking graph joins the copies.
       const preloaded = roadTiles.roadsWithin(bounds);
       if (map === undefined) return preloaded;
-      const sourceId = map.getLayer(ROAD_SOURCE_LAYER)?.source ?? "basemap";
-      if (map.getSource(sourceId) === undefined) return preloaded;
-      const roads: MapRoad[] = [...preloaded];
-      for (const feature of map.querySourceFeatures(sourceId, {
-        sourceLayer: ROAD_SOURCE_LAYER,
-      })) {
-        const kind = feature.properties?.["kind"];
-        if (typeof kind !== "string") continue;
-        const geometry = feature.geometry as {
-          readonly type: string;
-          readonly coordinates: unknown;
-        };
-        const lines = (
-          geometry.type === "LineString"
-            ? [geometry.coordinates as [number, number][]]
-            : geometry.type === "MultiLineString"
-              ? (geometry.coordinates as [number, number][][])
-              : []
-        ).filter((line) => line.length >= 2 && ringTouches(line, bounds));
-        if (lines.length === 0) continue;
-        const detail = feature.properties?.["kind_detail"];
-        roads.push({
-          kind,
-          ...(typeof detail === "string" ? { kindDetail: detail } : {}),
-          ...(feature.properties?.["is_bridge"] === true
-            ? { isBridge: true }
-            : {}),
-          lines,
-        });
-      }
-      return roads;
+      return [
+        ...preloaded,
+        ...loadedRoads(map, (line) => ringTouches(line, bounds)),
+      ];
     },
 
     preloadRoads(bounds, accept) {
