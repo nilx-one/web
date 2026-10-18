@@ -185,8 +185,8 @@ export interface FlyoverProgress {
  * put back when it ends. No body moves and nothing is recorded.
  */
 export interface FlyoverFeedback {
-  readonly playCue?: (cue: SoundCue) => void;
-  readonly impact?: Pick<HostPort, "impact">["impact"];
+  readonly playCue?: ((cue: SoundCue) => void) | undefined;
+  readonly impact?: Pick<HostPort, "impact">["impact"] | undefined;
 }
 
 export function useFlyover(
