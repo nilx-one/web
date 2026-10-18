@@ -549,13 +549,15 @@ export type FlightLootRarity =
   | "exclusive";
 
 export const FLIGHT_LOOT_COLORS: Readonly<Record<FlightLootRarity, number>> =
-  Object.freeze({
-    common: 0x899199,
-    uncommon: 0x00bfd4,
-    rare: 0x358ff0,
-    special: 0x9b6cfa,
-    exclusive: 0xe8b84c,
-  });
+  Object.freeze(
+    {
+      common: 0x899199,
+      uncommon: 0x00bfd4,
+      rare: 0x358ff0,
+      special: 0x9b6cfa,
+      exclusive: 0xe8b84c,
+    },
+  );
 
 /** Positioned in the real 3D world; no purchase or pick-up authority. */
 export interface MapFlightLoot {
