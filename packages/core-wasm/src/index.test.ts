@@ -554,6 +554,28 @@ describe("CoreWasmClient", () => {
     }
   });
 
+  it("only advertises landmark waypoint capability from a v2 Core", async () => {
+    const oldBindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime(),
+    });
+    const newBindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({ orb_spill_version: () => 2 }),
+    });
+    expect(oldBindings.orbSpillVersion).toBeUndefined();
+    expect(newBindings.orbSpillVersion?.()).toBe(2);
+    await expect(
+      createCoreWasmClient({
+        loadBindings: async () => oldBindings,
+      }).orbSpillVersion(),
+    ).resolves.toBe(1);
+    await expect(
+      createCoreWasmClient({
+        loadBindings: async () => newBindings,
+      }).orbSpillVersion(),
+    ).resolves.toBe(2);
+  });
+
   it("hands the orb world to Core as its wire and decodes the answer strictly", async () => {
     const at = { longitude_e7: "304469000", latitude_e7: "504655000" };
     const view = {
