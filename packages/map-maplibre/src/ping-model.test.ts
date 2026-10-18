@@ -4,7 +4,7 @@
 import { AVATAR_MODEL_IDS } from "@nilx-one/map-contract";
 import { Box3, Mesh, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
-import { createPingModel } from "./ping-model";
+import { airDensity, createPingModel } from "./ping-model";
 import { bodyOrientation, createAvatarLayer } from "./avatar-layer";
 
 describe("xPing system prop", () => {
@@ -53,6 +53,36 @@ describe("xPing system prop", () => {
     model.sample(0.4, false, 1);
     expect(smoke.visible).toBe(false);
     expect(spark.visible).toBe(false);
+    model.dispose();
+  });
+  it("sheds clots of air that thicken from its cruise to its top speed", () => {
+    expect(airDensity(30)).toBe(0);
+    expect(airDensity(60)).toBeCloseTo(0.5);
+    expect(airDensity(90)).toBe(1);
+    expect(airDensity(120)).toBe(1);
+    expect(airDensity(Number.NaN)).toBe(0);
+    const model = createPingModel();
+    const clots: Mesh[] = [];
+    model.root.traverse((node) => {
+      if (node instanceof Mesh && node.name === "ping-air") clots.push(node);
+    });
+    const shown = () => clots.filter((clot) => clot.visible);
+    const thickness = () =>
+      shown().reduce(
+        (sum, clot) => sum + (clot.material as { opacity: number }).opacity,
+        0,
+      );
+    model.sample(0.3, true, 0, 30);
+    expect(shown()).toHaveLength(0);
+    model.sample(0.3, true, 0, 45);
+    const thin = thickness();
+    expect(shown().length).toBeGreaterThan(0);
+    model.sample(0.3, true, 0, 90);
+    expect(shown()).toHaveLength(clots.length);
+    expect(thickness()).toBeGreaterThan(thin * 2);
+    // Reduced motion gathers no air, however fast.
+    model.sample(0.3, false, 0, 90);
+    expect(shown()).toHaveLength(0);
     model.dispose();
   });
   it("disposes its owned geometry and materials", () => {
