@@ -6,11 +6,13 @@ import {
   type FindRoll,
   type LonLat,
 } from "@nilx-one/artifact-contract";
+import type { MapFogField, MapLandmark } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
   fromCoordinate,
   knownSpill,
+  landmarkWaypoint,
   mapOrbs,
   orbWorldInput,
   refreshSpill,
@@ -72,6 +74,60 @@ describe("orbs between the map and Core", () => {
     expect(toCoordinate([0, -0.00000001])).toEqual({
       longitude_e7: "0",
       latitude_e7: "0",
+    });
+  });
+
+  it("selects a real same-cell monument as a stable route waypoint", () => {
+    const [longitude, latitude] = findPoint(roll);
+    const fog = {
+      cellAt: (point: { longitude: number }) => ({
+        id: point.longitude < 31 ? "here" : "elsewhere",
+        center: { longitude, latitude },
+        boundary: [],
+      }),
+    } as unknown as MapFogField;
+    const candidates: MapLandmark[] = [
+      {
+        id: "faraway",
+        longitude: 31.01,
+        latitude,
+        kind: "monument",
+        facts: {},
+      },
+      {
+        id: "ordinary",
+        longitude: longitude + 0.00001,
+        latitude,
+        kind: "viewpoint",
+        facts: {},
+      },
+      {
+        id: "memorial",
+        longitude: longitude + 0.0003,
+        latitude,
+        kind: "monument",
+        facts: {},
+      },
+    ];
+    const select = () =>
+      landmarkWaypoint(roll, fog, () => candidates);
+    expect(select()).toEqual([longitude + 0.0003, latitude]);
+    expect(select()).toEqual(select());
+    expect(landmarkWaypoint(roll, fog, () => [])).toBeUndefined();
+
+    const spill = knownSpill(view, roll, () => center, 1_000, select());
+    const legacy = orbWorldInput([spill], new Set(), undefined, undefined);
+    expect(legacy.spills[0]).not.toHaveProperty("via");
+    const guided = orbWorldInput(
+      [spill],
+      new Set(),
+      undefined,
+      undefined,
+      true,
+    );
+    expect(guided.spills[0]).toMatchObject({
+      via: toCoordinate([longitude + 0.0003, latitude]),
+      to: toCoordinate(findPoint(roll)),
     });
   });
 
