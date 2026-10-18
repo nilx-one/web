@@ -176,7 +176,7 @@ describe("useFlyover", () => {
     );
   });
 
-  it("forces only while held and allowed, straight at the station, and smokes", async () => {
+  it("forces only while held and allowed, straight at the station, smokes and gathers air", async () => {
     const { renderer, drone, hook } = setup();
     let allowed = false;
     const forcing = {
@@ -191,6 +191,7 @@ describe("useFlyover", () => {
     // Held but not allowed: nothing spent, still on the roads.
     expect(forcing.spent).not.toHaveBeenCalled();
     expect(hook.result.current.progress?.forced).toBeUndefined();
+    expect(lastDrone(drone)!.speedMps).toBeCloseTo(30);
     allowed = true;
     act(() => vi.advanceTimersByTime(1_000));
     expect(forcing.spent).toHaveBeenCalled();
@@ -204,6 +205,9 @@ describe("useFlyover", () => {
     expect(straight?.points).toHaveLength(2);
     expect(straight?.points[1]).toEqual([TO.longitude, TO.latitude]);
     expect(lastDrone(drone)!.wear).toBe(0.4);
+    // A second into the three-second build-up: well past cruise, short of top.
+    expect(lastDrone(drone)!.speedMps).toBeGreaterThan(45);
+    expect(lastDrone(drone)!.speedMps).toBeLessThan(90);
     // Let go: back on the roads, spending nothing more.
     act(() => hook.result.current.force(false));
     forcing.spent.mockClear();

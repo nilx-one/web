@@ -89,6 +89,8 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly liftMeters?: number;
   /** A system drone's engine wear, 0 to 1. */
   readonly wear?: number;
+  /** How fast a system drone flies, in m/s. */
+  readonly speedMps?: number;
   /** Which system drone this is; omitted, xPing. */
   readonly droneKind?: SystemDroneKind;
   /** Banking and leaning in the model's own frame, in degrees. */
@@ -98,7 +100,12 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
 /** What the layer needs of a drone model, xPing's or an ambient one. */
 interface DroneModel {
   readonly root: Object3D;
-  sample(phase: number, moving: boolean, wear?: number): void;
+  sample(
+    phase: number,
+    moving: boolean,
+    wear?: number,
+    speedMps?: number,
+  ): void;
   dispose(): void;
 }
 
@@ -443,6 +450,7 @@ export function createAvatarLayer(
         instance.handle.clipPhase,
         !instance.handle.reducedMotion,
         instance.handle.wear,
+        instance.handle.speedMps,
       );
       scene.add(drone.root);
       place(instance);
@@ -485,6 +493,7 @@ export function createAvatarLayer(
         handle.clipPhase,
         !handle.reducedMotion,
         handle.wear,
+        handle.speedMps,
       );
       place(existing);
       applyVisibility(existing);
@@ -587,6 +596,7 @@ export function createAvatarLayer(
         ...(handle.rollDeg === undefined ? {} : { rollDeg: handle.rollDeg }),
         ...(handle.pitchDeg === undefined ? {} : { pitchDeg: handle.pitchDeg }),
         ...(handle.wear === undefined ? {} : { wear: handle.wear }),
+        ...(handle.speedMps === undefined ? {} : { speedMps: handle.speedMps }),
         ...(handle.kind === undefined ? {} : { droneKind: handle.kind }),
         visible: true,
         reducedMotion: handle.reducedMotion,

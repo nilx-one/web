@@ -376,11 +376,11 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         }
         if (state.arrived && leg === "out" && arrivedAt === undefined)
           arrivedAt = Date.now();
+        const speed =
+          FLYOVER_SPEED_MPS *
+          (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * state.boost);
         if (state.arrived || now - publishedAt >= 250) {
           publishedAt = now;
-          const speed =
-            FLYOVER_SPEED_MPS *
-            (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * state.boost);
           setProgress({
             point: { longitude, latitude },
             remainingMs:
@@ -406,6 +406,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             pitchDeg: flying ? state.pitchDeg : 0,
             scale: FLYOVER_DRONE_SCALE,
             ...(wear === undefined ? {} : { wear }),
+            ...(flying ? { speedMps: speed } : {}),
           });
           if (flying && openRef.current && followingRef.current) {
             const turn = ((state.bearingDeg - cameraBearing + 540) % 360) - 180;
