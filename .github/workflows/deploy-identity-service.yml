@@ -142,30 +142,34 @@ jobs:
           echo "IDENTITY_DECISION=$reason" >>"$GITHUB_ENV"
 
       - id: provider
-        name: Publish transient provider environment
+        name: Encrypt provider credentials for scoped infra handoff
         if: steps.need.outputs.deploy == 'true'
         env:
-          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
           TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
           TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          INFRA_AGE_RECIPIENT: ${{ vars.INFRA_AGE_RECIPIENT }}
+          REGISTRY_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
-
-          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
-            test -n "${!name:-}" || { echo "Missing repository secret $name." >&2; exit 1; }
+          umask 077
+          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET INFRA_AGE_RECIPIENT REGISTRY_TOKEN; do
+            test -n "${!name:-}" || { echo "Required production credential/recipient $name missing." >&2; exit 1; }
+            [[ "${!name}" != *$'\n'* && "${!name}" != *$'\r'* ]] || exit 1
           done
-
-          echo "published=true" >>"$GITHUB_OUTPUT"
-
-          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
-            if ! gh secret set "$name" --repo "$INFRA_REPOSITORY" --body "${!name}"; then
-              echo "::error::Could not write secret $name to ${INFRA_REPOSITORY}. INFRA_DEPLOY_TOKEN needs Secrets: Read and write access there." >&2
-              exit 1
-            fi
-          done
-
-          echo "Provider credentials are readable by ${INFRA_REPOSITORY} for this deployment only."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          {
+            printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN"
+            printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$TELEGRAM_OIDC_CLIENT_SECRET"
+            printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET"
+            printf 'GHCR_PULL_USER=%s\n' "$GITHUB_ACTOR"
+            printf 'GHCR_PULL_TOKEN=%s\n' "$REGISTRY_TOKEN"
+          } > "$RUNNER_TEMP/identity-source.env"
+          age --armor --recipient "$INFRA_AGE_RECIPIENT" \
+            --output "$RUNNER_TEMP/identity-secrets.age" "$RUNNER_TEMP/identity-source.env"
+          rm -f "$RUNNER_TEMP/identity-source.env"
+          echo "encrypted=true" >>"$GITHUB_OUTPUT"
 
       - id: dispatch
         name: Request infra identity deployment
@@ -184,6 +188,7 @@ jobs:
             --arg ref "$RELEASE_SHA" \
             --arg telegram_oidc_client_id "$TELEGRAM_OIDC_CLIENT_ID" \
             --arg discord_client_id "$DISCORD_CLIENT_ID" \
+            --rawfile envelope "$RUNNER_TEMP/identity-secrets.age" \
             '{
               event_type: "deploy-workload",
               client_payload: {
@@ -192,7 +197,8 @@ jobs:
                 source_repository: $source,
                 ref: $ref,
                 telegram_oidc_client_id: $telegram_oidc_client_id,
-                discord_client_id: $discord_client_id
+                discord_client_id: $discord_client_id,
+                secrets_age: $envelope
               }
             }' |
             gh api --method POST "repos/${INFRA_REPOSITORY}/dispatches" --input -
@@ -204,22 +210,9 @@ jobs:
           BASELINE_RUN_ID: ${{ steps.dispatch.outputs.baseline_run_id }}
         run: bash deploy/infra-workload.sh await nilxone-identity "$IDENTITY_IMAGE" "$BASELINE_RUN_ID"
 
-      - name: Revoke transient provider environment
-        if: always() && steps.provider.outputs.published == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
-        run: |
-          set -Eeuo pipefail
-          revoked=true
-
-          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET; do
-            if ! gh secret delete "$name" --repo "$INFRA_REPOSITORY"; then
-              revoked=false
-              echo "::error::Could not remove the transient provider secret $name from ${INFRA_REPOSITORY}. Remove it by hand before the next deployment."
-            fi
-          done
-
-          [ "$revoked" = true ]
+      - name: Clean transient encrypted provider material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/identity-source.env" "$RUNNER_TEMP/identity-secrets.age"
 
       - name: Publish summary
         if: always()
@@ -233,6 +226,6 @@ jobs:
             echo "- identity package: \`${IDENTITY_RELEASE_SHA:-unknown}\`"
             echo "- previously active: \`${IDENTITY_ACTIVE_IMAGE:-unknown}\`"
             echo "- activation: \`${{ steps.need.outputs.deploy || 'not decided' }}\` (${IDENTITY_DECISION:-see the decision step log})"
-            echo "- provider environment: \`transient\`"
+            echo "- provider environment: \`encrypted per deployment\`"
             echo "- result: \`${{ job.status }}\`"
           } >>"$GITHUB_STEP_SUMMARY"

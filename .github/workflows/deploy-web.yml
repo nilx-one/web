@@ -21,12 +21,15 @@ on:
 permissions:
   contents: read
   actions: read
+  packages: read
 
 jobs:
   deploy:
     name: Request infra activation for ${{ inputs.target }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment:
+      name: production
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       CLIENT_NAME: ${{ inputs.target }}
@@ -111,6 +114,25 @@ jobs:
             exit 1
           fi
 
+      - name: Encrypt ephemeral GHCR pull credential
+        env:
+          INFRA_AGE_RECIPIENT: ${{ vars.INFRA_AGE_RECIPIENT }}
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$INFRA_AGE_RECIPIENT"
+          test -n "$REGISTRY_TOKEN"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          {
+            printf 'GHCR_PULL_USER=%s\n' "$GITHUB_ACTOR"
+            printf 'GHCR_PULL_TOKEN=%s\n' "$REGISTRY_TOKEN"
+          } > "$RUNNER_TEMP/client-registry.env"
+          age --armor --recipient "$INFRA_AGE_RECIPIENT" \
+            --output "$RUNNER_TEMP/client-registry.age" "$RUNNER_TEMP/client-registry.env"
+          rm -f "$RUNNER_TEMP/client-registry.env"
+
       - id: dispatch
         name: Request infra workload deployment
         env:
@@ -125,13 +147,15 @@ jobs:
             --arg image "$CLIENT_IMAGE" \
             --arg source "$GITHUB_REPOSITORY" \
             --arg ref "$RELEASE_SHA" \
+            --rawfile envelope "$RUNNER_TEMP/client-registry.age" \
             '{
               event_type: "deploy-workload",
               client_payload: {
                 workload: $workload,
                 image: $image,
                 source_repository: $source,
-                ref: $ref
+                ref: $ref,
+                secrets_age: $envelope
               }
             }' |
             gh api --method POST "repos/${INFRA_REPOSITORY}/dispatches" --input -
@@ -141,6 +165,10 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
           BASELINE_RUN_ID: ${{ steps.dispatch.outputs.baseline_run_id }}
         run: bash deploy/infra-workload.sh await "$WORKLOAD" "$CLIENT_IMAGE" "$BASELINE_RUN_ID"
+
+      - name: Remove ephemeral registry payload
+        if: always()
+        run: rm -f "$RUNNER_TEMP/client-registry.age" "$RUNNER_TEMP/client-registry.env"
 
       - name: Publish summary
         if: always()
