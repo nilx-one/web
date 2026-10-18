@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { FLIGHT_LOOT_COLORS, type FlightLootRarity } from "@nilx-one/map-contract";
+import {
+  FLIGHT_LOOT_COLORS,
+  type FlightLootRarity,
+} from "@nilx-one/map-contract";
 import {
   AdditiveBlending,
   BackSide,
@@ -149,7 +152,13 @@ export function createPingModel() {
      * `speedMps` is how fast it flies: above its 30 m/s cruise the air
      * gathers into clots shed past it, thickest at its 90 m/s top.
      */
-    sample(phase: number, moving: boolean, wear = 0, speedMps = 0, rarity?: FlightLootRarity) {
+    sample(
+      phase: number,
+      moving: boolean,
+      wear = 0,
+      speedMps = 0,
+      rarity?: FlightLootRarity,
+    ) {
       lootAura.visible = rarity !== undefined;
       if (rarity !== undefined) {
         auraMaterial.color.setHex(FLIGHT_LOOT_COLORS[rarity]);
