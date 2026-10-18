@@ -1725,6 +1725,8 @@ export function AuthenticatedMapHomeView({
     core: findItems,
     directory: courierDirectory ?? seededMarketDirectory,
     engine: xpingEngine,
+    cue,
+    feedback,
     suspended:
       guideActive ||
       achievementDialog !== undefined ||
@@ -3829,6 +3831,7 @@ export function AuthenticatedMapHomeView({
           ) : null}
           {flyover.expanded ? (
             <FlyoverControls
+              lootNotice={flyover.lootNotice}
               onSteer={flyover.steer}
               onCollapse={flyover.collapse}
               onLeave={flyover.leave}

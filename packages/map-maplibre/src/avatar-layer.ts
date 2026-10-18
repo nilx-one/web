@@ -1,12 +1,17 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { AVATAR_ASSET_VERSIONS } from "@nilx-one/map-contract";
+import {
+  AVATAR_ASSET_VERSIONS,
+  FLIGHT_LOOT_COLORS,
+} from "@nilx-one/map-contract";
 import type {
   AvatarClipId,
   AvatarHandle,
   AvatarLayerContract,
   AvatarModelId,
+  FlightLootRarity,
+  MapFlightLoot,
   SystemDroneHandle,
   SystemDroneKind,
   MapCamera,
@@ -24,15 +29,20 @@ import {
   type Map as MapLibreMap,
 } from "maplibre-gl";
 import {
+  AdditiveBlending,
   AnimationMixer,
+  CylinderGeometry,
   DirectionalLight,
   Euler,
   HemisphereLight,
   Matrix4,
+  Mesh,
+  MeshBasicMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
   Scene,
+  Vector3,
   WebGLRenderer,
   type AnimationClip,
 } from "three";
@@ -40,6 +50,7 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 import { createPingModel } from "./ping-model";
+import { createFlightLootModel } from "./flight-loot-model";
 import {
   createAmbientDroneKit,
   type AmbientDroneKit,
@@ -89,10 +100,11 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly liftMeters?: number;
   /** A system drone's engine wear, 0 to 1. */
   readonly wear?: number;
-  /** How fast a system drone flies, in m/s. */
+  /** Actual flight speed for existing airflow effect. */
   readonly speedMps?: number;
   /** Which system drone this is; omitted, xPing. */
   readonly droneKind?: SystemDroneKind;
+  readonly lootAura?: FlightLootRarity;
   /** Banking and leaning in the model's own frame, in degrees. */
   readonly rollDeg?: number;
   readonly pitchDeg?: number;
@@ -105,6 +117,7 @@ interface DroneModel {
     moving: boolean,
     wear?: number,
     speedMps?: number,
+    aura?: FlightLootRarity,
   ): void;
   dispose(): void;
 }
@@ -161,6 +174,7 @@ export function bodyOrientation(
 export interface AvatarCustomLayer
   extends CustomLayerInterface, AvatarLayerContract {
   upsertDrone(handle: SystemDroneHandle): boolean;
+  setFlightLoot(handles: readonly MapFlightLoot[]): void;
   hasInstances(): boolean;
   dispose(): void;
 }
@@ -249,6 +263,13 @@ export function createAvatarLayer(
   const now = options.now ?? (() => globalThis.performance.now());
   const requestMount = options.requestMount ?? (() => undefined);
   const instances = new Map<string, AvatarInstance>();
+  const flightLoot = new Map<
+    string,
+    {
+      handle: MapFlightLoot;
+      model: ReturnType<typeof createFlightLootModel>;
+    }
+  >();
   const assetCache = new Map<AvatarModelId, Promise<GLTF>>();
   const backpackSource = createBackpackSource(
     () => new GLTFLoader().loadAsync(BACKPACK_ASSET_URL),
@@ -256,6 +277,20 @@ export function createAvatarLayer(
   );
   const abortController = new AbortController();
   const scene = new Scene();
+  const laserGeometry = new CylinderGeometry(0.055, 0.055, 1, 8);
+  const laserBeams = Array.from({ length: 2 }, () => {
+    const material = new MeshBasicMaterial({
+      color: FLIGHT_LOOT_COLORS.rare,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+      blending: AdditiveBlending,
+    });
+    const beam = new Mesh(laserGeometry, material);
+    beam.visible = false;
+    scene.add(beam);
+    return beam;
+  });
   // Custom layers have their own Three scene: MapLibre's map lighting does
   // not illuminate the GLB's PBR materials. Mercator uses Z as vertical.
   const ambient = new HemisphereLight(0xffffff, 0x6e665e, 2);
@@ -428,6 +463,64 @@ export function createAvatarLayer(
     root.updateMatrixWorld(true);
   }
 
+  function placeFlightLoot(entry: {
+    handle: MapFlightLoot;
+    model: ReturnType<typeof createFlightLootModel>;
+  }): void {
+    if (map === undefined) return;
+    const { lngLat, heightMeters } = entry.handle;
+    const altitude =
+      (loadedTerrainElevationMeters(map, lngLat) ?? 0) + heightMeters;
+    const coordinate = MercatorCoordinate.fromLngLat(
+      { lng: lngLat[0], lat: lngLat[1] },
+      altitude,
+    );
+    const metres = coordinate.meterInMercatorCoordinateUnits();
+    entry.model.root.position.set(
+      (coordinate.x - origin.x) / origin.metres,
+      (coordinate.y - origin.y) / origin.metres,
+      (coordinate.z - origin.z) / origin.metres,
+    );
+    entry.model.root.scale.setScalar(metres / origin.metres);
+    entry.model.root.quaternion.copy(bodyOrientation(0));
+    entry.model.root.updateMatrixWorld(true);
+  }
+
+  const beamDirection = new Vector3();
+  const beamOrigin = new Vector3(0, 1, 0);
+  function updateLootLasers(): void {
+    const source = instances.get("flyover:xPing")?.root;
+    const targets = [...flightLoot.values()]
+      .filter(
+        ({ handle }) =>
+          handle.laserTarget && handle.intakeProgress === undefined,
+      )
+      .slice(0, 2);
+    for (const [index, beam] of laserBeams.entries()) {
+      const target = targets[index];
+      beam.visible = source !== undefined && target !== undefined;
+      if (!source || !target) continue;
+      beamDirection.subVectors(target.model.root.position, source.position);
+      const distance = beamDirection.length();
+      if (distance <= 0.01) {
+        beam.visible = false;
+        continue;
+      }
+      beam.position
+        .copy(source.position)
+        .add(target.model.root.position)
+        .multiplyScalar(0.5);
+      beam.quaternion.setFromUnitVectors(
+        beamOrigin,
+        beamDirection.multiplyScalar(1 / distance),
+      );
+      beam.scale.set(1, distance, 1);
+      (beam.material as MeshBasicMaterial).color.setHex(
+        FLIGHT_LOOT_COLORS[target.handle.rarity],
+      );
+    }
+  }
+
   function anchorAt(mounted: MapLibreMap): void {
     const center = MercatorCoordinate.fromLngLat(mounted.getCenter(), 0);
     origin = {
@@ -437,6 +530,20 @@ export function createAvatarLayer(
       metres: center.meterInMercatorCoordinateUnits(),
     };
     for (const instance of instances.values()) place(instance);
+    for (const entry of flightLoot.values()) {
+      placeFlightLoot(entry);
+      const pull = entry.handle.intakeProgress;
+      const target = instances.get("flyover:xPing")?.root;
+      if (pull !== undefined && target !== undefined) {
+        const amount = Math.max(0, Math.min(1, pull));
+        entry.model.root.position.lerp(
+          target.position,
+          amount * amount * (3 - 2 * amount),
+        );
+        entry.model.root.scale.multiplyScalar(1 - 0.85 * amount);
+      }
+    }
+    updateLootLasers();
   }
 
   async function hydrate(instance: AvatarInstance): Promise<void> {
@@ -451,6 +558,7 @@ export function createAvatarLayer(
         !instance.handle.reducedMotion,
         instance.handle.wear,
         instance.handle.speedMps,
+        instance.handle.lootAura,
       );
       scene.add(drone.root);
       place(instance);
@@ -494,6 +602,7 @@ export function createAvatarLayer(
         !handle.reducedMotion,
         handle.wear,
         handle.speedMps,
+        handle.lootAura,
       );
       place(existing);
       applyVisibility(existing);
@@ -597,6 +706,7 @@ export function createAvatarLayer(
         ...(handle.pitchDeg === undefined ? {} : { pitchDeg: handle.pitchDeg }),
         ...(handle.wear === undefined ? {} : { wear: handle.wear }),
         ...(handle.speedMps === undefined ? {} : { speedMps: handle.speedMps }),
+        ...(handle.lootAura === undefined ? {} : { lootAura: handle.lootAura }),
         ...(handle.kind === undefined ? {} : { droneKind: handle.kind }),
         visible: true,
         reducedMotion: handle.reducedMotion,
@@ -604,6 +714,38 @@ export function createAvatarLayer(
       return (
         renderer !== undefined && instances.get(handle.id)?.root !== undefined
       );
+    },
+
+    setFlightLoot(handles) {
+      const desired = new Set(handles.map((handle) => handle.id));
+      for (const [id, entry] of flightLoot) {
+        if (desired.has(id)) continue;
+        entry.model.dispose();
+        flightLoot.delete(id);
+      }
+      for (const handle of handles) {
+        let entry = flightLoot.get(handle.id);
+        if (
+          entry !== undefined &&
+          (entry.handle.kind !== handle.kind ||
+            entry.handle.rarity !== handle.rarity)
+        ) {
+          entry.model.dispose();
+          flightLoot.delete(handle.id);
+          entry = undefined;
+        }
+        if (entry === undefined) {
+          const model = createFlightLootModel(handle.kind, handle.rarity);
+          scene.add(model.root);
+          entry = { handle, model };
+          flightLoot.set(handle.id, entry);
+        }
+        entry.handle = handle;
+        entry.model.setNear(handle.near);
+        placeFlightLoot(entry);
+      }
+      if (handles.length > 0) requestMount();
+      map?.triggerRepaint();
     },
 
     remove(id) {
@@ -625,7 +767,7 @@ export function createAvatarLayer(
     },
 
     hasInstances() {
-      return instances.size > 0;
+      return instances.size > 0 || flightLoot.size > 0;
     },
 
     dispose() {
@@ -639,6 +781,13 @@ export function createAvatarLayer(
         instance.root?.removeFromParent();
       }
       instances.clear();
+      laserGeometry.dispose();
+      for (const beam of laserBeams) {
+        (beam.material as MeshBasicMaterial).dispose();
+        beam.removeFromParent();
+      }
+      for (const entry of flightLoot.values()) entry.model.dispose();
+      flightLoot.clear();
       ambientKit?.dispose();
       ambientKit = undefined;
       assetCache.clear();

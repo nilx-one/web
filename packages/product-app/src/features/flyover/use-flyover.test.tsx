@@ -45,6 +45,7 @@ function setup(waitForRoads?: () => Promise<void>) {
     ...double,
     systemDrone: drone,
     setRoute: vi.fn(),
+    setFlightLoot: vi.fn(),
     obstaclesWithin: vi.fn(() => []),
     roadsWithin: vi.fn(() => []),
     preloadRoads: vi.fn(async () => {
@@ -102,6 +103,47 @@ afterEach(() => {
 });
 
 describe("useFlyover", () => {
+  it("renders an early collectible, blooms at 30 m, and collects once with an aura", async () => {
+    const { renderer, drone, hook } = setup();
+    const collected = vi.fn();
+    await act(async () => {
+      hook.result.current.start({
+        from: FROM,
+        to: TO,
+        loot: [
+          {
+            id: "verified-preview-1",
+            kind: "orb",
+            rarity: "special",
+            lane: 0,
+            distanceMeters: 130,
+            heightMeters: 14,
+          },
+        ],
+        onLootCollected: collected,
+      });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 1_000));
+    expect(renderer.setFlightLoot).toHaveBeenCalled();
+    expect(renderer.setFlightLoot.mock.lastCall?.[0]).toEqual([
+      expect.objectContaining({ id: "verified-preview-1", near: false }),
+    ]);
+    act(() => vi.advanceTimersByTime(2_500));
+    expect(renderer.setFlightLoot.mock.lastCall?.[0]).toEqual([
+      expect.objectContaining({ id: "verified-preview-1", near: true }),
+    ]);
+    act(() => vi.advanceTimersByTime(2_000));
+    expect(collected).toHaveBeenCalledTimes(1);
+    expect(renderer.setFlightLoot.mock.lastCall?.[0]).toEqual([]);
+    expect(lastDrone(drone)?.lootAura).toBe("special");
+    act(() => hook.result.current.leave());
+    expect(renderer.setFlightLoot.mock.lastCall?.[0]).toEqual([]);
+  });
+
   it("draws the route, takes off beside the Bond and flies it", async () => {
     const { renderer, drone, hook } = setup();
     await begin(hook);
@@ -205,7 +247,6 @@ describe("useFlyover", () => {
     expect(straight?.points).toHaveLength(2);
     expect(straight?.points[1]).toEqual([TO.longitude, TO.latitude]);
     expect(lastDrone(drone)!.wear).toBe(0.4);
-    // A second into the three-second build-up: well past cruise, short of top.
     expect(lastDrone(drone)!.speedMps).toBeGreaterThan(45);
     expect(lastDrone(drone)!.speedMps).toBeLessThan(90);
     // Let go: back on the roads, spending nothing more.

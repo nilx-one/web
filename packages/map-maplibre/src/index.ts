@@ -31,6 +31,7 @@ import {
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapOrb,
+  type MapFlightLoot,
   type MapRoute,
   type MapPinnedLandmark,
   type MapPointSelection,
@@ -631,6 +632,7 @@ export function createMapLibreRenderer(
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
   const droneHandles = new Map<string, SystemDroneHandle>();
+  let flightLootHandles: readonly MapFlightLoot[] = [];
   let droneLayerFailed = false;
   let avatarCamera: MapCamera = camera;
   let monumentLayer: MonumentCustomLayer | undefined;
@@ -670,6 +672,7 @@ export function createMapLibreRenderer(
         layer.setCamera(avatarCamera);
         for (const handle of avatarHandles.values()) layer.upsert(handle);
         for (const handle of droneHandles.values()) layer.upsertDrone(handle);
+        layer.setFlightLoot(flightLootHandles);
         if (map !== undefined && firstPaintDone && layer.hasInstances()) {
           ensureAvatarLayer(map);
         }
@@ -2416,6 +2419,13 @@ export function createMapLibreRenderer(
     setPinnedLandmarks(next: readonly MapPinnedLandmark[]) {
       pinnedLandmarks = next.map((landmark) => ({ ...landmark }));
       if (map !== undefined && presentationApplied) applyPinnedLandmarks(map);
+    },
+
+    setFlightLoot(next: readonly MapFlightLoot[]) {
+      flightLootHandles = next.map((item) => ({ ...item }));
+      if (avatarLayer !== undefined)
+        avatarLayer.setFlightLoot(flightLootHandles);
+      else if (flightLootHandles.length > 0) void requestAvatarLayer();
     },
 
     setOrbs(next: readonly MapOrb[]) {

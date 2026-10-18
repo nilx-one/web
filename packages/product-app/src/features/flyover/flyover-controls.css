@@ -160,3 +160,28 @@
     transform: none;
   }
 }
+
+/* xPing's own caption, never an overlay that steals steering gestures. */
+.flyover__loot-notice {
+  position: absolute;
+  left: 50%;
+  top: 32%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: min(86vw, 24rem);
+  padding: 0.55rem 0.8rem;
+  border-radius: 12px;
+  color: var(--map-ink);
+  background: var(--map-glass-strong);
+  border: 1px solid var(--map-line);
+  backdrop-filter: blur(16px);
+  pointer-events: none;
+  font-size: 0.875rem;
+  text-align: center;
+  z-index: 1;
+}
+.flyover__loot-notice strong {
+  color: var(--map-accent-spatial);
+}

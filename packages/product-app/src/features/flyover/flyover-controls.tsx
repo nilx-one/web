@@ -18,6 +18,8 @@ import "./flyover-controls.css";
 export const FLYOVER_SWIPE_PIXELS = 36;
 
 export interface FlyoverControlsProps {
+  /** Caption from xPing after spotting a high-rarity laser target. */
+  readonly lootNotice?: "rare" | "special" | "exclusive" | undefined;
   readonly onSteer: (direction: -1 | 1) => void;
   readonly onCollapse: () => void;
   readonly onLeave: () => void;
@@ -42,6 +44,7 @@ export interface FlyoverControlsProps {
  * takes no gestures while it flies; the camera is the flight's.
  */
 export function FlyoverControls({
+  lootNotice,
   onSteer,
   onCollapse,
   onLeave,
@@ -155,6 +158,12 @@ export function FlyoverControls({
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+      {lootNotice ? (
+        <div className="flyover__loot-notice" role="status" aria-live="polite">
+          <strong>xPing</strong>
+          <span>{t(`flyover.loot.${lootNotice}`)}</span>
         </div>
       ) : null}
       <div className="flyover__bottom">

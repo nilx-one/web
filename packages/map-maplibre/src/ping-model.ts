@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  FLIGHT_LOOT_COLORS,
+  type FlightLootRarity,
+} from "@nilx-one/map-contract";
+import {
+  AdditiveBlending,
+  BackSide,
   BoxGeometry,
   CylinderGeometry,
   Group,
@@ -110,6 +116,17 @@ export function createPingModel() {
     airMaterials.push(material);
     airClots.push(clot);
   }
+  const auraMaterial = new MeshBasicMaterial({
+    color: FLIGHT_LOOT_COLORS.common,
+    transparent: true,
+    opacity: 0.22,
+    side: BackSide,
+    blending: AdditiveBlending,
+    depthWrite: false,
+  });
+  const lootAura = new Mesh(new SphereGeometry(0.65, 16, 12), auraMaterial);
+  lootAura.visible = false;
+  body.add(lootAura);
   const rotors: Mesh[] = [];
   for (const x of [-1, 1])
     for (const z of [-1, 1]) {
@@ -135,7 +152,23 @@ export function createPingModel() {
      * `speedMps` is how fast it flies: above its 30 m/s cruise the air
      * gathers into clots shed past it, thickest at its 90 m/s top.
      */
-    sample(phase: number, moving: boolean, wear = 0, speedMps = 0) {
+    sample(
+      phase: number,
+      moving: boolean,
+      wear = 0,
+      speedMps = 0,
+      rarity?: FlightLootRarity,
+    ) {
+      lootAura.visible = rarity !== undefined;
+      // Three.js bounds include invisible meshes. Keep the dormant aura out
+      // of the drone's unpowered geometry bounds until it is actually earned.
+      lootAura.scale.setScalar(rarity === undefined ? 0 : 1);
+      if (rarity !== undefined) {
+        auraMaterial.color.setHex(FLIGHT_LOOT_COLORS[rarity]);
+        auraMaterial.opacity = moving
+          ? 0.22 + 0.05 * Math.sin(phase * Math.PI * 2)
+          : 0.22;
+      }
       const worn = Math.min(1, Math.max(0, wear));
       body.position.y =
         1.9 + (moving ? Math.sin(phase * Math.PI * 2) * 0.055 : 0);
@@ -194,6 +227,7 @@ export function createPingModel() {
       tapeMaterial.dispose();
       smokeMaterial.dispose();
       sparkMaterial.dispose();
+      auraMaterial.dispose();
       for (const material of airMaterials) material.dispose();
       root.removeFromParent();
     },

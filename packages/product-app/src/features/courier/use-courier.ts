@@ -10,6 +10,7 @@ import type {
 } from "@nilx-one/application";
 import { CourierCapabilityUnavailable } from "@nilx-one/application";
 import type { MapPointSelection, MapRenderer } from "@nilx-one/map-contract";
+import type { HostPort, SoundCue } from "@nilx-one/host-contract";
 import { courierCoordinate, courierPoint } from "./courier-map";
 import { FLYOVER_DRONE_ID, useFlyover } from "../flyover/use-flyover";
 import { createXpingForcing, type XpingForcing } from "../xping/xping-forcing";
@@ -21,6 +22,8 @@ export function useCourier(input: {
   core: Pick<CoreRuntimePort, "courierDestination"> | undefined;
   directory: CourierDirectoryPort | undefined;
   suspended: boolean;
+  cue?: ((moment: SoundCue) => void) | undefined;
+  feedback?: Pick<HostPort, "impact"> | undefined;
   /** xPing's engine; absent, a flight cannot be forced. */
   engine?: XpingEngineAccessPort | undefined;
 }) {
@@ -33,7 +36,10 @@ export function useCourier(input: {
   const [forcing, setForcing] = useState<XpingForcing>();
   /** When forcing on empty broke the engine and called the flight off. */
   const [brokenAt, setBrokenAt] = useState<number>();
-  const flyover = useFlyover(input.renderer, !input.suspended);
+  const flyover = useFlyover(input.renderer, !input.suspended, {
+    playCue: input.cue,
+    impact: input.feedback?.impact,
+  });
   const { following, setFollowing, expand, active, start, leave } = flyover;
   const leaveRef = useRef(leave);
   useEffect(() => {
