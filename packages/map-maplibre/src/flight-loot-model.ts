@@ -54,7 +54,10 @@ export function createFlightLootModel(
   const item = new Mesh(geometry, material);
   if (kind === "balloon") {
     item.scale.y = 1.25;
-    const string = new Mesh(keep(new CylinderGeometry(0.014, 0.014, 0.65, 6)), material);
+    const string = new Mesh(
+      keep(new CylinderGeometry(0.014, 0.014, 0.65, 6)),
+      material,
+    );
     string.position.y = -0.94;
     root.add(string);
   }
