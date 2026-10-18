@@ -567,6 +567,10 @@ export interface MapFlightLoot {
   readonly rarity: FlightLootRarity;
   /** Strong emissive aura appears only in the last 30 m before contact. */
   readonly near: boolean;
+  /** At most two 3D laser locks are selected by the flight, never the renderer. */
+  readonly laserTarget?: boolean;
+  /** 0–1 local visual tractor animation after actual collision. */
+  readonly intakeProgress?: number;
 }
 
 export type MapRendererStatus =
