@@ -22,11 +22,15 @@ A per-chat in-process lock serializes slot creation and updates, while
 database IDs preserve slots across service restarts. Deployments should
 run a single Telegram polling replica, as before.
 
-The bot deletes consumed command and location inputs on a best-effort
-basis in private chats to reduce clutter. Telegram limits deletion of
-older messages to 48 hours. Consequently this contract is about
-**bot-owned messages**, not an ability to reorder Telegram history or
-guarantee that arbitrary user/legacy messages never appear.
+**Edit bot messages; delete only user inputs.** The bot uses `editMessageText`
+for its retained Open/Status/Admin slots (Open remains unchanged unless it
+needs recovery). It never deletes an existing bot-owned slot for normal
+updates or role changes. In a private chat, incoming user commands, location
+shares and unsupported inputs are removed **after successful processing**,
+best-effort, to keep the surface focused. Telegram permits a bot to delete
+incoming private-chat messages within 48 hours; it cannot edit user messages
+or retroactively remove legacy messages older than the API permits.
+Failed input deletion is logged without undoing an already committed action.
 
 Telegram only edits messages with no reply keyboard or with an inline
 keyboard. The status slot therefore does **not** install reply keyboards.
@@ -35,27 +39,43 @@ native attachment/location picker; `/set_position` and `/travel`
 continue to consume explicitly shared map points and keep their existing
 admin authorization checks.
 
+The default and ordinary-user menus expose exactly `/open` and `/unlink`,
+in that order; linked admins additionally see `/set_position` and `/travel`
+before `/unlink`. The legacy `/start`, `/whoami`, `/recover`,
+`/current_position`, `/help` and `/unlink_confirm` handlers remain
+functional when explicitly typed, but are not promoted in the menu.
+`/unlink` uses a five-minute, single-use inline confirmation/cancellation
+flow in the editable Status slot; the provider repository still rejects
+unlink if Telegram is the Bond's sole remaining access path.
+
 Admin request receipts are recorded after a successful admin-slot
 refresh. Approval confirmations also update the same admin slot rather
-than generating a fourth message. The full pending request source is
-the existing persistent admin-role repository and Web inbox; Telegram
+than generating a fourth message. An admin demotion redacts the retained
+Admin slot without deleting the bot-owned message; a later promotion
+can reuse the same message ID. The full pending request source is the
+existing persistent admin-role repository and Web inbox; Telegram
 shows the first ten actionable requests.
 
 ## Verification
 
-1. Guest `/open`: exactly two bot-owned messages, with Open above Status.
-2. Repeated `/help`, `/whoami`, or `/recover`: Status ID is unchanged.
-3. Restart identity service: messages are edited, not recreated.
-4. Linked admin: the third slot appears; two outstanding review requests
+1. Guest and ordinary-user command menus are exactly `/open`, `/unlink`.
+   Admins get `/set_position`, `/travel` as additional menu entries.
+2. Guest `/open`: exactly two bot-owned messages, with Open above Status.
+3. Repeated `/help`, `/whoami`, or `/recover`: Status ID is unchanged.
+4. Restart identity service: messages are edited, not recreated.
+5. Linked admin: the third slot appears; two outstanding review requests
    share one message with independent callbacks.
-5. User/candidate/unauthorized callback: no elevation or admin inbox.
-6. Admin `/set_position`, `/travel`, and ordinary `/current_position`
+6. User/candidate/unauthorized callback: no elevation or admin inbox.
+7. Admin `/set_position`, `/travel`, and ordinary `/current_position`
    preserve their prior location semantics.
-7. Telegram edit API errors other than message-not-found produce no
-   duplicate messages. Revocation best-effort removes the admin slot
-   and never bypasses the server-side authorization gate.
-8. Full CI validates Rust format, clippy, and tests; Validate checks the
-   runtime package. Merge does not deploy.
+8. `/unlink` uses inline Confirm/Cancel on Status and never emits an extra
+   bot message; expiry and sole-access guards remain enforced.
+9. Input cleanup deletes *only incoming user messages*, never bot slots.
+   Admin revocation redacts and retains its slot ID for later reuse.
+10. Telegram edit API errors other than message-not-found produce no
+    duplicate messages and never bypass the authorization boundary.
+11. Full CI validates Rust format, clippy, and tests; Validate checks the
+    runtime package. Merge does not deploy.
 
 ---
 
