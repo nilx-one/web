@@ -6,6 +6,7 @@ pub mod api {
     include!("api_avaia_lifecycle.rs");
     include!("api_pub_info.rs");
     include!("api_awards.rs");
+    include!("api_xping.rs");
     include!("session_activation.rs");
 }
 pub mod browser_web_auth;
@@ -26,6 +27,7 @@ pub mod repository {
     include!("repository_pub_info.rs");
     include!("repository_awards.rs");
     include!("repository_business_stations.rs");
+    include!("repository_xping.rs");
 }
 pub mod speech;
 pub mod telegram_init_data;
