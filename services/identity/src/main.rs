@@ -592,7 +592,7 @@ async fn deliver_admin_role_notifications(
                 Arc::clone(&surfaces),
             );
             match compact.refresh_admin(None).await {
-                Ok(_) => {
+                Ok(true) => {
                     if let Err(error) = repository
                         .confirm_admin_role_telegram_delivery(&item, now)
                         .await
@@ -600,6 +600,7 @@ async fn deliver_admin_role_notifications(
                         error!(%error, "admin role Telegram send receipt could not be persisted");
                     }
                 }
+                Ok(false) => {}
                 Err(error) => {
                     // A bot cannot send private messages to unstarted/blocked chats.
                     // The durable claim expires after 300 seconds; retry without
@@ -651,7 +652,7 @@ async fn deliver_admin_role_approval_confirmations(
             Arc::clone(surfaces),
         );
         match compact.refresh_admin(Some(&notice)).await {
-            Ok(_) => {
+            Ok(true) => {
                 if let Err(error) = repository
                     .confirm_admin_role_telegram_confirmation(&item, now)
                     .await
@@ -659,6 +660,7 @@ async fn deliver_admin_role_approval_confirmations(
                     error!(%error, "admin-role confirmation receipt could not be saved");
                 }
             }
+            Ok(false) => {}
             Err(error) => {
                 error!(
                     telegram_user_id = item.telegram_user_id,
