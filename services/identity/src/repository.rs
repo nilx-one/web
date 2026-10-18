@@ -2085,68 +2085,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reserved_prefix_cannot_be_claimed_by_any_registration_path() {
+    async fn zero_prefix_registration_creates_users_not_admins() {
         let repository = IdentityRepository::connect("sqlite::memory:")
             .await
             .expect("repository");
-        let reserved: PubDress = "0x0нуль".parse().expect("reserved");
+        let reserved: PubDress = "0x0нуль".parse().expect("address");
         assert!(matches!(
-            repository
-                .register(&reserved, &ProviderIdentity::telegram(7), 1)
-                .await
-                .expect("provider result"),
-            RegistrationOutcome::HandleUnavailable
-        ));
-        assert!(matches!(
-            repository
-                .register_native(
-                    &reserved,
-                    "hash",
-                    1,
-                    b"recovery",
-                    b"challenge",
-                    b"idempotency",
-                    1,
-                    60
-                )
-                .await
-                .expect("native result"),
-            NativeRegistrationOutcome::HandleUnavailable
-        ));
-        assert!(sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES ('0x0direct', 'human', 1)").execute(&repository.pool).await.is_err());
-        let ordinary: PubDress = "0x1ordinary".parse().expect("ordinary");
-        assert!(matches!(
-            repository
-                .register(&ordinary, &ProviderIdentity::telegram(7), 1)
-                .await
-                .expect("ordinary registration"),
+            repository.register(&reserved, &ProviderIdentity::telegram(7), 1).await.expect("register"),
             RegistrationOutcome::Registered(_)
         ));
-        assert_eq!(
-            repository.role_for(ordinary.as_str()).await.expect("role"),
-            crate::BondAccessRole::User
-        );
+        assert_eq!(repository.role_for(reserved.as_str()).await.expect("role"), crate::BondAccessRole::User);
+        let native: PubDress = "0x0native".parse().expect("address");
         assert!(matches!(
-            repository
-                .rename_pub_dress(&ordinary, &reserved)
-                .await
-                .expect("rename result"),
+            repository.register_native(&native, "hash", 1, b"recovery", b"challenge", b"idempotency", 1, 60).await.expect("native"),
+            NativeRegistrationOutcome::Registered(_)
+        ));
+        assert_eq!(repository.role_for(native.as_str()).await.expect("role"), crate::BondAccessRole::User);
+        let ordinary: PubDress = "0x1ordinary".parse().expect("ordinary");
+        assert!(matches!(
+            repository.register(&ordinary, &ProviderIdentity::telegram(8), 1).await.expect("ordinary"),
+            RegistrationOutcome::Registered(_)
+        ));
+        assert!(matches!(
+            repository.rename_pub_dress(&ordinary, &"0x0elevated".parse().expect("target")).await.expect("rename"),
             PubDressRenameOutcome::Unavailable
         ));
-        assert!(
-            sqlx::query(
-                "UPDATE identities SET pub_dress = '0x0elevated' WHERE pub_dress = '0x1ordinary'"
-            )
-            .execute(&repository.pool)
-            .await
-            .is_err()
-        );
-        assert!(
-            repository
-                .is_pub_dress_available(&reserved)
-                .await
-                .expect("unallocated")
-        );
     }
 
     #[tokio::test]

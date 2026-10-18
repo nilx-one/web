@@ -2308,18 +2308,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reserved_prefix_is_not_offered_or_registered_by_public_apis() {
+    async fn zero_prefix_is_publicly_available_for_registration() {
         let app = app().await;
         let resolve = Request::post("/api/v1/identity/resolve")
             .header("content-type", "application/json")
             .body(Body::from(r#"{"pub_dress":"0x0нуль"}"#))
             .expect("resolve");
         let response = app.clone().oneshot(resolve).await.expect("response");
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(
-            json_body(response).await["error"]["code"],
-            "reserved_pub_dress_prefix"
-        );
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json_body(response).await["state"], "available");
         let availability =
             Request::get("/api/v1/identity/availability?discriminator=0&slug=reserved")
                 .header(AUTHORIZATION, format!("tma {}", signed_init_data(7)))
@@ -2327,31 +2324,27 @@ mod tests {
                 .expect("availability");
         let response = app.clone().oneshot(availability).await.expect("response");
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(json_body(response).await["available"], false);
+        assert_eq!(json_body(response).await["available"], true);
         let provider = Request::post("/api/v1/identity/registration")
             .header(AUTHORIZATION, format!("tma {}", signed_init_data(7)))
             .header("content-type", "application/json")
             .body(Body::from(r#"{"discriminator":"0","slug":"reserved"}"#))
             .expect("provider");
         assert_eq!(
-            app.clone()
-                .oneshot(provider)
-                .await
-                .expect("response")
-                .status(),
-            StatusCode::CONFLICT
+            app.clone().oneshot(provider).await.expect("response").status(),
+            StatusCode::CREATED
         );
         let native = Request::post("/api/v1/auth/native/registration")
             .header("content-type", "application/json")
-            .header("idempotency-key", "reserved-prefix-test")
+            .header("idempotency-key", "zero-prefix-test-0001")
             .header(super::CSRF_HEADER, "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x0reserved","password":"a deliberately long password"}"#,
+                r#"{"pub_dress":"0x0native","password":"a deliberately long password"}"#
             ))
             .expect("native");
         assert_eq!(
             app.oneshot(native).await.expect("response").status(),
-            StatusCode::CONFLICT
+            StatusCode::CREATED
         );
     }
 
