@@ -15,9 +15,9 @@ Inspect actual state before reporting an access limitation.
 Proceed without additional confirmation for reversible repository actions,
 including creating branches, editing files, committing and pushing, opening or
 updating pull requests, commenting or reviewing, marking a pull request ready,
-and merging when all merge conditions below are satisfied.
+but not merging, which requires explicit authorization for that PR.
 
-Always obtain explicit user authorization before deployment or release
+Always obtain explicit user authorization before merge, deployment or release
 activation, repository deletion or transfer, destructive data operations, or
 irreversible actions outside the repository.
 
@@ -85,7 +85,8 @@ Once the exact head revision is verified, required CI is green, applicable
 deploy validation is green, the requested scope is complete, and no known
 blocker remains, mark the pull request ready without asking the user again.
 
-Merge automatically when all of the following are true:
+Merge only after the user explicitly authorizes this PR and all of the
+following are true:
 
 - the requested task is complete;
 - the final diff matches the intended scope;
@@ -136,8 +137,8 @@ the release.
 
 ### Deployment
 
-Deployment always requires explicit user authorization, even after an automatic
-merge.
+Deployment always requires separate explicit user authorization, even after an
+authorized merge.
 
 After authorization, deploy the already verified revision or artifact, perform
 the environment transition, activate the release, and verify minimal
@@ -181,26 +182,43 @@ deployment results without evidence from the corresponding operation.
 Commit as the GitHub account that actually did the work, identified by its
 account ID:
 
-| GitHub account | Account ID | Git author (ID-based noreply)               |
-| -------------- | ---------- | ------------------------------------------- |
-| `0x0sky`       | 75973992   | `75973992+0x0sky@users.noreply.github.com`  |
-| `x0skai`       | 300452669  | `300452669+x0skai@users.noreply.github.com` |
+| GitHub account | Account ID | Canonical author and committer email |
+| -------------- | ---------- | ------------------------------------ |
+| `0x0sky`       | 75973992   | `0x0sky@aiaiaiai.org`                |
+| `x0skai`       | 300452669  | `x0skai@aiaiaiai.org`                |
 
 AI-tool co-authorship is separate from GitHub account credit. Credit only
 substantive work incorporated into the exact commit:
 
-- `Co-authored-by: Codex <codex@openai.com>` when OpenAI Codex contributed.
-- `Co-authored-by: Claude <noreply@anthropic.com>` when Claude contributed.
+- **Mandatory for every Codex-authored commit:** if OpenAI Codex wrote code,
+  tests, documentation or an incorporated patch, include exactly one
+  `Co-authored-by: Codex <codex@openai.com>` trailer in that commit message,
+  regardless of which account or tool performs the commit.
+- **Mandatory for every Claude-authored commit:** when Claude contributed
+  substantive changes, include exactly one
+  `Co-authored-by: Claude <noreply@anthropic.com>` trailer.
+- If both agents contributed substantive changes to the same commit, include
+  both trailers. Never attribute an agent that did not contribute.
 
-`Assisted-by: OpenAI Codex` does **not** produce GitHub co-authorship and must
-not replace the Codex `Co-authored-by` trailer. In particular, a commit authored
-by `0x0sky` with genuine Codex changes must contain the Codex trailer in the
-**commit message**, not only in a pull request description. Do not add tool
-co-authors when that tool did not contribute to the commit.
+For a commit containing Codex work, the message must end like this:
+
+```text
+fix(scope): describe the change
+
+Co-authored-by: Codex <codex@openai.com>
+```
+
+Separate the trailer block from the message body with one blank line. Put
+multiple trailers on consecutive lines, without blank lines between them.
+Add these trailers **before pushing**, and verify the actual commit message
+(`git log -1 --format=%B`). A pull request description, review or
+`Assisted-by: OpenAI Codex` is **not** equivalent to the required trailer.
+Ensure the genuine trailer survives squash merges; do not claim the credit if
+it was dropped.
 
 Rules:
 
-- Add the other account as `Co-authored-by: <login> <<ID>+<login>@users.noreply.github.com>`
+- Add the other account as `Co-authored-by: <login> <login@aiaiaiai.org>`
   only when it contributed code, tests, documentation or an incorporated patch
   to that exact commit. A review, approval, prompt or account ownership alone
   does not qualify.
@@ -209,10 +227,17 @@ Rules:
 - Never add the primary author as its own co-author, and never duplicate a
   trailer.
 - Put trailers in the final paragraph of the commit message, one per line.
+- Both author and committer identities belonging to these accounts use their
+  verified `@aiaiaiai.org` address for every new source commit. The platform-
+  managed `web-flow <noreply@github.com>` committer on GitHub squash merges
+  is not the account author's email and is not a substitute for it.
+- Legacy GitHub ID-based noreply addresses remain historical identifiers only;
+  never use them in new account author, committer or co-author metadata.
 - Never label a commit as an unknown author to avoid this rule. If the connected
-  GitHub API cannot author as the correct account, commit from a shell with the
-  correct repository-local identity. If no such shell exists, state the
-  limitation in the PR and do not claim the attribution.
+  GitHub API cannot author using the canonical email, use a Git-capable shell
+  with the correct repository-local author and committer identity. If no such
+  transport exists, keep the PR blocked, state the limitation, and do not
+  misrepresent the actual commit metadata or relax validation.
 - The commit-attribution check validates identities, trailer format, and
   duplicate or self credit. It cannot prove that a contribution happened; the
   author and reviewers establish that.
