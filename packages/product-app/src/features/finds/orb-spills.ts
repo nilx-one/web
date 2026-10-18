@@ -118,15 +118,15 @@ const HERITAGE_KINDS: ReadonlySet<string> = new Set([
  * the original artifact. No invented POI and no change to artifact placement.
  * The cache may legitimately have no landmark, giving the legacy trail.
  */
+type LandmarkLookup = (
+  point: MapPointSelection,
+  radiusMeters: number,
+) => readonly MapLandmark[];
+
 export function landmarkWaypoint(
   roll: Pick<FindRoll, "segment" | "placement">,
   fog: MapFogField | undefined,
-  near:
-    | ((
-        point: MapPointSelection,
-        radiusMeters: number,
-      ) => readonly MapLandmark[])
-    | undefined,
+  near: LandmarkLookup | undefined,
 ): LonLat | undefined {
   if (fog === undefined || near === undefined) return undefined;
   const [longitude, latitude] = findPoint(roll);
