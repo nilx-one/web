@@ -97,6 +97,8 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly liftMeters?: number;
   /** A system drone's engine wear, 0 to 1. */
   readonly wear?: number;
+  /** Actual flight speed for existing airflow effect. */
+  readonly speedMps?: number;
   /** Which system drone this is; omitted, xPing. */
   readonly droneKind?: SystemDroneKind;
   readonly lootAura?: FlightLootRarity;
@@ -111,6 +113,7 @@ interface DroneModel {
     phase: number,
     moving: boolean,
     wear?: number,
+    speedMps?: number,
     aura?: FlightLootRarity,
   ): void;
   dispose(): void;
@@ -532,6 +535,7 @@ export function createAvatarLayer(
         instance.handle.clipPhase,
         !instance.handle.reducedMotion,
         instance.handle.wear,
+        instance.handle.speedMps,
         instance.handle.lootAura,
       );
       scene.add(drone.root);
@@ -575,6 +579,7 @@ export function createAvatarLayer(
         handle.clipPhase,
         !handle.reducedMotion,
         handle.wear,
+        handle.speedMps,
         handle.lootAura,
       );
       place(existing);
@@ -678,6 +683,7 @@ export function createAvatarLayer(
         ...(handle.rollDeg === undefined ? {} : { rollDeg: handle.rollDeg }),
         ...(handle.pitchDeg === undefined ? {} : { pitchDeg: handle.pitchDeg }),
         ...(handle.wear === undefined ? {} : { wear: handle.wear }),
+        ...(handle.speedMps === undefined ? {} : { speedMps: handle.speedMps }),
         ...(handle.lootAura === undefined ? {} : { lootAura: handle.lootAura }),
         ...(handle.kind === undefined ? {} : { droneKind: handle.kind }),
         visible: true,
