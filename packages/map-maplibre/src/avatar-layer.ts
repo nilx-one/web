@@ -82,6 +82,8 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly reducedMotion?: boolean;
   /** Metres above the drawn ground, for a prop that flies. */
   readonly liftMeters?: number;
+  /** A system drone's engine wear, 0 to 1. */
+  readonly wear?: number;
   /** Banking and leaning in the model's own frame, in degrees. */
   readonly rollDeg?: number;
   readonly pitchDeg?: number;
@@ -415,7 +417,11 @@ export function createAvatarLayer(
       const drone = createPingModel();
       instance.drone = drone;
       instance.root = drone.root;
-      drone.sample(instance.handle.clipPhase, !instance.handle.reducedMotion);
+      drone.sample(
+        instance.handle.clipPhase,
+        !instance.handle.reducedMotion,
+        instance.handle.wear,
+      );
       scene.add(drone.root);
       place(instance);
       map?.triggerRepaint();
@@ -449,7 +455,11 @@ export function createAvatarLayer(
     const existing = instances.get(handle.id);
     if (existing !== undefined && existing.handle.modelId === handle.modelId) {
       existing.handle = handle;
-      existing.drone?.sample(handle.clipPhase, !handle.reducedMotion);
+      existing.drone?.sample(
+        handle.clipPhase,
+        !handle.reducedMotion,
+        handle.wear,
+      );
       place(existing);
       applyVisibility(existing);
       applyClip(existing);
@@ -550,6 +560,7 @@ export function createAvatarLayer(
           : { liftMeters: handle.heightMeters }),
         ...(handle.rollDeg === undefined ? {} : { rollDeg: handle.rollDeg }),
         ...(handle.pitchDeg === undefined ? {} : { pitchDeg: handle.pitchDeg }),
+        ...(handle.wear === undefined ? {} : { wear: handle.wear }),
         visible: true,
         reducedMotion: handle.reducedMotion,
       });

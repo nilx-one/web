@@ -15,6 +15,7 @@ import { prefersReducedMotion } from "../../shell/motion";
 import { offsetPoint } from "../guide/guide-stage";
 import {
   flightObstacles,
+  FLYOVER_FORCE_SPEED_FACTOR,
   FLYOVER_SPEED_MPS,
   flightPath,
   flightPoint,
@@ -104,11 +105,25 @@ function around(point: LonLat, meters: number): MapBounds {
   };
 }
 
+/**
+ * What may force a flight, and what forcing costs. The flight asks before
+ * each frame it forces, tells what it spent, and draws the engine's wear as
+ * smoke. Core and the service decide the engine; this only carries it.
+ */
+export interface FlyoverForcing {
+  allowed(): boolean;
+  spent(ms: number): void;
+  /** The engine's wear now, from 0 to 1. */
+  wear(): number;
+}
+
 export interface FlyoverRequest {
   /** Where the Bond and its Avaia stand. */
   readonly from: MapPointSelection;
   /** The business station the flight goes to. */
   readonly to: MapPointSelection;
+  /** Absent, the flight cannot be forced. */
+  readonly forcing?: FlyoverForcing;
 }
 
 export interface Flyover {
@@ -121,6 +136,8 @@ export interface Flyover {
   start(request: FlyoverRequest): void;
   /** Steps xPing a lane aside; the route pulls it back once let go. */
   steer(direction: -1 | 1): void;
+  /** Holds or lets go of forcing; only the way out can be forced. */
+  force(holding: boolean): void;
   /** Leaves the flight at once. */
   leave(): void;
 }
@@ -129,7 +146,12 @@ export interface Flyover {
 export interface FlyoverProgress {
   readonly point: MapPointSelection;
   readonly remainingMs: number;
+  /** When it reached the destination; it then flies back to the start. */
   readonly arrivedAt?: number;
+  /** Flying back to where it set off from. */
+  readonly returning?: boolean;
+  /** Being forced, straight at the destination. */
+  readonly forced?: boolean;
 }
 
 /**
@@ -146,6 +168,10 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     followingRef.current = following;
   }, [following]);
   const flight = useRef<{ state: FlightState } | undefined>(undefined);
+  const forcing = useRef(false);
+  const force = useCallback((holding: boolean) => {
+    forcing.current = holding;
+  }, []);
 
   const start = useCallback(
     (next: FlyoverRequest) => {
@@ -203,7 +229,9 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         return;
       }
       const plane = localFrame(from);
-      const path = flightPath(route.map(plane.toLocal));
+      let leg: "out" | "back" = "out";
+      let road = route;
+      let path = flightPath(road.map(plane.toLocal));
       let state = startFlight(path);
       flight.current = { state };
       let obstacles: FlightObstacle[] = [];
@@ -212,19 +240,42 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       let last = started;
       let cameraBearing = state.bearingDeg;
       let publishedAt = -Infinity;
+      let arrivedAt: number | undefined;
+      let straight = false;
+      let hovering = false;
       renderer.setCamera(
         chaseCamera(request.from, state.bearingDeg, state.height),
         { motion: "eased", durationMs: FLYOVER_TAKEOFF_MS },
       );
+
+      // Back the way it came, after hovering at the station: never forced.
+      const flyBack = () => {
+        arrivalTimer = undefined;
+        if (cancelled) return;
+        leg = "back";
+        road = [...route].reverse();
+        renderer.setRoute?.({ points: road });
+        path = flightPath(road.map(plane.toLocal));
+        state = { ...startFlight(path), height: state.height };
+        flight.current = { state };
+        hovering = false;
+        last = globalThis.performance.now();
+        frame = globalThis.requestAnimationFrame(draw);
+      };
 
       const draw = (now: number) => {
         frame = undefined;
         if (cancelled) return;
         const elapsed = Math.min(100, Math.max(0, now - last));
         last = now;
-        const flying = now - started >= FLYOVER_TAKEOFF_MS;
+        const flying = leg === "back" || now - started >= FLYOVER_TAKEOFF_MS;
         const current = flight.current ?? { state };
         state = current.state;
+        const forced =
+          flying &&
+          leg === "out" &&
+          forcing.current &&
+          request.forcing?.allowed() === true;
         if (flying) {
           if (now - obstaclesAt >= OBSTACLE_REFRESH_MS) {
             obstaclesAt = now;
@@ -241,25 +292,45 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             scanAhead(path, state.distance, obstacles),
             elapsed,
             now,
+            forced,
           );
           current.state = state;
+          if (forced) request.forcing?.spent(elapsed);
         }
         const lift = flying
           ? state.height
           : state.height * Math.min(1, (now - started) / FLYOVER_TAKEOFF_MS);
         const [longitude, latitude] = plane.toLonLat(flightPoint(path, state));
+        // Forced, the route drawn is the straight line it flies; let go, the
+        // roads again.
+        const offRoute = state.free !== undefined;
+        if (offRoute !== straight) {
+          straight = offRoute;
+          renderer.setRoute?.({
+            points: offRoute ? [[longitude, latitude], to] : road,
+          });
+        }
+        if (state.arrived && leg === "out" && arrivedAt === undefined)
+          arrivedAt = Date.now();
         if (state.arrived || now - publishedAt >= 250) {
           publishedAt = now;
+          const speed =
+            FLYOVER_SPEED_MPS *
+            (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * state.boost);
           setProgress({
             point: { longitude, latitude },
             remainingMs:
-              Math.max(0, FLYOVER_TAKEOFF_MS - (now - started)) +
-              (Math.max(0, path.length - state.distance) / FLYOVER_SPEED_MPS) *
-                1000,
-            ...(state.arrived ? { arrivedAt: Date.now() } : {}),
+              (leg === "out"
+                ? Math.max(0, FLYOVER_TAKEOFF_MS - (now - started))
+                : 0) +
+              (Math.max(0, path.length - state.distance) / speed) * 1000,
+            ...(arrivedAt === undefined ? {} : { arrivedAt }),
+            ...(leg === "back" ? { returning: true } : {}),
+            ...(offRoute ? { forced: true } : {}),
           });
         }
         try {
+          const wear = request.forcing?.wear();
           drone?.upsert({
             id: FLYOVER_DRONE_ID,
             lngLat: [longitude, latitude],
@@ -270,6 +341,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             rollDeg: flying ? state.rollDeg : 0,
             pitchDeg: flying ? state.pitchDeg : 0,
             scale: FLYOVER_DRONE_SCALE,
+            ...(wear === undefined ? {} : { wear }),
           });
           if (flying && followingRef.current) {
             const turn = ((state.bearingDeg - cameraBearing + 540) % 360) - 180;
@@ -284,11 +356,12 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
           setRequest(undefined);
           return;
         }
-        if (state.arrived) {
-          arrivalTimer = setTimeout(
-            () => setRequest(undefined),
-            FLYOVER_ARRIVAL_MS,
-          );
+        if (state.arrived && !hovering) {
+          hovering = true;
+          arrivalTimer =
+            leg === "out"
+              ? setTimeout(flyBack, FLYOVER_ARRIVAL_MS)
+              : setTimeout(() => setRequest(undefined), FLYOVER_ARRIVAL_MS);
           return;
         }
         frame = globalThis.requestAnimationFrame(draw);
@@ -332,6 +405,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       // Whatever ends the effect ends the flight: leaving, the world closing
       // or the map going away. A later start is a new flight.
       setRequest(undefined);
+      forcing.current = false;
       cancelled = true;
       document.removeEventListener("keydown", onKeyDown);
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
@@ -353,7 +427,16 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
 
   const active = request !== undefined;
   return useMemo(
-    () => ({ active, start, steer, leave, progress, following, setFollowing }),
-    [active, leave, start, steer, progress, following],
+    () => ({
+      active,
+      start,
+      steer,
+      force,
+      leave,
+      progress,
+      following,
+      setFollowing,
+    }),
+    [active, leave, start, steer, force, progress, following],
   );
 }

@@ -6,11 +6,13 @@ import type {
   CoreRuntimePort,
   CourierDirectoryPort,
   CourierPlan,
+  XpingEngineAccessPort,
 } from "@nilx-one/application";
 import { CourierCapabilityUnavailable } from "@nilx-one/application";
 import type { MapPointSelection, MapRenderer } from "@nilx-one/map-contract";
 import { courierCoordinate, courierPoint } from "./courier-map";
 import { FLYOVER_DRONE_ID, useFlyover } from "../flyover/use-flyover";
+import { createXpingForcing, type XpingForcing } from "../xping/xping-forcing";
 import { prefersReducedMotion } from "../../shell/motion";
 
 export function useCourier(input: {
@@ -19,13 +21,28 @@ export function useCourier(input: {
   core: Pick<CoreRuntimePort, "courierDestination"> | undefined;
   directory: CourierDirectoryPort | undefined;
   suspended: boolean;
+  /** xPing's engine; absent, a flight cannot be forced. */
+  engine?: XpingEngineAccessPort | undefined;
 }) {
   const [offer, setOffer] = useState<"exclusive" | "special">();
   const [plan, setPlan] = useState<CourierPlan>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  /** Why the offer cannot be taken: the engine is broken. */
+  const [blocked, setBlocked] = useState<"broken">();
+  const [forcing, setForcing] = useState<XpingForcing>();
+  /** When forcing on empty broke the engine and called the flight off. */
+  const [brokenAt, setBrokenAt] = useState<number>();
   const flyover = useFlyover(input.renderer, !input.suspended);
-  const { following, setFollowing, active, start } = flyover;
+  const { following, setFollowing, active, start, leave } = flyover;
+  const leaveRef = useRef(leave);
+  useEffect(() => {
+    leaveRef.current = leave;
+  }, [leave]);
+  // A flight's forcing tells the service what is left when it ends.
+  useEffect(() => {
+    if (!active) forcing?.close();
+  }, [active, forcing]);
   const generation = useRef(0),
     requesting = useRef(false);
   const latest = useRef(input);
@@ -50,7 +67,7 @@ export function useCourier(input: {
   }, []);
   const accept = useCallback(async () => {
     if (requesting.current || offer === undefined) return;
-    const { core, directory, origin } = latest.current;
+    const { core, directory, origin, engine } = latest.current;
     if (active) {
       close();
       return;
@@ -67,7 +84,16 @@ export function useCourier(input: {
     requesting.current = true;
     setBusy(true);
     setError(false);
+    setBlocked(undefined);
     try {
+      // A broken engine keeps xPing in its dock until it mends or is repaired.
+      const read = await engine?.readXpingEngine();
+      if (ticket !== generation.current) return;
+      if (read?.kind === "read" && read.view.broken) {
+        setBlocked("broken");
+        setError(true);
+        return;
+      }
       const projection = await directory.points();
       if (ticket !== generation.current) return;
       const from = courierCoordinate(origin);
@@ -89,11 +115,21 @@ export function useCourier(input: {
         destination,
         started_at_ms: String(Date.now()),
       };
+      const flightForcing =
+        engine !== undefined && read?.kind === "read"
+          ? createXpingForcing(engine, read, () => {
+              setBrokenAt(Date.now());
+              leaveRef.current();
+            })
+          : undefined;
       setPlan(next);
       setOffer(undefined);
+      setBrokenAt(undefined);
+      setForcing(flightForcing);
       start({
         from: origin,
         to: courierPoint(next.destination.coordinate),
+        ...(flightForcing === undefined ? {} : { forcing: flightForcing }),
       });
     } catch {
       if (ticket === generation.current) setError(true);
@@ -183,6 +219,9 @@ export function useCourier(input: {
     plan,
     busy,
     error,
+    blocked,
+    forcing: active ? forcing : undefined,
+    brokenAt,
     following: flyover.active && following,
     flyover,
     open,

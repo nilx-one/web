@@ -1695,6 +1695,7 @@ export function AuthenticatedMapHomeView({
     origin: observedPosition,
     core: findItems,
     directory: courierDirectory ?? seededMarketDirectory,
+    engine: xpingEngine,
     suspended:
       guideActive ||
       achievementDialog !== undefined ||
@@ -2934,6 +2935,7 @@ export function AuthenticatedMapHomeView({
           ? undefined
           : marketPointTitle(courier.plan.destination, locale)
       }
+      brokenAt={courier.brokenAt}
       onFlight={() => {
         if (!courier.plan) return;
         courier.setFollowing(false);
@@ -3740,6 +3742,17 @@ export function AuthenticatedMapHomeView({
               onSteer={flyover.steer}
               onLeave={flyover.leave}
               activities={activities}
+              {...(courier.forcing === undefined
+                ? {}
+                : {
+                    force: {
+                      engine: courier.forcing,
+                      available:
+                        flyover.progress?.returning !== true &&
+                        flyover.progress?.arrivedAt === undefined,
+                      onHold: flyover.force,
+                    },
+                  })}
             />
           ) : null}
           {flyover.active ? null : (
@@ -3777,6 +3790,7 @@ export function AuthenticatedMapHomeView({
             <CourierOffer
               busy={courier.busy}
               error={courier.error}
+              blocked={courier.blocked}
               onAccept={() => void courier.accept()}
               onDecline={() => {
                 courier.close();

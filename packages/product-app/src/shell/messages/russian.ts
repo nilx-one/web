@@ -210,6 +210,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "flyover.left": "Влево",
   "flyover.right": "Вправо",
   "flyover.leave": "Выйти из полёта",
+  "flyover.force": "Форсировать xPing: держите, чтобы лететь быстрее и выше",
   "dock.edit": "изменить",
   "dock.ai": "ИИ",
   "dock.unconfigured": "не настроено",

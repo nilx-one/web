@@ -96,7 +96,12 @@ export function createPingModel() {
     }
   return {
     root,
-    sample(phase: number, moving: boolean) {
+    /**
+     * `wear`, 0 to 1, is how much of its engine is spent: the puff grows
+     * thicker and darker and the sparks come oftener the more it is.
+     */
+    sample(phase: number, moving: boolean, wear = 0) {
+      const worn = Math.min(1, Math.max(0, wear));
       body.position.y =
         1.9 + (moving ? Math.sin(phase * Math.PI * 2) * 0.055 : 0);
       const wobble = moving ? Math.sin(phase * Math.PI * 2) : 0;
@@ -112,12 +117,22 @@ export function createPingModel() {
       }
       const puff = moving ? Math.max(0, Math.sin(phase * Math.PI * 2)) : 0;
       smoke.visible = moving && puff > 0;
-      smoke.position.set(0.18, 0.16 + (moving ? phase : 0) * 0.3, -0.08);
-      smoke.scale.setScalar(1 + puff * 1.2);
-      smokeMaterial.opacity = puff * 0.22;
-      spark.visible = moving && phase > 0.7 && phase < 0.85;
+      smoke.position.set(
+        0.18,
+        0.16 + (moving ? phase : 0) * (0.3 + worn * 0.5),
+        -0.08,
+      );
+      smoke.scale.setScalar((1 + puff * 1.2) * (1 + worn * 2.5));
+      smokeMaterial.opacity = puff * (0.22 + worn * 0.6);
+      smokeMaterial.color.setHex(worn > 0.66 ? 0x4a4f55 : 0x9aa2aa);
+      // A worn engine sparks in more of each cycle, up to most of it.
+      const sparkWindow = 0.15 + worn * 0.45;
+      const sparkFrom = 0.7 - worn * 0.45;
+      spark.visible =
+        moving && phase > sparkFrom && phase < sparkFrom + sparkWindow;
       sparkMaterial.opacity = spark.visible
-        ? Math.sin(((phase - 0.7) / 0.15) * Math.PI) * 0.7
+        ? Math.sin(((phase - sparkFrom) / sparkWindow) * Math.PI) *
+          (0.7 + worn * 0.3)
         : 0;
     },
     dispose() {
