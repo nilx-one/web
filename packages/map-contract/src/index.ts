@@ -794,9 +794,19 @@ export interface AvatarLayerContract {
   setCamera(camera: MapCamera): void;
 }
 
+/**
+ * Which drone a system prop is. `xping` is the informer's own, the default.
+ * The other two are the city's ambient traffic, renderer-local scenery that
+ * nobody owns: a `street` cargo drone that keeps to the streets, and a small
+ * `yard` scout that cuts through courtyards and park paths.
+ */
+export type SystemDroneKind = "xping" | "street" | "yard";
+
 /** xPing is renderer-local presentation and cannot enter the avatar catalogue. */
 export interface SystemDroneHandle {
   readonly id: string;
+  /** Omitted, `xping`. */
+  readonly kind?: SystemDroneKind;
   readonly lngLat: readonly [number, number];
   readonly bearingDeg: number;
   readonly phase: number;
