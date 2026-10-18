@@ -12,20 +12,20 @@ use std::{
 };
 
 use identity_bot::{
-    AdminRoleDecision, AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository,
-    BrowserOAuthConfig, DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig,
-    GithubEvidenceRepository, IdentityProvider, IdentityRecord, IdentityRepository,
-    NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,
-    ProviderSecretCipher, SelfDisconnectOutcome, TelegramInitDataVerifier, TelegramLocationIntents,
-    api, browser_web_auth, business_command, github_evidence, location_control_router,
-    provider_self_service_router, public_api,
+    AdminRoleDecision, AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode,
+    BondLocationRepository, BrowserOAuthConfig, DecimalU64, DiscordOAuthClient, GeoCoordinate,
+    GithubEvidenceConfig, GithubEvidenceRepository, IdentityProvider, IdentityRecord,
+    IdentityRepository, NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent,
+    ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome, TelegramInitDataVerifier,
+    TelegramLocationIntents, api, browser_web_auth, business_command, github_evidence,
+    location_control_router, provider_self_service_router, public_api,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
     prelude::*,
     types::{
-        BotCommand, BotCommandScope, ButtonRequest, InlineKeyboardButton, InlineKeyboardMarkup,
-        CallbackQuery, KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
+        BotCommand, BotCommandScope, ButtonRequest, CallbackQuery, InlineKeyboardButton,
+        InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
     },
 };
 use tokio::sync::Mutex;
@@ -469,11 +469,10 @@ async fn main() {
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))
         .branch(Update::filter_callback_query().endpoint(handle_admin_role_callback));
-    let mut dispatcher =
-        Dispatcher::builder(bot, handler)
-            .dependencies(dptree::deps![telegram_state])
-            .enable_ctrlc_handler()
-            .build();
+    let mut dispatcher = Dispatcher::builder(bot, handler)
+        .dependencies(dptree::deps![telegram_state])
+        .enable_ctrlc_handler()
+        .build();
 
     tokio::select! {
         () = dispatcher.dispatch() => {}
@@ -510,7 +509,6 @@ fn oauth_credentials_from_environment(
         _ => panic!("{client_id_key} and {client_secret_key} must be configured together"),
     }
 }
-
 
 fn now_unix_seconds() -> u64 {
     SystemTime::now()
@@ -551,7 +549,10 @@ async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityReposito
             }
         };
         for item in deliveries {
-            match repository.claim_admin_role_telegram_delivery(&item, now).await {
+            match repository
+                .claim_admin_role_telegram_delivery(&item, now)
+                .await
+            {
                 Ok(true) => {}
                 Ok(false) => continue,
                 Err(error) => {
@@ -573,12 +574,16 @@ async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityReposito
                 "🔐 0x1 · Запит на роль admin\nBond: {}\nЗареєстрований 0x0 Bond очікує рішення. Надати адміністраторські права?\nДоки запит відкритий, права залишаються user.",
                 item.pub_dress
             );
-            match bot.send_message(ChatId(item.telegram_user_id), notice)
+            match bot
+                .send_message(ChatId(item.telegram_user_id), notice)
                 .reply_markup(markup)
                 .await
             {
                 Ok(_) => {
-                    if let Err(error) = repository.confirm_admin_role_telegram_delivery(&item, now).await {
+                    if let Err(error) = repository
+                        .confirm_admin_role_telegram_delivery(&item, now)
+                        .await
+                    {
                         error!(%error, "admin role Telegram send receipt could not be persisted");
                     }
                 }
@@ -607,51 +612,63 @@ async fn handle_admin_role_callback(
     };
     let answer = match i64::try_from(callback.from.id.0) {
         Err(_) => "Невідомий Telegram-акаунт.".to_owned(),
-        Ok(telegram_user_id) => {
-            match state.repository.find_by_telegram(telegram_user_id).await {
-                Ok(Some(actor)) => {
-                    match state.repository.pending_admin_role_request_by_id(request_id).await {
-                        Ok(Some(pub_dress)) => {
-                            match pub_dress.parse() {
-                                Ok(candidate) => {
-                                    match state.repository
-                                        .decide_admin_role_request(
-                                            &actor.pub_dress,
-                                            &candidate,
-                                            approve,
-                                            now_unix_seconds(),
-                                        )
-                                        .await
-                                    {
-                                        Ok(AdminRoleDecision::Approved) => format!("✅ {pub_dress}: admin надано."),
-                                        Ok(AdminRoleDecision::Denied) => format!("❌ {pub_dress}: залишено user."),
-                                        Ok(AdminRoleDecision::AlreadyDecided) => "Цей запит уже розглянуто.".to_owned(),
-                                        Ok(AdminRoleDecision::Forbidden) => "Недостатньо прав адміністратора.".to_owned(),
-                                        Err(error) => {
-                                            error!(%error, "admin role Telegram decision could not be saved");
-                                            "Сервіс тимчасово недоступний.".to_owned()
-                                        }
-                                    }
+        Ok(telegram_user_id) => match state.repository.find_by_telegram(telegram_user_id).await {
+            Ok(Some(actor)) => {
+                match state
+                    .repository
+                    .pending_admin_role_request_by_id(request_id)
+                    .await
+                {
+                    Ok(Some(pub_dress)) => match pub_dress.parse() {
+                        Ok(candidate) => {
+                            match state
+                                .repository
+                                .decide_admin_role_request(
+                                    &actor.pub_dress,
+                                    &candidate,
+                                    approve,
+                                    now_unix_seconds(),
+                                )
+                                .await
+                            {
+                                Ok(AdminRoleDecision::Approved) => {
+                                    format!("✅ {pub_dress}: admin надано.")
                                 }
-                                Err(_) => "Некоректна адреса Bond.".to_owned(),
+                                Ok(AdminRoleDecision::Denied) => {
+                                    format!("❌ {pub_dress}: залишено user.")
+                                }
+                                Ok(AdminRoleDecision::AlreadyDecided) => {
+                                    "Цей запит уже розглянуто.".to_owned()
+                                }
+                                Ok(AdminRoleDecision::Forbidden) => {
+                                    "Недостатньо прав адміністратора.".to_owned()
+                                }
+                                Err(error) => {
+                                    error!(%error, "admin role Telegram decision could not be saved");
+                                    "Сервіс тимчасово недоступний.".to_owned()
+                                }
                             }
                         }
-                        Ok(None) => "Цей запит уже розглянуто.".to_owned(),
-                        Err(error) => {
-                            error!(%error, "admin role Telegram callback lookup failed");
-                            "Сервіс тимчасово недоступний.".to_owned()
-                        }
+                        Err(_) => "Некоректна адреса Bond.".to_owned(),
+                    },
+                    Ok(None) => "Цей запит уже розглянуто.".to_owned(),
+                    Err(error) => {
+                        error!(%error, "admin role Telegram callback lookup failed");
+                        "Сервіс тимчасово недоступний.".to_owned()
                     }
                 }
-                Ok(None) => "Потрібно прив’язати Telegram до свого admin Bond.".to_owned(),
-                Err(error) => {
-                    error!(%error, "Telegram admin identity lookup failed");
-                    "Сервіс тимчасово недоступний.".to_owned()
-                }
             }
-        }
+            Ok(None) => "Потрібно прив’язати Telegram до свого admin Bond.".to_owned(),
+            Err(error) => {
+                error!(%error, "Telegram admin identity lookup failed");
+                "Сервіс тимчасово недоступний.".to_owned()
+            }
+        },
     };
-    bot.answer_callback_query(callback.id).text(answer).show_alert(true).await?;
+    bot.answer_callback_query(callback.id)
+        .text(answer)
+        .show_alert(true)
+        .await?;
     Ok(())
 }
 
@@ -1646,9 +1663,21 @@ mod tests {
 
     #[test]
     fn admin_role_callbacks_are_short_and_not_authority() {
-        assert_eq!(super::parse_admin_role_decision_callback("ar:y:12"), Some((true, 12)));
-        assert_eq!(super::parse_admin_role_decision_callback("ar:n:12"), Some((false, 12)));
-        for invalid in ["ar:y:0", "ar:y:-1", "ar:yes:12", "ar:n:12:extra", "ar:y:abc"] {
+        assert_eq!(
+            super::parse_admin_role_decision_callback("ar:y:12"),
+            Some((true, 12))
+        );
+        assert_eq!(
+            super::parse_admin_role_decision_callback("ar:n:12"),
+            Some((false, 12))
+        );
+        for invalid in [
+            "ar:y:0",
+            "ar:y:-1",
+            "ar:yes:12",
+            "ar:n:12:extra",
+            "ar:y:abc",
+        ] {
             assert_eq!(super::parse_admin_role_decision_callback(invalid), None);
         }
     }
