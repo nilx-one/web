@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { flightPath, localFrame, pathAt } from "./flyover-flight";
 import {
   crossedFlightLoot,
+  laserLootTargets,
+  LOOT_LASER_RANGE_METERS,
   LOOT_NEAR_METERS,
   LOOT_MIN_VISIBLE_METERS,
   rarerLoot,
@@ -56,6 +58,28 @@ describe("xPing flight loot presentation", () => {
     expect(crossedFlightLoot(path, item, [14, 130, 35], [14, 195, 35])).toBe(false);
     expect(crossedFlightLoot(path, item, before, before)).toBe(false);
     expect(pathAt(path, item.distanceMeters).point[1]).toBe(160);
+  });
+
+  it("locks no more than two forward targets using 3D distance", () => {
+    const items = [
+      { ...spawn(-1, 140), id: "left" },
+      { ...spawn(0, 145), id: "centre" },
+      { ...spawn(1, 145), id: "right" },
+      { ...spawn(0, 190), id: "far" },
+    ];
+    expect(LOOT_LASER_RANGE_METERS).toBe(45);
+    expect(
+      laserLootTargets(path, items, 130, [0, 130, 14], new Set()),
+    ).toEqual(["centre", "left"]);
+    expect(
+      laserLootTargets(path, items, 130, [0, 130, 14], new Set(["centre"])),
+    ).toEqual(["left", "right"]);
+    expect(
+      laserLootTargets(path, items, 130, [0, 130, 120], new Set()),
+    ).toEqual([]);
+    expect(
+      laserLootTargets(path, items, 160, [0, 160, 14], new Set()),
+    ).toEqual(["far"]);
   });
 
   it("never shows a collected item twice, or a stronger aura from a lesser rarity", () => {
