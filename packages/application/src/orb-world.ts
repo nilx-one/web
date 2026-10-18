@@ -20,6 +20,8 @@ export interface OrbWorldSpill {
   readonly artifact_id: string;
   /** Where the trail starts: the middle of the cell the find lies in. */
   readonly from: OrbCoordinate;
+  /** A real landmark on the way, only for Core orb spill v2+. */
+  readonly via?: OrbCoordinate;
   /** Where the find lies. */
   readonly to: OrbCoordinate;
   /** When this device first drew the spill. */
