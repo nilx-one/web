@@ -255,6 +255,9 @@ impl IdentityRepository {
             .execute(&mut *reserved_transaction)
             .await?;
         reserved_transaction.commit().await?;
+        sqlx::raw_sql(include_str!("../migrations/0029_admin_role_requests.sql"))
+            .execute(&self.pool)
+            .await?;
         if !self.has_native_sessions_column("active").await? {
             sqlx::raw_sql(include_str!("../migrations/0016_session_activation.sql"))
                 .execute(&self.pool)
@@ -283,27 +286,23 @@ impl IdentityRepository {
         Ok(())
     }
 
-    /// Existing human Bonds in the reserved `0x0` namespace are always admins.
-    /// Other Bonds use their stored role, defaulting to `user`.
+    /// Server-stored access roles, never implicitly derived from 0x0.
     pub async fn role_for(&self, pub_dress: &str) -> Result<BondAccessRole, RepositoryError> {
         let stored = sqlx::query_scalar::<_, String>(
-            "SELECT CASE WHEN i.identity_kind = 'human' AND substr(i.pub_dress, 1, 3) = '0x0' \
-                 THEN 'admin' ELSE COALESCE(r.role, 'user') END FROM identities i \
-                 LEFT JOIN bond_roles r ON r.pub_dress = i.pub_dress WHERE i.pub_dress = ?",
+            "SELECT COALESCE(r.role, 'user') FROM identities i \
+             LEFT JOIN bond_roles r ON r.pub_dress = i.pub_dress WHERE i.pub_dress = ?",
         )
         .bind(pub_dress)
         .fetch_optional(&self.pool)
         .await?;
         match stored {
             None => Ok(BondAccessRole::default()),
-            Some(value) => {
-                BondAccessRole::from_stored(&value).ok_or(RepositoryError::CorruptBondRole)
-            }
+            Some(value) => BondAccessRole::from_stored(&value).ok_or(RepositoryError::CorruptBondRole),
         }
     }
 
     /// Assigns a role to an existing human Bond. There is no public route to
-    /// this: public registration only ever creates `user` Bonds outside `0x0`.
+    /// this: public registration creates only `user` Bonds.
     pub async fn set_role(
         &self,
         pub_dress: &PubDress,
@@ -2056,78 +2055,32 @@ mod tests {
     use crate::{AvaiaPubDress, PubDress, PubDressLabel};
 
     #[tokio::test]
-    async fn reserved_prefix_upgrade_promotes_existing_humans_and_preserves_renames() {
+    async fn reserved_prefix_upgrade_preserves_explicit_roles_and_renames() {
         let database = tempfile::NamedTempFile::new().expect("database");
         let url = format!("sqlite://{}", database.path().display());
         let repository = IdentityRepository::connect(&url).await.expect("repository");
-        // Seed the shape of an existing deployment before the reservation.
         sqlx::query("DROP TRIGGER identities_reserved_admin_prefix_insert")
-            .execute(&repository.pool)
-            .await
-            .expect("legacy schema");
+            .execute(&repository.pool).await.expect("legacy schema");
         for address in ["0x0нуль", "0x0other"] {
             sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES (?, 'human', 1)")
                 .bind(address).execute(&repository.pool).await.expect("legacy human");
         }
-        sqlx::query("INSERT INTO bond_roles (pub_dress, role) VALUES ('0x0нуль', 'business')")
-            .execute(&repository.pool)
-            .await
-            .expect("legacy role");
+        let admin: PubDress = "0x0нуль".parse().expect("admin");
+        repository.set_role(&admin, crate::BondAccessRole::Admin).await.expect("existing grant");
         repository.pool.close().await;
-
         let upgraded = IdentityRepository::connect(&url).await.expect("upgrade");
-        for address in ["0x0нуль", "0x0other"] {
-            assert_eq!(
-                upgraded.role_for(address).await.expect("role"),
-                crate::BondAccessRole::Admin
-            );
-            let stored: String =
-                sqlx::query_scalar("SELECT role FROM bond_roles WHERE pub_dress = ?")
-                    .bind(address)
-                    .fetch_one(&upgraded.pool)
-                    .await
-                    .expect("stored role");
-            assert_eq!(stored, "admin");
-        }
-        assert_eq!(
-            upgraded.role_for("0x0unknown").await.expect("role"),
-            crate::BondAccessRole::User
-        );
-        assert_eq!(
-            upgraded.role_for("x0нульai").await.expect("role"),
-            crate::BondAccessRole::User
-        );
-        let old: PubDress = "0x0нуль".parse().expect("old");
-        let new: PubDress = "0x0renamed".parse().expect("new");
+        assert_eq!(upgraded.role_for(admin.as_str()).await.expect("role"), crate::BondAccessRole::Admin);
+        assert_eq!(upgraded.role_for("0x0other").await.expect("role"), crate::BondAccessRole::User);
+        let next: PubDress = "0x0renamed".parse().expect("new");
         assert!(matches!(
-            upgraded.rename_pub_dress(&old, &new).await.expect("rename"),
+            upgraded.rename_pub_dress(&admin, &next).await.expect("rename"),
             PubDressRenameOutcome::Renamed(_)
         ));
-        assert_eq!(
-            upgraded.role_for(new.as_str()).await.expect("renamed role"),
-            crate::BondAccessRole::Admin
-        );
-        // A stored override cannot accidentally demote the reserved namespace.
-        upgraded
-            .set_role(&new, crate::BondAccessRole::Business)
-            .await
-            .expect("stored override");
-        assert_eq!(
-            upgraded
-                .role_for(new.as_str())
-                .await
-                .expect("effective role"),
-            crate::BondAccessRole::Admin
-        );
+        upgraded.set_role(&next, crate::BondAccessRole::Business).await.expect("demotion");
+        assert_eq!(upgraded.role_for(next.as_str()).await.expect("role"), crate::BondAccessRole::Business);
         upgraded.pool.close().await;
         let reopened = IdentityRepository::connect(&url).await.expect("reopen");
-        assert_eq!(
-            reopened
-                .role_for(new.as_str())
-                .await
-                .expect("reopened role"),
-            crate::BondAccessRole::Admin
-        );
+        assert_eq!(reopened.role_for(next.as_str()).await.expect("persisted"), crate::BondAccessRole::Business);
     }
 
     #[tokio::test]

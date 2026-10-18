@@ -20,7 +20,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActivationRequest, ActivationRequestStatus, AvaiaPubDress, DiscordOAuthClient,
+    ActivationRequest, ActivationRequestStatus, AdminRoleDecision, AvaiaPubDress, DiscordOAuthClient,
     DiscordOAuthError, GeoCoordinate, IdentityRecord, IdentityRepository, NativeAuthConfig,
     NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine, PasswordPolicyError,
     ProviderIdentity, ProviderLinkOutcome, ProviderLinkRepository, PubDress,
@@ -136,6 +136,11 @@ fn router_with_clock(
             post(authenticate_native_identity),
         )
         .route("/api/v1/auth/native/logout", post(logout_native_identity))
+        .route("/api/v1/admin/role-requests", get(read_admin_role_requests))
+        .route(
+            "/api/v1/admin/role-requests/{pub_dress}/decision",
+            post(decide_admin_role_request),
+        )
         .route("/api/v1/auth/telegram/link", post(link_telegram_provider))
         .route(
             "/api/v1/auth/native/remembered/forget",
@@ -790,6 +795,9 @@ async fn authenticated_response(
             return unavailable();
         }
     };
+    if let Err(error) = state.repository.request_admin_review_on_login(&identity.pub_dress, now).await {
+        tracing::error!(%error, "admin approval request could not be recorded");
+    }
     let remembered_expires_at = now.saturating_add(state.native_auth.remembered_bond_ttl_seconds);
     let remembered_hint = match state
         .remembered_bond_signer
@@ -1133,6 +1141,13 @@ async fn identity_response(
         Some(value) => value,
         None => return unavailable(),
     };
+    if active_client {
+        if let Ok(now) = now(state) {
+            if let Err(error) = state.repository.request_admin_review_on_login(&identity.pub_dress, now).await {
+                tracing::error!(%error, "provider admin approval request could not be recorded");
+            }
+        }
+    }
     let password_required = match state
         .repository
         .password_required(&identity.pub_dress)

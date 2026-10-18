@@ -3,6 +3,7 @@
 
 pub mod api {
     include!("api.rs");
+    include!("api_admin_roles.rs");
     include!("api_avaia_lifecycle.rs");
     include!("api_pub_info.rs");
     include!("api_awards.rs");
@@ -23,6 +24,7 @@ pub mod public_api;
 pub mod rate_limit;
 pub mod repository {
     include!("repository.rs");
+    include!("repository_admin_roles.rs");
     include!("repository_avaia_lifecycle.rs");
     include!("repository_pub_info.rs");
     include!("repository_awards.rs");
@@ -52,7 +54,7 @@ pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository, SelfDisconn
 pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
 pub use provider_self_service::provider_self_service_router;
 pub use repository::{
-    ActivationRequest, ActivationRequestStatus, AvaiaConfigurationState, AvaiaIdentityRecord,
+    ActivationRequest, ActivationRequestStatus, AdminRoleDecision, AdminRoleRequest, AvaiaConfigurationState, AvaiaIdentityRecord,
     AvaiaLocation, AvaiaTravelOutcome, AvaiaUpdateOutcome, BusinessRegistrationOutcome,
     BusinessStation, BusinessStationOutcome, IdentityProvider, IdentityRecord, IdentityRepository,
     NativeCredentialRecord, NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome,

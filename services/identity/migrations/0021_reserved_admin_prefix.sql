@@ -1,12 +1,8 @@
 -- © 2026 aiaiaiai · aiaiaiai.org
 -- SPDX-License-Identifier: MPL-2.0
 
--- Promote existing human Bonds only; public registration cannot allocate 0x0.
-INSERT INTO bond_roles (pub_dress, role)
-SELECT pub_dress, 'admin' FROM identities
-WHERE identity_kind = 'human' AND substr(pub_dress, 1, 3) = '0x0'
-ON CONFLICT(pub_dress) DO UPDATE SET role = excluded.role;
-
+-- Public registration cannot allocate 0x0. Historical role rows stay intact;
+-- startup must never re-grant roles based on address prefix.
 -- Storage-level defense also covers direct inserts by other service adapters.
 CREATE TRIGGER IF NOT EXISTS identities_reserved_admin_prefix_insert
 BEFORE INSERT ON identities
