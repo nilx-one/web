@@ -545,11 +545,13 @@ export function useFlyover(
                       ) <= 30,
                   };
                 });
-          renderer.setFlightLoot?.(
-            items
-              .map((item) => ({ ...item, laserTarget: targeted.has(item.id) }))
-              .concat(intakeModels),
-          );
+          renderer.setFlightLoot?.([
+            ...items.map((item) => ({
+              ...item,
+              laserTarget: targeted.has(item.id),
+            })),
+            ...intakeModels,
+          ]);
         }
         // Forced, the route drawn is the straight line it flies; let go, the
         // roads again.
