@@ -19,6 +19,7 @@ import {
   FLYOVER_SPEED_MPS,
   flightPath,
   flightPoint,
+  nearestAlong,
   localFrame,
   scanAhead,
   startFlight,
@@ -28,6 +29,14 @@ import {
   type FlightState,
 } from "./flyover-flight";
 import { flyoverRoadBounds, planFlyoverRoute } from "./flyover-route";
+import {
+  crossedFlightLoot,
+  rarerLoot,
+  validFlightLoot,
+  visibleFlightLoot,
+  type FlightLootSpawn,
+} from "./flight-loot";
+import { flightLootHaptic } from "./flight-loot-haptics";
 
 /** xPing's handle while it flies, apart from the informer's. */
 export const FLYOVER_DRONE_ID = "flyover:xPing";
@@ -124,6 +133,10 @@ export interface FlyoverRequest {
   readonly to: MapPointSelection;
   /** Absent, the flight cannot be forced. */
   readonly forcing?: FlyoverForcing;
+  /** Externally supplied collectible placements; the flight never rolls drops. */
+  readonly loot?: readonly FlightLootSpawn[];
+  /** Reports a local 3D collision, never grants a reward or entitlement. */
+  readonly onLootCollected?: (item: FlightLootSpawn) => void;
 }
 
 export interface Flyover {
@@ -296,6 +309,13 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       let road = route;
       let path = flightPath(road.map(plane.toLocal));
       let state = startFlight(path);
+      // Only callers with an explicit collection handler can stage these props:
+      // this flight neither invents drops nor treats a client hit as a reward.
+      const loot = request.onLootCollected
+        ? validFlightLoot(request.loot ?? [], path.length)
+        : [];
+      const pickedLoot = new Set<string>();
+      let brightest: FlightLootSpawn["rarity"] | undefined;
       flight.current = { state };
       let obstacles: FlightObstacle[] = [];
       let obstaclesAt = -Infinity;
@@ -319,6 +339,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         leg = "back";
         road = [...route].reverse();
         renderer.setRoute?.({ points: road });
+        renderer.setFlightLoot?.([]);
         path = flightPath(road.map(plane.toLocal));
         state = { ...startFlight(path), height: state.height };
         flight.current = { state };
@@ -335,6 +356,8 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         const flying = leg === "back" || now - started >= FLYOVER_TAKEOFF_MS;
         const current = flight.current ?? { state };
         state = current.state;
+        const previousLootPoint = flightPoint(path, state);
+        const previousLootHeight = state.height;
         const forced =
           flying &&
           leg === "out" &&
@@ -364,7 +387,69 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         const lift = flying
           ? state.height
           : state.height * Math.min(1, (now - started) / FLYOVER_TAKEOFF_MS);
-        const [longitude, latitude] = plane.toLonLat(flightPoint(path, state));
+        const actualLootPoint = flightPoint(path, state);
+        const [longitude, latitude] = plane.toLonLat(actualLootPoint);
+        if (flying && leg === "out" && loot.length) {
+          let pickups = 0;
+          const previous: [number, number, number] = [
+            previousLootPoint[0],
+            previousLootPoint[1],
+            previousLootHeight,
+          ];
+          const currentPoint: [number, number, number] = [
+            actualLootPoint[0],
+            actualLootPoint[1],
+            state.height,
+          ];
+          for (const item of loot) {
+            if (
+              pickedLoot.has(item.id) ||
+              !crossedFlightLoot(path, item, previous, currentPoint)
+            )
+              continue;
+            pickedLoot.add(item.id);
+            brightest = rarerLoot(brightest, item.rarity);
+            pickups++;
+            try {
+              request.onLootCollected?.(item);
+            } catch {
+              // A consumer failing to process an event must not break flight.
+            }
+          }
+          if (pickups) flightLootHaptic(); // one light impact per simulation tick
+          const distance =
+            state.free === undefined
+              ? state.distance
+              : nearestAlong(path, actualLootPoint);
+          const speed =
+            FLYOVER_SPEED_MPS *
+            (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * state.boost);
+          const shown = visibleFlightLoot(
+            path,
+            plane,
+            loot,
+            distance,
+            speed,
+            pickedLoot,
+          );
+          renderer.setFlightLoot?.(
+            state.free === undefined
+              ? shown
+              : shown.map((item) => {
+                  const at = plane.toLocal(item.lngLat);
+                  // On a forced detour, do not illuminate distant road props.
+                  return {
+                    ...item,
+                    near:
+                      item.near &&
+                      Math.hypot(
+                        at[0] - actualLootPoint[0],
+                        at[1] - actualLootPoint[1],
+                      ) <= 30,
+                  };
+                }),
+          );
+        }
         // Forced, the route drawn is the straight line it flies; let go, the
         // roads again.
         const offRoute = state.free !== undefined;
@@ -406,6 +491,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             pitchDeg: flying ? state.pitchDeg : 0,
             scale: FLYOVER_DRONE_SCALE,
             ...(wear === undefined ? {} : { wear }),
+            ...(brightest === undefined ? {} : { lootAura: brightest }),
           });
           if (flying && openRef.current && followingRef.current) {
             const turn = ((state.bearingDeg - cameraBearing + 540) % 360) - 180;
@@ -479,6 +565,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       restoreCamera.current = undefined;
       try {
         drone?.remove(FLYOVER_DRONE_ID);
+        renderer.setFlightLoot?.([]);
         renderer.setRoute?.(null);
       } catch {
         /* A detached renderer cannot clean up its props. */
