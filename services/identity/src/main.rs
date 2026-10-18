@@ -638,7 +638,10 @@ async fn deliver_admin_role_approval_confirmations(
             "✅ 0x1 · Користувач {} приєднався до ролі {}.",
             item.pub_dress, item.role
         );
-        match bot.send_message(ChatId(item.telegram_user_id), notice).await {
+        match bot
+            .send_message(ChatId(item.telegram_user_id), notice)
+            .await
+        {
             Ok(_) => {
                 if let Err(error) = repository
                     .confirm_admin_role_telegram_confirmation(&item, now)
