@@ -50,32 +50,12 @@ struct CommandSpec {
     description: &'static str,
 }
 
-/// Default private-chat commands. Registration is only offered to accounts
-/// without a linked Bond; registered chats get their own command scope.
+/// Minimal public Telegram command menu. Other commands remain accepted
+/// as typed legacy entry points, but are not promoted in Telegram's UI.
 const USER_COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         command: "open",
         description: "Open 0x1",
-    },
-    CommandSpec {
-        command: "start",
-        description: "Open pub_dress registration",
-    },
-    CommandSpec {
-        command: "whoami",
-        description: "Show your Bond identity and location",
-    },
-    CommandSpec {
-        command: "current_position",
-        description: "Передати поточну позицію й повернути live mode",
-    },
-    CommandSpec {
-        command: "recover",
-        description: "Explain the current recovery boundary",
-    },
-    CommandSpec {
-        command: "help",
-        description: "Show available commands",
     },
 ];
 
@@ -94,7 +74,8 @@ const ADMIN_ONLY_COMMANDS: &[CommandSpec] = &[
     },
 ];
 
-/// Disconnect is deliberately the final command, including for admins.
+/// Available in the menu for guests and registered Bonds; unlink still
+/// requires a real linked identity and confirmation.
 const UNLINK_COMMAND: CommandSpec = CommandSpec {
     command: "unlink",
     description: "Від'єднати Telegram від цього Bond",
@@ -118,17 +99,14 @@ impl CommandMenu {
 /// One ordering for the Telegram menu and /help, based on the persisted
 /// Telegram-to-Bond binding and the Bond's actual role.
 fn command_specs(menu: CommandMenu) -> Vec<&'static CommandSpec> {
-    let mut specs: Vec<&'static CommandSpec> = USER_COMMANDS
-        .iter()
-        .filter(|spec| !matches!(menu, CommandMenu::Registered(_)) || spec.command != "start")
-        .collect();
+    let mut specs: Vec<&'static CommandSpec> = USER_COMMANDS.iter().collect();
 
     if let CommandMenu::Registered(role) = menu {
         if role.can_set_manual_location() {
             specs.extend(ADMIN_ONLY_COMMANDS.iter());
         }
-        specs.push(&UNLINK_COMMAND);
     }
+    specs.push(&UNLINK_COMMAND);
     specs
 }
 
@@ -1512,27 +1490,31 @@ mod tests {
     }
 
     #[test]
-    fn registration_only_for_guests_and_unlink_last_for_registered_bonds() {
-        let guest = bot_commands(CommandMenu::Unregistered);
-        assert!(guest.iter().any(|c| c.command == "start"));
-        assert!(!guest.iter().any(|c| c.command == "unlink"));
-        assert!(help_text(CommandMenu::Unregistered).contains("/start"));
-        assert!(!help_text(CommandMenu::Unregistered).contains("/unlink"));
-
-        for role in [
-            BondAccessRole::User,
-            BondAccessRole::Admin,
-            BondAccessRole::Business,
+    fn public_command_menu_is_only_open_and_unlink() {
+        for menu in [
+            CommandMenu::Unregistered,
+            CommandMenu::Registered(BondAccessRole::User),
+            CommandMenu::Registered(BondAccessRole::Business),
         ] {
-            let menu = CommandMenu::Registered(role);
             let commands = bot_commands(menu);
-            assert!(!commands.iter().any(|c| c.command == "start"));
-            assert_eq!(commands.last().unwrap().command, "unlink");
+            let names: Vec<_> = commands.iter().map(|c| c.command.as_str()).collect();
+            assert_eq!(names, vec!["open", "unlink"]);
             let help = help_text(menu);
-            assert!(!help.contains("/start"));
+            assert!(help.contains("/open"));
             assert!(help.contains("/unlink"));
-            let command_lines: Vec<_> = help.lines().filter(|line| line.starts_with('/')).collect();
-            assert!(command_lines.last().unwrap().starts_with("/unlink — "));
+            for hidden in ["/start", "/whoami", "/current_position", "/recover", "/help"] {
+                assert!(!help.contains(hidden), "{hidden} leaked into public commands");
+            }
+        }
+        let admin_commands = bot_commands(CommandMenu::Registered(BondAccessRole::Admin));
+        let names: Vec<_> = admin_commands.iter().map(|c| c.command.as_str()).collect();
+        assert_eq!(names, vec!["open", "set_position", "travel", "unlink"]);
+    }
+
+    #[test]
+    fn legacy_commands_remain_accepted_even_when_hidden_from_menu() {
+        for command in ["/start", "/whoami", "/current_position", "/recover", "/help", "/unlink_confirm"] {
+            assert_eq!(super::command_of(command), command);
         }
     }
 
