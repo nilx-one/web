@@ -15,9 +15,9 @@ Inspect actual state before reporting an access limitation.
 Proceed without additional confirmation for reversible repository actions,
 including creating branches, editing files, committing and pushing, opening or
 updating pull requests, commenting or reviewing, marking a pull request ready,
-and merging when all merge conditions below are satisfied.
+but not merging, which requires explicit authorization for that PR.
 
-Always obtain explicit user authorization before deployment or release
+Always obtain explicit user authorization before merge, deployment or release
 activation, repository deletion or transfer, destructive data operations, or
 irreversible actions outside the repository.
 
@@ -85,7 +85,8 @@ Once the exact head revision is verified, required CI is green, applicable
 deploy validation is green, the requested scope is complete, and no known
 blocker remains, mark the pull request ready without asking the user again.
 
-Merge automatically when all of the following are true:
+Merge only after the user explicitly authorizes this PR and all of the
+following are true:
 
 - the requested task is complete;
 - the final diff matches the intended scope;
@@ -136,8 +137,8 @@ the release.
 
 ### Deployment
 
-Deployment always requires explicit user authorization, even after an automatic
-merge.
+Deployment always requires separate explicit user authorization, even after an
+authorized merge.
 
 After authorization, deploy the already verified revision or artifact, perform
 the environment transition, activate the release, and verify minimal
