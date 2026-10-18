@@ -14,6 +14,7 @@ import {
   chaseCamera,
   routeOverview,
   useFlyover,
+  type FlyoverForcing,
 } from "./use-flyover";
 
 /** About 330 m due east, so a whole flight fits in a test. */
@@ -25,8 +26,14 @@ const BASE: MapCamera = {
   bearing: 10,
   pitch: 50,
 };
+const EXPLORED: MapCamera = {
+  center: [30.459, 50.482],
+  zoom: 16,
+  bearing: 140,
+  pitch: 20,
+};
 
-function setup() {
+function setup(waitForRoads?: () => Promise<void>) {
   const double = createMapRendererDouble();
   double.setCamera(BASE);
   vi.mocked(double.setCamera).mockClear();
@@ -40,22 +47,32 @@ function setup() {
     setRoute: vi.fn(),
     obstaclesWithin: vi.fn(() => []),
     roadsWithin: vi.fn(() => []),
-    preloadRoads: vi.fn(async () => ({
-      covering: 0,
-      refused: 0,
-      skipped: 0,
-      cached: 0,
-      fetched: 0,
-      failed: 0,
-    })),
+    preloadRoads: vi.fn(async () => {
+      await waitForRoads?.();
+      return {
+        covering: 0,
+        refused: 0,
+        skipped: 0,
+        cached: 0,
+        fetched: 0,
+        failed: 0,
+      };
+    }),
   };
   const hook = renderHook(() => useFlyover(renderer, true));
   return { renderer, drone, hook };
 }
 
-async function begin(hook: ReturnType<typeof setup>["hook"]) {
+async function begin(
+  hook: ReturnType<typeof setup>["hook"],
+  forcing?: FlyoverForcing,
+) {
   await act(async () => {
-    hook.result.current.start({ from: FROM, to: TO });
+    hook.result.current.start({
+      from: FROM,
+      to: TO,
+      ...(forcing === undefined ? {} : { forcing }),
+    });
     await Promise.resolve();
   });
   await act(async () => {
@@ -133,14 +150,22 @@ describe("useFlyover", () => {
     expect(Math.abs(FROM.latitude - back.lngLat[1]) * 111_195).toBeLessThan(2);
   });
 
-  it("hovers at the station, then puts the world back", async () => {
+  it("hovers at the station, flies back to the start, then puts the world back", async () => {
     const { renderer, drone, hook } = setup();
     await begin(hook);
     act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 12_000));
     const hovering = lastDrone(drone)!;
     expect(hovering.lngLat[0]).toBeCloseTo(TO.longitude, 5);
     expect(hook.result.current.active).toBe(true);
-    expect(hook.result.current.progress?.arrivedAt).toBeDefined();
+    const arrivedAt = hook.result.current.progress?.arrivedAt;
+    expect(arrivedAt).toBeDefined();
+    // The way back is part of the flight, and cannot be forced.
+    act(() => vi.advanceTimersByTime(FLYOVER_ARRIVAL_MS + 1_000));
+    expect(hook.result.current.active).toBe(true);
+    expect(hook.result.current.progress?.returning).toBe(true);
+    expect(hook.result.current.progress?.arrivedAt).toBe(arrivedAt);
+    act(() => vi.advanceTimersByTime(12_000));
+    expect(lastDrone(drone)!.lngLat[0]).toBeCloseTo(FROM.longitude, 5);
     act(() => vi.advanceTimersByTime(FLYOVER_ARRIVAL_MS));
     expect(hook.result.current.active).toBe(false);
     expect(drone.remove).toHaveBeenCalledWith(FLYOVER_DRONE_ID);
@@ -149,6 +174,43 @@ describe("useFlyover", () => {
       BASE,
       expect.objectContaining({ motion: "eased" }),
     );
+  });
+
+  it("forces only while held and allowed, straight at the station, and smokes", async () => {
+    const { renderer, drone, hook } = setup();
+    let allowed = false;
+    const forcing = {
+      allowed: vi.fn(() => allowed),
+      spent: vi.fn(),
+      wear: vi.fn(() => 0.4),
+    };
+    await begin(hook, forcing);
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 200));
+    act(() => hook.result.current.force(true));
+    act(() => vi.advanceTimersByTime(500));
+    // Held but not allowed: nothing spent, still on the roads.
+    expect(forcing.spent).not.toHaveBeenCalled();
+    expect(hook.result.current.progress?.forced).toBeUndefined();
+    allowed = true;
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(forcing.spent).toHaveBeenCalled();
+    const spent = forcing.spent.mock.calls.reduce((sum, [ms]) => sum + ms, 0);
+    expect(spent).toBeGreaterThan(900);
+    expect(spent).toBeLessThanOrEqual(1_000);
+    expect(hook.result.current.progress?.forced).toBe(true);
+    const road = vi.mocked(renderer.setRoute).mock.calls[0]?.[0];
+    const straight = vi.mocked(renderer.setRoute).mock.lastCall?.[0];
+    expect(straight).not.toBe(road);
+    expect(straight?.points).toHaveLength(2);
+    expect(straight?.points[1]).toEqual([TO.longitude, TO.latitude]);
+    expect(lastDrone(drone)!.wear).toBe(0.4);
+    // Let go: back on the roads, spending nothing more.
+    act(() => hook.result.current.force(false));
+    forcing.spent.mockClear();
+    act(() => vi.advanceTimersByTime(500));
+    expect(forcing.spent).not.toHaveBeenCalled();
+    expect(hook.result.current.progress?.forced).toBeUndefined();
+    expect(vi.mocked(renderer.setRoute).mock.lastCall?.[0]).toEqual(road);
   });
 
   it("can be cancelled at any moment", async () => {
@@ -182,58 +244,81 @@ describe("useFlyover", () => {
     expect(hook.result.current.progress).toBeUndefined();
   });
 
-  it("tucks away on collapse, flies on and opens again on expand", async () => {
+  it("keeps flying when collapsed and resumes chasing on expand", async () => {
     const { renderer, drone, hook } = setup();
     await begin(hook);
     act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 500));
-    expect(hook.result.current.expanded).toBe(true);
     const before = lastDrone(drone)!.lngLat[0];
     act(() => hook.result.current.collapse());
-    expect(hook.result.current.active).toBe(true);
     expect(hook.result.current.expanded).toBe(false);
-    expect(hook.result.current.following).toBe(false);
+    expect(hook.result.current.active).toBe(true);
     expect(renderer.getCamera()).toEqual(BASE);
-    renderer.setCamera(BASE);
+    renderer.setCamera(EXPLORED);
     act(() => vi.advanceTimersByTime(1000));
-    expect(renderer.getCamera()).toEqual(BASE);
+    expect(renderer.getCamera()).toEqual(EXPLORED);
     expect(lastDrone(drone)!.lngLat[0]).toBeGreaterThan(before);
     act(() => hook.result.current.expand());
     expect(hook.result.current.expanded).toBe(true);
-    expect(hook.result.current.following).toBe(true);
-    act(() => vi.advanceTimersByTime(1000));
-    expect(renderer.getCamera()).not.toEqual(BASE);
-    act(() => hook.result.current.leave());
-    expect(hook.result.current.active).toBe(false);
-    expect(hook.result.current.expanded).toBe(false);
+    act(() => vi.advanceTimersByTime(250));
+    expect(renderer.getCamera()).not.toEqual(EXPLORED);
+    act(() => hook.result.current.collapse());
+    expect(renderer.getCamera()).toEqual(EXPLORED);
   });
 
-  it("cancels a collapsed flight, and a new one opens expanded", async () => {
-    const { hook } = setup();
+  it("retains the user's camera when a collapsed round trip finishes", async () => {
+    const { renderer, hook } = setup();
+    await begin(hook);
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 500));
+    act(() => hook.result.current.collapse());
+    renderer.setCamera(EXPLORED);
+    act(() => vi.advanceTimersByTime(32_000));
+    expect(hook.result.current.active).toBe(false);
+    expect(renderer.getCamera()).toEqual(EXPLORED);
+  });
+
+  it("keeps the user's view when the flight is cancelled after collapse", async () => {
+    const { renderer, hook } = setup();
     await begin(hook);
     act(() => hook.result.current.collapse());
+    renderer.setCamera(EXPLORED);
     act(() => hook.result.current.leave());
     expect(hook.result.current.active).toBe(false);
-    await begin(hook);
-    expect(hook.result.current.expanded).toBe(true);
+    expect(renderer.getCamera()).toEqual(EXPLORED);
   });
 
-  it("collapses on Escape and takes no steering while collapsed", async () => {
+  it("does not reclaim the camera when roads load after collapse", async () => {
+    let finishRoads: () => void = () => {};
+    const roads = new Promise<void>((resolve) => {
+      finishRoads = resolve;
+    });
+    const { renderer, hook } = setup(() => roads);
+    await begin(hook);
+    act(() => hook.result.current.collapse());
+    renderer.setCamera(EXPLORED);
+    await act(async () => {
+      finishRoads();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(renderer.getCamera()).toEqual(EXPLORED);
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 500));
+    expect(renderer.getCamera()).toEqual(EXPLORED);
+    expect(hook.result.current.active).toBe(true);
+    act(() => hook.result.current.leave());
+    expect(renderer.getCamera()).toEqual(EXPLORED);
+  });
+
+  it("Escape collapses instead of cancelling the flight", async () => {
     const { hook } = setup();
     await begin(hook);
     act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 500));
     act(() => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape" }));
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { code: "Escape", cancelable: true }),
+      );
     });
     expect(hook.result.current.active).toBe(true);
     expect(hook.result.current.expanded).toBe(false);
-    const arrow = new KeyboardEvent("keydown", {
-      code: "ArrowLeft",
-      cancelable: true,
-    });
-    act(() => {
-      document.dispatchEvent(arrow);
-    });
-    expect(arrow.defaultPrevented).toBe(false);
   });
 
   it("shows the whole route still under reduced motion", async () => {

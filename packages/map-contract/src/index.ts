@@ -812,6 +812,11 @@ export interface SystemDroneHandle {
   readonly pitchDeg?: number;
   /** Size against the 1.2 m drone; omitted, 1. */
   readonly scale?: number;
+  /**
+   * How worn its engine is, from 0 to 1: it smokes and sparks more the
+   * more is spent. Omitted, the faint puff of a tired but sound drone.
+   */
+  readonly wear?: number;
 }
 export interface SystemDroneLayerContract {
   /**

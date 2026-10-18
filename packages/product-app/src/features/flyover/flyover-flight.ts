@@ -35,6 +35,11 @@ export const FLYOVER_CLEARANCE_METERS = 7;
 export const FLYOVER_MAX_CLIMB_METERS = 60;
 /** How long a step aside holds before the route pulls xPing back. */
 export const FLYOVER_STEER_HOLD_MS = 1_400;
+/** Forcing at its full: this many times the speed, and twice the height. */
+export const FLYOVER_FORCE_SPEED_FACTOR = 2.5;
+export const FLYOVER_FORCE_HEIGHT_FACTOR = 2;
+/** How long forcing takes to build up, and to wear off once let go. */
+export const FLYOVER_FORCE_RAMP_MS = 3_000;
 
 /** Spring rates: a lane change snaps, a climb is brisk, a descent glides. */
 const LATERAL_RATE = 5.5;
@@ -300,6 +305,13 @@ export interface FlightState {
   readonly rollDeg: number;
   readonly pitchDeg: number;
   readonly arrived: boolean;
+  /** How far forcing has built up, from 0 to 1. */
+  readonly boost: number;
+  /**
+   * Where xPing is while it is forced straight at the destination, off the
+   * route; once let go it joins the route again where it is nearest.
+   */
+  readonly free: Point | undefined;
 }
 
 export function startFlight(path: FlightPath): FlightState {
@@ -317,7 +329,50 @@ export function startFlight(path: FlightPath): FlightState {
     rollDeg: 0,
     pitchDeg: CRUISE_PITCH_DEG,
     arrived: path.length === 0,
+    boost: 0,
+    free: undefined,
   };
+}
+
+/** How far along the path the point nearest to `point` lies. */
+export function nearestAlong(path: FlightPath, [px, py]: Point): number {
+  const { points, along } = path;
+  if (points.length < 2) return 0;
+  let best = 0;
+  let bestSquared = Infinity;
+  for (let index = 1; index < points.length; index++) {
+    const [ax, ay] = points[index - 1]!;
+    const [bx, by] = points[index]!;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const length = dx * dx + dy * dy;
+    const t =
+      length === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length));
+    const qx = ax + dx * t - px;
+    const qy = ay + dy * t - py;
+    const squared = qx * qx + qy * qy;
+    if (squared < bestSquared) {
+      bestSquared = squared;
+      best = along[index - 1]! + Math.sqrt(length) * t;
+    }
+  }
+  return best;
+}
+
+/** Joins the route again where it is nearest, without a jump: the offset
+ * becomes the lateral the route then pulls back in. */
+function rejoin(
+  path: FlightPath,
+  state: FlightState,
+  free: Point,
+): FlightState {
+  const distance = nearestAlong(path, free);
+  const { point, direction } = pathAt(path, distance);
+  const lateral =
+    (free[0] - point[0]) * direction[1] - (free[1] - point[1]) * direction[0];
+  return { ...state, distance, lateral, lateralSpeed: 0, free: undefined };
 }
 
 /** A person's step aside, at a time on the same clock as `stepFlight`. */
@@ -358,7 +413,10 @@ function spring(
 /**
  * Advances the flight by `elapsedMs`, reading the roofs ahead in `scan`.
  * Steps of any length give the same flight to within a frame: long ones
- * are split into short ones.
+ * are split into short ones. While `forcing`, xPing builds up to
+ * [`FLYOVER_FORCE_SPEED_FACTOR`] times its speed and twice its height and
+ * flies straight at the destination; let go, it slows back down and joins
+ * the route where it is nearest.
  */
 export function stepFlight(
   path: FlightPath,
@@ -366,27 +424,32 @@ export function stepFlight(
   scan: FlightScan,
   elapsedMs: number,
   nowMs: number,
+  forcing = false,
 ): FlightState {
   if (state.arrived) return state;
   const steering = nowMs - state.steeredAt < FLYOVER_STEER_HOLD_MS;
   const lane = chooseLane(scan, steering ? state.steerLane : 0);
   const targetLateral = lane * FLYOVER_LANE_METERS;
-  const targetHeight = cruiseHeight(scan, lane);
-  let { distance, lateral, lateralSpeed, height, climbSpeed, rollDeg } = state;
+  const cruise = cruiseHeight(scan, lane);
+  if (!forcing && state.free !== undefined)
+    state = rejoin(path, state, state.free);
+  let { distance, lateral, lateralSpeed, height, climbSpeed, rollDeg, boost } =
+    state;
+  let free = state.free;
   let bearingDeg = state.bearingDeg;
   let pitchDeg = state.pitchDeg;
+  let arrived = false;
+  const end = path.points[path.points.length - 1] ?? [0, 0];
   let remaining = Math.max(0, elapsedMs) / 1000;
-  while (remaining > 0) {
+  while (remaining > 0 && !arrived) {
     const seconds = Math.min(remaining, 1 / 120);
     remaining -= seconds;
-    distance = Math.min(path.length, distance + FLYOVER_SPEED_MPS * seconds);
-    [lateral, lateralSpeed] = spring(
-      lateral,
-      lateralSpeed,
-      targetLateral,
-      LATERAL_RATE,
-      seconds,
-    );
+    const ramp = (seconds * 1000) / FLYOVER_FORCE_RAMP_MS;
+    boost = forcing ? Math.min(1, boost + ramp) : Math.max(0, boost - ramp);
+    const speed =
+      FLYOVER_SPEED_MPS * (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * boost);
+    const targetHeight =
+      cruise * (1 + (FLYOVER_FORCE_HEIGHT_FACTOR - 1) * boost);
     [height, climbSpeed] = spring(
       height,
       climbSpeed,
@@ -394,28 +457,55 @@ export function stepFlight(
       targetHeight > height ? CLIMB_RATE : DESCENT_RATE,
       seconds,
     );
-    // Heading is where xPing is actually going: along the route, plus the
-    // way it is drifting aside. How fast that turns is how hard it banks.
-    const { direction } = pathAt(path, distance);
-    const right: Point = [direction[1], -direction[0]];
-    const nextBearing = bearingOf([
-      direction[0] * FLYOVER_SPEED_MPS + right[0] * lateralSpeed,
-      direction[1] * FLYOVER_SPEED_MPS + right[1] * lateralSpeed,
-    ]);
+    let nextBearing: number;
+    if (forcing) {
+      // Straight at the destination, over whatever lies between.
+      free ??= flightPoint(path, { ...state, distance, lateral });
+      const dx = end[0] - free[0];
+      const dy = end[1] - free[1];
+      const left = Math.hypot(dx, dy);
+      const step = speed * seconds;
+      if (left <= step) {
+        free = end;
+        arrived = true;
+      } else {
+        free = [free[0] + (dx / left) * step, free[1] + (dy / left) * step];
+      }
+      nextBearing = left > 0.001 ? bearingOf([dx, dy]) : bearingDeg;
+    } else {
+      distance = Math.min(path.length, distance + speed * seconds);
+      [lateral, lateralSpeed] = spring(
+        lateral,
+        lateralSpeed,
+        targetLateral,
+        LATERAL_RATE,
+        seconds,
+      );
+      // Heading is where xPing is actually going: along the route, plus the
+      // way it is drifting aside. How fast that turns is how hard it banks.
+      const { direction } = pathAt(path, distance);
+      const right: Point = [direction[1], -direction[0]];
+      nextBearing = bearingOf([
+        direction[0] * speed + right[0] * lateralSpeed,
+        direction[1] * speed + right[1] * lateralSpeed,
+      ]);
+      arrived = distance >= path.length;
+    }
     const turn = ((nextBearing - bearingDeg + 540) % 360) - 180;
     bearingDeg = nextBearing;
     const turnRate = (turn * RAD) / seconds;
-    const bank = Math.atan2(FLYOVER_SPEED_MPS * turnRate, GRAVITY) / RAD;
+    const bank = Math.atan2(speed * turnRate, GRAVITY) / RAD;
     const targetRoll = Math.max(-MAX_ROLL_DEG, Math.min(MAX_ROLL_DEG, bank));
     rollDeg += (targetRoll - rollDeg) * Math.min(1, ROLL_RATE * seconds);
-    // Nose down at cruise, up while climbing, further down while diving.
+    // Nose down at cruise, up while climbing, further down while diving,
+    // and further down still the faster it is forced.
     pitchDeg =
-      CRUISE_PITCH_DEG - Math.atan2(climbSpeed, FLYOVER_SPEED_MPS) / RAD;
+      CRUISE_PITCH_DEG * (1 + boost) - Math.atan2(climbSpeed, speed) / RAD;
   }
   return {
     ...state,
-    distance,
-    lateral,
+    distance: arrived && free !== undefined ? path.length : distance,
+    lateral: arrived && free !== undefined ? 0 : lateral,
     lateralSpeed,
     height,
     climbSpeed,
@@ -423,12 +513,18 @@ export function stepFlight(
     bearingDeg,
     rollDeg,
     pitchDeg,
-    arrived: distance >= path.length,
+    boost,
+    free: arrived ? undefined : free,
+    arrived,
   };
 }
 
 /** Where xPing is on the plane: on the route, `lateral` metres to its right. */
-export function flightPoint(path: FlightPath, state: FlightState): Point {
+export function flightPoint(
+  path: FlightPath,
+  state: Pick<FlightState, "distance" | "lateral" | "free">,
+): Point {
+  if (state.free !== undefined) return state.free;
   const { point, direction } = pathAt(path, state.distance);
   return [
     point[0] + direction[1] * state.lateral,

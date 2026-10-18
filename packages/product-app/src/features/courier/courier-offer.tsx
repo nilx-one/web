@@ -6,11 +6,14 @@ import "./courier.css";
 export function CourierOffer({
   busy,
   error,
+  blocked,
   onAccept,
   onDecline,
 }: {
   busy: boolean;
   error: boolean;
+  /** Why it cannot go: its engine is broken. */
+  blocked?: "broken" | undefined;
   onAccept(): void;
   onDecline(): void;
 }) {
@@ -40,7 +43,13 @@ export function CourierOffer({
       <p>xPing</p>
       <h2 id="courier-offer-title">{t("courier.offer")}</h2>
       <p>{t("courier.boundary")}</p>
-      {error ? <p role="alert">{t("courier.unavailable")}</p> : null}
+      {error ? (
+        <p role="alert">
+          {blocked === "broken"
+            ? t("courier.engineBroken")
+            : t("courier.unavailable")}
+        </p>
+      ) : null}
       <button type="button" disabled={busy} onClick={onAccept}>
         {t("courier.send")}
       </button>

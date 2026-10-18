@@ -62,6 +62,10 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/finds/spills",
             get(read_spills).post(spill_orbs),
         )
+        .route(
+            "/api/v1/identity/xping/engine",
+            get(read_xping_engine).post(command_xping_engine),
+        )
         .layer(DefaultBodyLimit::max(PUB_INFO_MAX_BYTES))
         .with_state(state)
 }
@@ -797,6 +801,101 @@ mod pub_info_api_tests {
             )
             .await
             .expect("response")
+    }
+
+    /// Signs in once, then keeps that session: a second sign-in would be a
+    /// second, not yet activated, client.
+    async fn engine_request(
+        app: &axum::Router,
+        auth: &str,
+        session: &mut Option<String>,
+        body: Option<Value>,
+    ) -> axum::response::Response {
+        let request = match body {
+            Some(_) => Request::post("/api/v1/identity/xping/engine")
+                .header("x-0x1-csrf", "1")
+                .header("content-type", "application/json"),
+            None => Request::get("/api/v1/identity/xping/engine"),
+        };
+        let request = match session {
+            Some(cookie) => request.header(COOKIE, cookie.as_str()),
+            None => request.header(AUTHORIZATION, format!("tma {auth}")),
+        };
+        let response = app
+            .clone()
+            .oneshot(
+                request
+                    .body(body.map_or_else(Body::empty, |body| Body::from(body.to_string())))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        if session.is_none() && response.headers().contains_key(SET_COOKIE) {
+            *session = Some(session_cookie(&response));
+        }
+        response
+    }
+
+    #[tokio::test]
+    async fn the_xping_engine_breaks_by_core_and_is_repaired_once() {
+        let (app, sky, other) = two_bonds().await;
+        let now_ms = NOW * 1000;
+        let (mut sky_session, mut other_session) = (None, None);
+        let fresh = json(engine_request(&app, &sky, &mut sky_session, None).await).await;
+        assert_eq!(fresh["engine"]["energy_permille"], 1000);
+        assert_eq!(fresh["engine"]["broken"], false);
+        assert_eq!(fresh["now_ms"], now_ms);
+
+        let force = |ms: u64| Some(serde_json::json!({ "op": "force", "forced_ms": ms }));
+        let half = json(engine_request(&app, &sky, &mut sky_session, force(15_000)).await).await;
+        assert_eq!(half["engine"]["energy_permille"], 500);
+        assert_eq!(half["engine"]["repair_seeds"], "25");
+        // Another Bond's engine is its own.
+        let theirs = json(engine_request(&app, &other, &mut other_session, None).await).await;
+        assert_eq!(theirs["engine"]["energy_permille"], 1000);
+
+        // Fifteen more seconds empty it; a second more on empty does not
+        // break it yet, the next one does, at the service's time.
+        engine_request(&app, &sky, &mut sky_session, force(15_000)).await;
+        let strained = json(engine_request(&app, &sky, &mut sky_session, force(1_999)).await).await;
+        assert_eq!(strained["engine"]["broken"], false);
+        assert_eq!(strained["engine"]["empty_margin_ms"], "1");
+        let broken = json(engine_request(&app, &sky, &mut sky_session, force(1)).await).await;
+        assert_eq!(broken["engine"]["broken"], true);
+        assert_eq!(broken["state"]["broken_at_ms"], now_ms.to_string());
+        assert_eq!(broken["engine"]["repair_seeds"], "50");
+        let refused = engine_request(&app, &sky, &mut sky_session, force(1)).await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        assert_eq!(json(refused).await["error"]["code"], "broken");
+
+        let repair = |paid: u64, expected: &Value| {
+            Some(serde_json::json!({ "op": "repaired", "paid_seeds": paid, "expected": expected }))
+        };
+        let underpaid =
+            engine_request(&app, &sky, &mut sky_session, repair(49, &broken["state"])).await;
+        assert_eq!(underpaid.status(), StatusCode::CONFLICT);
+        assert_eq!(json(underpaid).await["error"]["code"], "underpaid");
+        let stale = engine_request(&app, &sky, &mut sky_session, repair(50, &half["state"])).await;
+        assert_eq!(json(stale).await["error"]["code"], "stale_engine");
+        let repaired = json(
+            engine_request(&app, &sky, &mut sky_session, repair(50, &broken["state"])).await,
+        )
+        .await;
+        assert_eq!(repaired["engine"]["energy_permille"], 1000);
+        assert_eq!(repaired["engine"]["broken"], false);
+        assert_eq!(repaired["authority"], "client");
+        // The same payment again repairs nothing twice.
+        let replay = engine_request(&app, &sky, &mut sky_session, repair(50, &broken["state"])).await;
+        assert_eq!(json(replay).await["error"]["code"], "stale_engine");
+
+        for bad in [
+            force(0),
+            force(60_001),
+            Some(serde_json::json!({ "op": "break_down" })),
+        ] {
+            let response = engine_request(&app, &sky, &mut sky_session, bad).await;
+            assert!(response.status().is_client_error(), "{}", response.status());
+        }
     }
 
     #[tokio::test]

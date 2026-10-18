@@ -15,6 +15,7 @@ import { prefersReducedMotion } from "../../shell/motion";
 import { offsetPoint } from "../guide/guide-stage";
 import {
   flightObstacles,
+  FLYOVER_FORCE_SPEED_FACTOR,
   FLYOVER_SPEED_MPS,
   flightPath,
   flightPoint,
@@ -104,20 +105,31 @@ function around(point: LonLat, meters: number): MapBounds {
   };
 }
 
+/**
+ * What may force a flight, and what forcing costs. The flight asks before
+ * each frame it forces, tells what it spent, and draws the engine's wear as
+ * smoke. Core and the service decide the engine; this only carries it.
+ */
+export interface FlyoverForcing {
+  allowed(): boolean;
+  spent(ms: number): void;
+  /** The engine's wear now, from 0 to 1. */
+  wear(): number;
+}
+
 export interface FlyoverRequest {
   /** Where the Bond and its Avaia stand. */
   readonly from: MapPointSelection;
   /** The business station the flight goes to. */
   readonly to: MapPointSelection;
+  /** Absent, the flight cannot be forced. */
+  readonly forcing?: FlyoverForcing;
 }
 
 export interface Flyover {
-  /** A flight is under way, whether it is open or tucked away. */
+  /** The route continues, whether open or collapsed. */
   readonly active: boolean;
-  /**
-   * The flight is open: it owns the screen, its controls are up and the
-   * world's own camera stands down. A collapsed flight is still `active`.
-   */
+  /** Whether the full-screen camera and flight controls are active. */
   readonly expanded: boolean;
   readonly following: boolean;
   readonly progress: FlyoverProgress | undefined;
@@ -126,11 +138,13 @@ export interface Flyover {
   start(request: FlyoverRequest): void;
   /** Steps xPing a lane aside; the route pulls it back once let go. */
   steer(direction: -1 | 1): void;
-  /** Tucks the flight away: it flies on and the world is handed back. */
+  /** Holds or lets go of forcing; only the way out can be forced. */
+  force(holding: boolean): void;
+  /** Hand back the camera and world controls without ending the route. */
   collapse(): void;
-  /** Opens a collapsed flight again, chasing xPing. */
+  /** Resume chasing xPing and return to full-screen steering. */
   expand(): void;
-  /** Cancels the flight at once. */
+  /** Leaves the flight at once. */
   leave(): void;
 }
 
@@ -138,7 +152,12 @@ export interface Flyover {
 export interface FlyoverProgress {
   readonly point: MapPointSelection;
   readonly remainingMs: number;
+  /** When it reached the destination; it then flies back to the start. */
   readonly arrivedAt?: number;
+  /** Flying back to where it set off from. */
+  readonly returning?: boolean;
+  /** Being forced, straight at the destination. */
+  readonly forced?: boolean;
 }
 
 /**
@@ -151,22 +170,29 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
   const [progress, setProgress] = useState<FlyoverProgress>();
   const [following, setFollowing] = useState(true);
   const [open, setOpen] = useState(true);
+  const openRef = useRef(open);
   const followingRef = useRef(following);
+  const restoreCamera = useRef<
+    { putBack(): void; capture(): void } | undefined
+  >(undefined);
   useEffect(() => {
     followingRef.current = following;
   }, [following]);
-  const openRef = useRef(open);
+  const flight = useRef<{ state: FlightState } | undefined>(undefined);
   useEffect(() => {
     openRef.current = open;
   }, [open]);
-  const flight = useRef<{ state: FlightState } | undefined>(undefined);
-  /** Puts the camera back where the flight found it; set while one flies. */
-  const restoreCamera = useRef<(() => void) | undefined>(undefined);
+  const forcing = useRef(false);
+  const force = useCallback((holding: boolean) => {
+    forcing.current = holding;
+  }, []);
 
   const start = useCallback(
     (next: FlyoverRequest) => {
       if (!ready || request !== undefined) return;
       setProgress(undefined);
+      followingRef.current = true;
+      openRef.current = true;
       setFollowing(true);
       setOpen(true);
       setRequest((current) => current ?? next);
@@ -180,12 +206,19 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
   const collapse = useCallback(() => {
     if (!openRef.current) return;
     openRef.current = false;
+    followingRef.current = false;
+    forcing.current = false;
     setOpen(false);
     setFollowing(false);
-    restoreCamera.current?.();
+    restoreCamera.current?.putBack();
   }, []);
   const expand = useCallback(() => {
-    setOpen(true);
+    if (!openRef.current) {
+      restoreCamera.current?.capture();
+      openRef.current = true;
+      setOpen(true);
+    }
+    followingRef.current = true;
     setFollowing(true);
   }, []);
   const steer = useCallback((direction: -1 | 1) => {
@@ -210,18 +243,33 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       return () => setRequest(undefined);
     }
     const reduced = prefersReducedMotion();
+    let worldCamera = { camera: base, padding: basePadding };
     const putBack = () => {
       try {
-        renderer.setCamera(base, {
+        renderer.setCamera(worldCamera.camera, {
           motion: reduced ? "immediate" : "eased",
           durationMs: 900,
-          ...(basePadding === undefined ? {} : { padding: basePadding }),
+          ...(worldCamera.padding === undefined
+            ? {}
+            : { padding: worldCamera.padding }),
         });
       } catch {
-        /* A lost renderer has nothing left to put back. */
+        /* A detached renderer has nothing left to restore. */
       }
     };
-    restoreCamera.current = putBack;
+    restoreCamera.current = {
+      putBack,
+      capture: () => {
+        try {
+          worldCamera = {
+            camera: renderer.getCamera(),
+            padding: renderer.getCameraPadding?.(),
+          };
+        } catch {
+          /* Preserve the last valid world camera if the renderer was lost. */
+        }
+      },
+    };
     let cancelled = false;
     let frame: number | undefined;
     let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
@@ -231,7 +279,8 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     const fly = (route: readonly LonLat[]) => {
       renderer.setRoute?.({ points: route });
       if (reduced) {
-        renderer.setCamera(routeOverview(route), { motion: "immediate" });
+        if (openRef.current)
+          renderer.setCamera(routeOverview(route), { motion: "immediate" });
         drone?.upsert({
           id: FLYOVER_DRONE_ID,
           lngLat: to,
@@ -243,7 +292,9 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         return;
       }
       const plane = localFrame(from);
-      const path = flightPath(route.map(plane.toLocal));
+      let leg: "out" | "back" = "out";
+      let road = route;
+      let path = flightPath(road.map(plane.toLocal));
       let state = startFlight(path);
       flight.current = { state };
       let obstacles: FlightObstacle[] = [];
@@ -252,19 +303,43 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       let last = started;
       let cameraBearing = state.bearingDeg;
       let publishedAt = -Infinity;
-      renderer.setCamera(
-        chaseCamera(request.from, state.bearingDeg, state.height),
-        { motion: "eased", durationMs: FLYOVER_TAKEOFF_MS },
-      );
+      let arrivedAt: number | undefined;
+      let straight = false;
+      let hovering = false;
+      if (openRef.current)
+        renderer.setCamera(
+          chaseCamera(request.from, state.bearingDeg, state.height),
+          { motion: "eased", durationMs: FLYOVER_TAKEOFF_MS },
+        );
+
+      // Back the way it came, after hovering at the station: never forced.
+      const flyBack = () => {
+        arrivalTimer = undefined;
+        if (cancelled) return;
+        leg = "back";
+        road = [...route].reverse();
+        renderer.setRoute?.({ points: road });
+        path = flightPath(road.map(plane.toLocal));
+        state = { ...startFlight(path), height: state.height };
+        flight.current = { state };
+        hovering = false;
+        last = globalThis.performance.now();
+        frame = globalThis.requestAnimationFrame(draw);
+      };
 
       const draw = (now: number) => {
         frame = undefined;
         if (cancelled) return;
         const elapsed = Math.min(100, Math.max(0, now - last));
         last = now;
-        const flying = now - started >= FLYOVER_TAKEOFF_MS;
+        const flying = leg === "back" || now - started >= FLYOVER_TAKEOFF_MS;
         const current = flight.current ?? { state };
         state = current.state;
+        const forced =
+          flying &&
+          leg === "out" &&
+          forcing.current &&
+          request.forcing?.allowed() === true;
         if (flying) {
           if (now - obstaclesAt >= OBSTACLE_REFRESH_MS) {
             obstaclesAt = now;
@@ -281,25 +356,45 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             scanAhead(path, state.distance, obstacles),
             elapsed,
             now,
+            forced,
           );
           current.state = state;
+          if (forced) request.forcing?.spent(elapsed);
         }
         const lift = flying
           ? state.height
           : state.height * Math.min(1, (now - started) / FLYOVER_TAKEOFF_MS);
         const [longitude, latitude] = plane.toLonLat(flightPoint(path, state));
+        // Forced, the route drawn is the straight line it flies; let go, the
+        // roads again.
+        const offRoute = state.free !== undefined;
+        if (offRoute !== straight) {
+          straight = offRoute;
+          renderer.setRoute?.({
+            points: offRoute ? [[longitude, latitude], to] : road,
+          });
+        }
+        if (state.arrived && leg === "out" && arrivedAt === undefined)
+          arrivedAt = Date.now();
         if (state.arrived || now - publishedAt >= 250) {
           publishedAt = now;
+          const speed =
+            FLYOVER_SPEED_MPS *
+            (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * state.boost);
           setProgress({
             point: { longitude, latitude },
             remainingMs:
-              Math.max(0, FLYOVER_TAKEOFF_MS - (now - started)) +
-              (Math.max(0, path.length - state.distance) / FLYOVER_SPEED_MPS) *
-                1000,
-            ...(state.arrived ? { arrivedAt: Date.now() } : {}),
+              (leg === "out"
+                ? Math.max(0, FLYOVER_TAKEOFF_MS - (now - started))
+                : 0) +
+              (Math.max(0, path.length - state.distance) / speed) * 1000,
+            ...(arrivedAt === undefined ? {} : { arrivedAt }),
+            ...(leg === "back" ? { returning: true } : {}),
+            ...(offRoute ? { forced: true } : {}),
           });
         }
         try {
+          const wear = request.forcing?.wear();
           drone?.upsert({
             id: FLYOVER_DRONE_ID,
             lngLat: [longitude, latitude],
@@ -310,8 +405,9 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             rollDeg: flying ? state.rollDeg : 0,
             pitchDeg: flying ? state.pitchDeg : 0,
             scale: FLYOVER_DRONE_SCALE,
+            ...(wear === undefined ? {} : { wear }),
           });
-          if (flying && followingRef.current) {
+          if (flying && openRef.current && followingRef.current) {
             const turn = ((state.bearingDeg - cameraBearing + 540) % 360) - 180;
             cameraBearing +=
               turn * Math.min(1, (CHASE_TURN_RATE * elapsed) / 1000);
@@ -324,11 +420,12 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
           setRequest(undefined);
           return;
         }
-        if (state.arrived) {
-          arrivalTimer = setTimeout(
-            () => setRequest(undefined),
-            FLYOVER_ARRIVAL_MS,
-          );
+        if (state.arrived && !hovering) {
+          hovering = true;
+          arrivalTimer =
+            leg === "out"
+              ? setTimeout(flyBack, FLYOVER_ARRIVAL_MS)
+              : setTimeout(() => setRequest(undefined), FLYOVER_ARRIVAL_MS);
           return;
         }
         frame = globalThis.requestAnimationFrame(draw);
@@ -373,6 +470,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       // Whatever ends the effect ends the flight: leaving, the world closing
       // or the map going away. A later start is a new flight.
       setRequest(undefined);
+      forcing.current = false;
       cancelled = true;
       document.removeEventListener("keydown", onKeyDown);
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
@@ -383,9 +481,10 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
         drone?.remove(FLYOVER_DRONE_ID);
         renderer.setRoute?.(null);
       } catch {
-        /* A lost renderer has nothing left to put back. */
+        /* A detached renderer cannot clean up its props. */
       }
-      putBack();
+      // A collapsed flight already gave the camera to the world.
+      if (openRef.current) putBack();
     };
   }, [ready, renderer, request, steer, collapse]);
 
@@ -397,6 +496,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       expanded,
       start,
       steer,
+      force,
       collapse,
       expand,
       leave,
@@ -404,16 +504,6 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       following,
       setFollowing,
     }),
-    [
-      active,
-      expanded,
-      collapse,
-      expand,
-      leave,
-      start,
-      steer,
-      progress,
-      following,
-    ],
+    [active, expanded, leave, start, steer, force, collapse, expand, progress, following],
   );
 }

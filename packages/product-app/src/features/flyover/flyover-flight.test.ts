@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   FLYOVER_CLEARANCE_METERS,
+  FLYOVER_FORCE_RAMP_MS,
   FLYOVER_LANE_METERS,
   FLYOVER_LOW_HEIGHT_METERS,
   FLYOVER_MAX_LANE,
@@ -14,6 +15,7 @@ import {
   flightPath,
   flightPoint,
   localFrame,
+  nearestAlong,
   pathAt,
   scanAhead,
   startFlight,
@@ -213,5 +215,90 @@ describe("at the wheel", () => {
       if (point[0] > 8 && point[0] < 20) inside.push(point);
     });
     expect(inside).toEqual([]);
+  });
+});
+
+/** Flies frame by frame with the force held as `forcing` says. */
+function forced(
+  path: FlightPath,
+  ms: number,
+  from: FlightState,
+  forcing: (nowMs: number) => boolean,
+  startMs = 0,
+): FlightState {
+  let state = from;
+  for (let now = startMs; now < startMs + ms; now += 16) {
+    state = stepFlight(
+      path,
+      state,
+      scanAhead(path, state.distance, []),
+      16,
+      now + 16,
+      forcing(now),
+    );
+  }
+  return state;
+}
+
+/** A dog-leg: east, then north; its far end is north-east of the start. */
+const dogLeg = flightPath(
+  [
+    [0, 0],
+    [600, 0],
+    [600, 600],
+  ],
+  0,
+);
+
+describe("forcing", () => {
+  it("builds up over a few seconds to faster and twice as high", () => {
+    const cruising = fly(north, [], 4_000);
+    const start = startFlight(north);
+    // Half-way up the ramp it is not yet at full.
+    const ramping = forced(north, FLYOVER_FORCE_RAMP_MS / 2, start, () => true);
+    expect(ramping.boost).toBeGreaterThan(0.4);
+    expect(ramping.boost).toBeLessThan(0.6);
+    const full = forced(north, 4_000, start, () => true);
+    expect(full.boost).toBe(1);
+    // Straight north the forced line is the route: it got further, faster.
+    expect(flightPoint(north, full)[1]).toBeGreaterThan(
+      cruising.distance * 1.6,
+    );
+    const high = forced(north, 8_000, start, () => true);
+    expect(high.height).toBeGreaterThan(FLYOVER_LOW_HEIGHT_METERS * 1.8);
+  });
+
+  it("flies straight at the destination, then joins the route where nearest", () => {
+    const start = startFlight(dogLeg);
+    const cut = forced(dogLeg, 6_000, start, () => true);
+    expect(cut.free).toBeDefined();
+    const [x, y] = flightPoint(dogLeg, cut);
+    // On the diagonal, not on either leg of the route.
+    expect(Math.abs(x - y)).toBeLessThan(5);
+    expect(x).toBeGreaterThan(50);
+    // Let go: it is back on the route, at its nearest point, with no jump.
+    const released = stepFlight(
+      dogLeg,
+      cut,
+      scanAhead(dogLeg, 0, []),
+      0,
+      6_100,
+    );
+    expect(released.free).toBeUndefined();
+    expect(released.distance).toBeCloseTo(nearestAlong(dogLeg, [x, y]), 3);
+    const [rx, ry] = flightPoint(dogLeg, released);
+    expect(Math.hypot(rx - x, ry - y)).toBeLessThan(0.01);
+    // And the route pulls it in again, slowing as the force wears off.
+    const settled = forced(dogLeg, 6_000, released, () => false, 6_100);
+    expect(Math.abs(settled.lateral)).toBeLessThan(1);
+    expect(settled.boost).toBe(0);
+  });
+
+  it("arrives at the destination when forced all the way there", () => {
+    const end = forced(dogLeg, 30_000, startFlight(dogLeg), () => true);
+    expect(end.arrived).toBe(true);
+    expect(end.free).toBeUndefined();
+    const [x, y] = flightPoint(dogLeg, end);
+    expect(Math.hypot(x - 600, y - 600)).toBeLessThan(0.01);
   });
 });

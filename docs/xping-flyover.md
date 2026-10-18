@@ -34,18 +34,18 @@ destination, named by the BusinessPoint's localized display name ("150 m to
 0xda-market Golden Gate"), rounded up to whole 50 m steps so it changes once
 per step rather than every frame.
 
-While the flight is open the Dock and status rail stand down. The bottom of the screen is
-the activity row (distance and **↗ xPing**), with the steering right above
-it; the location and camera controls are hidden until the flight is
-collapsed or ends.
+While expanded the Dock and status rail stand down. The bottom of the screen
+is the activity row (distance and **↗ xPing**), with the steering right above
+it; the location and camera controls return when collapsed or finished.
 
-An open flight is one of two states of an active flight. **Collapse** tucks
-it away: xPing flies on and the route stays drawn, but the controls go, the
-camera eases back to where the flight found it and the world's own camera
-(with the Dock and the location and camera controls) returns. The activity
-row keeps the flight, and **↗ xPing** or a tap on the drone opens it again,
-chasing xPing. **Cancel** ends the flight at once. Both sit in a row under
-the header, so the host label stays clear.
+**Collapse** releases the camera, Dock and controls while xPing keeps
+flying (including the homeward leg). **↗ xPing** on the activity row, or
+tapping the drone, expands it again from its current position. **Cancel**
+asks "Cancel the flight?" with Yes/No; No (or Escape) dismisses that dialog
+without stopping the flight. The action row sits below the header and
+toasts below the action row. A collapsed flight never restores a stale
+camera upon finishing, and expanding captures the latest world camera as
+its new restoration target.
 
 Only the flying xPing takes taps, and only while it flies: the renderer
 hit-tests a drone just when something has subscribed to that drone's id.
@@ -90,8 +90,9 @@ refreshed every 250 ms):
 At the wheel, a sideways swipe, ←/→, `A`/`D` or the ◀ ▶ buttons step it
 one lane aside, at most two either way. The step holds for 1.4 s, then the
 route pulls it back. Steering into a building it cannot clear still goes
-around it. Escape collapses the open flight; the cancel button ends it. A
-collapsed flight takes no steering.
+around it. Escape collapses the expanded flight (or dismisses the cancellation
+confirmation), and steering is disabled while collapsed. Confirmed Cancel
+ends the flight on either leg.
 
 ## Camera and ending
 
@@ -104,3 +105,41 @@ eases back to where it was. With reduced motion the route and both ends
 are one still view, xPing at the station, until the person leaves.
 
 Presentation only: no body moves and nothing is recorded.
+
+## Forcing and the way back
+
+The steering row holds **push to force** between ◀ and ▶, filled with what
+is left of the engine. While it is held, and the engine allows it, xPing
+builds up over three seconds (`FLYOVER_FORCE_RAMP_MS`) to 2.5× its speed and
+twice its height, and flies straight at the destination: the drawn route
+becomes that straight line. Let go, it slows back down over the same three
+seconds and joins the road route where it is nearest, the offset pulled back
+in like a lane step. The drone smokes and sparks more as the engine empties.
+
+Forcing is counted as it happens and told to the identity service a second at
+a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On
+empty, two more seconds of forcing break the engine: the report that crosses
+it is sent at once, the service records the breakdown at its own clock, and
+the flight is called off ("xPing broke down · flight called off"). A broken
+engine keeps xPing in its dock: the offer says so until it mends or is
+repaired.
+
+After hovering at the station xPing always flies back to where it set off,
+along the same roads and never forced; only then does the world get its
+camera back if the flight is still expanded. If collapsed, the world
+retains the camera already in use. The activity row tells the way back as the distance to the start.
+
+## Engine, smoke and repair
+
+xPing's engine is Core's rules (`docs/xping-engine.md` in core), stored by the
+identity service at its own clock (`/api/v1/identity/xping/engine`). The
+Avaia's Dock window has an **xPing** section: the engine's energy and smoke,
+when it is full again or, broken, when it mends itself, and a repair priced by
+Core (50 Seed ₴€£ for an empty or broken engine, 25 for half).
+
+A repair runs inside the owner's inventory queue (`features/xping`): read the
+engine and the service's clock, let Core's `xping_repair` price it against the
+inventory, have the service record it on exactly that engine state, and only
+then store the inventory. A refusal (`stale`, `underpaid`, not enough Seeds)
+stores nothing. Every Bond is given 10,000 starter Seed ₴€£ once, by Core's
+`grant_starter_seeds`.

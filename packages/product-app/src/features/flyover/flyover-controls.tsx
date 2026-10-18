@@ -1,7 +1,15 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useRef, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { useLocalization } from "../../shell/localization";
 import "./flyover-controls.css";
@@ -11,28 +19,75 @@ export const FLYOVER_SWIPE_PIXELS = 36;
 
 export interface FlyoverControlsProps {
   readonly onSteer: (direction: -1 | 1) => void;
-  /** Tucks the flight away; it flies on. */
   readonly onCollapse: () => void;
-  /** Cancels the flight. */
   readonly onLeave: () => void;
   /** The flight's activity row, the lowest element under the steering. */
   readonly activities?: ReactNode;
+  /** Push to force: absent, the flight cannot be forced. */
+  readonly force?: {
+    /** What is left of the engine, from 0 to 1, as it is spent. */
+    readonly engine: {
+      energy(): number;
+      subscribe(listener: () => void): () => void;
+    };
+    /** Whether forcing is possible now: not on the way back. */
+    readonly available: boolean;
+    readonly onHold: (holding: boolean) => void;
+  };
 }
 
 /**
  * At the wheel of the flight: swipe anywhere, or press the buttons, to step
  * xPing left or right, the way a runner game is steered. The map beneath
- * takes no gestures while it flies; the camera is the flight's. Collapse
- * tucks the flight away, cancel ends it; both sit under the header.
+ * takes no gestures while it flies; the camera is the flight's.
  */
 export function FlyoverControls({
   onSteer,
   onCollapse,
   onLeave,
   activities,
+  force,
 }: FlyoverControlsProps) {
   const { t } = useLocalization();
   const swipe = useRef<{ x: number; y: number } | undefined>(undefined);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const noButton = useRef<HTMLButtonElement>(null);
+  const yesButton = useRef<HTMLButtonElement>(null);
+  const dismiss = useCallback(() => {
+    setConfirmCancel(false);
+    cancelButton.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (!confirmCancel) return;
+    noButton.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        dismiss();
+      } else if (
+        event.code === "ArrowLeft" ||
+        event.code === "ArrowRight" ||
+        event.code === "KeyA" ||
+        event.code === "KeyD"
+      ) {
+        event.stopImmediatePropagation();
+      } else if (event.code === "Tab") {
+        const first = noButton.current;
+        const last = yesButton.current;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [confirmCancel, dismiss]);
   return (
     <div className="flyover" role="group" aria-label={t("flyover.controls")}>
       <div
@@ -61,10 +116,47 @@ export function FlyoverControls({
         <button type="button" className="flyover__action" onClick={onCollapse}>
           {t("flyover.collapse")}
         </button>
-        <button type="button" className="flyover__action" onClick={onLeave}>
+        <button
+          type="button"
+          className="flyover__action"
+          ref={cancelButton}
+          onClick={() => setConfirmCancel(true)}
+        >
           {t("flyover.leave")}
         </button>
       </div>
+      {confirmCancel ? (
+        <div className="flyover__confirm-backdrop">
+          <div
+            className="flyover__confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="flyover-confirm-title"
+          >
+            <p id="flyover-confirm-title" className="flyover__confirm-title">
+              {t("flyover.cancelConfirm")}
+            </p>
+            <div className="flyover__confirm-actions">
+              <button
+                type="button"
+                className="flyover__action"
+                ref={noButton}
+                onClick={dismiss}
+              >
+                {t("flyover.no")}
+              </button>
+              <button
+                type="button"
+                className="flyover__action"
+                ref={yesButton}
+                onClick={onLeave}
+              >
+                {t("flyover.yes")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="flyover__bottom">
         <div className="flyover__steer">
           <button
@@ -75,6 +167,7 @@ export function FlyoverControls({
           >
             ◀
           </button>
+          {force === undefined ? null : <ForceButton {...force} />}
           <button
             type="button"
             className="flyover__button"
@@ -89,5 +182,52 @@ export function FlyoverControls({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Push to force, filled with what is left of the engine. It reads the
+ * engine itself, a whole percent at a time, so a held button redraws only
+ * itself, not the world around it.
+ */
+function ForceButton({
+  engine,
+  available,
+  onHold,
+}: NonNullable<FlyoverControlsProps["force"]>) {
+  const { t } = useLocalization();
+  const percent = useSyncExternalStore(
+    engine.subscribe,
+    () => Math.round(engine.energy() * 100),
+    () => Math.round(engine.energy() * 100),
+  );
+  return (
+    <button
+      type="button"
+      className="flyover__button flyover__force"
+      aria-label={t("flyover.force")}
+      disabled={!available}
+      style={{ "--flyover-energy": `${percent}%` } as CSSProperties}
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        onHold(true);
+      }}
+      onPointerUp={() => onHold(false)}
+      onPointerCancel={() => onHold(false)}
+      onLostPointerCapture={() => onHold(false)}
+      onKeyDown={(event) => {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          if (!event.repeat) onHold(true);
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.key === " " || event.key === "Enter") onHold(false);
+      }}
+      onBlur={() => onHold(false)}
+    >
+      <span aria-hidden="true">⚡</span>
+      <span className="flyover__force-level">{percent}%</span>
+    </button>
   );
 }

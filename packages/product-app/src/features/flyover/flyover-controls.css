@@ -2,8 +2,7 @@
 /* SPDX-License-Identifier: MPL-2.0 */
 
 /* The flight owns the world while it lasts: the whole map is a swipe
-   surface, with the steering under the thumbs and collapse and cancel
-   under the header. */
+   surface, with the steering under the thumbs and a way out on top. */
 .flyover {
   position: absolute;
   inset: 0;
@@ -31,7 +30,7 @@
   cursor: pointer;
 }
 
-/* Under the header, never over it: the host label keeps its place. */
+/* Top actions sit below the host header and above toast notifications. */
 .flyover__actions {
   position: absolute;
   top: calc(var(--shell-top) + var(--shell-header-block) + var(--shell-gap));
@@ -43,6 +42,50 @@
 .flyover__action {
   padding: 0 14px;
   font-size: 13px;
+}
+
+.authenticated-map-home--flight {
+  --flight-toast-inset: calc(44px + var(--shell-gap));
+}
+
+.flyover__confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: var(--shell-inset);
+  background: rgba(0, 0, 0, 0.4);
+  touch-action: none;
+}
+
+.flyover__confirm {
+  width: min(22rem, 100%);
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--map-line);
+  border-radius: 16px;
+  color: var(--map-ink);
+  background: var(--map-glass-strong);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 36px var(--map-shadow);
+}
+
+.flyover__confirm-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.flyover__confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.flyover__confirm-actions .flyover__action {
+  min-width: 4rem;
 }
 
 /* The Dock stands down in flight: the bottom of the screen is the activity
@@ -77,4 +120,43 @@
 .flyover__button:focus-visible {
   outline: 2px solid var(--map-accent-spatial);
   outline-offset: 2px;
+}
+
+/* Push to force: filled with what is left of the engine, emptying as it is
+   held. */
+.flyover__force {
+  min-width: 72px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+  background:
+    linear-gradient(
+      to top,
+      var(--map-accent-spatial, #00bfd4) var(--flyover-energy, 100%),
+      transparent var(--flyover-energy, 100%)
+    ),
+    var(--map-glass-strong);
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.flyover__force-level {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flyover__force:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flyover__force:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flyover__force:active:not(:disabled) {
+    transform: none;
+  }
 }
