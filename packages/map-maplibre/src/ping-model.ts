@@ -160,6 +160,9 @@ export function createPingModel() {
       rarity?: FlightLootRarity,
     ) {
       lootAura.visible = rarity !== undefined;
+      // Three.js bounds include invisible meshes. Keep the dormant aura out
+      // of the drone's unpowered geometry bounds until it is actually earned.
+      lootAura.scale.setScalar(rarity === undefined ? 0 : 1);
       if (rarity !== undefined) {
         auraMaterial.color.setHex(FLIGHT_LOOT_COLORS[rarity]);
         auraMaterial.opacity = moving
