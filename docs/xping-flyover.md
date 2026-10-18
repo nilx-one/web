@@ -130,8 +130,13 @@ Presentation only: no body moves and nothing is recorded.
 
 ## Forcing and the way back
 
-The steering row holds **push to force** between ◀ and ▶, filled with what
-is left of the engine. While it is held, and the engine allows it, xPing
+The steering row holds **push to force** between ◀ and ▶, with a **solid**
+button whose background changes continuously from yellow at full energy
+through orange to red at empty energy. The numeric percentage stays visible;
+no lightning pictogram or partially filled gauge is drawn. "Collapse" releases
+the chase camera while flight continues; "Cancel" is a separate, visually
+distinct action requiring confirmation. While force is held, and the engine
+allows it, xPing
 builds up over three seconds (`FLYOVER_FORCE_RAMP_MS`) to 3× its speed,
 xPing's top of 90 m/s, and twice its height, and flies straight at the
 destination: the drawn route becomes that straight line. Let go, it slows back down over the same three
