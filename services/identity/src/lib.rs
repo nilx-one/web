@@ -63,6 +63,6 @@ pub use repository::{
     BusinessRegistrationOutcome, BusinessStation, BusinessStationOutcome, IdentityProvider,
     IdentityRecord, IdentityRepository, NativeCredentialRecord, NativeRegistrationOutcome,
     ProviderIdentity, PubDressRenameOutcome, PublicIdentityRecord, RegistrationOutcome,
-    RepositoryError,
+    RepositoryError, TelegramMessageSlot,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};
