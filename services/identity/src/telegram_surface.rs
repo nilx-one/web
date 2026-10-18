@@ -286,19 +286,35 @@ impl CompactBot {
     async fn revoke_admin_slot(&self) {
         let lock = self.surfaces.lock_for(self.chat).await;
         let _guard = lock.lock().await;
-        let Ok(Some(message_id)) = self.surfaces.repository
-            .telegram_message_id(self.chat.0, TelegramMessageSlot::Admin).await else {
+        let Ok(Some(message_id)) = self
+            .surfaces
+            .repository
+            .telegram_message_id(self.chat.0, TelegramMessageSlot::Admin)
+            .await
+        else {
             return;
         };
-        match self.bot.edit_message_text(
-            self.chat, MessageId(message_id), "🔒 Доступ admin завершено."
-        ).reply_markup(InlineKeyboardMarkup::new(Vec::<Vec<InlineKeyboardButton>>::new())).await {
+        match self
+            .bot
+            .edit_message_text(
+                self.chat,
+                MessageId(message_id),
+                "🔒 Доступ admin завершено.",
+            )
+            .reply_markup(InlineKeyboardMarkup::new(
+                Vec::<Vec<InlineKeyboardButton>>::new(),
+            ))
+            .await
+        {
             Ok(_) => {}
-            Err(error) if error.to_string().to_ascii_lowercase().contains("message is not modified") => {}
+            Err(error)
+                if error
+                    .to_string()
+                    .to_ascii_lowercase()
+                    .contains("message is not modified") => {}
             Err(error) => error!(%error, "could not redact old admin Telegram message"),
         }
     }
-
 }
 
 pub(crate) struct CompactMessage {
