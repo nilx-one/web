@@ -44,7 +44,8 @@ export function rarerLoot(
   previous: FlightLootRarity | undefined,
   collected: FlightLootRarity,
 ): FlightLootRarity {
-  return previous === undefined || RARITY_RANK[collected] > RARITY_RANK[previous]
+  return previous === undefined ||
+    RARITY_RANK[collected] > RARITY_RANK[previous]
     ? collected
     : previous;
 }
