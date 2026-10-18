@@ -88,17 +88,19 @@ export function distanceToFogCellEdgeMeters(
   const metresPerDegreeLat = 111_195;
   const metresPerDegreeLng =
     metresPerDegreeLat * Math.cos((point.latitude * Math.PI) / 180);
-  const relative = (
-    [longitude, latitude]: readonly [number, number],
-  ): readonly [number, number] => [
-    (((longitude - point.longitude + 540) % 360) - 180) *
-      metresPerDegreeLng,
-    (latitude - point.latitude) * metresPerDegreeLat,
-  ];
+  const relative = (coordinate: readonly [number, number]) => {
+    const [longitude, latitude] = coordinate;
+    const wrappedDelta = ((longitude - point.longitude + 540) % 360) - 180;
+    return [
+      wrappedDelta * metresPerDegreeLng,
+      (latitude - point.latitude) * metresPerDegreeLat,
+    ] as const;
+  };
   let minSquared = Number.POSITIVE_INFINITY;
   for (let index = 0; index < cell.boundary.length; index += 1) {
     const [ax, ay] = relative(cell.boundary[index]!);
-    const [bx, by] = relative(cell.boundary[(index + 1) % cell.boundary.length]!);
+    const nextIndex = (index + 1) % cell.boundary.length;
+    const [bx, by] = relative(cell.boundary[nextIndex]!);
     const dx = bx - ax;
     const dy = by - ay;
     const lengthSquared = dx * dx + dy * dy;
