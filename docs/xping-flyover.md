@@ -116,6 +116,12 @@ destination: the drawn route becomes that straight line. Let go, it slows back d
 seconds and joins the road route where it is nearest, the offset pulled back
 in like a lane step. The drone smokes and sparks more as the engine empties.
 
+Above its 30 m/s cruise the air gathers ahead of xPing into clots, rings
+shed from its nose back past its body. They grow with its speed (the
+renderer's `speedMps`): one thin clot just past cruise, up to four, wider,
+denser and trailing further, at its 90 m/s top. They fade as it slows back
+down, and reduced motion draws none.
+
 Forcing is counted as it happens and told to the identity service a second at
 a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On
 empty, two more seconds of forcing break the engine: the report that crosses
