@@ -192,11 +192,6 @@ async fn resolve_pub_dress(
     };
 
     match state.repository.is_pub_dress_available(&pub_dress).await {
-        Ok(true) if pub_dress.discriminator() == '0' => no_store_error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "reserved_pub_dress_prefix",
-            "0x0 is reserved. Choose a discriminator from 1 to f for registration.",
-        ),
         Ok(available) => no_store_json(
             StatusCode::OK,
             PubDressResolutionResponse {
@@ -1021,7 +1016,7 @@ async fn check_pub_dress_availability(
             [(CACHE_CONTROL, "no-store")],
             Json(AvailabilityResponse {
                 pub_dress: pub_dress.to_string(),
-                available: available && pub_dress.discriminator() != '0',
+                available,
             }),
         )
             .into_response(),

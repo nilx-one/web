@@ -255,6 +255,9 @@ impl IdentityRepository {
             .execute(&mut *reserved_transaction)
             .await?;
         reserved_transaction.commit().await?;
+        sqlx::raw_sql(include_str!("../migrations/0030_open_zero_prefix.sql"))
+            .execute(&self.pool)
+            .await?;
         sqlx::raw_sql(include_str!("../migrations/0029_admin_role_requests.sql"))
             .execute(&self.pool)
             .await?;
@@ -1501,9 +1504,6 @@ async fn insert_human_with_public_label_in(
     pub_dress: &PubDress,
     now: u64,
 ) -> Result<HumanIdentityInsertOutcome, RepositoryError> {
-    if pub_dress.discriminator() == '0' {
-        return Ok(HumanIdentityInsertOutcome::PubDressUnavailable);
-    }
     let stem = match PubDressLabel::stem(pub_dress) {
         Ok(stem) => stem,
         Err(_) => {
