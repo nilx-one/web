@@ -109,7 +109,7 @@ describe("identity foundation view state", () => {
 describe("pub_dress status", () => {
   const selection = { discriminator: "0", slug: "sky" };
 
-  it("explains reserved registration while retaining legacy sign-in", () => {
+  it("handles a legacy reserved-prefix rejection without blocking sign-in", () => {
     expect(
       createPubDressStatusViewState(selection, false, {
         kind: "rejected",
@@ -117,7 +117,7 @@ describe("pub_dress status", () => {
       }),
     ).toEqual({
       kind: "invalid",
-      detail: "0x0 is reserved — choose 1–f to register",
+      detail: "Incorrect — this character isn’t supported",
     });
     expect(
       createPubDressStatusViewState(selection, false, {
