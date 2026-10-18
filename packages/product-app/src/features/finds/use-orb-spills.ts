@@ -49,7 +49,8 @@ export interface OrbSpillsInput {
   /** The identity service; spills need it to be one that has them. */
   readonly port: unknown;
   /** Core, which owns every orb rule. Without it no orb is drawn. */
-  readonly core: Pick<CoreRuntimePort, "orbWorld" | "orbSpillVersion"> | undefined;
+  readonly core:
+    Pick<CoreRuntimePort, "orbWorld" | "orbSpillVersion"> | undefined;
   readonly renderer: MapRenderer;
   /** Where the Bond stands, observed or declared: spills are read around it. */
   readonly near: MapPointSelection | undefined;
@@ -100,7 +101,8 @@ export function useOrbSpills({
   }>({ runtime: undefined, version: 1 });
   useEffect(() => {
     let live = true;
-    void core?.orbSpillVersion?.()
+    void core
+      ?.orbSpillVersion?.()
       .then((version) => {
         if (live && Number.isInteger(version) && version >= 2) {
           setCapability({ runtime: core, version });
@@ -111,7 +113,8 @@ export function useOrbSpills({
       live = false;
     };
   }, [core]);
-  const waypointsEnabled = capability.runtime === core && capability.version >= 2;
+  const waypointsEnabled =
+    capability.runtime === core && capability.version >= 2;
   const [spills, setSpills] = useState<ReadonlyMap<string, KnownSpill>>(
     () => new Map(),
   );
