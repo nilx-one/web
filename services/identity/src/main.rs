@@ -12,7 +12,7 @@ use std::{
 };
 
 use identity_bot::{
-    AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository,
+    AdminRoleDecision, AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode, BondLocationRepository,
     BrowserOAuthConfig, DecimalU64, DiscordOAuthClient, GeoCoordinate, GithubEvidenceConfig,
     GithubEvidenceRepository, IdentityProvider, IdentityRecord, IdentityRepository,
     NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent, ProviderLinkRepository,
@@ -25,7 +25,7 @@ use teloxide::{
     prelude::*,
     types::{
         BotCommand, BotCommandScope, ButtonRequest, InlineKeyboardButton, InlineKeyboardMarkup,
-        KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
+        CallbackQuery, KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
     },
 };
 use tokio::sync::Mutex;
@@ -459,9 +459,18 @@ async fn main() {
         synced_command_menus: Arc::new(Mutex::new(HashMap::new())),
     });
 
+    // One durable, shared delivery queue for all Telegram-linked admins.
+    // No new secret or standalone bot; the existing TELOXIDE_TOKEN is reused.
+    tokio::spawn(deliver_admin_role_notifications(
+        bot.clone(),
+        telegram_state.repository.clone(),
+    ));
     info!(%http_bind, "starting Stage 1 identity service");
+    let handler = dptree::entry()
+        .branch(Update::filter_message().endpoint(handle_message))
+        .branch(Update::filter_callback_query().endpoint(handle_admin_role_callback));
     let mut dispatcher =
-        Dispatcher::builder(bot, Update::filter_message().endpoint(handle_message))
+        Dispatcher::builder(bot, handler)
             .dependencies(dptree::deps![telegram_state])
             .enable_ctrlc_handler()
             .build();
@@ -500,6 +509,150 @@ fn oauth_credentials_from_environment(
         }
         _ => panic!("{client_id_key} and {client_secret_key} must be configured together"),
     }
+}
+
+
+fn now_unix_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
+}
+
+fn admin_role_decision_callback_data(approve: bool, request_id: i64) -> String {
+    format!("ar:{}:{request_id}", if approve { "y" } else { "n" })
+}
+
+/// Short callback payload is an identifier, never a bearer token or role proof.
+fn parse_admin_role_decision_callback(raw: &str) -> Option<(bool, i64)> {
+    let mut parts = raw.split(':');
+    if parts.next()? != "ar" {
+        return None;
+    }
+    let approve = match parts.next()? {
+        "y" => true,
+        "n" => false,
+        _ => return None,
+    };
+    let id = parts.next()?.parse::<i64>().ok()?;
+    (id > 0 && parts.next().is_none()).then_some((approve, id))
+}
+
+async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityRepository) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(20));
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        ticker.tick().await;
+        let now = now_unix_seconds();
+        let deliveries = match repository.due_admin_role_telegram_deliveries(now).await {
+            Ok(deliveries) => deliveries,
+            Err(error) => {
+                error!(%error, "admin role Telegram outbox could not be read");
+                continue;
+            }
+        };
+        for item in deliveries {
+            match repository.claim_admin_role_telegram_delivery(&item, now).await {
+                Ok(true) => {}
+                Ok(false) => continue,
+                Err(error) => {
+                    error!(%error, "admin role Telegram delivery claim failed");
+                    continue;
+                }
+            }
+            let markup = InlineKeyboardMarkup::new(vec![vec![
+                InlineKeyboardButton::callback(
+                    "✅ Надати admin",
+                    admin_role_decision_callback_data(true, item.request_id),
+                ),
+                InlineKeyboardButton::callback(
+                    "❌ Відхилити",
+                    admin_role_decision_callback_data(false, item.request_id),
+                ),
+            ]]);
+            let notice = format!(
+                "🔐 0x1 · Запит на роль admin\nBond: {}\nЗареєстрований 0x0 Bond очікує рішення. Надати адміністраторські права?\nДоки запит відкритий, права залишаються user.",
+                item.pub_dress
+            );
+            match bot.send_message(ChatId(item.telegram_user_id), notice)
+                .reply_markup(markup)
+                .await
+            {
+                Ok(_) => {
+                    if let Err(error) = repository.confirm_admin_role_telegram_delivery(&item, now).await {
+                        error!(%error, "admin role Telegram send receipt could not be persisted");
+                    }
+                }
+                Err(error) => {
+                    // A bot cannot send private messages to unstarted/blocked chats.
+                    // The durable claim expires after 300 seconds; retry without
+                    // silently forgetting the decision request in the Web inbox.
+                    error!(telegram_user_id = item.telegram_user_id, %error, "admin role Telegram notification not delivered");
+                }
+            }
+        }
+    }
+}
+
+async fn handle_admin_role_callback(
+    bot: Bot,
+    callback: CallbackQuery,
+    state: Arc<TelegramBotState>,
+) -> ResponseResult<()> {
+    let Some((approve, request_id)) = callback
+        .data
+        .as_deref()
+        .and_then(parse_admin_role_decision_callback)
+    else {
+        return Ok(());
+    };
+    let answer = match i64::try_from(callback.from.id.0) {
+        Err(_) => "Невідомий Telegram-акаунт.".to_owned(),
+        Ok(telegram_user_id) => {
+            match state.repository.find_by_telegram(telegram_user_id).await {
+                Ok(Some(actor)) => {
+                    match state.repository.pending_admin_role_request_by_id(request_id).await {
+                        Ok(Some(pub_dress)) => {
+                            match pub_dress.parse() {
+                                Ok(candidate) => {
+                                    match state.repository
+                                        .decide_admin_role_request(
+                                            &actor.pub_dress,
+                                            &candidate,
+                                            approve,
+                                            now_unix_seconds(),
+                                        )
+                                        .await
+                                    {
+                                        Ok(AdminRoleDecision::Approved) => format!("✅ {pub_dress}: admin надано."),
+                                        Ok(AdminRoleDecision::Denied) => format!("❌ {pub_dress}: залишено user."),
+                                        Ok(AdminRoleDecision::AlreadyDecided) => "Цей запит уже розглянуто.".to_owned(),
+                                        Ok(AdminRoleDecision::Forbidden) => "Недостатньо прав адміністратора.".to_owned(),
+                                        Err(error) => {
+                                            error!(%error, "admin role Telegram decision could not be saved");
+                                            "Сервіс тимчасово недоступний.".to_owned()
+                                        }
+                                    }
+                                }
+                                Err(_) => "Некоректна адреса Bond.".to_owned(),
+                            }
+                        }
+                        Ok(None) => "Цей запит уже розглянуто.".to_owned(),
+                        Err(error) => {
+                            error!(%error, "admin role Telegram callback lookup failed");
+                            "Сервіс тимчасово недоступний.".to_owned()
+                        }
+                    }
+                }
+                Ok(None) => "Потрібно прив’язати Telegram до свого admin Bond.".to_owned(),
+                Err(error) => {
+                    error!(%error, "Telegram admin identity lookup failed");
+                    "Сервіс тимчасово недоступний.".to_owned()
+                }
+            }
+        }
+    };
+    bot.answer_callback_query(callback.id).text(answer).show_alert(true).await?;
+    Ok(())
 }
 
 async fn handle_message(
@@ -1489,6 +1642,15 @@ mod tests {
         assert_eq!(command_of("/set_position@nilx_one_bot"), "/set_position");
         assert_eq!(command_of("/start ref"), "/start");
         assert_eq!(command_of("Встановити"), "Встановити");
+    }
+
+    #[test]
+    fn admin_role_callbacks_are_short_and_not_authority() {
+        assert_eq!(super::parse_admin_role_decision_callback("ar:y:12"), Some((true, 12)));
+        assert_eq!(super::parse_admin_role_decision_callback("ar:n:12"), Some((false, 12)));
+        for invalid in ["ar:y:0", "ar:y:-1", "ar:yes:12", "ar:n:12:extra", "ar:y:abc"] {
+            assert_eq!(super::parse_admin_role_decision_callback(invalid), None);
+        }
     }
 
     fn private_message(media: serde_json::Value) -> teloxide::types::Message {
