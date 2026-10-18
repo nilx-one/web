@@ -35,8 +35,8 @@ export const FLYOVER_CLEARANCE_METERS = 7;
 export const FLYOVER_MAX_CLIMB_METERS = 60;
 /** How long a step aside holds before the route pulls xPing back. */
 export const FLYOVER_STEER_HOLD_MS = 1_400;
-/** Forcing at its full: this many times the speed, and twice the height. */
-export const FLYOVER_FORCE_SPEED_FACTOR = 2.5;
+/** Forcing at its full: 3× the speed, xPing's 90 m/s top, and twice the height. */
+export const FLYOVER_FORCE_SPEED_FACTOR = 3;
 export const FLYOVER_FORCE_HEIGHT_FACTOR = 2;
 /** How long forcing takes to build up, and to wear off once let go. */
 export const FLYOVER_FORCE_RAMP_MS = 3_000;
