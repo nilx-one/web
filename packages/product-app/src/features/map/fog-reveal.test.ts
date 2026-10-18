@@ -18,6 +18,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   artifactsInCell,
+  distanceToFogCellEdgeMeters,
+  FOG_NEARBY_REVEAL_METERS,
   FOG_REVEAL_CONCURRENCY,
   FOG_REVEAL_MAX_MS,
   FOG_REVEAL_MIN_MS,
@@ -65,6 +67,37 @@ describe("revealing a fog cell", () => {
     expect(revealDurationMs(40)).toBe(FOG_REVEAL_MAX_MS);
     expect(revealDurationMs(Number.NaN)).toBe(FOG_REVEAL_MIN_MS);
     expect(FOG_REVEAL_MAX_MS).toBe(5 * 60_000);
+  });
+
+  it("measures the nearest geographic cell edge, not the cell centre", () => {
+    const neighbour: MapFogCell = {
+      id: "east",
+      center: { longitude: 30.53, latitude: 50.45 },
+      boundary: [
+        [30.525, 50.449],
+        [30.535, 50.449],
+        [30.535, 50.451],
+        [30.525, 50.451],
+      ],
+    };
+    expect(
+      distanceToFogCellEdgeMeters(
+        { longitude: 30.5249, latitude: 50.45 },
+        neighbour,
+      ),
+    ).toBeLessThan(FOG_NEARBY_REVEAL_METERS);
+    expect(
+      distanceToFogCellEdgeMeters(
+        { longitude: 30.5247, latitude: 50.45 },
+        neighbour,
+      ),
+    ).toBeGreaterThan(FOG_NEARBY_REVEAL_METERS);
+    expect(
+      distanceToFogCellEdgeMeters(
+        { longitude: Number.NaN, latitude: 50.45 },
+        neighbour,
+      ),
+    ).toBe(Number.POSITIVE_INFINITY);
   });
 
   it("counts only the landmarks that stand in the cell itself", () => {
