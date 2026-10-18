@@ -1,6 +1,9 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+mod telegram_surface;
+use telegram_surface::{CompactBot, TelegramSurfaces};
+
 use std::{
     collections::HashMap,
     env,
@@ -24,8 +27,8 @@ use identity_bot::{
 use teloxide::{
     prelude::*,
     types::{
-        BotCommand, BotCommandScope, ButtonRequest, CallbackQuery, InlineKeyboardButton,
-        InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
+        BotCommand, BotCommandScope, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+        KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
     },
 };
 use tokio::sync::Mutex;
@@ -185,6 +188,7 @@ impl PendingUnlinkConfirmations {
 /// markup. A user who has blocked the bot only costs a log line.
 struct TelegramSpeechRelay {
     bot: Bot,
+    surfaces: Arc<TelegramSurfaces>,
 }
 
 impl SpeechRelay for TelegramSpeechRelay {
@@ -195,8 +199,12 @@ impl SpeechRelay for TelegramSpeechRelay {
     ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
             for telegram_user_id in telegram_user_ids {
-                if let Err(error) = self
-                    .bot
+                let compact = CompactBot::new(
+                    self.bot.clone(),
+                    ChatId(telegram_user_id),
+                    Arc::clone(&self.surfaces),
+                );
+                if let Err(error) = compact
                     .send_message(ChatId(telegram_user_id), text.clone())
                     .await
                 {
@@ -214,6 +222,7 @@ struct TelegramBotState {
     intents: TelegramLocationIntents,
     provider_links: ProviderLinkRepository,
     pending_unlinks: PendingUnlinkConfirmations,
+    surfaces: Arc<TelegramSurfaces>,
     /// Last successfully synchronized menu per chat, rechecked on every message.
     synced_command_menus: Arc<Mutex<HashMap<i64, CommandMenu>>>,
 }
@@ -336,6 +345,7 @@ async fn main() {
     let repository = IdentityRepository::connect(&database_url)
         .await
         .expect("identity database must initialize");
+    let surfaces = Arc::new(TelegramSurfaces::new(repository.clone()));
     repository
         .initialize_avaia_configuration()
         .await
@@ -404,7 +414,10 @@ async fn main() {
             telegram_activity_verifier.clone(),
             discord_activity_oauth.clone(),
             native_auth.clone(),
-            Arc::new(TelegramSpeechRelay { bot: bot.clone() }),
+            Arc::new(TelegramSpeechRelay {
+                bot: bot.clone(),
+                surfaces: Arc::clone(&surfaces),
+            }),
             config,
         )
     });
@@ -456,6 +469,7 @@ async fn main() {
         intents: TelegramLocationIntents::default(),
         provider_links,
         pending_unlinks: PendingUnlinkConfirmations::default(),
+        surfaces: Arc::clone(&surfaces),
         synced_command_menus: Arc::new(Mutex::new(HashMap::new())),
     });
 
@@ -464,6 +478,7 @@ async fn main() {
     tokio::spawn(deliver_admin_role_notifications(
         bot.clone(),
         telegram_state.repository.clone(),
+        Arc::clone(&surfaces),
     ));
     info!(%http_bind, "starting Stage 1 identity service");
     let handler = dptree::entry()
@@ -538,12 +553,20 @@ fn parse_admin_role_decision_callback(raw: &str) -> Option<(bool, String)> {
     .then(|| (approve, token.to_owned()))
 }
 
-async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityRepository) {
+async fn deliver_admin_role_notifications(
+    bot: Bot,
+    repository: IdentityRepository,
+    surfaces: Arc<TelegramSurfaces>,
+) {
     let mut ticker = tokio::time::interval(Duration::from_secs(20));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         ticker.tick().await;
         let now = now_unix_seconds();
+        // A role-grant announcement follows a committed, approved DB
+        // transition, whether the decision originated in Telegram or Web.
+        // Keep this lane independent of failures reading the pending inbox.
+        deliver_admin_role_approval_confirmations(&bot, &repository, &surfaces, now).await;
         let deliveries = match repository.due_admin_role_telegram_deliveries(now).await {
             Ok(deliveries) => deliveries,
             Err(error) => {
@@ -563,26 +586,13 @@ async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityReposito
                     continue;
                 }
             }
-            let markup = InlineKeyboardMarkup::new(vec![vec![
-                InlineKeyboardButton::callback(
-                    "✅ Надати admin",
-                    admin_role_decision_callback_data(true, &item.request_token),
-                ),
-                InlineKeyboardButton::callback(
-                    "❌ Відхилити",
-                    admin_role_decision_callback_data(false, &item.request_token),
-                ),
-            ]]);
-            let notice = format!(
-                "🔐 0x1 · Запит на роль admin\nBond: {}\nЗареєстрований 0x0 Bond очікує рішення. Надати адміністраторські права?\nДоки запит відкритий, права залишаються user.",
-                item.pub_dress
+            let compact = CompactBot::new(
+                bot.clone(),
+                ChatId(item.telegram_user_id),
+                Arc::clone(&surfaces),
             );
-            match bot
-                .send_message(ChatId(item.telegram_user_id), notice)
-                .reply_markup(markup)
-                .await
-            {
-                Ok(_) => {
+            match compact.refresh_admin(None).await {
+                Ok(true) => {
                     if let Err(error) = repository
                         .confirm_admin_role_telegram_delivery(&item, now)
                         .await
@@ -590,12 +600,73 @@ async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityReposito
                         error!(%error, "admin role Telegram send receipt could not be persisted");
                     }
                 }
+                Ok(false) => {}
                 Err(error) => {
                     // A bot cannot send private messages to unstarted/blocked chats.
                     // The durable claim expires after 300 seconds; retry without
                     // silently forgetting the decision request in the Web inbox.
                     error!(telegram_user_id = item.telegram_user_id, %error, "admin role Telegram notification not delivered");
                 }
+            }
+        }
+    }
+}
+
+/// Fan out only confirmations of successfully persisted admin grants.
+/// Each recipient receives at most one normal successful send, with a retry
+/// window for failed/unknown sends and no announcement for denied requests.
+async fn deliver_admin_role_approval_confirmations(
+    bot: &Bot,
+    repository: &IdentityRepository,
+    surfaces: &Arc<TelegramSurfaces>,
+    now: u64,
+) {
+    let items = match repository.due_admin_role_telegram_confirmations(now).await {
+        Ok(items) => items,
+        Err(error) => {
+            error!(%error, "admin-role confirmation outbox could not be read");
+            return;
+        }
+    };
+    for item in items {
+        match repository
+            .claim_admin_role_telegram_confirmation(&item, now)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(error) => {
+                error!(%error, "admin-role confirmation lease failed");
+                continue;
+            }
+        }
+        // Plain text: Bond addresses are never interpolated into Telegram
+        // Markdown or HTML, so even unusual valid slugs cannot alter markup.
+        let notice = format!(
+            "✅ 0x1 · Користувач {} приєднався до ролі {}.",
+            item.pub_dress, item.role
+        );
+        let compact = CompactBot::new(
+            bot.clone(),
+            ChatId(item.telegram_user_id),
+            Arc::clone(surfaces),
+        );
+        match compact.refresh_admin(Some(&notice)).await {
+            Ok(true) => {
+                if let Err(error) = repository
+                    .confirm_admin_role_telegram_confirmation(&item, now)
+                    .await
+                {
+                    error!(%error, "admin-role confirmation receipt could not be saved");
+                }
+            }
+            Ok(false) => {}
+            Err(error) => {
+                error!(
+                    telegram_user_id = item.telegram_user_id,
+                    %error,
+                    "admin-role confirmation Telegram delivery failed; retry scheduled"
+                );
             }
         }
     }
@@ -669,9 +740,15 @@ async fn handle_admin_role_callback(
         },
     };
     bot.answer_callback_query(callback.id)
-        .text(answer)
+        .text(answer.clone())
         .show_alert(true)
         .await?;
+    if let Ok(user_id) = i64::try_from(callback.from.id.0) {
+        let compact = CompactBot::new(bot, ChatId(user_id), Arc::clone(&state.surfaces));
+        if let Err(error) = compact.refresh_admin(Some(&answer)).await {
+            error!(%error, "admin Telegram inbox refresh after decision failed");
+        }
+    }
     Ok(())
 }
 
@@ -702,10 +779,15 @@ async fn handle_message(
         return Ok(());
     };
 
+    let bot = CompactBot::new(bot, message.chat.id, Arc::clone(&state.surfaces));
     ensure_command_menu(&bot, &message, state.as_ref(), telegram_user_id).await;
 
     if let Some(location) = shared_point(&message) {
         handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
+        bot.refresh_admin(None).await?;
+        if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
+            error!(%error, "could not remove consumed Telegram location input");
+        }
         return Ok(());
     }
 
@@ -744,7 +826,10 @@ async fn handle_message(
             send_help(&bot, &message, state.as_ref(), telegram_user_id).await?;
         }
     }
-
+    bot.refresh_admin(None).await?;
+    if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
+        error!(%error, "could not remove consumed Telegram command input");
+    }
     Ok(())
 }
 
@@ -869,7 +954,7 @@ async fn ensure_command_menu(
 }
 
 async fn registered_identity(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     repository: &IdentityRepository,
     telegram_user_id: i64,
@@ -943,7 +1028,7 @@ fn resolve_location_mode(
 }
 
 async fn handle_location(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1025,7 +1110,7 @@ async fn handle_location(
 
 /// One admin-initiated manual destination, not a live GPS observation.
 async fn handle_travel_point(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     identity: &IdentityRecord,
@@ -1094,7 +1179,7 @@ async fn handle_travel_point(
 }
 
 async fn begin_travel(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1122,7 +1207,7 @@ async fn begin_travel(
 }
 
 async fn begin_current_position(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1139,15 +1224,14 @@ async fn begin_current_position(
         .await;
     bot.send_message(
         message.chat.id,
-        "Натисніть кнопку нижче: Telegram передасть вашу поточну геолокацію, Bond.location оновиться і режим стане live.",
+        "Надішліть свою геолокацію через вкладення Telegram протягом 5 хвилин. Bond.location оновиться і режим стане live.",
     )
-    .reply_markup(current_position_request_keyboard())
     .await?;
     Ok(())
 }
 
 async fn begin_manual_position(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1184,7 +1268,7 @@ async fn begin_manual_position(
 /// host that is sending the command is not reversible from inside this same
 /// chat once it loses access to the Bond it was linked to.
 async fn begin_unlink(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1209,7 +1293,7 @@ async fn begin_unlink(
 /// refuses the write when Telegram is this Bond's only way back in — the
 /// same guard the Mini App Settings surface's disconnect button relies on.
 async fn confirm_unlink(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1270,7 +1354,7 @@ async fn confirm_unlink(
 }
 
 async fn send_help(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1299,16 +1383,8 @@ fn control_keyboard(role: BondAccessRole) -> KeyboardMarkup {
     }
 }
 
-fn current_position_request_keyboard() -> KeyboardMarkup {
-    KeyboardMarkup::new([[
-        KeyboardButton::new("Передати поточну позицію").request(ButtonRequest::Location)
-    ]])
-    .resize_keyboard()
-    .one_time_keyboard()
-}
-
 async fn start_registration(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1343,10 +1419,9 @@ async fn start_registration(
     Ok(())
 }
 
-/// `/open` — the topmost command in [`USER_COMMANDS`]. Deliberately
-/// stateless: no repository lookup, no role check, so it stays available to
-/// every chat in every state, including one that never registered.
-async fn open_app(bot: &Bot, message: &Message) -> ResponseResult<()> {
+/// `/open` remains the topmost command for every chat. The compact
+/// presenter reuses its Open and Status messages without requiring a Bond.
+async fn open_app(bot: &CompactBot, message: &Message) -> ResponseResult<()> {
     bot.send_message(message.chat.id, "Open 0x1")
         .reply_markup(registration_keyboard())
         .await?;
@@ -1360,7 +1435,7 @@ fn registration_keyboard() -> InlineKeyboardMarkup {
 }
 
 async fn show_identity(
-    bot: &Bot,
+    bot: &CompactBot,
     message: &Message,
     state: &TelegramBotState,
     telegram_user_id: i64,
@@ -1421,8 +1496,7 @@ mod tests {
     use super::{
         CURRENT_POSITION_BUTTON, CommandMenu, LocationModeRefusal, MINI_APP_URL,
         PendingUnlinkConfirmations, SET_POSITION_BUTTON, bot_commands, command_of,
-        control_keyboard, current_position_request_keyboard, help_text, registration_keyboard,
-        resolve_location_mode, shared_point,
+        control_keyboard, help_text, registration_keyboard, resolve_location_mode, shared_point,
     };
 
     #[test]
@@ -1539,13 +1613,6 @@ mod tests {
                 }]]
             })
         );
-    }
-
-    #[test]
-    fn current_position_button_requests_current_location() {
-        let keyboard = serde_json::to_value(current_position_request_keyboard())
-            .expect("current-position keyboard must serialize");
-        assert_eq!(keyboard["keyboard"][0][0]["request_location"], true);
     }
 
     #[test]
