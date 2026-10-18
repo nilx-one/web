@@ -19,7 +19,7 @@ export const FLYOVER_SWIPE_PIXELS = 36;
 
 export interface FlyoverControlsProps {
   /** Caption from xPing after spotting a high-rarity laser target. */
-  readonly lootNotice?: "rare" | "special" | "exclusive";
+  readonly lootNotice?: "rare" | "special" | "exclusive" | undefined;
   readonly onSteer: (direction: -1 | 1) => void;
   readonly onCollapse: () => void;
   readonly onLeave: () => void;
