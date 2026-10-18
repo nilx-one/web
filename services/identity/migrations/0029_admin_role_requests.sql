@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS admin_role_requests (
     pub_dress TEXT PRIMARY KEY COLLATE BINARY NOT NULL
         REFERENCES identities(pub_dress) ON UPDATE CASCADE ON DELETE CASCADE,
     status TEXT NOT NULL CHECK(status IN ('pending', 'approved', 'denied')),
+    -- Opaque, never-reused-in-practice callback reference; a deleted rowid
+    -- must not be able to authorize a different future registration.
+    request_token TEXT NOT NULL UNIQUE DEFAULT (lower(hex(randomblob(16)))),
     requested_at INTEGER NOT NULL,
     decided_by TEXT REFERENCES identities(pub_dress)
         ON UPDATE CASCADE ON DELETE SET NULL,

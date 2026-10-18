@@ -516,12 +516,12 @@ fn now_unix_seconds() -> u64 {
         .map_or(0, |duration| duration.as_secs())
 }
 
-fn admin_role_decision_callback_data(approve: bool, request_id: i64) -> String {
-    format!("ar:{}:{request_id}", if approve { "y" } else { "n" })
+fn admin_role_decision_callback_data(approve: bool, token: &str) -> String {
+    format!("ar:{}:{token}", if approve { "y" } else { "n" })
 }
 
 /// Short callback payload is an identifier, never a bearer token or role proof.
-fn parse_admin_role_decision_callback(raw: &str) -> Option<(bool, i64)> {
+fn parse_admin_role_decision_callback(raw: &str) -> Option<(bool, String)> {
     let mut parts = raw.split(':');
     if parts.next()? != "ar" {
         return None;
@@ -531,8 +531,11 @@ fn parse_admin_role_decision_callback(raw: &str) -> Option<(bool, i64)> {
         "n" => false,
         _ => return None,
     };
-    let id = parts.next()?.parse::<i64>().ok()?;
-    (id > 0 && parts.next().is_none()).then_some((approve, id))
+    let token = parts.next()?;
+    (token.len() == 32
+        && token.bytes().all(|byte| byte.is_ascii_hexdigit())
+        && parts.next().is_none())
+    .then(|| (approve, token.to_owned()))
 }
 
 async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityRepository) {
@@ -563,11 +566,11 @@ async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityReposito
             let markup = InlineKeyboardMarkup::new(vec![vec![
                 InlineKeyboardButton::callback(
                     "✅ Надати admin",
-                    admin_role_decision_callback_data(true, item.request_id),
+                    admin_role_decision_callback_data(true, &item.request_token),
                 ),
                 InlineKeyboardButton::callback(
                     "❌ Відхилити",
-                    admin_role_decision_callback_data(false, item.request_id),
+                    admin_role_decision_callback_data(false, &item.request_token),
                 ),
             ]]);
             let notice = format!(
@@ -603,7 +606,7 @@ async fn handle_admin_role_callback(
     callback: CallbackQuery,
     state: Arc<TelegramBotState>,
 ) -> ResponseResult<()> {
-    let Some((approve, request_id)) = callback
+    let Some((approve, request_token)) = callback
         .data
         .as_deref()
         .and_then(parse_admin_role_decision_callback)
@@ -616,7 +619,7 @@ async fn handle_admin_role_callback(
             Ok(Some(actor)) => {
                 match state
                     .repository
-                    .pending_admin_role_request_by_id(request_id)
+                    .pending_admin_role_request_by_token(&request_token)
                     .await
                 {
                     Ok(Some(pub_dress)) => match pub_dress.parse() {
@@ -1662,22 +1665,18 @@ mod tests {
     }
 
     #[test]
-    fn admin_role_callbacks_are_short_and_not_authority() {
+    fn admin_role_callbacks_use_unpredictable_request_tokens() {
+        let token = "0123456789abcdef0123456789abcdef";
         assert_eq!(
-            super::parse_admin_role_decision_callback("ar:y:12"),
-            Some((true, 12))
+            super::parse_admin_role_decision_callback(&super::admin_role_decision_callback_data(true, token)),
+            Some((true, token.to_owned()))
         );
         assert_eq!(
-            super::parse_admin_role_decision_callback("ar:n:12"),
-            Some((false, 12))
+            super::parse_admin_role_decision_callback(&super::admin_role_decision_callback_data(false, token)),
+            Some((false, token.to_owned()))
         );
-        for invalid in [
-            "ar:y:0",
-            "ar:y:-1",
-            "ar:yes:12",
-            "ar:n:12:extra",
-            "ar:y:abc",
-        ] {
+        for invalid in ["ar:y:12", "ar:y:0", "ar:yes:0123456789abcdef0123456789abcdef",
+                        "ar:y:0000000000000000000000000000000g", "ar:y:0123456789abcdef0123456789abcdef:extra"] {
             assert_eq!(super::parse_admin_role_decision_callback(invalid), None);
         }
     }

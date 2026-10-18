@@ -3,7 +3,7 @@
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AdminRoleTelegramDelivery {
-    pub request_id: i64,
+    pub request_token: String,
     pub pub_dress: String,
     pub telegram_user_id: i64,
 }
@@ -17,7 +17,7 @@ impl IdentityRepository {
     ) -> Result<Vec<AdminRoleTelegramDelivery>, RepositoryError> {
         let cutoff = (now as i64).saturating_sub(300);
         let rows = sqlx::query(
-            "SELECT q.rowid AS request_id, q.pub_dress, \
+            "SELECT q.request_token, q.pub_dress, \
              CAST(p.provider_subject AS INTEGER) AS telegram_user_id \
              FROM admin_role_requests q \
              JOIN bond_roles roles ON roles.role = 'admin' \
@@ -35,7 +35,7 @@ impl IdentityRepository {
         Ok(rows.into_iter().filter_map(|row| {
             let telegram_user_id: i64 = row.get("telegram_user_id");
             (telegram_user_id > 0).then(|| AdminRoleTelegramDelivery {
-                request_id: row.get("request_id"),
+                request_token: row.get("request_token"),
                 pub_dress: row.get("pub_dress"),
                 telegram_user_id,
             })
@@ -53,14 +53,14 @@ impl IdentityRepository {
             "INSERT INTO admin_role_telegram_deliveries \
              (pub_dress, telegram_user_id, last_attempt_at, attempts) \
              SELECT q.pub_dress, ?, ?, 1 FROM admin_role_requests q \
-             WHERE q.rowid = ? AND q.pub_dress = ? AND q.status = 'pending' \
+             WHERE q.request_token = ? AND q.pub_dress = ? AND q.status = 'pending' \
              ON CONFLICT(pub_dress, telegram_user_id) DO UPDATE SET \
                last_attempt_at = excluded.last_attempt_at, attempts = attempts + 1 \
              WHERE delivered_at IS NULL AND last_attempt_at <= ?",
         )
         .bind(delivery.telegram_user_id)
         .bind(now as i64)
-        .bind(delivery.request_id)
+        .bind(&delivery.request_token)
         .bind(&delivery.pub_dress)
         .bind((now as i64).saturating_sub(300))
         .execute(&self.pool)
@@ -86,14 +86,14 @@ impl IdentityRepository {
     }
 
     /// Callback payload contains only a numeric request ID, not authority.
-    pub async fn pending_admin_role_request_by_id(
+    pub async fn pending_admin_role_request_by_token(
         &self,
-        request_id: i64,
+        request_token: &str,
     ) -> Result<Option<String>, RepositoryError> {
         Ok(sqlx::query_scalar(
-            "SELECT pub_dress FROM admin_role_requests WHERE rowid = ? AND status = 'pending'",
+            "SELECT pub_dress FROM admin_role_requests WHERE request_token = ? AND status = 'pending'",
         )
-        .bind(request_id)
+        .bind(request_token)
         .fetch_optional(&self.pool)
         .await?)
     }
@@ -117,7 +117,7 @@ mod admin_telegram_delivery_tests {
         let due = repo.due_admin_role_telegram_deliveries(20).await.expect("due");
         assert_eq!(due.len(), 2);
         assert_eq!(due.iter().map(|v| v.telegram_user_id).collect::<Vec<_>>(), vec![7, 8]);
-        assert_eq!(repo.pending_admin_role_request_by_id(due[0].request_id).await.expect("lookup").as_deref(), Some("0x0new"));
+        assert_eq!(repo.pending_admin_role_request_by_token(&due[0].request_token).await.expect("lookup").as_deref(), Some("0x0new"));
         assert!(repo.claim_admin_role_telegram_delivery(&due[0], 20).await.expect("claim"));
         assert!(!repo.claim_admin_role_telegram_delivery(&due[0], 21).await.expect("duplicate"));
         assert_eq!(repo.due_admin_role_telegram_deliveries(21).await.expect("due").len(), 1);
