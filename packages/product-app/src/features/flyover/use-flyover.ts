@@ -504,6 +504,17 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       following,
       setFollowing,
     }),
-    [active, expanded, leave, start, steer, force, collapse, expand, progress, following],
+    [
+      active,
+      expanded,
+      leave,
+      start,
+      steer,
+      force,
+      collapse,
+      expand,
+      progress,
+      following,
+    ],
   );
 }
