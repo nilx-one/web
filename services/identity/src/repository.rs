@@ -267,6 +267,9 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0032_admin_telegram_approval_confirmations.sql"))
             .execute(&self.pool)
             .await?;
+        sqlx::raw_sql(include_str!("../migrations/0033_telegram_message_slots.sql"))
+            .execute(&self.pool)
+            .await?;
         if !self.has_native_sessions_column("active").await? {
             sqlx::raw_sql(include_str!("../migrations/0016_session_activation.sql"))
                 .execute(&self.pool)

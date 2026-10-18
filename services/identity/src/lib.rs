@@ -27,6 +27,7 @@ pub mod repository {
     include!("repository_admin_roles.rs");
     include!("repository_admin_telegram.rs");
     include!("repository_admin_telegram_confirmations.rs");
+    include!("repository_telegram_message_slots.rs");
     include!("repository_avaia_lifecycle.rs");
     include!("repository_pub_info.rs");
     include!("repository_awards.rs");
@@ -62,6 +63,6 @@ pub use repository::{
     BusinessRegistrationOutcome, BusinessStation, BusinessStationOutcome, IdentityProvider,
     IdentityRecord, IdentityRepository, NativeCredentialRecord, NativeRegistrationOutcome,
     ProviderIdentity, PubDressRenameOutcome, PublicIdentityRecord, RegistrationOutcome,
-    RepositoryError,
+    RepositoryError, TelegramMessageSlot,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};
