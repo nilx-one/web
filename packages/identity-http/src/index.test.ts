@@ -1257,3 +1257,49 @@ describe("Telegram self-disconnect transport", () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 });
+
+describe("admin approval inbox contract", () => {
+  it("retrieves pending requests for a session and submits an explicit decision", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(response(200, {
+        requests: [{ pub_dress: "0x0candidate", requested_at: 1234 }],
+      }))
+      .mockResolvedValueOnce(response(200, {
+        status: "approved",
+        pub_dress: "0x0candidate",
+      }));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    await expect(adapter.listAdminRoleRequests()).resolves.toEqual({
+      kind: "available",
+      requests: [{ pubDress: "0x0candidate", requestedAt: 1234 }],
+    });
+    await expect(adapter.decideAdminRoleRequest("0x0candidate", true))
+      .resolves.toEqual({ kind: "decided", status: "approved" });
+    expect(fetch).toHaveBeenNthCalledWith(2,
+      "/api/v1/admin/role-requests/0x0candidate/decision",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        headers: expect.objectContaining({ "x-0x1-csrf": "1" }),
+        body: JSON.stringify({ approve: true }),
+      }),
+    );
+  });
+
+  it("does not show the inbox or grant access to non-admins", async () => {
+    const adapter = createIdentityHttpAdapter({
+      fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+        response(403, { error: { code: "admin_required" } }),
+      ),
+      getAuthorization: () => undefined,
+    });
+    await expect(adapter.listAdminRoleRequests()).resolves.toEqual({
+      kind: "not-admin",
+    });
+    await expect(adapter.decideAdminRoleRequest("0x0candidate", true))
+      .resolves.toEqual({ kind: "not-admin" });
+  });
+});
