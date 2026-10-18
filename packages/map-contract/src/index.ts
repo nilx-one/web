@@ -271,9 +271,21 @@ export interface MapObservedPositionLabel {
    */
   readonly speech?: string;
   /**
-   * A still of the study standing here, shown beside the text once the body
-   * itself is too small to read. It is the same body, at a size that survives
-   * the distance — never a second identity, and never a claim of its own.
+   * What the body is doing right now — walking, standing, looking around —
+   * as presentation copy the application already localized.
+   */
+  readonly activity?: string;
+  /**
+   * The avatar handle this card speaks for. While the world hides that body,
+   * the card draws it: the same study, outfit and clip, live, at a size that
+   * survives the distance. While the world draws it, the card does not. The
+   * card's body is loaded once and only shown and hidden after that.
+   */
+  readonly bodyId?: string;
+  /**
+   * A still of the study standing here, shown beside the text while the world
+   * hides the body and the card cannot draw it live — still loading, or a host
+   * with no usable graphics. It is the same body, never a second identity.
    */
   readonly avatarUrl?: string;
 }

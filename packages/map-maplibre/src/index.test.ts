@@ -35,6 +35,7 @@ import {
   createMapLibreRenderer,
   resolvePmtilesProtocolUrl,
   type MapLabelMarker,
+  type MapLabelBodyPreview,
   type MapLabelMarkerFactory,
 } from "./index";
 
@@ -1068,6 +1069,151 @@ describe("presentation dimension", () => {
     expect(
       fakeMap.layout.get(`${BUILDING_EXTRUSION_LAYER_ID}.visibility`),
     ).toBe("none");
+  });
+});
+
+describe("the card's own body", () => {
+  function cardBody() {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const preview = {
+      show: vi.fn(),
+      setPose: vi.fn(),
+      setHidden: vi.fn(),
+      resize: vi.fn(),
+      dispose: vi.fn(),
+    } satisfies MapLabelBodyPreview;
+    let ready: ((value: boolean) => void) | undefined;
+    const createLabelBodyPreview = vi.fn(
+      (_canvas: HTMLCanvasElement, options: { onReady: typeof ready }) => {
+        ready = options.onReady;
+        return Promise.resolve(preview);
+      },
+    );
+    const renderer = createMapLibreRenderer({
+      createMap: (_options: MapOptions) => fakeMap as unknown as MapLibreMap,
+      createLabelMarker,
+      createLabelBodyPreview,
+    });
+    renderer.mount(document.createElement("div"));
+    fakeMap.emit("load");
+    const card = () => markers[0]?.element;
+    const body = (
+      visible: boolean,
+      clipId: "idle" | "walk" = "walk",
+      clipPhase = 0,
+      backpack = false,
+    ) =>
+      renderer.avatars?.upsert({
+        id: "avaia",
+        modelId: "kai-study",
+        lngLat: [30.5234, 50.4501],
+        bearingDeg: 0,
+        clipId,
+        clipPhase,
+        scale: 1,
+        visible,
+        backpack,
+      });
+    return {
+      renderer,
+      preview,
+      createLabelBodyPreview,
+      card,
+      body,
+      markReady: () => ready?.(true),
+    };
+  }
+
+  it("stands the body live only while the world hides it", async () => {
+    const { renderer, preview, card, body, markReady } = cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(false);
+    await vi.waitFor(() => expect(preview.resize).toHaveBeenCalled());
+    body(false);
+    markReady();
+
+    expect(preview.show).toHaveBeenCalledWith(
+      expect.objectContaining({ assetUrl: expect.stringContaining("kai") }),
+    );
+    expect(preview.setPose).toHaveBeenLastCalledWith("walk", 0);
+    expect(preview.setHidden).toHaveBeenLastCalledWith(false);
+    expect(card()?.dataset.body).toBe("model");
+
+    body(true);
+    expect(preview.setHidden).toHaveBeenLastCalledWith(true);
+    expect(card()?.dataset.body).toBe("none");
+  });
+
+  it("is made once and only shown and hidden after that", async () => {
+    const { renderer, preview, createLabelBodyPreview, body, markReady } =
+      cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(false);
+    await vi.waitFor(() => expect(preview.resize).toHaveBeenCalled());
+    markReady();
+
+    for (const visible of [true, false, true, false]) body(visible);
+    renderer.setObservedPositionLabel(null);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(false);
+
+    expect(createLabelBodyPreview).toHaveBeenCalledOnce();
+    expect(preview.dispose).not.toHaveBeenCalled();
+  });
+
+  // Zooming out mid-stride: the card takes over in the pose the world's body
+  // was standing in, not at the start of the clip.
+  it("takes the body over mid-clip at the world's own phase", async () => {
+    const { renderer, preview, body, markReady } = cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(true, "walk", 0.3);
+    body(false, "walk", 0.42);
+    await vi.waitFor(() => expect(preview.resize).toHaveBeenCalled());
+    body(false, "walk", 0.47);
+    markReady();
+
+    expect(preview.setPose).toHaveBeenLastCalledWith("walk", 0.47);
+    expect(preview.setHidden).toHaveBeenLastCalledWith(false);
+    // Handed back, the world seeks its own phase; the card stops drawing.
+    body(true, "walk", 0.52);
+    expect(preview.setHidden).toHaveBeenLastCalledWith(true);
+  });
+
+  it("carries the backpack the world's body carries across the handover", async () => {
+    const { renderer, preview, card, body, markReady } = cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({ title: "0x0sky", bodyId: "avaia" });
+    body(true, "walk", 0, true);
+    body(false, "walk", 0, true);
+    await vi.waitFor(() => expect(preview.resize).toHaveBeenCalled());
+    body(false, "walk", 0, true);
+    markReady();
+
+    expect(preview.show).toHaveBeenLastCalledWith(
+      expect.objectContaining({ backpack: true }),
+    );
+    expect(card()?.dataset.body).toBe("model");
+    body(false, "walk", 0, false);
+    expect(preview.show).toHaveBeenLastCalledWith(
+      expect.objectContaining({ backpack: false }),
+    );
+  });
+
+  it("keeps the still while the live body cannot draw", () => {
+    const { renderer, card, body } = cardBody();
+    renderer.setObservedPosition(OBSERVED);
+    renderer.setObservedPositionLabel({
+      title: "0x0sky",
+      bodyId: "avaia",
+      avatarUrl: "/avatars/0.1.0/kai-study.png",
+    });
+    body(false);
+
+    expect(card()?.dataset.body).toBe("still");
   });
 });
 

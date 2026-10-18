@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AnimationClip,
   Box3,
+  NumberKeyframeTrack,
   Mesh,
   Object3D,
   PerspectiveCamera,
@@ -48,7 +49,13 @@ function character(): Object3D {
 function asset(): GLTF {
   return {
     scene: character(),
-    animations: [new AnimationClip("idle", 1, [])],
+    animations: [
+      new AnimationClip("idle", 1, []),
+      // A clip whose pose is readable: the body slides 10 m along x over 2 s.
+      new AnimationClip("walk", 2, [
+        new NumberKeyframeTrack(".position[x]", [0, 2], [0, 10]),
+      ]),
+    ],
   } as unknown as GLTF;
 }
 
@@ -187,6 +194,136 @@ describe("what a preview costs", () => {
     view.show(TEE);
     await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
     expect(schedule).not.toHaveBeenCalled();
+    view.dispose();
+  });
+});
+
+describe("hiding a body that already stands here", () => {
+  it("stops drawing while hidden and resumes without loading again", async () => {
+    const loadAsset = vi.fn(() => Promise.resolve(asset()));
+    const stop = vi.fn();
+    const schedule = vi.fn(() => stop);
+    const { view, renderer } = preview({
+      reducedMotion: false,
+      clipId: "idle",
+      loadAsset,
+      schedule,
+    });
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+    expect(schedule).toHaveBeenCalledTimes(1);
+
+    view.setHidden(true);
+    expect(stop).toHaveBeenCalledTimes(1);
+    const drawn = renderer.render.mock.calls.length;
+    view.setPose("walk", 0.5);
+    view.resize(100, 100);
+    expect(renderer.render.mock.calls.length).toBe(drawn);
+
+    view.setHidden(false);
+    expect(schedule).toHaveBeenCalledTimes(2);
+    expect(loadAsset).toHaveBeenCalledTimes(1);
+    view.dispose();
+  });
+
+  it("loads while hidden and draws only once shown", async () => {
+    const { view, renderer } = preview();
+    view.setHidden(true);
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+    expect(renderer.render).not.toHaveBeenCalled();
+    view.setHidden(false);
+    expect(renderer.render).toHaveBeenCalledTimes(1);
+    view.dispose();
+  });
+});
+
+describe("keeping the world's pose", () => {
+  function standing(renderer: ReturnType<typeof fakeRenderer>): Object3D {
+    const scene = renderer.render.mock.lastCall?.[0] as Object3D | undefined;
+    const body = scene?.getObjectByName("dasha-v2-study");
+    if (body === undefined) throw new Error("no body drawn");
+    return body;
+  }
+
+  it("seeks a clip handed over mid-way to the world's own phase", async () => {
+    const { view, renderer } = preview();
+    view.setPose("walk", 0.25);
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+    expect(standing(renderer).position.x).toBeCloseTo(2.5);
+
+    view.setPose("walk", 0.6);
+    expect(standing(renderer).position.x).toBeCloseTo(6);
+    view.dispose();
+  });
+
+  it("changes clip without loading the body again", async () => {
+    const loadAsset = vi.fn(() => Promise.resolve(asset()));
+    const { view, renderer } = preview({ loadAsset });
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+    view.setPose("walk", 0.5);
+    expect(standing(renderer).position.x).toBeCloseTo(5);
+    view.setPose("idle", 0);
+    expect(loadAsset).toHaveBeenCalledTimes(1);
+    view.dispose();
+  });
+});
+
+describe("what the body carries", () => {
+  function carried() {
+    const mounted: Object3D[] = [];
+    const mount = vi.fn((root: Object3D) => {
+      const bag = new Object3D();
+      bag.name = "bag";
+      root.add(bag);
+      mounted.push(bag);
+      return Promise.resolve(bag);
+    });
+    const dispose = vi.fn((bag: Object3D) => bag.removeFromParent());
+    return { attachment: { key: "backpack", mount, dispose }, mounted };
+  }
+
+  it("mounts once on a body and only shows and hides it after that", async () => {
+    const { view } = preview();
+    const { attachment, mounted } = carried();
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+
+    view.setAttachment(attachment, true);
+    await vi.waitFor(() => expect(mounted).toHaveLength(1));
+    expect(mounted[0]?.visible).toBe(true);
+    view.setAttachment(attachment, false);
+    expect(mounted[0]?.visible).toBe(false);
+    view.setAttachment(attachment, true);
+    expect(mounted[0]?.visible).toBe(true);
+    expect(attachment.mount).toHaveBeenCalledOnce();
+    view.dispose();
+    expect(attachment.dispose).toHaveBeenCalledWith(mounted[0]);
+  });
+
+  it("is carried by a body that arrives after it was asked for", async () => {
+    const { view } = preview();
+    const { attachment, mounted } = carried();
+    view.setAttachment(attachment, true);
+    view.show(TEE);
+    await vi.waitFor(() => expect(mounted).toHaveLength(1));
+    expect(mounted[0]?.parent?.name).toBe("dasha-v2-study");
+    view.dispose();
+  });
+
+  it("is mounted again on a new body and given back from the old one", async () => {
+    const { view } = preview();
+    const { attachment, mounted } = carried();
+    view.show(TEE);
+    await vi.waitFor(() => expect(view.getStatus().kind).toBe("ready"));
+    view.setAttachment(attachment, true);
+    await vi.waitFor(() => expect(mounted).toHaveLength(1));
+
+    view.show(SKY);
+    await vi.waitFor(() => expect(mounted).toHaveLength(2));
+    expect(attachment.dispose).toHaveBeenCalledWith(mounted[0]);
     view.dispose();
   });
 });

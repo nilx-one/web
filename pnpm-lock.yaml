@@ -277,6 +277,9 @@ importers:
 
   packages/map-maplibre:
     dependencies:
+      '@nilx-one/graphics':
+        specifier: workspace:*
+        version: link:../graphics
       '@nilx-one/map-contract':
         specifier: workspace:*
         version: link:../map-contract

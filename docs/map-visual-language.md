@@ -47,7 +47,7 @@ So a body carries a presentation size of its own, and it is **one size at every 
 Two rules bound it:
 
 - **Apparent size only.** The multiplier changes how tall a body is drawn and nothing else. It never moves the body, never widens the accuracy it stands in, and never survives into shared state.
-- **A body withdraws before it can lie.** Further out than street scale no body is drawn at all — it would be too small to read. What is left is the marker and the card, and the card carries a still of the same study so the identity survives the distance.
+- **A body withdraws before it can lie.** Further out than street scale no body is drawn at all — it would be too small to read. What is left is the marker and the card, and the card carries the same study, live, so the identity survives the distance.
 
 One body is drawn — the identity at the wheel — and only while this device holds an observation of itself. A body on the map is never evidence of presence, proximity, or that anyone else is nearby.
 
@@ -57,7 +57,9 @@ The marker is always drawn. It is three restrained circles — the accuracy the 
 
 The accuracy halo is what the observation actually knows. A body stands inside it, not instead of it.
 
-The **card** and the body take turns. Closer than street scale the body is on the world and speaks for itself, and a card over its head would only repeat it. Further out the body is gone, and the card is what is left — the identity, "this device", and a still of the study beside the text, so who is standing there is still legible when it is too far to draw.
+The **card** and the body take turns. Closer than street scale the body is on the world and speaks for itself, and a card over its head would only repeat it. Further out the body is gone, and the card is what is left — the identity, what the body is doing (walking, standing, looking around), how far it is from this device or "this device", and the body itself beside the text, so who is standing there is still legible when it is too far to draw.
+
+The card's body is the world's body, not a second one. The label names the avatar handle it speaks for (`bodyId`), and the card draws that handle's study, outfit and clip in a small off-map preview — but only while the world hides that handle. While the world draws it, the card shows none. Both bodies are drawn once: the world's is loaded and cloned on its first upsert, the card's preview is made with the card, and after that each is only shown and hidden (`visible` on the world, `setHidden` on the preview). A style swap re-adds the avatar layer without re-cloning the bodies already standing in it, and a card withdrawn and shown again is the same card with the same body. The study's published still stands in only while the live body cannot draw — still loading, or a host with no usable graphics.
 
 One number decides which of the two is on the world, and the map contract publishes it. The renderer hides the card by it and the application draws the body by it, so the turn is a single fact rather than two that could drift into a width showing both or neither.
 

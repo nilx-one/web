@@ -32,6 +32,20 @@ export interface AvatarPreviewBody {
   readonly visibleNodes: readonly string[];
 }
 
+/**
+ * Something the body carries that its own asset does not: a separate asset
+ * fitted onto this skeleton. It is mounted the first time it is shown on a
+ * body and only shown and hidden after that; a new body mounts it again.
+ */
+export interface AvatarPreviewAttachment {
+  /** One mount per key per body. */
+  readonly key: string;
+  /** Fit onto the standing body; nothing for a body it does not fit. */
+  readonly mount: (root: Object3D) => Promise<Object3D | undefined>;
+  /** Give back what the mount made for itself; shared assets stay. */
+  readonly dispose: (mounted: Object3D) => void;
+}
+
 /** How much of the body is in frame. */
 export type AvatarPreviewFraming = "full-body" | "head-and-shoulders";
 
@@ -57,6 +71,19 @@ export interface AvatarPreview {
   show(body: AvatarPreviewBody): void;
   setFraming(framing: AvatarPreviewFraming): void;
   resize(width: number, height: number): void;
+  /**
+   * Stand in this clip at this normalized phase, the way the world seeks its
+   * own body on every update; between updates the clip runs on its own clock.
+   * No clip stands still.
+   */
+  setPose(clipId: string | undefined, phase: number): void;
+  /** Show or hide something the body carries. */
+  setAttachment(attachment: AvatarPreviewAttachment, shown: boolean): void;
+  /**
+   * Hidden keeps the loaded body, its skeleton and its mixer, and only stops
+   * drawing: showing it again is a flag, never a fresh fetch and clone.
+   */
+  setHidden(hidden: boolean): void;
   getStatus(): AvatarPreviewStatus;
   dispose(): void;
 }
@@ -254,6 +281,17 @@ export function createAvatarPreview(
   let mixer: AnimationMixer | undefined;
   let clips: readonly AnimationClip[] = [];
   let held: string | undefined;
+  let clipId = options.clipId;
+  let phase = 0;
+  let playing: AnimationClip | undefined;
+  let hidden = false;
+  interface HeldAttachment {
+    attachment: AvatarPreviewAttachment;
+    shown: boolean;
+    mounted?: Object3D;
+    mounting?: Object3D;
+  }
+  const attachments = new Map<string, HeldAttachment>();
   let generation = 0;
   let disposed = false;
   let lastFrame = 0;
@@ -280,7 +318,7 @@ export function createAvatarPreview(
 
   function draw(): void {
     const target = ensureRenderer();
-    if (target === undefined || root === undefined) return;
+    if (hidden || target === undefined || root === undefined) return;
     const now = globalThis.performance?.now?.() ?? 0;
     if (mixer !== undefined && options.reducedMotion !== true) {
       const delta = Math.min(0.1, Math.max(0, now - lastFrame) / 1000);
@@ -291,7 +329,7 @@ export function createAvatarPreview(
   }
 
   function startLoop(): void {
-    if (stopLoop !== undefined || disposed) return;
+    if (stopLoop !== undefined || disposed || hidden) return;
     if (options.reducedMotion === true) {
       // Standing still is one frame, not a loop that redraws the same pose.
       draw();
@@ -301,7 +339,49 @@ export function createAvatarPreview(
     stopLoop = schedule(draw);
   }
 
+  function releaseAttachments(): void {
+    for (const held of attachments.values()) {
+      // Detached before the body's tree is disposed: an attachment shares its
+      // asset's geometry, which is not this body's to give back.
+      if (held.mounted !== undefined) held.attachment.dispose(held.mounted);
+      delete held.mounted;
+      delete held.mounting;
+    }
+  }
+
+  function syncAttachment(held: HeldAttachment): void {
+    if (held.mounted !== undefined) {
+      held.mounted.visible = held.shown;
+      draw();
+      return;
+    }
+    const body = root;
+    if (!held.shown || body === undefined || held.mounting === body) return;
+    held.mounting = body;
+    void held.attachment
+      .mount(body)
+      .then((mounted) => {
+        // A mount overtaken by a new body, or by disposal, is given back.
+        if (held.mounting !== body || disposed || root !== body) {
+          if (mounted !== undefined) held.attachment.dispose(mounted);
+          if (held.mounting === body) delete held.mounting;
+          return;
+        }
+        delete held.mounting;
+        if (mounted === undefined) return;
+        held.mounted = mounted;
+        mounted.visible = held.shown;
+        draw();
+      })
+      .catch(() => {
+        // A carried item never keeps the body from standing; the next time it
+        // is asked for it is tried again.
+        if (held.mounting === body) delete held.mounting;
+      });
+  }
+
   function clearBody(): void {
+    releaseAttachments();
     if (root !== undefined) {
       mixer?.stopAllAction();
       root.removeFromParent();
@@ -309,7 +389,28 @@ export function createAvatarPreview(
     }
     root = undefined;
     mixer = undefined;
+    playing = undefined;
     clips = [];
+  }
+
+  function playClip(): void {
+    if (root === undefined) return;
+    mixer?.stopAllAction();
+    const clip =
+      clipId === undefined
+        ? undefined
+        : clips.find((entry) => entry.name === clipId);
+    playing = clip;
+    if (clip === undefined) return;
+    mixer ??= new AnimationMixer(root);
+    mixer.clipAction(clip).reset().play();
+  }
+
+  /** The world's own seek, so a body handed between them keeps its pose. */
+  function seek(at: number): void {
+    if (mixer === undefined || playing === undefined) return;
+    const duration = Math.max(playing.duration, Number.EPSILON);
+    mixer.setTime(duration * Math.min(0.999999, Math.max(0, at)));
   }
 
   function stand(gltf: GLTF, next: AvatarPreviewBody): void {
@@ -320,16 +421,11 @@ export function createAvatarPreview(
     scene.add(instance);
     root = instance;
     clips = gltf.animations;
-    const clip =
-      options.clipId === undefined
-        ? undefined
-        : clips.find((entry) => entry.name === options.clipId);
-    if (clip !== undefined) {
-      mixer = new AnimationMixer(instance);
-      mixer.clipAction(clip).reset().play();
-    }
+    playClip();
+    seek(phase);
     instance.updateMatrixWorld(true);
     framePreviewCamera(camera, new Box3().setFromObject(instance), framing);
+    for (const held of attachments.values()) syncAttachment(held);
     announce({ kind: "ready" });
     startLoop();
     draw();
@@ -385,6 +481,43 @@ export function createAvatarPreview(
       camera.updateProjectionMatrix();
       ensureRenderer()?.setSize(width, height, false);
       draw();
+    },
+
+    setPose(next, nextPhase) {
+      if (disposed) return;
+      phase = nextPhase;
+      if (next !== clipId) {
+        clipId = next;
+        playClip();
+      }
+      seek(phase);
+      draw();
+    },
+
+    setAttachment(attachment, shown) {
+      if (disposed) return;
+      const held = attachments.get(attachment.key);
+      if (held === undefined) {
+        const fresh: HeldAttachment = { attachment, shown };
+        attachments.set(attachment.key, fresh);
+        syncAttachment(fresh);
+        return;
+      }
+      if (held.shown === shown && (held.mounted !== undefined || !shown))
+        return;
+      held.shown = shown;
+      syncAttachment(held);
+    },
+
+    setHidden(next) {
+      if (disposed || next === hidden) return;
+      hidden = next;
+      if (hidden) {
+        stopLoop?.();
+        stopLoop = undefined;
+        return;
+      }
+      if (root !== undefined) startLoop();
     },
 
     getStatus() {

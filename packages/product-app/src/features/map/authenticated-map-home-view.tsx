@@ -145,6 +145,7 @@ import {
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
 import {
   avaiaStudy,
+  BODY_ACTIVITY_KEYS,
   BODY_HANDLE_IDS,
   createWheelBodyHandle,
   unconfiguredAvaiaStudy,
@@ -1865,8 +1866,13 @@ export function AuthenticatedMapHomeView({
       wheel === "avaia" && at !== undefined && observedPosition !== undefined
         ? mapDistanceMeters(observedPosition, at)
         : 0;
+    // What the card's body is doing is what the world's is doing: the clip the
+    // wheel's handle was last drawn with, said in words.
+    const clip = drawnBodies.current[wheel]?.clipId;
     return {
       title: wheelAddress,
+      bodyId: BODY_HANDLE_IDS[wheel],
+      ...(clip === undefined ? {} : { activity: t(BODY_ACTIVITY_KEYS[clip]) }),
       detail:
         away > AT_DEVICE_METERS
           ? t(
@@ -1879,8 +1885,8 @@ export function AuthenticatedMapHomeView({
         ? {}
         : { at: [at.longitude, at.latitude] as const }),
       ...(avaiaSpeech === undefined ? {} : { speech: avaiaSpeech }),
-      // Too far out for a body, so the card shows the study it would be
-      // standing in — the same identity, at a size that survives the distance.
+      // Too far out for the world to draw the body, so the card stands it live;
+      // the still answers only while that cannot draw.
       ...(wheelStudy === undefined
         ? {}
         : { avatarUrl: avatarPreviewUrl(wheelStudy) }),
@@ -2412,11 +2418,14 @@ export function AuthenticatedMapHomeView({
         drawn[body.seat] = handle;
         avatarLayer.upsert(handle);
       } else hide(body.seat);
-      // Only the driver carries its own card as the body traverses the map.
+      // Only the driver carries its own card as the body traverses the map,
+      // and the card says what that body is doing every time it is drawn.
       const moving =
         body.seat === "avaia" ? avaiaWalk.moving : manualBondMoving;
+      if (body.seat === wheel) {
+        renderer.setObservedPositionLabel(wheelLabelRef.current(stance?.point));
+      }
       if (moving && stance !== undefined) {
-        renderer.setObservedPositionLabel(wheelLabelRef.current(stance.point));
         if (
           body.seat === "bond" &&
           declaredPosition &&

@@ -8,6 +8,16 @@ import type {
 
 export const OBSERVED_POSITION_LABEL_CLASS = "map-observed-position-label";
 
+/** The card's live body, in CSS pixels: a whole person at a glance. */
+export const LABEL_BODY_WIDTH = 30;
+export const LABEL_BODY_HEIGHT = 40;
+
+/**
+ * What stands beside the card's text: the live body, its still, or nothing.
+ * The world and the card take turns, so the application never asks for both.
+ */
+export type LabelBodyMode = "model" | "still" | "none";
+
 /** The Dock's own easing, so the card opens the way the Dock does. */
 const SPEECH_TRANSITION =
   "max-height 320ms cubic-bezier(0.2, 0, 0, 1), opacity 240ms ease, margin-top 320ms cubic-bezier(0.2, 0, 0, 1)";
@@ -15,7 +25,7 @@ const SPEECH_TRANSITION =
 /** Tall enough for three short lines, which is the most a line should run. */
 const SPEECH_OPEN_MAX_HEIGHT = "64px";
 
-function prefersReducedMotion(document: Document): boolean {
+export function prefersReducedMotion(document: Document): boolean {
   try {
     return (
       document.defaultView?.matchMedia?.("(prefers-reduced-motion: reduce)")
@@ -96,8 +106,8 @@ export function createObservedPositionLabelElement(
   card.style.lineHeight = "1.25";
   card.style.fontSize = "13px";
 
-  // The text is the identity; the still is the body it would be standing in if
-  // the world were close enough to see one.
+  // The text is the identity; beside it stands the body the world is too far
+  // out to draw — live when this host can draw it, a still when it cannot.
   const text = document.createElement("span");
   text.dataset.part = "text";
   text.style.display = "block";
@@ -113,10 +123,24 @@ export function createObservedPositionLabelElement(
   study.style.objectFit = "contain";
   study.style.flex = "0 0 auto";
 
+  const model = document.createElement("canvas");
+  model.dataset.part = "model";
+  model.setAttribute("aria-hidden", "true");
+  model.style.width = `${LABEL_BODY_WIDTH}px`;
+  model.style.height = `${LABEL_BODY_HEIGHT}px`;
+  model.style.flex = "0 0 auto";
+  setPartShown(study, false, "block");
+  setPartShown(model, false, "block");
+
   const title = document.createElement("strong");
   title.dataset.part = "title";
   title.style.display = "block";
   title.style.fontWeight = "600";
+
+  const activity = document.createElement("span");
+  activity.dataset.part = "activity";
+  activity.style.display = "block";
+  activity.style.fontSize = "11px";
 
   const detail = document.createElement("span");
   detail.dataset.part = "detail";
@@ -147,8 +171,8 @@ export function createObservedPositionLabelElement(
   connector.style.width = "1px";
   connector.style.height = "22px";
 
-  text.append(title, detail, speech);
-  card.append(text, study);
+  text.append(title, activity, detail, speech);
+  card.append(text, model, study);
   element.append(card, connector);
   return element;
 }
@@ -166,6 +190,7 @@ export function applyObservedPositionLabel(
     '[data-part="connector"]',
   );
   const study = element.querySelector<HTMLImageElement>('[data-part="study"]');
+  const activity = element.querySelector<HTMLElement>('[data-part="activity"]');
   const speech = element.querySelector<HTMLElement>('[data-part="speech"]');
 
   if (card !== null) {
@@ -182,6 +207,11 @@ export function applyObservedPositionLabel(
     setPartShown(detail, label.detail !== undefined, "block");
     detail.style.color = palette.detail;
   }
+  if (activity !== null) {
+    setText(activity, label.activity ?? "");
+    setPartShown(activity, label.activity !== undefined, "block");
+    activity.style.color = palette.detail;
+  }
   if (connector !== null) {
     connector.style.background = palette.connector;
   }
@@ -196,15 +226,31 @@ export function applyObservedPositionLabel(
     speech.style.marginTop = speaking ? "4px" : "0px";
     element.dataset.speaking = speaking ? "true" : "false";
   }
-  if (study !== null) {
-    // A card with no study to show is text alone rather than a gap where a
-    // body would be: nothing is drawn for a body that was never chosen.
-    setPartShown(study, label.avatarUrl !== undefined, "block");
-    if (
-      label.avatarUrl !== undefined &&
-      study.getAttribute("src") !== label.avatarUrl
-    ) {
-      study.src = label.avatarUrl;
-    }
+  if (
+    study !== null &&
+    label.avatarUrl !== undefined &&
+    study.getAttribute("src") !== label.avatarUrl
+  ) {
+    study.src = label.avatarUrl;
   }
+}
+
+/** The canvas the card's live body is drawn into, made once with the card. */
+export function labelBodyCanvas(
+  element: HTMLElement,
+): HTMLCanvasElement | null {
+  return element.querySelector<HTMLCanvasElement>('[data-part="model"]');
+}
+
+/**
+ * Show the live body, its still, or neither. Both parts stay in the card for
+ * its whole life: switching is a flag, never a new element or a new load. A
+ * card with no body to show is text alone rather than a gap where one would be.
+ */
+export function setLabelBody(element: HTMLElement, mode: LabelBodyMode): void {
+  const model = labelBodyCanvas(element);
+  const study = element.querySelector<HTMLElement>('[data-part="study"]');
+  if (model !== null) setPartShown(model, mode === "model", "block");
+  if (study !== null) setPartShown(study, mode === "still", "block");
+  element.dataset.body = mode;
 }
