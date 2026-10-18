@@ -248,7 +248,8 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
     "Здійснено вхід Bond з 0x0. Надати йому права адміністратора?",
   "identity.adminInbox.approve": "Надати admin",
   "identity.adminInbox.deny": "Залишити user",
-  "identity.adminInbox.failure": "Не вдалося зберегти рішення. Повторіть спробу.",
+  "identity.adminInbox.failure":
+    "Не вдалося зберегти рішення. Повторіть спробу.",
   "identity.password.confirm": "Підтвердьте пароль",
   "identity.password.show": "Показати паролі",
   "identity.password.hide": "Сховати паролі",

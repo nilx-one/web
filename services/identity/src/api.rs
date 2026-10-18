@@ -1141,12 +1141,14 @@ async fn identity_response(
         Some(value) => value,
         None => return unavailable(),
     };
-    if active_client {
-        if let Ok(now) = now(state) {
-            if let Err(error) = state.repository.request_admin_review_on_login(&identity.pub_dress, now).await {
-                tracing::error!(%error, "provider admin approval request could not be recorded");
-            }
-        }
+    if active_client
+        && let Ok(now) = now(state)
+        && let Err(error) = state
+            .repository
+            .request_admin_review_on_login(&identity.pub_dress, now)
+            .await
+    {
+        tracing::error!(%error, "provider admin approval request could not be recorded");
     }
     let password_required = match state
         .repository

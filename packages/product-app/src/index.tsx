@@ -379,11 +379,11 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
 
   const adminIdentity = browserHost
     ? nativeContextQuery.data?.kind === "authenticated"
-        ? nativeContextQuery.data.identity.pubDress
-        : undefined
-      : providerIdentityQuery.data?.kind === "registered"
-        ? providerIdentityQuery.data.identity.pubDress
-        : undefined;
+      ? nativeContextQuery.data.identity.pubDress
+      : undefined
+    : providerIdentityQuery.data?.kind === "registered"
+      ? providerIdentityQuery.data.identity.pubDress
+      : undefined;
   const adminInboxQuery = useQuery({
     queryKey: ["admin-role-inbox", adminIdentity],
     queryFn: () =>

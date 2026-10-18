@@ -1259,7 +1259,7 @@ describe("Telegram self-disconnect transport", () => {
 });
 
 describe("admin approval inbox contract", () => {
-  it("retrieves pending requests for a session and submits an explicit decision", async () => {
+  it("reads an inbox and posts an explicit decision", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
