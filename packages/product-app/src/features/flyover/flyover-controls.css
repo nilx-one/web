@@ -38,17 +38,26 @@
   font-size: 13px;
 }
 
-.flyover__steer {
+/* The Dock stands down in flight: the bottom of the screen is the activity
+   row, with the steering right above it. */
+.flyover__bottom {
   position: absolute;
   right: calc(var(--shell-inset) + var(--safe-right, 0px));
-  bottom: calc(
-    var(--shell-inset) + var(--safe-bottom, 0px) +
-      var(--shell-bottom-height, 0px) + var(--shell-gap)
-  );
+  bottom: calc(var(--shell-inset) + var(--safe-bottom, 0px));
   left: calc(var(--shell-inset) + var(--safe-left, 0px));
+  display: grid;
+  gap: var(--shell-gap);
+  pointer-events: none;
+}
+
+.flyover__steer {
   display: flex;
   justify-content: space-between;
   pointer-events: none;
+}
+
+.flyover__activities {
+  pointer-events: auto;
 }
 
 .flyover__button {

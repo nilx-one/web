@@ -8,6 +8,7 @@ import {
   LEGACY_MARKET_POINT_NUMBERS,
   marketMapPoints,
   marketPinId,
+  marketPointTitle,
   seededMarketDestination,
   seededMarketDirectory,
 } from "./market-points";
@@ -70,4 +71,20 @@ it("keeps the two DREAM malls and two Troieshchyna destinations separate", () =>
     pins.find((p) => p.title.endsWith("DREAM yellow"))!.latitude,
   );
   expect(pins.filter((p) => p.title.includes("Troieshchyna"))).toHaveLength(2);
+});
+
+it("names a BusinessPoint by its localized display name, not its id", () => {
+  const golden = KYIV_MARKET_BUSINESS_POINTS[0]!;
+  expect(marketPointTitle(golden, "uk-UA")).toBe("0xda-market Золоті Ворота");
+  expect(marketPointTitle(golden, "en")).toBe("0xda-market Golden Gate");
+  expect(
+    marketPointTitle(
+      {
+        ...golden,
+        id: { owner_pub_dress: "other", number: 0 },
+        description: "Kiosk",
+      },
+      "en",
+    ),
+  ).toBe("0xda-market Kiosk");
 });

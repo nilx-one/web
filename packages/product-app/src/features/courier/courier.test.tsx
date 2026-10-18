@@ -355,36 +355,38 @@ it("listens for taps on the flying xPing only, never on a parked offer drone", a
   unmount();
   expect(unsubscribe).toHaveBeenCalled();
 });
-it("tells flight progress as Avaia's distance in whole 50 m steps", () => {
-  const avaia = { longitude: 30.5, latitude: 50.4 };
-  // About 111.2 m per 0.001° of latitude.
+it("tells flight progress as the distance to the named target in 50 m steps", () => {
+  // The plan's destination stands at 30.501, 50.401; about 111.2 m per
+  // 0.001° of latitude.
   const at = (latitude: number) => ({
     active: true,
-    progress: { point: { longitude: 30.5, latitude }, remainingMs: 9000 },
+    progress: { point: { longitude: 30.501, latitude }, remainingMs: 9000 },
   });
   const props = {
     jobs: [],
     plan,
     completed: undefined,
-    avaia: { name: "Avaia", point: () => avaia },
+    target: "0xda-market Golden Gate",
     onFlight: vi.fn(),
     onFollow: vi.fn(),
     onCells: vi.fn(),
   };
-  const view = render(<ActivityStack {...props} flight={at(50.401)} />);
+  const view = render(<ActivityStack {...props} flight={at(50.4)} />);
   expect(screen.getByRole("status")).toHaveTextContent(
-    "xPing · flying to 0xda-market · 100 m from Avaia",
+    "150 m to 0xda-market Golden Gate",
   );
-  view.rerender(<ActivityStack {...props} flight={at(50.4013)} />);
-  expect(screen.getByRole("status")).toHaveTextContent("· 100 m from Avaia");
-  view.rerender(<ActivityStack {...props} flight={at(50.4014)} />);
-  expect(screen.getByRole("status")).toHaveTextContent("· 150 m from Avaia");
+  view.rerender(<ActivityStack {...props} flight={at(50.4005)} />);
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "100 m to 0xda-market Golden Gate",
+  );
+  view.rerender(<ActivityStack {...props} flight={at(50.401)} />);
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "0 m to 0xda-market Golden Gate",
+  );
   view.rerender(
-    <ActivityStack
-      {...props}
-      avaia={{ name: "Avaia", point: () => undefined }}
-      flight={at(50.4014)}
-    />,
+    <ActivityStack {...props} target={undefined} flight={at(50.4)} />,
   );
-  expect(screen.getByRole("status")).toHaveTextContent("· 0:09");
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "xPing · flying to 0xda-market · 0:09",
+  );
 });

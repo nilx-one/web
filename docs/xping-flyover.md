@@ -29,9 +29,14 @@ nothing but the flight drives the visible progress or completion. Leaving clears
 without reporting success. During route loading (and the static reduced
 motion preview), no arrival is inferred from elapsed wall-clock time.
 
-The activity row tells progress as xPing's ground distance from Avaia's
-body, in whole 50 m steps, so it changes once per step rather than every
-frame. Without a body for Avaia it falls back to the remaining duration.
+The activity row tells progress as xPing's ground distance to the
+destination, named by the BusinessPoint's localized display name ("150 m to
+0xda-market Golden Gate"), rounded up to whole 50 m steps so it changes once
+per step rather than every frame.
+
+In flight the Dock and status rail stand down. The bottom of the screen is
+the activity row (distance and **↗ xPing**), with the steering right above
+it; the location and camera controls are hidden until the flight ends.
 
 Only the flying xPing takes taps, and only while it flies: the renderer
 hit-tests a drone just when something has subscribed to that drone's id.
