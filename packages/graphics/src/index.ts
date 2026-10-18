@@ -8,6 +8,7 @@ export {
   framePreviewCamera,
   heldAvatarAssets,
   type AvatarPreview,
+  type AvatarPreviewAttachment,
   type AvatarPreviewBody,
   type AvatarPreviewFraming,
   type AvatarPreviewOptions,

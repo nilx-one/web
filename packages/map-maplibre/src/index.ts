@@ -265,8 +265,11 @@ export interface MapLabelBodyPreview {
     readonly key: string;
     readonly assetUrl: string;
     readonly visibleNodes: readonly string[];
+    /** The world's carry, mounted from the same asset the world mounts. */
+    readonly backpack: boolean;
   }): void;
-  setClip(clipId: string | undefined): void;
+  /** The world's clip and phase, applied the way the world applies them. */
+  setPose(clipId: string | undefined, phase: number): void;
   setHidden(hidden: boolean): void;
   resize(width: number, height: number): void;
   dispose(): void;
@@ -287,12 +290,45 @@ const createGraphicsLabelBodyPreview: MapLabelBodyPreviewFactory = (
   canvas,
   { reducedMotion, onReady },
 ) =>
-  import("@nilx-one/graphics").then(({ createAvatarPreview }) =>
-    createAvatarPreview(canvas, {
+  Promise.all([
+    import("@nilx-one/graphics"),
+    import("./backpack-model"),
+    import("three/addons/loaders/GLTFLoader.js"),
+  ]).then(([graphics, carry, { GLTFLoader }]) => {
+    const preview = graphics.createAvatarPreview(canvas, {
       reducedMotion,
       onStatus: (status) => onReady(status.kind === "ready"),
-    }),
-  );
+    });
+    // The same carry asset and the same fit the world mounts, so a body
+    // handed to the card keeps what it carries.
+    const backpackSource = carry.createBackpackSource(
+      () => new GLTFLoader().loadAsync(carry.BACKPACK_ASSET_URL),
+      () => globalThis.performance.now(),
+    );
+    const backpack = {
+      key: "backpack",
+      mount: async (root: Parameters<typeof carry.mountBackpack>[0]) => {
+        const asset = await backpackSource.request();
+        return asset === undefined
+          ? undefined
+          : carry.mountBackpack(root, asset.scene);
+      },
+      dispose: carry.disposeBackpack,
+    };
+    return {
+      show(body) {
+        preview.show(body);
+        preview.setAttachment(backpack, body.backpack);
+      },
+      setPose: (clipId, phase) => preview.setPose(clipId, phase),
+      setHidden: (hidden) => preview.setHidden(hidden),
+      resize: (width, height) => preview.resize(width, height),
+      dispose() {
+        preview.dispose();
+        backpackSource.release();
+      },
+    };
+  });
 
 /** The part of a MapLibre marker the observed-position label depends on. */
 export interface MapLabelMarker {
@@ -981,8 +1017,11 @@ export function createMapLibreRenderer(
         key: `${handle.modelId}#${visibleNodes.join("|")}`,
         assetUrl: avatarAssetUrl(handle.modelId),
         visibleNodes,
+        backpack: handle.backpack === true,
       });
-      labelBody?.setClip(handle.clipId);
+      // Every update seeks, as the world's own does, so the pose handed
+      // across in either direction is the one the other side was standing in.
+      labelBody?.setPose(handle.clipId, handle.clipPhase);
     }
     const drawn = live && labelBody !== undefined && labelBodyReady;
     labelBody?.setHidden(!drawn);
