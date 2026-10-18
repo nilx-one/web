@@ -213,6 +213,8 @@ spatial map with restrained cyan accents. The map is the spatial substrate of
 | Primary roads        | `#bccfd4`             | `#344a52`             |
 | Secondary roads      | `#cedcdf`             | `#26383e`             |
 | Water                | `#c8ecf3`             | `#05222a`             |
+| Bridge deck          | `#f8fafb`             | `#2e4249`             |
+| Bridge edge          | `#9cb2b9`             | `#5d757d`             |
 | Accent               | `#37d7e5`             | `#37d7e5`             |
 | Label (reserved)     | `#536166` / `#7d8a90` | `#a8b6bb` / `#78898f` |
 
@@ -238,12 +240,24 @@ Layer order follows the visual priority of the map: geography (`earth`,
 `landcover`, `parks`, `landuse-urban`), water (`water`, `water-accent`,
 `rivers`), urban mass (`buildings-flat`), movement (`roads-rail`,
 `roads-minor-casing`, `roads-secondary`, `roads-casing`, `roads-primary`),
-urban depth (`buildings`), then minor detail (`boundaries`, `pois`). Buildings
-hand over from a flat wash beneath the road network to restrained
-`fill-extrusion` depth above it between street and building scale, using OSM
-`height` where the data has it and a conservative fallback where it does not.
-The footprints stay painted past the handover, so hiding the extrusion is all
-explicit 2D has to do.
+bridges (`bridges-shadow`, `bridges-edge`, `bridges-deck`), urban depth
+(`buildings`), then minor detail (`boundaries`, `pois`). Buildings hand over
+from a flat wash beneath the road network to restrained `fill-extrusion` depth
+above it between street and building scale, using OSM `height` where the data
+has it and a conservative fallback where it does not. The footprints stay
+painted past the handover, so hiding the extrusion is all explicit 2D has to
+do.
+
+### Bridges
+
+The archive marks a bridge only as a `roads` line with `is_bridge`. It has no
+bridge outline, span height or piers. From city scale (zoom 11) the styles lay
+a deck over every bridge that carries a road, a railway or a path. The deck is
+lighter than the road and has a darker edge. A soft shadow on the water,
+offset to the south-east of the map's light, lifts it off the river. The deck
+is as wide as what it carries: a major road's full width, a railway or a minor
+road narrower, a footbridge narrowest. The bridge layers paint above every
+road, so a road that passes under a bridge stays under it.
 
 ### Scale progression
 
