@@ -27,7 +27,7 @@ use identity_bot::{
 use teloxide::{
     prelude::*,
     types::{
-        BotCommand, BotCommandScope, ButtonRequest, CallbackQuery, InlineKeyboardButton,
+        BotCommand, BotCommandScope, CallbackQuery, InlineKeyboardButton,
         InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
     },
 };
@@ -1369,14 +1369,6 @@ fn control_keyboard(role: BondAccessRole) -> KeyboardMarkup {
     }
 }
 
-fn current_position_request_keyboard() -> KeyboardMarkup {
-    KeyboardMarkup::new([[
-        KeyboardButton::new("Передати поточну позицію").request(ButtonRequest::Location)
-    ]])
-    .resize_keyboard()
-    .one_time_keyboard()
-}
-
 async fn start_registration(
     bot: &CompactBot,
     message: &Message,
@@ -1413,9 +1405,8 @@ async fn start_registration(
     Ok(())
 }
 
-/// `/open` — the topmost command in [`USER_COMMANDS`]. Deliberately
-/// stateless: no repository lookup, no role check, so it stays available to
-/// every chat in every state, including one that never registered.
+/// `/open` remains the topmost command for every chat. The compact
+/// presenter reuses its Open and Status messages without requiring a Bond.
 async fn open_app(bot: &CompactBot, message: &Message) -> ResponseResult<()> {
     bot.send_message(message.chat.id, "Open 0x1")
         .reply_markup(registration_keyboard())
@@ -1491,7 +1482,7 @@ mod tests {
     use super::{
         CURRENT_POSITION_BUTTON, CommandMenu, LocationModeRefusal, MINI_APP_URL,
         PendingUnlinkConfirmations, SET_POSITION_BUTTON, bot_commands, command_of,
-        control_keyboard, current_position_request_keyboard, help_text, registration_keyboard,
+        control_keyboard, help_text, registration_keyboard,
         resolve_location_mode, shared_point,
     };
 
@@ -1609,13 +1600,6 @@ mod tests {
                 }]]
             })
         );
-    }
-
-    #[test]
-    fn current_position_button_requests_current_location() {
-        let keyboard = serde_json::to_value(current_position_request_keyboard())
-            .expect("current-position keyboard must serialize");
-        assert_eq!(keyboard["keyboard"][0][0]["request_location"], true);
     }
 
     #[test]
