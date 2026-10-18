@@ -280,43 +280,25 @@ impl CompactBot {
             .map(|_| true)
     }
 
+    /// When a Bond loses admin privileges, redact the old admin message
+    /// rather than deleting it. Retain its Telegram ID for a possible later
+    /// role grant; all admin callbacks still revalidate the stored role.
     async fn revoke_admin_slot(&self) {
         let lock = self.surfaces.lock_for(self.chat).await;
         let _guard = lock.lock().await;
-        let Ok(Some(message_id)) = self
-            .surfaces
-            .repository
-            .telegram_message_id(self.chat.0, TelegramMessageSlot::Admin)
-            .await
-        else {
+        let Ok(Some(message_id)) = self.surfaces.repository
+            .telegram_message_id(self.chat.0, TelegramMessageSlot::Admin).await else {
             return;
         };
-        // Removing an old message is limited by Telegram to 48 hours.
-        // Redact old admin actions even if the deletion is impossible.
-        if self
-            .bot
-            .delete_message(self.chat, MessageId(message_id))
-            .await
-            .is_err()
-        {
-            let _ = self
-                .bot
-                .edit_message_text(
-                    self.chat,
-                    MessageId(message_id),
-                    "🔒 Доступ admin завершено.",
-                )
-                .await;
-        }
-        if let Err(error) = self
-            .surfaces
-            .repository
-            .save_telegram_message_id(self.chat.0, TelegramMessageSlot::Admin, None)
-            .await
-        {
-            error!(%error, "Admin Telegram slot revocation receipt not saved");
+        match self.bot.edit_message_text(
+            self.chat, MessageId(message_id), "🔒 Доступ admin завершено."
+        ).reply_markup(InlineKeyboardMarkup::new(Vec::<Vec<InlineKeyboardButton>>::new())).await {
+            Ok(_) => {}
+            Err(error) if error.to_string().to_ascii_lowercase().contains("message is not modified") => {}
+            Err(error) => error!(%error, "could not redact old admin Telegram message"),
         }
     }
+
 }
 
 pub(crate) struct CompactMessage {
