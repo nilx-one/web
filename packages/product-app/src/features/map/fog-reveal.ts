@@ -99,19 +99,14 @@ export function distanceToFogCellEdgeMeters(
   let minSquared = Number.POSITIVE_INFINITY;
   for (let index = 0; index < cell.boundary.length; index += 1) {
     const [ax, ay] = relative(cell.boundary[index]!);
-    const [bx, by] = relative(
-      cell.boundary[(index + 1) % cell.boundary.length]!,
-    );
+    const [bx, by] = relative(cell.boundary[(index + 1) % cell.boundary.length]!);
     const dx = bx - ax;
     const dy = by - ay;
     const lengthSquared = dx * dx + dy * dy;
     const t =
       lengthSquared === 0
         ? 0
-        : Math.max(
-            0,
-            Math.min(1, -(ax * dx + ay * dy) / lengthSquared),
-          );
+        : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSquared));
     const x = ax + t * dx;
     const y = ay + t * dy;
     minSquared = Math.min(minSquared, x * x + y * y);
