@@ -64,7 +64,8 @@ export const IDENTITY_EN = {
   "identity.form.notYou": "Not you?",
   "identity.authenticated": "Authenticated Bond",
   "identity.adminInbox.title": "Admin access requests",
-  "identity.adminInbox.description": "A reserved 0x0 Bond signed in. Should this Bond receive admin privileges?",
+  "identity.adminInbox.description":
+    "A reserved 0x0 Bond signed in. Should this Bond receive admin privileges?",
   "identity.adminInbox.approve": "Grant admin",
   "identity.adminInbox.deny": "Keep user role",
   "identity.adminInbox.failure": "The decision could not be saved. Try again.",
@@ -243,7 +244,8 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.form.notYou": "Не ви?",
   "identity.authenticated": "Автентифікований Bond",
   "identity.adminInbox.title": "Запити на права адміністратора",
-  "identity.adminInbox.description": "Здійснено вхід Bond з 0x0. Надати йому права адміністратора?",
+  "identity.adminInbox.description":
+    "Здійснено вхід Bond з 0x0. Надати йому права адміністратора?",
   "identity.adminInbox.approve": "Надати admin",
   "identity.adminInbox.deny": "Залишити user",
   "identity.adminInbox.failure": "Не вдалося зберегти рішення. Повторіть спробу.",

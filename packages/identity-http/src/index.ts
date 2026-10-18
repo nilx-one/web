@@ -266,13 +266,12 @@ class IdentityHttpAdapter
 
   public async listAdminRoleRequests(): Promise<AdminRoleInboxResult> {
     try {
+      const authorization = this.authorization();
       const response = await this.fetch("/api/v1/admin/role-requests", {
         method: "GET",
         cache: "no-store",
         credentials: "same-origin",
-        headers: this.authorization() === undefined
-          ? {}
-          : { authorization: this.authorization()! },
+        headers: authorization === undefined ? {} : { authorization },
       });
       if (response.status === 403) return { kind: "not-admin" };
       if (!response.ok) return { kind: "service-unavailable" };
@@ -282,8 +281,11 @@ class IdentityHttpAdapter
       }
       const requests = [];
       for (const item of body.requests) {
-        if (!isRecord(item) || typeof item.pub_dress !== "string"
-          || typeof item.requested_at !== "number") {
+        if (
+          !isRecord(item) ||
+          typeof item.pub_dress !== "string" ||
+          typeof item.requested_at !== "number"
+        ) {
           return { kind: "service-unavailable" };
         }
         requests.push({
@@ -319,7 +321,10 @@ class IdentityHttpAdapter
       );
       if (response.ok) {
         const body: unknown = await response.json().catch(() => undefined);
-        if (isRecord(body) && (body.status === "approved" || body.status === "denied")) {
+        if (
+          isRecord(body) &&
+          (body.status === "approved" || body.status === "denied")
+        ) {
           return { kind: "decided", status: body.status };
         }
       }

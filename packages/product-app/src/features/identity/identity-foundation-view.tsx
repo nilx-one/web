@@ -1364,14 +1364,18 @@ export function IdentityFoundationView({
                           <button
                             type="button"
                             disabled={adminRoleInbox.busy}
-                            onClick={() => adminRoleInbox.onDecide(request.pubDress, true)}
+                            onClick={() =>
+                              adminRoleInbox.onDecide(request.pubDress, true)
+                            }
                           >
                             {t("identity.adminInbox.approve")}
                           </button>
                           <button
                             type="button"
                             disabled={adminRoleInbox.busy}
-                            onClick={() => adminRoleInbox.onDecide(request.pubDress, false)}
+                            onClick={() =>
+                              adminRoleInbox.onDecide(request.pubDress, false)
+                            }
                           >
                             {t("identity.adminInbox.deny")}
                           </button>

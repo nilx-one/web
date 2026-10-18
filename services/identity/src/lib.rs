@@ -54,10 +54,11 @@ pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository, SelfDisconn
 pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
 pub use provider_self_service::provider_self_service_router;
 pub use repository::{
-    ActivationRequest, ActivationRequestStatus, AdminRoleDecision, AdminRoleRequest, AvaiaConfigurationState, AvaiaIdentityRecord,
-    AvaiaLocation, AvaiaTravelOutcome, AvaiaUpdateOutcome, BusinessRegistrationOutcome,
-    BusinessStation, BusinessStationOutcome, IdentityProvider, IdentityRecord, IdentityRepository,
-    NativeCredentialRecord, NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome,
-    PublicIdentityRecord, RegistrationOutcome, RepositoryError,
+    ActivationRequest, ActivationRequestStatus, AdminRoleDecision, AdminRoleRequest,
+    AvaiaConfigurationState, AvaiaIdentityRecord, AvaiaLocation, AvaiaTravelOutcome,
+    AvaiaUpdateOutcome, BusinessRegistrationOutcome, BusinessStation, BusinessStationOutcome,
+    IdentityProvider, IdentityRecord, IdentityRepository, NativeCredentialRecord,
+    NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome, PublicIdentityRecord,
+    RegistrationOutcome, RepositoryError,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};

@@ -377,9 +377,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     retry: false,
   });
 
-  const adminIdentity =
-    browserHost
-      ? nativeContextQuery.data?.kind === "authenticated"
+  const adminIdentity = browserHost
+    ? nativeContextQuery.data?.kind === "authenticated"
         ? nativeContextQuery.data.identity.pubDress
         : undefined
       : providerIdentityQuery.data?.kind === "registered"
@@ -1278,7 +1277,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             adminRoleInbox: {
               requests: adminInboxQuery.data.requests,
               busy: adminRoleDecision.isPending,
-              failed: adminRoleDecision.data?.kind === "service-unavailable" ||
+              failed:
+                adminRoleDecision.data?.kind === "service-unavailable" ||
                 adminRoleDecision.isError,
               onDecide: (pubDress: string, approve: boolean) =>
                 adminRoleDecision.mutate({ pubDress, approve }),
