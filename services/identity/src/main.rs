@@ -686,6 +686,11 @@ async fn handle_admin_role_callback(
             telegram_user_id,
         )
         .await;
+        // An admin who just detached Telegram must immediately lose the
+        // actionable third slot, without deleting the existing bot message.
+        if let Err(error) = compact.refresh_admin(None).await {
+            error!(%error, "could not redact admin slot after Telegram unlink");
+        }
         return Ok(());
     }
     let Some((approve, request_token)) = callback
@@ -1311,12 +1316,16 @@ async fn begin_unlink(
         message.chat.id,
         "Це від'єднає Telegram від цього Bond. Підтвердьте протягом 5 хвилин. Якщо Telegram — єдиний спосіб входу, від'єднання буде відхилено.",
     )
-    .reply_markup(InlineKeyboardMarkup::new([[
-        InlineKeyboardButton::callback("✅ Від'єднати", "ul:y"),
-        InlineKeyboardButton::callback("Скасувати", "ul:n"),
-    ]]))
+    .reply_markup(unlink_confirmation_keyboard())
     .await?;
     Ok(())
+}
+
+fn unlink_confirmation_keyboard() -> InlineKeyboardMarkup {
+    InlineKeyboardMarkup::new([[
+        InlineKeyboardButton::callback("✅ Від'єднати", "ul:y"),
+        InlineKeyboardButton::callback("Скасувати", "ul:n"),
+    ]])
 }
 
 /// `/unlink` arms an expiring, single-use confirmation. Both the inline
@@ -1591,6 +1600,15 @@ mod tests {
         let admin_commands = bot_commands(CommandMenu::Registered(BondAccessRole::Admin));
         let names: Vec<_> = admin_commands.iter().map(|c| c.command.as_str()).collect();
         assert_eq!(names, vec!["open", "set_position", "travel", "unlink"]);
+    }
+
+    #[test]
+    fn unlink_confirmation_is_an_inline_status_action() {
+        let markup = serde_json::to_value(super::unlink_confirmation_keyboard())
+            .expect("inline keyboard");
+        assert_eq!(markup["inline_keyboard"][0][0]["callback_data"], "ul:y");
+        assert_eq!(markup["inline_keyboard"][0][1]["callback_data"], "ul:n");
+        assert_eq!(markup["inline_keyboard"].as_array().map(Vec::len), Some(1));
     }
 
     #[test]
