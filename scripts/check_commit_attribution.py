@@ -10,15 +10,15 @@ ACCOUNTS = {
     "0x0sky": "0x0sky@aiaiaiai.org",
     "x0skai": "x0skai@aiaiaiai.org",
 }
-# Historical aliases are recognized for self-credit detection, never permitted
-# as identities in new commits.
-LEGACY_ACCOUNTS = {
+# GitHub's verified ID-based noreply addresses are canonical in AGENTS.md.
+# Existing corporate addresses are also valid as required by CLAUDE.md.
+VERIFIED_NOREPLY_ACCOUNTS = {
     "75973992+0x0sky@users.noreply.github.com": "0x0sky",
     "300452669+x0skai@users.noreply.github.com": "x0skai",
 }
 ACCOUNT_BY_ADDRESS = {
     **{address.lower(): name for name, address in ACCOUNTS.items()},
-    **LEGACY_ACCOUNTS,
+    **VERIFIED_NOREPLY_ACCOUNTS,
 }
 CLAUDE = "Claude <noreply@anthropic.com>"
 CODEX = "Codex <codex@openai.com>"
@@ -26,13 +26,8 @@ CODEX = "Codex <codex@openai.com>"
 
 def validate(email, message, committer_email=None):
     errors = []
-    author_address = email.lower()
-    if author_address in LEGACY_ACCOUNTS:
-        account = LEGACY_ACCOUNTS[author_address]
-        errors.append(f"noncanonical author email for {account}; use {ACCOUNTS[account]}")
-    if committer_email is not None and committer_email.lower() in LEGACY_ACCOUNTS:
-        account = LEGACY_ACCOUNTS[committer_email.lower()]
-        errors.append(f"noncanonical committer email for {account}; use {ACCOUNTS[account]}")
+    # Either verified account address may identify the author or committer.
+    # Invalid co-author names and IDs are still checked below.
     parsed = subprocess.run(
         ["git", "interpret-trailers", "--parse"], input=message,
         text=True, capture_output=True, check=True,
@@ -53,7 +48,7 @@ def validate(email, message, committer_email=None):
         name, address = match.groups()
         if (author and name == author) or address.lower() == email.lower():
             errors.append("primary author repeated as co-author")
-        if name in ACCOUNTS and address.lower() != ACCOUNTS[name]:
+        if name in ACCOUNTS and ACCOUNT_BY_ADDRESS.get(address.lower()) != name:
             errors.append("incorrect account co-author address")
         if address.lower() in ACCOUNT_BY_ADDRESS and name != ACCOUNT_BY_ADDRESS[address.lower()]:
             errors.append("incorrect account co-author name")

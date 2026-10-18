@@ -12,20 +12,46 @@ afterEach(() => chooseLocale("auto"));
 
 function setup() {
   const onSteer = vi.fn();
+  const onCollapse = vi.fn();
   const onLeave = vi.fn();
-  const view = render(<FlyoverControls onSteer={onSteer} onLeave={onLeave} />);
+  const view = render(
+    <FlyoverControls
+      onSteer={onSteer}
+      onCollapse={onCollapse}
+      onLeave={onLeave}
+    />,
+  );
   const surface = view.container.querySelector(".flyover__surface")!;
-  return { onSteer, onLeave, surface };
+  return { onSteer, onCollapse, onLeave, surface };
 }
 
 describe("FlyoverControls", () => {
-  it("steps on the buttons and leaves on request", () => {
-    const { onSteer, onLeave } = setup();
+  it("steps, collapses, and confirms cancellation", () => {
+    const { onSteer, onCollapse, onLeave } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Step left" }));
     fireEvent.click(screen.getByRole("button", { name: "Step right" }));
     expect(onSteer.mock.calls).toEqual([[-1], [1]]);
-    fireEvent.click(screen.getByRole("button", { name: "Leave the flight" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(onCollapse).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "Cancel the flight?",
+    );
+    expect(onLeave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
     expect(onLeave).toHaveBeenCalledOnce();
+  });
+
+  it("No and Escape dismiss cancellation without ending the flight", () => {
+    const { onLeave } = setup();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    fireEvent.click(cancel);
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    fireEvent.click(cancel);
+    fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(onLeave).not.toHaveBeenCalled();
   });
 
   it("steps on a sideways swipe, not on a tap or an upward one", () => {
@@ -45,6 +71,7 @@ describe("FlyoverControls", () => {
     const view = render(
       <FlyoverControls
         onSteer={vi.fn()}
+        onCollapse={vi.fn()}
         onLeave={vi.fn()}
         activities={<p>150 m to 0xda-market Golden Gate</p>}
       />,
@@ -66,6 +93,7 @@ describe("FlyoverControls", () => {
     const view = render(
       <FlyoverControls
         onSteer={vi.fn()}
+        onCollapse={vi.fn()}
         onLeave={vi.fn()}
         force={{
           engine: {
@@ -97,6 +125,7 @@ describe("FlyoverControls", () => {
     view.rerender(
       <FlyoverControls
         onSteer={vi.fn()}
+        onCollapse={vi.fn()}
         onLeave={vi.fn()}
         force={{
           engine: { energy: () => energy, subscribe: () => () => {} },
