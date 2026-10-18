@@ -257,7 +257,9 @@ describe("revealing the fog around a Bond", () => {
       owner: "0x0sky",
       onRevealed,
     });
-    expect(onRevealed.mock.calls.filter(([, via]) => via === "nearby")).toHaveLength(1);
+    expect(
+      onRevealed.mock.calls.filter(([, via]) => via === "nearby"),
+    ).toHaveLength(1);
   });
 
   it("requires a close, accurate observation; a declared Bond position never opens a neighbour", () => {
