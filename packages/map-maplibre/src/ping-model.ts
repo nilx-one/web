@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { FLIGHT_LOOT_COLORS, type FlightLootRarity } from "@nilx-one/map-contract";
 import {
+  AdditiveBlending,
+  BackSide,
   BoxGeometry,
   CylinderGeometry,
   Group,
@@ -77,6 +80,17 @@ export function createPingModel() {
   spark.position.set(-0.24, 0.025, 0.12);
   spark.rotation.z = 0.6;
   body.add(spark);
+  const auraMaterial = new MeshBasicMaterial({
+    color: FLIGHT_LOOT_COLORS.common,
+    transparent: true,
+    opacity: 0.22,
+    side: BackSide,
+    blending: AdditiveBlending,
+    depthWrite: false,
+  });
+  const lootAura = new Mesh(new SphereGeometry(0.65, 16, 12), auraMaterial);
+  lootAura.visible = false;
+  body.add(lootAura);
   const rotors: Mesh[] = [];
   for (const x of [-1, 1])
     for (const z of [-1, 1]) {
@@ -100,7 +114,17 @@ export function createPingModel() {
      * `wear`, 0 to 1, is how much of its engine is spent: the puff grows
      * thicker and darker and the sparks come oftener the more it is.
      */
-    sample(phase: number, moving: boolean, wear = 0) {
+    sample(
+      phase: number,
+      moving: boolean,
+      wear = 0,
+      rarity?: FlightLootRarity,
+    ) {
+      lootAura.visible = rarity !== undefined;
+      if (rarity !== undefined) {
+        auraMaterial.color.setHex(FLIGHT_LOOT_COLORS[rarity]);
+        auraMaterial.opacity = moving ? 0.22 + 0.05 * Math.sin(phase * Math.PI * 2) : 0.22;
+      }
       const worn = Math.min(1, Math.max(0, wear));
       body.position.y =
         1.9 + (moving ? Math.sin(phase * Math.PI * 2) * 0.055 : 0);
@@ -146,6 +170,7 @@ export function createPingModel() {
       tapeMaterial.dispose();
       smokeMaterial.dispose();
       sparkMaterial.dispose();
+      auraMaterial.dispose();
       root.removeFromParent();
     },
   };
