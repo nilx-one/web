@@ -1416,7 +1416,7 @@ async fn start_registration(
 /// `/open` — the topmost command in [`USER_COMMANDS`]. Deliberately
 /// stateless: no repository lookup, no role check, so it stays available to
 /// every chat in every state, including one that never registered.
-async fn open_app(bot: &Bot, message: &Message) -> ResponseResult<()> {
+async fn open_app(bot: &CompactBot, message: &Message) -> ResponseResult<()> {
     bot.send_message(message.chat.id, "Open 0x1")
         .reply_markup(registration_keyboard())
         .await?;
