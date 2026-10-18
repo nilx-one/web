@@ -43,6 +43,11 @@ impl IdentityRepository {
         pub_dress: &PubDress,
         now: u64,
     ) -> Result<BusinessRegistrationOutcome, RepositoryError> {
+        // Operator-owned BusinessPoints follow a separate lifecycle. Reopening
+        // human 0x0 registration does not silently widen business provisioning.
+        if pub_dress.discriminator() == '0' {
+            return Ok(BusinessRegistrationOutcome::Unavailable);
+        }
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let existing = sqlx::query_scalar::<_, Option<String>>(
             "SELECT r.role FROM identities i \

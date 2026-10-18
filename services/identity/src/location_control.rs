@@ -998,10 +998,6 @@ mod tests {
         let pool = sqlx::SqlitePool::connect(&database_url)
             .await
             .expect("database connection");
-        sqlx::query("DROP TRIGGER identities_reserved_admin_prefix_insert")
-            .execute(&pool)
-            .await
-            .expect("legacy schema");
         sqlx::query(
             "INSERT INTO identities (pub_dress, identity_kind, created_at) \
              VALUES ('0x0walker', 'human', 10)",
@@ -1016,6 +1012,13 @@ mod tests {
         .execute(&pool)
         .await
         .expect("legacy provider");
+
+        // Legacy privilege is a persisted grant, not the reserved prefix.
+        let incumbent: PubDress = "0x0walker".parse().expect("legacy admin");
+        identities
+            .set_role(&incumbent, BondAccessRole::Admin)
+            .await
+            .expect("existing admin grant");
 
         let locations = BondLocationRepository::connect(&database_url)
             .await
