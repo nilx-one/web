@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { AVATAR_ASSET_VERSIONS } from "@nilx-one/map-contract";
+import { AVATAR_ASSET_VERSIONS, FLIGHT_LOOT_COLORS } from "@nilx-one/map-contract";
 import type {
   AvatarClipId,
   AvatarHandle,
@@ -26,15 +26,20 @@ import {
   type Map as MapLibreMap,
 } from "maplibre-gl";
 import {
+  AdditiveBlending,
   AnimationMixer,
+  CylinderGeometry,
   DirectionalLight,
   Euler,
   HemisphereLight,
   Matrix4,
+  Mesh,
+  MeshBasicMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
   Scene,
+  Vector3,
   WebGLRenderer,
   type AnimationClip,
 } from "three";
@@ -263,6 +268,20 @@ export function createAvatarLayer(
   );
   const abortController = new AbortController();
   const scene = new Scene();
+  const laserGeometry = new CylinderGeometry(0.055, 0.055, 1, 8);
+  const laserBeams = Array.from({ length: 2 }, () => {
+    const material = new MeshBasicMaterial({
+      color: FLIGHT_LOOT_COLORS.rare,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+      blending: AdditiveBlending,
+    });
+    const beam = new Mesh(laserGeometry, material);
+    beam.visible = false;
+    scene.add(beam);
+    return beam;
+  });
   // Custom layers have their own Three scene: MapLibre's map lighting does
   // not illuminate the GLB's PBR materials. Mercator uses Z as vertical.
   const ambient = new HemisphereLight(0xffffff, 0x6e665e, 2);
@@ -456,6 +475,30 @@ export function createAvatarLayer(
     entry.model.root.updateMatrixWorld(true);
   }
 
+  const beamDirection = new Vector3();
+  const beamOrigin = new Vector3(0, 1, 0);
+  function updateLootLasers(): void {
+    const source = instances.get("flyover:xPing")?.root;
+    const targets = [...flightLoot.values()]
+      .filter(({ handle }) => handle.laserTarget && handle.intakeProgress === undefined)
+      .slice(0, 2);
+    for (const [index, beam] of laserBeams.entries()) {
+      const target = targets[index];
+      beam.visible = source !== undefined && target !== undefined;
+      if (!source || !target) continue;
+      beamDirection.subVectors(target.model.root.position, source.position);
+      const distance = beamDirection.length();
+      if (distance <= 0.01) {
+        beam.visible = false;
+        continue;
+      }
+      beam.position.copy(source.position).add(target.model.root.position).multiplyScalar(0.5);
+      beam.quaternion.setFromUnitVectors(beamOrigin, beamDirection.multiplyScalar(1 / distance));
+      beam.scale.set(1, distance, 1);
+      (beam.material as MeshBasicMaterial).color.setHex(FLIGHT_LOOT_COLORS[target.handle.rarity]);
+    }
+  }
+
   function anchorAt(mounted: MapLibreMap): void {
     const center = MercatorCoordinate.fromLngLat(mounted.getCenter(), 0);
     origin = {
@@ -465,7 +508,17 @@ export function createAvatarLayer(
       metres: center.meterInMercatorCoordinateUnits(),
     };
     for (const instance of instances.values()) place(instance);
-    for (const entry of flightLoot.values()) placeFlightLoot(entry);
+    for (const entry of flightLoot.values()) {
+      placeFlightLoot(entry);
+      const pull = entry.handle.intakeProgress;
+      const target = instances.get("flyover:xPing")?.root;
+      if (pull !== undefined && target !== undefined) {
+        const amount = Math.max(0, Math.min(1, pull));
+        entry.model.root.position.lerp(target.position, amount * amount * (3 - 2 * amount));
+        entry.model.root.scale.multiplyScalar(1 - 0.85 * amount);
+      }
+    }
+    updateLootLasers();
   }
 
   async function hydrate(instance: AvatarInstance): Promise<void> {
@@ -699,6 +752,11 @@ export function createAvatarLayer(
         instance.root?.removeFromParent();
       }
       instances.clear();
+      laserGeometry.dispose();
+      for (const beam of laserBeams) {
+        (beam.material as MeshBasicMaterial).dispose();
+        beam.removeFromParent();
+      }
       for (const entry of flightLoot.values()) entry.model.dispose();
       flightLoot.clear();
       ambientKit?.dispose();
