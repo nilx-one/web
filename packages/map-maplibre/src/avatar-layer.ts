@@ -263,10 +263,13 @@ export function createAvatarLayer(
   const now = options.now ?? (() => globalThis.performance.now());
   const requestMount = options.requestMount ?? (() => undefined);
   const instances = new Map<string, AvatarInstance>();
-  const flightLoot = new Map<string, {
-    handle: MapFlightLoot;
-    model: ReturnType<typeof createFlightLootModel>;
-  }>();
+  const flightLoot = new Map<
+    string,
+    {
+      handle: MapFlightLoot;
+      model: ReturnType<typeof createFlightLootModel>;
+    }
+  >();
   const assetCache = new Map<AvatarModelId, Promise<GLTF>>();
   const backpackSource = createBackpackSource(
     () => new GLTFLoader().loadAsync(BACKPACK_ASSET_URL),
@@ -460,12 +463,10 @@ export function createAvatarLayer(
     root.updateMatrixWorld(true);
   }
 
-  function placeFlightLoot(
-    entry: {
-      handle: MapFlightLoot;
-      model: ReturnType<typeof createFlightLootModel>;
-    },
-  ): void {
+  function placeFlightLoot(entry: {
+    handle: MapFlightLoot;
+    model: ReturnType<typeof createFlightLootModel>;
+  }): void {
     if (map === undefined) return;
     const { lngLat, heightMeters } = entry.handle;
     const altitude =
@@ -726,7 +727,8 @@ export function createAvatarLayer(
         let entry = flightLoot.get(handle.id);
         if (
           entry !== undefined &&
-          (entry.handle.kind !== handle.kind || entry.handle.rarity !== handle.rarity)
+          (entry.handle.kind !== handle.kind ||
+            entry.handle.rarity !== handle.rarity)
         ) {
           entry.model.dispose();
           flightLoot.delete(handle.id);
