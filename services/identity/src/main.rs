@@ -52,12 +52,10 @@ struct CommandSpec {
 
 /// Minimal public Telegram command menu. Other commands remain accepted
 /// as typed legacy entry points, but are not promoted in Telegram's UI.
-const USER_COMMANDS: &[CommandSpec] = &[
-    CommandSpec {
-        command: "open",
-        description: "Open 0x1",
-    },
-];
+const USER_COMMANDS: &[CommandSpec] = &[CommandSpec {
+    command: "open",
+    description: "Open 0x1",
+}];
 
 /// Commands that move `Bond.location` into manual mode. These stay off the
 /// default menu and are only registered for a chat once its sender resolves
@@ -660,21 +658,34 @@ async fn handle_admin_role_callback(
     if let Some(action @ ("ul:y" | "ul:n")) = callback.data.as_deref() {
         let Ok(telegram_user_id) = i64::try_from(callback.from.id.0) else {
             bot.answer_callback_query(callback.id)
-                .text("Невідомий Telegram-акаунт.").await?;
+                .text("Невідомий Telegram-акаунт.")
+                .await?;
             return Ok(());
         };
         bot.answer_callback_query(callback.id).await?;
         let compact = CompactBot::new(
-            bot.clone(), ChatId(telegram_user_id), Arc::clone(&state.surfaces)
+            bot.clone(),
+            ChatId(telegram_user_id),
+            Arc::clone(&state.surfaces),
         );
         if action == "ul:y" {
             confirm_unlink_for_user(&compact, state.as_ref(), telegram_user_id).await?;
         } else if state.pending_unlinks.consume(telegram_user_id).await {
-            compact.send_message(ChatId(telegram_user_id), "Від'єднання скасовано.").await?;
+            compact
+                .send_message(ChatId(telegram_user_id), "Від'єднання скасовано.")
+                .await?;
         } else {
-            compact.send_message(ChatId(telegram_user_id), "Запит уже неактивний.").await?;
+            compact
+                .send_message(ChatId(telegram_user_id), "Запит уже неактивний.")
+                .await?;
         }
-        sync_command_menu(&bot, ChatId(telegram_user_id), state.as_ref(), telegram_user_id).await;
+        sync_command_menu(
+            &bot,
+            ChatId(telegram_user_id),
+            state.as_ref(),
+            telegram_user_id,
+        )
+        .await;
         return Ok(());
     }
     let Some((approve, request_token)) = callback
@@ -792,8 +803,11 @@ async fn handle_message(
     }
 
     let Some(text) = message.text() else {
-        bot.send_message(message.chat.id, "Підтримуються команди та геолокація Telegram. Для 0x1 використовуйте /open.")
-            .await?;
+        bot.send_message(
+            message.chat.id,
+            "Підтримуються команди та геолокація Telegram. Для 0x1 використовуйте /open.",
+        )
+        .await?;
         if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
             error!(%error, "could not remove unsupported Telegram input");
         }
@@ -1315,8 +1329,11 @@ async fn confirm_unlink_for_user(
 ) -> ResponseResult<()> {
     let chat_id = ChatId(telegram_user_id);
     if !state.pending_unlinks.consume(telegram_user_id).await {
-        bot.send_message(chat_id, "Запит на від'єднання відсутній або прострочений. Повторіть /unlink.")
-            .await?;
+        bot.send_message(
+            chat_id,
+            "Запит на від'єднання відсутній або прострочений. Повторіть /unlink.",
+        )
+        .await?;
         return Ok(());
     }
     let identity = match state.repository.find_by_telegram(telegram_user_id).await {
@@ -1328,7 +1345,8 @@ async fn confirm_unlink_for_user(
         }
         Err(error) => {
             error!(%error, "Telegram identity lookup failed during unlink");
-            bot.send_message(chat_id, "Identity тимчасово недоступний.").await?;
+            bot.send_message(chat_id, "Identity тимчасово недоступний.")
+                .await?;
             return Ok(());
         }
     };
@@ -1336,11 +1354,13 @@ async fn confirm_unlink_for_user(
         Ok(value) => value,
         Err(error) => {
             error!(%error, "stored Bond pub_dress is invalid");
-            bot.send_message(chat_id, "Bond тимчасово недоступний.").await?;
+            bot.send_message(chat_id, "Bond тимчасово недоступний.")
+                .await?;
             return Ok(());
         }
     };
-    match state.provider_links
+    match state
+        .provider_links
         .unlink_self_service(&pub_dress, IdentityProvider::Telegram)
         .await
     {
@@ -1348,10 +1368,12 @@ async fn confirm_unlink_for_user(
             bot.send_message(
                 chat_id,
                 "Telegram від'єднано від Bond. Відкрийте /open для входу або реєстрації.",
-            ).await?;
+            )
+            .await?;
         }
         Ok(SelfDisconnectOutcome::NotLinked) => {
-            bot.send_message(chat_id, "Telegram уже не прив'язаний до Bond.").await?;
+            bot.send_message(chat_id, "Telegram уже не прив'язаний до Bond.")
+                .await?;
         }
         Ok(SelfDisconnectOutcome::SoleAccessPath) => {
             bot.send_message(
@@ -1361,7 +1383,8 @@ async fn confirm_unlink_for_user(
         }
         Err(error) => {
             error!(%error, "self-disconnect failed");
-            bot.send_message(chat_id, "Від'єднання тимчасово недоступне.").await?;
+            bot.send_message(chat_id, "Від'єднання тимчасово недоступне.")
+                .await?;
         }
     }
     Ok(())
@@ -1448,8 +1471,11 @@ async fn start_registration(
 /// `/open` remains the topmost command for every chat. The compact
 /// presenter reuses its Open and Status messages without requiring a Bond.
 async fn open_app(bot: &CompactBot, message: &Message) -> ResponseResult<()> {
-    bot.send_message(message.chat.id, "0x1 готовий. Mini App відкривається кнопкою у повідомленні Open.")
-        .await?;
+    bot.send_message(
+        message.chat.id,
+        "0x1 готовий. Mini App відкривається кнопкою у повідомленні Open.",
+    )
+    .await?;
     Ok(())
 }
 
@@ -1549,8 +1575,17 @@ mod tests {
             let help = help_text(menu);
             assert!(help.contains("/open"));
             assert!(help.contains("/unlink"));
-            for hidden in ["/start", "/whoami", "/current_position", "/recover", "/help"] {
-                assert!(!help.contains(hidden), "{hidden} leaked into public commands");
+            for hidden in [
+                "/start",
+                "/whoami",
+                "/current_position",
+                "/recover",
+                "/help",
+            ] {
+                assert!(
+                    !help.contains(hidden),
+                    "{hidden} leaked into public commands"
+                );
             }
         }
         let admin_commands = bot_commands(CommandMenu::Registered(BondAccessRole::Admin));
@@ -1560,7 +1595,14 @@ mod tests {
 
     #[test]
     fn legacy_commands_remain_accepted_even_when_hidden_from_menu() {
-        for command in ["/start", "/whoami", "/current_position", "/recover", "/help", "/unlink_confirm"] {
+        for command in [
+            "/start",
+            "/whoami",
+            "/current_position",
+            "/recover",
+            "/help",
+            "/unlink_confirm",
+        ] {
             assert_eq!(super::command_of(command), command);
         }
     }
