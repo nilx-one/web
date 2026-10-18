@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  useCallback,
+  useEffect,
   useRef,
+  useState,
   useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
@@ -16,6 +19,7 @@ export const FLYOVER_SWIPE_PIXELS = 36;
 
 export interface FlyoverControlsProps {
   readonly onSteer: (direction: -1 | 1) => void;
+  readonly onCollapse: () => void;
   readonly onLeave: () => void;
   /** The flight's activity row, the lowest element under the steering. */
   readonly activities?: ReactNode;
@@ -39,12 +43,51 @@ export interface FlyoverControlsProps {
  */
 export function FlyoverControls({
   onSteer,
+  onCollapse,
   onLeave,
   activities,
   force,
 }: FlyoverControlsProps) {
   const { t } = useLocalization();
   const swipe = useRef<{ x: number; y: number } | undefined>(undefined);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const noButton = useRef<HTMLButtonElement>(null);
+  const yesButton = useRef<HTMLButtonElement>(null);
+  const dismiss = useCallback(() => {
+    setConfirmCancel(false);
+    cancelButton.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (!confirmCancel) return;
+    noButton.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        dismiss();
+      } else if (
+        event.code === "ArrowLeft" ||
+        event.code === "ArrowRight" ||
+        event.code === "KeyA" ||
+        event.code === "KeyD"
+      ) {
+        event.stopImmediatePropagation();
+      } else if (event.code === "Tab") {
+        const first = noButton.current;
+        const last = yesButton.current;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [confirmCancel, dismiss]);
   return (
     <div className="flyover" role="group" aria-label={t("flyover.controls")}>
       <div
@@ -69,9 +112,51 @@ export function FlyoverControls({
           swipe.current = undefined;
         }}
       />
-      <button type="button" className="flyover__leave" onClick={onLeave}>
-        {t("flyover.leave")}
-      </button>
+      <div className="flyover__actions">
+        <button type="button" className="flyover__action" onClick={onCollapse}>
+          {t("flyover.collapse")}
+        </button>
+        <button
+          type="button"
+          className="flyover__action"
+          ref={cancelButton}
+          onClick={() => setConfirmCancel(true)}
+        >
+          {t("flyover.leave")}
+        </button>
+      </div>
+      {confirmCancel ? (
+        <div className="flyover__confirm-backdrop">
+          <div
+            className="flyover__confirm"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="flyover-confirm-title"
+          >
+            <p id="flyover-confirm-title" className="flyover__confirm-title">
+              {t("flyover.cancelConfirm")}
+            </p>
+            <div className="flyover__confirm-actions">
+              <button
+                type="button"
+                className="flyover__action"
+                ref={noButton}
+                onClick={dismiss}
+              >
+                {t("flyover.no")}
+              </button>
+              <button
+                type="button"
+                className="flyover__action"
+                ref={yesButton}
+                onClick={onLeave}
+              >
+                {t("flyover.yes")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="flyover__bottom">
         <div className="flyover__steer">
           <button

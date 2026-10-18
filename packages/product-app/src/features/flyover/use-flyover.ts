@@ -127,8 +127,10 @@ export interface FlyoverRequest {
 }
 
 export interface Flyover {
-  /** A flight is under way: the world's own camera stands down. */
+  /** The route continues, whether open or collapsed. */
   readonly active: boolean;
+  /** Whether the full-screen camera and flight controls are active. */
+  readonly expanded: boolean;
   readonly following: boolean;
   readonly progress: FlyoverProgress | undefined;
   setFollowing(value: boolean): void;
@@ -138,6 +140,10 @@ export interface Flyover {
   steer(direction: -1 | 1): void;
   /** Holds or lets go of forcing; only the way out can be forced. */
   force(holding: boolean): void;
+  /** Hand back the camera and world controls without ending the route. */
+  collapse(): void;
+  /** Resume chasing xPing and return to full-screen steering. */
+  expand(): void;
   /** Leaves the flight at once. */
   leave(): void;
 }
@@ -163,11 +169,19 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
   const [request, setRequest] = useState<FlyoverRequest | undefined>();
   const [progress, setProgress] = useState<FlyoverProgress>();
   const [following, setFollowing] = useState(true);
+  const [open, setOpen] = useState(true);
+  const openRef = useRef(open);
   const followingRef = useRef(following);
+  const restoreCamera = useRef<
+    { putBack(): void; capture(): void } | undefined
+  >(undefined);
   useEffect(() => {
     followingRef.current = following;
   }, [following]);
   const flight = useRef<{ state: FlightState } | undefined>(undefined);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
   const forcing = useRef(false);
   const force = useCallback((holding: boolean) => {
     forcing.current = holding;
@@ -177,7 +191,10 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     (next: FlyoverRequest) => {
       if (!ready || request !== undefined) return;
       setProgress(undefined);
+      followingRef.current = true;
+      openRef.current = true;
       setFollowing(true);
+      setOpen(true);
       setRequest((current) => current ?? next);
     },
     [ready, request],
@@ -186,9 +203,27 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     setRequest(undefined);
     setProgress(undefined);
   }, []);
+  const collapse = useCallback(() => {
+    if (!openRef.current) return;
+    openRef.current = false;
+    followingRef.current = false;
+    forcing.current = false;
+    setOpen(false);
+    setFollowing(false);
+    restoreCamera.current?.putBack();
+  }, []);
+  const expand = useCallback(() => {
+    if (!openRef.current) {
+      restoreCamera.current?.capture();
+      openRef.current = true;
+      setOpen(true);
+    }
+    followingRef.current = true;
+    setFollowing(true);
+  }, []);
   const steer = useCallback((direction: -1 | 1) => {
     const current = flight.current;
-    if (current === undefined) return;
+    if (current === undefined || !openRef.current) return;
     current.state = steerFlight(
       current.state,
       direction,
@@ -208,6 +243,33 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       return () => setRequest(undefined);
     }
     const reduced = prefersReducedMotion();
+    let worldCamera = { camera: base, padding: basePadding };
+    const putBack = () => {
+      try {
+        renderer.setCamera(worldCamera.camera, {
+          motion: reduced ? "immediate" : "eased",
+          durationMs: 900,
+          ...(worldCamera.padding === undefined
+            ? {}
+            : { padding: worldCamera.padding }),
+        });
+      } catch {
+        /* A detached renderer has nothing left to restore. */
+      }
+    };
+    restoreCamera.current = {
+      putBack,
+      capture: () => {
+        try {
+          worldCamera = {
+            camera: renderer.getCamera(),
+            padding: renderer.getCameraPadding?.(),
+          };
+        } catch {
+          /* Preserve the last valid world camera if the renderer was lost. */
+        }
+      },
+    };
     let cancelled = false;
     let frame: number | undefined;
     let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
@@ -217,7 +279,8 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     const fly = (route: readonly LonLat[]) => {
       renderer.setRoute?.({ points: route });
       if (reduced) {
-        renderer.setCamera(routeOverview(route), { motion: "immediate" });
+        if (openRef.current)
+          renderer.setCamera(routeOverview(route), { motion: "immediate" });
         drone?.upsert({
           id: FLYOVER_DRONE_ID,
           lngLat: to,
@@ -243,10 +306,11 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       let arrivedAt: number | undefined;
       let straight = false;
       let hovering = false;
-      renderer.setCamera(
-        chaseCamera(request.from, state.bearingDeg, state.height),
-        { motion: "eased", durationMs: FLYOVER_TAKEOFF_MS },
-      );
+      if (openRef.current)
+        renderer.setCamera(
+          chaseCamera(request.from, state.bearingDeg, state.height),
+          { motion: "eased", durationMs: FLYOVER_TAKEOFF_MS },
+        );
 
       // Back the way it came, after hovering at the station: never forced.
       const flyBack = () => {
@@ -343,7 +407,7 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
             scale: FLYOVER_DRONE_SCALE,
             ...(wear === undefined ? {} : { wear }),
           });
-          if (flying && followingRef.current) {
+          if (flying && openRef.current && followingRef.current) {
             const turn = ((state.bearingDeg - cameraBearing + 540) % 360) - 180;
             cameraBearing +=
               turn * Math.min(1, (CHASE_TURN_RATE * elapsed) / 1000);
@@ -384,9 +448,10 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!openRef.current) return;
       if (event.code === "Escape") {
         event.preventDefault();
-        leave();
+        collapse();
         return;
       }
       const direction =
@@ -411,32 +476,45 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       if (arrivalTimer !== undefined) clearTimeout(arrivalTimer);
       flight.current = undefined;
+      restoreCamera.current = undefined;
       try {
         drone?.remove(FLYOVER_DRONE_ID);
         renderer.setRoute?.(null);
-        renderer.setCamera(base, {
-          motion: reduced ? "immediate" : "eased",
-          durationMs: 900,
-          ...(basePadding === undefined ? {} : { padding: basePadding }),
-        });
       } catch {
-        /* A lost renderer has nothing left to put back. */
+        /* A detached renderer cannot clean up its props. */
       }
+      // A collapsed flight already gave the camera to the world.
+      if (openRef.current) putBack();
     };
-  }, [ready, renderer, request, steer, leave]);
+  }, [ready, renderer, request, steer, collapse]);
 
   const active = request !== undefined;
+  const expanded = active && open;
   return useMemo(
     () => ({
       active,
+      expanded,
       start,
       steer,
       force,
+      collapse,
+      expand,
       leave,
       progress,
       following,
       setFollowing,
     }),
-    [active, leave, start, steer, force, progress, following],
+    [
+      active,
+      expanded,
+      leave,
+      start,
+      steer,
+      force,
+      collapse,
+      expand,
+      progress,
+      following,
+    ],
   );
 }

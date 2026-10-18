@@ -34,7 +34,7 @@ export function useCourier(input: {
   /** When forcing on empty broke the engine and called the flight off. */
   const [brokenAt, setBrokenAt] = useState<number>();
   const flyover = useFlyover(input.renderer, !input.suspended);
-  const { following, setFollowing, active, start, leave } = flyover;
+  const { following, setFollowing, expand, active, start, leave } = flyover;
   const leaveRef = useRef(leave);
   useEffect(() => {
     leaveRef.current = leave;
@@ -178,9 +178,9 @@ export function useCourier(input: {
   useEffect(() => {
     if (!flyover.active) return;
     return renderer.systemDrone?.subscribeActivation?.(FLYOVER_DRONE_ID, () =>
-      setFollowing(true),
+      expand(),
     );
-  }, [flyover.active, renderer, setFollowing]);
+  }, [flyover.active, renderer, expand]);
   useEffect(() => {
     const drone = renderer.systemDrone;
     if (!drone || suspended || !offer || flyover.active) return;

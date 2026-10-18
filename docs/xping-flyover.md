@@ -34,9 +34,18 @@ destination, named by the BusinessPoint's localized display name ("150 m to
 0xda-market Golden Gate"), rounded up to whole 50 m steps so it changes once
 per step rather than every frame.
 
-In flight the Dock and status rail stand down. The bottom of the screen is
-the activity row (distance and **↗ xPing**), with the steering right above
-it; the location and camera controls are hidden until the flight ends.
+While expanded the Dock and status rail stand down. The bottom of the screen
+is the activity row (distance and **↗ xPing**), with the steering right above
+it; the location and camera controls return when collapsed or finished.
+
+**Collapse** releases the camera, Dock and controls while xPing keeps
+flying (including the homeward leg). **↗ xPing** on the activity row, or
+tapping the drone, expands it again from its current position. **Cancel**
+asks "Cancel the flight?" with Yes/No; No (or Escape) dismisses that dialog
+without stopping the flight. The action row sits below the header and
+toasts below the action row. A collapsed flight never restores a stale
+camera upon finishing, and expanding captures the latest world camera as
+its new restoration target.
 
 Only the flying xPing takes taps, and only while it flies: the renderer
 hit-tests a drone just when something has subscribed to that drone's id.
@@ -81,7 +90,9 @@ refreshed every 250 ms):
 At the wheel, a sideways swipe, ←/→, `A`/`D` or the ◀ ▶ buttons step it
 one lane aside, at most two either way. The step holds for 1.4 s, then the
 route pulls it back. Steering into a building it cannot clear still goes
-around it. Escape or the leave button ends the flight.
+around it. Escape collapses the expanded flight (or dismisses the cancellation
+confirmation), and steering is disabled while collapsed. Confirmed Cancel
+ends the flight on either leg.
 
 ## Camera and ending
 
@@ -115,7 +126,8 @@ repaired.
 
 After hovering at the station xPing always flies back to where it set off,
 along the same roads and never forced; only then does the world get its
-camera back. The activity row tells the way back as the distance to the start.
+camera back if the flight is still expanded. If collapsed, the world
+retains the camera already in use. The activity row tells the way back as the distance to the start.
 
 ## Engine, smoke and repair
 
