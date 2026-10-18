@@ -152,8 +152,8 @@
 }
 
 .flyover__force:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25);
 }
 
 .flyover__force:active:not(:disabled) {
