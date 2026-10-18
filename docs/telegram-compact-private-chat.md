@@ -70,7 +70,7 @@ shows the first ten actionable requests.
    preserve their prior location semantics.
 8. `/unlink` uses inline Confirm/Cancel on Status and never emits an extra
    bot message; expiry and sole-access guards remain enforced.
-9. Input cleanup deletes *only incoming user messages*, never bot slots.
+9. Input cleanup deletes _only incoming user messages_, never bot slots.
    Admin revocation redacts and retains its slot ID for later reuse.
 10. Telegram edit API errors other than message-not-found produce no
     duplicate messages and never bypass the authorization boundary.
