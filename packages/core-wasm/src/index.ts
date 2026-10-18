@@ -24,6 +24,7 @@ import type {
   CoreFindItemResult,
   CoreFoundItem,
   CoreInventoryAnswer,
+  CoreXpingRepairAnswer,
   CoreInventoryCommand,
   CoreRecipe,
   CoreSize,
@@ -275,6 +276,31 @@ function decodeInventoryAnswer(value: string): CoreInventoryAnswer {
     };
   }
   throw new Error("0x1 Core returned an invalid inventory answer");
+}
+
+function decodeXpingRepairAnswer(value: string): CoreXpingRepairAnswer {
+  const parsed: unknown = JSON.parse(value);
+  if (
+    isRecord(parsed) &&
+    parsed.ok === false &&
+    typeof parsed.error === "string"
+  ) {
+    return { ok: false, error: parsed.error };
+  }
+  if (
+    isRecord(parsed) &&
+    parsed.ok === true &&
+    isRecord(parsed.inventory) &&
+    isRecord(parsed.engine) &&
+    isRecord(parsed.outcome)
+  ) {
+    return {
+      ok: true,
+      inventory: JSON.stringify(parsed.inventory),
+      seedsSpent: decodeAmount(parsed.outcome.seeds_spent),
+    };
+  }
+  throw new Error("0x1 Core returned an invalid xPing repair answer");
 }
 
 function decodeEconomyCatalog(value: string): CoreEconomyCatalog {
@@ -663,6 +689,11 @@ export interface CoreWasmBindings {
     command: CoreInventoryCommand,
     nowMs: number,
   ): CoreInventoryAnswer;
+  xpingRepair?(
+    engine: string,
+    inventory: string,
+    nowMs: number,
+  ): CoreXpingRepairAnswer;
   avaiaDriveStep?(
     state: string,
     input: AvaiaDriveInput,
@@ -710,6 +741,8 @@ export interface GeneratedCoreWasmModule {
     command: string,
     now_ms: string,
   ): string;
+  /** Absent from a runtime built before Core's xPing engine. */
+  xping_repair?(engine: string, inventory: string, now_ms: string): string;
   /** Absent from a runtime built before Core's Avaia life. */
   apply_avaia_life?(
     state: string,
@@ -827,6 +860,18 @@ export async function loadGeneratedCoreWasmBindings(
                 JSON.stringify(command),
                 String(nowMs),
               ),
+            );
+          },
+        }),
+    ...(runtime.xping_repair === undefined
+      ? {}
+      : {
+          xpingRepair: (engine: string, inventory: string, nowMs: number) => {
+            if (!Number.isSafeInteger(nowMs) || nowMs < 0) {
+              throw new RangeError("now must be a whole number of ms");
+            }
+            return decodeXpingRepairAnswer(
+              runtime.xping_repair!(engine, inventory, String(nowMs)),
             );
           },
         }),
@@ -1023,6 +1068,18 @@ class CoreWasmClient implements CoreRuntimePort {
       throw new Error("0x1 Core Wasm inventory binding is missing");
     }
     return bindings.applyInventoryCommand(state, command, nowMs);
+  }
+
+  public async xpingRepair(
+    engine: string,
+    inventory: string,
+    nowMs: number,
+  ): Promise<CoreXpingRepairAnswer> {
+    const bindings = await this.loadBindings();
+    if (bindings.xpingRepair === undefined) {
+      throw new Error("0x1 Core Wasm xPing repair binding is missing");
+    }
+    return bindings.xpingRepair(engine, inventory, nowMs);
   }
 
   public async avaiaDriveStep(

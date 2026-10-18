@@ -30,6 +30,7 @@ import {
   hasBusinessStationAccess,
   hasNearbySpeechAccess,
   hasCommittedAwardAccess,
+  hasXpingEngineAccess,
   hasPubInfoAccess,
   type BondProviderConnections,
   type BondProviderType,
@@ -1076,6 +1077,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           : {})}
         {...(hasCommittedAwardAccess(dependencies.identity)
           ? { committedAwards: dependencies.identity }
+          : {})}
+        {...(hasXpingEngineAccess(dependencies.identity)
+          ? { xpingEngine: dependencies.identity }
           : {})}
         findItems={dependencies.core}
         {...(dependencies.courierDirectory === undefined

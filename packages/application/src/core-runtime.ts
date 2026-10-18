@@ -178,6 +178,12 @@ export interface CoreRuntimePort {
     command: CoreInventoryCommand,
     nowMs: number,
   ): Promise<CoreInventoryAnswer>;
+  /** Pays for an xPing engine repair from the inventory, at Core's price. */
+  xpingRepair?(
+    engine: string,
+    inventory: string,
+    nowMs: number,
+  ): Promise<CoreXpingRepairAnswer>;
   /**
    * One step of the Avaia's drive (`docs/avaia-drive.md` in core): the stored
    * drive, `""` for a fresh one, one input, the wall clock and the local hour.
@@ -259,7 +265,22 @@ export type CoreInventoryCommand =
       readonly holder: CoreHolder;
       readonly carry: "backpack" | "bag";
     }
-  | { readonly op: "gift_backpacks"; readonly bond_level: number };
+  | { readonly op: "gift_backpacks"; readonly bond_level: number }
+  /** Ten thousand starter Seeds ₴€£, once (`starter` in the state). */
+  | { readonly op: "grant_starter_seeds" };
+
+/**
+ * Core's `xping_repair` (`docs/xping-engine.md`): the payment for an engine
+ * repair, priced from the engine itself, with both next states. The host
+ * stores the inventory only once the service recorded the engine's half.
+ */
+export type CoreXpingRepairAnswer =
+  | {
+      readonly ok: true;
+      readonly inventory: string;
+      readonly seedsSpent: number;
+    }
+  | { readonly ok: false; readonly error: string };
 
 export type RuntimeReadiness =
   | {
