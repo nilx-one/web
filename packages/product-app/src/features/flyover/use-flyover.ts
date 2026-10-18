@@ -579,7 +579,8 @@ export function useFlyover(
         }
         try {
           const wear = request.forcing?.wear();
-          const speedMps = FLYOVER_SPEED_MPS *
+          const speedMps =
+            FLYOVER_SPEED_MPS *
             (1 + (FLYOVER_FORCE_SPEED_FACTOR - 1) * state.boost);
           drone?.upsert({
             id: FLYOVER_DRONE_ID,
