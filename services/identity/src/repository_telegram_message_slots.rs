@@ -75,12 +75,16 @@ mod telegram_message_slot_tests {
 
     #[tokio::test]
     async fn slots_are_independent_and_reused_after_reopening_storage() {
-        let repo = IdentityRepository::connect("sqlite::memory:").await.expect("database");
+        let dir = tempfile::tempdir().expect("temporary database directory");
+        let url = format!("sqlite://{}", dir.path().join("telegram-slots.db").display());
+        let repo = IdentityRepository::connect(&url).await.expect("database");
         assert_eq!(repo.telegram_message_id(123, TelegramMessageSlot::Open).await.unwrap(), None);
         repo.save_telegram_message_id(123, TelegramMessageSlot::Open, Some(5)).await.unwrap();
         repo.save_telegram_message_id(123, TelegramMessageSlot::Status, Some(6)).await.unwrap();
         repo.save_telegram_message_id(123, TelegramMessageSlot::Admin, Some(7)).await.unwrap();
         repo.save_telegram_message_id(123, TelegramMessageSlot::Status, Some(8)).await.unwrap();
+        drop(repo);
+        let repo = IdentityRepository::connect(&url).await.expect("reopened database");
         assert_eq!(repo.telegram_message_id(123, TelegramMessageSlot::Open).await.unwrap(), Some(5));
         assert_eq!(repo.telegram_message_id(123, TelegramMessageSlot::Status).await.unwrap(), Some(8));
         assert_eq!(repo.telegram_message_id(123, TelegramMessageSlot::Admin).await.unwrap(), Some(7));
