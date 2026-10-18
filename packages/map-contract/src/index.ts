@@ -540,6 +540,35 @@ export interface MapOrb {
   readonly landsAt: number;
 }
 
+/** Flight collectibles are transient renderer props, not durable claims. */
+export type FlightLootRarity =
+  | "common"
+  | "uncommon"
+  | "rare"
+  | "special"
+  | "exclusive";
+
+export const FLIGHT_LOOT_COLORS: Readonly<Record<FlightLootRarity, number>> =
+  Object.freeze({
+    common: 0x899199,
+    uncommon: 0x00bfd4,
+    rare: 0x358ff0,
+    special: 0x9b6cfa,
+    exclusive: 0xe8b84c,
+  });
+
+/** Positioned in the real 3D world; no purchase or pick-up authority. */
+export interface MapFlightLoot {
+  readonly id: string;
+  readonly lngLat: readonly [longitude: number, latitude: number];
+  /** Metres above local terrain at the chosen point. */
+  readonly heightMeters: number;
+  readonly kind: "orb" | "seeds" | "balloon" | "cell" | "cosmetic";
+  readonly rarity: FlightLootRarity;
+  /** Strong emissive aura appears only in the last 30 m before contact. */
+  readonly near: boolean;
+}
+
 export type MapRendererStatus =
   | { readonly kind: "unmounted" }
   | { readonly kind: "loading" }
@@ -691,6 +720,8 @@ export interface MapRenderer {
   setPinnedLandmarks?(landmarks: readonly MapPinnedLandmark[]): void;
   /** Lays orbs on the world; an empty list clears them. */
   setOrbs?(orbs: readonly MapOrb[]): void;
+  /** World-space loot supplied by the flight, never item ownership. */
+  setFlightLoot?(loot: readonly MapFlightLoot[]): void;
   /** Draws one route on the world; `null` clears it. */
   setRoute?(route: MapRoute | null): void;
 }
@@ -827,6 +858,8 @@ export interface SystemDroneHandle {
    * more is spent. Omitted, the faint puff of a tired but sound drone.
    */
   readonly wear?: number;
+  /** Highest locally collected rarity during this flight, presentation only. */
+  readonly lootAura?: FlightLootRarity;
 }
 export interface SystemDroneLayerContract {
   /**
