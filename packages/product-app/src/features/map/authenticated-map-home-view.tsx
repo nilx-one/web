@@ -1695,11 +1695,15 @@ export function AuthenticatedMapHomeView({
   });
   const guideActive = guide.state !== undefined;
   const systemInformer = useSystemInformer();
+  const announcedAdminRequests = useRef(new Set<string>());
   useEffect(() => {
     if (adminRoleInbox === undefined) return;
     for (const request of adminRoleInbox.requests) {
+      const id = `admin-role:${request.pubDress}:${request.requestedAt}`;
+      if (announcedAdminRequests.current.has(id)) continue;
+      announcedAdminRequests.current.add(id);
       systemInformer.publish({
-        id: `admin-role:${request.pubDress}:${request.requestedAt}`,
+        id,
         kind: "admin-review",
         title: t("identity.adminInbox.title"),
         description: `${request.pubDress} · ${t("identity.adminInbox.description")}`,
@@ -1709,7 +1713,7 @@ export function AuthenticatedMapHomeView({
         },
       });
     }
-  }, [adminRoleInbox?.requests, onNavigate, systemInformer.publish, t]);
+  }, [adminRoleInbox, onNavigate, systemInformer, t]);
   // xPing's engine lives with the identity service; its repairs are paid
   // from this device's inventory, which also gets the starter Seeds once.
   const xping = useXpingEngine(pubDress, xpingEngine, findItems);
