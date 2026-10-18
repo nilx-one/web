@@ -99,10 +99,10 @@ impl CommandMenu {
 fn command_specs(menu: CommandMenu) -> Vec<&'static CommandSpec> {
     let mut specs: Vec<&'static CommandSpec> = USER_COMMANDS.iter().collect();
 
-    if let CommandMenu::Registered(role) = menu {
-        if role.can_set_manual_location() {
-            specs.extend(ADMIN_ONLY_COMMANDS.iter());
-        }
+    if let CommandMenu::Registered(role) = menu
+        && role.can_set_manual_location()
+    {
+        specs.extend(ADMIN_ONLY_COMMANDS.iter());
     }
     specs.push(&UNLINK_COMMAND);
     specs
