@@ -189,6 +189,7 @@ import {
 import { pinnedLandmarks } from "./pinned-landmarks";
 import {
   marketMapPoints,
+  marketPointTitle,
   seededMarketDirectory,
   MARKET_MARKER_ONLY_OWNERS,
 } from "../courier/market-points";
@@ -2900,9 +2901,75 @@ export function AuthenticatedMapHomeView({
     setDockSectionTitle(passedSectionTitle(event.currentTarget));
   }
 
+  // In flight the activity row sits under the flight controls; otherwise
+  // it stacks with the fog prompt.
+  const activities = (
+    <ActivityStack
+      jobs={fogReveal.jobs}
+      plan={courier.plan}
+      flight={flyover}
+      completed={completedReveal}
+      target={
+        courier.plan === undefined
+          ? undefined
+          : marketPointTitle(courier.plan.destination, locale)
+      }
+      onFlight={() => {
+        if (!courier.plan) return;
+        courier.setFollowing(false);
+        followCamera.release();
+        const points = [
+          courierPoint(courier.plan.origin),
+          courierPoint(courier.plan.destination.coordinate),
+          flyover.progress?.point ?? courierPoint(courier.plan.origin),
+        ];
+        if (observedPosition) points.push(observedPosition);
+        const camera = activityCamera(
+          points,
+          globalThis.innerWidth,
+          globalThis.innerHeight,
+        );
+        if (camera)
+          renderer.setCamera(camera, {
+            motion: reducedMotion ? "immediate" : "eased",
+          });
+      }}
+      onFollow={() => {
+        followCamera.release();
+        courier.setFollowing(true);
+      }}
+      onCells={() => {
+        courier.setFollowing(false);
+        followCamera.release();
+        const cells = fogReveal.jobs.length
+          ? fogReveal.jobs.map((job) => job.cell)
+          : completedReveal
+            ? [completedReveal.cell]
+            : [];
+        const camera = activityCamera(
+          cells.flatMap((cell) =>
+            cell.boundary.map(([longitude, latitude]) => ({
+              longitude,
+              latitude,
+            })),
+          ),
+          globalThis.innerWidth,
+          globalThis.innerHeight,
+        );
+        if (camera)
+          renderer.setCamera(camera, {
+            motion: reducedMotion ? "immediate" : "eased",
+          });
+      }}
+    />
+  );
   return (
     <AppShell
-      className="authenticated-map-home"
+      className={
+        flyover.active
+          ? "authenticated-map-home authenticated-map-home--flight"
+          : "authenticated-map-home"
+      }
       presentation={presentation}
       safeArea={safeArea}
       data-theme={resolvedAppearance}
@@ -3646,82 +3713,28 @@ export function AuthenticatedMapHomeView({
             />
           ) : null}
           {flyover.active ? (
-            <FlyoverControls onSteer={flyover.steer} onLeave={flyover.leave} />
+            <FlyoverControls
+              onSteer={flyover.steer}
+              onLeave={flyover.leave}
+              activities={activities}
+            />
           ) : null}
-          <LocationControl
-            viewModel={locationControl}
-            proximity={
-              findItems?.avaiaProximity === undefined
-                ? undefined
-                : (avaiaProximity?.policy ?? "unknown")
-            }
-            onActivate={activateLocationControl}
-          />
+          {flyover.active ? null : (
+            <LocationControl
+              viewModel={locationControl}
+              proximity={
+                findItems?.avaiaProximity === undefined
+                  ? undefined
+                  : (avaiaProximity?.policy ?? "unknown")
+              }
+              onActivate={activateLocationControl}
+            />
+          )}
           <FogRevealPrompt
             prompt={travelPrompt === undefined ? fogReveal.prompt : undefined}
             jobs={fogReveal.jobs}
             avaia={avaiaLabel}
-            activities={
-              <ActivityStack
-                jobs={fogReveal.jobs}
-                plan={courier.plan}
-                flight={flyover}
-                completed={completedReveal}
-                avaia={{
-                  name: avaiaLabel,
-                  point: () =>
-                    avaiaWalk.stance(globalThis.performance.now())?.point,
-                }}
-                onFlight={() => {
-                  if (!courier.plan) return;
-                  courier.setFollowing(false);
-                  followCamera.release();
-                  const points = [
-                    courierPoint(courier.plan.origin),
-                    courierPoint(courier.plan.destination.coordinate),
-                    flyover.progress?.point ??
-                      courierPoint(courier.plan.origin),
-                  ];
-                  if (observedPosition) points.push(observedPosition);
-                  const camera = activityCamera(
-                    points,
-                    globalThis.innerWidth,
-                    globalThis.innerHeight,
-                  );
-                  if (camera)
-                    renderer.setCamera(camera, {
-                      motion: reducedMotion ? "immediate" : "eased",
-                    });
-                }}
-                onFollow={() => {
-                  followCamera.release();
-                  courier.setFollowing(true);
-                }}
-                onCells={() => {
-                  courier.setFollowing(false);
-                  followCamera.release();
-                  const cells = fogReveal.jobs.length
-                    ? fogReveal.jobs.map((job) => job.cell)
-                    : completedReveal
-                      ? [completedReveal.cell]
-                      : [];
-                  const camera = activityCamera(
-                    cells.flatMap((cell) =>
-                      cell.boundary.map(([longitude, latitude]) => ({
-                        longitude,
-                        latitude,
-                      })),
-                    ),
-                    globalThis.innerWidth,
-                    globalThis.innerHeight,
-                  );
-                  if (camera)
-                    renderer.setCamera(camera, {
-                      motion: reducedMotion ? "immediate" : "eased",
-                    });
-                }}
-              />
-            }
+            activities={flyover.active ? undefined : activities}
             onConfirm={confirmFogReveal}
             onDismiss={fogReveal.dismiss}
           />
