@@ -170,11 +170,9 @@ export function createPubDressStatusViewState(
       return {
         kind: "invalid",
         detail:
-          result.reason === "reserved-prefix"
-            ? "0x0 is reserved — choose 1–f to register"
-            : result.reason === "invalid-length"
-              ? "Incorrect — use 2–32 characters"
-              : "Incorrect — this character isn’t supported",
+          result.reason === "invalid-length"
+            ? "Incorrect — use 2–32 characters"
+            : "Incorrect — this character isn’t supported",
       };
     case "rate-limited":
     case "service-unavailable":

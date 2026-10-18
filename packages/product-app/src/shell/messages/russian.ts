@@ -377,6 +377,14 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "8–128 символов Unicode · без пробелов в начале и в конце · без переносов строки",
   "identity.form.notYou": "Не вы?",
   "identity.authenticated": "Аутентифицированный Bond",
+  "identity.adminInbox.title": "Запросы прав администратора",
+  "identity.adminInbox.description":
+    "Bond с адресом 0x0 вошёл в систему. Предоставить ему права администратора?",
+  "identity.adminInbox.review": "Рассмотреть",
+  "identity.adminInbox.approve": "Предоставить admin",
+  "identity.adminInbox.deny": "Оставить user",
+  "identity.adminInbox.failure":
+    "Не удалось сохранить решение. Повторите попытку.",
   "identity.password.confirm": "Подтвердите пароль",
   "identity.password.show": "Показать пароли",
   "identity.password.hide": "Скрыть пароли",

@@ -227,6 +227,66 @@ describe("revealing the fog around a Bond", () => {
     expect(fog.revealed.size).toBe(0);
   });
 
+  it("opens an adjacent fog cell when accurate Bond GPS is within 15 m of its edge", () => {
+    const fog = createFogFieldDouble(0.01);
+    const onRevealed = vi.fn();
+    const nearEdge = { longitude: 30.5249, latitude: 50.45 };
+    const world = fogRenderer(fog);
+    const { rerender } = render({
+      renderer: world,
+      bondPoint: nearEdge,
+      observed: { ...nearEdge, accuracyMeters: 8 },
+      onRevealed,
+    });
+
+    expect(fog.isRevealed("strip:3052")).toBe(true);
+    expect(fog.isRevealed("strip:3053")).toBe(true);
+    expect(onRevealed).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "strip:3053" }),
+      "nearby",
+    );
+    const nearbyCalls = onRevealed.mock.calls.filter(
+      ([, via]) => via === "nearby",
+    );
+    expect(nearbyCalls).toHaveLength(1);
+
+    rerender({
+      renderer: world,
+      bondPoint: nearEdge,
+      observed: { ...nearEdge, accuracyMeters: 8 },
+      owner: "0x0sky",
+      onRevealed,
+    });
+    expect(
+      onRevealed.mock.calls.filter(([, via]) => via === "nearby"),
+    ).toHaveLength(1);
+  });
+
+  it("requires a close, accurate observation; a declared Bond position never opens a neighbour", () => {
+    const fog = createFogFieldDouble(0.01);
+    const world = fogRenderer(fog);
+    const nearEdge = { longitude: 30.5249, latitude: 50.45 };
+    const { rerender } = render({ renderer: world, bondPoint: nearEdge });
+    expect(fog.revealed.size).toBe(0);
+
+    rerender({
+      renderer: world,
+      bondPoint: nearEdge,
+      observed: { ...nearEdge, accuracyMeters: 20 },
+      owner: "0x0sky",
+    });
+    expect(fog.isRevealed("strip:3053")).toBe(false);
+
+    const farther = { longitude: 30.5247, latitude: 50.45 };
+    rerender({
+      renderer: world,
+      bondPoint: farther,
+      observed: { ...farther, accuracyMeters: 8 },
+      owner: "0x0sky",
+    });
+    expect(fog.isRevealed("strip:3053")).toBe(false);
+  });
+
   it("keeps a reveal going across a reopened page", () => {
     const fog = createFogFieldDouble(0.01);
     const renderer = fogRenderer(fog);
