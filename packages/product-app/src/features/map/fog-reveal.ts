@@ -63,6 +63,62 @@ export const FOG_CELL_LANDMARK_RADIUS_METERS = 220;
 /** An observation vaguer than this does not say which cell the device is in. */
 export const FOG_APPROACH_ACCURACY_METERS = 50;
 
+/** A Bond's accurately observed approach also lifts fog near a cell edge. */
+export const FOG_NEARBY_REVEAL_METERS = 15;
+
+/** An uncertain GPS fix may not reveal a neighbouring cell. */
+export const FOG_NEARBY_ACCURACY_METERS = 15;
+
+/**
+ * Shortest distance to a cell's polygon boundary, not to its centre.
+ * Project only this small local neighborhood into ground metres. Wrapping
+ * longitude keeps cells crossing the antimeridian local too.
+ */
+export function distanceToFogCellEdgeMeters(
+  point: MapPointSelection,
+  cell: MapFogCell,
+): number {
+  if (
+    cell.boundary.length < 3 ||
+    !Number.isFinite(point.longitude) ||
+    !Number.isFinite(point.latitude)
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const metresPerDegreeLat = 111_195;
+  const metresPerDegreeLng =
+    metresPerDegreeLat * Math.cos((point.latitude * Math.PI) / 180);
+  const relative = ([longitude, latitude]: readonly [
+    number,
+    number,
+  ]): readonly [number, number] => [
+    (((longitude - point.longitude + 540) % 360) - 180) *
+      metresPerDegreeLng,
+    (latitude - point.latitude) * metresPerDegreeLat,
+  ];
+  let minSquared = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < cell.boundary.length; index += 1) {
+    const [ax, ay] = relative(cell.boundary[index]!);
+    const [bx, by] = relative(
+      cell.boundary[(index + 1) % cell.boundary.length]!,
+    );
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+    const t =
+      lengthSquared === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(1, -(ax * dx + ay * dy) / lengthSquared),
+          );
+    const x = ax + t * dx;
+    const y = ay + t * dy;
+    minSquared = Math.min(minSquared, x * x + y * y);
+  }
+  return Math.sqrt(minSquared);
+}
+
 /**
  * How far past a cell's edge the Avaia stops, as a share of the way from the
  * cell's centre to that edge: a step back onto open ground, not a step in.
