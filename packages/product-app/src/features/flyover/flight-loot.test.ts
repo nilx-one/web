@@ -17,7 +17,10 @@ import {
 
 const path = flightPath([[0, 0], [0, 1_000]]);
 const frame = localFrame([30.5, 50.45]);
-const spawn = (lane: FlightLootSpawn["lane"], distanceMeters = 160): FlightLootSpawn => ({
+const spawn = (
+  lane: FlightLootSpawn["lane"],
+  distanceMeters = 160,
+): FlightLootSpawn => ({
   id: `loot:${lane}`,
   lane,
   distanceMeters,
@@ -38,7 +41,9 @@ describe("xPing flight loot presentation", () => {
     expect(seen[0]?.near).toBe(true);
     expect(LOOT_MIN_VISIBLE_METERS).toBe(150);
     expect(LOOT_NEAR_METERS).toBe(30);
-    expect(visibleFlightLoot(path, frame, items, 120, 75, empty)[0]?.near).toBe(false);
+    expect(
+      visibleFlightLoot(path, frame, items, 120, 75, empty)[0]?.near,
+    ).toBe(false);
     expect(visibleFlightLoot(path, frame, items, 0, 75, empty)).toHaveLength(1);
   });
 
@@ -54,8 +59,12 @@ describe("xPing flight loot presentation", () => {
     const before: [number, number, number] = [14, 130, 14];
     const after: [number, number, number] = [14, 195, 14];
     expect(crossedFlightLoot(path, item, before, after)).toBe(true);
-    expect(crossedFlightLoot(path, item, [0, 130, 14], [0, 195, 14])).toBe(false);
-    expect(crossedFlightLoot(path, item, [14, 130, 35], [14, 195, 35])).toBe(false);
+    expect(
+      crossedFlightLoot(path, item, [0, 130, 14], [0, 195, 14]),
+    ).toBe(false);
+    expect(
+      crossedFlightLoot(path, item, [14, 130, 35], [14, 195, 35]),
+    ).toBe(false);
     expect(crossedFlightLoot(path, item, before, before)).toBe(false);
     expect(pathAt(path, item.distanceMeters).point[1]).toBe(160);
   });
@@ -84,7 +93,9 @@ describe("xPing flight loot presentation", () => {
 
   it("never shows a collected item twice, or a stronger aura from a lesser rarity", () => {
     const items = [spawn(0)];
-    expect(visibleFlightLoot(path, frame, items, 155, 30, new Set(["loot:0"]))).toEqual([]);
+    expect(
+      visibleFlightLoot(path, frame, items, 155, 30, new Set(["loot:0"])),
+    ).toEqual([]);
     expect(rarerLoot("rare", "common")).toBe("rare");
     expect(rarerLoot("rare", "exclusive")).toBe("exclusive");
     expect(rarerLoot("exclusive", "special")).toBe("exclusive");
@@ -93,7 +104,10 @@ describe("xPing flight loot presentation", () => {
   it("rejects duplicate and malformed route placements without rolling replacements", () => {
     const correct = spawn(0);
     expect(
-      validFlightLoot([correct, correct, spawn(-2, 1200), spawn(2, -1)], path.length),
+      validFlightLoot(
+        [correct, correct, spawn(-2, 1200), spawn(2, -1)],
+        path.length,
+      ),
     ).toEqual([correct]);
   });
 });
