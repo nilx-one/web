@@ -171,8 +171,8 @@ export function createPubDressStatusViewState(
         kind: "invalid",
         detail:
           result.reason === "invalid-length"
-              ? "Incorrect — use 2–32 characters"
-              : "Incorrect — this character isn’t supported",
+            ? "Incorrect — use 2–32 characters"
+            : "Incorrect — this character isn’t supported",
       };
     case "rate-limited":
     case "service-unavailable":
