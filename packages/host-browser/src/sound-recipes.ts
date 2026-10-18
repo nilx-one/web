@@ -413,6 +413,36 @@ function failure(voice: CueVoice): void {
   });
 }
 
+/** Quiet, focused confirmation when xPing's laser finds one or two targets. */
+function lootLock(voice: CueVoice): void {
+  tone(voice, {
+    type: "sine",
+    frequency: A5,
+    glideTo: E6,
+    attack: 0.003,
+    decay: 0.13,
+    gain: 0.045,
+  });
+  tone(voice, {
+    type: "triangle",
+    frequency: E5,
+    offset: 0.045,
+    decay: 0.1,
+    gain: 0.016,
+  });
+}
+
+/** Brighter, two-note tractor intake after real 3D collision. */
+function lootPickup(voice: CueVoice): void {
+  bell(voice, { frequency: E5, decay: 0.18, gain: 0.065 });
+  bell(voice, {
+    frequency: A5,
+    offset: 0.095,
+    decay: 0.26,
+    gain: 0.07,
+  });
+}
+
 export const CUE_RECIPES: Readonly<
   Record<SoundCue, (voice: CueVoice) => void>
 > = {
@@ -426,4 +456,6 @@ export const CUE_RECIPES: Readonly<
   achievement,
   heard,
   failure,
+  "loot-lock": lootLock,
+  "loot-pickup": lootPickup,
 };
