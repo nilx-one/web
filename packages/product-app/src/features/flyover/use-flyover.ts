@@ -198,7 +198,9 @@ export function useFlyover(
   const [progress, setProgress] = useState<FlyoverProgress>();
   const [lootNotice, setLootNotice] = useState<Flyover["lootNotice"]>();
   const feedbackRef = useRef(feedback);
-  feedbackRef.current = feedback;
+  useEffect(() => {
+    feedbackRef.current = feedback;
+  }, [feedback]);
   const [following, setFollowing] = useState(true);
   const [open, setOpen] = useState(true);
   const openRef = useRef(open);
