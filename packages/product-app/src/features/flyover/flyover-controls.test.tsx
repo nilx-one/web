@@ -40,4 +40,22 @@ describe("FlyoverControls", () => {
     swipe(40, -120);
     expect(onSteer.mock.calls).toEqual([[-1], [1]]);
   });
+
+  it("puts the activity row lowest, under the steering", () => {
+    const view = render(
+      <FlyoverControls
+        onSteer={vi.fn()}
+        onLeave={vi.fn()}
+        activities={<p>150 m to 0xda-market Golden Gate</p>}
+      />,
+    );
+    const bottom = view.container.querySelector(".flyover__bottom")!;
+    expect([...bottom.children].map((child) => child.className)).toEqual([
+      "flyover__steer",
+      "flyover__activities",
+    ]);
+    expect(bottom.lastElementChild).toHaveTextContent(
+      "150 m to 0xda-market Golden Gate",
+    );
+  });
 });

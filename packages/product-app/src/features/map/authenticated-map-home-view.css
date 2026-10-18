@@ -966,3 +966,9 @@
   outline: 2px solid var(--map-accent-spatial);
   outline-offset: 2px;
 }
+
+/* In flight the Dock and the status rail stand down; the flight controls own
+   the bottom of the screen. */
+.authenticated-map-home--flight .app-shell__bottom {
+  display: none;
+}

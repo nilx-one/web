@@ -267,6 +267,27 @@ export const LEGACY_MARKET_POINT_NUMBERS: ReadonlyMap<string, number> = new Map(
 export const marketPinId = (point: BusinessPoint) =>
   `business-point:${point.id.owner_pub_dress}:${point.id.number}`;
 
+/** What a seeded BusinessPoint is called on the map, in the viewer's locale. */
+export function marketPointTitle(
+  point: BusinessPoint,
+  locale: ProductLocale,
+): string {
+  const seeded = KYIV_MARKET_POINTS.find(
+    (entry) =>
+      point.id.owner_pub_dress === MARKET_OWNER_PUB_DRESS &&
+      entry.number === point.id.number,
+  );
+  const name =
+    seeded === undefined
+      ? point.description
+      : locale === "uk-UA"
+        ? seeded.uk
+        : locale === "ru-RU"
+          ? seeded.ru
+          : seeded.en;
+  return `0xda-market ${name}`;
+}
+
 export function marketMapPoints(
   locale: ProductLocale,
   detail: string,
@@ -277,7 +298,7 @@ export function marketMapPoints(
     latitude: point.latitude,
     kind: "business",
     weight: 0.8,
-    title: `0xda-market ${locale === "uk-UA" ? point.uk : locale === "ru-RU" ? point.ru : point.en}`,
+    title: marketPointTitle(KYIV_MARKET_BUSINESS_POINTS[index]!, locale),
     detail,
   }));
 }

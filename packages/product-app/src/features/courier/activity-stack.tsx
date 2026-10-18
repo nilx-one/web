@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import type { CourierPlan } from "@nilx-one/application";
 import { mapDistanceMeters } from "@nilx-one/map-contract";
-import type { MapFogCell, MapPointSelection } from "@nilx-one/map-contract";
+import type { MapFogCell } from "@nilx-one/map-contract";
+import { courierPoint } from "./courier-map";
 import type { FogRevealJob } from "../map/fog-reveal";
 import { FOG_REVEAL_CONCURRENCY, revealRemainingMs } from "../map/fog-reveal";
 import { useLocalization } from "../../shell/localization";
@@ -24,7 +25,7 @@ export function ActivityStack({
   plan,
   flight,
   completed,
-  avaia,
+  target,
   onFlight,
   onFollow,
   onCells,
@@ -33,8 +34,8 @@ export function ActivityStack({
   plan: CourierPlan | undefined;
   flight: Pick<Flyover, "active" | "progress">;
   completed: RevealCompletion | undefined;
-  /** Where xPing is measured from; without her point, time remaining shows. */
-  avaia?: { name: string; point(): MapPointSelection | undefined };
+  /** The destination's display name; progress is told as distance to it. */
+  target?: string | undefined;
   onFlight(): void;
   onFollow(): void;
   onCells(): void;
@@ -102,17 +103,19 @@ export function ActivityStack({
       focus: onCells,
     });
   const flightProgress = () => {
-    if (!flight.progress) return "…";
-    const from = avaia?.point();
-    if (!from) return clock(flight.progress.remainingMs);
+    if (!flight.progress || !plan) return t("courier.flight") + " · …";
+    if (target === undefined)
+      return t("courier.flight") + " · " + clock(flight.progress.remainingMs);
     const meters =
-      Math.floor(
-        mapDistanceMeters(from, flight.progress.point) /
-          FLIGHT_DISTANCE_STEP_METERS,
+      Math.ceil(
+        mapDistanceMeters(
+          flight.progress.point,
+          courierPoint(plan.destination.coordinate),
+        ) / FLIGHT_DISTANCE_STEP_METERS,
       ) * FLIGHT_DISTANCE_STEP_METERS;
     return t("courier.distance")
       .replace("{meters}", String(meters))
-      .replace("{avaia}", avaia!.name);
+      .replace("{target}", target);
   };
   if (plan && showFlight)
     rows.push({
@@ -120,10 +123,7 @@ export function ActivityStack({
       at: Number(plan.started_at_ms),
       done: arrivedAt !== undefined,
       exiting: arrivedAt !== undefined && now >= arrivedAt + 4500,
-      label:
-        arrivedAt !== undefined
-          ? t("courier.arrived")
-          : t("courier.flight") + " · " + flightProgress(),
+      label: arrivedAt !== undefined ? t("courier.arrived") : flightProgress(),
       focus: onFlight,
       ...(flight.active && arrivedAt === undefined ? { follow: onFollow } : {}),
     });

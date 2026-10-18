@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { useLocalization } from "../../shell/localization";
 import "./flyover-controls.css";
@@ -12,6 +12,8 @@ export const FLYOVER_SWIPE_PIXELS = 36;
 export interface FlyoverControlsProps {
   readonly onSteer: (direction: -1 | 1) => void;
   readonly onLeave: () => void;
+  /** The flight's activity row, the lowest element under the steering. */
+  readonly activities?: ReactNode;
 }
 
 /**
@@ -19,7 +21,11 @@ export interface FlyoverControlsProps {
  * xPing left or right, the way a runner game is steered. The map beneath
  * takes no gestures while it flies; the camera is the flight's.
  */
-export function FlyoverControls({ onSteer, onLeave }: FlyoverControlsProps) {
+export function FlyoverControls({
+  onSteer,
+  onLeave,
+  activities,
+}: FlyoverControlsProps) {
   const { t } = useLocalization();
   const swipe = useRef<{ x: number; y: number } | undefined>(undefined);
   return (
@@ -49,23 +55,28 @@ export function FlyoverControls({ onSteer, onLeave }: FlyoverControlsProps) {
       <button type="button" className="flyover__leave" onClick={onLeave}>
         {t("flyover.leave")}
       </button>
-      <div className="flyover__steer">
-        <button
-          type="button"
-          className="flyover__button"
-          aria-label={t("flyover.left")}
-          onClick={() => onSteer(-1)}
-        >
-          ◀
-        </button>
-        <button
-          type="button"
-          className="flyover__button"
-          aria-label={t("flyover.right")}
-          onClick={() => onSteer(1)}
-        >
-          ▶
-        </button>
+      <div className="flyover__bottom">
+        <div className="flyover__steer">
+          <button
+            type="button"
+            className="flyover__button"
+            aria-label={t("flyover.left")}
+            onClick={() => onSteer(-1)}
+          >
+            ◀
+          </button>
+          <button
+            type="button"
+            className="flyover__button"
+            aria-label={t("flyover.right")}
+            onClick={() => onSteer(1)}
+          >
+            ▶
+          </button>
+        </div>
+        {activities === undefined ? null : (
+          <div className="flyover__activities">{activities}</div>
+        )}
       </div>
     </div>
   );
