@@ -26,6 +26,7 @@ pub mod repository {
     include!("repository.rs");
     include!("repository_admin_roles.rs");
     include!("repository_admin_telegram.rs");
+    include!("repository_admin_telegram_confirmations.rs");
     include!("repository_avaia_lifecycle.rs");
     include!("repository_pub_info.rs");
     include!("repository_awards.rs");
@@ -56,10 +57,11 @@ pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
 pub use provider_self_service::provider_self_service_router;
 pub use repository::{
     ActivationRequest, ActivationRequestStatus, AdminRoleDecision, AdminRoleRequest,
-    AdminRoleTelegramDelivery, AvaiaConfigurationState, AvaiaIdentityRecord, AvaiaLocation,
-    AvaiaTravelOutcome, AvaiaUpdateOutcome, BusinessRegistrationOutcome, BusinessStation,
-    BusinessStationOutcome, IdentityProvider, IdentityRecord, IdentityRepository,
-    NativeCredentialRecord, NativeRegistrationOutcome, ProviderIdentity, PubDressRenameOutcome,
-    PublicIdentityRecord, RegistrationOutcome, RepositoryError,
+    AdminRoleTelegramConfirmation, AdminRoleTelegramDelivery, AvaiaConfigurationState,
+    AvaiaIdentityRecord, AvaiaLocation, AvaiaTravelOutcome, AvaiaUpdateOutcome,
+    BusinessRegistrationOutcome, BusinessStation, BusinessStationOutcome, IdentityProvider,
+    IdentityRecord, IdentityRepository, NativeCredentialRecord, NativeRegistrationOutcome,
+    ProviderIdentity, PubDressRenameOutcome, PublicIdentityRecord, RegistrationOutcome,
+    RepositoryError,
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};

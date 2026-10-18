@@ -91,7 +91,31 @@ impl IdentityRepository {
             sqlx::query(
                 "INSERT INTO bond_roles (pub_dress, role) VALUES (?, 'admin') \
                  ON CONFLICT(pub_dress) DO UPDATE SET role = 'admin'",
-            ).bind(candidate.as_str()).execute(&mut *tx).await?;
+            )
+            .bind(candidate.as_str())
+            .execute(&mut *tx)
+            .await?;
+
+            // Snapshot the Telegram-linked admins in the very same commit as
+            // the role grant. This is never run for a denied or stale request.
+            // Exclude the newly promoted Bond: the announcement goes to the
+            // admins who were eligible to review the request.
+            sqlx::query(
+                "INSERT OR IGNORE INTO admin_role_telegram_confirmations \
+                 (pub_dress, telegram_user_id) \
+                 SELECT ?, CAST(p.provider_subject AS INTEGER) \
+                 FROM bond_roles r \
+                 JOIN identities i ON i.pub_dress = r.pub_dress AND i.identity_kind = 'human' \
+                 JOIN identity_providers p ON p.pub_dress = r.pub_dress AND p.provider = 'telegram' \
+                 WHERE r.role = 'admin' AND r.pub_dress <> ? \
+                   AND p.provider_subject <> '' \
+                   AND p.provider_subject NOT GLOB '*[^0-9]*' \
+                   AND CAST(p.provider_subject AS INTEGER) > 0",
+            )
+            .bind(candidate.as_str())
+            .bind(candidate.as_str())
+            .execute(&mut *tx)
+            .await?;
         }
         tx.commit().await?;
         Ok(if approve {

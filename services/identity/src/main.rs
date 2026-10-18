@@ -544,6 +544,10 @@ async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityReposito
     loop {
         ticker.tick().await;
         let now = now_unix_seconds();
+        // A role-grant announcement follows a committed, approved DB
+        // transition, whether the decision originated in Telegram or Web.
+        // Keep this lane independent of failures reading the pending inbox.
+        deliver_admin_role_approval_confirmations(&bot, &repository, now).await;
         let deliveries = match repository.due_admin_role_telegram_deliveries(now).await {
             Ok(deliveries) => deliveries,
             Err(error) => {
@@ -596,6 +600,62 @@ async fn deliver_admin_role_notifications(bot: Bot, repository: IdentityReposito
                     // silently forgetting the decision request in the Web inbox.
                     error!(telegram_user_id = item.telegram_user_id, %error, "admin role Telegram notification not delivered");
                 }
+            }
+        }
+    }
+}
+
+/// Fan out only confirmations of successfully persisted admin grants.
+/// Each recipient receives at most one normal successful send, with a retry
+/// window for failed/unknown sends and no announcement for denied requests.
+async fn deliver_admin_role_approval_confirmations(
+    bot: &Bot,
+    repository: &IdentityRepository,
+    now: u64,
+) {
+    let items = match repository.due_admin_role_telegram_confirmations(now).await {
+        Ok(items) => items,
+        Err(error) => {
+            error!(%error, "admin-role confirmation outbox could not be read");
+            return;
+        }
+    };
+    for item in items {
+        match repository
+            .claim_admin_role_telegram_confirmation(&item, now)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => continue,
+            Err(error) => {
+                error!(%error, "admin-role confirmation lease failed");
+                continue;
+            }
+        }
+        // Plain text: Bond addresses are never interpolated into Telegram
+        // Markdown or HTML, so even unusual valid slugs cannot alter markup.
+        let notice = format!(
+            "✅ 0x1 · Користувач {} приєднався до ролі {}.",
+            item.pub_dress, item.role
+        );
+        match bot
+            .send_message(ChatId(item.telegram_user_id), notice)
+            .await
+        {
+            Ok(_) => {
+                if let Err(error) = repository
+                    .confirm_admin_role_telegram_confirmation(&item, now)
+                    .await
+                {
+                    error!(%error, "admin-role confirmation receipt could not be saved");
+                }
+            }
+            Err(error) => {
+                error!(
+                    telegram_user_id = item.telegram_user_id,
+                    %error,
+                    "admin-role confirmation Telegram delivery failed; retry scheduled"
+                );
             }
         }
     }
