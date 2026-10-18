@@ -27,8 +27,8 @@ use identity_bot::{
 use teloxide::{
     prelude::*,
     types::{
-        BotCommand, BotCommandScope, CallbackQuery, InlineKeyboardButton,
-        InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
+        BotCommand, BotCommandScope, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+        KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
     },
 };
 use tokio::sync::Mutex;
@@ -200,9 +200,14 @@ impl SpeechRelay for TelegramSpeechRelay {
         Box::pin(async move {
             for telegram_user_id in telegram_user_ids {
                 let compact = CompactBot::new(
-                    self.bot.clone(), ChatId(telegram_user_id), Arc::clone(&self.surfaces)
+                    self.bot.clone(),
+                    ChatId(telegram_user_id),
+                    Arc::clone(&self.surfaces),
                 );
-                if let Err(error) = compact.send_message(ChatId(telegram_user_id), text.clone()).await {
+                if let Err(error) = compact
+                    .send_message(ChatId(telegram_user_id), text.clone())
+                    .await
+                {
                     error!(%error, "spoken line copy was not delivered");
                 }
             }
@@ -409,7 +414,10 @@ async fn main() {
             telegram_activity_verifier.clone(),
             discord_activity_oauth.clone(),
             native_auth.clone(),
-            Arc::new(TelegramSpeechRelay { bot: bot.clone(), surfaces: Arc::clone(&surfaces) }),
+            Arc::new(TelegramSpeechRelay {
+                bot: bot.clone(),
+                surfaces: Arc::clone(&surfaces),
+            }),
             config,
         )
     });
@@ -579,7 +587,9 @@ async fn deliver_admin_role_notifications(
                 }
             }
             let compact = CompactBot::new(
-                bot.clone(), ChatId(item.telegram_user_id), Arc::clone(&surfaces)
+                bot.clone(),
+                ChatId(item.telegram_user_id),
+                Arc::clone(&surfaces),
             );
             match compact.refresh_admin(None).await {
                 Ok(_) => {
@@ -636,7 +646,9 @@ async fn deliver_admin_role_approval_confirmations(
             item.pub_dress, item.role
         );
         let compact = CompactBot::new(
-            bot.clone(), ChatId(item.telegram_user_id), Arc::clone(surfaces)
+            bot.clone(),
+            ChatId(item.telegram_user_id),
+            Arc::clone(surfaces),
         );
         match compact.refresh_admin(Some(&notice)).await {
             Ok(_) => {
@@ -1482,8 +1494,7 @@ mod tests {
     use super::{
         CURRENT_POSITION_BUTTON, CommandMenu, LocationModeRefusal, MINI_APP_URL,
         PendingUnlinkConfirmations, SET_POSITION_BUTTON, bot_commands, command_of,
-        control_keyboard, help_text, registration_keyboard,
-        resolve_location_mode, shared_point,
+        control_keyboard, help_text, registration_keyboard, resolve_location_mode, shared_point,
     };
 
     #[test]
