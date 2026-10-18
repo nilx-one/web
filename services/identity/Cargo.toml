@@ -17,7 +17,7 @@ chacha20poly1305 = "0.10"
 getrandom = "0.3"
 hmac = "0.12"
 jsonwebtoken = "9"
-nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "260510ae0505b9c7611a25d2a6db5c756aa6861d" }
+nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "b491039ca4c1af88002ab26708d3825ed156f406" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
