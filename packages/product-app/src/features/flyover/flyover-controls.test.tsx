@@ -126,6 +126,22 @@ describe("FlyoverControls", () => {
       "--flyover-energy-color: hsl(17.5 95% 50%)",
     );
     expect(button).not.toHaveTextContent("⚡");
+    energy = 0;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+    expect(button).toHaveTextContent("0%");
+    expect(button.getAttribute("style")).toContain(
+      "--flyover-energy-color: hsl(0 95% 50%)",
+    );
+    energy = 1;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+    expect(button).toHaveTextContent("100%");
+    expect(button.getAttribute("style")).toContain(
+      "--flyover-energy-color: hsl(50 95% 50%)",
+    );
     fireEvent.pointerUp(button, { pointerId: 1 });
     expect(onHold).toHaveBeenLastCalledWith(false);
     view.rerender(
@@ -142,7 +158,7 @@ describe("FlyoverControls", () => {
     );
     expect(
       screen.getByRole("button", {
-        name: "Force xPing: hold to fly faster and higher (35%)",
+        name: "Force xPing: hold to fly faster and higher (100%)",
       }),
     ).toBeDisabled();
   });
