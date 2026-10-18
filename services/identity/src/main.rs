@@ -1604,8 +1604,8 @@ mod tests {
 
     #[test]
     fn unlink_confirmation_is_an_inline_status_action() {
-        let markup = serde_json::to_value(super::unlink_confirmation_keyboard())
-            .expect("inline keyboard");
+        let markup =
+            serde_json::to_value(super::unlink_confirmation_keyboard()).expect("inline keyboard");
         assert_eq!(markup["inline_keyboard"][0][0]["callback_data"], "ul:y");
         assert_eq!(markup["inline_keyboard"][0][1]["callback_data"], "ul:n");
         assert_eq!(markup["inline_keyboard"].as_array().map(Vec::len), Some(1));
