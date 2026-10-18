@@ -266,6 +266,13 @@ import { useGuideCutscene } from "../guide/use-guide-cutscene";
 export type ConnectedProvider = BondProviderType;
 
 export interface AuthenticatedMapHomeViewProps {
+  /** Shared operational inbox visible only after server admin authorization. */
+  readonly adminRoleInbox?: {
+    readonly requests: readonly { pubDress: string; requestedAt: number }[];
+    readonly busy: boolean;
+    readonly failed: boolean;
+    onDecide(pubDress: string, approve: boolean): void;
+  };
   readonly hostLabel: string;
   readonly pubDress: string;
   readonly avaiaPubDress?: string;
@@ -768,6 +775,7 @@ function DockPlaceButton({
 }
 
 export function AuthenticatedMapHomeView({
+  adminRoleInbox,
   hostLabel,
   pubDress,
   avaiaPubDress,
@@ -1687,6 +1695,21 @@ export function AuthenticatedMapHomeView({
   });
   const guideActive = guide.state !== undefined;
   const systemInformer = useSystemInformer();
+  useEffect(() => {
+    if (adminRoleInbox === undefined) return;
+    for (const request of adminRoleInbox.requests) {
+      systemInformer.publish({
+        id: `admin-role:${request.pubDress}:${request.requestedAt}`,
+        kind: "admin-review",
+        title: t("identity.adminInbox.title"),
+        description: `${request.pubDress} · ${t("identity.adminInbox.description")}`,
+        action: {
+          label: t("identity.adminInbox.review"),
+          onPerform: () => onNavigate?.(IDENTITY_ROUTE),
+        },
+      });
+    }
+  }, [adminRoleInbox?.requests, onNavigate, systemInformer.publish, t]);
   // xPing's engine lives with the identity service; its repairs are paid
   // from this device's inventory, which also gets the starter Seeds once.
   const xping = useXpingEngine(pubDress, xpingEngine, findItems);
@@ -3198,6 +3221,58 @@ export function AuthenticatedMapHomeView({
                         onChange={onSlugChange}
                         onSubmit={onSlugSubmit}
                       />
+                      {adminRoleInbox !== undefined &&
+                      adminRoleInbox.requests.length > 0 ? (
+                        <section
+                          className="avaia-notebook"
+                          aria-label={t("identity.adminInbox.title")}
+                        >
+                          <span className="interface-settings__eyebrow">
+                            {t("identity.adminInbox.title")}
+                          </span>
+                          <p className="profile-edit__note">
+                            {t("identity.adminInbox.description")}
+                          </p>
+                          <ul className="avaia-notebook__list">
+                            {adminRoleInbox.requests.map((request) => (
+                              <li key={request.pubDress}>
+                                <strong>{request.pubDress}</strong>
+                                <span>
+                                  <button
+                                    type="button"
+                                    disabled={adminRoleInbox.busy}
+                                    onClick={() =>
+                                      adminRoleInbox.onDecide(
+                                        request.pubDress,
+                                        true,
+                                      )
+                                    }
+                                  >
+                                    {t("identity.adminInbox.approve")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={adminRoleInbox.busy}
+                                    onClick={() =>
+                                      adminRoleInbox.onDecide(
+                                        request.pubDress,
+                                        false,
+                                      )
+                                    }
+                                  >
+                                    {t("identity.adminInbox.deny")}
+                                  </button>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          {adminRoleInbox.failed ? (
+                            <p className="profile-edit__error" role="alert">
+                              {t("identity.adminInbox.failure")}
+                            </p>
+                          ) : null}
+                        </section>
+                      ) : null}
                       {avatarChoice === undefined ? null : (
                         <div className="avatar-choice">
                           <AvatarModelField

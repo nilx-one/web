@@ -54,12 +54,6 @@ export interface BrowserProviderAuthViewState {
 }
 
 export interface IdentityFoundationViewProps {
-  adminRoleInbox?: {
-    requests: readonly { pubDress: string; requestedAt: number }[];
-    busy: boolean;
-    failed: boolean;
-    onDecide(pubDress: string, approve: boolean): void;
-  };
   password: string;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
@@ -1219,7 +1213,6 @@ function IdentityForm({
 
 export function IdentityFoundationView({
   browserProviderAuth,
-  adminRoleInbox,
   password,
   pubDressLabelDerivation,
   pubDressLabelDerivationPending = false,
@@ -1352,41 +1345,7 @@ export function IdentityFoundationView({
                     {t("header.signOut")}
                   </button>
                 ) : null}
-                {adminRoleInbox !== undefined &&
-                adminRoleInbox.requests.length > 0 ? (
-                  <div className="admin-role-inbox">
-                    <h2>{t("identity.adminInbox.title")}</h2>
-                    <p>{t("identity.adminInbox.description")}</p>
-                    <ul>
-                      {adminRoleInbox.requests.map((request) => (
-                        <li key={request.pubDress}>
-                          <strong>{request.pubDress}</strong>
-                          <button
-                            type="button"
-                            disabled={adminRoleInbox.busy}
-                            onClick={() =>
-                              adminRoleInbox.onDecide(request.pubDress, true)
-                            }
-                          >
-                            {t("identity.adminInbox.approve")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={adminRoleInbox.busy}
-                            onClick={() =>
-                              adminRoleInbox.onDecide(request.pubDress, false)
-                            }
-                          >
-                            {t("identity.adminInbox.deny")}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    {adminRoleInbox.failed ? (
-                      <p role="alert">{t("identity.adminInbox.failure")}</p>
-                    ) : null}
-                  </div>
-                ) : null}
+
               </section>
             ) : (
               <section className="identity-message" aria-live="polite">

@@ -66,6 +66,7 @@ export const IDENTITY_EN = {
   "identity.adminInbox.title": "Admin access requests",
   "identity.adminInbox.description":
     "A reserved 0x0 Bond signed in. Should this Bond receive admin privileges?",
+  "identity.adminInbox.review": "Review",
   "identity.adminInbox.approve": "Grant admin",
   "identity.adminInbox.deny": "Keep user role",
   "identity.adminInbox.failure": "The decision could not be saved. Try again.",
@@ -246,6 +247,7 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.adminInbox.title": "Запити на права адміністратора",
   "identity.adminInbox.description":
     "Здійснено вхід Bond з 0x0. Надати йому права адміністратора?",
+  "identity.adminInbox.review": "Переглянути",
   "identity.adminInbox.approve": "Надати admin",
   "identity.adminInbox.deny": "Залишити user",
   "identity.adminInbox.failure":

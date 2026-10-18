@@ -1077,6 +1077,19 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     selectionMatchesResolution,
   ]);
 
+  const adminRoleInbox =
+    adminInboxQuery.data?.kind === "available"
+      ? {
+          requests: adminInboxQuery.data.requests,
+          busy: adminRoleDecision.isPending,
+          failed:
+            adminRoleDecision.data?.kind === "service-unavailable" ||
+            adminRoleDecision.isError,
+          onDecide: (pubDress: string, approve: boolean) =>
+            adminRoleDecision.mutate({ pubDress, approve }),
+        }
+      : undefined;
+
   if (viewModel.identity.kind === "authenticated") {
     // No Avaia runtime is published yet, so there is nothing to fetch on any
     // device. Both the Dock and the setup surface state that same device truth.
@@ -1086,6 +1099,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
       <AuthenticatedMapHomeView
+        {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
         hostLabel={viewModel.hostLabel}
         pubDress={viewModel.identity.pubDress}
         renderer={dependencies.mapRenderer}
@@ -1272,19 +1286,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       selection={selection}
       viewModel={viewModel}
       {...(browserProviderAuth === undefined ? {} : { browserProviderAuth })}
-      {...(adminInboxQuery.data?.kind === "available"
-        ? {
-            adminRoleInbox: {
-              requests: adminInboxQuery.data.requests,
-              busy: adminRoleDecision.isPending,
-              failed:
-                adminRoleDecision.data?.kind === "service-unavailable" ||
-                adminRoleDecision.isError,
-              onDecide: (pubDress: string, approve: boolean) =>
-                adminRoleDecision.mutate({ pubDress, approve }),
-            },
-          }
-        : {})}
       onCredentialAutofill={applyAutofilledCredential}
       onAvatarChoice={(model) => {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
