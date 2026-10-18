@@ -1187,4 +1187,73 @@ describe("Telegram self-disconnect transport", () => {
       reason: "not-connected",
     });
   });
+
+  it("reads, forces and repairs xPing's engine, strictly", async () => {
+    const engine = {
+      state: { energy_permille: 500, at_ms: "1000" },
+      engine: {
+        energy_permille: 500,
+        smoke_permille: 500,
+        broken: false,
+        empty_margin_ms: "2000",
+        full_at_ms: "21601000",
+        repair_seeds: "25",
+      },
+      now_ms: 1000,
+      authority: "client",
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(response(200, engine))
+      .mockResolvedValueOnce(response(200, engine))
+      .mockResolvedValueOnce(
+        response(409, { error: { code: "stale_engine", message: "" } }),
+      )
+      .mockResolvedValueOnce(
+        response(200, { ...engine, engine: { ...engine.engine, broken: 1 } }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    const read = {
+      kind: "read",
+      state: engine.state,
+      view: {
+        energyPermille: 500,
+        smokePermille: 500,
+        broken: false,
+        emptyMarginMs: 2000,
+        fullAtMs: 21_601_000,
+        repairSeeds: 25,
+      },
+      nowMs: 1000,
+    };
+    await expect(adapter.readXpingEngine()).resolves.toEqual(read);
+    await expect(adapter.forceXpingEngine(1500)).resolves.toEqual(read);
+    expect(fetch).toHaveBeenNthCalledWith(2, "/api/v1/identity/xping/engine", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-0x1-csrf": "1" },
+      body: JSON.stringify({ op: "force", forced_ms: 1500 }),
+    });
+    await expect(adapter.repairXpingEngine(25, engine.state)).resolves.toEqual({
+      kind: "rejected",
+      reason: "stale",
+    });
+    expect(JSON.parse(String(fetch.mock.calls[2]![1]!.body))).toEqual({
+      op: "repaired",
+      paid_seeds: 25,
+      expected: engine.state,
+    });
+    await expect(adapter.readXpingEngine()).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+    await expect(adapter.forceXpingEngine(0)).resolves.toEqual({
+      kind: "rejected",
+      reason: "invalid",
+    });
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
 });

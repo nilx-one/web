@@ -1,0 +1,51 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.xping-section__energy {
+  height: 8px;
+  margin: 8px 0 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--map-line, #0002);
+}
+
+.xping-section__energy > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--map-accent-spatial, #00bfd4);
+  transition: width 0.4s ease-out;
+}
+
+.xping-section__energy[data-broken] > span {
+  background: #c4573a;
+}
+
+.xping-section__repair {
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--map-line);
+  border-radius: 20px;
+  color: var(--map-ink);
+  background: var(--map-glass-strong);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.xping-section__repair:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.xping-section__repair:focus-visible {
+  outline: 2px solid var(--map-accent-spatial);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xping-section__energy > span {
+    transition: none;
+  }
+}

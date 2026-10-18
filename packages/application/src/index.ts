@@ -181,6 +181,7 @@ export {
   type CoreFoundItem,
   type CoreHolder,
   type CoreInventoryAnswer,
+  type CoreXpingRepairAnswer,
   type CoreInventoryCommand,
   type CoreRecipe,
   type CoreSize,
@@ -284,3 +285,14 @@ export {
   type CourierDirectoryPort,
   type CourierPlan,
 } from "./courier";
+
+export {
+  hasXpingEngineAccess,
+  parseXpingEngineRead,
+  type XpingEngineAccessPort,
+  type XpingEngineRead,
+  type XpingEngineRejection,
+  type XpingEngineResult,
+  type XpingEngineState,
+  type XpingEngineView,
+} from "./xping-engine";

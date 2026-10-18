@@ -647,6 +647,39 @@ describe("CoreWasmClient", () => {
     expect(older.courierDestination).toBeUndefined();
   });
 
+  it("pays for an xPing repair with Core's answer and refuses a malformed one", async () => {
+    let answer =
+      '{"ok":true,"inventory":{"seeds":"9950"},"engine":{"energy_permille":1000,"at_ms":"5"},"outcome":{"seeds_spent":"50","seeds_gained":"0","experience":0}}';
+    const seen: string[] = [];
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          xping_repair: (engine, inventory, now) => {
+            seen.push(`${engine}|${inventory}|${now}`);
+            return answer;
+          },
+        }),
+    });
+    expect(bindings.xpingRepair?.("{}", "", 5)).toEqual({
+      ok: true,
+      inventory: '{"seeds":"9950"}',
+      seedsSpent: 50,
+    });
+    expect(seen).toEqual(["{}||5"]);
+    answer = '{"ok":false,"error":"not_enough_seeds"}';
+    expect(bindings.xpingRepair?.("{}", "", 5)).toEqual({
+      ok: false,
+      error: "not_enough_seeds",
+    });
+    answer = '{"ok":true}';
+    expect(() => bindings.xpingRepair?.("{}", "", 5)).toThrow();
+    expect(() => bindings.xpingRepair?.("{}", "", -1)).toThrow(RangeError);
+    const older = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime({}),
+    });
+    expect(older.xpingRepair).toBeUndefined();
+  });
+
   it("has no proximity on a runtime built before it", async () => {
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () => generatedRuntime(),

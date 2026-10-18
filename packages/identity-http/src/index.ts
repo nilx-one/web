@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  parseXpingEngineRead,
+  type XpingEngineAccessPort,
+  type XpingEngineResult,
+  type XpingEngineState,
   isAvatarModel,
   formatPubDress,
   isBondProviderType,
@@ -249,7 +253,8 @@ class IdentityHttpAdapter
     CommittedAwardAccessPort,
     OrbSpillAccessPort,
     NearbySpeechAccessPort,
-    BusinessStationAccessPort
+    BusinessStationAccessPort,
+    XpingEngineAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
 
@@ -1266,6 +1271,74 @@ class IdentityHttpAdapter
     return pubInfoRefusal(body);
   }
 
+  public async readXpingEngine(): Promise<XpingEngineResult> {
+    return this.xpingEngine("GET");
+  }
+
+  public async forceXpingEngine(forcedMs: number): Promise<XpingEngineResult> {
+    if (!Number.isSafeInteger(forcedMs) || forcedMs <= 0)
+      return { kind: "rejected", reason: "invalid" };
+    return this.xpingEngine("POST", { op: "force", forced_ms: forcedMs });
+  }
+
+  public async repairXpingEngine(
+    paidSeeds: number,
+    expected: XpingEngineState,
+  ): Promise<XpingEngineResult> {
+    if (!Number.isSafeInteger(paidSeeds) || paidSeeds <= 0)
+      return { kind: "rejected", reason: "invalid" };
+    return this.xpingEngine("POST", {
+      op: "repaired",
+      paid_seeds: paidSeeds,
+      expected,
+    });
+  }
+
+  private async xpingEngine(
+    method: "GET" | "POST",
+    command?: unknown,
+  ): Promise<XpingEngineResult> {
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch("/api/v1/identity/xping/engine", {
+        method,
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          ...(command === undefined
+            ? {}
+            : { "content-type": "application/json", "x-0x1-csrf": "1" }),
+        },
+        ...(command === undefined ? {} : { body: JSON.stringify(command) }),
+      });
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const read = parseXpingEngineRead(body);
+      return read === undefined
+        ? { kind: "service-unavailable" }
+        : { kind: "read", ...read };
+    }
+    switch (parseErrorCode(body)) {
+      case "broken":
+        return { kind: "rejected", reason: "broken" };
+      case "full":
+        return { kind: "rejected", reason: "full" };
+      case "underpaid":
+        return { kind: "rejected", reason: "underpaid" };
+      case "stale_engine":
+        return { kind: "rejected", reason: "stale" };
+      case "invalid_forcing":
+        return { kind: "rejected", reason: "invalid" };
+      default:
+        return pubInfoRefusal(body);
+    }
+  }
+
   public async spillOrbs(artifactId: string): Promise<OrbSpillResult> {
     const authorization = this.authorization();
     let response: Response;
@@ -1511,6 +1584,7 @@ export function createIdentityHttpAdapter(
   CommittedAwardAccessPort &
   OrbSpillAccessPort &
   NearbySpeechAccessPort &
-  BusinessStationAccessPort {
+  BusinessStationAccessPort &
+  XpingEngineAccessPort {
   return new IdentityHttpAdapter(options);
 }

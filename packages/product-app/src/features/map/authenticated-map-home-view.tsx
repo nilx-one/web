@@ -18,6 +18,7 @@ import {
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
+  type XpingEngineAccessPort,
   type CoreRuntimePort,
   type BusinessStationAccessPort,
   type NearbySpeechAccessPort,
@@ -198,6 +199,8 @@ import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFollowCamera } from "./use-follow-camera";
 import { CameraModeControl } from "./camera-mode-control";
 import { FlyoverControls } from "../flyover/flyover-controls";
+import { useStarterSeeds, useXpingEngine } from "../xping/xping-engine";
+import { XpingSection } from "../xping/xping-section";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
   cameraChangeVisible,
@@ -303,6 +306,8 @@ export interface AuthenticatedMapHomeViewProps {
    * port receives only commitments and the fields the identity service prices.
    */
   readonly committedAwards?: CommittedAwardAccessPort;
+  /** xPing's engine as the identity service stores it; absent, no forcing. */
+  readonly xpingEngine?: XpingEngineAccessPort;
   /**
    * Core, naming what a find is and reading the pick-up setting. Absent or
    * older, finds are still paid; the toast then names the tier, not the item.
@@ -320,6 +325,7 @@ export interface AuthenticatedMapHomeViewProps {
     | "avaiaProximity"
     | "orbWorld"
     | "courierDestination"
+    | "xpingRepair"
   >;
   /**
    * Lets the signed-in Bond hear the Bonds within earshot. Absent when this
@@ -775,6 +781,7 @@ export function AuthenticatedMapHomeView({
   localModel,
   pubInfo,
   committedAwards,
+  xpingEngine,
   findItems,
   courierDirectory,
   nearbySpeech,
@@ -1679,6 +1686,10 @@ export function AuthenticatedMapHomeView({
   });
   const guideActive = guide.state !== undefined;
   const systemInformer = useSystemInformer();
+  // xPing's engine lives with the identity service; its repairs are paid
+  // from this device's inventory, which also gets the starter Seeds once.
+  const xping = useXpingEngine(pubDress, xpingEngine, findItems);
+  useStarterSeeds(pubDress, findItems);
   const courier = useCourier({
     renderer,
     origin: observedPosition,
@@ -3435,6 +3446,9 @@ export function AuthenticatedMapHomeView({
                             : levelSummary(t, standing.avaia)}
                         </p>
                       </section>
+                      {xpingEngine === undefined ? null : (
+                        <XpingSection engine={xping} />
+                      )}
                       {/* A host that cannot read the Avaia's profile configures
                         nothing here; what this device noted is still its own. */}
                       {avaiaSetup === undefined ? null : (

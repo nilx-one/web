@@ -94,3 +94,18 @@ eases back to where it was. With reduced motion the route and both ends
 are one still view, xPing at the station, until the person leaves.
 
 Presentation only: no body moves and nothing is recorded.
+
+## Engine, smoke and repair
+
+xPing's engine is Core's rules (`docs/xping-engine.md` in core), stored by the
+identity service at its own clock (`/api/v1/identity/xping/engine`). The
+Avaia's Dock window has an **xPing** section: the engine's energy and smoke,
+when it is full again or, broken, when it mends itself, and a repair priced by
+Core (50 Seed ₴€£ for an empty or broken engine, 25 for half).
+
+A repair runs inside the owner's inventory queue (`features/xping`): read the
+engine and the service's clock, let Core's `xping_repair` price it against the
+inventory, have the service record it on exactly that engine state, and only
+then store the inventory. A refusal (`stale`, `underpaid`, not enough Seeds)
+stores nothing. Every Bond is given 10,000 starter Seed ₴€£ once, by Core's
+`grant_starter_seeds`.
