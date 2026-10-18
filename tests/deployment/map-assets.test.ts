@@ -76,6 +76,7 @@ const SOURCE_LAYERS = [
 // deploy/web/inspect-basemap.sh. A style that reads anything else is guessing
 // at a schema, and a wrong guess fails silently as missing geography.
 const SOURCE_ATTRIBUTES = [
+  "is_bridge",
   "kind",
   "kind_detail",
   "height",
@@ -335,6 +336,38 @@ describe("map deployment assets", () => {
     },
   );
 
+  it.each(["light", "dark"] as const)(
+    "lays bridge decks over the roads that cross water, from city scale (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      const bridges = style.layers.filter((layer) =>
+        layer.id?.startsWith("bridges-"),
+      );
+      expect(bridges.map((layer) => layer.id)).toEqual([
+        "bridges-shadow",
+        "bridges-edge",
+        "bridges-deck",
+      ]);
+      for (const layer of bridges) {
+        expect(layer["source-layer"]).toBe("roads");
+        expect(JSON.stringify(layer.filter)).toContain(
+          '["==",["get","is_bridge"],true]',
+        );
+        expect(paintsAt(layer, MAP_SCALE_ZOOM.city)).toBe(true);
+      }
+      // Above every road, so a road passing beneath stays beneath.
+      const ids = style.layers.map((layer) => layer.id);
+      expect(ids.indexOf("bridges-shadow")).toBeGreaterThan(
+        ids.indexOf("roads-primary"),
+      );
+      expect(
+        style.layers.find((layer) => layer.id === "bridges-deck")?.paint?.[
+          "line-color"
+        ],
+      ).toBe(style.metadata?.["nilx-one:bridge-deck"]);
+    },
+  );
+
   it("raises urban depth only as the camera closes in", () => {
     const style = readStyle("light");
     const extrusion = style.layers.find((layer) => layer.id === "buildings");
@@ -366,6 +399,9 @@ describe("map deployment assets", () => {
       "roads-secondary",
       "roads-casing",
       "roads-primary",
+      "bridges-shadow",
+      "bridges-edge",
+      "bridges-deck",
       "buildings",
       "boundaries",
       "pois",
@@ -476,6 +512,8 @@ describe("map deployment assets", () => {
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#f7f9fa");
     expect(style.metadata?.["nilx-one:surface-land"]).toBe("#f1f4f5");
     expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#d2e9cd");
+    expect(style.metadata?.["nilx-one:bridge-deck"]).toBe("#f8fafb");
+    expect(style.metadata?.["nilx-one:bridge-edge"]).toBe("#9cb2b9");
     expect(style.metadata?.["nilx-one:surface-buildings"]).toBe("#d8e2e5");
     expect(style.metadata?.["nilx-one:road-primary"]).toBe("#bccfd4");
     expect(style.metadata?.["nilx-one:road-secondary"]).toBe("#cedcdf");
@@ -493,6 +531,8 @@ describe("map deployment assets", () => {
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#070c0e");
     expect(style.metadata?.["nilx-one:surface-land"]).toBe("#0c1417");
     expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#10201d");
+    expect(style.metadata?.["nilx-one:bridge-deck"]).toBe("#2e4249");
+    expect(style.metadata?.["nilx-one:bridge-edge"]).toBe("#5d757d");
     expect(style.metadata?.["nilx-one:surface-buildings"]).toBe("#203036");
     expect(style.metadata?.["nilx-one:surface-building-faces"]).toBe("#26383f");
     expect(style.metadata?.["nilx-one:road-primary"]).toBe("#344a52");

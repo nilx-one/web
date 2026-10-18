@@ -200,6 +200,7 @@ import { useFollowCamera } from "./use-follow-camera";
 import { CameraModeControl } from "./camera-mode-control";
 import { FlyoverControls } from "../flyover/flyover-controls";
 import { useStarterSeeds, useXpingEngine } from "../xping/xping-engine";
+import { useAmbientDrones } from "../ambient-drones/use-ambient-drones";
 import { XpingSection } from "../xping/xping-section";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
@@ -1710,6 +1711,15 @@ export function AuthenticatedMapHomeView({
   useSystemErrorNotices(statusToasts);
   useErrorToastFeedback(statusToasts, feedback, cue);
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
+  // The city's own drones, around wherever the camera looks; scenery only.
+  useAmbientDrones({
+    renderer,
+    ready: mapStatus.kind === "ready",
+    suspended:
+      section !== "world" ||
+      guideActive ||
+      systemInformer.activeId !== undefined,
+  });
   // The camera follows the body at the wheel the way a game camera follows
   // its character. It stands down while a scene or an informer stages shots.
   // The xPing flyover (core docs/xping-flyover.md) owns the camera while it
