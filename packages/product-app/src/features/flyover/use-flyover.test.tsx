@@ -151,15 +151,11 @@ describe("useFlyover", () => {
     );
   });
 
-  it("can be left at any moment, with Escape too", async () => {
+  it("can be cancelled at any moment", async () => {
     const { renderer, drone, hook } = setup();
     await begin(hook);
     act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 1_000));
-    act(() => {
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", { code: "Escape", cancelable: true }),
-      );
-    });
+    act(() => hook.result.current.leave());
     expect(hook.result.current.active).toBe(false);
     expect(drone.remove).toHaveBeenCalledWith(FLYOVER_DRONE_ID);
     expect(renderer.setRoute).toHaveBeenLastCalledWith(null);
@@ -184,6 +180,60 @@ describe("useFlyover", () => {
     expect(renderer.preloadRoads).toHaveBeenCalledOnce();
     act(() => hook.result.current.leave());
     expect(hook.result.current.progress).toBeUndefined();
+  });
+
+  it("tucks away on collapse, flies on and opens again on expand", async () => {
+    const { renderer, drone, hook } = setup();
+    await begin(hook);
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 500));
+    expect(hook.result.current.expanded).toBe(true);
+    const before = lastDrone(drone)!.lngLat[0];
+    act(() => hook.result.current.collapse());
+    expect(hook.result.current.active).toBe(true);
+    expect(hook.result.current.expanded).toBe(false);
+    expect(hook.result.current.following).toBe(false);
+    expect(renderer.getCamera()).toEqual(BASE);
+    renderer.setCamera(BASE);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(renderer.getCamera()).toEqual(BASE);
+    expect(lastDrone(drone)!.lngLat[0]).toBeGreaterThan(before);
+    act(() => hook.result.current.expand());
+    expect(hook.result.current.expanded).toBe(true);
+    expect(hook.result.current.following).toBe(true);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(renderer.getCamera()).not.toEqual(BASE);
+    act(() => hook.result.current.leave());
+    expect(hook.result.current.active).toBe(false);
+    expect(hook.result.current.expanded).toBe(false);
+  });
+
+  it("cancels a collapsed flight, and a new one opens expanded", async () => {
+    const { hook } = setup();
+    await begin(hook);
+    act(() => hook.result.current.collapse());
+    act(() => hook.result.current.leave());
+    expect(hook.result.current.active).toBe(false);
+    await begin(hook);
+    expect(hook.result.current.expanded).toBe(true);
+  });
+
+  it("collapses on Escape and takes no steering while collapsed", async () => {
+    const { hook } = setup();
+    await begin(hook);
+    act(() => vi.advanceTimersByTime(FLYOVER_TAKEOFF_MS + 500));
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape" }));
+    });
+    expect(hook.result.current.active).toBe(true);
+    expect(hook.result.current.expanded).toBe(false);
+    const arrow = new KeyboardEvent("keydown", {
+      code: "ArrowLeft",
+      cancelable: true,
+    });
+    act(() => {
+      document.dispatchEvent(arrow);
+    });
+    expect(arrow.defaultPrevented).toBe(false);
   });
 
   it("shows the whole route still under reduced motion", async () => {

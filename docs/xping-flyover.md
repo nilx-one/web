@@ -34,9 +34,18 @@ destination, named by the BusinessPoint's localized display name ("150 m to
 0xda-market Golden Gate"), rounded up to whole 50 m steps so it changes once
 per step rather than every frame.
 
-In flight the Dock and status rail stand down. The bottom of the screen is
+While the flight is open the Dock and status rail stand down. The bottom of the screen is
 the activity row (distance and **↗ xPing**), with the steering right above
-it; the location and camera controls are hidden until the flight ends.
+it; the location and camera controls are hidden until the flight is
+collapsed or ends.
+
+An open flight is one of two states of an active flight. **Collapse** tucks
+it away: xPing flies on and the route stays drawn, but the controls go, the
+camera eases back to where the flight found it and the world's own camera
+(with the Dock and the location and camera controls) returns. The activity
+row keeps the flight, and **↗ xPing** or a tap on the drone opens it again,
+chasing xPing. **Cancel** ends the flight at once. Both sit in a row under
+the header, so the host label stays clear.
 
 Only the flying xPing takes taps, and only while it flies: the renderer
 hit-tests a drone just when something has subscribed to that drone's id.
@@ -81,7 +90,8 @@ refreshed every 250 ms):
 At the wheel, a sideways swipe, ←/→, `A`/`D` or the ◀ ▶ buttons step it
 one lane aside, at most two either way. The step holds for 1.4 s, then the
 route pulls it back. Steering into a building it cannot clear still goes
-around it. Escape or the leave button ends the flight.
+around it. Escape collapses the open flight; the cancel button ends it. A
+collapsed flight takes no steering.
 
 ## Camera and ending
 

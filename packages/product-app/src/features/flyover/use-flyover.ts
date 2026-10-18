@@ -112,8 +112,13 @@ export interface FlyoverRequest {
 }
 
 export interface Flyover {
-  /** A flight is under way: the world's own camera stands down. */
+  /** A flight is under way, whether it is open or tucked away. */
   readonly active: boolean;
+  /**
+   * The flight is open: it owns the screen, its controls are up and the
+   * world's own camera stands down. A collapsed flight is still `active`.
+   */
+  readonly expanded: boolean;
   readonly following: boolean;
   readonly progress: FlyoverProgress | undefined;
   setFollowing(value: boolean): void;
@@ -121,7 +126,11 @@ export interface Flyover {
   start(request: FlyoverRequest): void;
   /** Steps xPing a lane aside; the route pulls it back once let go. */
   steer(direction: -1 | 1): void;
-  /** Leaves the flight at once. */
+  /** Tucks the flight away: it flies on and the world is handed back. */
+  collapse(): void;
+  /** Opens a collapsed flight again, chasing xPing. */
+  expand(): void;
+  /** Cancels the flight at once. */
   leave(): void;
 }
 
@@ -141,17 +150,25 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
   const [request, setRequest] = useState<FlyoverRequest | undefined>();
   const [progress, setProgress] = useState<FlyoverProgress>();
   const [following, setFollowing] = useState(true);
+  const [open, setOpen] = useState(true);
   const followingRef = useRef(following);
   useEffect(() => {
     followingRef.current = following;
   }, [following]);
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
   const flight = useRef<{ state: FlightState } | undefined>(undefined);
+  /** Puts the camera back where the flight found it; set while one flies. */
+  const restoreCamera = useRef<(() => void) | undefined>(undefined);
 
   const start = useCallback(
     (next: FlyoverRequest) => {
       if (!ready || request !== undefined) return;
       setProgress(undefined);
       setFollowing(true);
+      setOpen(true);
       setRequest((current) => current ?? next);
     },
     [ready, request],
@@ -160,9 +177,20 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     setRequest(undefined);
     setProgress(undefined);
   }, []);
+  const collapse = useCallback(() => {
+    if (!openRef.current) return;
+    openRef.current = false;
+    setOpen(false);
+    setFollowing(false);
+    restoreCamera.current?.();
+  }, []);
+  const expand = useCallback(() => {
+    setOpen(true);
+    setFollowing(true);
+  }, []);
   const steer = useCallback((direction: -1 | 1) => {
     const current = flight.current;
-    if (current === undefined) return;
+    if (current === undefined || !openRef.current) return;
     current.state = steerFlight(
       current.state,
       direction,
@@ -182,6 +210,18 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       return () => setRequest(undefined);
     }
     const reduced = prefersReducedMotion();
+    const putBack = () => {
+      try {
+        renderer.setCamera(base, {
+          motion: reduced ? "immediate" : "eased",
+          durationMs: 900,
+          ...(basePadding === undefined ? {} : { padding: basePadding }),
+        });
+      } catch {
+        /* A lost renderer has nothing left to put back. */
+      }
+    };
+    restoreCamera.current = putBack;
     let cancelled = false;
     let frame: number | undefined;
     let arrivalTimer: ReturnType<typeof setTimeout> | undefined;
@@ -311,9 +351,10 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!openRef.current) return;
       if (event.code === "Escape") {
         event.preventDefault();
-        leave();
+        collapse();
         return;
       }
       const direction =
@@ -337,23 +378,42 @@ export function useFlyover(renderer: MapRenderer, ready: boolean): Flyover {
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       if (arrivalTimer !== undefined) clearTimeout(arrivalTimer);
       flight.current = undefined;
+      restoreCamera.current = undefined;
       try {
         drone?.remove(FLYOVER_DRONE_ID);
         renderer.setRoute?.(null);
-        renderer.setCamera(base, {
-          motion: reduced ? "immediate" : "eased",
-          durationMs: 900,
-          ...(basePadding === undefined ? {} : { padding: basePadding }),
-        });
       } catch {
         /* A lost renderer has nothing left to put back. */
       }
+      putBack();
     };
-  }, [ready, renderer, request, steer, leave]);
+  }, [ready, renderer, request, steer, collapse]);
 
   const active = request !== undefined;
+  const expanded = active && open;
   return useMemo(
-    () => ({ active, start, steer, leave, progress, following, setFollowing }),
-    [active, leave, start, steer, progress, following],
+    () => ({
+      active,
+      expanded,
+      start,
+      steer,
+      collapse,
+      expand,
+      leave,
+      progress,
+      following,
+      setFollowing,
+    }),
+    [
+      active,
+      expanded,
+      collapse,
+      expand,
+      leave,
+      start,
+      steer,
+      progress,
+      following,
+    ],
   );
 }

@@ -11,6 +11,9 @@ export const FLYOVER_SWIPE_PIXELS = 36;
 
 export interface FlyoverControlsProps {
   readonly onSteer: (direction: -1 | 1) => void;
+  /** Tucks the flight away; it flies on. */
+  readonly onCollapse: () => void;
+  /** Cancels the flight. */
   readonly onLeave: () => void;
   /** The flight's activity row, the lowest element under the steering. */
   readonly activities?: ReactNode;
@@ -19,10 +22,12 @@ export interface FlyoverControlsProps {
 /**
  * At the wheel of the flight: swipe anywhere, or press the buttons, to step
  * xPing left or right, the way a runner game is steered. The map beneath
- * takes no gestures while it flies; the camera is the flight's.
+ * takes no gestures while it flies; the camera is the flight's. Collapse
+ * tucks the flight away, cancel ends it; both sit under the header.
  */
 export function FlyoverControls({
   onSteer,
+  onCollapse,
   onLeave,
   activities,
 }: FlyoverControlsProps) {
@@ -52,9 +57,14 @@ export function FlyoverControls({
           swipe.current = undefined;
         }}
       />
-      <button type="button" className="flyover__leave" onClick={onLeave}>
-        {t("flyover.leave")}
-      </button>
+      <div className="flyover__actions">
+        <button type="button" className="flyover__action" onClick={onCollapse}>
+          {t("flyover.collapse")}
+        </button>
+        <button type="button" className="flyover__action" onClick={onLeave}>
+          {t("flyover.leave")}
+        </button>
+      </div>
       <div className="flyover__bottom">
         <div className="flyover__steer">
           <button

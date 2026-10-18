@@ -25,7 +25,7 @@ export function useCourier(input: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const flyover = useFlyover(input.renderer, !input.suspended);
-  const { following, setFollowing, active, start } = flyover;
+  const { following, setFollowing, expand, active, start } = flyover;
   const generation = useRef(0),
     requesting = useRef(false);
   const latest = useRef(input);
@@ -142,9 +142,9 @@ export function useCourier(input: {
   useEffect(() => {
     if (!flyover.active) return;
     return renderer.systemDrone?.subscribeActivation?.(FLYOVER_DRONE_ID, () =>
-      setFollowing(true),
+      expand(),
     );
-  }, [flyover.active, renderer, setFollowing]);
+  }, [flyover.active, renderer, expand]);
   useEffect(() => {
     const drone = renderer.systemDrone;
     if (!drone || suspended || !offer || flyover.active) return;

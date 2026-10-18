@@ -1711,7 +1711,7 @@ export function AuthenticatedMapHomeView({
     enabled:
       mapStatus.kind === "ready" &&
       section === "world" &&
-      !flyover.active &&
+      !flyover.expanded &&
       handover === undefined &&
       !guideActive &&
       !courier.following &&
@@ -2945,7 +2945,7 @@ export function AuthenticatedMapHomeView({
       }}
       onFollow={() => {
         followCamera.release();
-        courier.setFollowing(true);
+        flyover.expand();
       }}
       onCells={() => {
         courier.setFollowing(false);
@@ -2975,7 +2975,7 @@ export function AuthenticatedMapHomeView({
   return (
     <AppShell
       className={
-        flyover.active
+        flyover.expanded
           ? "authenticated-map-home authenticated-map-home--flight"
           : "authenticated-map-home"
       }
@@ -3710,7 +3710,7 @@ export function AuthenticatedMapHomeView({
           mapStatus.kind === "ready" &&
           handover === undefined &&
           !guideActive &&
-          !flyover.active &&
+          !flyover.expanded &&
           systemInformer.activeId === undefined ? (
             <CameraModeControl
               renderer={renderer}
@@ -3721,14 +3721,15 @@ export function AuthenticatedMapHomeView({
               onFree={followCamera.selectFree}
             />
           ) : null}
-          {flyover.active ? (
+          {flyover.expanded ? (
             <FlyoverControls
               onSteer={flyover.steer}
+              onCollapse={flyover.collapse}
               onLeave={flyover.leave}
               activities={activities}
             />
           ) : null}
-          {flyover.active ? null : (
+          {flyover.expanded ? null : (
             <LocationControl
               viewModel={locationControl}
               proximity={
@@ -3743,7 +3744,7 @@ export function AuthenticatedMapHomeView({
             prompt={travelPrompt === undefined ? fogReveal.prompt : undefined}
             jobs={fogReveal.jobs}
             avaia={avaiaLabel}
-            activities={flyover.active ? undefined : activities}
+            activities={flyover.expanded ? undefined : activities}
             onConfirm={confirmFogReveal}
             onDismiss={fogReveal.dismiss}
           />

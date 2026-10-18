@@ -12,20 +12,31 @@ afterEach(() => chooseLocale("auto"));
 
 function setup() {
   const onSteer = vi.fn();
+  const onCollapse = vi.fn();
   const onLeave = vi.fn();
-  const view = render(<FlyoverControls onSteer={onSteer} onLeave={onLeave} />);
+  const view = render(
+    <FlyoverControls
+      onSteer={onSteer}
+      onCollapse={onCollapse}
+      onLeave={onLeave}
+    />,
+  );
   const surface = view.container.querySelector(".flyover__surface")!;
-  return { onSteer, onLeave, surface };
+  return { onSteer, onCollapse, onLeave, surface };
 }
 
 describe("FlyoverControls", () => {
-  it("steps on the buttons and leaves on request", () => {
-    const { onSteer, onLeave } = setup();
+  it("steps on the buttons, collapses and cancels on request", () => {
+    const { onSteer, onCollapse, onLeave } = setup();
     fireEvent.click(screen.getByRole("button", { name: "Step left" }));
     fireEvent.click(screen.getByRole("button", { name: "Step right" }));
     expect(onSteer.mock.calls).toEqual([[-1], [1]]);
-    fireEvent.click(screen.getByRole("button", { name: "Leave the flight" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(onCollapse).toHaveBeenCalledOnce();
+    expect(onLeave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onLeave).toHaveBeenCalledOnce();
+    expect(onCollapse).toHaveBeenCalledOnce();
   });
 
   it("steps on a sideways swipe, not on a tap or an upward one", () => {
@@ -41,10 +52,20 @@ describe("FlyoverControls", () => {
     expect(onSteer.mock.calls).toEqual([[-1], [1]]);
   });
 
+  it("keeps collapse and cancel together, under the header", () => {
+    const { surface } = setup();
+    const actions = surface.parentElement!.querySelector(".flyover__actions")!;
+    expect([...actions.children].map((child) => child.textContent)).toEqual([
+      "Collapse",
+      "Cancel",
+    ]);
+  });
+
   it("puts the activity row lowest, under the steering", () => {
     const view = render(
       <FlyoverControls
         onSteer={vi.fn()}
+        onCollapse={vi.fn()}
         onLeave={vi.fn()}
         activities={<p>150 m to 0xda-market Golden Gate</p>}
       />,
