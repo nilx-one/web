@@ -7,6 +7,8 @@ import type {
   AvatarHandle,
   AvatarLayerContract,
   AvatarModelId,
+  FlightLootRarity,
+  MapFlightLoot,
   SystemDroneHandle,
   SystemDroneKind,
   MapCamera,
@@ -40,6 +42,7 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
 import { createPingModel } from "./ping-model";
+import { createFlightLootModel } from "./flight-loot-model";
 import {
   createAmbientDroneKit,
   type AmbientDroneKit,
@@ -91,6 +94,7 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly wear?: number;
   /** Which system drone this is; omitted, xPing. */
   readonly droneKind?: SystemDroneKind;
+  readonly lootAura?: FlightLootRarity;
   /** Banking and leaning in the model's own frame, in degrees. */
   readonly rollDeg?: number;
   readonly pitchDeg?: number;
@@ -98,7 +102,12 @@ type SceneHandle = Omit<AvatarHandle, "modelId"> & {
 /** What the layer needs of a drone model, xPing's or an ambient one. */
 interface DroneModel {
   readonly root: Object3D;
-  sample(phase: number, moving: boolean, wear?: number): void;
+  sample(
+    phase: number,
+    moving: boolean,
+    wear?: number,
+    aura?: FlightLootRarity,
+  ): void;
   dispose(): void;
 }
 
@@ -154,6 +163,7 @@ export function bodyOrientation(
 export interface AvatarCustomLayer
   extends CustomLayerInterface, AvatarLayerContract {
   upsertDrone(handle: SystemDroneHandle): boolean;
+  setFlightLoot(handles: readonly MapFlightLoot[]): void;
   hasInstances(): boolean;
   dispose(): void;
 }
@@ -242,6 +252,10 @@ export function createAvatarLayer(
   const now = options.now ?? (() => globalThis.performance.now());
   const requestMount = options.requestMount ?? (() => undefined);
   const instances = new Map<string, AvatarInstance>();
+  const flightLoot = new Map<string, {
+    handle: MapFlightLoot;
+    model: ReturnType<typeof createFlightLootModel>;
+  }>();
   const assetCache = new Map<AvatarModelId, Promise<GLTF>>();
   const backpackSource = createBackpackSource(
     () => new GLTFLoader().loadAsync(BACKPACK_ASSET_URL),
@@ -421,6 +435,27 @@ export function createAvatarLayer(
     root.updateMatrixWorld(true);
   }
 
+  function placeFlightLoot(
+    entry: { handle: MapFlightLoot; model: ReturnType<typeof createFlightLootModel> },
+  ): void {
+    if (map === undefined) return;
+    const { lngLat, heightMeters } = entry.handle;
+    const altitude = (loadedTerrainElevationMeters(map, lngLat) ?? 0) + heightMeters;
+    const coordinate = MercatorCoordinate.fromLngLat(
+      { lng: lngLat[0], lat: lngLat[1] },
+      altitude,
+    );
+    const metres = coordinate.meterInMercatorCoordinateUnits();
+    entry.model.root.position.set(
+      (coordinate.x - origin.x) / origin.metres,
+      (coordinate.y - origin.y) / origin.metres,
+      (coordinate.z - origin.z) / origin.metres,
+    );
+    entry.model.root.scale.setScalar(metres / origin.metres);
+    entry.model.root.quaternion.copy(bodyOrientation(0));
+    entry.model.root.updateMatrixWorld(true);
+  }
+
   function anchorAt(mounted: MapLibreMap): void {
     const center = MercatorCoordinate.fromLngLat(mounted.getCenter(), 0);
     origin = {
@@ -430,6 +465,7 @@ export function createAvatarLayer(
       metres: center.meterInMercatorCoordinateUnits(),
     };
     for (const instance of instances.values()) place(instance);
+    for (const entry of flightLoot.values()) placeFlightLoot(entry);
   }
 
   async function hydrate(instance: AvatarInstance): Promise<void> {
@@ -443,6 +479,7 @@ export function createAvatarLayer(
         instance.handle.clipPhase,
         !instance.handle.reducedMotion,
         instance.handle.wear,
+        instance.handle.lootAura,
       );
       scene.add(drone.root);
       place(instance);
@@ -485,6 +522,7 @@ export function createAvatarLayer(
         handle.clipPhase,
         !handle.reducedMotion,
         handle.wear,
+        handle.lootAura,
       );
       place(existing);
       applyVisibility(existing);
@@ -587,6 +625,7 @@ export function createAvatarLayer(
         ...(handle.rollDeg === undefined ? {} : { rollDeg: handle.rollDeg }),
         ...(handle.pitchDeg === undefined ? {} : { pitchDeg: handle.pitchDeg }),
         ...(handle.wear === undefined ? {} : { wear: handle.wear }),
+        ...(handle.lootAura === undefined ? {} : { lootAura: handle.lootAura }),
         ...(handle.kind === undefined ? {} : { droneKind: handle.kind }),
         visible: true,
         reducedMotion: handle.reducedMotion,
@@ -594,6 +633,37 @@ export function createAvatarLayer(
       return (
         renderer !== undefined && instances.get(handle.id)?.root !== undefined
       );
+    },
+
+    setFlightLoot(handles) {
+      const desired = new Set(handles.map((handle) => handle.id));
+      for (const [id, entry] of flightLoot) {
+        if (desired.has(id)) continue;
+        entry.model.dispose();
+        flightLoot.delete(id);
+      }
+      for (const handle of handles) {
+        let entry = flightLoot.get(handle.id);
+        if (
+          entry !== undefined &&
+          (entry.handle.kind !== handle.kind || entry.handle.rarity !== handle.rarity)
+        ) {
+          entry.model.dispose();
+          flightLoot.delete(handle.id);
+          entry = undefined;
+        }
+        if (entry === undefined) {
+          const model = createFlightLootModel(handle.kind, handle.rarity);
+          scene.add(model.root);
+          entry = { handle, model };
+          flightLoot.set(handle.id, entry);
+        }
+        entry.handle = handle;
+        entry.model.setNear(handle.near);
+        placeFlightLoot(entry);
+      }
+      if (handles.length > 0) requestMount();
+      map?.triggerRepaint();
     },
 
     remove(id) {
@@ -615,7 +685,7 @@ export function createAvatarLayer(
     },
 
     hasInstances() {
-      return instances.size > 0;
+      return instances.size > 0 || flightLoot.size > 0;
     },
 
     dispose() {
@@ -629,6 +699,8 @@ export function createAvatarLayer(
         instance.root?.removeFromParent();
       }
       instances.clear();
+      for (const entry of flightLoot.values()) entry.model.dispose();
+      flightLoot.clear();
       ambientKit?.dispose();
       ambientKit = undefined;
       assetCache.clear();
