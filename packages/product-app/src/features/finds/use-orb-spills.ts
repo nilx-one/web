@@ -49,9 +49,7 @@ export interface OrbSpillsInput {
   /** The identity service; spills need it to be one that has them. */
   readonly port: unknown;
   /** Core, which owns every orb rule. Without it no orb is drawn. */
-  readonly core:
-    | Pick<CoreRuntimePort, "orbWorld" | "orbSpillVersion">
-    | undefined;
+  readonly core: Pick<CoreRuntimePort, "orbWorld" | "orbSpillVersion"> | undefined;
   readonly renderer: MapRenderer;
   /** Where the Bond stands, observed or declared: spills are read around it. */
   readonly near: MapPointSelection | undefined;
@@ -113,8 +111,7 @@ export function useOrbSpills({
       live = false;
     };
   }, [core]);
-  const waypointsEnabled =
-    capability.runtime === core && capability.version >= 2;
+  const waypointsEnabled = capability.runtime === core && capability.version >= 2;
   const [spills, setSpills] = useState<ReadonlyMap<string, KnownSpill>>(
     () => new Map(),
   );
@@ -143,12 +140,10 @@ export function useOrbSpills({
   );
 
   const waypoint = useCallback(
-    (roll: FindRoll): LonLat | undefined =>
-      landmarkWaypoint(
-        roll,
-        renderer.fog,
-        renderer.landmarksNear?.bind(renderer),
-      ),
+    (roll: FindRoll): LonLat | undefined => {
+      const near = renderer.landmarksNear?.bind(renderer);
+      return landmarkWaypoint(roll, renderer.fog, near);
+    },
     [renderer],
   );
 
