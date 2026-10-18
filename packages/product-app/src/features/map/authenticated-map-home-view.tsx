@@ -1555,7 +1555,8 @@ export function AuthenticatedMapHomeView({
       void earnActivity(
         pubDress,
         {
-          kind: via === "avaia" ? "zone_revealed" : "zone_walked",
+          // Near the boundary is a reveal, not evidence of entering.
+          kind: via === "approach" ? "zone_walked" : "zone_revealed",
           earner: via === "avaia" ? "avaia" : "bond",
           subject: cell.id,
           at: Date.now(),
