@@ -1017,6 +1017,13 @@ mod tests {
         .await
         .expect("legacy provider");
 
+        // Legacy privilege is a persisted grant, not the reserved prefix.
+        let incumbent: PubDress = "0x0walker".parse().expect("legacy admin");
+        identities
+            .set_role(&incumbent, BondAccessRole::Admin)
+            .await
+            .expect("existing admin grant");
+
         let locations = BondLocationRepository::connect(&database_url)
             .await
             .expect("Bond location repository");
