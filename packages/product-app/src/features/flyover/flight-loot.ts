@@ -54,10 +54,7 @@ export function rarerLoot(
 export function lootPosition(path: FlightPath, item: FlightLootSpawn): Point {
   const { point, direction } = pathAt(path, item.distanceMeters);
   const offset = item.lane * FLYOVER_LANE_METERS;
-  return [
-    point[0] + direction[1] * offset,
-    point[1] - direction[0] * offset,
-  ];
+  return [point[0] + direction[1] * offset, point[1] - direction[0] * offset];
 }
 
 /**
