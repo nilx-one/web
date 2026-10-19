@@ -25,9 +25,16 @@ run a single Telegram polling replica, as before.
 **Edit bot messages; delete only user inputs.** The bot uses `editMessageText`
 for its retained Open/Status/Admin slots (Open remains unchanged unless it
 needs recovery). It never deletes an existing bot-owned slot for normal
-updates or role changes. In a private chat, incoming user commands, location
-shares and unsupported inputs are removed **after successful processing**,
-best-effort, to keep the surface focused. Telegram permits a bot to delete
+updates or role changes. In a private chat, one-step user commands and unsupported inputs are removed
+after a successful Status response. **Interactive location commands** (`/travel`,
+`/set_position`, and `/current_position`) stay visible until a point has been
+successfully processed and acknowledged in the editable Status slot. Only then
+does the bot remove the originating user command and shared location, best-effort.
+Failed or invalid points keep the active command for a retry. Another command,
+including `/unlink`, preempts that flow and removes its stale originating
+command; it never treats a later point as completion of the old request. An
+expired flow never falls through to an implicit admin Bond-only movement.
+The Status slot is edited, **never deleted** as part of cleanup. Telegram permits a bot to delete
 incoming private-chat messages within 48 hours; it cannot edit user messages
 or retroactively remove legacy messages older than the API permits.
 Failed input deletion is logged without undoing an already committed action.
@@ -70,11 +77,17 @@ shows the first ten actionable requests.
    preserve their prior location semantics.
 8. `/unlink` uses inline Confirm/Cancel on Status and never emits an extra
    bot message; expiry and sole-access guards remain enforced.
-9. Input cleanup deletes _only incoming user messages_, never bot slots.
-   Admin revocation redacts and retains its slot ID for later reuse.
-10. Telegram edit API errors other than message-not-found produce no
+9. `/travel` remains until an ordinary map point results in an acknowledged
+   atomic Bond/Avaia arrival; its user command and location are then cleaned,
+   while the Status slot remains. Invalid/live points and failed writes can be retried.
+10. `/travel` → `/unlink` cancels and removes the previous travel command;
+    a subsequent point cannot complete that travel. Expired travel cannot
+    silently become a Bond-only manual location update.
+11. Input cleanup deletes _only incoming user messages_, never bot slots.
+    Admin revocation redacts and retains its slot ID for later reuse.
+12. Telegram edit API errors other than message-not-found produce no
     duplicate messages and never bypass the authorization boundary.
-11. Full CI validates Rust format, clippy, and tests; Validate checks the
+13. Full CI validates Rust format, clippy, and tests; Validate checks the
     runtime package. Merge does not deploy.
 
 ---

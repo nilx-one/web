@@ -224,6 +224,8 @@ struct OAuthTransaction {
 struct PendingProvider {
     provider: BrowserProvider,
     subject: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    suggested_pub_dress: Option<String>,
     expires_at: u64,
 }
 
@@ -457,7 +459,7 @@ async fn telegram_callback(
             return callback_failure("telegram_authentication_failed");
         }
     };
-    let subject = match telegram_subject(&state, client, &token.id_token).await {
+    let (subject, username) = match telegram_subject(&state, client, &token.id_token).await {
         Ok(value) => value,
         Err(error) => {
             tracing::warn!(%error, "Telegram browser ID token validation failed");
@@ -469,6 +471,7 @@ async fn telegram_callback(
         &headers,
         BrowserProvider::Telegram.identity(subject),
         &transaction,
+        suggested_pub_dress_from_telegram_username(username.as_deref()),
     )
     .await
 }
@@ -547,6 +550,7 @@ async fn discord_callback(
         &headers,
         BrowserProvider::Discord.identity(user.id),
         &transaction,
+        None,
     )
     .await
 }
@@ -628,6 +632,7 @@ async fn github_callback(
         &headers,
         BrowserProvider::Github.identity(user.id.to_string()),
         &transaction,
+        None,
     )
     .await
 }
@@ -678,6 +683,7 @@ async fn finish_provider_callback(
     headers: &HeaderMap,
     provider: ProviderIdentity,
     transaction: &OAuthTransaction,
+    suggested_pub_dress: Option<String>,
 ) -> Response {
     let Some(now) = now_unix_seconds() else {
         return callback_failure("provider_authentication_unavailable");
@@ -737,6 +743,7 @@ async fn finish_provider_callback(
             IdentityProvider::Github => BrowserProvider::Github,
         },
         subject: provider.subject,
+        suggested_pub_dress,
         expires_at: now.saturating_add(PENDING_PROVIDER_TTL_SECONDS),
     };
     let Some(pending_cookie) = state
@@ -960,6 +967,8 @@ struct BrowserProviderContextResponse {
     available: BrowserProviderAvailability,
     #[serde(skip_serializing_if = "Option::is_none")]
     provider: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suggested_pub_dress: Option<String>,
 }
 
 async fn read_provider_context(
@@ -987,6 +996,9 @@ async fn read_provider_context(
             state: if pending.is_some() { "pending" } else { "none" },
             available,
             provider: pending.as_ref().map(|value| value.provider.as_str()),
+            suggested_pub_dress: pending
+                .as_ref()
+                .and_then(|value| value.suggested_pub_dress.clone()),
         },
     );
     if raw_pending.is_some() && pending.is_none() {
@@ -1227,13 +1239,36 @@ struct TelegramTokenResponse {
 #[derive(Debug, Deserialize)]
 struct TelegramClaims {
     sub: String,
+    preferred_username: Option<String>,
+}
+
+/// A verified Telegram username is presentation data, never an account key.
+/// If its first character is an eligible discriminator, keep the exact visual
+/// username (e.g. @boss_zhab -> 0xboss_zhab); otherwise prefix with 0x1.
+/// No address is registered or reserved by producing this advisory suggestion.
+fn suggested_pub_dress_from_telegram_username(username: Option<&str>) -> Option<String> {
+    let username = username?;
+    if !(2..=32).contains(&username.len())
+        || !username
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        return None;
+    }
+    let first = username.as_bytes()[0] as char;
+    let candidate = if username.len() >= 3 && matches!(first, '1'..='9' | 'a'..='f') {
+        format!("0x{username}")
+    } else {
+        format!("0x1{username}")
+    };
+    candidate.parse::<PubDress>().ok().map(|_| candidate)
 }
 
 async fn telegram_subject(
     state: &BrowserAuthState,
     client: &OAuthClientCredentials,
     id_token: &str,
-) -> Result<String, BrowserProviderError> {
+) -> Result<(String, Option<String>), BrowserProviderError> {
     let header = decode_header(id_token).map_err(|_| BrowserProviderError::InvalidToken)?;
     let kid = header.kid.ok_or(BrowserProviderError::InvalidToken)?;
     let jwks = state
@@ -1261,7 +1296,7 @@ async fn telegram_subject(
     if claims.sub.is_empty() {
         return Err(BrowserProviderError::InvalidToken);
     }
-    Ok(claims.sub)
+    Ok((claims.sub, claims.preferred_username))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1420,6 +1455,7 @@ mod tests {
         let pending = PendingProvider {
             provider: BrowserProvider::Telegram,
             subject: "42".to_owned(),
+            suggested_pub_dress: Some("0xboss_zhab".to_owned()),
             expires_at: 500,
         };
         let value = signer
@@ -1430,11 +1466,24 @@ mod tests {
             .expect("valid signed cookie");
         assert_eq!(parsed.provider, BrowserProvider::Telegram);
         assert_eq!(parsed.subject, "42");
+        assert_eq!(parsed.suggested_pub_dress.as_deref(), Some("0xboss_zhab"));
         assert!(
             signer
                 .verify::<PendingProvider>("browser-pending-provider", &format!("{value}x"))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn telegram_username_is_only_an_advisory_address_suggestion() {
+        use super::suggested_pub_dress_from_telegram_username as suggest;
+        assert_eq!(suggest(Some("boss_zhab")).as_deref(), Some("0xboss_zhab"));
+        assert_eq!(suggest(Some("sky")).as_deref(), Some("0x1sky"));
+        assert_eq!(suggest(Some("0boss")).as_deref(), Some("0x10boss"));
+        assert_eq!(suggest(Some("Boss_zhab")).as_deref(), Some("0x1Boss_zhab"));
+        assert_eq!(suggest(Some("a")).as_deref(), None);
+        assert_eq!(suggest(Some("@boss_zhab")).as_deref(), None);
+        assert_eq!(suggest(None).as_deref(), None);
     }
 
     #[test]
@@ -1461,6 +1510,7 @@ mod tests {
                 &PendingProvider {
                     provider: BrowserProvider::Discord,
                     subject: "42".to_owned(),
+                    suggested_pub_dress: None,
                     expires_at: expires_at + 1,
                 },
             )
