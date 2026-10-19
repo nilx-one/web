@@ -94,12 +94,17 @@
   overflow: hidden;
 }
 
-/* Spacing that used to be the detail grid's gap now lives in the scroller,
-   so it scrolls away with the body instead of holding a gap open under the
-   fixed header. */
+/* Keep a physical gap between the fixed title and the scroll viewport.
+   Padding alone scrolls away: on iPhone a half-visible sound slider then
+   appears to merge into the title. Fade only the entering edge of the body;
+   all controls remain reachable when scrolled fully into view. */
 .bond-dock__detail > .bond-dock__scroll {
   gap: 1.35rem;
+  margin-top: 0.65rem;
   padding-top: 1.35rem;
+  scroll-padding-top: 0.85rem;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 0.85rem);
+  mask-image: linear-gradient(to bottom, transparent, #000 0.85rem);
 }
 
 .bond-dock__detail-header {

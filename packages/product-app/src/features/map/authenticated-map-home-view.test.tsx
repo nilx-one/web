@@ -1731,8 +1731,15 @@ describe("AuthenticatedMapHomeView", () => {
 
   it("offers sound on the settings route and keeps the choice on this device", () => {
     const sound = soundDouble();
-    renderView({ section: "settings", sound });
+    const { container } = renderView({ section: "settings", sound });
 
+    // The header must be a fixed sibling of the clipped scroll viewport;
+    // the sound sliders never belong to the header's paint surface.
+    const header = container.querySelector(".bond-dock__detail-header");
+    const scroller = container.querySelector(".bond-dock__detail > .bond-dock__scroll");
+    expect(header?.nextElementSibling).toBe(scroller);
+    expect(scroller).toContainElement(screen.getByRole("group", { name: "Sound" }));
+    expect(header).not.toContainElement(screen.getByRole("group", { name: "Sound" }));
     expect(screen.getByRole("group", { name: "Sound" })).toBeVisible();
     const soundLevel = screen.getByRole("slider", { name: "Sound" });
     expect(soundLevel).toHaveValue("1");
