@@ -50,7 +50,10 @@ export interface BrowserProviderAuthViewState {
     github: boolean;
   };
   pendingProvider?: BrowserIdentityProvider;
+  suggestedPubDress?: string;
   onAuthorize(provider: BrowserIdentityProvider): void;
+  onApplySuggestedPubDress(pubDress: string): void;
+  onChooseExistingIdentity(): void;
 }
 
 export interface IdentityFoundationViewProps {
@@ -279,6 +282,7 @@ function ProviderRow({
   const { t } = useLocalization();
   const signInWith = (provider: string) =>
     t("identity.provider.signInWithNamed").replaceAll("{provider}", provider);
+  const suggestedPubDress = auth?.suggestedPubDress;
   const pendingLabel =
     auth?.pendingProvider === "telegram"
       ? "Telegram"
@@ -331,15 +335,36 @@ function ProviderRow({
         </button>
       </div>
       {pendingLabel === undefined ? null : (
-        <p
-          className="identity-status identity-status--available"
-          aria-live="polite"
-        >
-          {t("identity.provider.verified").replaceAll(
-            "{provider}",
-            pendingLabel,
-          )}
-        </p>
+        <>
+          <p
+            className="identity-status identity-status--available"
+            aria-live="polite"
+          >
+            {t("identity.provider.verified").replaceAll(
+              "{provider}",
+              pendingLabel,
+            )}
+          </p>
+          <div className="provider-buttons">
+            {suggestedPubDress === undefined ? null : (
+              <button
+                type="button"
+                onClick={() => auth?.onApplySuggestedPubDress(suggestedPubDress)}
+              >
+                {t("identity.provider.suggested").replaceAll(
+                  "{pubDress}",
+                  suggestedPubDress,
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => auth?.onChooseExistingIdentity()}
+            >
+              {t("identity.provider.existing")}
+            </button>
+          </div>
+        </>
       )}
     </section>
   );

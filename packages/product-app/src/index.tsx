@@ -1270,6 +1270,16 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             ? providerContext.available
             : { telegram: false, discord: false, github: false },
         onAuthorize: authorizeBrowserProvider,
+        onApplySuggestedPubDress: (pubDress: string) => {
+          const suggested = parsePubDress(pubDress);
+          if (suggested !== undefined) changeSelection(suggested);
+        },
+        onChooseExistingIdentity: () =>
+          changeSelection({ discriminator: "1", slug: "" }),
+        ...(providerContext?.kind === "pending" &&
+        providerContext.suggestedPubDress !== undefined
+          ? { suggestedPubDress: providerContext.suggestedPubDress }
+          : {}),
         ...(pendingBrowserProvider === undefined
           ? {}
           : { pendingProvider: pendingBrowserProvider }),

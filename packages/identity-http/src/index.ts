@@ -8,6 +8,7 @@ import {
   type XpingEngineState,
   isAvatarModel,
   formatPubDress,
+  parsePubDress,
   isBondProviderType,
   type BondProviderType,
   type BrowserIdentityProvider,
@@ -992,7 +993,18 @@ class IdentityHttpAdapter
       return { kind: "none", available };
     }
     if (body.state === "pending" && isBrowserProvider(body.provider)) {
-      return { kind: "pending", provider: body.provider, available };
+      const suggestedPubDress =
+        body.provider === "telegram" &&
+        typeof body.suggested_pub_dress === "string" &&
+        parsePubDress(body.suggested_pub_dress) !== undefined
+          ? body.suggested_pub_dress
+          : undefined;
+      return {
+        kind: "pending",
+        provider: body.provider,
+        available,
+        ...(suggestedPubDress === undefined ? {} : { suggestedPubDress }),
+      };
     }
     return { kind: "service-unavailable" };
   }

@@ -37,7 +37,9 @@ export const IDENTITY_EN = {
   "identity.provider.signInWithNamed": "Sign in with {provider}",
   "identity.provider.web": "web",
   "identity.provider.verified":
-    "{provider} verified. Already have a Bond? Sign in below and we’ll connect {provider}. New here? Create your Bond below.",
+    "{provider} verified. Choose whether to create a new identity or sign in to your existing one.",
+  "identity.provider.suggested": "Create {pubDress}",
+  "identity.provider.existing": "Sign in to existing identity",
   "identity.avatar.label": "Avatar study",
   "identity.avatar.later": "Decide later",
   "identity.recovery.label": "Recovery key",
@@ -218,7 +220,9 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.provider.signInWithNamed": "Увійти через {provider}",
   "identity.provider.web": "веб",
   "identity.provider.verified":
-    "{provider} підтверджено. Уже маєте Bond? Увійдіть нижче, і ми підключимо {provider}. Вперше тут? Створіть свій Bond нижче.",
+    "{provider} підтверджено. Оберіть: створити нову ідентичність або увійти до наявної.",
+  "identity.provider.suggested": "Створити {pubDress}",
+  "identity.provider.existing": "Увійти до наявної ідентичності",
   "identity.avatar.label": "Дослідження аватара",
   "identity.avatar.later": "Вирішити пізніше",
   "identity.recovery.label": "Ключ відновлення",

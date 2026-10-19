@@ -664,3 +664,55 @@ describe("provider password hand-off", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe("verified Telegram username suggestion", () => {
+  it("offers explicit create or existing-account actions without registering implicitly", () => {
+    const onApplySuggestedPubDress = vi.fn();
+    const onChooseExistingIdentity = vi.fn();
+    const onSubmit = vi.fn();
+    render(
+      <IdentityFoundationView
+        password=""
+        selection={{ discriminator: "1", slug: "" }}
+        viewModel={{
+          hostLabel: "browser host",
+          safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+          showProviderRow: true,
+          runtime: {
+            tone: "ready",
+            label: "Shared Core ready",
+            detail: "Contract 1 is available to the Web client.",
+          },
+          identity: {
+            kind: "form",
+            mode: "initial",
+            status: { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+            busy: false,
+          },
+        }}
+        browserProviderAuth={{
+          available: { telegram: true, discord: true, github: false },
+          pendingProvider: "telegram",
+          suggestedPubDress: "0xboss_zhab",
+          onAuthorize: vi.fn(),
+          onApplySuggestedPubDress,
+          onChooseExistingIdentity,
+        }}
+        onAcknowledgeRecovery={vi.fn()}
+        onCredentialAutofill={vi.fn()}
+        onForgetRemembered={vi.fn()}
+        onLogout={vi.fn()}
+        onPasswordChange={vi.fn()}
+        onResolvePubDress={vi.fn()}
+        onSelectionChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Create 0xboss_zhab" }));
+    expect(onApplySuggestedPubDress).toHaveBeenCalledWith("0xboss_zhab");
+    fireEvent.click(screen.getByRole("button", { name: "Sign in to existing identity" }));
+    expect(onChooseExistingIdentity).toHaveBeenCalledOnce();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
