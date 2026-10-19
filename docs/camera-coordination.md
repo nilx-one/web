@@ -40,13 +40,17 @@ identity, not persisted between sessions.
 MapLibre's optional `whenSceneReady` paint barrier waits for the camera to stop,
 the current style and tiles (including terrain) to load, and the monument and
 requested body models to finish loading or take their existing missing-asset
-fallback. Two stable paints include the final asset placement. It does not use
+fallback. A layer whose code cannot load at all (offline, or a hashed chunk a
+newer deploy no longer serves) counts as that same fallback: the world is
+revealed without it. Two stable paints include the final asset placement. It does not use
 `idle`, which continuously animated custom layers may never emit.
 
 The world stays mounted and measurable behind an opaque loading surface. Core's
 ready badge and automatic cutscenes wait for that initial reveal. After 20 seconds
 of scene preparation, a retryable message replaces the endless loading state;
-a timeout never counts as a successful frame. Cancellation on retarget, retry or
+a timeout never counts as a successful frame. The 20 seconds belong to the
+attempt, not to the opening target: a live fix that retargets the wait does not
+restart them. Only visible time counts, since a hidden page paints no frames. Cancellation on retarget, retry or
 unmount prevents a stale completion from revealing the world. Permission denial
 or unavailable location still permits a map-only view with the existing location
 control. Later navigation does not restart the startup cover.

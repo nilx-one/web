@@ -54,6 +54,52 @@ describe("world startup", () => {
     unmount();
     expect(r.waits[1]!.signal.aborted).toBe(true);
   });
+  it("offers the retry on time even while live fixes keep retargeting the wait", async () => {
+    vi.useFakeTimers();
+    const r = renderer();
+    const { result, rerender } = renderHook(
+      ({ target }) => useWorldStartup(r.port, { kind: "ready" }, false, target),
+      { initialProps: { target: "fix-0" } },
+    );
+    for (let second = 1; second <= 21; second++) {
+      rerender({ target: `fix-${second}` });
+      await act(async () => vi.advanceTimersByTime(1_000));
+    }
+    expect(result.current.failed).toBe(true);
+    expect(result.current.ready).toBe(false);
+    // Every superseded wait was cancelled, and the last one with the failure.
+    expect(r.waits.length).toBeGreaterThan(1);
+    expect(r.waits.every((wait) => wait.signal.aborted)).toBe(true);
+  });
+
+  it("counts only visible time, so a backgrounded cold start is not a failure", async () => {
+    vi.useFakeTimers();
+    let visibility: DocumentVisibilityState = "visible";
+    const descriptor = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockImplementation(() => visibility);
+    const setVisibility = async (next: DocumentVisibilityState) => {
+      visibility = next;
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    };
+    const r = renderer();
+    const { result } = renderHook(() =>
+      useWorldStartup(r.port, { kind: "ready" }, false, "target"),
+    );
+    await act(async () => vi.advanceTimersByTime(5_000));
+    await setVisibility("hidden");
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(result.current.failed).toBe(false);
+    await setVisibility("visible");
+    await act(async () => vi.advanceTimersByTime(14_000));
+    expect(result.current.failed).toBe(false);
+    await act(async () => vi.advanceTimersByTime(1_100));
+    expect(result.current.failed).toBe(true);
+    descriptor.mockRestore();
+  });
+
   it("cancels an outdated initial target but does not cover the world again after reveal", async () => {
     vi.useFakeTimers();
     const r = renderer();

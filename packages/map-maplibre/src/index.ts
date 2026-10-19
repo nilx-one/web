@@ -582,6 +582,9 @@ function validPoint(point: MapPointSelection): boolean {
   );
 }
 
+/** An optional layer whose code failed to load is already recorded as failed. */
+function ignoreOptionalLayer(): void {}
+
 export function createMapLibreRenderer(
   options: MapLibreRendererOptions = {},
 ): MapLibreRenderer {
@@ -639,6 +642,13 @@ export function createMapLibreRenderer(
   let avatarCamera: MapCamera = camera;
   let monumentLayer: MonumentCustomLayer | undefined;
   let monumentLayerPromise: Promise<MonumentCustomLayer> | undefined;
+  // A layer's code that could not be loaded (offline, or a hashed chunk a
+  // newer deploy no longer serves) is an optional model missing, the same as
+  // a missing asset: the world is shown without it rather than held back.
+  // The rejected import is kept, as before, so a body upserted every frame
+  // never re-requests a chunk that is gone.
+  let monumentLayerFailed = false;
+  let avatarLayerFailed = false;
 
   /**
    * A fixed landmark, not a handle the application drives: it is requested
@@ -652,9 +662,15 @@ export function createMapLibreRenderer(
       ({ createMonumentLayer }) => {
         const layer = createMonumentLayer();
         monumentLayer = layer;
+        monumentLayerFailed = false;
         layer.setDimension(dimension);
         if (map !== undefined && firstPaintDone) ensureMonumentLayer(map);
         return layer;
+      },
+      (error: unknown) => {
+        monumentLayerFailed = true;
+        map?.triggerRepaint();
+        throw error;
       },
     );
     return monumentLayerPromise;
@@ -671,6 +687,7 @@ export function createMapLibreRenderer(
           },
         });
         avatarLayer = layer;
+        avatarLayerFailed = false;
         layer.setCamera(avatarCamera);
         for (const handle of avatarHandles.values()) layer.upsert(handle);
         for (const handle of droneHandles.values()) layer.upsertDrone(handle);
@@ -679,6 +696,11 @@ export function createMapLibreRenderer(
           ensureAvatarLayer(map);
         }
         return layer;
+      },
+      (error: unknown) => {
+        avatarLayerFailed = true;
+        map?.triggerRepaint();
+        throw error;
       },
     );
     return avatarLayerPromise;
@@ -721,7 +743,7 @@ export function createMapLibreRenderer(
     upsert(handle) {
       avatarHandles.set(handle.id, handle);
       if (avatarLayer !== undefined) avatarLayer.upsert(handle);
-      else void requestAvatarLayer();
+      else void requestAvatarLayer().catch(ignoreOptionalLayer);
       if (handle.id === observedLabel?.bodyId) applyLabelBody();
     },
     remove(id) {
@@ -1583,7 +1605,7 @@ export function createMapLibreRenderer(
       ensureAvatarLayer(mounted);
     if (firstPaintDone) {
       ensureMonumentLayer(mounted);
-      void requestMonumentLayer();
+      void requestMonumentLayer().catch(ignoreOptionalLayer);
     }
     presentationApplied = true;
   }
@@ -2108,8 +2130,12 @@ export function createMapLibreRenderer(
         () =>
           firstPaintDone &&
           presentationApplied &&
-          (dimension === "flat" || monumentLayer?.isSettled() === true) &&
-          (avatarHandles.size === 0 || avatarLayer?.assetsSettled() === true),
+          (dimension === "flat" ||
+            monumentLayerFailed ||
+            monumentLayer?.isSettled() === true) &&
+          (avatarHandles.size === 0 ||
+            avatarLayerFailed ||
+            avatarLayer?.assetsSettled() === true),
         signal,
       );
     },
@@ -2442,7 +2468,8 @@ export function createMapLibreRenderer(
       flightLootHandles = next.map((item) => ({ ...item }));
       if (avatarLayer !== undefined)
         avatarLayer.setFlightLoot(flightLootHandles);
-      else if (flightLootHandles.length > 0) void requestAvatarLayer();
+      else if (flightLootHandles.length > 0)
+        void requestAvatarLayer().catch(ignoreOptionalLayer);
     },
 
     setOrbs(next: readonly MapOrb[]) {
