@@ -268,9 +268,16 @@ describe("device location over the persistent world", () => {
         accuracyMeters: 24,
       }),
     );
-    expect(vi.mocked(renderer.setCamera).mock.calls).toHaveLength(
-      camerasAfterFirstFix,
-    );
+    // The follow camera may track the body to the new fix, whenever its
+    // own timing lets it: that move always yields to a person's gesture.
+    // What a live update must never do is take the view back the way the
+    // first fix did, with a camera move that does not yield.
+    const later = vi
+      .mocked(renderer.setCamera)
+      .mock.calls.slice(camerasAfterFirstFix);
+    expect(
+      later.filter(([, options]) => options?.yieldToGesture !== true),
+    ).toEqual([]);
   });
 
   it("stops observing when the authenticated world goes away", async () => {
