@@ -2698,40 +2698,114 @@ mod tests {
 
     #[tokio::test]
     async fn password_registration_is_active_keyless_and_atomic() {
-        let repository = IdentityRepository::connect("sqlite::memory:").await.expect("repository");
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
         let address = PubDress::from_str("0x0new").expect("address");
-        let result = repository.register_native_password(&address, "hash", 1, b"first", 100).await.expect("register");
+        let result = repository
+            .register_native_password(&address, "hash", 1, b"first", 100)
+            .await
+            .expect("register");
         assert!(matches!(result, NativeRegistrationOutcome::Registered(_)));
-        let credential = repository.find_native_credential(&address).await.expect("lookup").expect("credential");
+        let credential = repository
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
         assert!(credential.active);
         assert!(credential.recovery_key_hash.is_none());
-        assert_eq!(repository.role_for(address.as_str()).await.expect("role"), crate::BondAccessRole::User);
-        let challenges: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM native_registration_challenges").fetch_one(&repository.pool).await.expect("challenges");
+        assert_eq!(
+            repository.role_for(address.as_str()).await.expect("role"),
+            crate::BondAccessRole::User
+        );
+        let challenges: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM native_registration_challenges")
+                .fetch_one(&repository.pool)
+                .await
+                .expect("challenges");
         assert_eq!(challenges, 0);
-        assert!(matches!(repository.register_native_password(&address, "different", 1, b"second", 101).await.expect("collision"), NativeRegistrationOutcome::HandleUnavailable));
-        assert_eq!(repository.find_native_credential(&address).await.expect("lookup").expect("credential").password_hash, "hash");
+        assert!(matches!(
+            repository
+                .register_native_password(&address, "different", 1, b"second", 101)
+                .await
+                .expect("collision"),
+            NativeRegistrationOutcome::HandleUnavailable
+        ));
+        assert_eq!(
+            repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .password_hash,
+            "hash"
+        );
     }
 
     #[tokio::test]
     async fn nullable_recovery_migration_preserves_legacy_credentials_and_challenges() {
         let database = tempfile::NamedTempFile::new().expect("database");
         let url = format!("sqlite://{}", database.path().display());
-        let legacy = sqlx::SqlitePool::connect(&url).await.expect("legacy database");
-        sqlx::raw_sql(include_str!("../migrations/0001_identities.sql")).execute(&legacy).await.expect("identities");
-        sqlx::raw_sql(include_str!("../migrations/0002_provider_accounts.sql")).execute(&legacy).await.expect("providers");
-        sqlx::raw_sql(include_str!("../migrations/0003_native_auth.sql")).execute(&legacy).await.expect("credentials");
-        sqlx::query("INSERT INTO identities(pub_dress, created_at) VALUES ('0x1legacy', 1)").execute(&legacy).await.expect("identity");
-        sqlx::query("INSERT INTO native_credentials VALUES ('0x1legacy', 'hash', 1, ?, 0, 1, 1)").bind(b"issued-key".as_slice()).execute(&legacy).await.expect("credential");
-        sqlx::query("INSERT INTO native_registration_challenges VALUES (?, '0x1legacy', 200, 1)").bind(b"issued-challenge".as_slice()).execute(&legacy).await.expect("challenge");
+        let legacy = sqlx::SqlitePool::connect(&url)
+            .await
+            .expect("legacy database");
+        sqlx::raw_sql(include_str!("../migrations/0001_identities.sql"))
+            .execute(&legacy)
+            .await
+            .expect("identities");
+        sqlx::raw_sql(include_str!("../migrations/0002_provider_accounts.sql"))
+            .execute(&legacy)
+            .await
+            .expect("providers");
+        sqlx::raw_sql(include_str!("../migrations/0003_native_auth.sql"))
+            .execute(&legacy)
+            .await
+            .expect("credentials");
+        sqlx::query("INSERT INTO identities(pub_dress, created_at) VALUES ('0x1legacy', 1)")
+            .execute(&legacy)
+            .await
+            .expect("identity");
+        sqlx::query("INSERT INTO native_credentials VALUES ('0x1legacy', 'hash', 1, ?, 0, 1, 1)")
+            .bind(b"issued-key".as_slice())
+            .execute(&legacy)
+            .await
+            .expect("credential");
+        sqlx::query("INSERT INTO native_registration_challenges VALUES (?, '0x1legacy', 200, 1)")
+            .bind(b"issued-challenge".as_slice())
+            .execute(&legacy)
+            .await
+            .expect("challenge");
         legacy.close().await;
         let upgraded = IdentityRepository::connect(&url).await.expect("upgrade");
         let address = PubDress::from_str("0x1legacy").expect("address");
-        let credential = upgraded.find_native_credential(&address).await.expect("lookup").expect("credential");
-        assert_eq!(credential.recovery_key_hash.as_deref(), Some(b"issued-key".as_slice()));
-        assert!(upgraded.activate_native_registration(b"issued-challenge", 100).await.expect("activate").is_some());
+        let credential = upgraded
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
+        assert_eq!(
+            credential.recovery_key_hash.as_deref(),
+            Some(b"issued-key".as_slice())
+        );
+        assert!(
+            upgraded
+                .activate_native_registration(b"issued-challenge", 100)
+                .await
+                .expect("activate")
+                .is_some()
+        );
         upgraded.pool.close().await;
-        let reopened = IdentityRepository::connect(&url).await.expect("idempotent reopen");
-        assert!(reopened.find_native_credential(&address).await.expect("lookup").expect("credential").active);
+        let reopened = IdentityRepository::connect(&url)
+            .await
+            .expect("idempotent reopen");
+        assert!(
+            reopened
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
+        );
     }
 
     #[tokio::test]

@@ -2797,12 +2797,26 @@ mod tests {
         let app = app().await;
         register_telegram_fixture(&app).await;
         let body = r#"{"password":"a deliberately long password"}"#;
-        let first = app.clone().oneshot(telegram_password_request(42, body)).await.expect("response");
+        let first = app
+            .clone()
+            .oneshot(telegram_password_request(42, body))
+            .await
+            .expect("response");
         assert_eq!(first.status(), StatusCode::CREATED);
-        let second = app.clone().oneshot(telegram_password_request(42, r#"{"password":"a different long password"}"#)).await.expect("response");
+        let second = app
+            .clone()
+            .oneshot(telegram_password_request(
+                42,
+                r#"{"password":"a different long password"}"#,
+            ))
+            .await
+            .expect("response");
         assert_eq!(second.status(), StatusCode::CONFLICT);
         assert!(second.headers().get(SET_COOKIE).is_none());
-        assert_eq!(json_body(second).await["error"]["code"], "password_already_set");
+        assert_eq!(
+            json_body(second).await["error"]["code"],
+            "password_already_set"
+        );
     }
 
     #[tokio::test]
@@ -3163,7 +3177,11 @@ mod tests {
                 .to_string(),
             ))
             .expect("registration request");
-        let registration = app.clone().oneshot(registration).await.expect("registration");
+        let registration = app
+            .clone()
+            .oneshot(registration)
+            .await
+            .expect("registration");
         assert_eq!(registration.status(), StatusCode::CREATED);
         registration
             .headers()
