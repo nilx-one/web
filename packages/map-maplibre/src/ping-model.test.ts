@@ -85,6 +85,40 @@ describe("xPing system prop", () => {
     expect(shown()).toHaveLength(0);
     model.dispose();
   });
+  it("renders nitro jets and streaks above cruise", () => {
+    const model = createPingModel();
+    const named = (name: string) => {
+      const found: Mesh[] = [];
+      model.root.traverse((node) => {
+        if (node instanceof Mesh && node.name === name) found.push(node);
+      });
+      return found;
+    };
+    const flames = named("ping-boost-flame");
+    const cores = named("ping-boost-core");
+    const streaks = named("ping-speed-streak");
+    const anyLit = () =>
+      [...flames, ...cores, ...streaks].some((mesh) => mesh.visible);
+    expect(flames).toHaveLength(2);
+    expect(cores).toHaveLength(2);
+    expect(streaks).toHaveLength(8);
+    model.sample(0.25, true, 0, 30);
+    expect(anyLit()).toBe(false);
+    model.sample(0.25, true, 0, 60);
+    const halfLength = flames[0]!.scale.y;
+    const halfStreaks = streaks.filter((mesh) => mesh.visible).length;
+    expect(flames.every((mesh) => mesh.visible)).toBe(true);
+    expect(cores.every((mesh) => mesh.visible)).toBe(true);
+    expect(halfStreaks).toBeGreaterThan(0);
+    model.sample(0.25, true, 0, 90);
+    expect(flames[0]!.scale.y).toBeGreaterThan(halfLength);
+    expect(streaks.filter((mesh) => mesh.visible)).toHaveLength(8);
+    model.sample(0.25, true, 0, 30);
+    expect(anyLit()).toBe(false);
+    model.sample(0.25, false, 0, 90);
+    expect(anyLit()).toBe(false);
+    model.dispose();
+  });
   it("disposes its owned geometry and materials", () => {
     const model = createPingModel();
     const disposals: ReturnType<typeof vi.fn>[] = [];

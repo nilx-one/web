@@ -149,6 +149,14 @@ renderer's `speedMps`): one thin clot just past cruise, up to four, wider,
 denser and trailing further, at its 90 m/s top. They fade as it slows back
 down, and reduced motion draws none.
 
+At speeds above cruise the existing forcing engine also lights twin blue-white
+exhaust jets and world-space speed streaks. Both length and trail density grow
+with the measured speed, then fade as xPing slows back to cruise. The expanded
+chase camera looks farther ahead and widens with `FlightState.boost`; this
+visual framing does not affect travel, engine state or the route. Collapsing
+the flight or entering activity overview continues to release the camera to
+the world. Reduced-motion mode suppresses these moving effects.
+
 Forcing is counted as it happens and told to the identity service a second at
 a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On
 empty, two more seconds of forcing break the engine: the report that crosses
