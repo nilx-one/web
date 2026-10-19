@@ -104,8 +104,9 @@ the renames. The service accepts only a published model id and stores nothing
 else; the choice is identity state, so it follows the Bond to every host rather
 than living in one device's interface preferences.
 
-A new Bond is offered a body once, right after its address, its password and
-its recovery key — the first moment there is a Bond to represent. The three
+A new Bond is offered a body once, after its address and password registration
+have authenticated it. Body choice belongs to 0x1 onboarding, outside the shared
+authentication view; no recovery-key step precedes it. The three
 studies are shown as themselves: each card is a still generated from that very
 study, so a picker can never promise a figure the world would not draw.
 "Decide later" is a real answer, and the profile keeps the same picker.
