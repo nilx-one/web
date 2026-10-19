@@ -349,7 +349,9 @@ function ProviderRow({
             {suggestedPubDress === undefined ? null : (
               <button
                 type="button"
-                onClick={() => auth?.onApplySuggestedPubDress(suggestedPubDress)}
+                onClick={() =>
+                  auth?.onApplySuggestedPubDress(suggestedPubDress)
+                }
               >
                 {t("identity.provider.suggested").replaceAll(
                   "{pubDress}",
