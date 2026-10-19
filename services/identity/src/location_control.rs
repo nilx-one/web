@@ -1355,7 +1355,9 @@ mod tests {
     #[tokio::test]
     async fn location_flow_retains_command_until_acknowledged_or_preempted() {
         let flows = TelegramLocationIntents::new(Duration::from_secs(60));
-        flows.begin_with_message(7, PendingLocationIntent::Travel, 41).await;
+        flows
+            .begin_with_message(7, PendingLocationIntent::Travel, 41)
+            .await;
         assert_eq!(flows.peek(7).await, Some(PendingLocationIntent::Travel));
         assert!(flows.is_pending_command(7, 41).await);
         assert!(!flows.is_pending_command(7, 42).await);
@@ -1364,10 +1366,16 @@ mod tests {
         assert_eq!(flows.finish(7).await, None);
         assert_eq!(flows.peek(7).await, None);
 
-        flows.begin_with_message(7, PendingLocationIntent::Travel, 50).await;
+        flows
+            .begin_with_message(7, PendingLocationIntent::Travel, 50)
+            .await;
         assert_eq!(flows.cancel(7).await, Some(50));
-        flows.begin_with_message(7, PendingLocationIntent::Manual, 51).await;
-        flows.begin_with_message(8, PendingLocationIntent::Travel, 80).await;
+        flows
+            .begin_with_message(7, PendingLocationIntent::Manual, 51)
+            .await;
+        flows
+            .begin_with_message(8, PendingLocationIntent::Travel, 80)
+            .await;
         assert_eq!(flows.cancel(7).await, Some(51));
         assert_eq!(flows.peek(8).await, Some(PendingLocationIntent::Travel));
     }
@@ -1375,7 +1383,9 @@ mod tests {
     #[tokio::test]
     async fn expired_travel_is_not_active_but_can_still_be_cleaned_up() {
         let flows = TelegramLocationIntents::new(Duration::ZERO);
-        flows.begin_with_message(7, PendingLocationIntent::Travel, 41).await;
+        flows
+            .begin_with_message(7, PendingLocationIntent::Travel, 41)
+            .await;
         assert!(flows.expired(7).await);
         assert_eq!(flows.peek(7).await, None);
         assert!(!flows.is_pending_command(7, 41).await);
