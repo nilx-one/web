@@ -255,9 +255,12 @@ pub enum PendingLocationIntent {
     Travel,
 }
 
+// Transient Telegram presentation state, not a protocol or relationship entity.
+type TrackedTelegramLocationIntent = (PendingLocationIntent, Instant, Option<i32>);
+
 #[derive(Clone, Debug)]
 pub struct TelegramLocationIntents {
-    pending: Arc<Mutex<HashMap<i64, (PendingLocationIntent, Instant, Option<i32>)>>>,
+    pending: Arc<Mutex<HashMap<i64, TrackedTelegramLocationIntent>>>,
     ttl: Duration,
 }
 
