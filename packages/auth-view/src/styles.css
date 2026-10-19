@@ -1,0 +1,123 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* Optional neutral skin. 0x1 keeps its product skin and xPing outside this package. */
+.ecosystem-auth-panel {
+  --auth-accent: #185adb;
+  max-width: 28rem;
+  margin: auto;
+  padding: clamp(1.25rem, 5vw, 2.5rem);
+  color: #182338;
+  background: #fff;
+  border: 1px solid #d7dce4;
+  border-radius: 1.25rem;
+  font:
+    1rem/1.5 system-ui,
+    sans-serif;
+}
+.ecosystem-auth-panel h1 {
+  font-size: 1.65rem;
+  line-height: 1.2;
+}
+.ecosystem-auth-panel .auth-product-name {
+  color: var(--auth-accent);
+  font-weight: 650;
+}
+.ecosystem-auth-panel .identity-form {
+  display: grid;
+  gap: 0.75rem;
+}
+.ecosystem-auth-panel .address-field,
+.ecosystem-auth-panel .password-field {
+  display: flex;
+  align-items: center;
+  border: 1px solid #8a97aa;
+  border-radius: 0.65rem;
+  padding: 0.25rem 0.5rem;
+  min-width: 0;
+}
+.ecosystem-auth-panel input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0.65rem 0.25rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.ecosystem-auth-panel select {
+  font: inherit;
+  padding: 0.65rem 0.2rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.ecosystem-auth-panel button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--auth-accent);
+  cursor: pointer;
+}
+.ecosystem-auth-panel button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.ecosystem-auth-panel :focus-visible {
+  outline: 2px solid var(--auth-accent);
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+.ecosystem-auth-panel svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+}
+.ecosystem-auth-panel .digit-selector {
+  display: flex;
+  align-items: center;
+}
+.ecosystem-auth-panel .selector-chevron {
+  display: none;
+}
+.ecosystem-auth-panel .identity-error {
+  color: #a31b3a;
+}
+.ecosystem-auth-panel .identity-status,
+.ecosystem-auth-panel .password-note {
+  margin: 0;
+  font-size: 0.875rem;
+}
+.ecosystem-auth-panel .text-action {
+  justify-self: start;
+  padding: 0;
+  text-decoration: underline;
+}
+.ecosystem-auth-panel .visually-hidden,
+.ecosystem-auth-panel .password-field--autofill-proxy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+@keyframes credential-autofill-start {
+  from {
+    opacity: 0.99;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.ecosystem-auth-panel input:-webkit-autofill {
+  animation-name: credential-autofill-start;
+  animation-duration: 1ms;
+}

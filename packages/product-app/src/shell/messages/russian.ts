@@ -445,7 +445,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.error.justRegistered":
     "Этот pub_dress только что зарегистрировали. Проверьте его ещё раз.",
   "identity.error.alreadyCommitted":
-    "Регистрация уже зафиксирована, и её ключ восстановления нельзя показать снова.",
+    "Аккаунт создан. Войдите с паролем, который вы задали.",
   "identity.error.rateLimited":
     "Слишком много попыток. Подождите, прежде чем пробовать снова.",
   "identity.error.invalidCredentials": "Неверный pub_dress или пароль.",

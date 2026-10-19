@@ -60,24 +60,21 @@ describe("identity foundation view state", () => {
     });
   });
 
-  it("does not authenticate a registration before recovery acknowledgement", () => {
+  it("accepts a server-authenticated registration without a recovery step", () => {
     expect(
       createNativeIdentityViewState(
         { kind: "anonymous" },
         { kind: "available", detail: "Available — create this identity" },
         {
-          kind: "recovery-key-required",
+          kind: "authenticated",
           identity: { pubDress: "0x0sky" },
-          recoveryKey: "0x1-rk-secret",
-          challenge: "0x1c-secret",
         },
         undefined,
         false,
       ),
     ).toMatchObject({
-      kind: "recovery-key",
+      kind: "authenticated",
       pubDress: "0x0sky",
-      recoveryKey: "0x1-rk-secret",
     });
   });
 

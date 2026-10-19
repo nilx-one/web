@@ -229,6 +229,12 @@ importers:
 
   packages/artifact-contract: {}
 
+  packages/auth-view:
+    dependencies:
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+
   packages/core-wasm:
     dependencies:
       '@nilx-one/application':
@@ -353,6 +359,9 @@ importers:
 
   packages/product-app:
     dependencies:
+      '@aiaiaiai/auth-view':
+        specifier: workspace:*
+        version: link:../auth-view
       '@nilx-one/application':
         specifier: workspace:*
         version: link:../application

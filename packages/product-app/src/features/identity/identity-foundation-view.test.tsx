@@ -51,7 +51,7 @@ describe("progressive native identity form", () => {
             busy: false,
           },
         }}
-        onAcknowledgeRecovery={vi.fn()}
+
         onCredentialAutofill={vi.fn()}
         onForgetRemembered={vi.fn()}
         onLogout={vi.fn()}
@@ -98,7 +98,7 @@ describe("progressive native identity form", () => {
     const sharedProps = {
       password: "",
       selection: { discriminator: "0", slug: "sky" },
-      onAcknowledgeRecovery: vi.fn(),
+
       onCredentialAutofill: vi.fn(),
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
@@ -190,7 +190,7 @@ describe("progressive native identity form", () => {
     const sharedProps = {
       selection,
       viewModel,
-      onAcknowledgeRecovery: vi.fn(),
+
       onCredentialAutofill,
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
@@ -265,7 +265,7 @@ describe("progressive native identity form", () => {
     const sharedProps = {
       selection,
       viewModel,
-      onAcknowledgeRecovery: vi.fn(),
+
       onCredentialAutofill: vi.fn(),
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
@@ -296,7 +296,7 @@ describe("progressive native identity form", () => {
     vi.useFakeTimers();
     const sharedProps = {
       selection: { discriminator: "0", slug: "sky" },
-      onAcknowledgeRecovery: vi.fn(),
+
       onCredentialAutofill: vi.fn(),
       onForgetRemembered: vi.fn(),
       onLogout: vi.fn(),
@@ -431,7 +431,7 @@ describe("public address inside the identity form", () => {
             busy: false,
           },
         }}
-        onAcknowledgeRecovery={vi.fn()}
+
         onCredentialAutofill={vi.fn()}
         onForgetRemembered={vi.fn()}
         onLogout={vi.fn()}
@@ -496,7 +496,6 @@ describe("public address inside the identity form", () => {
 
 describe("identity surface in Ukrainian", () => {
   const handlers = {
-    onAcknowledgeRecovery: vi.fn(),
     onCredentialAutofill: vi.fn(),
     onForgetRemembered: vi.fn(),
     onLogout: vi.fn(),
@@ -555,36 +554,9 @@ describe("identity surface in Ukrainian", () => {
     ).toBeInTheDocument();
   });
 
-  it("presents the recovery key and provider password steps in Ukrainian", () => {
+  it("presents the provider password step in Ukrainian", () => {
     chooseLocale("uk-UA");
-    const { rerender } = render(
-      <IdentityFoundationView
-        {...handlers}
-        password=""
-        selection={{ discriminator: "0", slug: "sky" }}
-        viewModel={{
-          ...chrome,
-          showProviderRow: false,
-          identity: {
-            kind: "recovery-key",
-            pubDress: "0x0sky",
-            recoveryKey: "key",
-            challenge: "challenge",
-            busy: false,
-          },
-        }}
-      />,
-    );
-
-    expect(
-      screen.getByRole("heading", { name: "Збережіть ключ відновлення." }),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Копіювати" })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Перейти до 0x1" }),
-    ).toBeDisabled();
-
-    rerender(
+    render(
       <IdentityFoundationView
         {...handlers}
         password=""
@@ -641,7 +613,7 @@ describe("provider password hand-off", () => {
           },
         }}
         passwordHandoff={{ open, returned }}
-        onAcknowledgeRecovery={vi.fn()}
+
         onCredentialAutofill={vi.fn()}
         onForgetRemembered={vi.fn()}
         onLogout={vi.fn()}
@@ -701,7 +673,7 @@ describe("verified Telegram username suggestion", () => {
           onApplySuggestedPubDress,
           onChooseExistingIdentity,
         }}
-        onAcknowledgeRecovery={vi.fn()}
+
         onCredentialAutofill={vi.fn()}
         onForgetRemembered={vi.fn()}
         onLogout={vi.fn()}

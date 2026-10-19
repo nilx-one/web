@@ -88,10 +88,8 @@ describe("identity HTTP adapter", () => {
   it("sends native passwords only in no-store request bodies", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(201, {
-        state: "recovery_key_required",
+        state: "authenticated",
         identity: { pub_dress: "0x0sky" },
-        recovery_key: "0x1-rk-secret",
-        challenge: "0x1c-secret",
       }),
     );
     const adapter = createIdentityHttpAdapter({
@@ -106,10 +104,8 @@ describe("identity HTTP adapter", () => {
         "idempotency-key-0001",
       ),
     ).resolves.toEqual({
-      kind: "recovery-key-required",
+      kind: "authenticated",
       identity: { pubDress: "0x0sky" },
-      recoveryKey: "0x1-rk-secret",
-      challenge: "0x1c-secret",
     });
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/auth/native/registration",
@@ -275,10 +271,8 @@ describe("Provider password setup transport", () => {
   it("sends only the password with verified host authorization and CSRF protection", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(201, {
-        state: "recovery_key_required",
+        state: "authenticated",
         identity: { pub_dress: "0x0sky" },
-        recovery_key: "rk",
-        challenge: "challenge",
       }),
     );
     const adapter = createIdentityHttpAdapter({
@@ -287,7 +281,7 @@ describe("Provider password setup transport", () => {
     });
     await expect(
       adapter.setProviderPassword("telegram", "a private password"),
-    ).resolves.toMatchObject({ kind: "recovery-key-required" });
+    ).resolves.toMatchObject({ kind: "authenticated" });
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/auth/telegram/password",
       expect.objectContaining({
@@ -304,10 +298,8 @@ describe("Provider password setup transport", () => {
   it("presents the Discord proof to the Discord setup endpoint", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(201, {
-        state: "recovery_key_required",
+        state: "authenticated",
         identity: { pub_dress: "0x0sky" },
-        recovery_key: "rk",
-        challenge: "challenge",
       }),
     );
     const adapter = createIdentityHttpAdapter({
@@ -316,7 +308,7 @@ describe("Provider password setup transport", () => {
     });
     await expect(
       adapter.setProviderPassword("discord", "a private password"),
-    ).resolves.toMatchObject({ kind: "recovery-key-required" });
+    ).resolves.toMatchObject({ kind: "authenticated" });
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/auth/discord/password",
       expect.objectContaining({

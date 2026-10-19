@@ -57,10 +57,8 @@ describe("identity access use cases", () => {
         pubDress: "0x0sky",
       }),
       registerNative: async (pubDress) => ({
-        kind: "recovery-key-required",
+        kind: "authenticated",
         identity: { pubDress },
-        recoveryKey: "0x1-rk-secret",
-        challenge: "0x1c-secret",
       }),
       authenticateNative: async (pubDress) => ({
         kind: "authenticated",
@@ -81,7 +79,7 @@ describe("identity access use cases", () => {
         "idempotency-key-1",
       ),
     ).resolves.toMatchObject({
-      kind: "recovery-key-required",
+      kind: "authenticated",
       identity: { pubDress: "0x0sky" },
     });
     await expect(

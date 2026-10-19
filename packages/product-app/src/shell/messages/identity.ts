@@ -131,7 +131,7 @@ export const IDENTITY_EN = {
   "identity.error.justRegistered":
     "That pub_dress was just registered. Resolve it again.",
   "identity.error.alreadyCommitted":
-    "Registration already committed and its recovery key can’t be shown again.",
+    "Account created. Sign in with the password you chose.",
   "identity.error.rateLimited": "Too many attempts. Wait before trying again.",
   "identity.error.invalidCredentials": "The pub_dress or password is invalid.",
   "identity.error.challengeExpired":
@@ -319,7 +319,7 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.error.justRegistered":
     "Цей pub_dress щойно зареєстрували. Перевірте його ще раз.",
   "identity.error.alreadyCommitted":
-    "Реєстрацію вже зафіксовано, і її ключ відновлення не можна показати знову.",
+    "Акаунт створено. Увійдіть із паролем, який ви задали.",
   "identity.error.rateLimited":
     "Забагато спроб. Зачекайте, перш ніж пробувати знову.",
   "identity.error.invalidCredentials": "Неправильний pub_dress або пароль.",

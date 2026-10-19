@@ -447,17 +447,10 @@ class IdentityHttpAdapter
     const body: unknown = await response.json().catch(() => undefined);
     if (response.ok && isRecord(body)) {
       const identity = parseIdentity(body.identity);
-      if (
-        body.state === "recovery_key_required" &&
-        identity !== undefined &&
-        typeof body.recovery_key === "string" &&
-        typeof body.challenge === "string"
-      ) {
+      if (body.state === "authenticated" && identity !== undefined) {
         return {
-          kind: "recovery-key-required",
+          kind: "authenticated",
           identity,
-          recoveryKey: body.recovery_key,
-          challenge: body.challenge,
         };
       }
     }
@@ -644,17 +637,10 @@ class IdentityHttpAdapter
     const body: unknown = await response.json().catch(() => undefined);
     if (response.ok && isRecord(body)) {
       const identity = parseIdentity(body.identity);
-      if (
-        body.state === "recovery_key_required" &&
-        identity !== undefined &&
-        typeof body.recovery_key === "string" &&
-        typeof body.challenge === "string"
-      ) {
+      if (body.state === "authenticated" && identity !== undefined) {
         return {
-          kind: "recovery-key-required",
+          kind: "authenticated",
           identity,
-          recoveryKey: body.recovery_key,
-          challenge: body.challenge,
         };
       }
     }
