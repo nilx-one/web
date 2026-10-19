@@ -255,9 +255,12 @@ pub enum PendingLocationIntent {
     Travel,
 }
 
+// Transient Telegram presentation state, not a protocol or relationship entity.
+type TrackedTelegramLocationIntent = (PendingLocationIntent, Instant, Option<i32>);
+
 #[derive(Clone, Debug)]
 pub struct TelegramLocationIntents {
-    pending: Arc<Mutex<HashMap<i64, (PendingLocationIntent, Instant)>>>,
+    pending: Arc<Mutex<HashMap<i64, TrackedTelegramLocationIntent>>>,
     ttl: Duration,
 }
 
@@ -276,15 +279,70 @@ impl TelegramLocationIntents {
         }
     }
 
+    /// Legacy untracked intent entry point.
     pub async fn begin(&self, telegram_user_id: i64, intent: PendingLocationIntent) {
         self.pending
             .lock()
             .await
-            .insert(telegram_user_id, (intent, Instant::now()));
+            .insert(telegram_user_id, (intent, Instant::now(), None));
+    }
+
+    /// Retain the user's Telegram command until completion; not BondChain state.
+    pub async fn begin_with_message(
+        &self,
+        telegram_user_id: i64,
+        intent: PendingLocationIntent,
+        message_id: i32,
+    ) {
+        self.pending
+            .lock()
+            .await
+            .insert(telegram_user_id, (intent, Instant::now(), Some(message_id)));
+    }
+
+    /// Failed writes and invalid points must not consume an interactive request.
+    pub async fn peek(&self, telegram_user_id: i64) -> Option<PendingLocationIntent> {
+        self.pending
+            .lock()
+            .await
+            .get(&telegram_user_id)
+            .and_then(|(intent, started, _)| (started.elapsed() <= self.ttl).then_some(*intent))
+    }
+
+    pub async fn expired(&self, telegram_user_id: i64) -> bool {
+        self.pending
+            .lock()
+            .await
+            .get(&telegram_user_id)
+            .is_some_and(|(_, started, _)| started.elapsed() > self.ttl)
+    }
+
+    /// The initiating command alone is retained; one-step inputs still clear.
+    pub async fn is_pending_command(&self, telegram_user_id: i64, message_id: i32) -> bool {
+        self.pending
+            .lock()
+            .await
+            .get(&telegram_user_id)
+            .is_some_and(|(_, started, id)| {
+                started.elapsed() <= self.ttl && *id == Some(message_id)
+            })
+    }
+
+    /// Caller may remove the returned user-owned command, never a bot slot.
+    pub async fn cancel(&self, telegram_user_id: i64) -> Option<i32> {
+        self.pending
+            .lock()
+            .await
+            .remove(&telegram_user_id)
+            .and_then(|(_, _, message_id)| message_id)
+    }
+
+    pub async fn finish(&self, telegram_user_id: i64) -> Option<i32> {
+        self.cancel(telegram_user_id).await
     }
 
     pub async fn consume(&self, telegram_user_id: i64) -> Option<PendingLocationIntent> {
-        let (intent, started) = self.pending.lock().await.remove(&telegram_user_id)?;
+        let (intent, started, _) = self.pending.lock().await.remove(&telegram_user_id)?;
         (started.elapsed() <= self.ttl).then_some(intent)
     }
 }
@@ -1295,6 +1353,46 @@ mod tests {
             Some(PendingLocationIntent::Manual)
         );
         assert_eq!(intents.consume(7).await, None);
+    }
+
+    #[tokio::test]
+    async fn location_flow_retains_command_until_acknowledged_or_preempted() {
+        let flows = TelegramLocationIntents::new(Duration::from_secs(60));
+        flows
+            .begin_with_message(7, PendingLocationIntent::Travel, 41)
+            .await;
+        assert_eq!(flows.peek(7).await, Some(PendingLocationIntent::Travel));
+        assert!(flows.is_pending_command(7, 41).await);
+        assert!(!flows.is_pending_command(7, 42).await);
+        assert_eq!(flows.peek(7).await, Some(PendingLocationIntent::Travel));
+        assert_eq!(flows.finish(7).await, Some(41));
+        assert_eq!(flows.finish(7).await, None);
+        assert_eq!(flows.peek(7).await, None);
+
+        flows
+            .begin_with_message(7, PendingLocationIntent::Travel, 50)
+            .await;
+        assert_eq!(flows.cancel(7).await, Some(50));
+        flows
+            .begin_with_message(7, PendingLocationIntent::Manual, 51)
+            .await;
+        flows
+            .begin_with_message(8, PendingLocationIntent::Travel, 80)
+            .await;
+        assert_eq!(flows.cancel(7).await, Some(51));
+        assert_eq!(flows.peek(8).await, Some(PendingLocationIntent::Travel));
+    }
+
+    #[tokio::test]
+    async fn expired_travel_is_not_active_but_can_still_be_cleaned_up() {
+        let flows = TelegramLocationIntents::new(Duration::ZERO);
+        flows
+            .begin_with_message(7, PendingLocationIntent::Travel, 41)
+            .await;
+        assert!(flows.expired(7).await);
+        assert_eq!(flows.peek(7).await, None);
+        assert!(!flows.is_pending_command(7, 41).await);
+        assert_eq!(flows.cancel(7).await, Some(41));
     }
 
     #[tokio::test]

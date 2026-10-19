@@ -28,7 +28,7 @@ use teloxide::{
     prelude::*,
     types::{
         BotCommand, BotCommandScope, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
-        KeyboardButton, KeyboardMarkup, MenuButton, Message, WebAppInfo,
+        KeyboardButton, KeyboardMarkup, MenuButton, Message, MessageId, WebAppInfo,
     },
 };
 use tokio::sync::Mutex;
@@ -201,6 +201,8 @@ struct TelegramBotState {
     surfaces: Arc<TelegramSurfaces>,
     /// Last successfully synchronized menu per chat, rechecked on every message.
     synced_command_menus: Arc<Mutex<HashMap<i64, CommandMenu>>>,
+    /// A location must not race the command that arms it.
+    message_locks: Arc<Mutex<HashMap<i64, Arc<Mutex<()>>>>>,
 }
 
 async fn run_operator_command(args: &[String]) -> i32 {
@@ -447,6 +449,7 @@ async fn main() {
         pending_unlinks: PendingUnlinkConfirmations::default(),
         surfaces: Arc::clone(&surfaces),
         synced_command_menus: Arc::new(Mutex::new(HashMap::new())),
+        message_locks: Arc::new(Mutex::new(HashMap::new())),
     });
 
     // One durable, shared delivery queue for all Telegram-linked admins.
@@ -795,15 +798,35 @@ async fn handle_message(
         return Ok(());
     };
 
+    let message_lock = {
+        let mut locks = state.message_locks.lock().await;
+        Arc::clone(
+            locks
+                .entry(telegram_user_id)
+                .or_insert_with(|| Arc::new(Mutex::new(()))),
+        )
+    };
+    let _message_guard = message_lock.lock().await;
     let bot = CompactBot::new(bot, message.chat.id, Arc::clone(&state.surfaces));
     ensure_command_menu(&bot, &message, state.as_ref(), telegram_user_id).await;
 
     if let Some(location) = shared_point(&message) {
-        handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
-        bot.refresh_admin(None).await?;
-        if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
-            error!(%error, "could not remove consumed Telegram location input");
+        let acknowledged =
+            handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
+        if acknowledged {
+            // Confirm in the editable Status slot before removing either user input.
+            if let Some(command_id) = state.intents.finish(telegram_user_id).await
+                && let Err(error) = bot
+                    .delete_message(message.chat.id, MessageId(command_id))
+                    .await
+            {
+                error!(%error, "could not remove completed Telegram flow command");
+            }
+            if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
+                error!(%error, "could not remove acknowledged Telegram location input");
+            }
         }
+        bot.refresh_admin(None).await?;
         return Ok(());
     }
 
@@ -818,6 +841,15 @@ async fn handle_message(
         }
         return Ok(());
     };
+
+    // Every incoming command preempts any prior location flow, including /unlink.
+    if let Some(previous_id) = state.intents.cancel(telegram_user_id).await
+        && let Err(error) = bot
+            .delete_message(message.chat.id, MessageId(previous_id))
+            .await
+    {
+        error!(%error, "could not remove superseded Telegram flow command");
+    }
 
     match command_of(text) {
         "/open" => open_app(&bot, &message).await?,
@@ -851,7 +883,13 @@ async fn handle_message(
         }
     }
     bot.refresh_admin(None).await?;
-    if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
+    // Keep a multi-step command visible while the Telegram picker is pending.
+    if !state
+        .intents
+        .is_pending_command(telegram_user_id, message.id.0)
+        .await
+        && let Err(error) = bot.delete_message(message.chat.id, message.id).await
+    {
         error!(%error, "could not remove consumed Telegram command input");
     }
     Ok(())
@@ -1065,14 +1103,23 @@ async fn handle_location(
     state: &TelegramBotState,
     telegram_user_id: i64,
     location: &teloxide::types::Location,
-) -> ResponseResult<()> {
+) -> ResponseResult<bool> {
     let Some((identity, role)) =
         registered_identity(bot, message, &state.repository, telegram_user_id).await?
     else {
-        return Ok(());
+        return Ok(false);
     };
 
-    let intent = state.intents.consume(telegram_user_id).await;
+    // Expired travel must never fall back to an unrelated admin Bond-only move.
+    if state.intents.expired(telegram_user_id).await {
+        bot.send_message(
+            message.chat.id,
+            "Час очікування локації минув. Повторіть команду.",
+        )
+        .await?;
+        return Ok(false);
+    }
+    let intent = state.intents.peek(telegram_user_id).await;
     if intent == Some(PendingLocationIntent::Travel) {
         return handle_travel_point(bot, message, state, &identity, role, location).await;
     }
@@ -1085,7 +1132,7 @@ async fn handle_location(
             )
             .reply_markup(control_keyboard(role))
             .await?;
-            return Ok(());
+            return Ok(false);
         }
         Err(LocationModeRefusal::NoIntent) => {
             bot.send_message(
@@ -1094,7 +1141,7 @@ async fn handle_location(
             )
             .reply_markup(control_keyboard(role))
             .await?;
-            return Ok(());
+            return Ok(false);
         }
     };
 
@@ -1104,7 +1151,7 @@ async fn handle_location(
             error!(%error, "Telegram supplied an invalid location point");
             bot.send_message(message.chat.id, "Telegram передав некоректну координату.")
                 .await?;
-            return Ok(());
+            return Ok(false);
         }
     };
     let updated_at = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -1112,7 +1159,7 @@ async fn handle_location(
         Err(_) => {
             bot.send_message(message.chat.id, "Bond location тимчасово недоступний.")
                 .await?;
-            return Ok(());
+            return Ok(false);
         }
     };
     let location_record = BondLocation::new(coordinate, mode, DecimalU64::new(updated_at));
@@ -1125,7 +1172,7 @@ async fn handle_location(
         error!(%error, "Bond location write failed");
         bot.send_message(message.chat.id, "Bond location тимчасово недоступний.")
             .await?;
-        return Ok(());
+        return Ok(false);
     }
 
     let acknowledgement = match mode {
@@ -1137,7 +1184,7 @@ async fn handle_location(
     bot.send_message(message.chat.id, acknowledgement)
         .reply_markup(control_keyboard(role))
         .await?;
-    Ok(())
+    Ok(true)
 }
 
 /// One admin-initiated manual destination, not a live GPS observation.
@@ -1148,11 +1195,11 @@ async fn handle_travel_point(
     identity: &IdentityRecord,
     role: BondAccessRole,
     point: &teloxide::types::Location,
-) -> ResponseResult<()> {
+) -> ResponseResult<bool> {
     if !role.can_set_manual_location() {
         bot.send_message(message.chat.id, "Подорожі з Avaia доступні лише admin.")
             .await?;
-        return Ok(());
+        return Ok(false);
     }
     if point.live_period.is_some() {
         bot.send_message(
@@ -1160,14 +1207,14 @@ async fn handle_travel_point(
             "Для подорожі оберіть звичайну точку на мапі, не live location. Повторіть /travel.",
         )
         .await?;
-        return Ok(());
+        return Ok(false);
     }
     let coordinate = match GeoCoordinate::from_degrees(point.longitude, point.latitude) {
         Ok(value) => value,
         Err(_) => {
             bot.send_message(message.chat.id, "Некоректні координати подорожі.")
                 .await?;
-            return Ok(());
+            return Ok(false);
         }
     };
     let owner = match identity.pub_dress.parse() {
@@ -1176,7 +1223,7 @@ async fn handle_travel_point(
             error!(%error, "stored travel owner pub_dress invalid");
             bot.send_message(message.chat.id, "Bond тимчасово недоступний.")
                 .await?;
-            return Ok(());
+            return Ok(false);
         }
     };
     let at = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -1184,30 +1231,35 @@ async fn handle_travel_point(
         Err(_) => {
             bot.send_message(message.chat.id, "Подорож тимчасово недоступна.")
                 .await?;
-            return Ok(());
+            return Ok(false);
         }
     };
-    let response = match state
+    let (response, arrived) = match state
         .repository
         .travel_with_avaia(&owner, coordinate, at)
         .await
     {
-        Ok(AvaiaTravelOutcome::Arrived) => {
-            "Подорож розпочато! Bond і Avaia телепортовані у вибрану точку. Позиції збережено окремо; Avaia далі рухається самостійно."
-        }
-        Ok(AvaiaTravelOutcome::AdminRequired) => "Подорожі з Avaia доступні лише admin.",
-        Ok(AvaiaTravelOutcome::AvaiaUnavailable) => {
-            "Спочатку створіть Avaia в 0x1. Позиція Bond не змінена."
-        }
+        Ok(AvaiaTravelOutcome::Arrived) => (
+            "✅ Bond і Avaia телепортовані у вибрану точку. Позиції збережено окремо; Avaia далі рухається самостійно.",
+            true,
+        ),
+        Ok(AvaiaTravelOutcome::AdminRequired) => ("Подорожі з Avaia доступні лише admin.", false),
+        Ok(AvaiaTravelOutcome::AvaiaUnavailable) => (
+            "Спочатку створіть Avaia в 0x1. Позиція Bond не змінена.",
+            false,
+        ),
         Err(error) => {
             error!(%error, "atomic Bond/Avaia travel failed");
-            "Подорож не вдалася; позиції Bond і Avaia не змінено."
+            (
+                "Подорож не вдалася; позиції Bond і Avaia не змінено.",
+                false,
+            )
         }
     };
     bot.send_message(message.chat.id, response)
         .reply_markup(control_keyboard(role))
         .await?;
-    Ok(())
+    Ok(arrived)
 }
 
 async fn begin_travel(
@@ -1226,15 +1278,20 @@ async fn begin_travel(
             .await?;
         return Ok(());
     }
-    state
-        .intents
-        .begin(telegram_user_id, PendingLocationIntent::Travel)
-        .await;
     bot.send_message(
         message.chat.id,
         "Відкрийте Telegram Location та надішліть звичайну точку на карті протягом 5 хвилин. Bond і створена Avaia перемістяться туди разом (manual mode).",
     )
     .await?;
+    // Arm only after the instruction is visible in the shared Status slot.
+    state
+        .intents
+        .begin_with_message(
+            telegram_user_id,
+            PendingLocationIntent::Travel,
+            message.id.0,
+        )
+        .await;
     Ok(())
 }
 
@@ -1250,15 +1307,20 @@ async fn begin_current_position(
     {
         return Ok(());
     }
-    state
-        .intents
-        .begin(telegram_user_id, PendingLocationIntent::Current)
-        .await;
     bot.send_message(
         message.chat.id,
         "Надішліть свою геолокацію через вкладення Telegram протягом 5 хвилин. Bond.location оновиться і режим стане live.",
     )
     .await?;
+    // Arm only after the instruction is visible in the shared Status slot.
+    state
+        .intents
+        .begin_with_message(
+            telegram_user_id,
+            PendingLocationIntent::Current,
+            message.id.0,
+        )
+        .await;
     Ok(())
 }
 
@@ -1282,15 +1344,20 @@ async fn begin_manual_position(
         .await?;
         return Ok(());
     }
-    state
-        .intents
-        .begin(telegram_user_id, PendingLocationIntent::Manual)
-        .await;
     bot.send_message(
         message.chat.id,
         "Відкрийте Telegram Location, оберіть довільну точку на мапі та надішліть її протягом 5 хвилин. Вона стане вашим Bond.location у manual mode.",
     )
     .await?;
+    // Arm only after the instruction is visible in the shared Status slot.
+    state
+        .intents
+        .begin_with_message(
+            telegram_user_id,
+            PendingLocationIntent::Manual,
+            message.id.0,
+        )
+        .await;
     Ok(())
 }
 
