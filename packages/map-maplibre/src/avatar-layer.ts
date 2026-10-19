@@ -138,6 +138,7 @@ interface AvatarInstance {
       }
     | undefined;
   loadGeneration: number;
+  settled?: boolean;
 }
 
 /**
@@ -176,6 +177,7 @@ export interface AvatarCustomLayer
   upsertDrone(handle: SystemDroneHandle): boolean;
   setFlightLoot(handles: readonly MapFlightLoot[]): void;
   hasInstances(): boolean;
+  assetsSettled(): boolean;
   dispose(): void;
 }
 
@@ -547,6 +549,7 @@ export function createAvatarLayer(
   }
 
   async function hydrate(instance: AvatarInstance): Promise<void> {
+    instance.settled = false;
     const localGeneration = instance.loadGeneration;
     if (instance.handle.modelId === "system-ping") {
       instance.drone?.dispose();
@@ -560,6 +563,7 @@ export function createAvatarLayer(
         instance.handle.speedMps,
         instance.handle.lootAura,
       );
+      instance.settled = true;
       scene.add(drone.root);
       place(instance);
       map?.triggerRepaint();
@@ -585,6 +589,11 @@ export function createAvatarLayer(
       map?.triggerRepaint();
     } catch {
       // Fail closed: a missing study asset renders nothing and does not affect the map.
+    } finally {
+      if (!disposed && localGeneration === instance.loadGeneration) {
+        instance.settled = true;
+        map?.triggerRepaint();
+      }
     }
   }
 
@@ -764,6 +773,12 @@ export function createAvatarLayer(
       // Stored only as local presentation input. Projection remains MapLibre-owned.
       cameraState = next;
       void cameraState;
+    },
+
+    assetsSettled() {
+      return [...instances.values()].every(
+        (instance) => instance.settled === true,
+      );
     },
 
     hasInstances() {

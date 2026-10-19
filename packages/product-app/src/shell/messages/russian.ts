@@ -508,6 +508,10 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "map.status.idle": "Карта неактивна",
   "map.status.idleDetail": "Географический рендерер ещё не смонтирован.",
   "map.status.loading": "Загрузка карты",
+  "map.startup.loading": "Готовим мир к открытию…",
+  "map.startup.failed":
+    "Мир загружается дольше, чем ожидалось. Попробуй ещё раз.",
+  "map.startup.retry": "Попробовать ещё раз",
   "map.status.loadingDetail": "Загружаем собственный стиль карты 0x1.",
   "map.status.ready": "Карта готова",
   "map.status.readyDetail": "MapLibre отображает географическую основу.",

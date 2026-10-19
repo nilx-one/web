@@ -579,6 +579,12 @@ export interface MapRenderer {
   mount(container: HTMLElement): void;
   unmount(): void;
   getStatus(): MapRendererStatus;
+  /**
+   * Optional renderer-owned paint barrier for the current view: camera at rest,
+   * tiles/terrain loaded and scene assets settled (including optional fallbacks).
+   * Unlike ready, this means the world can be revealed. Abort on teardown/retry.
+   */
+  whenSceneReady?(signal: AbortSignal): Promise<void>;
   subscribe(listener: (status: MapRendererStatus) => void): () => void;
   getCamera(): MapCamera;
   /** Snapshot of actual viewport padding for temporary cinematic framing. */

@@ -1834,11 +1834,50 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
   });
 
+  it("covers a technically ready renderer until its opening scene has painted", async () => {
+    const mapRenderer = renderer();
+    let reveal: (() => void) | undefined;
+    mapRenderer.whenSceneReady = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          reveal = resolve;
+        }),
+    );
+    const { container } = renderView({ mapRenderer });
+    expect(screen.getByText("Preparing your view of the world…")).toBeVisible();
+    expect(container.querySelector(".core-chip")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Camera mode" })).toBeNull();
+    await vi.waitFor(() => expect(reveal).toBeDefined());
+    await act(async () => reveal!());
+    expect(screen.queryByText("Preparing your view of the world…")).toBeNull();
+    expect(container.querySelector(".core-chip")).not.toBeNull();
+    expect(container.querySelector("[data-world-ready=true]")).not.toBeNull();
+  });
+
   it("keeps a rendering map free of status chrome", () => {
     renderView({ mapRenderer: renderer({ kind: "ready" }) });
 
     expect(screen.queryByText("Map unavailable")).not.toBeInTheDocument();
     expect(screen.queryByText("Loading map")).not.toBeInTheDocument();
+  });
+
+  it("shows a renderer failure on the covered world instead of endless preparation", () => {
+    const mapRenderer = renderer({
+      kind: "unavailable",
+      reason: "webgl-context-lost",
+    });
+    mapRenderer.whenSceneReady = vi.fn();
+    const { container } = renderView({ mapRenderer });
+    const cover = container.querySelector<HTMLElement>(
+      ".authenticated-map-home__startup",
+    )!;
+    expect(
+      within(cover).getByText("This browser dropped the map's WebGL context."),
+    ).toBeVisible();
+    expect(
+      within(cover).queryByText("Preparing your view of the world…"),
+    ).toBeNull();
+    expect(mapRenderer.whenSceneReady).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -2096,7 +2135,9 @@ describe("AuthenticatedMapHomeView", () => {
     await vi.waitFor(() => expect(mapRenderer.setCamera).toHaveBeenCalled());
     const [camera, options] =
       vi.mocked(mapRenderer.setCamera).mock.lastCall ?? [];
-    expect(camera?.center).toEqual([declared.longitude, declared.latitude]);
+    expect(camera?.center).toEqual(
+      isometricCamera(camera!, { ...declared, bearingDeg: 0 }).center,
+    );
     expect(camera?.zoom).toBeGreaterThan(MAP_BODY_HANDOVER_ZOOM);
     expect(options?.motion).toBe("flight");
   });
@@ -2134,7 +2175,9 @@ describe("AuthenticatedMapHomeView", () => {
       ).toBeGreaterThanOrEqual(2),
     );
     const calls = vi.mocked(mapRenderer.setCamera).mock.calls;
-    expect(calls[0]?.[0].center).toEqual([near.longitude, near.latitude]);
+    expect(calls[0]?.[0].center).toEqual(
+      isometricCamera(calls[0]![0], { ...near, bearingDeg: 0 }).center,
+    );
     expect(calls[0]?.[0].zoom).toBe(18.5);
     expect(calls.some(([camera]) => camera.zoom < 16)).toBe(true);
     const lastCamera = calls.at(-1)?.[0];
