@@ -144,6 +144,15 @@ renderer's `speedMps`): one thin clot just past cruise, up to four, wider,
 denser and trailing further, at its 90 m/s top. They fade as it slows back
 down, and reduced motion draws none.
 
+The same measured speed now ignites two blue-white exhaust jets and a small
+pool of world-space light streaks behind the drone. The jets lengthen and the
+streaks become denser during the three-second ramp, then extinguish as speed
+returns to cruise, including on engine refusal or the homeward leg. The
+expanded chase camera looks a little farther ahead and widens progressively
+at full boost; collapse and activity overview still release it to the world.
+No screen-wide blur, map distortion or new postprocessing pass is needed on
+mobile. Reduced motion renders none of these speed effects.
+
 Forcing is counted as it happens and told to the identity service a second at
 a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On
 empty, two more seconds of forcing break the engine: the report that crosses
