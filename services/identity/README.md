@@ -1,7 +1,7 @@
 # Identity Service
 
-The identity service owns phase-0 native Web credentials, one-time recovery
-keys, browser sessions, and remembered-Bond hints. A user can register and sign
+The identity service owns native Web credentials, browser sessions, remembered-Bond
+hints and legacy recovery material. New registrations require only a username and password. A user can register and sign
 in with only an exact, case-sensitive `pub_dress` and password. Provider
 adapters remain isolated for later optional bindings.
 
@@ -23,8 +23,8 @@ It and its machine-readable version are maintained only there.
 
 - `POST /api/v1/identity/resolve` resolves an exact public `pub_dress` candidate.
 - `GET /api/v1/auth/native/context` returns authenticated, remembered, or anonymous context.
-- `POST /api/v1/auth/native/registration` atomically claims an address and returns a one-time recovery challenge.
-- `POST /api/v1/auth/native/recovery/acknowledgement` acknowledges delivery and creates the session.
+- `POST /api/v1/auth/native/registration` atomically claims an address, activates its password and returns an authenticated session (contract 14); no recovery material is generated.
+- `POST /api/v1/auth/native/recovery/acknowledgement` finishes legacy registrations that already received a challenge.
 - `POST /api/v1/auth/native/session` verifies a password and creates a session.
 - `POST /api/v1/auth/native/recovery` rotates the password and recovery key after valid recovery proof.
 - `POST /api/v1/auth/native/logout` revokes the active session.
@@ -67,20 +67,12 @@ Availability is advisory. The database insert remains the only collision boundar
 
 ## Bond roles and location modes
 
-The `0x0` namespace is reserved for existing human administrators. On upgrade,
-all existing human `0x0…` Bonds receive `admin` in `bond_roles`; role lookup
-also enforces that policy independently of a stored override. Unknown addresses
-and Avaia never gain admin rights from this prefix.
+All hexadecimal prefixes `0`–`f` are available for new human registrations.
+The shared form defaults to `0x0`. Roles are explicitly stored; choosing `0x0`
+does not grant administrator rights. Existing explicit grants remain intact.
+Human discriminators remain immutable after registration.
 
-Public native and provider registration accepts discriminators `1`–`f` only.
-The Web form starts at `1`; existing `0x0…` credentials still resolve for sign-in,
-recovery and provider linking. An unallocated `0x0…` address resolves with
-`reserved_pub_dress_prefix`, never as an available or registered Bond.
-Registration checks and database triggers prevent allocating a new human
-`0x0…` identity. Human discriminators are immutable at the repository and
-storage boundaries; existing administrators can still rename their slug.
-
-Other human Bonds default to `user`; known stored roles are `user`, `admin`,
+Human Bonds default to `user`; known stored roles are `user`, `admin`,
 and `business`. Non-reserved roles remain assignable out of band, with no
 public role-assignment API:
 

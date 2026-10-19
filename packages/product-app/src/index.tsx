@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { CourierDirectoryPort } from "@nilx-one/application";
+import { DEFAULT_AUTH_SELECTION } from "@aiaiaiai/auth-view";
+
 import {
-  AcknowledgeRecoveryKey,
   ChooseAvatarModel,
   AuthenticateNativeIdentity,
   BeginBrowserProviderAuthorization,
@@ -302,8 +303,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const appearance = useAppearance();
   const browserHost = host.kind === "browser";
   const [selection, setSelection] = useState<PubDressSelection>({
-    discriminator: "1",
-    slug: "",
+    ...DEFAULT_AUTH_SELECTION,
   });
   const [password, setPassword] = useState("");
   // A verified external provider must never attach to a stored native session
@@ -493,7 +493,12 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         idempotencyKey,
       ),
     onSuccess: (result) => {
-      if (result.kind === "rejected" && result.reason === "unavailable") {
+      if (result.kind === "authenticated") setPassword("");
+      if (
+        result.kind === "rejected" &&
+        (result.reason === "unavailable" ||
+          result.reason === "already-committed")
+      ) {
         void resolutionQuery.refetch();
       }
     },
@@ -504,17 +509,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         input.pubDress,
         input.password,
       ),
-  });
-  const recoveryAcknowledgement = useMutation({
-    mutationFn: (challenge: string) =>
-      new AcknowledgeRecoveryKey(dependencies.identity).execute(challenge),
-    onSuccess: (result) => {
-      if (result.kind === "authenticated") {
-        void queryClient.invalidateQueries({
-          queryKey: ["native-identity-context"],
-        });
-      }
-    },
   });
   const providerRegistration = useMutation({
     mutationFn: (selection: PubDressSelection) =>
@@ -530,7 +524,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       new SetProviderPassword(dependencies.identity).execute(host, password),
     gcTime: 0,
     onSuccess: async (result) => {
-      if (result.kind === "recovery-key-required") setPassword("");
+      if (result.kind === "authenticated") setPassword("");
       // "already-set" means the provider-identity read that put this Bond on
       // the password-setup screen was stale: a credential exists server-side
       // already. Re-reading it is what lets createProviderIdentityViewState
@@ -595,9 +589,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       });
       nativeRegistration.reset();
       nativeAuthentication.reset();
-      recoveryAcknowledgement.reset();
+
       browserProviderLink.reset();
-      setSelection({ discriminator: "1", slug: "" });
+      setSelection({ ...DEFAULT_AUTH_SELECTION });
       setPassword("");
       setIdempotencyKey(newIdempotencyKey());
       setUseRememberedHint(false);
@@ -609,7 +603,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   async function refreshIdentityProjections(): Promise<void> {
     nativeRegistration.reset();
     nativeAuthentication.reset();
-    recoveryAcknowledgement.reset();
+
     providerRegistration.reset();
     await Promise.all([
       queryClient.invalidateQueries({
@@ -671,7 +665,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
       nativeRegistration.reset();
       nativeAuthentication.reset();
-      recoveryAcknowledgement.reset();
+
       browserProviderLink.reset();
       setUseRememberedHint(true);
       pendingAutofillCredential.current = undefined;
@@ -684,11 +678,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const nativePending =
     nativeRegistration.isPending ||
     nativeAuthentication.isPending ||
-    recoveryAcknowledgement.isPending ||
     forgetRemembered.isPending ||
     logout.isPending;
-  const latestAuthentication =
-    recoveryAcknowledgement.data ?? nativeAuthentication.data;
+  const latestAuthentication = nativeAuthentication.data;
   const nativeIdentityState = createNativeIdentityViewState(
     nativeContextQuery.data?.kind === "remembered" && !useRememberedHint
       ? { kind: "anonymous" }
@@ -794,11 +786,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           providerIdentityQuery.data,
           providerRegistration.data,
           status,
-          providerRegistration.isPending ||
-            providerPassword.isPending ||
-            recoveryAcknowledgement.isPending,
+          providerRegistration.isPending || providerPassword.isPending,
           providerPassword.data,
-          recoveryAcknowledgement.data,
         );
   if (
     host.kind === "telegram" &&
@@ -872,8 +861,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   // Registration is the one moment a body is offered without being asked for:
   // a Bond that just came into existence, before its world opens.
   const registeredThisSession =
-    nativeRegistration.data?.kind === "recovery-key-required" ||
-    providerPassword.data?.kind === "recovery-key-required";
+    nativeRegistration.data?.kind === "authenticated" ||
+    providerPassword.data?.kind === "authenticated";
   const viewModel = createIdentityFoundationViewModel(
     host,
     readinessQuery.data,
@@ -903,7 +892,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       setUseRememberedHint(false);
     }
     setResolutionArmed(false);
-    setSelection(normalizePubDressCredentialInput(next, selection));
+    setSelection(next);
     setPassword("");
     pendingAutofillCredential.current = undefined;
     setIdempotencyKey(newIdempotencyKey());
@@ -920,7 +909,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
 
   function chooseExistingIdentity(): void {
     setProviderLinkApproved(true);
-    changeSelection({ discriminator: "1", slug: "" });
+    changeSelection({ ...DEFAULT_AUTH_SELECTION });
   }
 
   function applyAutofilledCredential(
@@ -944,7 +933,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     };
     nativeRegistration.reset();
     nativeAuthentication.reset();
-    recoveryAcknowledgement.reset();
   }
 
   function resolvePubDressNow(): void {
@@ -993,7 +981,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         !identityState.busy &&
         validNativePassword(password)
       ) {
-        recoveryAcknowledgement.reset();
         providerPassword.mutate(providerHost);
       }
       return;
@@ -1009,7 +996,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
           return;
         }
         nativeAuthentication.reset();
-        recoveryAcknowledgement.reset();
+
         nativeAuthentication.mutate({ pubDress, password });
         break;
       }
@@ -1060,7 +1047,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     if (resolution?.kind === "registered") {
       pendingAutofillCredential.current = undefined;
       nativeAuthentication.reset();
-      recoveryAcknowledgement.reset();
+
       nativeAuthentication.mutate({
         pubDress: resolution.pubDress,
         password: credential.password,
@@ -1068,12 +1055,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       return;
     }
     if (resolution?.kind === "available") {
+      // Filling a credential is not consent to create a new account.
       pendingAutofillCredential.current = undefined;
-      nativeRegistration.reset();
-      nativeRegistration.mutate({
-        pubDress: resolution.pubDress,
-        password: credential.password,
-      });
       return;
     }
     if (
@@ -1088,7 +1071,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     nativePending,
     nativeRegistration,
     password,
-    recoveryAcknowledgement,
     resolutionQuery.data,
     resolutionQuery.isFetching,
     resolutionSelection.discriminator,
@@ -1316,9 +1298,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
       }}
       onSkipAvatarChoice={() => setAvatarStepDeclined(true)}
-      onAcknowledgeRecovery={(challenge) =>
-        recoveryAcknowledgement.mutate(challenge)
-      }
       onForgetRemembered={() => forgetRemembered.mutate()}
       onLogout={() => logout.mutate()}
       onPasswordChange={(nextPassword) => {

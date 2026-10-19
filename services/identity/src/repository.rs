@@ -194,6 +194,19 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0003_native_auth.sql"))
             .execute(&self.pool)
             .await?;
+        // Retain legacy recovery material, but new credentials have no key.
+        let recovery_required: i64 = sqlx::query_scalar(
+            "SELECT \"notnull\" FROM pragma_table_info('native_credentials') WHERE name = 'recovery_key_hash'",
+        ).fetch_one(&self.pool).await?;
+        if recovery_required == 1 {
+            let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+            sqlx::raw_sql(include_str!(
+                "../migrations/0034_optional_native_recovery.sql"
+            ))
+            .execute(&mut *transaction)
+            .await?;
+            transaction.commit().await?;
+        }
         if !self.has_identity_column("identity_kind").await? {
             sqlx::raw_sql(include_str!("../migrations/0004_owned_avaia_identity.sql"))
                 .execute(&self.pool)
@@ -219,14 +232,18 @@ impl IdentityRepository {
             .execute(&self.pool)
             .await?;
         if !self.has_business_station_column("caption").await? {
-            sqlx::raw_sql(include_str!("../migrations/0025_business_station_caption.sql"))
-                .execute(&self.pool)
-                .await?;
-        }
-        // A business is many points, not one location: 0026's table is gone.
-        sqlx::raw_sql(include_str!("../migrations/0027_drop_business_locations.sql"))
+            sqlx::raw_sql(include_str!(
+                "../migrations/0025_business_station_caption.sql"
+            ))
             .execute(&self.pool)
             .await?;
+        }
+        // A business is many points, not one location: 0026's table is gone.
+        sqlx::raw_sql(include_str!(
+            "../migrations/0027_drop_business_locations.sql"
+        ))
+        .execute(&self.pool)
+        .await?;
         if !self.has_avaia_location_column("travel_revision").await? {
             sqlx::raw_sql(include_str!("../migrations/0022_avaia_travel_revision.sql"))
                 .execute(&self.pool)
@@ -261,15 +278,21 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0029_admin_role_requests.sql"))
             .execute(&self.pool)
             .await?;
-        sqlx::raw_sql(include_str!("../migrations/0031_admin_telegram_delivery.sql"))
-            .execute(&self.pool)
-            .await?;
-        sqlx::raw_sql(include_str!("../migrations/0032_admin_telegram_approval_confirmations.sql"))
-            .execute(&self.pool)
-            .await?;
-        sqlx::raw_sql(include_str!("../migrations/0033_telegram_message_slots.sql"))
-            .execute(&self.pool)
-            .await?;
+        sqlx::raw_sql(include_str!(
+            "../migrations/0031_admin_telegram_delivery.sql"
+        ))
+        .execute(&self.pool)
+        .await?;
+        sqlx::raw_sql(include_str!(
+            "../migrations/0032_admin_telegram_approval_confirmations.sql"
+        ))
+        .execute(&self.pool)
+        .await?;
+        sqlx::raw_sql(include_str!(
+            "../migrations/0033_telegram_message_slots.sql"
+        ))
+        .execute(&self.pool)
+        .await?;
         if !self.has_native_sessions_column("active").await? {
             sqlx::raw_sql(include_str!("../migrations/0016_session_activation.sql"))
                 .execute(&self.pool)
@@ -309,7 +332,9 @@ impl IdentityRepository {
         .await?;
         match stored {
             None => Ok(BondAccessRole::default()),
-            Some(value) => BondAccessRole::from_stored(&value).ok_or(RepositoryError::CorruptBondRole),
+            Some(value) => {
+                BondAccessRole::from_stored(&value).ok_or(RepositoryError::CorruptBondRole)
+            }
         }
     }
 
@@ -803,6 +828,46 @@ impl IdentityRepository {
         now: u64,
         challenge_expires_at: u64,
     ) -> Result<NativeRegistrationOutcome, RepositoryError> {
+        self.register_native_credential(
+            pub_dress,
+            password_hash,
+            password_hash_version,
+            Some((recovery_key_hash, challenge_hash, challenge_expires_at)),
+            idempotency_key_hash,
+            now,
+        )
+        .await
+    }
+
+    /// Commit an immediately usable password without issuing recovery material.
+    pub async fn register_native_password(
+        &self,
+        pub_dress: &PubDress,
+        password_hash: &str,
+        password_hash_version: i64,
+        idempotency_key_hash: &[u8],
+        now: u64,
+    ) -> Result<NativeRegistrationOutcome, RepositoryError> {
+        self.register_native_credential(
+            pub_dress,
+            password_hash,
+            password_hash_version,
+            None,
+            idempotency_key_hash,
+            now,
+        )
+        .await
+    }
+
+    async fn register_native_credential(
+        &self,
+        pub_dress: &PubDress,
+        password_hash: &str,
+        password_hash_version: i64,
+        recovery: Option<(&[u8], &[u8], u64)>,
+        idempotency_key_hash: &[u8],
+        now: u64,
+    ) -> Result<NativeRegistrationOutcome, RepositoryError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         let replay = sqlx::query_scalar::<_, String>(
@@ -833,26 +898,29 @@ impl IdentityRepository {
         sqlx::query(
             "INSERT INTO native_credentials \
              (pub_dress, password_hash, password_hash_version, recovery_key_hash, active, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, 0, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(pub_dress.as_str())
         .bind(password_hash)
         .bind(password_hash_version)
-        .bind(recovery_key_hash)
+        .bind(recovery.map(|(key, _, _)| key))
+        .bind(recovery.is_none())
         .bind(now as i64)
         .bind(now as i64)
         .execute(&mut *transaction)
         .await?;
-        sqlx::query(
-            "INSERT INTO native_registration_challenges \
+        if let Some((_, challenge_hash, challenge_expires_at)) = recovery {
+            sqlx::query(
+                "INSERT INTO native_registration_challenges \
              (challenge_hash, pub_dress, expires_at, created_at) VALUES (?, ?, ?, ?)",
-        )
-        .bind(challenge_hash)
-        .bind(pub_dress.as_str())
-        .bind(challenge_expires_at as i64)
-        .bind(now as i64)
-        .execute(&mut *transaction)
-        .await?;
+            )
+            .bind(challenge_hash)
+            .bind(pub_dress.as_str())
+            .bind(challenge_expires_at as i64)
+            .bind(now as i64)
+            .execute(&mut *transaction)
+            .await?;
+        }
         sqlx::query(
             "INSERT INTO native_registration_idempotency \
              (idempotency_key_hash, pub_dress, created_at) VALUES (?, ?, ?)",
@@ -869,33 +937,28 @@ impl IdentityRepository {
     }
 
     /// The provider binding is the authority; a submitted handle cannot select an owner.
-    /// An acknowledged credential is immutable through this setup path.
-    #[allow(clippy::too_many_arguments)]
-    pub async fn prepare_provider_password(
+    /// An active credential is immutable through this setup path.
+    pub async fn set_provider_password(
         &self,
         provider: &ProviderIdentity,
         password_hash: &str,
         password_hash_version: i64,
-        recovery_key_hash: &[u8],
-        challenge_hash: &[u8],
         now: u64,
-        expires_at: u64,
     ) -> Result<Option<IdentityRecord>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let pub_dress = sqlx::query_scalar::<_, String>(
             "INSERT INTO native_credentials \
              (pub_dress, password_hash, password_hash_version, recovery_key_hash, active, created_at, updated_at) \
-             SELECT p.pub_dress, ?, ?, ?, 0, ?, ? FROM identity_providers p \
+             SELECT p.pub_dress, ?, ?, NULL, 1, ?, ? FROM identity_providers p \
              JOIN identities i ON i.pub_dress = p.pub_dress \
              WHERE p.provider = ? AND p.provider_subject = ? AND i.identity_kind = 'human' \
              ON CONFLICT(pub_dress) DO UPDATE SET password_hash = excluded.password_hash, \
              password_hash_version = excluded.password_hash_version, \
-             recovery_key_hash = excluded.recovery_key_hash, updated_at = excluded.updated_at \
+             recovery_key_hash = NULL, active = 1, updated_at = excluded.updated_at \
              WHERE native_credentials.active = 0 RETURNING pub_dress",
         )
         .bind(password_hash)
         .bind(password_hash_version)
-        .bind(recovery_key_hash)
         .bind(now as i64)
         .bind(now as i64)
         .bind(provider.provider.as_str())
@@ -906,18 +969,11 @@ impl IdentityRepository {
             transaction.rollback().await?;
             return Ok(None);
         };
-        sqlx::query(
-            "INSERT INTO native_registration_challenges \
-             (challenge_hash, pub_dress, expires_at, created_at) VALUES (?, ?, ?, ?) \
-             ON CONFLICT(pub_dress) DO UPDATE SET challenge_hash = excluded.challenge_hash, \
-             expires_at = excluded.expires_at, created_at = excluded.created_at",
-        )
-        .bind(challenge_hash)
-        .bind(&pub_dress)
-        .bind(expires_at as i64)
-        .bind(now as i64)
-        .execute(&mut *transaction)
-        .await?;
+        // Invalidate a legacy unfinished setup challenge when replacing it.
+        sqlx::query("DELETE FROM native_registration_challenges WHERE pub_dress = ?")
+            .bind(&pub_dress)
+            .execute(&mut *transaction)
+            .await?;
         let record = identity_for_pub_dress_in(&mut transaction, pub_dress).await?;
         transaction.commit().await?;
         Ok(Some(record))
@@ -1007,6 +1063,37 @@ impl IdentityRepository {
         let record = identity_for_pub_dress_in(&mut transaction, pub_dress).await?;
         transaction.commit().await?;
         Ok(Some(record))
+    }
+
+    /// Called only after password verification. CAS prevents a stale proof from
+    /// activating a credential changed by concurrent provider setup or recovery.
+    pub async fn complete_pending_native_password(
+        &self,
+        credential: &NativeCredentialRecord,
+        now: u64,
+    ) -> Result<bool, RepositoryError> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let updated = sqlx::query(
+            "UPDATE native_credentials SET active = 1, updated_at = ? \
+             WHERE pub_dress = ? AND password_hash = ? AND \
+             (active = 1 OR EXISTS (SELECT 1 FROM native_registration_challenges c \
+              WHERE c.pub_dress = native_credentials.pub_dress))",
+        )
+        .bind(now as i64)
+        .bind(&credential.pub_dress)
+        .bind(&credential.password_hash)
+        .execute(&mut *transaction)
+        .await?;
+        if updated.rows_affected() == 0 {
+            transaction.rollback().await?;
+            return Ok(false);
+        }
+        sqlx::query("DELETE FROM native_registration_challenges WHERE pub_dress = ?")
+            .bind(&credential.pub_dress)
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(true)
     }
 
     /// A new session starts active only if the Bond currently holds no other
@@ -1231,8 +1318,9 @@ impl IdentityRepository {
             return Ok(None);
         };
         let request = decode_activation_request(&row)?;
-        let request = advance_activation_request(&mut transaction, request, now, objection_window_seconds)
-            .await?;
+        let request =
+            advance_activation_request(&mut transaction, request, now, objection_window_seconds)
+                .await?;
         transaction.commit().await?;
         Ok(match request.status {
             ActivationRequestStatus::Pending | ActivationRequestStatus::Objectable => Some(request),
@@ -1265,8 +1353,9 @@ impl IdentityRepository {
             return Ok(None);
         };
         let request = decode_activation_request(&row)?;
-        let request = advance_activation_request(&mut transaction, request, now, objection_window_seconds)
-            .await?;
+        let request =
+            advance_activation_request(&mut transaction, request, now, objection_window_seconds)
+                .await?;
         transaction.commit().await?;
         Ok(Some(request))
     }
@@ -1342,7 +1431,8 @@ impl IdentityRepository {
         };
         let request = decode_activation_request(&row)?;
         let request =
-            advance_activation_request(&mut transaction, request, now, objection_window_seconds).await?;
+            advance_activation_request(&mut transaction, request, now, objection_window_seconds)
+                .await?;
         if request.status != ActivationRequestStatus::Objectable {
             transaction.commit().await?;
             return Ok(false);
@@ -1386,7 +1476,8 @@ impl IdentityRepository {
         };
         let request = decode_activation_request(&row)?;
         let request =
-            advance_activation_request(&mut transaction, request, now, objection_window_seconds).await?;
+            advance_activation_request(&mut transaction, request, now, objection_window_seconds)
+                .await?;
         if !matches!(
             request.status,
             ActivationRequestStatus::Pending | ActivationRequestStatus::Objectable
@@ -1847,7 +1938,9 @@ async fn advance_activation_request(
         .await;
     }
     if request.status == ActivationRequestStatus::Objectable
-        && request.objection_deadline.is_some_and(|deadline| now >= deadline)
+        && request
+            .objection_deadline
+            .is_some_and(|deadline| now >= deadline)
     {
         let activated = activate_session_in(
             transaction,
@@ -2002,7 +2095,7 @@ pub struct NativeCredentialRecord {
     pub pub_dress: String,
     pub password_hash: String,
     pub password_hash_version: i64,
-    pub recovery_key_hash: Vec<u8>,
+    pub recovery_key_hash: Option<Vec<u8>>,
     pub active: bool,
 }
 
@@ -2073,21 +2166,42 @@ mod tests {
                 .bind(address).execute(&repository.pool).await.expect("legacy human");
         }
         let admin: PubDress = "0x0нуль".parse().expect("admin");
-        repository.set_role(&admin, crate::BondAccessRole::Admin).await.expect("existing grant");
+        repository
+            .set_role(&admin, crate::BondAccessRole::Admin)
+            .await
+            .expect("existing grant");
         repository.pool.close().await;
         let upgraded = IdentityRepository::connect(&url).await.expect("upgrade");
-        assert_eq!(upgraded.role_for(admin.as_str()).await.expect("role"), crate::BondAccessRole::Admin);
-        assert_eq!(upgraded.role_for("0x0other").await.expect("role"), crate::BondAccessRole::User);
+        assert_eq!(
+            upgraded.role_for(admin.as_str()).await.expect("role"),
+            crate::BondAccessRole::Admin
+        );
+        assert_eq!(
+            upgraded.role_for("0x0other").await.expect("role"),
+            crate::BondAccessRole::User
+        );
         let next: PubDress = "0x0renamed".parse().expect("new");
         assert!(matches!(
-            upgraded.rename_pub_dress(&admin, &next).await.expect("rename"),
+            upgraded
+                .rename_pub_dress(&admin, &next)
+                .await
+                .expect("rename"),
             PubDressRenameOutcome::Renamed(_)
         ));
-        upgraded.set_role(&next, crate::BondAccessRole::Business).await.expect("demotion");
-        assert_eq!(upgraded.role_for(next.as_str()).await.expect("role"), crate::BondAccessRole::Business);
+        upgraded
+            .set_role(&next, crate::BondAccessRole::Business)
+            .await
+            .expect("demotion");
+        assert_eq!(
+            upgraded.role_for(next.as_str()).await.expect("role"),
+            crate::BondAccessRole::Business
+        );
         upgraded.pool.close().await;
         let reopened = IdentityRepository::connect(&url).await.expect("reopen");
-        assert_eq!(reopened.role_for(next.as_str()).await.expect("persisted"), crate::BondAccessRole::Business);
+        assert_eq!(
+            reopened.role_for(next.as_str()).await.expect("persisted"),
+            crate::BondAccessRole::Business
+        );
     }
 
     #[tokio::test]
@@ -2097,23 +2211,50 @@ mod tests {
             .expect("repository");
         let reserved: PubDress = "0x0нуль".parse().expect("address");
         assert!(matches!(
-            repository.register(&reserved, &ProviderIdentity::telegram(7), 1).await.expect("register"),
+            repository
+                .register(&reserved, &ProviderIdentity::telegram(7), 1)
+                .await
+                .expect("register"),
             RegistrationOutcome::Registered(_)
         ));
-        assert_eq!(repository.role_for(reserved.as_str()).await.expect("role"), crate::BondAccessRole::User);
+        assert_eq!(
+            repository.role_for(reserved.as_str()).await.expect("role"),
+            crate::BondAccessRole::User
+        );
         let native: PubDress = "0x0native".parse().expect("address");
         assert!(matches!(
-            repository.register_native(&native, "hash", 1, b"recovery", b"challenge", b"idempotency", 1, 60).await.expect("native"),
+            repository
+                .register_native(
+                    &native,
+                    "hash",
+                    1,
+                    b"recovery",
+                    b"challenge",
+                    b"idempotency",
+                    1,
+                    60
+                )
+                .await
+                .expect("native"),
             NativeRegistrationOutcome::Registered(_)
         ));
-        assert_eq!(repository.role_for(native.as_str()).await.expect("role"), crate::BondAccessRole::User);
+        assert_eq!(
+            repository.role_for(native.as_str()).await.expect("role"),
+            crate::BondAccessRole::User
+        );
         let ordinary: PubDress = "0x1ordinary".parse().expect("ordinary");
         assert!(matches!(
-            repository.register(&ordinary, &ProviderIdentity::telegram(8), 1).await.expect("ordinary"),
+            repository
+                .register(&ordinary, &ProviderIdentity::telegram(8), 1)
+                .await
+                .expect("ordinary"),
             RegistrationOutcome::Registered(_)
         ));
         assert!(matches!(
-            repository.rename_pub_dress(&ordinary, &"0x0elevated".parse().expect("target")).await.expect("rename"),
+            repository
+                .rename_pub_dress(&ordinary, &"0x0elevated".parse().expect("target"))
+                .await
+                .expect("rename"),
             PubDressRenameOutcome::Unavailable
         ));
     }
@@ -2583,6 +2724,183 @@ mod tests {
                 .is_pub_dress_available(&title)
                 .await
                 .expect("lookup")
+        );
+    }
+
+    #[tokio::test]
+    async fn password_registration_is_active_keyless_and_atomic() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let address = PubDress::from_str("0x0new").expect("address");
+        let result = repository
+            .register_native_password(&address, "hash", 1, b"first", 100)
+            .await
+            .expect("register");
+        assert!(matches!(result, NativeRegistrationOutcome::Registered(_)));
+        let credential = repository
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
+        assert!(credential.active);
+        assert!(credential.recovery_key_hash.is_none());
+        assert_eq!(
+            repository.role_for(address.as_str()).await.expect("role"),
+            crate::BondAccessRole::User
+        );
+        let challenges: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM native_registration_challenges")
+                .fetch_one(&repository.pool)
+                .await
+                .expect("challenges");
+        assert_eq!(challenges, 0);
+        assert!(matches!(
+            repository
+                .register_native_password(&address, "different", 1, b"second", 101)
+                .await
+                .expect("collision"),
+            NativeRegistrationOutcome::HandleUnavailable
+        ));
+        assert_eq!(
+            repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .password_hash,
+            "hash"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_password_proof_cannot_finish_changed_pending_credentials() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let address = PubDress::from_str("0x0pending").expect("address");
+        repository
+            .register_native(
+                &address,
+                "old-hash",
+                1,
+                b"key",
+                b"challenge",
+                b"idempotency",
+                100,
+                200,
+            )
+            .await
+            .expect("pending");
+        let stale = repository
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
+        sqlx::query(
+            "UPDATE native_credentials SET password_hash = 'replacement-hash' WHERE pub_dress = ?",
+        )
+        .bind(address.as_str())
+        .execute(&repository.pool)
+        .await
+        .expect("concurrent change");
+        assert!(
+            !repository
+                .complete_pending_native_password(&stale, 101)
+                .await
+                .expect("stale completion")
+        );
+        assert!(
+            !repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
+        );
+        let current = repository
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
+        assert!(
+            repository
+                .complete_pending_native_password(&current, 101)
+                .await
+                .expect("current completion")
+        );
+        assert!(
+            repository
+                .activate_native_registration(b"challenge", 102)
+                .await
+                .expect("old challenge")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn nullable_recovery_migration_preserves_legacy_credentials_and_challenges() {
+        let database = tempfile::NamedTempFile::new().expect("database");
+        let url = format!("sqlite://{}", database.path().display());
+        let legacy = sqlx::SqlitePool::connect(&url)
+            .await
+            .expect("legacy database");
+        sqlx::raw_sql(include_str!("../migrations/0001_identities.sql"))
+            .execute(&legacy)
+            .await
+            .expect("identities");
+        sqlx::raw_sql(include_str!("../migrations/0002_provider_accounts.sql"))
+            .execute(&legacy)
+            .await
+            .expect("providers");
+        sqlx::raw_sql(include_str!("../migrations/0003_native_auth.sql"))
+            .execute(&legacy)
+            .await
+            .expect("credentials");
+        sqlx::query("INSERT INTO identities(pub_dress, created_at) VALUES ('0x1legacy', 1)")
+            .execute(&legacy)
+            .await
+            .expect("identity");
+        sqlx::query("INSERT INTO native_credentials VALUES ('0x1legacy', 'hash', 1, ?, 0, 1, 1)")
+            .bind(b"issued-key".as_slice())
+            .execute(&legacy)
+            .await
+            .expect("credential");
+        sqlx::query("INSERT INTO native_registration_challenges VALUES (?, '0x1legacy', 200, 1)")
+            .bind(b"issued-challenge".as_slice())
+            .execute(&legacy)
+            .await
+            .expect("challenge");
+        legacy.close().await;
+        let upgraded = IdentityRepository::connect(&url).await.expect("upgrade");
+        let address = PubDress::from_str("0x1legacy").expect("address");
+        let credential = upgraded
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
+        assert_eq!(
+            credential.recovery_key_hash.as_deref(),
+            Some(b"issued-key".as_slice())
+        );
+        assert!(
+            upgraded
+                .activate_native_registration(b"issued-challenge", 100)
+                .await
+                .expect("activate")
+                .is_some()
+        );
+        upgraded.pool.close().await;
+        let reopened = IdentityRepository::connect(&url)
+            .await
+            .expect("idempotent reopen");
+        assert!(
+            reopened
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
         );
     }
 

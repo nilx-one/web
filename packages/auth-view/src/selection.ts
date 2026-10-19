@@ -1,0 +1,72 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+export interface AuthSelection {
+  discriminator: string;
+  slug: string;
+}
+export const DEFAULT_AUTH_SELECTION: Readonly<AuthSelection> = {
+  discriminator: "0",
+  slug: "",
+};
+export function parseUsername(value: string): AuthSelection | undefined {
+  return /^0x[0-9a-f].+/u.test(value)
+    ? { discriminator: value[2]!, slug: value.slice(3) }
+    : undefined;
+}
+
+function scalarLength(value: string): number {
+  return [...value].length;
+}
+
+function isReplacement(previous: string, next: string): boolean {
+  if (previous.length === 0) {
+    return scalarLength(next) >= 3;
+  }
+  return Math.abs(scalarLength(next) - scalarLength(previous)) > 1;
+}
+
+/**
+ * Accepts credential-manager username shapes without changing the canonical
+ * split-field model used by the product UI.
+ *
+ * - `0x0sky` -> discriminator `0`, slug `sky`
+ * - `sky` -> keep the selected discriminator, slug `sky`
+ * - `0sky` -> discriminator `0`, slug `sky` when inserted as a replacement
+ * - `fsky` -> discriminator `f`, slug `sky` when inserted as a replacement
+ *
+ * Canonical input is parsed before discriminator-change shortcuts so a full
+ * username can never survive as the literal slug of another selection.
+ * Compact hexadecimal input is deliberately treated as a discriminator only
+ * for a replacement/autofill-sized edit. This keeps manually typed slugs such
+ * as `012` representable instead of reinterpreting them while the user types.
+ */
+export function normalizeCredentialInput(
+  next: AuthSelection,
+  previous: AuthSelection,
+): AuthSelection {
+  const canonical = parseUsername(next.slug);
+  if (canonical !== undefined) {
+    return canonical;
+  }
+
+  if (next.discriminator !== previous.discriminator) {
+    return next;
+  }
+
+  const characters = [...next.slug];
+  const discriminator = characters[0];
+  if (
+    discriminator !== undefined &&
+    /^[0-9a-f]$/.test(discriminator) &&
+    characters.length >= 3 &&
+    isReplacement(previous.slug, next.slug)
+  ) {
+    return {
+      discriminator,
+      slug: characters.slice(1).join(""),
+    };
+  }
+
+  return next;
+}

@@ -11,6 +11,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   application: [],
+  "auth-view": [],
   "artifact-contract": [],
   "core-wasm": ["@nilx-one/application"],
   graphics: [],
@@ -25,6 +26,7 @@ const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   "narration-templates": ["@nilx-one/narration-contract"],
   "narration-webllm": ["@nilx-one/narration-contract"],
   "product-app": [
+    "@aiaiaiai/auth-view",
     "@nilx-one/application",
     "@nilx-one/artifact-contract",
     "@nilx-one/graphics",
@@ -55,7 +57,9 @@ function sourceFiles(directory: string): string[] {
 
 function internalImports(source: string): string[] {
   return [
-    ...source.matchAll(/from\s+["'](@nilx-one\/[a-z-]+)(?:\/[^"']*)?["']/g),
+    ...source.matchAll(
+      /from\s+["'](@nilx-one\/[a-z-]+|@aiaiaiai\/auth-view)(?:\/[^"']*)?["']/g,
+    ),
   ].map((match) => match[1] ?? "");
 }
 

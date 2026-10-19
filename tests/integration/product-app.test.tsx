@@ -194,15 +194,13 @@ describe("ProductApp identity", () => {
     expect(results.violations).toEqual([]);
   });
 
-  it("adapts one browser form from availability to registration and recovery acknowledgement", async () => {
+  it("adapts one browser form from availability to direct registration", async () => {
     const user = userEvent.setup();
     const registerNative = vi
       .fn<IdentityAccessPort["registerNative"]>()
       .mockResolvedValue({
-        kind: "recovery-key-required",
+        kind: "authenticated",
         identity: { pubDress: "0xaSky" },
-        recoveryKey: "0x1-rk-once-only",
-        challenge: "0x1c-registration",
       });
     const acknowledgeRecoveryKey = vi
       .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
@@ -221,7 +219,7 @@ describe("ProductApp identity", () => {
     const discriminator = await screen.findByRole("combobox", {
       name: "pub_dress hexadecimal discriminator",
     });
-    expect(discriminator).toHaveValue("1");
+    expect(discriminator).toHaveValue("0");
     expect(discriminator.querySelector('option[value="0"]')).not.toBeNull();
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
@@ -244,16 +242,8 @@ describe("ProductApp identity", () => {
       "a deliberately long password",
       expect.any(String),
     );
-    expect(await screen.findByText("0x1-rk-once-only")).toBeInTheDocument();
-    expect(screen.getByText(/only native recovery proof/i)).toBeInTheDocument();
-    const continueButton = screen.getByRole("button", {
-      name: "Continue to 0x1",
-    });
-    expect(continueButton).toBeDisabled();
-    await user.click(screen.getByLabelText("I saved this recovery key"));
-    await user.click(continueButton);
-
-    expect(acknowledgeRecoveryKey).toHaveBeenCalledWith("0x1c-registration");
+    expect(acknowledgeRecoveryKey).not.toHaveBeenCalled();
+    expect(screen.queryByText(/recovery key/i)).not.toBeInTheDocument();
     // A new Bond is asked for a body once, before its world opens. Deciding
     // later is an answer, and it opens the world with no model recorded.
     expect(
@@ -412,14 +402,12 @@ describe("ProductApp identity", () => {
     );
   });
 
-  it("resolves and registers a saved credential selected from an empty form", async () => {
+  it("requires explicit creation after filling an available saved username", async () => {
     const registerNative = vi
       .fn<IdentityAccessPort["registerNative"]>()
       .mockResolvedValue({
-        kind: "recovery-key-required",
+        kind: "authenticated",
         identity: { pubDress: "0xaSky" },
-        recoveryKey: "0x1-rk-autofill",
-        challenge: "0x1c-autofill-registration",
       });
     const { container } = render(
       <ProductApp
@@ -451,6 +439,10 @@ describe("ProductApp identity", () => {
       inputType: "insertReplacementText",
     });
 
+    const create = await screen.findByRole("button", { name: "Create 0xaSky" });
+    await waitFor(() => expect(create).toBeEnabled());
+    expect(registerNative).not.toHaveBeenCalled();
+    fireEvent.click(create);
     await waitFor(() =>
       expect(registerNative).toHaveBeenCalledWith(
         "0xaSky",
@@ -458,7 +450,7 @@ describe("ProductApp identity", () => {
         expect.any(String),
       ),
     );
-    expect(await screen.findByText("0x1-rk-autofill")).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Choose your body." });
   });
 
   it("waits for a typing pause unless the mobile go action resolves now", async () => {
@@ -704,16 +696,14 @@ describe("ProductApp identity", () => {
     expect(forgetRememberedBond).not.toHaveBeenCalled();
   });
 
-  it("creates a Telegram password after address authorization and confirms recovery before entering", async () => {
+  it("creates a Telegram password after address authorization without a recovery step", async () => {
     window.history.replaceState({}, "", "/telegram/");
     const user = userEvent.setup();
     const setProviderPassword = vi
       .fn<IdentityAccessPort["setProviderPassword"]>()
       .mockResolvedValue({
-        kind: "recovery-key-required",
+        kind: "authenticated",
         identity: { pubDress: "0xaSky" },
-        recoveryKey: "0x1-rk-test",
-        challenge: "test-challenge",
       });
     const acknowledgeRecoveryKey = vi
       .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
@@ -786,14 +776,7 @@ describe("ProductApp identity", () => {
       "telegram",
       "a long Telegram password",
     );
-    expect(await screen.findByText("0x1-rk-test")).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Take the wheel as 0xaSky" }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("checkbox", { name: "I saved this recovery key" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
+    expect(screen.queryByText(/recovery key/i)).not.toBeInTheDocument();
     await screen.findByRole("heading", { name: "Choose your body." });
     await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
@@ -801,9 +784,7 @@ describe("ProductApp identity", () => {
         name: "Take the wheel as 0xaSky",
       }),
     ).toBeVisible();
-    expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
-      "test-challenge",
-    );
+    expect(acknowledgeRecoveryKey).not.toHaveBeenCalled();
   });
 
   it.each([true, false])(
@@ -878,15 +859,13 @@ describe("ProductApp identity", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("creates a Discord password for an authorized Bond and confirms recovery before entering", async () => {
+  it("creates a Discord password for an authorized Bond without a recovery step", async () => {
     const user = userEvent.setup();
     const setProviderPassword = vi
       .fn<IdentityAccessPort["setProviderPassword"]>()
       .mockResolvedValue({
-        kind: "recovery-key-required",
+        kind: "authenticated",
         identity: { pubDress: "0x0sky" },
-        recoveryKey: "0x1-rk-discord",
-        challenge: "discord-challenge",
       });
     const acknowledgeRecoveryKey = vi
       .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
@@ -933,11 +912,7 @@ describe("ProductApp identity", () => {
       "discord",
       "a long Discord password",
     );
-    expect(await screen.findByText("0x1-rk-discord")).toBeVisible();
-    await user.click(
-      screen.getByRole("checkbox", { name: "I saved this recovery key" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
+    expect(screen.queryByText(/recovery key/i)).not.toBeInTheDocument();
     await screen.findByRole("heading", { name: "Choose your body." });
     await user.click(screen.getByRole("button", { name: "Decide later" }));
     expect(
@@ -945,9 +920,7 @@ describe("ProductApp identity", () => {
         name: "Take the wheel as 0x0sky",
       }),
     ).toBeVisible();
-    expect(acknowledgeRecoveryKey).toHaveBeenCalledExactlyOnceWith(
-      "discord-challenge",
-    );
+    expect(acknowledgeRecoveryKey).not.toHaveBeenCalled();
   });
 
   it("recovers from a stale passwordRequired read instead of stranding the Bond on the password screen", async () => {
@@ -1122,10 +1095,8 @@ describe("ProductApp identity", () => {
     const registerNative = vi
       .fn<IdentityAccessPort["registerNative"]>()
       .mockResolvedValue({
-        kind: "recovery-key-required",
+        kind: "authenticated",
         identity: { pubDress: "0xaSky" },
-        recoveryKey: "0x1-rk-once-only",
-        challenge: "0x1c-registration",
       });
     const acknowledgeRecoveryKey = vi
       .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
@@ -1174,12 +1145,8 @@ describe("ProductApp identity", () => {
       "a deliberately long password",
     );
     await user.click(screen.getByRole("button", { name: "Create 0xaSky" }));
-    await screen.findByText("0x1-rk-once-only");
-    await user.click(screen.getByLabelText("I saved this recovery key"));
-    await user.click(screen.getByRole("button", { name: "Continue to 0x1" }));
-
-    // The body is offered after the address and the password, never before:
-    // there is no Bond to represent until the recovery key is acknowledged.
+    expect(acknowledgeRecoveryKey).not.toHaveBeenCalled();
+    // Body choice is 0x1 onboarding, after authentication has completed.
     expect(
       await screen.findByRole("heading", { name: "Choose your body." }),
     ).toBeVisible();

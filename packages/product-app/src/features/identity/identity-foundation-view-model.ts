@@ -84,14 +84,6 @@ export type IdentityViewState =
       choice: AvatarChoiceViewState;
     }
   | {
-      kind: "recovery-key";
-      pubDress: string;
-      recoveryKey: string;
-      challenge: string;
-      busy: boolean;
-      error?: string;
-    }
-  | {
       kind: "authenticated";
       pubDress: string;
       avaiaPubDress?: string;
@@ -201,16 +193,13 @@ export function createNativeIdentityViewState(
       native: true,
     };
   }
-  if (registration?.kind === "recovery-key-required") {
+  if (registration?.kind === "authenticated") {
     return {
-      kind: "recovery-key",
+      kind: "authenticated",
       pubDress: registration.identity.pubDress,
-      recoveryKey: registration.recoveryKey,
-      challenge: registration.challenge,
-      busy: pending,
-      ...(authentication?.kind === "rejected"
-        ? { error: nativeAuthenticationError(authentication) }
-        : {}),
+      ...projectedAvaia(registration.identity.avaiaPubDress),
+      ...projectedAvatar(registration.identity.avatarModel),
+      native: true,
     };
   }
   if (context === undefined) {
@@ -269,7 +258,6 @@ export function createProviderIdentityViewState(
   status: PubDressStatusViewState,
   pending: boolean,
   passwordSetup?: ProviderPasswordResult,
-  acknowledgement?: NativeAuthenticationResult,
 ): IdentityViewState {
   if (!hasAuthenticatedHostSession(host)) {
     return {
@@ -293,29 +281,15 @@ export function createProviderIdentityViewState(
     registered.passwordRequired !== false
   ) {
     if (
-      acknowledgement?.kind === "authenticated" &&
-      acknowledgement.identity.pubDress === registered.identity.pubDress
+      passwordSetup?.kind === "authenticated" &&
+      passwordSetup.identity.pubDress === registered.identity.pubDress
     ) {
       return {
         kind: "authenticated",
-        pubDress: acknowledgement.identity.pubDress,
-        ...projectedAvaia(acknowledgement.identity.avaiaPubDress),
-        ...projectedAvatar(acknowledgement.identity.avatarModel),
-        native: false,
-      };
-    }
-    if (passwordSetup?.kind === "recovery-key-required") {
-      return {
-        kind: "recovery-key",
         pubDress: passwordSetup.identity.pubDress,
-        recoveryKey: passwordSetup.recoveryKey,
-        challenge: passwordSetup.challenge,
-        busy: pending,
-        ...(acknowledgement?.kind === "rejected"
-          ? { error: nativeAuthenticationError(acknowledgement) }
-          : acknowledgement?.kind === "service-unavailable"
-            ? { error: "Couldn’t finish setup. Try again." }
-            : {}),
+        ...projectedAvaia(passwordSetup.identity.avaiaPubDress),
+        ...projectedAvatar(passwordSetup.identity.avatarModel),
+        native: false,
       };
     }
     const error = providerPasswordError(passwordSetup, passwordHost);
@@ -421,8 +395,7 @@ function nativeSubmissionError(
       return { error: "That pub_dress was just registered. Resolve it again." };
     case "already-committed":
       return {
-        error:
-          "Registration already committed and its recovery key can’t be shown again.",
+        error: "Account created. Sign in with the password you chose.",
       };
     case "rate-limited":
       return { error: "Too many attempts. Wait before trying again." };

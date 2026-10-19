@@ -99,10 +99,8 @@ export type NativeIdentityContextResult =
 
 export type NativeRegistrationResult =
   | {
-      kind: "recovery-key-required";
+      kind: "authenticated";
       identity: IdentityProjection;
-      recoveryKey: string;
-      challenge: string;
     }
   | {
       kind: "rejected";
@@ -188,7 +186,7 @@ export type AvatarModelResult =
   | { kind: "service-unavailable" };
 
 export type ProviderPasswordResult =
-  | Extract<NativeRegistrationResult, { kind: "recovery-key-required" }>
+  | Extract<NativeRegistrationResult, { kind: "authenticated" }>
   | {
       kind: "rejected";
       reason:

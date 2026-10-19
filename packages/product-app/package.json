@@ -10,6 +10,7 @@
     "./progression": "./src/features/progression/progression.ts"
   },
   "dependencies": {
+    "@aiaiaiai/auth-view": "workspace:*",
     "@nilx-one/application": "workspace:*",
     "@nilx-one/artifact-contract": "workspace:*",
     "@nilx-one/graphics": "workspace:*",

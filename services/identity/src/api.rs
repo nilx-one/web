@@ -20,10 +20,10 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActivationRequest, ActivationRequestStatus, AdminRoleDecision, AvaiaPubDress, DiscordOAuthClient,
-    DiscordOAuthError, GeoCoordinate, IdentityRecord, IdentityRepository, NativeAuthConfig,
-    NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine, PasswordPolicyError,
-    ProviderIdentity, ProviderLinkOutcome, ProviderLinkRepository, PubDress,
+    ActivationRequest, ActivationRequestStatus, AdminRoleDecision, AvaiaPubDress,
+    DiscordOAuthClient, DiscordOAuthError, GeoCoordinate, IdentityRecord, IdentityRepository,
+    NativeAuthConfig, NativeCredentialRecord, NativeRegistrationOutcome, PasswordEngine,
+    PasswordPolicyError, ProviderIdentity, ProviderLinkOutcome, ProviderLinkRepository, PubDress,
     PubDressRenameOutcome, RegistrationOutcome, RememberedBondSigner, SecretDigester,
     TelegramInitDataVerifier, TokenFactory, rate_limit::AttemptLimiter,
 };
@@ -316,59 +316,31 @@ async fn register_native_identity(
                 return unavailable();
             }
         };
-    let recovery_key = match TokenFactory::recovery_key() {
-        Ok(value) => value,
-        Err(error) => {
-            tracing::error!(%error, "native recovery key generation failed");
-            return unavailable();
-        }
-    };
-    let challenge = match TokenFactory::registration_challenge() {
-        Ok(value) => value,
-        Err(error) => {
-            tracing::error!(%error, "native registration challenge generation failed");
-            return unavailable();
-        }
-    };
-    let recovery_key_hash = state
-        .secret_digester
-        .digest("native-recovery-key", &recovery_key);
-    let challenge_hash = state
-        .secret_digester
-        .digest("native-registration-challenge", &challenge);
     let idempotency_key_hash = state
         .secret_digester
         .digest("native-registration-idempotency", idempotency_key);
-    let challenge_expires_at =
-        now.saturating_add(state.native_auth.registration_challenge_ttl_seconds);
-
     match state
         .repository
-        .register_native(
+        .register_native_password(
             &pub_dress,
             &password_hash,
             state.password_engine.hash_version(),
-            &recovery_key_hash,
-            &challenge_hash,
             &idempotency_key_hash,
             now,
-            challenge_expires_at,
         )
         .await
     {
-        Ok(NativeRegistrationOutcome::Registered(identity)) => no_store_json(
-            StatusCode::CREATED,
-            NativeRegistrationResponse {
-                state: "recovery_key_required",
-                identity: identity.into(),
-                recovery_key,
-                challenge,
-            },
-        ),
+        Ok(NativeRegistrationOutcome::Registered(identity)) => {
+            let mut response = authenticated_response(&state, &headers, identity, now, None).await;
+            if response.status() == StatusCode::OK {
+                *response.status_mut() = StatusCode::CREATED;
+            }
+            response
+        }
         Ok(NativeRegistrationOutcome::IdempotentReplay(_)) => no_store_error(
             StatusCode::CONFLICT,
             "native_registration_already_committed",
-            "Registration committed and its recovery key was already issued.",
+            "Registration already committed. Sign in with the chosen password.",
         ),
         Ok(NativeRegistrationOutcome::HandleUnavailable)
         | Ok(NativeRegistrationOutcome::PublicLabelUnavailable) => no_store_error(
@@ -468,9 +440,7 @@ async fn authenticate_native_identity(
             }
         };
 
-    let authenticated = password_matches
-        && credential.as_ref().is_some_and(|value| value.active)
-        && pub_dress.is_some();
+    let authenticated = password_matches && credential.is_some() && pub_dress.is_some();
     if !authenticated {
         state.limiter.record_authentication_failure(source_key, now);
         state
@@ -482,6 +452,21 @@ async fn authenticate_native_identity(
     state.limiter.clear(&source_key);
     state.limiter.clear(&pub_dress_key);
     let credential = credential.expect("authenticated credential exists");
+    if !credential.active {
+        match state
+            .repository
+            .complete_pending_native_password(&credential, now)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => return invalid_native_credentials(),
+            Err(error) => {
+                tracing::error!(%error, "pending native password setup failed");
+                return unavailable();
+            }
+        }
+    }
+
     if credential.password_hash_version < state.password_engine.hash_version() {
         rehash_credential_after_success(&state, &credential, &password_for_rehash, now).await;
     }
@@ -519,10 +504,11 @@ async fn link_telegram_provider(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
-        Ok(value) => value,
-        Err(error) => return error.into_response(),
-    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
@@ -654,9 +640,11 @@ async fn recover_native_identity(
     let submitted_recovery_hash = state
         .secret_digester
         .digest("native-recovery-key", &request.recovery_key);
+    let Some(recovery_key_hash) = credential.recovery_key_hash.as_ref() else {
+        return invalid_recovery_material();
+    };
     if !bool::from(
-        credential
-            .recovery_key_hash
+        recovery_key_hash
             .as_slice()
             .ct_eq(submitted_recovery_hash.as_slice()),
     ) {
@@ -730,11 +718,7 @@ async fn reconcile_authenticated_identity(
             return None;
         }
     };
-    match state
-        .repository
-        .resolve_human_identity(&pub_dress)
-        .await
-    {
+    match state.repository.resolve_human_identity(&pub_dress).await {
         Ok(Some(record)) => Some(record),
         Ok(None) => {
             tracing::error!(pub_dress = %identity.pub_dress, "authenticated human identity disappeared during resolution");
@@ -790,7 +774,11 @@ async fn authenticated_response(
             return unavailable();
         }
     };
-    if let Err(error) = state.repository.request_admin_review_on_login(&identity.pub_dress, now).await {
+    if let Err(error) = state
+        .repository
+        .request_admin_review_on_login(&identity.pub_dress, now)
+        .await
+    {
         tracing::error!(%error, "admin approval request could not be recorded");
     }
     let remembered_expires_at = now.saturating_add(state.native_auth.remembered_bond_ttl_seconds);
@@ -1238,40 +1226,23 @@ async fn set_provider_password(
         Ok(Ok(value)) => value,
         _ => return unavailable(),
     };
-    let (Ok(recovery_key), Ok(challenge)) = (
-        TokenFactory::recovery_key(),
-        TokenFactory::registration_challenge(),
-    ) else {
-        return unavailable();
-    };
-    let recovery_hash = state
-        .secret_digester
-        .digest("native-recovery-key", &recovery_key);
-    let challenge_hash = state
-        .secret_digester
-        .digest("native-registration-challenge", &challenge);
     match state
         .repository
-        .prepare_provider_password(
+        .set_provider_password(
             &provider,
             &password_hash,
             state.password_engine.hash_version(),
-            &recovery_hash,
-            &challenge_hash,
             now,
-            now.saturating_add(state.native_auth.registration_challenge_ttl_seconds),
         )
         .await
     {
-        Ok(Some(identity)) => no_store_json(
-            StatusCode::CREATED,
-            NativeRegistrationResponse {
-                state: "recovery_key_required",
-                identity: identity.into(),
-                recovery_key,
-                challenge,
-            },
-        ),
+        Ok(Some(identity)) => {
+            let mut response = authenticated_response(&state, &headers, identity, now, None).await;
+            if response.status() == StatusCode::OK {
+                *response.status_mut() = StatusCode::CREATED;
+            }
+            response
+        }
         Ok(None) => no_store_error(
             StatusCode::CONFLICT,
             "password_already_set",
@@ -1297,10 +1268,11 @@ async fn rename_pub_dress(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
-        Ok(value) => value,
-        Err(error) => return error.into_response(),
-    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
@@ -1347,11 +1319,7 @@ async fn rename_pub_dress_response(
     if next == current {
         return renamed_response(state, headers, identity, now);
     }
-    match state
-        .repository
-        .rename_pub_dress(&current, &next)
-        .await
-    {
+    match state.repository.rename_pub_dress(&current, &next).await {
         Ok(PubDressRenameOutcome::Renamed(identity)) => {
             renamed_response(state, headers, identity, now)
         }
@@ -1390,10 +1358,11 @@ async fn choose_avatar_model(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
-        Ok(value) => value,
-        Err(error) => return error.into_response(),
-    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
@@ -1465,10 +1434,11 @@ async fn rename_owned_avaia(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, active, _token_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
-        Ok(value) => value,
-        Err(error) => return error.into_response(),
-    };
+    let (identity, active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
@@ -1504,11 +1474,7 @@ async fn rename_owned_avaia_response(
     if identity.avaia_pub_dress.as_deref() == Some(next.as_str()) {
         return no_store_json(StatusCode::OK, IdentityProjection::from(identity));
     }
-    match state
-        .repository
-        .rename_owned_avaia(&owner, &next)
-        .await
-    {
+    match state.repository.rename_owned_avaia(&owner, &next).await {
         Ok(PubDressRenameOutcome::Renamed(identity)) => {
             no_store_json(StatusCode::OK, IdentityProjection::from(identity))
         }
@@ -2034,14 +2000,6 @@ impl NativeContextResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct NativeRegistrationResponse {
-    state: &'static str,
-    identity: IdentityProjection,
-    recovery_key: String,
-    challenge: String,
-}
-
-#[derive(Debug, Serialize)]
 struct NativeAuthenticationResponse {
     state: &'static str,
     identity: IdentityProjection,
@@ -2331,7 +2289,11 @@ mod tests {
             .body(Body::from(r#"{"discriminator":"0","slug":"reserved"}"#))
             .expect("provider");
         assert_eq!(
-            app.clone().oneshot(provider).await.expect("response").status(),
+            app.clone()
+                .oneshot(provider)
+                .await
+                .expect("response")
+                .status(),
             StatusCode::CREATED
         );
         let native = Request::post("/api/v1/auth/native/registration")
@@ -2339,7 +2301,7 @@ mod tests {
             .header("idempotency-key", "zero-prefix-test-0001")
             .header(super::CSRF_HEADER, "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x0native","password":"a deliberately long password"}"#
+                r#"{"pub_dress":"0x0native","password":"a deliberately long password"}"#,
             ))
             .expect("native");
         assert_eq!(
@@ -2358,7 +2320,11 @@ mod tests {
             .body(Body::from(r#"{"discriminator":"1","slug":"sky"}"#))
             .expect("valid request");
         assert_eq!(
-            app.clone().oneshot(register).await.expect("response").status(),
+            app.clone()
+                .oneshot(register)
+                .await
+                .expect("response")
+                .status(),
             StatusCode::CREATED
         );
 
@@ -2513,11 +2479,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn native_registration_stays_unauthenticated_until_recovery_key_acknowledgement() {
+    async fn native_registration_authenticates_without_recovery_material() {
         let app = app().await;
         let resolve = Request::post("/api/v1/identity/resolve")
             .header("content-type", "application/json")
-            .body(Body::from(r#"{"pub_dress":"0x1Sky"}"#))
+            .body(Body::from(r#"{"pub_dress":"0x0Sky"}"#))
             .expect("resolve request");
         let response = app.clone().oneshot(resolve).await.expect("resolve");
         assert_eq!(response.status(), StatusCode::OK);
@@ -2530,7 +2496,7 @@ mod tests {
             .header("idempotency-key", "native-registration-test-0001")
             .header(super::CSRF_HEADER, "1")
             .body(Body::from(
-                r#"{"pub_dress":"0x1Sky","password":"a deliberately long password"}"#,
+                r#"{"pub_dress":"0x0Sky","password":"a deliberately long password"}"#,
             ))
             .expect("registration request");
         let response = app
@@ -2539,49 +2505,28 @@ mod tests {
             .await
             .expect("registration");
         assert_eq!(response.status(), StatusCode::CREATED);
-        assert!(response.headers().get(SET_COOKIE).is_none());
-        let body = to_bytes(response.into_body(), 4096).await.expect("body");
-        let body: Value = serde_json::from_slice(&body).expect("JSON body");
-        assert_eq!(body["state"], "recovery_key_required");
-        assert!(body["identity"]["avaia_pub_dress"].is_null());
-        assert_eq!(body["identity"]["pub_dress_url"], "https://0x1sky.nilx.one");
-        assert!(
-            body["recovery_key"]
-                .as_str()
-                .expect("recovery key")
-                .starts_with("0x1-rk-")
-        );
-
-        let context = Request::get("/api/v1/auth/native/context")
-            .body(Body::empty())
-            .expect("context request");
-        let context = app.clone().oneshot(context).await.expect("context");
-        let context = to_bytes(context.into_body(), 4096).await.expect("body");
-        let context: Value = serde_json::from_slice(&context).expect("JSON body");
-        assert_eq!(context["state"], "anonymous");
-
-        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
-            .header("content-type", "application/json")
-            .header(super::CSRF_HEADER, "1")
-            .body(Body::from(
-                serde_json::json!({ "challenge": body["challenge"] }).to_string(),
-            ))
-            .expect("acknowledgement request");
-        let acknowledgement = app
-            .clone()
-            .oneshot(acknowledgement)
-            .await
-            .expect("acknowledgement");
-        assert_eq!(acknowledgement.status(), StatusCode::OK);
-        let cookies = acknowledgement
+        let cookies = response
             .headers()
             .get_all(SET_COOKIE)
             .iter()
-            .filter_map(|value| value.to_str().ok())
-            .filter_map(|value| value.split(';').next())
+            .map(|value| {
+                value
+                    .to_str()
+                    .expect("cookie")
+                    .split(';')
+                    .next()
+                    .expect("pair")
+                    .to_owned()
+            })
             .collect::<Vec<_>>();
         assert_eq!(cookies.len(), 2);
-
+        let body = to_bytes(response.into_body(), 4096).await.expect("body");
+        let body: Value = serde_json::from_slice(&body).expect("JSON body");
+        assert_eq!(body["state"], "authenticated");
+        assert!(body["identity"]["avaia_pub_dress"].is_null());
+        assert_eq!(body["identity"]["pub_dress_url"], "https://0x0sky.nilx.one");
+        assert!(body.get("recovery_key").is_none());
+        assert!(body.get("challenge").is_none());
         let authenticated_context = Request::get("/api/v1/auth/native/context")
             .header("cookie", cookies.join("; "))
             .body(Body::empty())
@@ -2596,12 +2541,129 @@ mod tests {
         let authenticated_context: Value =
             serde_json::from_slice(&authenticated_context).expect("JSON body");
         assert_eq!(authenticated_context["state"], "authenticated");
-        assert_eq!(authenticated_context["identity"]["pub_dress"], "0x1Sky");
+        assert_eq!(authenticated_context["identity"]["pub_dress"], "0x0Sky");
         assert!(authenticated_context["identity"]["avaia_pub_dress"].is_null());
         assert_eq!(
             authenticated_context["identity"]["pub_dress_url"],
-            "https://0x1sky.nilx.one"
+            "https://0x0sky.nilx.one"
         );
+    }
+
+    #[tokio::test]
+    async fn pending_legacy_registration_requires_password_proof_and_no_recovery_step() {
+        struct AdvancingClock(AtomicU64);
+        impl Clock for AdvancingClock {
+            fn now_unix_seconds(&self) -> Result<u64, super::ClockError> {
+                Ok(self.0.load(Ordering::Relaxed))
+            }
+        }
+        let clock = Arc::new(AdvancingClock(AtomicU64::new(NOW)));
+        let url = test_database_url("pending-native");
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        let links = ProviderLinkRepository::connect(&url).await.expect("links");
+        let config = NativeAuthConfig::new(
+            "test-auth-secret-that-is-at-least-thirty-two-bytes",
+            "test-password-pepper-that-is-at-least-thirty-two-bytes",
+        )
+        .expect("config");
+        let engine = config.password_engine();
+        let address = "0x0pending".parse().expect("address");
+        repository
+            .register_native(
+                &address,
+                &engine.hash("a deliberately long password").expect("hash"),
+                engine.hash_version(),
+                b"legacy-key",
+                b"legacy-challenge",
+                b"legacy-idempotency",
+                NOW - 100,
+                NOW - 1,
+            )
+            .await
+            .expect("pending registration");
+        let app = router_with_clock(
+            repository.clone(),
+            links,
+            TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
+            None,
+            config,
+            clock.clone(),
+        );
+        let sign_in = |password: &str| {
+            Request::post("/api/v1/auth/native/session")
+                .header("content-type", "application/json")
+                .header(super::CSRF_HEADER, "1")
+                .body(Body::from(
+                    serde_json::json!({ "pub_dress": "0x0pending", "password": password })
+                        .to_string(),
+                ))
+                .expect("request")
+        };
+        let wrong = app
+            .clone()
+            .oneshot(sign_in("a different long password"))
+            .await
+            .expect("response");
+        assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+        assert!(wrong.headers().get(SET_COOKIE).is_none());
+        assert!(
+            !repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
+        );
+        clock.0.fetch_add(60, Ordering::Relaxed);
+        let response = app
+            .oneshot(sign_in("a deliberately long password"))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get(SET_COOKIE).is_some());
+        let body = json_body(response).await;
+        assert_eq!(body["state"], "authenticated");
+        assert!(body.get("recovery_key").is_none());
+        assert!(body.get("challenge").is_none());
+        assert!(
+            repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
+        );
+        assert!(
+            repository
+                .activate_native_registration(b"legacy-challenge", NOW - 50)
+                .await
+                .expect("old challenge")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn registration_retry_never_authenticates_from_an_idempotency_key() {
+        let app = app().await;
+        let cookies = native_session_cookies(&app, "0x0retry", "registration-retry-key").await;
+        assert!(cookies.contains(super::SESSION_COOKIE));
+        for address in ["0x0retry", "0x0different"] {
+            let response = app.clone().oneshot(Request::post("/api/v1/auth/native/registration")
+                .header("content-type", "application/json")
+                .header("idempotency-key", "registration-retry-key")
+                .header(super::CSRF_HEADER, "1")
+                .body(Body::from(serde_json::json!({"pub_dress": address, "password": "a different long password"}).to_string())).expect("request"))
+                .await.expect("response");
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            assert!(response.headers().get(SET_COOKIE).is_none());
+            assert!(json_body(response).await.get("identity").is_none());
+        }
+        let recovery = app.oneshot(Request::post("/api/v1/auth/native/recovery")
+            .header("content-type", "application/json").header(super::CSRF_HEADER, "1")
+            .body(Body::from(r#"{"pub_dress":"0x0retry","recovery_key":"","new_password":"another deliberate password"}"#)).expect("request"))
+            .await.expect("response");
+        assert!(!recovery.status().is_success());
+        assert!(recovery.headers().get(SET_COOKIE).is_none());
     }
 
     #[tokio::test]
@@ -2620,21 +2682,7 @@ mod tests {
             .oneshot(registration)
             .await
             .expect("registration");
-        let body = to_bytes(response.into_body(), 4096).await.expect("body");
-        let body: Value = serde_json::from_slice(&body).expect("JSON body");
-        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
-            .header("content-type", "application/json")
-            .header(super::CSRF_HEADER, "1")
-            .body(Body::from(
-                serde_json::json!({ "challenge": body["challenge"] }).to_string(),
-            ))
-            .expect("acknowledgement request");
-        let acknowledgement = app
-            .clone()
-            .oneshot(acknowledgement)
-            .await
-            .expect("acknowledgement");
-        let cookies = acknowledgement
+        let cookies = response
             .headers()
             .get_all(SET_COOKIE)
             .iter()
@@ -2729,7 +2777,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn telegram_password_requires_recovery_then_supports_native_sign_in_without_reset() {
+    async fn telegram_password_immediately_supports_native_sign_in_without_reset() {
         let app = app().await;
         register_telegram_fixture(&app).await;
         let setup = app
@@ -2744,8 +2792,10 @@ mod tests {
         assert_eq!(setup.headers()[CACHE_CONTROL], "no-store");
         let setup = json_body(setup).await;
         assert_eq!(setup["identity"]["pub_dress"], "0x1sky");
-        assert_eq!(setup["state"], "recovery_key_required");
+        assert_eq!(setup["state"], "authenticated");
         assert!(setup.get("password_hash").is_none());
+        assert!(setup.get("recovery_key").is_none());
+        assert!(setup.get("challenge").is_none());
         let sign_in = || {
             Request::post("/api/v1/auth/native/session")
                 .header("content-type", "application/json")
@@ -2755,21 +2805,6 @@ mod tests {
                 ))
                 .expect("request")
         };
-        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
-            .header("content-type", "application/json")
-            .header("x-0x1-csrf", "1")
-            .body(Body::from(
-                serde_json::json!({"challenge":setup["challenge"]}).to_string(),
-            ))
-            .expect("request");
-        assert_eq!(
-            app.clone()
-                .oneshot(acknowledgement)
-                .await
-                .expect("response")
-                .status(),
-            StatusCode::OK
-        );
         assert_eq!(
             app.clone()
                 .oneshot(sign_in())
@@ -2864,42 +2899,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn telegram_password_can_resume_pending_setup_and_invalidates_old_challenge() {
+    async fn telegram_password_setup_cannot_replace_an_active_password() {
         let app = app().await;
         register_telegram_fixture(&app).await;
         let body = r#"{"password":"a deliberately long password"}"#;
-        let first = json_body(
-            app.clone()
-                .oneshot(telegram_password_request(42, body))
-                .await
-                .expect("response"),
-        )
-        .await;
-        let second = json_body(
-            app.clone()
-                .oneshot(telegram_password_request(42, body))
-                .await
-                .expect("response"),
-        )
-        .await;
-        assert_ne!(first["challenge"], second["challenge"]);
-        for (setup, expected) in [(first, StatusCode::BAD_REQUEST), (second, StatusCode::OK)] {
-            let request = Request::post("/api/v1/auth/native/recovery/acknowledgement")
-                .header("content-type", "application/json")
-                .header("x-0x1-csrf", "1")
-                .body(Body::from(
-                    serde_json::json!({"challenge":setup["challenge"]}).to_string(),
-                ))
-                .expect("request");
-            assert_eq!(
-                app.clone()
-                    .oneshot(request)
-                    .await
-                    .expect("response")
-                    .status(),
-                expected
-            );
-        }
+        let first = app
+            .clone()
+            .oneshot(telegram_password_request(42, body))
+            .await
+            .expect("response");
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let second = app
+            .clone()
+            .oneshot(telegram_password_request(
+                42,
+                r#"{"password":"a different long password"}"#,
+            ))
+            .await
+            .expect("response");
+        assert_eq!(second.status(), StatusCode::CONFLICT);
+        assert!(second.headers().get(SET_COOKIE).is_none());
+        assert_eq!(
+            json_body(second).await["error"]["code"],
+            "password_already_set"
+        );
     }
 
     #[tokio::test]
@@ -2926,7 +2949,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn telegram_password_does_not_enable_native_sign_in_before_recovery_acknowledgement() {
+    async fn telegram_password_enables_native_sign_in_without_recovery_acknowledgement() {
         let app = app().await;
         register_telegram_fixture(&app).await;
         let setup = app
@@ -2947,7 +2970,7 @@ mod tests {
             .expect("request");
         assert_eq!(
             app.oneshot(sign_in).await.expect("response").status(),
-            StatusCode::UNAUTHORIZED
+            StatusCode::OK
         );
     }
 
@@ -2977,7 +3000,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn discord_password_requires_recovery_then_supports_native_sign_in_without_reset() {
+    async fn discord_password_immediately_supports_native_sign_in_without_reset() {
         let app = discord_app().await;
         register_discord_fixture(&app).await;
         let setup = app
@@ -2992,8 +3015,10 @@ mod tests {
         assert_eq!(setup.headers()[CACHE_CONTROL], "no-store");
         let setup = json_body(setup).await;
         assert_eq!(setup["identity"]["pub_dress"], "0x1sky");
-        assert_eq!(setup["state"], "recovery_key_required");
+        assert_eq!(setup["state"], "authenticated");
         assert!(setup.get("password_hash").is_none());
+        assert!(setup.get("recovery_key").is_none());
+        assert!(setup.get("challenge").is_none());
         let sign_in = || {
             Request::post("/api/v1/auth/native/session")
                 .header("content-type", "application/json")
@@ -3003,21 +3028,6 @@ mod tests {
                 ))
                 .expect("request")
         };
-        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
-            .header("content-type", "application/json")
-            .header("x-0x1-csrf", "1")
-            .body(Body::from(
-                serde_json::json!({"challenge":setup["challenge"]}).to_string(),
-            ))
-            .expect("request");
-        assert_eq!(
-            app.clone()
-                .oneshot(acknowledgement)
-                .await
-                .expect("response")
-                .status(),
-            StatusCode::OK
-        );
         assert_eq!(
             app.clone()
                 .oneshot(sign_in())
@@ -3133,7 +3143,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn discord_password_does_not_enable_native_sign_in_before_recovery_acknowledgement() {
+    async fn discord_password_enables_native_sign_in_without_recovery_acknowledgement() {
         let app = discord_app().await;
         register_discord_fixture(&app).await;
         let setup = app
@@ -3154,7 +3164,7 @@ mod tests {
             .expect("request");
         assert_eq!(
             app.oneshot(sign_in).await.expect("response").status(),
-            StatusCode::UNAUTHORIZED
+            StatusCode::OK
         );
     }
 
@@ -3273,27 +3283,13 @@ mod tests {
                 .to_string(),
             ))
             .expect("registration request");
-        let registration = json_body(
-            app.clone()
-                .oneshot(registration)
-                .await
-                .expect("registration"),
-        )
-        .await;
-        let acknowledgement = Request::post("/api/v1/auth/native/recovery/acknowledgement")
-            .header("content-type", "application/json")
-            .header(super::CSRF_HEADER, "1")
-            .body(Body::from(
-                serde_json::json!({ "challenge": registration["challenge"] }).to_string(),
-            ))
-            .expect("acknowledgement request");
-        let acknowledgement = app
+        let registration = app
             .clone()
-            .oneshot(acknowledgement)
+            .oneshot(registration)
             .await
-            .expect("acknowledgement");
-        assert_eq!(acknowledgement.status(), StatusCode::OK);
-        acknowledgement
+            .expect("registration");
+        assert_eq!(registration.status(), StatusCode::CREATED);
+        registration
             .headers()
             .get_all(SET_COOKIE)
             .iter()

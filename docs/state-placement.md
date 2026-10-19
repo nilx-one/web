@@ -45,7 +45,7 @@ needed by committed experience and rare claims:
 - **`pub_dress`** — the Bond's address, its owned Avaia's address, and the
   public label folded from it ([Public Bond address](pub-dress-url.md)).
 - **The server-side records a sign-in needs** — provider bindings
-  (`identity_providers`), Argon2id verifiers and recovery keys
+  (`identity_providers`), Argon2id verifiers and optional legacy recovery-key verifiers
   (`native_credentials`), and session rows (`native_sessions`). The
   `__Host-` cookies that carry a session or a remembered Bond are not in
   this list: the browser holds those bytes.
