@@ -130,8 +130,13 @@ Presentation only: no body moves and nothing is recorded.
 
 ## Forcing and the way back
 
-The steering row holds **push to force** between ◀ and ▶, filled with what
-is left of the engine. While it is held, and the engine allows it, xPing
+The steering row holds **push to force** between ◀ and ▶, with a **solid**
+button whose background changes continuously from yellow at full energy
+through orange to red at empty energy. The numeric percentage stays visible;
+no lightning pictogram or partially filled gauge is drawn. "Collapse" releases
+the chase camera while flight continues; "Cancel" is a separate, visually
+distinct action requiring confirmation. While force is held, and the engine
+allows it, xPing
 builds up over three seconds (`FLYOVER_FORCE_RAMP_MS`) to 3× its speed,
 xPing's top of 90 m/s, and twice its height, and flies straight at the
 destination: the drawn route becomes that straight line. Let go, it slows back down over the same three
@@ -143,6 +148,23 @@ shed from its nose back past its body. They grow with its speed (the
 renderer's `speedMps`): one thin clot just past cruise, up to four, wider,
 denser and trailing further, at its 90 m/s top. They fade as it slows back
 down, and reduced motion draws none.
+
+At speeds above cruise the existing forcing engine also lights twin blue-white
+exhaust jets and world-space speed streaks. Both length and trail density grow
+with the measured speed, then fade as xPing slows back to cruise. The expanded
+chase camera looks farther ahead and widens with `FlightState.boost`; this
+visual framing does not affect travel, engine state or the route. Collapsing
+the flight or entering activity overview continues to release the camera to
+the world. Reduced-motion mode suppresses these moving effects.
+
+The intended effect combines street-racing nitrous acceleration with a
+strained spacecraft engine. Behind the cold blue-white speed jets, xPing's
+rear vents glow warm amber-to-red as forcing speed and spent engine energy
+increase. A worn engine visibly shudders, puffs and sputters more under load.
+These are deterministic visual effects derived from `speedMps` and Core's
+missing-energy fraction (`wear`), not a temperature meter, a second energy
+pool, or an additional failure trigger. At cruise or with reduced motion they
+switch off; the existing wear-based smoke remains separate from the boost.
 
 Forcing is counted as it happens and told to the identity service a second at
 a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On
