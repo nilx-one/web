@@ -214,6 +214,8 @@ export type BrowserProviderContextResult =
       kind: "pending";
       provider: BrowserIdentityProvider;
       available: BrowserProviderAvailability;
+      /** Optional display-only hint from the verified provider profile. */
+      suggestedPubDress?: string;
     }
   | { kind: "service-unavailable" };
 
