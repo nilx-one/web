@@ -26,6 +26,7 @@ import {
   ResolvePubDress,
   UpdateAvaiaProfile,
   formatPubDress,
+  parsePubDress,
   hasAvaiaProfileAccess,
   hasBusinessStationAccess,
   hasNearbySpeechAccess,

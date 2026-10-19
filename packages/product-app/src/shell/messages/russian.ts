@@ -351,7 +351,11 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.provider.signInWithNamed": "Войти через {provider}",
   "identity.provider.web": "веб",
   "identity.provider.verified":
-    "{provider} подтверждён. Уже есть Bond? Войдите ниже, и мы подключим {provider}. Впервые здесь? Создайте свой Bond ниже.",
+    "{provider} подтверждён. Выберите: создать новую идентичность или войти в существующую.",
+  "identity.provider.suggested": "Создать {pubDress}",
+  "identity.provider.existing": "Войти в существующую идентичность",
+  "identity.provider.connectExisting":
+    "Подключить подтверждённый аккаунт к {pubDress}",
   "identity.avatar.label": "Исследование аватара",
   "identity.avatar.later": "Решить позже",
   "identity.recovery.label": "Ключ восстановления",
