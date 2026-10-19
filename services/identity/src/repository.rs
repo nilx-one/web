@@ -298,6 +298,16 @@ impl IdentityRepository {
                 .execute(&self.pool)
                 .await?;
         }
+        // Backfill stable, service-private subjects for existing humans and
+        // install the registration trigger for all future native/provider users.
+        // The migration is idempotent; it must never rotate an existing subject.
+        let mut subject_transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        sqlx::raw_sql(include_str!(
+            "../migrations/0035_private_identity_subjects.sql"
+        ))
+        .execute(&mut *subject_transaction)
+        .await?;
+        subject_transaction.commit().await?;
         Ok(())
     }
 
@@ -3159,6 +3169,107 @@ mod tests {
             .expect("lookup")
             .expect("the original session is still live");
         assert!(still_active);
+    }
+
+    #[tokio::test]
+    async fn private_subject_stays_opaque_and_stable_across_rename_and_restart() {
+        let database = tempfile::NamedTempFile::new().expect("database");
+        let url = format!("sqlite://{}", database.path().display());
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        let current: PubDress = "0x0sky".parse().expect("human");
+        let next: PubDress = "0x0renamed".parse().expect("new name");
+        assert!(matches!(
+            repository
+                .register_native_password(&current, "hash", 1, b"idem-subject", 100)
+                .await
+                .expect("register"),
+            NativeRegistrationOutcome::Registered(_)
+        ));
+
+        let subject: Vec<u8> = sqlx::query_scalar(
+            "SELECT subject FROM identity_subjects WHERE pub_dress = ?",
+        )
+        .bind(current.as_str())
+        .fetch_one(&repository.pool)
+        .await
+        .expect("private subject");
+        assert_eq!(subject.len(), 32);
+
+        assert!(matches!(
+            repository
+                .rename_pub_dress(&current, &next)
+                .await
+                .expect("rename"),
+            PubDressRenameOutcome::Renamed(_)
+        ));
+        let renamed_subject: Vec<u8> = sqlx::query_scalar(
+            "SELECT subject FROM identity_subjects WHERE pub_dress = ?",
+        )
+        .bind(next.as_str())
+        .fetch_one(&repository.pool)
+        .await
+        .expect("subject after rename");
+        assert_eq!(subject, renamed_subject);
+        repository.pool.close().await;
+
+        let reopened = IdentityRepository::connect(&url).await.expect("reopen");
+        let reopened_subject: Vec<u8> = sqlx::query_scalar(
+            "SELECT subject FROM identity_subjects WHERE pub_dress = ?",
+        )
+        .bind(next.as_str())
+        .fetch_one(&reopened.pool)
+        .await
+        .expect("subject after restart");
+        assert_eq!(subject, reopened_subject);
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM identity_subjects")
+            .fetch_one(&reopened.pool)
+            .await
+            .expect("count");
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn private_subject_migration_backfills_existing_humans() {
+        let database = tempfile::NamedTempFile::new().expect("database");
+        let url = format!("sqlite://{}", database.path().display());
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        let old: PubDress = "0x0legacy".parse().expect("human");
+        repository
+            .register(&old, &ProviderIdentity::telegram(12345), 100)
+            .await
+            .expect("register provider human");
+
+        // Model a contract-14 database with no 0035 objects: an existing
+        // human must be backfilled, not assigned a new public identity.
+        sqlx::query("DROP TRIGGER identity_subjects_after_human_insert")
+            .execute(&repository.pool)
+            .await
+            .expect("drop trigger");
+        sqlx::query("DROP TABLE identity_subjects")
+            .execute(&repository.pool)
+            .await
+            .expect("drop 0035 table");
+        repository.pool.close().await;
+
+        let migrated = IdentityRepository::connect(&url).await.expect("upgrade");
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM identity_subjects WHERE pub_dress = ?",
+        )
+        .bind(old.as_str())
+        .fetch_one(&migrated.pool)
+        .await
+        .expect("backfilled subject");
+        assert_eq!(count, 1);
+        let newer: PubDress = "0x0newcomer".parse().expect("newcomer");
+        migrated
+            .register(&newer, &ProviderIdentity::discord("9876"), 200)
+            .await
+            .expect("register future human");
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM identity_subjects")
+            .fetch_one(&migrated.pool)
+            .await
+            .expect("all humans");
+        assert_eq!(count, 2);
     }
 
     async fn registered_repository() -> super::IdentityRepository {
