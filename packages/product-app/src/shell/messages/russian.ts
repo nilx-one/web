@@ -215,6 +215,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "flyover.no": "Нет",
   "flyover.yes": "Да",
   "flyover.force": "Форсировать xPing: держите, чтобы лететь быстрее и выше",
+  "flyover.energy": "Заряд",
   "flyover.loot.rare": "О, редкая находка!",
   "flyover.loot.special": "Это что-то особенное!",
   "flyover.loot.exclusive": "Это что-то Эксклюзивное!",

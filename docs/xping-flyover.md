@@ -31,8 +31,9 @@ motion preview), no arrival is inferred from elapsed wall-clock time.
 
 The activity row tells progress as xPing's ground distance to the
 destination, named by the BusinessPoint's localized display name ("150 m to
-0xda-market Golden Gate"), rounded up to whole 50 m steps so it changes once
-per step rather than every frame.
+0xda-market Golden Gate"), rounded up to whole 50 m steps beyond 200 m, 10 m steps between
+50 and 200 m, and whole metres within 50 m. It stays legible on short routes
+without showing raw frame-to-frame fractional noise.
 
 While expanded the Dock and status rail stand down. The bottom of the screen
 is the activity row (distance and **↗ xPing**), with the steering right above
@@ -131,7 +132,7 @@ Presentation only: no body moves and nothing is recorded.
 ## Forcing and the way back
 
 The steering row holds **push to force** between ◀ and ▶, with a **solid**
-button whose background changes continuously from yellow at full energy
+button labelled **Energy** (not flight progress), whose background changes continuously from yellow at full energy
 through orange to red at empty energy. The numeric percentage stays visible;
 no lightning pictogram or partially filled gauge is drawn. "Collapse" releases
 the chase camera while flight continues; "Cancel" is a separate, visually

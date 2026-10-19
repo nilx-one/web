@@ -23,7 +23,7 @@ import { seededMarketDirectory } from "./market-points";
 import type { MapRenderer } from "@nilx-one/map-contract";
 import { chooseLocale } from "../../shell/localization";
 import { activityCamera } from "./courier-map";
-import { ActivityStack } from "./activity-stack";
+import { ActivityStack, roundedFlightDistanceMeters } from "./activity-stack";
 import { useCourier } from "./use-courier";
 const origin = { longitude_e7: "305000000", latitude_e7: "504000000" };
 const destination: BusinessPoint = {
@@ -355,7 +355,11 @@ it("listens for taps on the flying xPing only, never on a parked offer drone", a
   unmount();
   expect(unsubscribe).toHaveBeenCalled();
 });
-it("tells flight progress as the distance to the named target in 50 m steps", () => {
+it("rounds route distance according to its scale", () => {
+  expect([0, 0.1, 9.2, 47.8, 51, 199, 201].map(roundedFlightDistanceMeters)).toEqual([0, 1, 10, 48, 60, 200, 250]);
+});
+
+it("tells flight progress as useful distance to the named target", () => {
   // The plan's destination stands at 30.501, 50.401; about 111.2 m per
   // 0.001° of latitude.
   const at = (latitude: number) => ({
@@ -373,11 +377,15 @@ it("tells flight progress as the distance to the named target in 50 m steps", ()
   };
   const view = render(<ActivityStack {...props} flight={at(50.4)} />);
   expect(screen.getByRole("status")).toHaveTextContent(
-    "150 m to 0xda-market Golden Gate",
+    "120 m to 0xda-market Golden Gate",
   );
   view.rerender(<ActivityStack {...props} flight={at(50.4005)} />);
   expect(screen.getByRole("status")).toHaveTextContent(
-    "100 m to 0xda-market Golden Gate",
+    "60 m to 0xda-market Golden Gate",
+  );
+  view.rerender(<ActivityStack {...props} flight={at(50.4009)} />);
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "12 m to 0xda-market Golden Gate",
   );
   view.rerender(<ActivityStack {...props} flight={at(50.401)} />);
   expect(screen.getByRole("status")).toHaveTextContent(
@@ -491,7 +499,7 @@ it("tells the way back, and a breakdown, in the flight row", () => {
     />,
   );
   expect(screen.getByRole("status")).toHaveTextContent(
-    "xPing · flying back · 150 m",
+    "xPing · flying back · 120 m",
   );
   expect(screen.getByRole("button", { name: "Follow xPing" })).toBeDefined();
   view.rerender(

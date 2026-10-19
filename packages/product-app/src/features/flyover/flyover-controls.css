@@ -137,6 +137,8 @@
   min-width: 72px;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 0.15rem;
   color: #191919;
   background: var(--flyover-energy-color, #f5cb0d);
   font-size: 18px;
@@ -149,6 +151,14 @@
   font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.flyover__force-caption {
+  font-size: 0.58rem;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .flyover__force:disabled {
