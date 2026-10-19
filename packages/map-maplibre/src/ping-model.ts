@@ -292,14 +292,22 @@ export function createPingModel() {
       for (const core of boostCores) {
         const length = flameLength * 0.72;
         core.visible = density > 0;
-        core.scale.set(density > 0 ? 1 : 0, density > 0 ? length : 0, density > 0 ? 1 : 0);
+        core.scale.set(
+          density > 0 ? 1 : 0,
+          density > 0 ? length : 0,
+          density > 0 ? 1 : 0,
+        );
         core.position.z = -0.22 - length / 2;
       }
       for (const [index, streak] of speedStreaks.entries()) {
         const age = (phase * 8 + index / SPEED_STREAKS) % 1;
         const shown = density > (index + 0.25) / SPEED_STREAKS;
         streak.visible = shown;
-        streak.scale.set(shown ? 1 : 0, shown ? 1 : 0, shown ? 0.5 + density * 2.5 : 0);
+        streak.scale.set(
+          shown ? 1 : 0,
+          shown ? 1 : 0,
+          shown ? 0.5 + density * 2.5 : 0,
+        );
         streak.position.z = -0.6 - age * density * 3.2;
         streakMaterials[index]!.opacity = shown
           ? Math.sin(age * Math.PI) * (0.16 + density * 0.48)

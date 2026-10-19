@@ -85,7 +85,7 @@ describe("xPing system prop", () => {
     expect(shown()).toHaveLength(0);
     model.dispose();
   });
-  it("renders paired nitro exhaust and world-space streaks only above cruise", () => {
+  it("renders nitro jets and streaks above cruise", () => {
     const model = createPingModel();
     const named = (name: string) => {
       const found: Mesh[] = [];
@@ -101,7 +101,9 @@ describe("xPing system prop", () => {
     expect(cores).toHaveLength(2);
     expect(streaks).toHaveLength(8);
     model.sample(0.25, true, 0, 30);
-    expect([...flames, ...cores, ...streaks].some((mesh) => mesh.visible)).toBe(false);
+    expect(
+      [...flames, ...cores, ...streaks].some((mesh) => mesh.visible),
+    ).toBe(false);
     model.sample(0.25, true, 0, 60);
     const halfLength = flames[0]!.scale.y;
     const halfStreaks = streaks.filter((mesh) => mesh.visible).length;
@@ -112,9 +114,13 @@ describe("xPing system prop", () => {
     expect(flames[0]!.scale.y).toBeGreaterThan(halfLength);
     expect(streaks.filter((mesh) => mesh.visible)).toHaveLength(8);
     model.sample(0.25, true, 0, 30);
-    expect([...flames, ...cores, ...streaks].some((mesh) => mesh.visible)).toBe(false);
+    expect(
+      [...flames, ...cores, ...streaks].some((mesh) => mesh.visible),
+    ).toBe(false);
     model.sample(0.25, false, 0, 90);
-    expect([...flames, ...cores, ...streaks].some((mesh) => mesh.visible)).toBe(false);
+    expect(
+      [...flames, ...cores, ...streaks].some((mesh) => mesh.visible),
+    ).toBe(false);
     model.dispose();
   });
   it("disposes its owned geometry and materials", () => {

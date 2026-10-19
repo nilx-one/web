@@ -73,7 +73,9 @@ export function chaseCamera(
 ): MapCamera {
   // Widen the chase shot as the forcing engine builds to 90 m/s, then
   // return it to normal on release. MapLibre still owns the projection.
-  const intensity = Number.isFinite(boost) ? Math.min(1, Math.max(0, boost)) : 0;
+  const intensity = Number.isFinite(boost)
+    ? Math.min(1, Math.max(0, boost))
+    : 0;
   const center = offsetPoint(
     point,
     bearingDeg,
@@ -81,7 +83,10 @@ export function chaseCamera(
   );
   return {
     center: [center.longitude, center.latitude],
-    zoom: 19.4 - Math.log2(1 + Math.max(0, heightMeters) / 28) - intensity * 0.6,
+    zoom:
+      19.4 -
+      Math.log2(1 + Math.max(0, heightMeters) / 28) -
+      intensity * 0.6,
     bearing: bearingDeg,
     pitch: CHASE_PITCH,
   };
@@ -613,7 +618,12 @@ export function useFlyover(
             cameraBearing +=
               turn * Math.min(1, (CHASE_TURN_RATE * elapsed) / 1000);
             renderer.setCamera(
-              chaseCamera({ longitude, latitude }, cameraBearing, lift, state.boost),
+              chaseCamera(
+                { longitude, latitude },
+                cameraBearing,
+                lift,
+                state.boost,
+              ),
               { motion: "immediate" },
             );
           }
