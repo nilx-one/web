@@ -904,6 +904,15 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     nativeAuthentication.reset();
   }
 
+  function applySuggestedPubDress(pubDress: string): void {
+    const suggestion = parsePubDress(pubDress);
+    if (suggestion !== undefined) changeSelection(suggestion);
+  }
+
+  function chooseExistingIdentity(): void {
+    changeSelection({ discriminator: "1", slug: "" });
+  }
+
   function applyAutofilledCredential(
     nextSelection: PubDressSelection,
     nextPassword: string,
@@ -1270,12 +1279,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             ? providerContext.available
             : { telegram: false, discord: false, github: false },
         onAuthorize: authorizeBrowserProvider,
-        onApplySuggestedPubDress: (pubDress: string) => {
-          const suggested = parsePubDress(pubDress);
-          if (suggested !== undefined) changeSelection(suggested);
-        },
-        onChooseExistingIdentity: () =>
-          changeSelection({ discriminator: "1", slug: "" }),
+        onApplySuggestedPubDress: applySuggestedPubDress,
+        onChooseExistingIdentity: chooseExistingIdentity,
         ...(providerContext?.kind === "pending" &&
         providerContext.suggestedPubDress !== undefined
           ? { suggestedPubDress: providerContext.suggestedPubDress }
