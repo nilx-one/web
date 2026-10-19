@@ -666,7 +666,7 @@ describe("provider password hand-off", () => {
 });
 
 describe("verified Telegram username suggestion", () => {
-  it("offers explicit create or existing-account actions without registering implicitly", () => {
+  it("requires an explicit onboarding decision", () => {
     const onApplySuggestedPubDress = vi.fn();
     const onChooseExistingIdentity = vi.fn();
     const onSubmit = vi.fn();
@@ -686,7 +686,10 @@ describe("verified Telegram username suggestion", () => {
           identity: {
             kind: "form",
             mode: "initial",
-            status: { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+            status: {
+              kind: "idle",
+              detail: "Case-sensitive · 2–32 characters",
+            },
             busy: false,
           },
         }}
@@ -709,9 +712,13 @@ describe("verified Telegram username suggestion", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Create 0xboss_zhab" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create 0xboss_zhab" }),
+    );
     expect(onApplySuggestedPubDress).toHaveBeenCalledWith("0xboss_zhab");
-    fireEvent.click(screen.getByRole("button", { name: "Sign in to existing identity" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in to existing identity" }),
+    );
     expect(onChooseExistingIdentity).toHaveBeenCalledOnce();
     expect(onSubmit).not.toHaveBeenCalled();
   });
