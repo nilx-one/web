@@ -40,7 +40,8 @@ export const IDENTITY_EN = {
     "{provider} verified. Choose whether to create a new identity or sign in to your existing one.",
   "identity.provider.suggested": "Create {pubDress}",
   "identity.provider.existing": "Sign in to existing identity",
-  "identity.provider.connectExisting": "Connect verified provider to {pubDress}",
+  "identity.provider.connectExisting":
+    "Connect verified provider to {pubDress}",
   "identity.avatar.label": "Avatar study",
   "identity.avatar.later": "Decide later",
   "identity.recovery.label": "Recovery key",
