@@ -167,10 +167,7 @@ export function createPingModel() {
   });
   const engineVents: Mesh[] = [];
   for (const x of [-0.13, 0.13]) {
-    const vent = new Mesh(
-      new SphereGeometry(0.055, 10, 8),
-      engineVentMaterial,
-    );
+    const vent = new Mesh(new SphereGeometry(0.055, 10, 8), engineVentMaterial);
     vent.name = "ping-engine-vent";
     vent.position.set(x, -0.035, -0.245);
     vent.visible = false;
@@ -311,9 +308,8 @@ export function createPingModel() {
       // effects also fade naturally when forcing runs out or the leg changes.
       const flameLength = 0.25 + density * 1.7;
       const sputter = worn * Math.abs(Math.sin(phase * Math.PI * 42));
-      boostFlameMaterial.opacity =
-        density * (0.58 + 0.08 * Math.sin(phase * Math.PI * 24)) *
-        (1 - sputter * 0.24);
+      const jetPulse = 0.58 + 0.08 * Math.sin(phase * Math.PI * 24);
+      boostFlameMaterial.opacity = density * jetPulse * (1 - sputter * 0.24);
       boostCoreMaterial.opacity = density * 0.84;
       // Warm strain glow beside the colder nitro jets. It never remains
       // active at cruise, on return, or with reduced motion enabled.
