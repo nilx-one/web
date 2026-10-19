@@ -1115,8 +1115,11 @@ async fn handle_location(
 
     // Expired travel must never fall back to an unrelated admin Bond-only move.
     if state.intents.expired(telegram_user_id).await {
-        bot.send_message(message.chat.id, "Час очікування локації минув. Повторіть команду.")
-            .await?;
+        bot.send_message(
+            message.chat.id,
+            "Час очікування локації минув. Повторіть команду.",
+        )
+        .await?;
         return Ok(false);
     }
     let intent = state.intents.peek(telegram_user_id).await;
@@ -1250,7 +1253,10 @@ async fn handle_travel_point(
         ),
         Err(error) => {
             error!(%error, "atomic Bond/Avaia travel failed");
-            ("Подорож не вдалася; позиції Bond і Avaia не змінено.", false)
+            (
+                "Подорож не вдалася; позиції Bond і Avaia не змінено.",
+                false,
+            )
         }
     };
     bot.send_message(message.chat.id, response)
@@ -1283,7 +1289,11 @@ async fn begin_travel(
     // Arm only after the instruction is visible in the shared Status slot.
     state
         .intents
-        .begin_with_message(telegram_user_id, PendingLocationIntent::Travel, message.id.0)
+        .begin_with_message(
+            telegram_user_id,
+            PendingLocationIntent::Travel,
+            message.id.0,
+        )
         .await;
     Ok(())
 }
@@ -1308,7 +1318,11 @@ async fn begin_current_position(
     // Arm only after the instruction is visible in the shared Status slot.
     state
         .intents
-        .begin_with_message(telegram_user_id, PendingLocationIntent::Current, message.id.0)
+        .begin_with_message(
+            telegram_user_id,
+            PendingLocationIntent::Current,
+            message.id.0,
+        )
         .await;
     Ok(())
 }
@@ -1341,7 +1355,11 @@ async fn begin_manual_position(
     // Arm only after the instruction is visible in the shared Status slot.
     state
         .intents
-        .begin_with_message(telegram_user_id, PendingLocationIntent::Manual, message.id.0)
+        .begin_with_message(
+            telegram_user_id,
+            PendingLocationIntent::Manual,
+            message.id.0,
+        )
         .await;
     Ok(())
 }
