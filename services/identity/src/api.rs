@@ -440,9 +440,7 @@ async fn authenticate_native_identity(
             }
         };
 
-    let authenticated = password_matches
-        && credential.as_ref().is_some_and(|value| value.active)
-        && pub_dress.is_some();
+    let authenticated = password_matches && credential.is_some() && pub_dress.is_some();
     if !authenticated {
         state.limiter.record_authentication_failure(source_key, now);
         state
@@ -454,6 +452,21 @@ async fn authenticate_native_identity(
     state.limiter.clear(&source_key);
     state.limiter.clear(&pub_dress_key);
     let credential = credential.expect("authenticated credential exists");
+    if !credential.active {
+        match state
+            .repository
+            .complete_pending_native_password(&credential, now)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => return invalid_native_credentials(),
+            Err(error) => {
+                tracing::error!(%error, "pending native password setup failed");
+                return unavailable();
+            }
+        }
+    }
+
     if credential.password_hash_version < state.password_engine.hash_version() {
         rehash_credential_after_success(&state, &credential, &password_for_rehash, now).await;
     }
@@ -2533,6 +2546,99 @@ mod tests {
         assert_eq!(
             authenticated_context["identity"]["pub_dress_url"],
             "https://0x0sky.nilx.one"
+        );
+    }
+
+    #[tokio::test]
+    async fn pending_legacy_registration_requires_password_proof_and_no_recovery_step() {
+        struct AdvancingClock(AtomicU64);
+        impl Clock for AdvancingClock {
+            fn now_unix_seconds(&self) -> Result<u64, super::ClockError> {
+                Ok(self.0.load(Ordering::Relaxed))
+            }
+        }
+        let clock = Arc::new(AdvancingClock(AtomicU64::new(NOW)));
+        let url = test_database_url("pending-native");
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        let links = ProviderLinkRepository::connect(&url).await.expect("links");
+        let config = NativeAuthConfig::new(
+            "test-auth-secret-that-is-at-least-thirty-two-bytes",
+            "test-password-pepper-that-is-at-least-thirty-two-bytes",
+        )
+        .expect("config");
+        let engine = config.password_engine();
+        let address = "0x0pending".parse().expect("address");
+        repository
+            .register_native(
+                &address,
+                &engine.hash("a deliberately long password").expect("hash"),
+                engine.hash_version(),
+                b"legacy-key",
+                b"legacy-challenge",
+                b"legacy-idempotency",
+                NOW - 100,
+                NOW - 1,
+            )
+            .await
+            .expect("pending registration");
+        let app = router_with_clock(
+            repository.clone(),
+            links,
+            TelegramInitDataVerifier::new(TOKEN.to_owned(), 300),
+            None,
+            config,
+            clock.clone(),
+        );
+        let sign_in = |password: &str| {
+            Request::post("/api/v1/auth/native/session")
+                .header("content-type", "application/json")
+                .header(super::CSRF_HEADER, "1")
+                .body(Body::from(
+                    serde_json::json!({ "pub_dress": "0x0pending", "password": password })
+                        .to_string(),
+                ))
+                .expect("request")
+        };
+        let wrong = app
+            .clone()
+            .oneshot(sign_in("a different long password"))
+            .await
+            .expect("response");
+        assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+        assert!(wrong.headers().get(SET_COOKIE).is_none());
+        assert!(
+            !repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
+        );
+        clock.0.fetch_add(60, Ordering::Relaxed);
+        let response = app
+            .oneshot(sign_in("a deliberately long password"))
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get(SET_COOKIE).is_some());
+        let body = json_body(response).await;
+        assert_eq!(body["state"], "authenticated");
+        assert!(body.get("recovery_key").is_none());
+        assert!(body.get("challenge").is_none());
+        assert!(
+            repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
+        );
+        assert!(
+            repository
+                .activate_native_registration(b"legacy-challenge", NOW - 50)
+                .await
+                .expect("old challenge")
+                .is_none()
         );
     }
 

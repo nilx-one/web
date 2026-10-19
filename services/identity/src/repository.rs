@@ -1065,6 +1065,37 @@ impl IdentityRepository {
         Ok(Some(record))
     }
 
+    /// Called only after password verification. CAS prevents a stale proof from
+    /// activating a credential changed by concurrent provider setup or recovery.
+    pub async fn complete_pending_native_password(
+        &self,
+        credential: &NativeCredentialRecord,
+        now: u64,
+    ) -> Result<bool, RepositoryError> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let updated = sqlx::query(
+            "UPDATE native_credentials SET active = 1, updated_at = ? \
+             WHERE pub_dress = ? AND password_hash = ? AND \
+             (active = 1 OR EXISTS (SELECT 1 FROM native_registration_challenges c \
+              WHERE c.pub_dress = native_credentials.pub_dress))",
+        )
+        .bind(now as i64)
+        .bind(&credential.pub_dress)
+        .bind(&credential.password_hash)
+        .execute(&mut *transaction)
+        .await?;
+        if updated.rows_affected() == 0 {
+            transaction.rollback().await?;
+            return Ok(false);
+        }
+        sqlx::query("DELETE FROM native_registration_challenges WHERE pub_dress = ?")
+            .bind(&credential.pub_dress)
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(true)
+    }
+
     /// A new session starts active only if the Bond currently holds no other
     /// active, still-valid session — the base case where there is nothing to
     /// activate against. Otherwise it starts inactive: activation is a
@@ -2739,6 +2770,71 @@ mod tests {
                 .expect("credential")
                 .password_hash,
             "hash"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_password_proof_cannot_finish_changed_pending_credentials() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let address = PubDress::from_str("0x0pending").expect("address");
+        repository
+            .register_native(
+                &address,
+                "old-hash",
+                1,
+                b"key",
+                b"challenge",
+                b"idempotency",
+                100,
+                200,
+            )
+            .await
+            .expect("pending");
+        let stale = repository
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
+        sqlx::query(
+            "UPDATE native_credentials SET password_hash = 'replacement-hash' WHERE pub_dress = ?",
+        )
+        .bind(address.as_str())
+        .execute(&repository.pool)
+        .await
+        .expect("concurrent change");
+        assert!(
+            !repository
+                .complete_pending_native_password(&stale, 101)
+                .await
+                .expect("stale completion")
+        );
+        assert!(
+            !repository
+                .find_native_credential(&address)
+                .await
+                .expect("lookup")
+                .expect("credential")
+                .active
+        );
+        let current = repository
+            .find_native_credential(&address)
+            .await
+            .expect("lookup")
+            .expect("credential");
+        assert!(
+            repository
+                .complete_pending_native_password(&current, 101)
+                .await
+                .expect("current completion")
+        );
+        assert!(
+            repository
+                .activate_native_registration(b"challenge", 102)
+                .await
+                .expect("old challenge")
+                .is_none()
         );
     }
 

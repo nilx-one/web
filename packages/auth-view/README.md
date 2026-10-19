@@ -40,7 +40,9 @@ issuance still uses the existing Single Active Client policy.
 A repeated idempotency key returns a conflict without a session or identity
 projection. The UI resolves again and offers sign-in; the password must be
 verified by the session endpoint. Existing keys/challenges remain supported only
-by the legacy 0x1 endpoints. Migration 0034 preserves them and all foreign keys.
+by the legacy 0x1 endpoints. Migration 0034 preserves them and all foreign keys. An unfinished legacy setup
+can also complete through a verified password; a stale password proof cannot
+activate a concurrently replaced credential, and the old challenge is consumed.
 Older service versions that require non-null recovery verifiers cannot safely
 read new credentials: roll back with a compatible service, not contract 13.
 
