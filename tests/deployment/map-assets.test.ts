@@ -107,6 +107,7 @@ const OPACITY_PROPERTY: Readonly<Record<string, string>> = {
   line: "line-opacity",
   "fill-extrusion": "fill-extrusion-opacity",
   circle: "circle-opacity",
+  "color-relief": "color-relief-opacity",
 };
 
 // Labels are text over the ground, not ground: they have no fill of their own
@@ -286,6 +287,13 @@ describe("map deployment assets", () => {
           expect(layer["source-layer"]).toBeUndefined();
           continue;
         }
+        // The published DEM is a raster: only the relief tint reads it,
+        // through its own source so the 3D terrain keeps its own.
+        if (layer.source === "relief") {
+          expect(layer.type).toBe("color-relief");
+          expect(layer["source-layer"]).toBeUndefined();
+          continue;
+        }
 
         expect(layer.source).toBe("basemap");
         expect(SOURCE_LAYERS).toContain(layer["source-layer"]);
@@ -368,6 +376,53 @@ describe("map deployment assets", () => {
     },
   );
 
+  it.each(["light", "dark"] as const)(
+    "tints the ground by its height from the published DEM (%s)",
+    (appearance) => {
+      const style = readStyle(appearance);
+      const relief = style.layers.find((layer) => layer.id === "relief");
+      expect(relief?.type).toBe("color-relief");
+      // The same published DEM as the terrain, as a source of its own:
+      // MapLibre renders a tint that shares the 3D terrain's source worse.
+      expect(relief?.source).toBe("relief");
+      expect(style.sources.relief).toEqual(style.sources.terrain);
+
+      // Beneath everything but the ground itself: parks, the urban fabric,
+      // water and roads all paint over it.
+      const ids = style.layers.map((layer) => layer.id);
+      expect(ids.indexOf("relief")).toBe(ids.indexOf("earth") + 1);
+
+      // The ramp spans the city's measured range, river valley to plateau,
+      // from the low colour to the high one the metadata publishes.
+      const ramp = relief?.paint?.["color-relief-color"] as unknown[];
+      expect(ramp.slice(0, 3)).toEqual([
+        "interpolate",
+        ["linear"],
+        ["elevation"],
+      ]);
+      const [low, high] = style.metadata?.["nilx-one:relief-range-meters"] as [
+        number,
+        number,
+      ];
+      expect(ramp[3]).toBe(low);
+      expect(ramp[4]).toBe(style.metadata?.["nilx-one:relief-low"]);
+      expect(ramp[ramp.length - 2]).toBe(high);
+      expect(ramp[ramp.length - 1]).toBe(
+        style.metadata?.["nilx-one:relief-high"],
+      );
+      expect(low).toBeLessThanOrEqual(90);
+      expect(high).toBeGreaterThanOrEqual(200);
+
+      // Out from the city overview the DEM's square edge would show; at
+      // street scale it steps back so building noise in the DEM stays quiet.
+      expect(paintsAt(relief!, 8.5)).toBe(false);
+      expect(paintsAt(relief!, MAP_SCALE_ZOOM.city)).toBe(true);
+      const opacity = relief?.paint?.["color-relief-opacity"];
+      expect(evaluateOpacity(opacity, MAP_SCALE_ZOOM.city)).toBe(1);
+      expect(evaluateOpacity(opacity, 16)).toBeLessThan(0.6);
+    },
+  );
+
   it("raises urban depth only as the camera closes in", () => {
     const style = readStyle("light");
     const extrusion = style.layers.find((layer) => layer.id === "buildings");
@@ -387,6 +442,7 @@ describe("map deployment assets", () => {
       "world-borders",
       "world-country-label",
       "earth",
+      "relief",
       "landcover",
       "parks",
       "landuse-urban",
@@ -511,6 +567,8 @@ describe("map deployment assets", () => {
     expect(style.metadata?.["nilx-one:visual-language"]).toBe("0x1-spatial");
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#f7f9fa");
     expect(style.metadata?.["nilx-one:surface-land"]).toBe("#f1f4f5");
+    expect(style.metadata?.["nilx-one:relief-low"]).toBe("#e4eeee");
+    expect(style.metadata?.["nilx-one:relief-high"]).toBe("#ebdfc8");
     expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#d2e9cd");
     expect(style.metadata?.["nilx-one:bridge-deck"]).toBe("#f8fafb");
     expect(style.metadata?.["nilx-one:bridge-edge"]).toBe("#9cb2b9");
@@ -530,6 +588,8 @@ describe("map deployment assets", () => {
 
     expect(style.metadata?.["nilx-one:surface-background"]).toBe("#070c0e");
     expect(style.metadata?.["nilx-one:surface-land"]).toBe("#0c1417");
+    expect(style.metadata?.["nilx-one:relief-low"]).toBe("#09161a");
+    expect(style.metadata?.["nilx-one:relief-high"]).toBe("#2a2418");
     expect(style.metadata?.["nilx-one:surface-parks"]).toBe("#10201d");
     expect(style.metadata?.["nilx-one:bridge-deck"]).toBe("#2e4249");
     expect(style.metadata?.["nilx-one:bridge-edge"]).toBe("#5d757d");
