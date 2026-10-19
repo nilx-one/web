@@ -356,7 +356,9 @@ it("listens for taps on the flying xPing only, never on a parked offer drone", a
   expect(unsubscribe).toHaveBeenCalled();
 });
 it("rounds route distance according to its scale", () => {
-  expect([0, 0.1, 9.2, 47.8, 51, 199, 201].map(roundedFlightDistanceMeters)).toEqual([0, 1, 10, 48, 60, 200, 250]);
+  expect(
+    [0, 0.1, 9.2, 47.8, 51, 199, 201].map(roundedFlightDistanceMeters),
+  ).toEqual([0, 1, 10, 48, 60, 200, 250]);
 });
 
 it("tells flight progress as useful distance to the named target", () => {
