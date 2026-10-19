@@ -26,6 +26,7 @@ import {
   ResolvePubDress,
   UpdateAvaiaProfile,
   formatPubDress,
+  parsePubDress,
   hasAvaiaProfileAccess,
   hasBusinessStationAccess,
   hasNearbySpeechAccess,
@@ -305,6 +306,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     slug: "",
   });
   const [password, setPassword] = useState("");
+  // A verified external provider must never attach to a stored native session
+  // without the person's explicit create/connect decision.
+  const [providerLinkApproved, setProviderLinkApproved] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
   const [resolutionSelection, setResolutionSelection] = useState(selection);
   const [resolutionArmed, setResolutionArmed] = useState(false);
@@ -723,6 +727,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   useEffect(() => {
     if (
       !browserHost ||
+      !providerLinkApproved ||
       pendingBrowserProvider === undefined ||
       authenticatedNativePubDress === undefined ||
       browserProviderLink.isPending ||
@@ -736,6 +741,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     browserHost,
     browserProviderLink,
     pendingBrowserProvider,
+    providerLinkApproved,
   ]);
 
   useEffect(() => {
@@ -828,6 +834,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
 
   if (
     browserHost &&
+    providerLinkApproved &&
     pendingBrowserProvider !== undefined &&
     nativeIdentityState.kind === "authenticated"
   ) {
@@ -902,6 +909,18 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     setIdempotencyKey(newIdempotencyKey());
     nativeRegistration.reset();
     nativeAuthentication.reset();
+  }
+
+  function applySuggestedPubDress(pubDress: string): void {
+    const suggestion = parsePubDress(pubDress);
+    if (suggestion === undefined) return;
+    setProviderLinkApproved(true);
+    changeSelection(suggestion);
+  }
+
+  function chooseExistingIdentity(): void {
+    setProviderLinkApproved(true);
+    changeSelection({ discriminator: "1", slug: "" });
   }
 
   function applyAutofilledCredential(
@@ -1270,6 +1289,12 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             ? providerContext.available
             : { telegram: false, discord: false, github: false },
         onAuthorize: authorizeBrowserProvider,
+        onApplySuggestedPubDress: applySuggestedPubDress,
+        onChooseExistingIdentity: chooseExistingIdentity,
+        ...(providerContext?.kind === "pending" &&
+        providerContext.suggestedPubDress !== undefined
+          ? { suggestedPubDress: providerContext.suggestedPubDress }
+          : {}),
         ...(pendingBrowserProvider === undefined
           ? {}
           : { pendingProvider: pendingBrowserProvider }),
@@ -1285,7 +1310,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
       selection={selection}
       viewModel={viewModel}
-      {...(browserProviderAuth === undefined ? {} : { browserProviderAuth })}
+      browserProviderAuth={browserProviderAuth}
       onCredentialAutofill={applyAutofilledCredential}
       onAvatarChoice={(model) => {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);
