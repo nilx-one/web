@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { waitForScene } from "./scene-ready";
+
 import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
@@ -2095,6 +2097,21 @@ export function createMapLibreRenderer(
       firstPaintDone = false;
       presentationApplied = false;
       publish({ kind: "unmounted" });
+    },
+
+    whenSceneReady(signal) {
+      const mounted = map;
+      if (mounted === undefined)
+        return Promise.reject(new Error("Map is not mounted"));
+      return waitForScene(
+        mounted,
+        () =>
+          firstPaintDone &&
+          presentationApplied &&
+          (dimension === "flat" || monumentLayer?.isSettled() === true) &&
+          (avatarHandles.size === 0 || avatarLayer?.assetsSettled() === true),
+        signal,
+      );
     },
 
     getStatus() {

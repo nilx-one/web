@@ -972,3 +972,17 @@
 .authenticated-map-home--flight .app-shell__bottom {
   display: none;
 }
+
+/* Keep the renderer mounted and measurable while its initial scene settles. */
+.authenticated-map-home__startup {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 2rem;
+  text-align: center;
+  background: var(--map-substrate);
+  color: var(--map-ink);
+}

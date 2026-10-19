@@ -10,6 +10,10 @@ export const WORLD_EN = {
   "map.status.idle": "Map idle",
   "map.status.idleDetail": "The geographic renderer has not mounted yet.",
   "map.status.loading": "Loading map",
+  "map.startup.loading": "Preparing your view of the world…",
+  "map.startup.failed":
+    "The world is taking longer to load. You can try again.",
+  "map.startup.retry": "Try again",
   "map.status.loadingDetail": "Loading the self-hosted 0x1 map style.",
   "map.status.ready": "Map ready",
   "map.status.readyDetail": "MapLibre is rendering the geographic substrate.",
@@ -112,6 +116,10 @@ export const WORLD_UK: Readonly<Record<keyof typeof WORLD_EN, string>> = {
   "map.status.idle": "Мапа неактивна",
   "map.status.idleDetail": "Географічний рендерер ще не змонтовано.",
   "map.status.loading": "Завантаження мапи",
+  "map.startup.loading": "Готуємо світ до відкриття…",
+  "map.startup.failed":
+    "Світ завантажується довше, ніж очікували. Спробуй ще раз.",
+  "map.startup.retry": "Спробувати ще раз",
   "map.status.loadingDetail": "Завантажуємо власний стиль мапи 0x1.",
   "map.status.ready": "Мапа готова",
   "map.status.readyDetail": "MapLibre відображає географічну основу.",
