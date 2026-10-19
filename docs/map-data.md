@@ -215,6 +215,8 @@ spatial map with restrained cyan accents. The map is the spatial substrate of
 | Water                | `#c8ecf3`             | `#05222a`             |
 | Bridge deck          | `#f8fafb`             | `#2e4249`             |
 | Bridge edge          | `#9cb2b9`             | `#5d757d`             |
+| Relief, valley floor | `#e4eeee`             | `#09161a`             |
+| Relief, plateau      | `#ebdfc8`             | `#2a2418`             |
 | Accent               | `#37d7e5`             | `#37d7e5`             |
 | Label (reserved)     | `#536166` / `#7d8a90` | `#a8b6bb` / `#78898f` |
 
@@ -237,16 +239,38 @@ and `tests/deployment/map-assets.test.ts` keeps the two documents structurally
 identical.
 
 Layer order follows the visual priority of the map: geography (`earth`,
-`landcover`, `parks`, `landuse-urban`), water (`water`, `water-accent`,
-`rivers`), urban mass (`buildings-flat`), movement (`roads-rail`,
-`roads-minor-casing`, `roads-secondary`, `roads-casing`, `roads-primary`),
-bridges (`bridges-shadow`, `bridges-edge`, `bridges-deck`), urban depth
-(`buildings`), then minor detail (`boundaries`, `pois`). Buildings hand over
-from a flat wash beneath the road network to restrained `fill-extrusion` depth
-above it between street and building scale, using OSM `height` where the data
-has it and a conservative fallback where it does not. The footprints stay
-painted past the handover, so hiding the extrusion is all explicit 2D has to
-do.
+`relief`, `landcover`, `parks`, `landuse-urban`), water (`water`,
+`water-accent`, `rivers`), urban mass (`buildings-flat`), movement
+(`roads-rail`, `roads-minor-casing`, `roads-secondary`, `roads-casing`,
+`roads-primary`), bridges (`bridges-shadow`, `bridges-edge`, `bridges-deck`),
+urban depth (`buildings`), then minor detail (`boundaries`, `pois`). Buildings
+hand over from a flat wash beneath the road network to restrained
+`fill-extrusion` depth above it between street and building scale, using OSM
+`height` where the data has it and a conservative fallback where it does not.
+The footprints stay painted past the handover, so hiding the extrusion is all
+explicit 2D has to do.
+
+### Relief
+
+The ground is tinted by its height, read from the same published DEM the
+renderer raises into terrain, through a `relief` source of its own: MapLibre
+renders a tint worse when it shares the 3D terrain's source, and the second
+request for a tile is answered by the browser's cache. A `color-relief` layer
+lies directly over the
+land, beneath parks, the urban fabric, water and roads, so everything drawn
+on the ground paints over it.
+
+Kyiv's DEM runs from about 86 m in the Dnipro floodplain to about 207 m on the
+right-bank plateau, with a median near 121 m. The ramp spans 88–205 m. The
+valley floor is a cool, faintly green tint close to the water; the slopes pass
+through the land tone; the plateau warms to a pale sand. The dark style
+follows the same shape in deep teal and brown.
+
+The tint fades in between zoom 9 and 10.5, so the DEM's square edge never
+shows over the regional overview. Past zoom 13 it steps back to 55 % by zoom 15. The DEM is a surface model that includes roofs and canopy, so at street
+scale buildings and trees would otherwise show as faint blotches. The tint
+paints in both volumetric and flat presentation, because it is colour, not
+depth.
 
 ### Bridges
 

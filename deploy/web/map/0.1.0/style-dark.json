@@ -38,7 +38,10 @@
     "nilx-one:zoom-building": 16.5,
     "nilx-one:label-fonts": "Noto Sans Regular, Noto Sans SemiBold",
     "nilx-one:bridge-deck": "#2e4249",
-    "nilx-one:bridge-edge": "#5d757d"
+    "nilx-one:bridge-edge": "#5d757d",
+    "nilx-one:relief-low": "#09161a",
+    "nilx-one:relief-high": "#2a2418",
+    "nilx-one:relief-range-meters": [88, 205]
   },
   "glyphs": "/map/0.1.0/fonts/{fontstack}/{range}.pbf",
   "projection": {
@@ -63,6 +66,16 @@
       "attribution": "© OpenStreetMap contributors"
     },
     "terrain": {
+      "type": "raster-dem",
+      "tiles": ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
+      "bounds": [29.75, 49.95, 31.35, 51.15],
+      "minzoom": 8,
+      "maxzoom": 12,
+      "tileSize": 256,
+      "encoding": "terrarium",
+      "attribution": "Terrain: Mapzen/Tilezen · SRTM courtesy of U.S. Geological Survey · ETOPO1 U.S. NOAA"
+    },
+    "relief": {
       "type": "raster-dem",
       "tiles": ["/map/0.1.0/terrain/{z}/{x}/{y}.png"],
       "bounds": [29.75, 49.95, 31.35, 51.15],
@@ -128,6 +141,44 @@
       "filter": ["==", ["geometry-type"], "Polygon"],
       "paint": {
         "fill-color": "#0c1417"
+      }
+    },
+    {
+      "id": "relief",
+      "type": "color-relief",
+      "source": "relief",
+      "minzoom": 8,
+      "paint": {
+        "color-relief-color": [
+          "interpolate",
+          ["linear"],
+          ["elevation"],
+          88,
+          "#09161a",
+          100,
+          "#0c1719",
+          120,
+          "#121816",
+          150,
+          "#191a14",
+          180,
+          "#211e15",
+          205,
+          "#2a2418"
+        ],
+        "color-relief-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9,
+          0,
+          10.5,
+          1,
+          13,
+          1,
+          15,
+          0.55
+        ]
       }
     },
     {
