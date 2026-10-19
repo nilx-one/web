@@ -157,6 +157,15 @@ visual framing does not affect travel, engine state or the route. Collapsing
 the flight or entering activity overview continues to release the camera to
 the world. Reduced-motion mode suppresses these moving effects.
 
+The intended effect combines street-racing nitrous acceleration with a
+strained spacecraft engine. Behind the cold blue-white speed jets, xPing's
+rear vents glow warm amber-to-red as forcing speed and spent engine energy
+increase. A worn engine visibly shudders, puffs and sputters more under load.
+These are deterministic visual effects derived from `speedMps` and Core's
+missing-energy fraction (`wear`), not a temperature meter, a second energy
+pool, or an additional failure trigger. At cruise or with reduced motion they
+switch off; the existing wear-based smoke remains separate from the boost.
+
 Forcing is counted as it happens and told to the identity service a second at
 a time (`features/xping/xping-forcing.ts`); the service runs Core's rules. On
 empty, two more seconds of forcing break the engine: the report that crosses

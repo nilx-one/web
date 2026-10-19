@@ -119,6 +119,32 @@ describe("xPing system prop", () => {
     expect(anyLit()).toBe(false);
     model.dispose();
   });
+  it("adds engine strain to nitro without inventing a heat state", () => {
+    const model = createPingModel();
+    const vents: Mesh[] = [];
+    model.root.traverse((node) => {
+      if (node instanceof Mesh && node.name === "ping-engine-vent") {
+        vents.push(node);
+      }
+    });
+    expect(vents).toHaveLength(2);
+    const glow = () => (vents[0]!.material as { opacity: number }).opacity;
+    const shudder = () => Math.abs(model.root.children[0]!.rotation.x);
+    model.sample(0.15, true, 0, 90);
+    const freshGlow = glow();
+    const freshShudder = shudder();
+    expect(vents.every((vent) => vent.visible)).toBe(true);
+    model.sample(0.15, true, 0.9, 90);
+    expect(glow()).toBeGreaterThan(freshGlow);
+    expect(shudder()).toBeGreaterThan(freshShudder);
+    model.sample(0.15, true, 0.9, 30);
+    expect(vents.every((vent) => !vent.visible)).toBe(true);
+    expect(shudder()).toBe(0);
+    model.sample(0.15, false, 0.9, 90);
+    expect(vents.every((vent) => !vent.visible)).toBe(true);
+    expect(shudder()).toBe(0);
+    model.dispose();
+  });
   it("disposes its owned geometry and materials", () => {
     const model = createPingModel();
     const disposals: ReturnType<typeof vi.fn>[] = [];

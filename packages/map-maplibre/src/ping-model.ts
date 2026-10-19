@@ -155,6 +155,29 @@ export function createPingModel() {
       collection.push(jet);
     }
   }
+  // Engine load has a different visual language from the blue nitro jets:
+  // the exposed vents glow amber-to-red as energy is spent. This is derived
+  // presentation, not a stored temperature or a second Core engine meter.
+  const engineVentMaterial = new MeshBasicMaterial({
+    color: 0xffa650,
+    transparent: true,
+    opacity: 0,
+    blending: AdditiveBlending,
+    depthWrite: false,
+  });
+  const engineVents: Mesh[] = [];
+  for (const x of [-0.13, 0.13]) {
+    const vent = new Mesh(
+      new SphereGeometry(0.055, 10, 8),
+      engineVentMaterial,
+    );
+    vent.name = "ping-engine-vent";
+    vent.position.set(x, -0.035, -0.245);
+    vent.visible = false;
+    vent.scale.setScalar(0);
+    body.add(vent);
+    engineVents.push(vent);
+  }
   const streakMaterials: MeshBasicMaterial[] = [];
   const speedStreaks: Mesh[] = [];
   for (let index = 0; index < SPEED_STREAKS; index += 1) {
@@ -229,10 +252,16 @@ export function createPingModel() {
           : 0.22;
       }
       const worn = Math.min(1, Math.max(0, wear));
+      const density = moving ? airDensity(speedMps) : 0;
+      // Perceived strain rises with real forcing speed and missing energy.
+      // Core owns energy and breakdown; no temperature is inferred or saved.
+      const strain = density * (0.3 + worn * 0.7);
+      const vibration = moving ? Math.sin(phase * Math.PI * 36) : 0;
       body.position.y =
         1.9 + (moving ? Math.sin(phase * Math.PI * 2) * 0.055 : 0);
       const wobble = moving ? Math.sin(phase * Math.PI * 2) : 0;
-      body.rotation.z = wobble * 0.055;
+      body.rotation.z = wobble * 0.055 + vibration * strain * 0.035;
+      body.rotation.x = vibration * strain * 0.025;
       patch.rotation.z = wobble * 0.07;
       for (const [index, rotor] of rotors.entries()) {
         // One tired bearing, mechanically separate from any reported error.
@@ -249,19 +278,23 @@ export function createPingModel() {
         0.16 + (moving ? phase : 0) * (0.3 + worn * 0.5),
         -0.08,
       );
-      smoke.scale.setScalar((1 + puff * 1.2) * (1 + worn * 2.5));
-      smokeMaterial.opacity = puff * (0.22 + worn * 0.6);
+      smoke.scale.setScalar(
+        (1 + puff * 1.2) * (1 + worn * 2.5) * (1 + strain * 0.4),
+      );
+      smokeMaterial.opacity = Math.min(
+        1,
+        puff * (0.22 + worn * 0.6) * (1 + strain * 0.2),
+      );
       smokeMaterial.color.setHex(worn > 0.66 ? 0x4a4f55 : 0x9aa2aa);
       // A worn engine sparks in more of each cycle, up to most of it.
-      const sparkWindow = 0.15 + worn * 0.45;
-      const sparkFrom = 0.7 - worn * 0.45;
+      const sparkWindow = 0.15 + worn * 0.45 + strain * 0.12;
+      const sparkFrom = 0.7 - worn * 0.45 - strain * 0.07;
       spark.visible =
         moving && phase > sparkFrom && phase < sparkFrom + sparkWindow;
       sparkMaterial.opacity = spark.visible
         ? Math.sin(((phase - sparkFrom) / sparkWindow) * Math.PI) *
           (0.7 + worn * 0.3)
         : 0;
-      const density = moving ? airDensity(speedMps) : 0;
       for (const [index, clot] of airClots.entries()) {
         // Each clot comes round AIR_CYCLES times a phase, staggered so they
         // trail one another; a thin air sheds only the first of them.
@@ -277,9 +310,20 @@ export function createPingModel() {
       // Ignition and release follow actual speed, not pointer state: these
       // effects also fade naturally when forcing runs out or the leg changes.
       const flameLength = 0.25 + density * 1.7;
+      const sputter = worn * Math.abs(Math.sin(phase * Math.PI * 42));
       boostFlameMaterial.opacity =
-        density * (0.58 + 0.08 * Math.sin(phase * Math.PI * 24));
+        density * (0.58 + 0.08 * Math.sin(phase * Math.PI * 24)) *
+        (1 - sputter * 0.24);
       boostCoreMaterial.opacity = density * 0.84;
+      // Warm strain glow beside the colder nitro jets. It never remains
+      // active at cruise, on return, or with reduced motion enabled.
+      engineVentMaterial.color.setHSL((1 - worn) * 0.1, 1, 0.55);
+      engineVentMaterial.opacity =
+        strain * (0.35 + 0.12 * Math.sin(phase * Math.PI * 28));
+      for (const vent of engineVents) {
+        vent.visible = strain > 0;
+        vent.scale.setScalar(strain > 0 ? 0.65 + strain * 0.55 : 0);
+      }
       for (const flame of boostFlames) {
         flame.visible = density > 0;
         flame.scale.set(
@@ -329,6 +373,7 @@ export function createPingModel() {
       for (const material of airMaterials) material.dispose();
       boostFlameMaterial.dispose();
       boostCoreMaterial.dispose();
+      engineVentMaterial.dispose();
       for (const material of streakMaterials) material.dispose();
       root.removeFromParent();
     },
