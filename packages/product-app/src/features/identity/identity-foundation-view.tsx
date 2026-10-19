@@ -1362,6 +1362,17 @@ export function IdentityFoundationView({
                   {t("identity.authenticated")}
                 </span>
                 <strong>{viewModel.identity.pubDress}</strong>
+                {browserProviderAuth?.pendingProvider !== undefined ? (
+                  <button
+                    type="button"
+                    onClick={browserProviderAuth.onChooseExistingIdentity}
+                  >
+                    {t("identity.provider.connectExisting").replaceAll(
+                      "{pubDress}",
+                      viewModel.identity.pubDress,
+                    )}
+                  </button>
+                ) : null}
                 {viewModel.identity.native ? (
                   <button type="button" onClick={onLogout}>
                     {t("header.signOut")}

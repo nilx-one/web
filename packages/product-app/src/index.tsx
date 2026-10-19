@@ -305,6 +305,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     slug: "",
   });
   const [password, setPassword] = useState("");
+  // A verified external provider must never attach to a stored native session
+  // without the person's explicit create/connect decision.
+  const [providerLinkApproved, setProviderLinkApproved] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(newIdempotencyKey);
   const [resolutionSelection, setResolutionSelection] = useState(selection);
   const [resolutionArmed, setResolutionArmed] = useState(false);
@@ -723,6 +726,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   useEffect(() => {
     if (
       !browserHost ||
+      !providerLinkApproved ||
       pendingBrowserProvider === undefined ||
       authenticatedNativePubDress === undefined ||
       browserProviderLink.isPending ||
@@ -736,6 +740,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     browserHost,
     browserProviderLink,
     pendingBrowserProvider,
+    providerLinkApproved,
   ]);
 
   useEffect(() => {
@@ -828,6 +833,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
 
   if (
     browserHost &&
+    providerLinkApproved &&
     pendingBrowserProvider !== undefined &&
     nativeIdentityState.kind === "authenticated"
   ) {
@@ -906,10 +912,13 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
 
   function applySuggestedPubDress(pubDress: string): void {
     const suggestion = parsePubDress(pubDress);
-    if (suggestion !== undefined) changeSelection(suggestion);
+    if (suggestion === undefined) return;
+    setProviderLinkApproved(true);
+    changeSelection(suggestion);
   }
 
   function chooseExistingIdentity(): void {
+    setProviderLinkApproved(true);
     changeSelection({ discriminator: "1", slug: "" });
   }
 
