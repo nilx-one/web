@@ -224,7 +224,8 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
     "{provider} підтверджено. Оберіть: створити нову ідентичність або увійти до наявної.",
   "identity.provider.suggested": "Створити {pubDress}",
   "identity.provider.existing": "Увійти до наявної ідентичності",
-  "identity.provider.connectExisting": "Підключити підтверджений акаунт до {pubDress}",
+  "identity.provider.connectExisting":
+    "Підключити підтверджений акаунт до {pubDress}",
   "identity.avatar.label": "Дослідження аватара",
   "identity.avatar.later": "Вирішити пізніше",
   "identity.recovery.label": "Ключ відновлення",
