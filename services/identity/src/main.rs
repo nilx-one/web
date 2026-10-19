@@ -815,13 +815,12 @@ async fn handle_message(
             handle_location(&bot, &message, state.as_ref(), telegram_user_id, location).await?;
         if acknowledged {
             // Confirm in the editable Status slot before removing either user input.
-            if let Some(command_id) = state.intents.finish(telegram_user_id).await {
-                if let Err(error) = bot
+            if let Some(command_id) = state.intents.finish(telegram_user_id).await
+                && let Err(error) = bot
                     .delete_message(message.chat.id, MessageId(command_id))
                     .await
-                {
-                    error!(%error, "could not remove completed Telegram flow command");
-                }
+            {
+                error!(%error, "could not remove completed Telegram flow command");
             }
             if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
                 error!(%error, "could not remove acknowledged Telegram location input");
@@ -844,13 +843,12 @@ async fn handle_message(
     };
 
     // Every incoming command preempts any prior location flow, including /unlink.
-    if let Some(previous_id) = state.intents.cancel(telegram_user_id).await {
-        if let Err(error) = bot
+    if let Some(previous_id) = state.intents.cancel(telegram_user_id).await
+        && let Err(error) = bot
             .delete_message(message.chat.id, MessageId(previous_id))
             .await
-        {
-            error!(%error, "could not remove superseded Telegram flow command");
-        }
+    {
+        error!(%error, "could not remove superseded Telegram flow command");
     }
 
     match command_of(text) {
@@ -890,10 +888,9 @@ async fn handle_message(
         .intents
         .is_pending_command(telegram_user_id, message.id.0)
         .await
+        && let Err(error) = bot.delete_message(message.chat.id, message.id).await
     {
-        if let Err(error) = bot.delete_message(message.chat.id, message.id).await {
-            error!(%error, "could not remove consumed Telegram command input");
-        }
+        error!(%error, "could not remove consumed Telegram command input");
     }
     Ok(())
 }
