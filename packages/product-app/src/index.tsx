@@ -1309,7 +1309,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
       selection={selection}
       viewModel={viewModel}
-      {...(browserProviderAuth === undefined ? {} : { browserProviderAuth })}
+      browserProviderAuth={browserProviderAuth}
       onCredentialAutofill={applyAutofilledCredential}
       onAvatarChoice={(model) => {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);

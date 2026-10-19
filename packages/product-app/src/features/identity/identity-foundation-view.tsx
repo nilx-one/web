@@ -60,7 +60,7 @@ export interface IdentityFoundationViewProps {
   password: string;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
-  browserProviderAuth?: BrowserProviderAuthViewState;
+  browserProviderAuth?: BrowserProviderAuthViewState | undefined;
   /** Normative public-label derivation returned by 0x1 Core. */
   pubDressLabelDerivation?: CorePubDressLabelResult | undefined;
   pubDressLabelDerivationPending?: boolean;
