@@ -116,12 +116,16 @@ export function FlyoverControls({
         }}
       />
       <div className="flyover__actions">
-        <button type="button" className="flyover__action" onClick={onCollapse}>
+        <button
+          type="button"
+          className="flyover__action flyover__action--collapse"
+          onClick={onCollapse}
+        >
           {t("flyover.collapse")}
         </button>
         <button
           type="button"
-          className="flyover__action"
+          className="flyover__action flyover__action--cancel"
           ref={cancelButton}
           onClick={() => setConfirmCancel(true)}
         >
@@ -205,18 +209,20 @@ function ForceButton({
   onHold,
 }: NonNullable<FlyoverControlsProps["force"]>) {
   const { t } = useLocalization();
-  const percent = useSyncExternalStore(
+  const energyPercent = useSyncExternalStore(
     engine.subscribe,
     () => Math.round(engine.energy() * 100),
     () => Math.round(engine.energy() * 100),
   );
+  const percent = Math.min(100, Math.max(0, energyPercent));
+  const color = `hsl(${percent / 2} 95% 50%)`;
   return (
     <button
       type="button"
       className="flyover__button flyover__force"
-      aria-label={t("flyover.force")}
+      aria-label={`${t("flyover.force")} (${percent}%)`}
       disabled={!available}
-      style={{ "--flyover-energy": `${percent}%` } as CSSProperties}
+      style={{ "--flyover-energy-color": color } as CSSProperties}
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture?.(event.pointerId);
         onHold(true);
@@ -235,7 +241,6 @@ function ForceButton({
       }}
       onBlur={() => onHold(false)}
     >
-      <span aria-hidden="true">⚡</span>
       <span className="flyover__force-level">{percent}%</span>
     </button>
   );

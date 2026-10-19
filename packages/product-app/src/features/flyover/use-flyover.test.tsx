@@ -249,6 +249,16 @@ describe("useFlyover", () => {
     expect(lastDrone(drone)!.wear).toBe(0.4);
     expect(lastDrone(drone)!.speedMps).toBeGreaterThan(45);
     expect(lastDrone(drone)!.speedMps).toBeLessThan(90);
+    // The measured speed drives the chase widening, not the press itself.
+    const boostedDrone = lastDrone(drone)!;
+    const chasing = renderer.getCamera();
+    expect(chasing.zoom).toBeLessThan(
+      chaseCamera(
+        { longitude: boostedDrone.lngLat[0], latitude: boostedDrone.lngLat[1] },
+        chasing.bearing,
+        boostedDrone.heightMeters!,
+      ).zoom,
+    );
     // Let go: back on the roads, spending nothing more.
     act(() => hook.result.current.force(false));
     forcing.spent.mockClear();
@@ -395,5 +405,17 @@ describe("chaseCamera", () => {
     expect(low.bearing).toBe(90);
     expect(high.zoom).toBeLessThan(low.zoom);
     expect(low.center[0]).toBeGreaterThan(FROM.longitude);
+  });
+
+  it("widens smoothly on force and clamps invalid presentation input", () => {
+    const cruise = chaseCamera(FROM, 90, 30);
+    const half = chaseCamera(FROM, 90, 30, 0.5);
+    const full = chaseCamera(FROM, 90, 30, 1);
+    expect(cruise.zoom).toBeGreaterThan(half.zoom);
+    expect(half.zoom).toBeGreaterThan(full.zoom);
+    expect(full.center[0]).toBeGreaterThan(cruise.center[0]);
+    expect(chaseCamera(FROM, 90, 30, -1)).toEqual(cruise);
+    expect(chaseCamera(FROM, 90, 30, Number.NaN)).toEqual(cruise);
+    expect(chaseCamera(FROM, 90, 30, 3)).toEqual(full);
   });
 });
