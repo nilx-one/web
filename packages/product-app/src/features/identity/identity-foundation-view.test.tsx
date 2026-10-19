@@ -712,9 +712,7 @@ describe("verified Telegram username suggestion", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Create 0xboss_zhab" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Create 0xboss_zhab" }));
     expect(onApplySuggestedPubDress).toHaveBeenCalledWith("0xboss_zhab");
     fireEvent.click(
       screen.getByRole("button", { name: "Sign in to existing identity" }),
