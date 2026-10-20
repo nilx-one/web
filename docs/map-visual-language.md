@@ -91,7 +91,7 @@ A short, hand-seeded list of Kyiv's anchors is pinned on the world the way this 
 
 Colour says what kind of place it is: built things (`monument`, `civic`) share the spatial accent, `sacred` places are gold, and `nature` is green. Each one carries a `weight` from 0 to 1. A heavier landmark glows wider and keeps its card further out: a weight-1 landmark is named from zoom 11, a weight-0 one from zoom 15. Where two cards would overlap, the heavier one keeps its place and the lighter one steps back until the map zooms in far enough to part them, so the city view names only the few that anchor it. The card is a smaller sibling of the Bond's own, with no study and no speech, so the Bond's card stays the one the eye finds first. The points sit beneath the observed position's layers and above the fog marks.
 
-In volumetric presentation the Motherland pin shares its point with the procedural monument model, which stands over it.
+In volumetric presentation the Motherland pin shares its point with the procedural monument model, which stands over it: at the statue's own OpenStreetMap node, upright, facing the Dnipro to the north-east with the sword in her right hand. The basemap draws the statue too, as a stack of building parts; once the model has loaded, the renderer cuts those parts (taller than 20 m and within 18 m of the statue's point) out of the building extrusion, so only one Motherland is ever drawn. The terraces of the museum around her stay as the basemap draws them, and the model's plinth stands in for the cut-out drum as an obstacle a walk goes round.
 
 ## Routes
 

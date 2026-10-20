@@ -34,9 +34,10 @@ const KIND_KEYS: Readonly<Record<MapPinnedLandmarkKind, TranslationKey>> = {
 export const KYIV_PINNED_LANDMARKS: readonly PinnedLandmarkSeed[] = [
   {
     id: "kyiv.motherland",
-    // Same point the volumetric monument layer stands on.
-    longitude: 30.5636,
-    latitude: 50.4267,
+    // Same point the volumetric monument layer stands on: the statue's own
+    // OpenStreetMap node, not the museum entrance east of it.
+    longitude: 30.56307,
+    latitude: 50.42655,
     kind: "monument",
     weight: 1,
     name: "landmark.pinned.motherland",

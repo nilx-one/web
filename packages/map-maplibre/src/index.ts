@@ -103,6 +103,12 @@ import {
 } from "./bridge-structures";
 import type { MonumentCustomLayer } from "./monument-layer";
 import {
+  carriesMotherlandCutout,
+  MOTHERLAND_PEDESTAL_HEIGHT_METERS,
+  motherlandPedestalRing,
+  withoutMotherland,
+} from "./monument-site";
+import {
   FOG_MARKS_FILL_LAYER_ID,
   FOG_MARKS_OUTLINE_LAYER_ID,
   FOG_MARKS_SOURCE_ID,
@@ -660,7 +666,11 @@ export function createMapLibreRenderer(
     if (monumentLayerPromise !== undefined) return monumentLayerPromise;
     monumentLayerPromise = import("./monument-layer").then(
       ({ createMonumentLayer }) => {
-        const layer = createMonumentLayer();
+        const layer = createMonumentLayer({
+          onModel: () => {
+            if (map !== undefined) applyMonumentCutout(map);
+          },
+        });
         monumentLayer = layer;
         monumentLayerFailed = false;
         layer.setDimension(dimension);
@@ -1592,6 +1602,48 @@ export function createMapLibreRenderer(
     mounted.addLayer(monumentLayer);
   }
 
+  /**
+   * Once the Motherland model stands, the basemap's own blocky statue gives
+   * way to it: cut out of the extrusion, never out of the flat footprints. A
+   * style swap brings back the style's own filter, and the model reloading
+   * into the new style brings the cut-out back with it.
+   */
+  function applyMonumentCutout(mounted: MapLibreMap): void {
+    if (monumentLayer?.hasModel() !== true) return;
+    if (mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) === undefined) return;
+    const filter = extrusionFilter(mounted);
+    if (carriesMotherlandCutout(filter)) return;
+    mounted.setFilter(BUILDING_EXTRUSION_LAYER_ID, withoutMotherland(filter));
+  }
+
+  function extrusionFilter(
+    mounted: MapLibreMap,
+  ): FilterSpecification | null | undefined {
+    return (
+      mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) as
+        { readonly filter?: FilterSpecification | null } | undefined
+    )?.filter;
+  }
+
+  /**
+   * The model's plinth, standing in as an obstacle for the drum the cut-out
+   * took away — only while the cut-out is in place, so the statue is solid
+   * exactly once, as whichever of the two is drawn.
+   */
+  function monumentObstacle(
+    mounted: MapLibreMap,
+    bounds: MapBounds,
+  ): MapObstacle | undefined {
+    if (!carriesMotherlandCutout(extrusionFilter(mounted))) return undefined;
+    const ring = motherlandPedestalRing();
+    if (!ringTouches(ring, bounds)) return undefined;
+    return {
+      kind: "building",
+      polygons: [[ring]],
+      heights: [MOTHERLAND_PEDESTAL_HEIGHT_METERS],
+    };
+  }
+
   function applyPresentation(mounted: MapLibreMap): void {
     applyBridgeStructures(mounted);
     applyDimension(mounted);
@@ -1605,6 +1657,7 @@ export function createMapLibreRenderer(
       ensureAvatarLayer(mounted);
     if (firstPaintDone) {
       ensureMonumentLayer(mounted);
+      applyMonumentCutout(mounted);
       void requestMonumentLayer().catch(ignoreOptionalLayer);
     }
     presentationApplied = true;
@@ -2320,6 +2373,8 @@ export function createMapLibreRenderer(
         }
       };
       collect("building", BUILDING_LAYER_IDS);
+      const monument = monumentObstacle(mounted, bounds);
+      if (monument !== undefined) obstacles.push(monument);
       collect("water", WATER_LAYER_IDS);
       return obstacles;
     },

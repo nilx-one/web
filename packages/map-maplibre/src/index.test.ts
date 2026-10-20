@@ -2,9 +2,18 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { MAP_BODY_HANDOVER_ZOOM } from "@nilx-one/map-contract";
-import type { Map as MapLibreMap, MapOptions } from "maplibre-gl";
+import type {
+  FilterSpecification,
+  Map as MapLibreMap,
+  MapOptions,
+} from "maplibre-gl";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  MOTHERLAND_MONUMENT_LOCATION,
+  MOTHERLAND_PEDESTAL_HEIGHT_METERS,
+  withoutMotherland,
+} from "./monument-site";
 import { tileBounds, type TileId } from "./road-tiles";
 
 import {
@@ -1785,6 +1794,48 @@ describe("obstacles the basemap draws", () => {
         makeFakeMap() as unknown as MapLibreMap,
     });
     expect(renderer.obstaclesWithin?.(bounds)).toEqual([]);
+  });
+
+  it("stands the Motherland plinth in for the drum the cut-out takes away", () => {
+    const motherland = {
+      west: 30.562,
+      south: 50.426,
+      east: 30.564,
+      north: 50.427,
+    };
+    const styleFilter: FilterSpecification = [
+      "in",
+      ["get", "kind"],
+      ["literal", ["building", "building_part"]],
+    ];
+    const answer = (filter: FilterSpecification) => {
+      const fakeMap = makeFakeMap();
+      fakeMap.layers.set("buildings", {
+        id: "buildings",
+        source: "basemap",
+        sourceLayer: "buildings",
+        filter,
+      });
+      fakeMap.sources.set("basemap", { setData: vi.fn() });
+      Object.assign(fakeMap, { querySourceFeatures: vi.fn(() => []) });
+      return readyRenderer(fakeMap).obstaclesWithin?.(motherland) ?? [];
+    };
+
+    // The basemap's own statue is still drawn: it is the obstacle, alone.
+    expect(answer(styleFilter)).toEqual([]);
+
+    const plinth = answer(withoutMotherland(styleFilter));
+    expect(plinth).toHaveLength(1);
+    expect(plinth[0]?.kind).toBe("building");
+    expect(plinth[0]?.heights).toEqual([MOTHERLAND_PEDESTAL_HEIGHT_METERS]);
+    const ring = plinth[0]?.polygons[0]?.[0] ?? [];
+    const longitudes = ring.map(([longitude]) => longitude);
+    expect(Math.min(...longitudes)).toBeLessThan(
+      MOTHERLAND_MONUMENT_LOCATION.lng,
+    );
+    expect(Math.max(...longitudes)).toBeGreaterThan(
+      MOTHERLAND_MONUMENT_LOCATION.lng,
+    );
   });
 });
 

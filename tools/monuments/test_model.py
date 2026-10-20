@@ -19,7 +19,7 @@ import trimesh
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--input", default="deploy/web/monuments/0.1.0/motherland.glb"
+    "--input", default="deploy/web/monuments/0.2.0/motherland.glb"
 )
 args = parser.parse_args()
 
@@ -34,12 +34,16 @@ assert len(scene.geometry) >= 15, (
 )
 
 low, high = scene.bounds
-assert low[2] == 0, f"the monument should stand on the ground, got z0={low[2]}"
-# 102 m ± 1 m: build_model.py's own rescale step targets exactly 102 m: a
-# larger drift means that step, or the sections it scales, broke.
-assert 101.0 <= high[2] <= 103.0, f"expected ~102 m tall, got {high[2]:.1f} m"
+# glTF is Y-up: height is the second axis, the footprint the other two.
+assert low[1] == 0, f"the monument should stand on the ground, got y0={low[1]}"
+# 102 m ± 1 m: build_model.py authors the sword tip at exactly 102 m and
+# guards it with a rescale step: a larger drift means either broke.
+assert 101.0 <= high[1] <= 103.0, f"expected ~102 m tall, got {high[1]:.1f} m"
 
-footprint = high[:2] - low[:2]
+footprint = (high - low)[[0, 2]]
 assert (footprint > 5).all(), f"pedestal footprint collapsed: {footprint}"
+# Wider than the drum it stands in for, or the cut-out basemap pylon would
+# leave a ring of bare ground around it.
+assert (footprint >= 39).all(), f"pedestal narrower than the drum: {footprint}"
 
-print(f"motherland.glb: {len(scene.geometry)} parts, {high[2]:.1f} m tall — ok")
+print(f"motherland.glb: {len(scene.geometry)} parts, {high[1]:.1f} m tall — ok")
