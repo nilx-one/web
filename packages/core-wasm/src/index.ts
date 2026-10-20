@@ -394,6 +394,36 @@ function decodeMenuOption(value: unknown, index: number): AvaiaDriveMenuOption {
   throw new Error("0x1 Core returned an invalid drive menu");
 }
 
+/** Exactly the archive-fact vocabulary accepted by Core and AI. */
+function isDescriptionRequest(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const locale = value.locale;
+  const allowed = new Set(["start_date", "artist_name", "architect", "height", "material"]);
+  if (
+    (locale !== "uk" && locale !== "en" && locale !== "ru") ||
+    typeof value.kind !== "string" ||
+    !/^[a-z][a-z_]{0,31}$/u.test(value.kind) ||
+    typeof value.kind_label !== "string" ||
+    value.kind_label.length === 0 ||
+    value.kind_label.length > 80 ||
+    (value.name !== undefined && typeof value.name !== "string") ||
+    !isRecord(value.facts)
+  ) return false;
+  const facts = Object.entries(value.facts);
+  return facts.length <= 5 &&
+    facts.every(([key, fact]) => allowed.has(key) && typeof fact === "string" && fact.length <= 80);
+}
+
+function isDescriptionResult(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.text === "string" &&
+    [...value.text].length > 0 &&
+    [...value.text].length <= 240 &&
+    typeof value.produced_by === "string" &&
+    /^[A-Za-z0-9_.:/-]{1,80}$/u.test(value.produced_by) &&
+    value.template_version === 1;
+}
+
 /**
  * One command, checked member by member: a host carries out only what Core
  * may say, and a command it cannot read stops the whole answer rather than
@@ -422,17 +452,27 @@ function decodeDriveCommand(value: unknown): AvaiaDriveCommand {
     case "pick_up":
     case "visited":
     case "describe":
-    case "keep":
       if (isRef(value.at)) return { do: value.do, at: value.at };
       break;
+    case "ai_describe":
+      if (isRef(value.at) && isCount(value.request_id) && isDescriptionRequest(value.request)) {
+        return value as unknown as AvaiaDriveCommand;
+      }
+      break;
     case "show":
-      if (isRef(value.at) && value.how === "speech") {
+      if (isRef(value.at) && value.how === "speech" && isDescriptionResult(value.result)) {
         return {
           do: "show",
           at: value.at,
           how: "speech",
           ms: decodeMs(value.ms),
-        };
+          result: value.result,
+        } as AvaiaDriveCommand;
+      }
+      break;
+    case "keep":
+      if (isRef(value.at) && isDescriptionResult(value.result)) {
+        return { do: "keep", at: value.at, result: value.result } as AvaiaDriveCommand;
       }
       break;
     case "say":
