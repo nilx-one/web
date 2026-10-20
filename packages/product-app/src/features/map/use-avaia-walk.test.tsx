@@ -539,6 +539,55 @@ describe("an Avaia carrying out Core's drive", () => {
     });
   });
 
+  it("notices from a declared point only for an administrator, and pays nothing for it", async () => {
+    const statue: MapLandmark = {
+      id: "poi:9",
+      ...at(20, 0),
+      kind: "statue",
+      name: "Statue",
+      facts: {},
+    };
+    const { renderer } = walkRenderer({
+      landmarksNear: (point: MapPointSelection, radius: number) =>
+        mapDistanceMeters(point, statue) <= radius ? [statue] : [],
+      areasNear: () => [],
+    } as unknown as Partial<MapRenderer>);
+    const awards: string[] = [];
+    const declared = {
+      ...ORIGIN,
+      accuracyMeters: 10,
+      declared: true as const,
+    };
+    const onAward = ({ kind }: { readonly kind: string }) =>
+      void awards.push(kind);
+
+    // An ordinary Bond standing at a declared point notices nothing.
+    const ordinary = render(renderer, { observed: declared, onAward });
+    await settle();
+    expect(ordinary.result.current.notebook.noticed).toEqual([]);
+    ordinary.unmount();
+
+    // An administrator's declared point writes it down, unpaid.
+    const admin = render(renderer, {
+      observed: declared,
+      declaredNotices: true,
+      onAward,
+    });
+    await settle();
+    expect(
+      admin.result.current.notebook.noticed.map((entry) => entry.landmark.id),
+    ).toEqual(["poi:9"]);
+    expect(awards).toEqual([]);
+    admin.unmount();
+
+    // The device's own observation still pays, for what is new to it.
+    forgetNotebookCache();
+    updateNotebook("0x0sky", () => ({ noticed: [], studied: [], seen: [] }));
+    render(renderer, { observed: { ...ORIGIN, accuracyMeters: 10 }, onAward });
+    await settle();
+    expect(awards).toEqual(["landmark_noticed"]);
+  });
+
   it("says a line about a place only when it knows the place", async () => {
     const { renderer } = walkRenderer();
     const lines: string[] = [];

@@ -169,6 +169,12 @@ export interface AvaiaWalkInput {
         readonly declared?: true;
       })
     | undefined;
+  /**
+   * The service grants this Bond the administrator capability: a declared
+   * point notices landmarks too, so a teleport fills the notebook. Such a
+   * notice pays no experience (nilx-one/ai MWL15).
+   */
+  readonly declaredNotices?: boolean;
   /** Authoritative admin trip, delivered only when the service revision changed. */
   readonly travelArrival?: {
     readonly coordinate: MapPointSelection;
@@ -396,6 +402,7 @@ export function useAvaiaWalk({
   renderer,
   active,
   observed,
+  declaredNotices = false,
   travelArrival,
   model,
   locale,
@@ -1412,7 +1419,7 @@ export function useAvaiaWalk({
   useEffect(() => {
     function notice(): void {
       if (
-        observedDeclared ||
+        (observedDeclared && !declaredNotices) ||
         observedLongitude === undefined ||
         observedLatitude === undefined ||
         observedAccuracy === undefined ||
@@ -1435,6 +1442,8 @@ export function useAvaiaWalk({
       updateNotebook(owner, (current) =>
         noticeLandmarks(current, found, Date.now()),
       );
+      // A declared point is not a passing: it is written down, not paid.
+      if (observedDeclared) return;
       for (const landmark of newlyNoticed) {
         latest.current.onAward?.({
           kind: "landmark_noticed",
@@ -1448,6 +1457,7 @@ export function useAvaiaWalk({
     notice();
     return renderer.subscribeLandmarksChanged?.call(renderer, notice);
   }, [
+    declaredNotices,
     observedAccuracy,
     observedDeclared,
     observedLatitude,
