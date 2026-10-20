@@ -1468,6 +1468,7 @@ export function AuthenticatedMapHomeView({
     renderer,
     active: wheel === "avaia" && handover === undefined,
     observed: observedPosition,
+    declaredNotices: avaiaSetup?.canTravel === true,
     ...(avaiaSetup?.travelArrival === undefined
       ? {}
       : { travelArrival: avaiaSetup.travelArrival }),

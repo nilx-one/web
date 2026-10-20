@@ -169,6 +169,11 @@ The second half is curiosity, and it runs in two steps.
    never makes a request for it. A landmark is a `pois` feature whose `kind`
    is on the list in `LANDMARK_KINDS` (monument, memorial, artwork, statue,
    museum, ruins and so on).
+   A declared point (a manual Bond position, a teleport) notices nothing,
+   except for a Bond the service grants the administrator capability, the
+   same `canTravel` that allows a teleport. Then a declared point notices
+   too, so a tester who teleports fills the notebook. Such a notice pays no
+   experience, and it is no evidence of having been there (nilx-one/ai MWL15).
 2. **The Avaia studies.** An Avaia at the wheel with nothing to do thinks of
    landmarks within 3 km: up to four noticed ones it has not studied, nearest
    first, then the dear places it misses most, six at most. Each goes to Core's
