@@ -55,8 +55,7 @@ export function observeInferencePerformance(
       : { ...previous, recovery };
   }
 
-  const severe =
-    fps < INFERENCE_FPS.criticalBelow ? previous.severe + 1 : 0;
+  const severe = fps < INFERENCE_FPS.criticalBelow ? previous.severe + 1 : 0;
   if (severe >= INFERENCE_WINDOWS.enterCritical) {
     return inferencePerformanceState("critical");
   }
