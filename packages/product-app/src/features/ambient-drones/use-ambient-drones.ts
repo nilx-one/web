@@ -1,9 +1,14 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapBounds, MapRenderer } from "@nilx-one/map-contract";
+import {
+  mapDistanceMeters,
+  type MapBounds,
+  type MapPointSelection,
+  type MapRenderer,
+} from "@nilx-one/map-contract";
 import { buildWalkGraph, type WalkGraph } from "@nilx-one/walk-graph";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { prefersReducedMotion } from "../../shell/motion";
 import {
   ambientRoads,
@@ -97,13 +102,31 @@ function pageVisible(): boolean {
  * without anything having flown it. Nothing is sent anywhere: the drones are
  * scenery, not presence, and no server knows of them.
  */
+/** A drone the city is flying where the world can see it, this instant. */
+export interface AmbientDroneSighting {
+  readonly id: string;
+  readonly longitude: number;
+  readonly latitude: number;
+  readonly heightMeters: number;
+}
+
+export interface AmbientDrones {
+  /** The nearest drone in sight within `meters` of `point`, if any. */
+  nearest(
+    point: MapPointSelection,
+    meters: number,
+  ): AmbientDroneSighting | undefined;
+}
+
 export function useAmbientDrones({
   renderer,
   ready,
   suspended = false,
   clock = Date.now,
-}: AmbientDronesOptions): void {
+}: AmbientDronesOptions): AmbientDrones {
+  const sightings = useRef(new Map<string, AmbientDroneSighting>());
   useEffect(() => {
+    const seen = sightings.current;
     const layer = renderer.systemDrone;
     if (!ready || suspended || layer === undefined || prefersReducedMotion())
       return;
@@ -122,6 +145,7 @@ export function useAmbientDrones({
 
     const take = (id: string) => {
       shown.delete(id);
+      seen.delete(id);
       try {
         layer.remove(id);
       } catch {
@@ -282,6 +306,12 @@ export function useAmbientDrones({
             scale: AMBIENT_DRONE_SCALE,
           });
           shown.add(drone.id);
+          seen.set(drone.id, {
+            id: drone.id,
+            longitude: sample.lngLat[0],
+            latitude: sample.lngLat[1],
+            heightMeters: sample.heightMeters,
+          });
         }
       } catch {
         // A renderer that cannot draw them takes them off; the world goes on.
@@ -326,4 +356,22 @@ export function useAmbientDrones({
       clear();
     };
   }, [renderer, ready, suspended, clock]);
+
+  return useMemo(
+    () => ({
+      nearest(point, meters) {
+        let best: AmbientDroneSighting | undefined;
+        let bestMeters = meters;
+        for (const sighting of sightings.current.values()) {
+          const away = mapDistanceMeters(point, sighting);
+          if (away <= bestMeters) {
+            best = sighting;
+            bestMeters = away;
+          }
+        }
+        return best;
+      },
+    }),
+    [],
+  );
 }

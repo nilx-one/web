@@ -136,6 +136,8 @@ const DRIVE_KIND = /^[a-z][a-z_]{0,31}$/;
 export interface AvaiaSpeech {
   readonly id: number;
   readonly text: string;
+  /** The place the line is about, when it names one: what it describes. */
+  readonly about?: MapPointSelection;
 }
 
 interface Rest {
@@ -540,7 +542,18 @@ export function useAvaiaWalk({
       });
       lastLine.current = text;
       speechCount.current += 1;
-      setSpeech({ id: speechCount.current, text });
+      setSpeech(
+        landmark === undefined
+          ? { id: speechCount.current, text }
+          : {
+              id: speechCount.current,
+              text,
+              about: {
+                longitude: landmark.longitude,
+                latitude: landmark.latitude,
+              },
+            },
+      );
       const cue = lineCue(kind);
       if (cue !== undefined) latest.current.onCue?.(cue);
       latest.current.onLine?.({ kind, text });

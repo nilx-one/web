@@ -226,6 +226,109 @@ export function smoothFollowCamera(
   );
 }
 
+/**
+ * Something worth a look, close to the body at the wheel: a drone passing
+ * by, a monument the Avaia is telling about. `key` names it, so a person who
+ * looked away from it is not shown it again.
+ */
+export interface FollowFocus extends MapPointSelection {
+  readonly key: string;
+}
+
+/** How quickly the camera swings onto a glance, and back off it. */
+export const GLANCE_RESPONSE_MS = 700;
+/** A glance looks out toward the horizon, over the body's shoulder. */
+export const GLANCE_PITCH = 72;
+/** The closest a glance comes in, and how much ground it keeps in view. */
+export const GLANCE_MAX_ZOOM = 19;
+export const GLANCE_MIN_ZOOM = 16.5;
+/** How far toward the subject the glance aims, from the body. */
+const GLANCE_LEAD = 0.4;
+
+/**
+ * The third-person look at a focus: from behind the body, over its
+ * shoulder, toward what it is looking at, near enough that both are in the
+ * frame — the body in the foreground, the subject ahead and above.
+ */
+export function glanceCamera(
+  current: MapCamera,
+  body: FollowBody,
+  focus: MapPointSelection,
+  dimension: MapDimension = "volumetric",
+): MapCamera {
+  const meters = distanceMeters(
+    [body.longitude, body.latitude],
+    [focus.longitude, focus.latitude],
+  );
+  const bearing = meters < 3 ? current.bearing : compassBearing(body, focus);
+  const lead = Math.min(1, GLANCE_LEAD);
+  const center: [number, number] = [
+    body.longitude + (focus.longitude - body.longitude) * lead,
+    body.latitude + (focus.latitude - body.latitude) * lead,
+  ];
+  // Fit the body and the subject: about twice their distance across the
+  // view's height, at street scale at the farthest.
+  const metresPerPixel = (Math.max(20, meters) * 2.2) / 700;
+  const fit = Math.log2(
+    (156_543.034 * Math.cos((body.latitude * Math.PI) / 180)) / metresPerPixel,
+  );
+  return {
+    center,
+    zoom: Math.min(GLANCE_MAX_ZOOM, Math.max(GLANCE_MIN_ZOOM, fit)),
+    bearing,
+    pitch: dimension === "flat" ? 0 : GLANCE_PITCH,
+  };
+}
+
+function compassBearing(
+  from: MapPointSelection,
+  to: MapPointSelection,
+): number {
+  const φ1 = (from.latitude * Math.PI) / 180;
+  const φ2 = (to.latitude * Math.PI) / 180;
+  const Δλ = ((to.longitude - from.longitude) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return ((((Math.atan2(y, x) * 180) / Math.PI) % 360) + 360) % 360;
+}
+
+/**
+ * Every part of the camera eased toward a target at once — ground, zoom,
+ * heading the short way round, tilt — for the swing onto a glance and back.
+ */
+export function easeCamera(
+  current: MapCamera,
+  target: MapCamera,
+  elapsedMs: number,
+  responseMs: number = GLANCE_RESPONSE_MS,
+): MapCamera {
+  if (elapsedMs > 1_000) return target;
+  const alpha = 1 - Math.exp(-Math.max(0, elapsedMs) / responseMs);
+  const longitude = ((target.center[0] - current.center[0] + 540) % 360) - 180;
+  const turn = ((target.bearing - current.bearing + 540) % 360) - 180;
+  return {
+    center: [
+      ((current.center[0] + longitude * alpha + 540) % 360) - 180,
+      current.center[1] + (target.center[1] - current.center[1]) * alpha,
+    ],
+    zoom: current.zoom + (target.zoom - current.zoom) * alpha,
+    bearing: (((current.bearing + turn * alpha) % 360) + 360) % 360,
+    pitch: current.pitch + (target.pitch - current.pitch) * alpha,
+  };
+}
+
+/** Near enough a target that the rest of an ease is too small to see. */
+export function closeToCamera(current: MapCamera, target: MapCamera): boolean {
+  const turn = ((current.bearing - target.bearing + 540) % 360) - 180;
+  return (
+    distanceMeters(current.center, target.center) < 0.3 &&
+    Math.abs(current.zoom - target.zoom) < 0.01 &&
+    Math.abs(turn) < FOLLOW_TURN_SETTLE_DEG &&
+    Math.abs(current.pitch - target.pitch) < 0.3
+  );
+}
+
 /** Smooth the ground target, retaining distance and the stable camera angle. */
 export function smoothIsometricCamera(
   current: MapCamera,

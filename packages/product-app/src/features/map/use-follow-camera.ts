@@ -21,11 +21,18 @@ import {
   isometricCamera,
   zoomPivotFor,
   sameFollowCamera,
+  closeToCamera,
+  easeCamera,
+  glanceCamera,
   smoothFollowCamera,
   smoothIsometricCamera,
+  type FollowFocus,
   type FollowBody,
   type CameraFollow,
 } from "./follow-camera";
+
+/** How often a camera at rest looks for something worth a glance. */
+export const FOCUS_CHECK_MS = 400;
 
 export interface FollowCameraInput {
   readonly renderer: MapRenderer;
@@ -45,6 +52,13 @@ export interface FollowCameraInput {
   readonly modes?: readonly CameraFollow[];
   /** First mode at mount; an unavailable mode falls back to Follow. */
   readonly initialMode?: CameraFollow;
+  /**
+   * Something worth a third-person look this instant, if anything: a drone
+   * passing close, a monument the Avaia is telling about. While it lasts a
+   * tracking camera looks at it over the body's shoulder; when it ends, or
+   * the moment a person moves the camera, the usual view comes back.
+   */
+  readonly focus?: () => FollowFocus | undefined;
 }
 
 export interface FollowCameraState {
@@ -75,6 +89,7 @@ export function useFollowCamera({
   reducedMotion,
   modes = CAMERA_MODES,
   initialMode = INITIAL_CAMERA_FOLLOW,
+  focus,
 }: FollowCameraInput): FollowCameraState {
   const [follow, setFollow] = useState<CameraFollow>(() =>
     modes.includes(initialMode) ? initialMode : "locked",
@@ -97,10 +112,39 @@ export function useFollowCamera({
   const trackedBody = useRef<FollowBody | undefined>(undefined);
   const trackingFrame = useRef<number | undefined>(undefined);
   const trackingTime = useRef<number | undefined>(undefined);
-  const input = useRef({ enabled, body, dimension, reducedMotion, modes });
-  useEffect(() => {
-    input.current = { enabled, body, dimension, reducedMotion, modes };
+  const input = useRef({
+    enabled,
+    body,
+    dimension,
+    reducedMotion,
+    modes,
+    focus,
   });
+  useEffect(() => {
+    input.current = { enabled, body, dimension, reducedMotion, modes, focus };
+  });
+  /**
+   * The glance under way, if any: what it looks at, and the zoom the usual
+   * view had before it, which the camera goes back to when it ends.
+   */
+  const glance = useRef<
+    | {
+        readonly key: string;
+        readonly zoom: number;
+        readonly returning: boolean;
+      }
+    | undefined
+  >(undefined);
+  /** What a person looked away from: never glanced at again. */
+  const dismissed = useRef(new Set<string>());
+  const activeFocus = useCallback((): FollowFocus | undefined => {
+    if (followRef.current === "free") return undefined;
+    const subject = input.current.focus?.();
+    if (subject === undefined || dismissed.current.has(subject.key)) {
+      return undefined;
+    }
+    return subject;
+  }, []);
   const available = useCallback(
     (mode: CameraFollow) =>
       mode === "locked" || input.current.modes.includes(mode),
@@ -279,30 +323,64 @@ export function useFollowCamera({
       }
       const current = renderer.getCamera();
       const locked = followRef.current === "locked";
-      const target = locked
-        ? followCamera(current, point, input.current.dimension)
-        : isometricCamera(current, point, input.current.dimension);
       const previous = trackingTime.current;
       trackingTime.current = nowMs;
-      const next =
-        previous === undefined || input.current.reducedMotion()
-          ? target
-          : locked
-            ? smoothFollowCamera(
-                current,
-                point,
-                nowMs - previous,
-                input.current.dimension,
-              )
-            : smoothIsometricCamera(current, target, nowMs - previous);
+      const elapsed = previous === undefined ? undefined : nowMs - previous;
+      const instant = elapsed === undefined || input.current.reducedMotion();
+      const subject = activeFocus();
+      if (subject !== undefined && glance.current?.key !== subject.key) {
+        glance.current = {
+          key: subject.key,
+          zoom: glance.current?.zoom ?? current.zoom,
+          returning: false,
+        };
+      } else if (subject === undefined && glance.current !== undefined) {
+        glance.current = { ...glance.current, returning: true };
+      }
+      // Coming back from a glance, the usual view comes back at the
+      // distance it had before.
+      const usual =
+        glance.current === undefined
+          ? current
+          : { ...current, zoom: glance.current.zoom };
+      let target: MapCamera;
+      let next: MapCamera;
+      if (subject !== undefined) {
+        target = glanceCamera(current, point, subject, input.current.dimension);
+        next = instant ? target : easeCamera(current, target, elapsed!);
+      } else {
+        target = locked
+          ? followCamera(usual, point, input.current.dimension)
+          : isometricCamera(usual, point, input.current.dimension);
+        if (glance.current !== undefined) {
+          next = instant ? target : easeCamera(current, target, elapsed!);
+          if (closeToCamera(next, target)) {
+            next = target;
+            glance.current = undefined;
+          }
+        } else {
+          next = instant
+            ? target
+            : locked
+              ? smoothFollowCamera(
+                  current,
+                  point,
+                  elapsed!,
+                  input.current.dimension,
+                )
+              : smoothIsometricCamera(current, target, elapsed!);
+        }
+      }
       if (!sameFollowCamera(current, next)) {
         renderer.setCamera(next, { yieldToGesture: true });
       }
-      if (!sameFollowCamera(next, target)) {
+      // A glance keeps watching while its subject moves, though the body
+      // stands still.
+      if (!sameFollowCamera(next, target) || subject !== undefined) {
         trackingFrame.current = globalThis.requestAnimationFrame(advance);
       }
     },
-    [renderer, stopTracking],
+    [activeFocus, renderer, stopTracking],
   );
 
   const track = useCallback(
@@ -331,6 +409,20 @@ export function useFollowCamera({
     [advanceTracking],
   );
 
+  // A body at rest is only tracked now and then; a subject worth a glance
+  // that turns up meanwhile wakes the camera rather than wait for it.
+  const hasFocus = focus !== undefined;
+  useEffect(() => {
+    if (!enabled || !hasFocus) return;
+    const check = globalThis.setInterval(() => {
+      if (trackingFrame.current !== undefined) return;
+      if (activeFocus() === undefined && glance.current === undefined) return;
+      const point = input.current.body();
+      if (point !== undefined) track(point);
+    }, FOCUS_CHECK_MS);
+    return () => globalThis.clearInterval(check);
+  }, [activeFocus, enabled, hasFocus, track]);
+
   // A locked camera closes in on the body; a free one zooms where the
   // person points, the way the map always has.
   useEffect(() => {
@@ -342,6 +434,13 @@ export function useFollowCamera({
     () =>
       renderer.subscribeCamera((change) => {
         if (change.phase === "start" && change.gesture) {
+          // A person moving the camera looks away from the glance: it is
+          // not shown again, and the usual view comes back at its own
+          // distance once the gesture ends.
+          if (glance.current !== undefined && !glance.current.returning) {
+            dismissed.current.add(glance.current.key);
+            glance.current = { ...glance.current, returning: true };
+          }
           stopTracking();
           gesturing.current = true;
           gestureStart.current = change.camera.zoom;
@@ -383,13 +482,19 @@ export function useFollowCamera({
           // Return to the stable game view after orbit/tilt/pan, even when stationary.
           // Free is the mode for keeping an independent viewing angle.
           const point = input.current.body();
+          const before = glance.current;
+          glance.current = undefined;
+          const usual =
+            before === undefined
+              ? change.camera
+              : { ...change.camera, zoom: before.zoom };
           if (
             followRef.current !== "free" &&
             point !== undefined &&
-            !sameFollowCamera(change.camera, frameBody(change.camera, point))
+            !sameFollowCamera(change.camera, frameBody(usual, point))
           ) {
             hold(FOLLOW_HOLD_MS);
-            aim(frameBody(change.camera, point), {
+            aim(frameBody(usual, point), {
               motion: input.current.reducedMotion() ? "immediate" : "eased",
             });
           }
