@@ -134,6 +134,7 @@ const EN_MESSAGES = {
     "Nothing yet. Walk past a monument, then hand your Avaia the wheel.",
   "avaia.notebook.note":
     "Kept on this device only. Nothing here is sent anywhere or asserted about anyone.",
+  "avaia.seen.title": "Seen on the way",
   "avaia.finds.title": "Rare finds",
   "avaia.finds.empty": "No live leads.",
   "avaia.finds.leadTitle": "Tier {tier} find",
@@ -489,6 +490,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Поки нічого. Пройдіть повз пам’ятник, а потім передайте кермо своїй Avaia.",
   "avaia.notebook.note":
     "Зберігається лише на цьому пристрої. Нічого звідси нікуди не надсилається і ні про кого не стверджується.",
+  "avaia.seen.title": "Бачила дорогою",
   "avaia.finds.title": "Рідкісні знахідки",
   "avaia.finds.empty": "Активних слідів немає.",
   "avaia.finds.leadTitle": "Знахідка рівня {tier}",

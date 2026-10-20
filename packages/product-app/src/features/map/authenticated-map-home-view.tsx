@@ -35,6 +35,7 @@ import {
   type AvatarHandle,
   type AvatarModelId,
   type MapDimension,
+  type MapLandmark,
   type MapObservedPositionLabel,
   type MapPointSelection,
   type MapRenderer,
@@ -167,7 +168,7 @@ import {
   type DockSeat,
 } from "./bond-dock-view-model";
 import { landmarkKindLabel, landmarkLabel } from "./avaia-lines";
-import { studiedBy } from "./landmark-notebook";
+import { seenBy, studiedBy } from "./landmark-notebook";
 import { placeLandmark } from "./place-affinity";
 import {
   ACHIEVEMENTS,
@@ -780,6 +781,35 @@ function DockPlaceButton({
         {translateFirst(t, identity.role, DOCK_ROLE_KEYS)}
       </small>
     </button>
+  );
+}
+
+/** Landmarks from the notebook, each with the archive's kind and facts. */
+function NotebookLandmarks({
+  locale,
+  landmarks,
+}: {
+  readonly locale: ProductLocale;
+  readonly landmarks: readonly { readonly landmark: MapLandmark }[];
+}) {
+  return (
+    <ul className="avaia-notebook__list">
+      {landmarks.map(({ landmark }) => (
+        <li key={landmark.id}>
+          <strong>{landmarkLabel(locale, landmark)}</strong>
+          <small>
+            {[
+              locale === "en"
+                ? landmark.kind
+                : landmarkKindLabel(locale, landmark.kind),
+              ...Object.entries(landmark.facts)
+                .filter(([key]) => !key.startsWith("name"))
+                .map(([key, value]) => `${key}: ${value}`),
+            ].join(" · ")}
+          </small>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -1696,6 +1726,7 @@ export function AuthenticatedMapHomeView({
       ? avaiaWalk.speech?.text
       : undefined;
   const avaiaStudied = studiedBy(avaiaWalk.notebook, avaiaAddress);
+  const avaiaSeen = seenBy(avaiaWalk.notebook, avaiaAddress);
   const reducedMotion = prefersReducedMotion();
   const { model: carriedInventory } = useInventory(pubDress, findItems);
   const guide = useGuideCutscene({
@@ -3718,37 +3749,32 @@ export function AuthenticatedMapHomeView({
                             {t("avaia.notebook.empty")}
                           </p>
                         ) : (
-                          <ul className="avaia-notebook__list">
-                            {avaiaStudied.map(({ landmark }) => (
-                              <li key={landmark.id}>
-                                <strong>
-                                  {landmarkLabel(locale, landmark)}
-                                </strong>
-                                <small>
-                                  {[
-                                    locale === "en"
-                                      ? landmark.kind
-                                      : landmarkKindLabel(
-                                          locale,
-                                          landmark.kind,
-                                        ),
-                                    ...Object.entries(landmark.facts)
-                                      .filter(
-                                        ([key]) => !key.startsWith("name"),
-                                      )
-                                      .map(
-                                        ([key, value]) => `${key}: ${value}`,
-                                      ),
-                                  ].join(" · ")}
-                                </small>
-                              </li>
-                            ))}
-                          </ul>
+                          <NotebookLandmarks
+                            locale={locale}
+                            landmarks={avaiaStudied}
+                          />
                         )}
                         <p className="interface-settings__note">
                           {t("avaia.notebook.note")}
                         </p>
                       </section>
+                      {avaiaSeen.length === 0 ? null : (
+                        <section
+                          className="avaia-notebook"
+                          aria-labelledby="avaia-seen-title"
+                        >
+                          <span
+                            className="interface-settings__eyebrow"
+                            id="avaia-seen-title"
+                          >
+                            {t("avaia.seen.title")}
+                          </span>
+                          <NotebookLandmarks
+                            locale={locale}
+                            landmarks={avaiaSeen}
+                          />
+                        </section>
+                      )}
                       <section
                         className="avaia-notebook"
                         aria-labelledby="avaia-finds-title"

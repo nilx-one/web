@@ -127,6 +127,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Пока ничего. Пройдите мимо памятника, а потом передайте руль своей Avaia.",
   "avaia.notebook.note":
     "Хранится только на этом устройстве. Ничего отсюда никуда не отправляется и ни о ком не утверждается.",
+  "avaia.seen.title": "Видела по пути",
   "avaia.finds.title": "Редкие находки",
   "avaia.finds.empty": "Активных следов нет.",
   "avaia.finds.leadTitle": "Находка уровня {tier}",

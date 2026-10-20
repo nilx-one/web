@@ -70,6 +70,7 @@ import {
   landmarksToStudy,
   noticeLandmarks,
   notebookSnapshot,
+  seeLandmark,
   studyLandmark,
   subscribeNotebooks,
   updateNotebook,
@@ -946,7 +947,13 @@ export function useAvaiaWalk({
           const entry = refs.current.get(command.at);
           stand(6_000);
           const landmark = refLandmark(entry);
-          if (landmark !== undefined) say("landmark.glanced", landmark);
+          if (landmark === undefined) return;
+          // What it says is the archive's own; it is kept as seen, never studied.
+          const { owner: book, avaiaAddress: by } = latest.current;
+          updateNotebook(book, (current) =>
+            seeLandmark(current, landmark, by, Date.now()),
+          );
+          say("landmark.glanced", landmark);
           return;
         }
         case "pick_up":
