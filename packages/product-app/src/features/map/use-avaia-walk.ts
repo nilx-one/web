@@ -1058,7 +1058,8 @@ export function useAvaiaWalk({
         }
         case "show": {
           const landmark = refLandmark(refs.current.get(command.at));
-          if (landmark === undefined || latest.current.model === undefined) return;
+          if (landmark === undefined || latest.current.model === undefined)
+            return;
           showing.current = {
             landmarkId: landmark.id,
             untilMs: globalThis.performance.now() + command.ms,
