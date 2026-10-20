@@ -187,6 +187,15 @@ that feature: its name, its kind, and every other attribute the tile carries,
 verbatim. Nothing is generated, looked up elsewhere, or invented. The studied
 entries appear on the Avaia's own screen in the Dock ("Landmarks studied").
 
+What it describes on the way is kept too. A landmark it steps aside for and
+names (`landmark.glanced`) goes into the notebook as seen: which landmark,
+when and which Avaia, with the same archive facts. Seen is not studied. It
+pays no experience, and it never sends the Avaia back to study: only the
+owner walking past does that. Seen landmarks it has not studied appear under
+"Seen on the way", most recent first. The shape of all three lists is
+registered in nilx-one/core (`docs/landmark-notebook.md`), and the line it may
+not cross is nilx-one/ai's MWL14.
+
 The notebook is kept per Bond, and its study notes per Avaia address, in local
 storage under `nilx-one.avaia.landmarks.v1.<pub_dress>`. Nothing sends it
 anywhere today, and it is never used as training signal. It is

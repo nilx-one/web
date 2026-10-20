@@ -500,6 +500,11 @@ describe("an Avaia carrying out Core's drive", () => {
     expect(fromStatue).toBeGreaterThan(2);
     expect(fromStatue).toBeLessThan(6);
     expect(lines).toContain("landmark.glanced");
+    // What it described is kept, as seen and not as studied.
+    expect(result.current.notebook.seen).toEqual([
+      { landmark: statue, seenAt: expect.any(Number), by: "avaia:test" },
+    ]);
+    expect(result.current.notebook.studied).toEqual([]);
   });
 
   it("marks a landmark its owner walked past as one to study", async () => {
@@ -513,6 +518,7 @@ describe("an Avaia carrying out Core's drive", () => {
     updateNotebook("0x0sky", () => ({
       noticed: [{ landmark: statue, noticedAt: Date.now() }],
       studied: [],
+      seen: [],
     }));
     const { renderer, tap } = walkRenderer({
       landmarksNear: (point: MapPointSelection, radius: number) =>

@@ -10,6 +10,8 @@ import {
   nextLandmarkToStudy,
   noticeLandmarks,
   readNotebook,
+  seeLandmark,
+  seenBy,
   studiedBy,
   studyLandmark,
   writeNotebook,
@@ -120,5 +122,56 @@ describe("the landmark notebook", () => {
 
     storage.data.set([...storage.data.keys()][0] ?? "", "{not json");
     expect(readNotebook("0x0sky", storage)).toEqual(EMPTY_NOTEBOOK);
+  });
+
+  it("keeps what an Avaia described as seen, never as studied", () => {
+    const notebook = seeLandmark(
+      seeLandmark(
+        seeLandmark(EMPTY_NOTEBOOK, near, "x0skai", 1),
+        far,
+        "x0skai",
+        2,
+      ),
+      near,
+      "x0skai",
+      3,
+    );
+    // Seeing it again moves it to the latest, once.
+    expect(
+      seenBy(notebook, "x0skai").map((entry) => entry.landmark.id),
+    ).toEqual(["poi:near", "poi:far"]);
+    expect(seenBy(notebook, "other")).toEqual([]);
+    // Seen is not studied, and never sends it back to study.
+    expect(studiedBy(notebook, "x0skai")).toEqual([]);
+    expect(landmarksToStudy(notebook, "x0skai", from)).toEqual([]);
+    // Once studied, it is listed with what it studied.
+    const studied = studyLandmark(
+      noticeLandmarks(notebook, [near], 4),
+      near,
+      "x0skai",
+      5,
+    );
+    expect(seenBy(studied, "x0skai").map((entry) => entry.landmark.id)).toEqual(
+      ["poi:far"],
+    );
+  });
+
+  it("reads a notebook kept before seen as having seen nothing", () => {
+    const storage = memoryStorage();
+    storage.data.set(
+      "nilx-one.avaia.landmarks.v1.0x0sky",
+      JSON.stringify({
+        noticed: [{ landmark: near, noticedAt: 1 }],
+        studied: [],
+      }),
+    );
+    expect(readNotebook("0x0sky", storage)).toEqual({
+      noticed: [{ landmark: near, noticedAt: 1 }],
+      studied: [],
+      seen: [],
+    });
+    const seen = seeLandmark(EMPTY_NOTEBOOK, near, "x0skai", 2);
+    writeNotebook("0x0sky", seen, storage);
+    expect(readNotebook("0x0sky", storage)).toEqual(seen);
   });
 });

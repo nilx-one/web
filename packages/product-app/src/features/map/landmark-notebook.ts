@@ -13,7 +13,10 @@ import {
  * A person walking past a monument is what puts it here: the device observed
  * itself close to something the basemap draws, and that is the whole of the
  * evidence. Its Avaia later walks up to what was noticed and studies it, which
- * is the second half. Both halves are one Bond's own: the notebook is never
+ * is the second half. What the Avaia steps aside for on its own walks and
+ * describes is kept too, as seen: never studied by being kept, and never
+ * something it goes back to study unless its owner walked past it. All of it
+ * is one Bond's own (nilx-one/core `docs/landmark-notebook.md`): the notebook is never
  * used as training signal, and nothing sends it anywhere today. It is
  * transport-eligible, which is not synced state and not service state, and
  * it asserts nothing about
@@ -31,12 +34,25 @@ export interface StudiedLandmark {
   readonly by: string;
 }
 
+/** A landmark an Avaia stepped aside for on a walk and described. */
+export interface SeenLandmark {
+  readonly landmark: MapLandmark;
+  readonly seenAt: number;
+  /** The Avaia address that saw it. */
+  readonly by: string;
+}
+
 export interface LandmarkNotebook {
   readonly noticed: readonly NoticedLandmark[];
   readonly studied: readonly StudiedLandmark[];
+  readonly seen: readonly SeenLandmark[];
 }
 
-export const EMPTY_NOTEBOOK: LandmarkNotebook = { noticed: [], studied: [] };
+export const EMPTY_NOTEBOOK: LandmarkNotebook = {
+  noticed: [],
+  studied: [],
+  seen: [],
+};
 
 const STORAGE_PREFIX = "nilx-one.avaia.landmarks.v1.";
 
@@ -89,6 +105,7 @@ export function readNotebook(
     const parsed = JSON.parse(raw) as {
       noticed?: unknown;
       studied?: unknown;
+      seen?: unknown;
     };
     const noticed = Array.isArray(parsed.noticed)
       ? parsed.noticed.filter(
@@ -104,7 +121,16 @@ export function readNotebook(
             typeof entry.by === "string",
         )
       : [];
-    return { noticed, studied } as LandmarkNotebook;
+    // A notebook written before seen was kept reads as having seen nothing.
+    const seen = Array.isArray(parsed.seen)
+      ? parsed.seen.filter(
+          (entry: { landmark?: unknown; seenAt?: unknown; by?: unknown }) =>
+            isLandmark(entry?.landmark) &&
+            typeof entry.seenAt === "number" &&
+            typeof entry.by === "string",
+        )
+      : [];
+    return { noticed, studied, seen } as LandmarkNotebook;
   } catch {
     return EMPTY_NOTEBOOK;
   }
@@ -153,6 +179,25 @@ export function studyLandmark(
     studied: [...studied, { landmark, studiedAt: nowMs, by }].slice(
       -NOTEBOOK_LIMIT,
     ),
+  };
+}
+
+/**
+ * Keeps what an Avaia stepped aside for and described. Seeing it again moves
+ * it to the latest; it is never studied for having been seen.
+ */
+export function seeLandmark(
+  notebook: LandmarkNotebook,
+  landmark: MapLandmark,
+  by: string,
+  nowMs: number,
+): LandmarkNotebook {
+  const seen = notebook.seen.filter(
+    (entry) => !(entry.landmark.id === landmark.id && entry.by === by),
+  );
+  return {
+    ...notebook,
+    seen: [...seen, { landmark, seenAt: nowMs, by }].slice(-NOTEBOOK_LIMIT),
   };
 }
 
@@ -206,6 +251,24 @@ export function studiedBy(
   return notebook.studied
     .filter((entry) => entry.by === by)
     .toSorted((a, b) => b.studiedAt - a.studiedAt);
+}
+
+/**
+ * What one Avaia saw on its walks and has not studied, most recent first:
+ * once studied, a landmark is listed with what it studied instead.
+ */
+export function seenBy(
+  notebook: LandmarkNotebook,
+  by: string,
+): readonly SeenLandmark[] {
+  const studied = new Set(
+    notebook.studied
+      .filter((entry) => entry.by === by)
+      .map((entry) => entry.landmark.id),
+  );
+  return notebook.seen
+    .filter((entry) => entry.by === by && !studied.has(entry.landmark.id))
+    .toSorted((a, b) => b.seenAt - a.seenAt);
 }
 
 // One notebook per Bond for the whole page, read from storage once. It is an
