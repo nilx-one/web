@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { openGround, planWalk } from "./avaia-path";
 import { routeBounds } from "./avaia-route";
+import { groundUnderTap } from "./walk-ground";
 import {
   startWalk,
   walkPosition,
@@ -175,7 +176,7 @@ export function useBondManualWalk({
     return subscribe.call(renderer, (tap) => {
       // Fog taps remain with the reveal flow. Buildings and water are not
       // destinations; they are not a command to move the Bond.
-      if (tap.ground !== "open" || saving) return;
+      if (saving || groundUnderTap(renderer, tap) !== "open") return;
       const now = globalThis.performance.now();
       const from = point(now);
       if (from === undefined) return;

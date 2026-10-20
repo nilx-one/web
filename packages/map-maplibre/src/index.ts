@@ -1703,7 +1703,10 @@ export function createMapLibreRenderer(
     mounted: MapLibreMap,
     layerId: string,
     bounds: MapBounds,
-  ): Pick<MapObstacle, "polygons"> & { readonly heights: readonly number[] } {
+  ): Pick<MapObstacle, "polygons"> & {
+    readonly heights: readonly number[];
+    readonly bases: readonly number[];
+  } {
     const layer = mounted.getLayer(layerId) as
       | {
           readonly source?: string;
@@ -1712,13 +1715,14 @@ export function createMapLibreRenderer(
         }
       | undefined;
     if (layer?.source === undefined || layer.sourceLayer === undefined) {
-      return { polygons: [], heights: [] };
+      return { polygons: [], heights: [], bases: [] };
     }
     if (mounted.getSource(layer.source) === undefined) {
-      return { polygons: [], heights: [] };
+      return { polygons: [], heights: [], bases: [] };
     }
     const polygons: (readonly (readonly [number, number])[])[][] = [];
     const heights: number[] = [];
+    const bases: number[] = [];
     for (const feature of mounted.querySourceFeatures(layer.source, {
       sourceLayer: layer.sourceLayer,
       ...(layer.filter == null ? {} : { filter: layer.filter }),
@@ -1732,6 +1736,8 @@ export function createMapLibreRenderer(
         Number.isFinite(raised) && raised > 0
           ? raised
           : BUILDING_DEFAULT_HEIGHT_METERS;
+      const lifted = Number(feature.properties?.["min_height"]);
+      const base = Number.isFinite(lifted) && lifted > 0 ? lifted : 0;
       const parts =
         geometry.type === "Polygon"
           ? [geometry.coordinates as [number, number][][]]
@@ -1743,9 +1749,10 @@ export function createMapLibreRenderer(
         if (outer === undefined || !ringTouches(outer, bounds)) continue;
         polygons.push(rings);
         heights.push(height);
+        bases.push(base);
       }
     }
-    return { polygons, heights };
+    return { polygons, heights, bases };
   }
 
   function landmarkFrom(
@@ -2358,7 +2365,7 @@ export function createMapLibreRenderer(
         // The flat and the raised building layers paint the same footprints;
         // one of them is enough.
         for (const layerId of existingLayers(mounted, layerIds)) {
-          const { polygons, heights } = polygonsPainted(
+          const { polygons, heights, bases } = polygonsPainted(
             mounted,
             layerId,
             bounds,
@@ -2366,7 +2373,7 @@ export function createMapLibreRenderer(
           if (polygons.length === 0) continue;
           obstacles.push(
             kind === "building"
-              ? { kind, polygons, heights }
+              ? { kind, polygons, heights, bases }
               : { kind, polygons },
           );
           return;

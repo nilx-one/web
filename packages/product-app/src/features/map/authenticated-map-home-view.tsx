@@ -148,6 +148,7 @@ import {
   BODY_ACTIVITY_KEYS,
   BODY_HANDLE_IDS,
   createWheelBodyHandle,
+  type BodyStance,
   unconfiguredAvaiaStudy,
 } from "./avatar-presence";
 
@@ -216,6 +217,7 @@ import {
   useBondManualWalk,
   type ManualMoveOutcome,
 } from "./use-bond-manual-walk";
+import { useWalkGroundLift } from "./use-walk-ground-lift";
 import { useFindLoop } from "./use-find-loop";
 import { useOrbSpills } from "../finds/use-orb-spills";
 import { readWorldMemory, rememberWorld } from "./world-memory";
@@ -895,6 +897,8 @@ export function AuthenticatedMapHomeView({
   const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
+  // Bodies stand on the terraces and steps the map draws, not inside them.
+  const groundLift = useWalkGroundLift(renderer);
   const {
     point: manualBondPoint,
     stance: manualBondStance,
@@ -2461,6 +2465,16 @@ export function AuthenticatedMapHomeView({
 
     let frame: number | undefined;
 
+    // Where a body is drawn standing: where it walked to, else this device.
+    function liftAt(
+      seat: DockSeat,
+      stance: BodyStance | undefined,
+      nowMs: number,
+    ): number {
+      const point = stance?.point ?? observedPosition;
+      return point === undefined ? 0 : groundLift(seat, point, nowMs);
+    }
+
     function draw(nowMs: number): void {
       const body = wheelBody(wheel, handover, nowMs);
       const stance =
@@ -2489,6 +2503,7 @@ export function AuthenticatedMapHomeView({
               timeMs: nowMs,
               reducedMotion,
               stance,
+              liftMeters: liftAt(body.seat, stance, nowMs),
             });
       if (handle !== null) {
         drawn[body.seat] = handle;
@@ -2554,6 +2569,7 @@ export function AuthenticatedMapHomeView({
     cameraZoom,
     carriedInventory,
     declaredPosition,
+    groundLift,
     handover,
     location.state,
     manualBondMoving,

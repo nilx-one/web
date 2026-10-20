@@ -99,6 +99,7 @@ import {
   type FondPlace,
   type VisitedPlace,
 } from "./place-affinity";
+import { groundUnderTap } from "./walk-ground";
 import { readWorldMemory, rememberWorld } from "./world-memory";
 
 /** The longest delay a timer keeps; a later one is set again when it fires. */
@@ -1104,7 +1105,10 @@ export function useAvaiaWalk({
         }
         if (taken === true) return;
       }
-      const ground = tap.ground === "fog" && nearDevice ? "open" : tap.ground;
+      const ground =
+        tap.ground === "fog" && nearDevice
+          ? "open"
+          : groundUnderTap(renderer, tap);
       if (ground !== "open") {
         say(blockedLineKind(ground));
         return;

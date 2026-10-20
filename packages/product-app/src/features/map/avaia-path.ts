@@ -21,6 +21,7 @@ import {
 
 import type { AvaiaLocomotionMode } from "./avaia-walk";
 import { planRoute, type AvaiaRoute } from "./avaia-route";
+import { walkGround } from "./walk-ground";
 
 /**
  * Paths first, grass when it pays (docs/avaia-outings.md §0).
@@ -137,12 +138,15 @@ export function planWalk({
   /** Where a body may set foot. Omitted, all ground is open. */
   readonly open?: OpenGround | undefined;
 }): WalkPlan {
-  const straight = planRoute(from, to, obstacles);
+  // Terraces are walked on, overhead parts walked under, and a terrace's
+  // edge is a wall except where its steps come up.
+  const walls = walkGround(obstacles, roads).walls;
+  const straight = planRoute(from, to, walls);
   const across =
     straight.kind === "route" && !stays(straight.path, open)
       ? FOG
       : planned(straight, "jog");
-  const along = alongPaths(from, to, roads, obstacles, open);
+  const along = alongPaths(from, to, roads, walls, open);
   if (along === undefined) return across;
   if (across.kind === "blocked") return along.route;
   const acrossMeters = pathMeters(across.path);

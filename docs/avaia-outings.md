@@ -104,6 +104,16 @@ The renderer answers `roadsWithin(bounds)` from tiles already loaded, and `planW
 - Fog along the way is checked under R1: see "R1: open ground only".
 - The "artifact on grass" case arrives with the finds (§3).
 
+### 0.8 Terraces and steps
+
+Some buildings are walked on, not round: the museum platform under the Motherland, a raised square, a roof garden. `walkGround` in `product-app` reads them from what the map already draws, the same obstacles and `roads` the walk uses:
+
+- **A terrace** is a building a footway or steps run across for at least 3 m. A part standing within a terrace and no more than 6 m higher is a tier of the same platform and a terrace too. Indoor corridors make nothing a terrace. A tap on a terrace is open ground, for the Avaia and for a manual Bond walk alike.
+- **A staircase** is a terrace crossed mostly by steps: OpenStreetMap often draws a monumental stair as a building part as tall as the platform it climbs to. Its height says nothing; its flight says how high a body stands on it.
+- **Overhead parts**, whose underside starts 2 m or more up (`MapObstacle.bases`, from `min_height`), are walked under: a statue's arm, a walkway bridging two blocks.
+- **Ledges.** A terrace's edge is a wall wherever the level drops more than 1 m, open only where its steps come up. A climbing flight is walled along both sides, so a body steps onto it at the foot or the top.
+- **Height.** A body stands at the level of the highest terrace under it; on a flight it climbs from the level at one end to the level at the other. The draw loop passes it as `AvatarHandle.liftMeters` over the drawn ground, eased to at most 3 m/s for the rare drop the data leaves sharp.
+
 ## §1 Outing targets
 
 Targets are **what is on the map**: parks, lakes, churches, monuments. Finds from §3 are not targets.
