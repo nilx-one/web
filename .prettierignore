@@ -9,3 +9,6 @@ deploy/web/voices/
 
 # Generated compact Natural Earth geometry (validated by deployment tests).
 deploy/web/map/0.1.0/world-countries.geojson
+
+# Byte-identical copy of nilx-one/ai fixtures/landmark-description.json (owned there).
+packages/product-app/src/features/map/landmark-description.json

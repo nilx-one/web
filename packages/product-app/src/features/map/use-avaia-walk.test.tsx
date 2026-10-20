@@ -490,7 +490,13 @@ describe("an Avaia carrying out Core's drive", () => {
     expect(passing).toEqual({
       type: "passing",
       things: [
-        { ref: "lm:poi:9", kind: "statue", group: "landmark", off_route_m: 12 },
+        {
+          ref: "lm:poi:9",
+          kind: "statue",
+          group: "landmark",
+          off_route_m: 12,
+          described: false,
+        },
       ],
     });
     // It stood in front of the statue, not on it, and said what it saw.
@@ -507,6 +513,122 @@ describe("an Avaia carrying out Core's drive", () => {
     expect(result.current.notebook.studied).toEqual([]);
   });
 
+  describe("describing what it stands in front of", () => {
+    const statue: MapLandmark = {
+      id: "poi:9",
+      ...at(150, 12),
+      kind: "statue",
+      name: "Rodina",
+      facts: { start_date: "1981", height: 62, inscription: "not a fact" },
+    };
+
+    async function describedWalk(extra: Partial<AvaiaWalkInput> = {}) {
+      const { renderer, tap } = walkRenderer({
+        landmarksNear: (point: MapPointSelection, radius: number) =>
+          mapDistanceMeters(point, statue) <= radius ? [statue] : [],
+        areasNear: () => [],
+      } as unknown as Partial<MapRenderer>);
+      let detoured = false;
+      const { core, inputs } = scriptedCore((input) => {
+        if (input.type === "tap") {
+          return [{ do: "walk", to: input.to, purpose: "tap", grass: true }];
+        }
+        if (input.type === "passing" && !detoured) {
+          detoured = true;
+          return [
+            {
+              do: "walk",
+              to: input.things[0]!.ref,
+              purpose: "detour",
+              grass: false,
+            },
+          ];
+        }
+        if (input.type === "arrived") {
+          return [
+            { do: "glance", at: "lm:poi:9" },
+            { do: "describe", at: "lm:poi:9" },
+          ];
+        }
+        if (input.type === "described") {
+          return [
+            { do: "show", at: input.at, how: "speech", ms: 9_000 },
+            { do: "keep", at: input.at },
+          ];
+        }
+        return [];
+      });
+      const view = render(renderer, {
+        core,
+        reducedMotion: false,
+        model: "sky-study",
+        ...extra,
+      });
+      await settle();
+      tap(at(500, 0));
+      for (
+        let s = 0;
+        s < 120 && !inputs.some((input) => input.type === "described");
+        s++
+      ) {
+        await advance(1_000);
+      }
+      await settle();
+      return { ...view, inputs };
+    }
+
+    it("tells the drive the notebook has no description, then shows and keeps the template", async () => {
+      const { result, inputs } = await describedWalk();
+      expect(inputs.find((input) => input.type === "passing")).toMatchObject({
+        things: [{ ref: "lm:poi:9", described: false }],
+      });
+      expect(inputs).toContainEqual({ type: "described", at: "lm:poi:9" });
+      const template = "Rodina — a statue. Since 1981. 62 m tall.";
+      expect(result.current.speech).toMatchObject({
+        text: template,
+        ms: 9_000,
+      });
+      expect(result.current.notebook.descriptions).toEqual([
+        {
+          landmarkId: "poi:9",
+          text: template,
+          producedBy: "template",
+          templateVersion: 1,
+          describedAt: expect.any(Number),
+        },
+      ]);
+    });
+
+    it("keeps a model's retelling only when it says nothing new", async () => {
+      const ask = vi.fn(
+        async () => "Rodina, a 62 m statue standing since 1981.",
+      );
+      const { result } = await describedWalk({
+        retell: { ask, modelId: "Qwen3-0.6B-q4f16_1-MLC" },
+      });
+      expect(ask).toHaveBeenCalledWith(
+        expect.stringContaining("Retell the description"),
+        "Rodina — a statue. Since 1981. 62 m tall.",
+      );
+      expect(result.current.notebook.descriptions[0]).toMatchObject({
+        text: "Rodina, a 62 m statue standing since 1981.",
+        producedBy: "Qwen3-0.6B-q4f16_1-MLC",
+      });
+    });
+
+    it("says the template when the retelling invents", async () => {
+      const { result } = await describedWalk({
+        retell: {
+          ask: async () => "Rodina was unveiled by Brezhnev in 1981.",
+          modelId: "Qwen3-0.6B-q4f16_1-MLC",
+        },
+      });
+      expect(result.current.notebook.descriptions[0]).toMatchObject({
+        producedBy: "template",
+      });
+    });
+  });
+
   it("marks a landmark its owner walked past as one to study", async () => {
     const statue: MapLandmark = {
       id: "poi:9",
@@ -519,6 +641,7 @@ describe("an Avaia carrying out Core's drive", () => {
       noticed: [{ landmark: statue, noticedAt: Date.now() }],
       studied: [],
       seen: [],
+      descriptions: [],
     }));
     const { renderer, tap } = walkRenderer({
       landmarksNear: (point: MapPointSelection, radius: number) =>
@@ -582,7 +705,12 @@ describe("an Avaia carrying out Core's drive", () => {
 
     // The device's own observation still pays, for what is new to it.
     forgetNotebookCache();
-    updateNotebook("0x0sky", () => ({ noticed: [], studied: [], seen: [] }));
+    updateNotebook("0x0sky", () => ({
+      noticed: [],
+      studied: [],
+      seen: [],
+      descriptions: [],
+    }));
     render(renderer, { observed: { ...ORIGIN, accuracyMeters: 10 }, onAward });
     await settle();
     expect(awards).toEqual(["landmark_noticed"]);

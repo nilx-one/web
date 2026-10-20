@@ -403,6 +403,21 @@ describe("CoreWasmClient", () => {
       default: 1,
     });
 
+    // A description: asked for, then shown and kept.
+    answer =
+      '{"commands":[{"do":"describe","at":"l:1"},{"do":"show","at":"l:1","how":"speech","ms":"9000"},{"do":"keep","at":"l:1"}],"ok":true,"state":{"version":1}}';
+    const described = bindings.avaiaDriveStep?.(
+      "{}",
+      { type: "described", at: "l:1" },
+      2_003,
+      13,
+    );
+    expect(described?.ok && described.commands).toEqual([
+      { do: "describe", at: "l:1" },
+      { do: "show", at: "l:1", how: "speech", ms: 9_000 },
+      { do: "keep", at: "l:1" },
+    ]);
+
     answer = '{"error":"invalid","ok":false}';
     expect(bindings.avaiaDriveStep?.("{", { type: "tick" }, 1, 13)).toEqual({
       ok: false,
@@ -412,6 +427,8 @@ describe("CoreWasmClient", () => {
     // A command the host cannot read stops the whole answer.
     for (const bad of [
       '{"ok":true,"state":{},"commands":[{"do":"teleport"}]}',
+      '{"ok":true,"state":{},"commands":[{"do":"show","at":"l:1","how":"card","ms":"9000"}]}',
+      '{"ok":true,"state":{},"commands":[{"do":"keep"}]}',
       '{"ok":true,"state":{},"commands":[{"do":"walk","to":"","purpose":"tap","grass":true}]}',
       '{"ok":true,"state":{},"commands":[{"do":"say","line":"anything"}]}',
       '{"ok":true,"state":{},"commands":[{"do":"choose","what":"outing","menu":[{"index":1,"action":"stay"}],"default":0}]}',

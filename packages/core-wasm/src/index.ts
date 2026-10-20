@@ -421,7 +421,19 @@ function decodeDriveCommand(value: unknown): AvaiaDriveCommand {
     case "glance":
     case "pick_up":
     case "visited":
+    case "describe":
+    case "keep":
       if (isRef(value.at)) return { do: value.do, at: value.at };
+      break;
+    case "show":
+      if (isRef(value.at) && value.how === "speech") {
+        return {
+          do: "show",
+          at: value.at,
+          how: "speech",
+          ms: decodeMs(value.ms),
+        };
+      }
       break;
     case "say":
       if (

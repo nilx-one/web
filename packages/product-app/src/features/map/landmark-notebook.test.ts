@@ -5,7 +5,9 @@ import type { MapLandmark } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
+  descriptionOf,
   EMPTY_NOTEBOOK,
+  keepDescription,
   landmarksToStudy,
   nextLandmarkToStudy,
   noticeLandmarks,
@@ -169,9 +171,34 @@ describe("the landmark notebook", () => {
       noticed: [{ landmark: near, noticedAt: 1 }],
       studied: [],
       seen: [],
+      descriptions: [],
     });
     const seen = seeLandmark(EMPTY_NOTEBOOK, near, "x0skai", 2);
     writeNotebook("0x0sky", seen, storage);
     expect(readNotebook("0x0sky", storage)).toEqual(seen);
+  });
+
+  it("keeps one description per landmark, the latest", () => {
+    const first = keepDescription(EMPTY_NOTEBOOK, {
+      landmarkId: "poi:near",
+      text: "Near — monument.",
+      producedBy: "template",
+      templateVersion: 1,
+      describedAt: 1,
+    });
+    const second = keepDescription(first, {
+      landmarkId: "poi:near",
+      text: "Near is a monument.",
+      producedBy: "Qwen3-0.6B-q4f16_1-MLC",
+      templateVersion: 1,
+      describedAt: 2,
+    });
+    expect(second.descriptions).toHaveLength(1);
+    expect(descriptionOf(second, "poi:near")?.text).toBe("Near is a monument.");
+    expect(descriptionOf(second, "poi:far")).toBeUndefined();
+
+    const storage = memoryStorage();
+    writeNotebook("0x0sky", second, storage);
+    expect(readNotebook("0x0sky", storage)).toEqual(second);
   });
 });

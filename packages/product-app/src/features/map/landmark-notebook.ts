@@ -42,16 +42,31 @@ export interface SeenLandmark {
   readonly by: string;
 }
 
+/**
+ * The short description kept of a landmark on the drive's `keep`: one per
+ * landmark. Worded from the archive's facts (`producedBy: "template"`), or a
+ * local model's retelling of them, which is a cache any device may word again.
+ */
+export interface DescribedLandmark {
+  readonly landmarkId: string;
+  readonly text: string;
+  readonly producedBy: string;
+  readonly templateVersion: number;
+  readonly describedAt: number;
+}
+
 export interface LandmarkNotebook {
   readonly noticed: readonly NoticedLandmark[];
   readonly studied: readonly StudiedLandmark[];
   readonly seen: readonly SeenLandmark[];
+  readonly descriptions: readonly DescribedLandmark[];
 }
 
 export const EMPTY_NOTEBOOK: LandmarkNotebook = {
   noticed: [],
   studied: [],
   seen: [],
+  descriptions: [],
 };
 
 const STORAGE_PREFIX = "nilx-one.avaia.landmarks.v1.";
@@ -106,6 +121,7 @@ export function readNotebook(
       noticed?: unknown;
       studied?: unknown;
       seen?: unknown;
+      descriptions?: unknown;
     };
     const noticed = Array.isArray(parsed.noticed)
       ? parsed.noticed.filter(
@@ -130,7 +146,23 @@ export function readNotebook(
             typeof entry.by === "string",
         )
       : [];
-    return { noticed, studied, seen } as LandmarkNotebook;
+    const descriptions = Array.isArray(parsed.descriptions)
+      ? parsed.descriptions.filter(
+          (entry: {
+            landmarkId?: unknown;
+            text?: unknown;
+            producedBy?: unknown;
+            templateVersion?: unknown;
+            describedAt?: unknown;
+          }) =>
+            typeof entry?.landmarkId === "string" &&
+            typeof entry.text === "string" &&
+            typeof entry.producedBy === "string" &&
+            typeof entry.templateVersion === "number" &&
+            typeof entry.describedAt === "number",
+        )
+      : [];
+    return { noticed, studied, seen, descriptions } as LandmarkNotebook;
   } catch {
     return EMPTY_NOTEBOOK;
   }
@@ -199,6 +231,28 @@ export function seeLandmark(
     ...notebook,
     seen: [...seen, { landmark, seenAt: nowMs, by }].slice(-NOTEBOOK_LIMIT),
   };
+}
+
+/** Keeps a landmark's description, in place of any earlier one. */
+export function keepDescription(
+  notebook: LandmarkNotebook,
+  description: DescribedLandmark,
+): LandmarkNotebook {
+  const others = notebook.descriptions.filter(
+    (entry) => entry.landmarkId !== description.landmarkId,
+  );
+  return {
+    ...notebook,
+    descriptions: [...others, description].slice(-NOTEBOOK_LIMIT),
+  };
+}
+
+/** The kept description of a landmark, when there is one. */
+export function descriptionOf(
+  notebook: LandmarkNotebook,
+  landmarkId: string,
+): DescribedLandmark | undefined {
+  return notebook.descriptions.find((entry) => entry.landmarkId === landmarkId);
 }
 
 /**

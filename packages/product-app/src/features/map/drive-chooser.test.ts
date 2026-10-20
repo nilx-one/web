@@ -72,6 +72,31 @@ describe("the model choosing what the Avaia does", () => {
     expect(open).toHaveBeenCalledTimes(1);
   });
 
+  it("retells with the same loaded model, unconstrained, and fails to null", async () => {
+    const { model, asked } = engine("Statue is a monument.");
+    const open = vi.fn(async () => model);
+    const chooser = createDriveChooser({ open });
+    await chooser.choose(onTheWay);
+    await expect(chooser.retell("system", "Statue — monument.")).resolves.toBe(
+      "Statue is a monument.",
+    );
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(asked[1]).toEqual({
+      system: "system",
+      user: "Statue — monument.",
+      maxNewTokens: 96,
+      temperature: 0.3,
+      topP: 0.9,
+    });
+    const failing = createDriveChooser({
+      open: async () =>
+        engine(async () => {
+          throw new Error("gpu lost");
+        }).model,
+    });
+    await expect(failing.retell("system", "x")).resolves.toBeNull();
+  });
+
   it("is no answer when the model says anything off the menu, or fails", async () => {
     const off = createDriveChooser({ open: async () => engine("7").model });
     await expect(off.choose(onTheWay)).resolves.toBeNull();
@@ -177,7 +202,7 @@ describe("the chooser in the world", () => {
       }),
     );
 
-    await expect(result.current?.(onTheWay)).resolves.toBeNull();
+    await expect(result.current?.choose(onTheWay)).resolves.toBeNull();
     expect(openCached).toHaveBeenCalledWith(
       "Qwen3-1.7B-q4f16_1-MLC",
       expect.any(Function),
@@ -215,7 +240,7 @@ describe("the chooser in the world", () => {
     );
     expect(result.current).toBeUndefined();
     rerender({ kind: "present" });
-    await expect(result.current?.(onTheWay)).resolves.toBe(1);
+    await expect(result.current?.choose(onTheWay)).resolves.toBe(1);
     expect(openCached).toHaveBeenCalledWith(
       "Qwen3-1.7B-q4f16_1-MLC",
       expect.any(Function),
