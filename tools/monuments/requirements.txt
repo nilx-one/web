@@ -1,3 +1,6 @@
 numpy==2.3.5
 scipy==1.17.0
+shapely==2.2.0
+mapbox_earcut==2.1.0
+svgelements==1.9.6
 trimesh==5.1.0

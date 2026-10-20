@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  AdditiveBlending,
+  BufferGeometry,
+  Mesh,
+  type MeshBasicMaterial,
+  MeshStandardMaterial,
   type DirectionalLight,
   type HemisphereLight,
   Matrix4,
@@ -18,13 +23,14 @@ import {
   cameraCentre,
   createMonumentLayer,
   monumentLights,
+  monumentLightsOf,
   orientMonument,
 } from "./monument-layer";
 import { MOTHERLAND_MONUMENT_FACING_DEG } from "./monument-site";
 
 describe("monument presentation contract", () => {
   it("keeps the model asset on the versioned same-origin path", () => {
-    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.3.0/motherland.glb");
+    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.4.0/motherland.glb");
   });
 
   it("sites the monument at its real-world coordinates", () => {
@@ -124,5 +130,54 @@ describe("monument light", () => {
     const front = new Vector3(Math.sin(facing), -Math.cos(facing), 0);
     expect(key.position.dot(front)).toBeGreaterThan(0);
     expect(rim.position.dot(front)).toBeLessThan(0);
+  });
+});
+
+describe("her light by day and by night", () => {
+  function model() {
+    const root = new Object3D();
+    const neon = new MeshStandardMaterial({ name: "neon" });
+    neon.emissive.setRGB(0.35, 4.4, 5.4);
+    const emblem = new MeshStandardMaterial({
+      name: "emblem",
+      color: 0xffd500,
+    });
+    const glow = new Mesh(new BufferGeometry(), new MeshStandardMaterial());
+    glow.name = "glow_sword_halo_a";
+    root.add(
+      new Mesh(new BufferGeometry(), neon),
+      new Mesh(new BufferGeometry(), emblem),
+      glow,
+    );
+    return { root, neon, emblem, glow };
+  }
+
+  it("burns only in the dark", () => {
+    const { root, neon, emblem, glow } = model();
+    const lights = monumentLightsOf(root);
+
+    lights.show("dark");
+    expect(glow.visible).toBe(true);
+    expect(neon.emissive.b).toBeGreaterThan(1);
+    expect(emblem.emissive.b).toBeGreaterThan(1);
+
+    lights.show("light");
+    expect(glow.visible).toBe(false);
+    expect(neon.emissive.getHex()).toBe(0);
+    // By day the coat of arms is its own gold, not lit.
+    expect(emblem.emissive.getHex()).toBe(0);
+    expect(emblem.color.getHex()).toBe(0xffd500);
+
+    lights.show("dark");
+    expect(neon.emissive.b).toBeGreaterThan(1);
+  });
+
+  it("draws the parts made of light additively, without depth", () => {
+    const { root, glow } = model();
+    monumentLightsOf(root);
+    const material = glow.material as unknown as MeshBasicMaterial;
+    expect(material.blending).toBe(AdditiveBlending);
+    expect(material.depthWrite).toBe(false);
+    expect(material.vertexColors).toBe(true);
   });
 });

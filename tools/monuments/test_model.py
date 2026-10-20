@@ -19,7 +19,7 @@ import trimesh
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--input", default="deploy/web/monuments/0.3.0/motherland.glb"
+    "--input", default="deploy/web/monuments/0.4.0/motherland.glb"
 )
 args = parser.parse_args()
 
@@ -45,5 +45,14 @@ assert (footprint > 5).all(), f"pedestal footprint collapsed: {footprint}"
 # Wider than the drum it stands in for, or the cut-out basemap pylon would
 # leave a ring of bare ground around it.
 assert (footprint >= 39).all(), f"pedestal narrower than the drum: {footprint}"
+
+# Her light: the sword's halo and the glow under her feet are parts made of
+# light alone, and the coat of arms is the real one, embossed in gold.
+names = set(scene.geometry)
+for part in ("glow_sword_halo_a", "glow_sword_halo_b", "glow_feet_pool", "glow_feet_curtain", "tryzub", "shield", "shield_rim"):
+    assert part in names, f"missing {part}"
+for part in ("glow_sword_halo_a", "glow_feet_pool"):
+    colours = scene.geometry[part].visual.vertex_colors
+    assert colours[:, :3].max() > 200 and colours[:, :3].min() < 10, f"{part} should fade to black"
 
 print(f"motherland.glb: {len(scene.geometry)} parts, {high[1]:.1f} m tall — ok")
