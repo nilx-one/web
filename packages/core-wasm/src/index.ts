@@ -398,7 +398,13 @@ function decodeMenuOption(value: unknown, index: number): AvaiaDriveMenuOption {
 function isDescriptionRequest(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const locale = value.locale;
-  const allowed = new Set(["start_date", "artist_name", "architect", "height", "material"]);
+  const allowed = new Set([
+    "start_date",
+    "artist_name",
+    "architect",
+    "height",
+    "material",
+  ]);
   if (
     (locale !== "uk" && locale !== "en" && locale !== "ru") ||
     typeof value.kind !== "string" ||
@@ -408,20 +414,28 @@ function isDescriptionRequest(value: unknown): boolean {
     value.kind_label.length > 80 ||
     (value.name !== undefined && typeof value.name !== "string") ||
     (value.facts !== undefined && !isRecord(value.facts))
-  ) return false;
+  )
+    return false;
   const facts = Object.entries(value.facts ?? {});
-  return facts.length <= 5 &&
-    facts.every(([key, fact]) => allowed.has(key) && typeof fact === "string" && fact.length <= 80);
+  return (
+    facts.length <= 5 &&
+    facts.every(
+      ([key, fact]) =>
+        allowed.has(key) && typeof fact === "string" && fact.length <= 80,
+    )
+  );
 }
 
 function isDescriptionResult(value: unknown): boolean {
-  return isRecord(value) &&
+  return (
+    isRecord(value) &&
     typeof value.text === "string" &&
     [...value.text].length > 0 &&
     [...value.text].length <= 240 &&
     typeof value.produced_by === "string" &&
     /^[A-Za-z0-9_.:/-]{1,80}$/u.test(value.produced_by) &&
-    value.template_version === 1;
+    value.template_version === 1
+  );
 }
 
 /**
@@ -455,12 +469,20 @@ function decodeDriveCommand(value: unknown): AvaiaDriveCommand {
       if (isRef(value.at)) return { do: value.do, at: value.at };
       break;
     case "ai_describe":
-      if (isRef(value.at) && isCount(value.request_id) && isDescriptionRequest(value.request)) {
+      if (
+        isRef(value.at) &&
+        isCount(value.request_id) &&
+        isDescriptionRequest(value.request)
+      ) {
         return value as unknown as AvaiaDriveCommand;
       }
       break;
     case "show":
-      if (isRef(value.at) && value.how === "speech" && isDescriptionResult(value.result)) {
+      if (
+        isRef(value.at) &&
+        value.how === "speech" &&
+        isDescriptionResult(value.result)
+      ) {
         return {
           do: "show",
           at: value.at,
@@ -472,7 +494,11 @@ function decodeDriveCommand(value: unknown): AvaiaDriveCommand {
       break;
     case "keep":
       if (isRef(value.at) && isDescriptionResult(value.result)) {
-        return { do: "keep", at: value.at, result: value.result } as AvaiaDriveCommand;
+        return {
+          do: "keep",
+          at: value.at,
+          result: value.result,
+        } as AvaiaDriveCommand;
       }
       break;
     case "say":
