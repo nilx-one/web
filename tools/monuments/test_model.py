@@ -19,7 +19,7 @@ import trimesh
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--input", default="deploy/web/monuments/0.5.0/motherland.glb"
+    "--input", default="deploy/web/monuments/0.6.0/motherland.glb"
 )
 args = parser.parse_args()
 
@@ -57,7 +57,7 @@ for part in ("glow_sword_halo_a", "glow_feet_pool"):
 
 # The figure's detail: the banded bodice, the mantle, the shoulders, the
 # face and hair, on a plinth whose step is wider than her hem.
-for part in ("robe", "bodice", "mantle", "bodice_band_low", "right_shoulder", "left_shoulder", "nose", "hair", "pedestal_step"):
+for part in ("robe", "bodice", "belt", "collar", "bust_left", "bust_right", "drapery_left", "drapery_right", "cloak", "right_shoulder", "left_shoulder", "nose", "hair", "hair_knot", "sword_guard_boss", "pedestal_step", "pedestal_rail", "pedestal_piers", "pedestal_rail_posts"):
     assert part in names, f"missing {part}"
 hem = scene.geometry["robe"].bounds
 step = scene.geometry["pedestal_step"].bounds
