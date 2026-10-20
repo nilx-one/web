@@ -109,9 +109,10 @@ describe("FlyoverControls", () => {
       />,
     );
     const button = screen.getByRole("button", {
-      name: "Force xPing: hold to fly faster and higher (80%)",
+      name: "Force xPing: hold to fly faster and higher · Energy: 80%",
     });
     expect(button).toHaveTextContent("80%");
+    expect(button).toHaveTextContent("Energy");
     expect(button).toHaveStyle({
       "--flyover-energy-color": "hsl(40 95% 50%)",
     });
@@ -158,7 +159,7 @@ describe("FlyoverControls", () => {
     );
     expect(
       screen.getByRole("button", {
-        name: "Force xPing: hold to fly faster and higher (100%)",
+        name: "Force xPing: hold to fly faster and higher · Energy: 100%",
       }),
     ).toBeDisabled();
   });

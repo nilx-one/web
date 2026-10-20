@@ -220,7 +220,7 @@ function ForceButton({
     <button
       type="button"
       className="flyover__button flyover__force"
-      aria-label={`${t("flyover.force")} (${percent}%)`}
+      aria-label={`${t("flyover.force")} · ${t("flyover.energy")}: ${percent}%`}
       disabled={!available}
       style={{ "--flyover-energy-color": color } as CSSProperties}
       onPointerDown={(event) => {
@@ -242,6 +242,7 @@ function ForceButton({
       onBlur={() => onHold(false)}
     >
       <span className="flyover__force-level">{percent}%</span>
+      <span className="flyover__force-caption">{t("flyover.energy")}</span>
     </button>
   );
 }

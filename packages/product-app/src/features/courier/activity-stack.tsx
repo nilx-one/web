@@ -18,8 +18,12 @@ const clock = (ms: number) => {
   const s = Math.ceil(Math.max(0, ms) / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
-/** Flight progress is told in whole 50 m steps, not a running number. */
-export const FLIGHT_DISTANCE_STEP_METERS = 50;
+/** Keep short flights readable without flickering at long-range precision. */
+export function roundedFlightDistanceMeters(meters: number): number {
+  const distance = Math.max(0, meters);
+  const step = distance <= 50 ? 1 : distance <= 200 ? 10 : 50;
+  return Math.ceil(distance / step) * step;
+}
 export function ActivityStack({
   jobs,
   plan,
@@ -113,24 +117,21 @@ export function ActivityStack({
     if (!flight.progress || !plan) return t("courier.flight") + " · …";
     if (target === undefined)
       return t("courier.flight") + " · " + clock(flight.progress.remainingMs);
-    const meters =
-      Math.ceil(
-        mapDistanceMeters(
-          flight.progress.point,
-          courierPoint(plan.destination.coordinate),
-        ) / FLIGHT_DISTANCE_STEP_METERS,
-      ) * FLIGHT_DISTANCE_STEP_METERS;
+    const meters = roundedFlightDistanceMeters(
+      mapDistanceMeters(
+        flight.progress.point,
+        courierPoint(plan.destination.coordinate),
+      ),
+    );
     return t("courier.distance")
       .replace("{meters}", String(meters))
       .replace("{target}", target);
   };
   const backProgress = () => {
     if (!flight.progress || !plan) return t("courier.returning") + " · …";
-    const meters =
-      Math.ceil(
-        mapDistanceMeters(flight.progress.point, courierPoint(plan.origin)) /
-          FLIGHT_DISTANCE_STEP_METERS,
-      ) * FLIGHT_DISTANCE_STEP_METERS;
+    const meters = roundedFlightDistanceMeters(
+      mapDistanceMeters(flight.progress.point, courierPoint(plan.origin)),
+    );
     return `${t("courier.returning")} · ${meters} ${t("courier.meters")}`;
   };
   if (plan && showFlight) {
