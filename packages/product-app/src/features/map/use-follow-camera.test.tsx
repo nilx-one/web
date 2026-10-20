@@ -19,10 +19,13 @@ import {
   isometricCamera,
   FOLLOW_MIN_ZOOM,
   followCamera,
+  GLANCE_PITCH,
+  glanceCamera,
   smoothFollowCamera,
+  type FollowFocus,
   type FollowBody,
 } from "./follow-camera";
-import { useFollowCamera } from "./use-follow-camera";
+import { FOCUS_CHECK_MS, useFollowCamera } from "./use-follow-camera";
 
 const HOME = { longitude: 24.03, latitude: 49.84, bearingDeg: 0 };
 const AHEAD = { longitude: 24.0301, latitude: 49.8401, bearingDeg: 90 };
@@ -894,5 +897,89 @@ describe("identity camera modes", () => {
       bearing: HOME.bearingDeg,
       pitch: FOLLOW_PITCH,
     });
+  });
+});
+
+describe("a glance at what passes close", () => {
+  // A drone about 80 m north-east of the body.
+  const DRONE = { key: "drone:a", longitude: 24.0307, latitude: 49.8405 };
+
+  function glancing(
+    fake: ReturnType<typeof fakeRenderer>,
+    focus: () => FollowFocus | undefined,
+  ) {
+    return renderHook(() =>
+      useFollowCamera({
+        renderer: fake.renderer,
+        enabled: true,
+        body: () => HOME,
+        dimension: "volumetric",
+        reducedMotion: () => false,
+        focus,
+      }),
+    );
+  }
+
+  it("looks at it over the body's shoulder while it lasts, then comes back", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    let subject: FollowFocus | undefined;
+    const { result } = glancing(fake, () => subject);
+    result.current.track(HOME);
+    const usual = fake.renderer.getCamera();
+
+    subject = DRONE;
+    act(() => vi.advanceTimersByTime(FOCUS_CHECK_MS + 3_000));
+    const look = glanceCamera(usual, HOME, DRONE);
+    const seen = fake.renderer.getCamera();
+    expect(Math.abs(seen.bearing - look.bearing)).toBeLessThan(1.5);
+    expect(seen.pitch).toBeCloseTo(GLANCE_PITCH, 0);
+    expect(seen.bearing).toBeGreaterThan(20);
+    expect(seen.bearing).toBeLessThan(70);
+
+    // It flew on: the usual view comes back, at the distance it had.
+    subject = undefined;
+    act(() => vi.advanceTimersByTime(4_000));
+    const back = fake.renderer.getCamera();
+    expect(back.zoom).toBeCloseTo(usual.zoom, 2);
+    expect(back.pitch).toBeCloseTo(usual.pitch, 1);
+    expect(back.bearing).toBeCloseTo(usual.bearing, 0);
+  });
+
+  it("gives the usual view back the moment a person moves the camera", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    const subject: FollowFocus = DRONE;
+    const usual = fake.renderer.getCamera();
+    const { result } = glancing(fake, () => subject);
+    result.current.track(HOME);
+    act(() => vi.advanceTimersByTime(FOCUS_CHECK_MS + 3_000));
+    expect(fake.renderer.getCamera().pitch).toBeCloseTo(GLANCE_PITCH, 0);
+
+    // A pan: the glance is dropped and the usual framing is aimed for.
+    act(() =>
+      fake.gesture({
+        center: [HOME.longitude + 0.0002, HOME.latitude],
+      }),
+    );
+    fake.settle();
+    expect(fake.renderer.getCamera()).toMatchObject({
+      zoom: usual.zoom,
+      pitch: FOLLOW_PITCH,
+    });
+    // The same drone is not glanced at again.
+    act(() => vi.advanceTimersByTime(FOCUS_CHECK_MS + 3_000));
+    expect(fake.renderer.getCamera().pitch).toBe(FOLLOW_PITCH);
+  });
+
+  it("never takes a Free camera", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    const { result } = glancing(fake, () => DRONE);
+    act(() => result.current.release());
+    fake.renderer.setCamera.mockClear();
+    result.current.track(HOME);
+    act(() => vi.advanceTimersByTime(FOCUS_CHECK_MS * 3));
+    expect(fake.renderer.setCamera).not.toHaveBeenCalled();
   });
 });

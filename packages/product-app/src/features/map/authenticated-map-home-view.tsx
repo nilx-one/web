@@ -212,6 +212,8 @@ import {
   followCamera as chaseCamera,
   isometricCamera,
   sameFollowCamera,
+  type FollowBody,
+  type FollowFocus,
 } from "./follow-camera";
 import {
   useBondManualWalk,
@@ -445,6 +447,10 @@ interface IdentityDetailState {
 }
 /** One ambient slot: the cadence the sampler itself changes clips on. */
 const AVATAR_AMBIENT_REFRESH_MS = 8_000;
+/** A drone passing this close to the body at the wheel is worth a look. */
+const GLANCE_DRONE_METERS = 120;
+/** A place the Avaia talks about is looked at when it is in sight, this near. */
+const GLANCE_LANDMARK_METERS = 400;
 
 const DIMENSION_STORAGE_KEY = "nilx-one.interface.dimension";
 
@@ -1759,7 +1765,7 @@ export function AuthenticatedMapHomeView({
   useErrorToastFeedback(statusToasts, feedback, cue);
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
   // The city's own drones, around wherever the camera looks; scenery only.
-  useAmbientDrones({
+  const ambientDrones = useAmbientDrones({
     renderer,
     ready: mapStatus.kind === "ready",
     suspended:
@@ -1773,6 +1779,24 @@ export function AuthenticatedMapHomeView({
   // flies; Agreed in the subscription cutscene is what starts it.
   const flyover = courier.flyover;
   const cameraModes = cameraModesFor(wheel);
+  const followBody = (): FollowBody | undefined => {
+    const now = globalThis.performance.now();
+    const stance =
+      wheel === "avaia"
+        ? avaiaWalk.stance(now)
+        : declaredPosition
+          ? manualBondStance(now)
+          : undefined;
+    if (stance !== undefined)
+      return { ...stance.point, bearingDeg: stance.bearingDeg };
+    if (
+      observedPosition === undefined ||
+      (wheel === "avaia" && declaredPosition)
+    )
+      return undefined;
+    return { ...observedPosition, bearingDeg: 0 };
+  };
+  const glanceFocus = useRef<() => FollowFocus | undefined>(() => undefined);
   const followCamera = useFollowCamera({
     renderer,
     modes: cameraModes,
@@ -1786,29 +1810,41 @@ export function AuthenticatedMapHomeView({
       !courier.following &&
       courier.offer === undefined &&
       systemInformer.activeId === undefined,
-    body: () => {
-      const now = globalThis.performance.now();
-      const stance =
-        wheel === "avaia"
-          ? avaiaWalk.stance(now)
-          : declaredPosition
-            ? manualBondStance(now)
-            : undefined;
-      if (stance !== undefined)
-        return { ...stance.point, bearingDeg: stance.bearingDeg };
-      if (
-        observedPosition === undefined ||
-        (wheel === "avaia" && declaredPosition)
-      )
-        return undefined;
-      return { ...observedPosition, bearingDeg: 0 };
-    },
+    body: followBody,
     dimension,
     reducedMotion: prefersReducedMotion,
+    // A third-person look while there is something to see beside the body:
+    // the place the Avaia is telling about, for as long as it talks, or a
+    // drone passing close, until it has flown on.
+    focus: () => glanceFocus.current(),
   });
   const followCameraRef = useRef(followCamera);
   useEffect(() => {
     followCameraRef.current = followCamera;
+  });
+  const avaiaSpeechAbout =
+    wheel === "avaia" && handover === undefined ? avaiaWalk.speech : undefined;
+  useEffect(() => {
+    glanceFocus.current = () => {
+      const body = followBody();
+      if (body === undefined) return undefined;
+      const about = avaiaSpeechAbout?.about;
+      if (
+        about !== undefined &&
+        avaiaSpeechAbout !== undefined &&
+        mapDistanceMeters(body, about) <= GLANCE_LANDMARK_METERS
+      ) {
+        return { ...about, key: `speech:${avaiaSpeechAbout.id}` };
+      }
+      const drone = ambientDrones.nearest(body, GLANCE_DRONE_METERS);
+      return drone === undefined
+        ? undefined
+        : {
+            key: `drone:${drone.id}`,
+            longitude: drone.longitude,
+            latitude: drone.latitude,
+          };
+    };
   });
   // In a cutscene the characters who are not the person speak: xSasha says
   // her line when it opens. The person's own replies are never voiced.

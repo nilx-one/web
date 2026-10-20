@@ -10,6 +10,12 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  closeToCamera,
+  easeCamera,
+  GLANCE_MAX_ZOOM,
+  GLANCE_MIN_ZOOM,
+  GLANCE_PITCH,
+  glanceCamera,
   CAMERA_READ_PIXELS,
   FOLLOW_MIN_ZOOM,
   FOLLOW_PITCH,
@@ -262,5 +268,66 @@ describe("isometric camera", () => {
     expect(zoomPivotFor("isometric")).toBe("center");
     expect(followAfterPinch("isometric", 20, 19)).toBe("free");
     expect(followAfterPinch("isometric", 20, 20.1)).toBe("isometric");
+  });
+});
+
+describe("glance", () => {
+  const body = { longitude: 30.56, latitude: 50.43, bearingDeg: 0 };
+  const current = {
+    center: [30.56, 50.43] as [number, number],
+    zoom: 20,
+    bearing: 0,
+    pitch: 60,
+  };
+
+  it("looks from behind the body toward the subject", () => {
+    const east = { longitude: 30.5614, latitude: 50.43 };
+    const look = glanceCamera(current, body, east);
+    expect(look.bearing).toBeCloseTo(90, 0);
+    expect(look.pitch).toBe(GLANCE_PITCH);
+    // Aimed between the two, nearer the body.
+    expect(look.center[0]).toBeGreaterThan(body.longitude);
+    expect(look.center[0]).toBeLessThan(east.longitude);
+  });
+
+  it("keeps both in view, at street scale at the farthest", () => {
+    const near = glanceCamera(current, body, {
+      longitude: 30.5601,
+      latitude: 50.43,
+    });
+    const far = glanceCamera(current, body, {
+      longitude: 30.566,
+      latitude: 50.43,
+    });
+    expect(near.zoom).toBeLessThanOrEqual(GLANCE_MAX_ZOOM);
+    expect(far.zoom).toBeLessThan(near.zoom);
+    expect(far.zoom).toBeGreaterThanOrEqual(GLANCE_MIN_ZOOM);
+    expect(
+      glanceCamera(
+        current,
+        body,
+        { longitude: 30.5614, latitude: 50.43 },
+        "flat",
+      ).pitch,
+    ).toBe(0);
+  });
+
+  it("eases every part of the camera, the short way round", () => {
+    const target = {
+      center: [30.561, 50.431] as [number, number],
+      zoom: 18,
+      bearing: 350,
+      pitch: 72,
+    };
+    const step = easeCamera({ ...current, bearing: 10 }, target, 100);
+    expect(step.bearing === 0 || step.bearing > 350 || step.bearing < 10).toBe(
+      true,
+    );
+    expect(step.zoom).toBeLessThan(20);
+    expect(step.zoom).toBeGreaterThan(18);
+    expect(step.pitch).toBeGreaterThan(60);
+    expect(easeCamera(current, target, 5_000)).toEqual(target);
+    expect(closeToCamera(target, target)).toBe(true);
+    expect(closeToCamera(current, target)).toBe(false);
   });
 });
