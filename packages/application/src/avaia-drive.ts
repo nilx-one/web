@@ -73,7 +73,7 @@ export interface LandmarkDescriptionRequest {
   readonly kind: string;
   readonly kind_label: string;
   readonly name?: string;
-  readonly facts: Readonly<Record<string, string>>;
+  readonly facts?: Readonly<Record<string, string>>;
 }
 
 /** An actual AI result, transported through Core before it reaches any host. */
