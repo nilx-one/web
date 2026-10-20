@@ -9,13 +9,23 @@ import {
   type Map as MapLibreMap,
 } from "maplibre-gl";
 import {
+  BackSide,
+  Color,
   DirectionalLight,
+  Float32BufferAttribute,
   HemisphereLight,
+  Matrix3,
   Matrix4,
+  Mesh,
+  MeshBasicMaterial,
   PerspectiveCamera,
+  PMREMGenerator,
   Scene,
+  SphereGeometry,
+  Vector3,
   WebGLRenderer,
   type Object3D,
+  type WebGLRenderTarget,
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
@@ -28,7 +38,7 @@ import { terrainElevationMeters } from "./terrain-elevation";
 export { MOTHERLAND_MONUMENT_LOCATION } from "./monument-site";
 
 export const MONUMENT_LAYER_ID = "nilx-one-motherland-monument";
-export const MONUMENT_ASSET_VERSION = "0.2.0";
+export const MONUMENT_ASSET_VERSION = "0.3.0";
 export const MONUMENT_ASSET_URL = `/monuments/${MONUMENT_ASSET_VERSION}/motherland.glb`;
 
 type AssetLoader = (signal: AbortSignal) => Promise<Object3D>;
@@ -106,17 +116,19 @@ export function createMonumentLayer(
 ): MonumentCustomLayer {
   const loadAsset = options.loadAsset ?? defaultLoadAsset;
   const scene = new Scene();
-  const ambient = new HemisphereLight(0xffffff, 0x6e665e, 2);
-  ambient.position.set(0, 0, 1);
-  const sunlight = new DirectionalLight(0xfff1df, 2.2);
-  sunlight.position.set(-1, -1, 2);
-  scene.add(ambient, sunlight);
+  scene.add(...monumentLights());
+  // The sky the chrome reflects, built on the first frame it is drawn in:
+  // MapLibre restores its own GL state after a custom layer renders, not
+  // after it is added.
+  let sky: WebGLRenderTarget | undefined;
   const camera = new PerspectiveCamera();
   // Same folded-origin trick the avatar layer uses: the monument's own
   // vertices are authored in metres, so the origin — not the geometry — is
   // what carries the huge Mercator-scale numbers.
   let origin = { x: 0, y: 0, z: 0, metres: 1 };
   const originMatrix = new Matrix4();
+  const viewProjection = new Matrix4();
+  const eye = new Vector3();
   let map: MapLibreMap | undefined;
   let renderer: WebGLRenderer | undefined;
   let root: Object3D | undefined;
@@ -215,13 +227,25 @@ export function createMonumentLayer(
       originMatrix
         .makeScale(origin.metres, origin.metres, origin.metres)
         .setPosition(origin.x, origin.y, origin.z);
-      camera.projectionMatrix
+      viewProjection
         .fromArray(frame.defaultProjectionData.mainMatrix)
         .multiply(originMatrix);
+      // Reflections are worked out from where the camera really is, so the
+      // chrome shows the sky above it and the city below, as the eye would.
+      // MapLibre hands over projection and view as one matrix: the camera
+      // goes back into the view half, and the projection keeps the rest.
+      cameraCentre(viewProjection, eye);
+      // Three rebuilds a camera's world matrix from its position on render.
+      camera.position.copy(eye);
+      camera.updateMatrixWorld(true);
+      camera.projectionMatrix.copy(viewProjection).multiply(camera.matrixWorld);
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-      camera.matrixWorld.identity();
-      camera.matrixWorldInverse.identity();
       renderer.resetState();
+      if (sky === undefined) {
+        sky = skyEnvironment(renderer);
+        scene.environment = sky.texture;
+        renderer.resetState();
+      }
       renderer.render(scene, camera);
       renderer.resetState();
     },
@@ -234,6 +258,7 @@ export function createMonumentLayer(
       loadController = undefined;
       root?.removeFromParent();
       root = undefined;
+      releaseSky();
       renderer?.dispose();
       renderer = undefined;
       map = undefined;
@@ -252,11 +277,121 @@ export function createMonumentLayer(
       loadController = undefined;
       root?.removeFromParent();
       root = undefined;
+      releaseSky();
       renderer?.dispose();
       renderer = undefined;
       map = undefined;
     },
   };
 
+  function releaseSky(): void {
+    sky?.dispose();
+    sky = undefined;
+    scene.environment = null;
+  }
+
   return layer;
+}
+
+/**
+ * The sky of the reference render, as the chrome reflects it: haze-white at
+ * the horizon, steel blue overhead, the city's blue shadow below, and the
+ * glare of a high sun over her right shoulder. Z is up, as in the layer.
+ */
+export const MONUMENT_SKY = {
+  zenith: "#5f8db0",
+  horizon: "#e3f1f7",
+  ground: "#36556c",
+  sun: "#ffffff",
+  /** How much brighter than white the sun's glare is, for the highlights. */
+  sunGain: 4,
+} as const;
+
+/** Bearings the lights come from, relative to the way she faces. */
+const KEY_LIGHT_TURN_DEG = 45;
+const RIM_LIGHT_TURN_DEG = 210;
+
+/**
+ * Cold daylight, as in the reference: a pale sky and the blue city below,
+ * a white key light from in front of her right shoulder, and a cyan rim
+ * from behind that outlines her against the sky.
+ */
+export function monumentLights(): Object3D[] {
+  const ambient = new HemisphereLight(0xdff2ff, 0x4a6a82, 1.2);
+  ambient.position.set(0, 0, 1);
+  const key = new DirectionalLight(0xf4f9ff, 2.4);
+  key.position.copy(fromBearing(KEY_LIGHT_TURN_DEG, 1.2));
+  const rim = new DirectionalLight(0x8fe8ff, 1.2);
+  rim.position.copy(fromBearing(RIM_LIGHT_TURN_DEG, 0.5));
+  return [ambient, key, rim];
+}
+
+/**
+ * A direction in the layer's frame (x east, y south, z up), `turnDeg`
+ * clockwise from the way she faces, `rise` up for every one across.
+ */
+function fromBearing(turnDeg: number, rise: number): Vector3 {
+  const bearing = ((MOTHERLAND_MONUMENT_FACING_DEG + turnDeg) * Math.PI) / 180;
+  return new Vector3(Math.sin(bearing), -Math.cos(bearing), rise);
+}
+
+/**
+ * Where the camera stands, given its combined projection and view: the one
+ * point that projects to nothing, x, y and w all zero in clip space.
+ */
+export function cameraCentre(viewProjection: Matrix4, into: Vector3): Vector3 {
+  const e = viewProjection.elements;
+  // Rows 0, 1 and 3 of the column-major matrix, split into A·p = -d.
+  const a = new Matrix3().set(
+    e[0]!,
+    e[4]!,
+    e[8]!,
+    e[1]!,
+    e[5]!,
+    e[9]!,
+    e[3]!,
+    e[7]!,
+    e[11]!,
+  );
+  const d = new Vector3(e[12]!, e[13]!, e[15]!);
+  return into.copy(d.negate().applyMatrix3(a.invert()));
+}
+
+function skyEnvironment(renderer: WebGLRenderer): WebGLRenderTarget {
+  const geometry = new SphereGeometry(1, 64, 32);
+  const position = geometry.getAttribute("position");
+  const zenith = new Color(MONUMENT_SKY.zenith);
+  const horizon = new Color(MONUMENT_SKY.horizon);
+  const ground = new Color(MONUMENT_SKY.ground);
+  const sunColor = new Color(MONUMENT_SKY.sun);
+  const sun = fromBearing(KEY_LIGHT_TURN_DEG, 1.2).normalize();
+  const colors: number[] = [];
+  const at = new Vector3();
+  const color = new Color();
+  for (let i = 0; i < position.count; i++) {
+    at.fromBufferAttribute(position, i).normalize();
+    if (at.z >= 0) {
+      color.copy(horizon).lerp(zenith, Math.pow(at.z, 0.6));
+    } else {
+      color.copy(horizon).lerp(ground, Math.min(1, -at.z * 3));
+    }
+    const glare = Math.pow(Math.max(0, at.dot(sun)), 64);
+    color
+      .lerp(sunColor, Math.min(1, glare))
+      .multiplyScalar(1 + glare * (MONUMENT_SKY.sunGain - 1));
+    colors.push(color.r, color.g, color.b);
+  }
+  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  const material = new MeshBasicMaterial({
+    vertexColors: true,
+    side: BackSide,
+  });
+  const sky = new Scene();
+  sky.add(new Mesh(geometry, material));
+  const pmrem = new PMREMGenerator(renderer);
+  const target = pmrem.fromScene(sky, 0, 0.1, 10);
+  pmrem.dispose();
+  geometry.dispose();
+  material.dispose();
+  return target;
 }
