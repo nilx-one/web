@@ -30,7 +30,7 @@ import { MOTHERLAND_MONUMENT_FACING_DEG } from "./monument-site";
 
 describe("monument presentation contract", () => {
   it("keeps the model asset on the versioned same-origin path", () => {
-    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.5.0/motherland.glb");
+    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.6.0/motherland.glb");
   });
 
   it("sites the monument at its real-world coordinates", () => {

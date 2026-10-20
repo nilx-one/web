@@ -4,4 +4,4 @@
 
 set -eu
 cd "$(dirname "$0")/../.."
-python tools/monuments/motherland/build_model.py --output deploy/web/monuments/0.5.0
+python tools/monuments/motherland/build_model.py --output deploy/web/monuments/0.6.0
