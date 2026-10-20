@@ -551,16 +551,24 @@ describe("an Avaia carrying out Core's drive", () => {
           ];
         }
         if (input.type === "description_facts") {
-          return [{
-            do: "ai_describe",
-            at: input.at,
-            request_id: 1,
-            request: input.request,
-          }];
+          return [
+            {
+              do: "ai_describe",
+              at: input.at,
+              request_id: 1,
+              request: input.request,
+            },
+          ];
         }
         if (input.type === "ai_described") {
           return [
-            { do: "show", at: input.at, how: "speech", ms: 9_000, result: input.result },
+            {
+              do: "show",
+              at: input.at,
+              how: "speech",
+              ms: 9_000,
+              result: input.result,
+            },
             { do: "keep", at: input.at, result: input.result },
           ];
         }
@@ -591,7 +599,9 @@ describe("an Avaia carrying out Core's drive", () => {
         things: [{ ref: "lm:poi:9", described: false }],
       });
       expect(types(inputs)).toContain("description_facts");
-      expect(inputs.find((input) => input.type === "description_facts")).toMatchObject({
+      expect(
+        inputs.find((input) => input.type === "description_facts"),
+      ).toMatchObject({
         at: "lm:poi:9",
         request: {
           locale: "en",
