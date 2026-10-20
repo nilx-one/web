@@ -407,9 +407,9 @@ function isDescriptionRequest(value: unknown): boolean {
     value.kind_label.length === 0 ||
     value.kind_label.length > 80 ||
     (value.name !== undefined && typeof value.name !== "string") ||
-    !isRecord(value.facts)
+    (value.facts !== undefined && !isRecord(value.facts))
   ) return false;
-  const facts = Object.entries(value.facts);
+  const facts = Object.entries(value.facts ?? {});
   return facts.length <= 5 &&
     facts.every(([key, fact]) => allowed.has(key) && typeof fact === "string" && fact.length <= 80);
 }
