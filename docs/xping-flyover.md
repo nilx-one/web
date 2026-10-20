@@ -51,8 +51,10 @@ its new restoration target.
 Only the flying xPing takes taps, and only while it flies: the renderer
 hit-tests a drone just when something has subscribed to that drone's id.
 The offer drone parked on the Bond and the hint drones beside it leave
-Bond and Avaia their taps. The offer shot reads the latest fix but is
-staged once per offer; closing it restores the camera from before it.
+Bond and Avaia their taps. The offer is a viewport-safe native dialog
+over the current world shot: neither opening nor declining it stages or
+restores the camera. Only explicit Send xPing starts the actual flight,
+whose hook owns the camera and its eventual restoration.
 
 Activity overview temporarily releases the chase camera with
 `setFollowing(false)` but does not stop the flight or compute another route.

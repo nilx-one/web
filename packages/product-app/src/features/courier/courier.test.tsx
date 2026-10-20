@@ -305,9 +305,8 @@ it("uses Core's destination, blocks duplicate dispatch, and cancels stale asynch
   unmount();
   expect(map.systemDrone!.remove).toHaveBeenCalledWith("system:xPing:courier");
 });
-it("stages the offer shot once per offer and hands back the camera from before it", () => {
+it("preserves the world camera while the offer is pending, skipped or reopened", () => {
   const map = renderer();
-  const before = map.getCamera();
   const { result, rerender } = renderHook(
     ({ at }) =>
       useCourier({
@@ -320,13 +319,18 @@ it("stages the offer shot once per offer and hands back the camera from before i
     { initialProps: { at: { longitude: 30.5, latitude: 50.4 } } },
   );
   act(() => result.current.open("exclusive"));
-  expect(map.setCamera).toHaveBeenCalledOnce();
+  expect(result.current.flyover.active).toBe(false);
+  expect(map.setCamera).not.toHaveBeenCalled();
   rerender({ at: { longitude: 30.5001, latitude: 50.4001 } });
   rerender({ at: { longitude: 30.5002, latitude: 50.4002 } });
-  expect(map.setCamera).toHaveBeenCalledOnce();
+  expect(map.setCamera).not.toHaveBeenCalled();
   act(() => result.current.close());
-  expect(map.setCamera).toHaveBeenCalledTimes(2);
-  expect(vi.mocked(map.setCamera).mock.lastCall?.[0]).toEqual(before);
+  expect(map.setCamera).not.toHaveBeenCalled();
+  act(() => result.current.open("special"));
+  expect(map.setCamera).not.toHaveBeenCalled();
+  act(() => result.current.close());
+  expect(result.current.flyover.active).toBe(false);
+  expect(map.setCamera).not.toHaveBeenCalled();
 });
 it("listens for taps on the flying xPing only, never on a parked offer drone", async () => {
   const map = renderer();
