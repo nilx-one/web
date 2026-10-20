@@ -75,7 +75,7 @@ export function observeInferencePerformance(
     : { ...previous, slow, severe };
 }
 
-/** 
+/**
  * Measure delivered animation frames only while Avaia has a cached model and
  * the map is active. The browser throttles hidden tabs, so visibility is an
  * explicit pause, never evidence of slow GPU performance. No network or model
@@ -124,7 +124,10 @@ export function useInferencePerformance(
           state =
             elapsed > 2_500
               ? inferencePerformanceState("critical")
-              : observeInferencePerformance(state, (frameCount * 1_000) / elapsed);
+              : observeInferencePerformance(
+                  state,
+                  (frameCount * 1_000) / elapsed,
+                );
           windowStart = at;
           frameCount = 0;
           publish();

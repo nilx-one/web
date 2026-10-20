@@ -52,9 +52,9 @@ describe("Avaia's browser inference performance gate", () => {
     const degraded = windows(inferencePerformanceState(), 30, 3);
     expect(windows(degraded, 10, 2).mode).toBe("critical");
     const nearlyRecovered = windows(degraded, 55, 4);
-    expect(windows(observeInferencePerformance(nearlyRecovered, 30), 55, 1).mode).toBe(
-      "degraded",
-    );
+    expect(
+      windows(observeInferencePerformance(nearlyRecovered, 30), 55, 1).mode,
+    ).toBe("degraded");
   });
 
   it("keeps background state distinct from FPS and ignores invalid samples", () => {
