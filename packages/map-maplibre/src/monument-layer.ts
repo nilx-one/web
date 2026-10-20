@@ -19,24 +19,37 @@ import {
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
+import {
+  MOTHERLAND_MONUMENT_FACING_DEG,
+  MOTHERLAND_MONUMENT_LOCATION,
+} from "./monument-site";
 import { terrainElevationMeters } from "./terrain-elevation";
 
+export { MOTHERLAND_MONUMENT_LOCATION } from "./monument-site";
+
 export const MONUMENT_LAYER_ID = "nilx-one-motherland-monument";
-export const MONUMENT_ASSET_VERSION = "0.1.0";
+export const MONUMENT_ASSET_VERSION = "0.2.0";
 export const MONUMENT_ASSET_URL = `/monuments/${MONUMENT_ASSET_VERSION}/motherland.glb`;
 
-/**
- * Kyiv's Motherland Monument — the one fixed, always-there landmark this
- * layer draws. Not a `MapLandmark` the archive publishes: a single
- * hand-placed study, real-world sited, that stands regardless of what the
- * basemap's own POI layer carries.
- */
-export const MOTHERLAND_MONUMENT_LOCATION: {
-  readonly lng: number;
-  readonly lat: number;
-} = { lng: 30.5636, lat: 50.4267 };
-
 type AssetLoader = (signal: AbortSignal) => Promise<Object3D>;
+
+/**
+ * Stands the model up in the layer's Mercator-aligned frame (x east, y
+ * south, z up), `scale` scene units to the metre. The asset is glTF Y-up,
+ * authored in metres facing -Z with her right hand on +X. Mercator's y runs
+ * south, so turning Y up alone would leave her mirrored, the sword in her
+ * left hand: flipping Z first keeps her right-handed, and the bearing then
+ * turns her to face the Dnipro.
+ */
+export function orientMonument(root: Object3D, scale: number): void {
+  root.scale.set(scale, scale, -scale);
+  root.rotation.set(
+    Math.PI / 2,
+    0,
+    (MOTHERLAND_MONUMENT_FACING_DEG * Math.PI) / 180,
+    "ZXY",
+  );
+}
 
 function defaultLoadAsset(signal: AbortSignal): Promise<Object3D> {
   const loader = new GLTFLoader();
@@ -61,12 +74,20 @@ function defaultLoadAsset(signal: AbortSignal): Promise<Object3D> {
 
 export interface MonumentCustomLayer extends CustomLayerInterface {
   isSettled(): boolean;
+  /** True while the model is loaded and standing in this mount. */
+  hasModel(): boolean;
   setDimension(dimension: MapDimension): void;
   dispose(): void;
 }
 
 export interface MonumentLayerOptions {
   readonly loadAsset?: AssetLoader;
+  /**
+   * Called each time the model is loaded into a mount: the moment the
+   * basemap's own statue can give way to it, and not before, so a model
+   * that never arrives never leaves an empty pylon behind.
+   */
+  readonly onModel?: () => void;
 }
 
 /**
@@ -125,10 +146,7 @@ export function createMonumentLayer(
       (coordinate.y - origin.y) / origin.metres,
       (coordinate.z - origin.z) / origin.metres,
     );
-    root.scale.setScalar(metres / origin.metres);
-    // glTF is Y-up; the model is authored Z-up in metres, so this is the same
-    // rotation the avatar layer applies, with no bearing to add on top.
-    root.rotation.set(Math.PI / 2, 0, 0, "ZXY");
+    orientMonument(root, metres / origin.metres);
     root.visible = dimension === "volumetric";
     root.updateMatrixWorld(true);
   }
@@ -154,6 +172,7 @@ export function createMonumentLayer(
       root = asset;
       scene.add(root);
       if (map !== undefined) anchorAt(map);
+      options.onModel?.();
       map?.triggerRepaint();
     } catch {
       // Fail closed: a missing monument asset renders nothing, same as a
@@ -172,6 +191,8 @@ export function createMonumentLayer(
     renderingMode: "3d",
 
     isSettled: () => settled,
+
+    hasModel: () => root !== undefined,
 
     onAdd(mountedMap, gl) {
       settled = false;

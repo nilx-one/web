@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { Object3D, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,11 +9,13 @@ import {
   MONUMENT_LAYER_ID,
   MOTHERLAND_MONUMENT_LOCATION,
   createMonumentLayer,
+  orientMonument,
 } from "./monument-layer";
+import { MOTHERLAND_MONUMENT_FACING_DEG } from "./monument-site";
 
 describe("monument presentation contract", () => {
   it("keeps the model asset on the versioned same-origin path", () => {
-    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.1.0/motherland.glb");
+    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.2.0/motherland.glb");
   });
 
   it("sites the monument at its real-world coordinates", () => {
@@ -49,5 +52,34 @@ describe("monument presentation contract", () => {
     expect(detachedRemove).not.toThrow();
     expect(detachedRemove).not.toThrow();
     expect(() => layer.dispose()).not.toThrow();
+  });
+});
+
+describe("monument orientation", () => {
+  // Where a glTF direction of the asset ends up in the layer's frame:
+  // x east, y south (Mercator), z up.
+  function placed(direction: [number, number, number]): Vector3 {
+    const root = new Object3D();
+    orientMonument(root, 1);
+    root.updateMatrixWorld(true);
+    return new Vector3(...direction).transformDirection(root.matrixWorld);
+  }
+
+  it("stands the figure upright, not lying on the ground", () => {
+    const up = placed([0, 1, 0]);
+    expect(up.z).toBeCloseTo(1);
+  });
+
+  it("faces her north-east, toward the Dnipro", () => {
+    const front = placed([0, 0, -1]);
+    const bearing = (Math.atan2(front.x, -front.y) * 180) / Math.PI;
+    expect(bearing).toBeCloseTo(MOTHERLAND_MONUMENT_FACING_DEG);
+    expect(front.z).toBeCloseTo(0);
+  });
+
+  it("keeps the sword in her right hand, on her south-east side", () => {
+    const right = placed([1, 0, 0]);
+    const bearing = (Math.atan2(right.x, -right.y) * 180) / Math.PI;
+    expect(bearing).toBeCloseTo(MOTHERLAND_MONUMENT_FACING_DEG + 90);
   });
 });
