@@ -74,6 +74,48 @@ export const MOTHERLAND_CUTOUT: ExpressionSpecification = [
 ];
 
 /**
+ * The museum's stepped terraces round the statue: every part of the complex
+ * low enough to walk on, within this distance of the statue's point. In the
+ * archive's data that is the complex and nothing else — the nearest other
+ * building that low stands well beyond it.
+ */
+export const MOTHERLAND_TERRACE_RADIUS_METERS = 60;
+export const MOTHERLAND_TERRACE_MAX_HEIGHT_METERS = 14;
+
+/**
+ * True for a `buildings` feature that is the monument's own ground: drawn
+ * by its own layer in the colour of the land around, not as a building.
+ */
+export const MOTHERLAND_TERRACES: ExpressionSpecification = [
+  "all",
+  [
+    "<=",
+    [
+      "distance",
+      {
+        type: "Point",
+        coordinates: [
+          MOTHERLAND_MONUMENT_LOCATION.lng,
+          MOTHERLAND_MONUMENT_LOCATION.lat,
+        ],
+      },
+    ],
+    MOTHERLAND_TERRACE_RADIUS_METERS,
+  ],
+  [
+    "<=",
+    ["coalesce", ["get", "height"], 7],
+    MOTHERLAND_TERRACE_MAX_HEIGHT_METERS,
+  ],
+];
+
+/** The terraces' stone, as the land around them is drawn in each theme. */
+export const MOTHERLAND_TERRACE_COLORS = {
+  light: "#e2e9e7",
+  dark: "#15262b",
+} as const;
+
+/**
  * `filter` with the statue cut out of it. Idempotent: a filter that already
  * carries the cut-out is returned as it is, so re-applying presentation
  * after a style swap never nests it twice.
@@ -81,25 +123,76 @@ export const MOTHERLAND_CUTOUT: ExpressionSpecification = [
 export function withoutMotherland(
   filter: FilterSpecification | null | undefined | void,
 ): FilterSpecification {
-  if (filter !== undefined && filter !== null) {
-    if (carriesMotherlandCutout(filter)) return filter;
-    return ["all", filter as ExpressionSpecification, keepMotherland()];
-  }
-  return keepMotherland();
-}
-
-function keepMotherland(): ExpressionSpecification {
-  return ["!", MOTHERLAND_CUTOUT];
+  return without(filter, MOTHERLAND_CUTOUT);
 }
 
 export function carriesMotherlandCutout(filter: unknown): boolean {
+  return carries(filter, MOTHERLAND_CUTOUT);
+}
+
+/** `filter` with the terraces taken out, for the generic buildings layer. */
+export function withoutMotherlandTerraces(
+  filter: FilterSpecification | null | undefined | void,
+): FilterSpecification {
+  return without(filter, MOTHERLAND_TERRACES);
+}
+
+export function carriesMotherlandTerraces(filter: unknown): boolean {
+  return carries(filter, MOTHERLAND_TERRACES);
+}
+
+/**
+ * The terraces' own filter: what the style's buildings filter admits, less
+ * anything this module took out of it, and only the terraces.
+ */
+export function onlyMotherlandTerraces(
+  filter: FilterSpecification | null | undefined | void,
+): FilterSpecification {
+  const style = styleFilter(filter);
+  return style === undefined
+    ? MOTHERLAND_TERRACES
+    : ["all", style as ExpressionSpecification, MOTHERLAND_TERRACES];
+}
+
+const OWN = [MOTHERLAND_CUTOUT, MOTHERLAND_TERRACES].map((cut) =>
+  JSON.stringify(["!", cut]),
+);
+
+/** The style's own filter, with this module's exclusions taken back out. */
+function styleFilter(filter: unknown): unknown {
+  if (filter === undefined || filter === null) return undefined;
+  if (!Array.isArray(filter) || filter[0] !== "all") return filter;
+  if (!filter.slice(1).some((part) => OWN.includes(JSON.stringify(part)))) {
+    return filter;
+  }
+  const rest = filter
+    .slice(1)
+    .filter((part) => !OWN.includes(JSON.stringify(part)));
+  return rest.length === 0
+    ? undefined
+    : rest.length === 1
+      ? rest[0]
+      : ["all", ...rest];
+}
+
+function without(
+  filter: FilterSpecification | null | undefined | void,
+  cut: ExpressionSpecification,
+): FilterSpecification {
+  const keep: ExpressionSpecification = ["!", cut];
+  if (filter === undefined || filter === null) return keep;
+  if (carries(filter, cut)) return filter;
+  // One flat "all", however many exclusions join it, so each stays findable.
+  if (Array.isArray(filter) && filter[0] === "all") {
+    return [...(filter as unknown[]), keep] as unknown as FilterSpecification;
+  }
+  return ["all", filter as ExpressionSpecification, keep];
+}
+
+function carries(filter: unknown, cut: ExpressionSpecification): boolean {
   if (!Array.isArray(filter) || filter[0] !== "all") return false;
-  const last: unknown = filter[filter.length - 1];
-  return (
-    Array.isArray(last) &&
-    last[0] === "!" &&
-    JSON.stringify(last[1]) === JSON.stringify(MOTHERLAND_CUTOUT)
-  );
+  const wanted = JSON.stringify(["!", cut]);
+  return filter.slice(1).some((part) => JSON.stringify(part) === wanted);
 }
 
 /**
