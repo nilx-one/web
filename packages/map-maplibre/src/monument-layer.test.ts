@@ -1,21 +1,30 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { Object3D, Vector3 } from "three";
+import {
+  type DirectionalLight,
+  type HemisphereLight,
+  Matrix4,
+  Object3D,
+  PerspectiveCamera,
+  Vector3,
+} from "three";
 import { describe, expect, it } from "vitest";
 
 import {
   MONUMENT_ASSET_URL,
   MONUMENT_LAYER_ID,
   MOTHERLAND_MONUMENT_LOCATION,
+  cameraCentre,
   createMonumentLayer,
+  monumentLights,
   orientMonument,
 } from "./monument-layer";
 import { MOTHERLAND_MONUMENT_FACING_DEG } from "./monument-site";
 
 describe("monument presentation contract", () => {
   it("keeps the model asset on the versioned same-origin path", () => {
-    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.2.0/motherland.glb");
+    expect(MONUMENT_ASSET_URL).toBe("/monuments/0.3.0/motherland.glb");
   });
 
   it("sites the monument at its real-world coordinates", () => {
@@ -81,5 +90,39 @@ describe("monument orientation", () => {
     const right = placed([1, 0, 0]);
     const bearing = (Math.atan2(right.x, -right.y) * 180) / Math.PI;
     expect(bearing).toBeCloseTo(MOTHERLAND_MONUMENT_FACING_DEG + 90);
+  });
+});
+
+describe("monument light", () => {
+  it("finds the camera a view-projection was made from", () => {
+    const camera = new PerspectiveCamera(40, 1.5, 1, 5_000);
+    camera.position.set(120, -340, 260);
+    camera.lookAt(0, 0, 50);
+    camera.updateMatrixWorld(true);
+    const viewProjection = new Matrix4().multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse,
+    );
+    const found = cameraCentre(viewProjection, new Vector3());
+    expect(found.x).toBeCloseTo(120, 3);
+    expect(found.y).toBeCloseTo(-340, 3);
+    expect(found.z).toBeCloseTo(260, 3);
+  });
+
+  it("lights her cold: a pale sky, a white key and a cyan rim", () => {
+    const [sky, key, rim] = monumentLights() as [
+      HemisphereLight,
+      DirectionalLight,
+      DirectionalLight,
+    ];
+    expect(sky.color.b).toBeGreaterThan(sky.color.r);
+    expect(sky.groundColor.b).toBeGreaterThan(sky.groundColor.r);
+    expect(key.intensity).toBeGreaterThan(rim.intensity);
+    expect(rim.color.g + rim.color.b).toBeGreaterThan(2 * rim.color.r);
+    // The key comes from in front of her, the rim from behind her.
+    const facing = (MOTHERLAND_MONUMENT_FACING_DEG * Math.PI) / 180;
+    const front = new Vector3(Math.sin(facing), -Math.cos(facing), 0);
+    expect(key.position.dot(front)).toBeGreaterThan(0);
+    expect(rim.position.dot(front)).toBeLessThan(0);
   });
 });

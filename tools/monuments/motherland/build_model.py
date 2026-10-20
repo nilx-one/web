@@ -31,12 +31,13 @@ OUT.mkdir(parents=True, exist_ok=True)
 PARTS = []
 
 # Chrome body, cyan-emissive trim — the "futuristic" read is the material,
-# not a different silhouette. emissiveFactor pushes the trim past 1.0 so a
+# not a different silhouette. The chrome is a true mirror: the layer gives it
+# the reference render's sky to reflect (monument-layer.ts, MONUMENT_SKY). emissiveFactor pushes the trim past 1.0 so a
 # renderer with bloom blooms it; a renderer without bloom still shows it as a
 # flat lit cyan, never dark.
 PALETTE = {
-    "chrome": ("#dfe7ea", 0.30, 0.45, None),
-    "chrome_dark": ("#a3aeb4", 0.34, 0.50, None),
+    "chrome": ("#e6eef3", 0.16, 0.92, None),
+    "chrome_dark": ("#a9bac5", 0.22, 0.88, None),
     "pedestal": ("#aab5ba", 0.42, 0.40, None),
     "neon": ("#5be7ff", 0.10, 0.05, (0.35, 4.4, 5.4)),
     "neon_warm": ("#ffe9a8", 0.10, 0.05, (5.4, 4.2, 1.6)),

@@ -19,7 +19,7 @@ import trimesh
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--input", default="deploy/web/monuments/0.2.0/motherland.glb"
+    "--input", default="deploy/web/monuments/0.3.0/motherland.glb"
 )
 args = parser.parse_args()
 
