@@ -46,6 +46,11 @@ export interface AvaiaDrivePassing {
   readonly group: AvaiaDriveGroup;
   readonly off_route_m: number;
   readonly studyable?: boolean;
+  /**
+   * Whether the notebook holds a description of this landmark. Sent, it
+   * lets the drive ask for one (`describe`); never sent, it never asks.
+   */
+  readonly described?: boolean;
 }
 
 /** A target an outing may go to. */
@@ -80,6 +85,7 @@ export type AvaiaDriveInput =
         readonly kind?: string;
         readonly meters?: number;
         readonly feeling?: AvaiaDriveFeeling;
+        readonly described?: boolean;
       }[];
     }
   | { readonly type: "stroll_options"; readonly to: readonly string[] }
@@ -95,7 +101,8 @@ export type AvaiaDriveInput =
       readonly energy: string;
       readonly home?: string;
     }
-  | { readonly type: "chosen"; readonly index: number | null };
+  | { readonly type: "chosen"; readonly index: number | null }
+  | { readonly type: "described"; readonly at: string };
 
 /** One option of a menu, as a model reads it. */
 export interface AvaiaDriveMenuOption {
@@ -117,6 +124,17 @@ export type AvaiaDriveCommand =
   | { readonly do: "look"; readonly ms: number }
   | { readonly do: "study"; readonly at: string }
   | { readonly do: "glance"; readonly at: string }
+  /** Ready a description of the landmark, then answer `described`. */
+  | { readonly do: "describe"; readonly at: string }
+  /** Show that description, in her own speech, for `ms`. */
+  | {
+      readonly do: "show";
+      readonly at: string;
+      readonly how: "speech";
+      readonly ms: number;
+    }
+  /** Keep that description in the notebook. */
+  | { readonly do: "keep"; readonly at: string }
   | { readonly do: "pick_up"; readonly at: string }
   | { readonly do: "visited"; readonly at: string }
   | {

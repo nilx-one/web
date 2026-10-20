@@ -1,0 +1,146 @@
+{
+  "schema": 1,
+  "about": "How a landmark the Avaia stepped aside for is described (tier 0), and which of a local model's retellings may be shown and kept instead. Owned by nilx-one/ai (src/describe.rs); nilx-one/web keeps a byte-identical copy at packages/product-app/src/features/map/landmark-description.json and tests its own port against it. Change it here first.",
+  "system_prompt": "You are Avaia, looking at a landmark on a walk. Retell the description you are given in your own words, in the same language, in at most two short sentences. Use only what it says: never add a date, a number, a name, a person, an event or a place it does not contain. Answer with the description and nothing else.",
+  "max_chars": 240,
+  "cases": [
+    {
+      "name": "the Motherland, in Ukrainian, with the facts the archive gives",
+      "input": {
+        "locale": "uk",
+        "kind": "monument",
+        "kind_label": "монумент",
+        "name": "Батьківщина-Мати",
+        "facts": {
+          "start_date": "1981-10-09",
+          "artist_name": "Василь Бородай",
+          "height": "62",
+          "material": "steel",
+          "wikidata": "Q1056018",
+          "inscription": "ignored"
+        }
+      },
+      "template": "Батьківщина-Мати — монумент. З 1981 року. Автор — Василь Бородай. Висота — 62 м. Матеріал — steel.",
+      "accepts": [
+        "Батьківщина-Мати — сталевий монумент 1981 року, заввишки 62 м.",
+        "<think>\n\n</think>\n\nБатьківщина-Мати: монумент Василя Бородая, що стоїть з 1981 року."
+      ],
+      "refuses": [
+        "",
+        "Батьківщина-Мати — монумент 1982 року.",
+        "Монумент 1981 року заввишки 62 м.",
+        "Батьківщина-Мати — монумент",
+        "<b>Батьківщина-Мати</b> — монумент.",
+        "Батьківщина-Мати — монумент.\nВисота 62 м.",
+        "Батьківщина-Мати. Монумент. З 1981. Автор. Висота.",
+        "<think>hm</think>Батьківщина-Мати — монумент.",
+        "Батьківщина-Мати — монумент роботи Євгена Вучетича."
+      ]
+    },
+    {
+      "name": "an English statue with a decimal height and no date",
+      "input": {
+        "locale": "en",
+        "kind": "statue",
+        "kind_label": "statue",
+        "name": "Rodina",
+        "facts": {
+          "height": "12.50 m",
+          "architect": "V. Yelizarov"
+        }
+      },
+      "template": "Rodina — statue. Architect: V. Yelizarov. 12.5 m tall.",
+      "accepts": [
+        "Rodina is a 12.5 m statue by architect V. Yelizarov.",
+        "Rodina, a statue standing 12.5 m tall."
+      ],
+      "refuses": [
+        "Rodina is a 13 m statue.",
+        "Rodina was built in 1981.",
+        "A statue 12.5 m tall.",
+        "Rodina was unveiled by Brezhnev.",
+        "Rodina stands in Kyiv, 12.5 m tall."
+      ]
+    },
+    {
+      "name": "a nameless Russian memorial, with a value dropped for being markup",
+      "input": {
+        "locale": "ru",
+        "kind": "memorial",
+        "kind_label": "мемориал",
+        "facts": {
+          "start_date": "около 1967",
+          "artist_name": "<script>x</script>",
+          "material": "granite"
+        }
+      },
+      "template": "Мемориал. С 1967 года. Материал — granite.",
+      "accepts": [
+        "Мемориал, стоящий с 1967 года.",
+        "Это мемориал с 1967 года, материал — granite."
+      ],
+      "refuses": [
+        "Мемориал с 1966 года.",
+        "Мемориал | 1967.",
+        "Гранитный мемориал, стоящий с 1967 года."
+      ]
+    },
+    {
+      "name": "a height that is not a number is left out",
+      "input": {
+        "locale": "en",
+        "kind": "monument",
+        "kind_label": "monument",
+        "name": "Arch",
+        "facts": {
+          "height": "tall",
+          "start_date": "unknown"
+        }
+      },
+      "template": "Arch — monument.",
+      "accepts": [
+        "Arch is a monument.",
+        "It is a monument called Arch."
+      ],
+      "refuses": [
+        "Arch is a monument from 1990.",
+        "Arch is a monument"
+      ]
+    }
+  ],
+  "refused_inputs": [
+    {
+      "name": "a kind outside the drive's alphabet",
+      "input": {
+        "locale": "en",
+        "kind": "Monument!",
+        "kind_label": "monument"
+      }
+    },
+    {
+      "name": "a locale it does not word",
+      "input": {
+        "locale": "de",
+        "kind": "monument",
+        "kind_label": "Denkmal"
+      }
+    },
+    {
+      "name": "a kind label that is markup",
+      "input": {
+        "locale": "en",
+        "kind": "monument",
+        "kind_label": "<i>monument</i>"
+      }
+    },
+    {
+      "name": "anything it does not read",
+      "input": {
+        "locale": "en",
+        "kind": "monument",
+        "kind_label": "monument",
+        "owner": "0x0sky"
+      }
+    }
+  ]
+}

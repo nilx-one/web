@@ -201,6 +201,28 @@ owner walking past does that. Seen landmarks it has not studied appear under
 registered in nilx-one/core (`docs/landmark-notebook.md`), and the line it may
 not cross is nilx-one/ai's MWL14.
 
+What she says about a landmark she stands in front of is a description. The
+loop is nilx-one/ai's `docs/landmark-description.md`:
+
+1. Every landmark a walk passes, and every curiosity option, tells Core's
+   drive whether the notebook already holds a description of it (`described`).
+2. Studying or glancing at one that has none, the drive asks for one
+   (`describe`).
+3. The host words it from the archive's facts (`landmark-description.ts`, the
+   port of nilx-one/ai's faculty, held to its fixture byte for byte). When the
+   Avaia's local model is on this device, the same model that chooses for her
+   is asked to retell it within 6 s. A retelling with a number, a capitalised
+   word or anything else the facts do not carry is refused, and the template
+   stands.
+4. The host answers `described`, and the drive answers `show` (in her speech,
+   for as long as it says) and `keep` together.
+5. The notebook keeps one description per landmark, with what produced it
+   (`template` or the model's id). The Avaia's screen shows it under the
+   landmark.
+
+Web, Telegram and Discord carry out the same commands, and a host with no
+model says the template.
+
 The notebook is kept per Bond, and its study notes per Avaia address, in local
 storage under `nilx-one.avaia.landmarks.v1.<pub_dress>`. Nothing sends it
 anywhere today, and it is never used as training signal. It is

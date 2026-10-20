@@ -33,6 +33,7 @@ import type { ProductLocale } from "../../shell/localization";
 import type { AwardRecord } from "../progression/commitment";
 import {
   blockedLineKind,
+  landmarkKindLabel,
   lineCue,
   pickAvaiaLine,
   type AvaiaLineKind,
@@ -66,7 +67,18 @@ import {
   type DriveRefEntry,
 } from "./drive-world";
 import {
+  admitDescription,
+  DESCRIBE_SYSTEM_PROMPT,
+  describeInput,
+  DESCRIPTION_TEMPLATE_VERSION,
+  descriptionTemplate,
+  readLandmarkFacts,
+  type LandmarkFacts,
+} from "./landmark-description";
+import {
+  descriptionOf,
   EMPTY_NOTEBOOK,
+  keepDescription,
   landmarksToStudy,
   noticeLandmarks,
   notebookSnapshot,
@@ -110,6 +122,12 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 export const SPEECH_MS = 10_000;
 
 /**
+ * How long a local model may take to retell a description before the
+ * template is said instead: well inside the drive's own wait for it.
+ */
+export const RETELL_MS = 6_000;
+
+/**
  * The ground right around the person is theirs to send a body onto even
  * before its cell has lit: they are standing on it.
  */
@@ -139,6 +157,15 @@ export interface AvaiaSpeech {
   readonly text: string;
   /** The place the line is about, when it names one: what it describes. */
   readonly about?: MapPointSelection;
+  /** How long it stays up, when the drive said; `SPEECH_MS` otherwise. */
+  readonly ms?: number;
+}
+
+/** A description readied for the drive's `show` and `keep`. */
+interface Readied {
+  readonly landmark: MapLandmark;
+  readonly text: string;
+  readonly producedBy: string;
 }
 
 interface Rest {
@@ -201,6 +228,16 @@ export interface AvaiaWalkInput {
    */
   readonly chooser?:
     ((choose: DriveChoose) => Promise<number | null>) | undefined;
+  /**
+   * Asks the local model to retell a description, and names that model.
+   * Absent, every description is the template (nilx-one/ai LD3).
+   */
+  readonly retell?:
+    | {
+        readonly ask: (system: string, user: string) => Promise<string | null>;
+        readonly modelId: string;
+      }
+    | undefined;
   /** What the Avaia's needs ask of it, from Core's Avaia life. */
   readonly life?: AvaiaLifeSignal | undefined;
   /**
@@ -412,6 +449,7 @@ export function useAvaiaWalk({
   reducedMotion,
   core,
   chooser,
+  retell,
   life,
   onFogTap,
   onCue,
@@ -455,6 +493,12 @@ export function useAvaiaWalk({
   const [clock, setClock] = useState(() => Date.now());
   const speechCount = useRef(0);
   const lastLine = useRef<string | undefined>(undefined);
+  // Descriptions readied for the drive, by ref, and the one on show: a line
+  // about the same landmark does not talk over it.
+  const readied = useRef(new Map<string, Readied>());
+  const showing = useRef<
+    { readonly landmarkId: string; readonly untilMs: number } | undefined
+  >(undefined);
 
   // The drive's stored state, opaque here, and the refs it was handed.
   const driveState = useRef<string>(readWorldMemory(owner).drive ?? "");
@@ -489,6 +533,7 @@ export function useAvaiaWalk({
     owner,
     core,
     chooser,
+    retell,
     onFogTap,
     onCue,
     onLine,
@@ -512,6 +557,7 @@ export function useAvaiaWalk({
       owner,
       core,
       chooser,
+      retell,
       onFogTap,
       onCue,
       onLine,
@@ -541,6 +587,14 @@ export function useAvaiaWalk({
     (kind: AvaiaLineKind, landmark?: MapLandmark): void => {
       const { model: voice, locale: language } = latest.current;
       if (voice === undefined) return;
+      const shown = showing.current;
+      if (
+        landmark !== undefined &&
+        shown?.landmarkId === landmark.id &&
+        globalThis.performance.now() < shown.untilMs
+      ) {
+        return;
+      }
       const text = pickAvaiaLine({
         locale: language,
         model: voice,
@@ -750,6 +804,7 @@ export function useAvaiaWalk({
       ...(DRIVE_KIND.test(landmark.kind) ? { kind: landmark.kind } : {}),
       meters: Math.round(meters),
       feeling: feelingFor(mine, landmark.id, now),
+      described: descriptionOf(known, landmark.id) !== undefined,
     });
     return {
       type: "curiosity_options",
@@ -961,6 +1016,59 @@ export function useAvaiaWalk({
             seeLandmark(current, landmark, by, Date.now()),
           );
           say("landmark.glanced", landmark);
+          return;
+        }
+        case "describe": {
+          const landmark = refLandmark(refs.current.get(command.at));
+          if (landmark === undefined) return;
+          const { locale: language, retell: model } = latest.current;
+          const facts = readLandmarkFacts(
+            describeInput(
+              landmark,
+              language,
+              landmarkKindLabel(language, landmark.kind),
+            ),
+          );
+          // Nothing the faculty can word: the drive's wait runs out unshown.
+          if (facts === undefined) return;
+          void wordDescription(facts, model).then(({ text, producedBy }) => {
+            if (readied.current.size >= READIED_KEPT) readied.current.clear();
+            readied.current.set(command.at, { landmark, text, producedBy });
+            step({ type: "described", at: command.at });
+          });
+          return;
+        }
+        case "show": {
+          const entry = readied.current.get(command.at);
+          if (entry === undefined || latest.current.model === undefined) return;
+          showing.current = {
+            landmarkId: entry.landmark.id,
+            untilMs: globalThis.performance.now() + command.ms,
+          };
+          speechCount.current += 1;
+          setSpeech({
+            id: speechCount.current,
+            text: entry.text,
+            about: {
+              longitude: entry.landmark.longitude,
+              latitude: entry.landmark.latitude,
+            },
+            ms: command.ms,
+          });
+          return;
+        }
+        case "keep": {
+          const entry = readied.current.get(command.at);
+          if (entry === undefined) return;
+          updateNotebook(latest.current.owner, (current) =>
+            keepDescription(current, {
+              landmarkId: entry.landmark.id,
+              text: entry.text,
+              producedBy: entry.producedBy,
+              templateVersion: DESCRIPTION_TEMPLATE_VERSION,
+              describedAt: Date.now(),
+            }),
+          );
           return;
         }
         case "pick_up":
@@ -1239,6 +1347,9 @@ export function useAvaiaWalk({
           .map((entry) => entry.landmark.id)
           .filter((id) => !studied.has(id)),
       );
+      const described = new Set(
+        known.descriptions.map((entry) => entry.landmarkId),
+      );
       const things = passingThings({
         refs: refs.current,
         ahead,
@@ -1246,6 +1357,7 @@ export function useAvaiaWalk({
         areas: renderer.areasNear?.call(renderer, body, 400) ?? [],
         finds: placedFinds,
         studyable,
+        described,
       });
       const key = things.map((thing) => thing.ref).join("|");
       if (things.length === 0 || key === lastPassing.current) return;
@@ -1407,7 +1519,7 @@ export function useAvaiaWalk({
     if (speech === undefined) return;
     const closes = globalThis.setTimeout(() => {
       setSpeech((current) => (current?.id === speech.id ? undefined : current));
-    }, SPEECH_MS);
+    }, speech.ms ?? SPEECH_MS);
     return () => globalThis.clearTimeout(closes);
   }, [speech]);
 
@@ -1546,4 +1658,36 @@ export function useAvaiaWalk({
     }),
     [fond, moving, notebook, stop, say, speech, stance, walkTo],
   );
+}
+
+/** Descriptions readied and not yet shown are let go past this many. */
+const READIED_KEPT = 32;
+
+/**
+ * The description of a landmark: the template, or a local model's retelling
+ * of it when one comes back in time and is admitted (nilx-one/ai LD1).
+ */
+async function wordDescription(
+  facts: LandmarkFacts,
+  model:
+    | {
+        readonly ask: (system: string, user: string) => Promise<string | null>;
+        readonly modelId: string;
+      }
+    | undefined,
+): Promise<{ readonly text: string; readonly producedBy: string }> {
+  const template = descriptionTemplate(facts);
+  if (model === undefined) return { text: template, producedBy: "template" };
+  let late: ReturnType<typeof setTimeout> | undefined;
+  const said = await Promise.race([
+    model.ask(DESCRIBE_SYSTEM_PROMPT, template).catch(() => null),
+    new Promise<null>((resolve) => {
+      late = globalThis.setTimeout(() => resolve(null), RETELL_MS);
+    }),
+  ]);
+  if (late !== undefined) globalThis.clearTimeout(late);
+  const admitted = said === null ? undefined : admitDescription(facts, said);
+  return admitted === undefined
+    ? { text: template, producedBy: "template" }
+    : { text: admitted, producedBy: model.modelId };
 }

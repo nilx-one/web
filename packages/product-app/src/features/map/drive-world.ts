@@ -395,6 +395,11 @@ export function passingThings(input: {
   readonly finds: readonly PlacedFind[];
   /** Landmarks the owner walked past that this Avaia has not studied. */
   readonly studyable: ReadonlySet<string>;
+  /**
+   * Landmarks the notebook holds a description of. Given, every landmark
+   * says whether it is described, so the drive may ask for the rest.
+   */
+  readonly described?: ReadonlySet<string>;
 }): AvaiaDrivePassing[] {
   const { refs, ahead } = input;
   if (ahead.length < 2) return [];
@@ -426,6 +431,9 @@ export function passingThings(input: {
       group: "landmark",
       off_route_m: off,
       ...(input.studyable.has(landmark.id) ? { studyable: true } : {}),
+      ...(input.described === undefined
+        ? {}
+        : { described: input.described.has(landmark.id) }),
     });
   }
   for (const area of input.areas) {

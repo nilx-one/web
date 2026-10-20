@@ -1146,6 +1146,12 @@ button.provider-control {
   overflow-wrap: anywhere;
 }
 
+.avaia-notebook__description {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .authenticated-map-home[data-theme="light"] .avaia-notebook__list > li {
   border-color: rgba(29, 40, 44, 0.1);
   background: rgba(29, 40, 44, 0.035);

@@ -26,9 +26,17 @@ export const CHOOSER_RETRY_MS = 10 * 60 * 1000;
 /** An answer is one number: a few tokens are all it may take. */
 const MAX_NEW_TOKENS = 4;
 
+/** A retold description is two short sentences at most. */
+const RETELL_NEW_TOKENS = 96;
+
 export interface DriveChooser {
   /** The option the model picks, or `null` for no answer. Never throws. */
   choose(choose: DriveChoose): Promise<number | null>;
+  /**
+   * The model's answer to one free turn, unchecked, or `null`. The caller
+   * admits it or not; nothing here reads it. Never throws.
+   */
+  retell(system: string, user: string): Promise<string | null>;
   /** Lets the model go. */
   dispose(): Promise<void>;
 }
@@ -125,11 +133,36 @@ export function createDriveChooser({
         return null;
       }
     },
+    async retell(system, user) {
+      const pending = loaded();
+      if (pending === undefined) return null;
+      try {
+        const model = await pending;
+        if (model === null || model.complete === undefined) return null;
+        return await model.complete({
+          system,
+          user,
+          maxNewTokens: RETELL_NEW_TOKENS,
+          temperature: 0.3,
+          topP: 0.9,
+        });
+      } catch {
+        return null;
+      }
+    },
     async dispose() {
       disposed = true;
       await release();
     },
   };
+}
+
+/** What the walk asks of the local model: a pick, and a retelling. */
+export interface DriveModel {
+  readonly choose: DriveChooser["choose"];
+  readonly retell: DriveChooser["retell"];
+  /** The model that answers: what a kept retelling says produced it. */
+  readonly modelId: string;
 }
 
 /**
@@ -140,7 +173,7 @@ export function createDriveChooser({
 export function useDriveChooser(
   localModel: LocalModelDependency | undefined,
   readiness: LocalModelReadiness,
-): DriveChooser["choose"] | undefined {
+): DriveModel | undefined {
   const modelId =
     readiness.kind === "present"
       ? (readiness.modelId ?? localModel?.defaultModelId)
@@ -163,5 +196,11 @@ export function useDriveChooser(
     },
     [chooser],
   );
-  return chooser?.choose;
+  return useMemo(
+    () =>
+      chooser === undefined || modelId === undefined
+        ? undefined
+        : { choose: chooser.choose, retell: chooser.retell, modelId },
+    [chooser, modelId],
+  );
 }

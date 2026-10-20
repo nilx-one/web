@@ -168,7 +168,7 @@ import {
   type DockSeat,
 } from "./bond-dock-view-model";
 import { landmarkKindLabel, landmarkLabel } from "./avaia-lines";
-import { seenBy, studiedBy } from "./landmark-notebook";
+import { seenBy, studiedBy, type DescribedLandmark } from "./landmark-notebook";
 import { placeLandmark } from "./place-affinity";
 import {
   ACHIEVEMENTS,
@@ -788,15 +788,24 @@ function DockPlaceButton({
 function NotebookLandmarks({
   locale,
   landmarks,
+  descriptions,
 }: {
   readonly locale: ProductLocale;
   readonly landmarks: readonly { readonly landmark: MapLandmark }[];
+  /** What she said about each, kept on the drive's `keep`. */
+  readonly descriptions: readonly DescribedLandmark[];
 }) {
   return (
     <ul className="avaia-notebook__list">
       {landmarks.map(({ landmark }) => (
         <li key={landmark.id}>
           <strong>{landmarkLabel(locale, landmark)}</strong>
+          <NotebookDescription
+            text={
+              descriptions.find((entry) => entry.landmarkId === landmark.id)
+                ?.text
+            }
+          />
           <small>
             {[
               locale === "en"
@@ -810,6 +819,12 @@ function NotebookLandmarks({
         </li>
       ))}
     </ul>
+  );
+}
+
+function NotebookDescription({ text }: { readonly text: string | undefined }) {
+  return text === undefined ? null : (
+    <p className="avaia-notebook__description">{text}</p>
   );
 }
 
@@ -1484,7 +1499,11 @@ export function AuthenticatedMapHomeView({
       return outcome === "offered" || outcome === "revealing";
     },
     core: findItems,
-    chooser: driveChooser,
+    chooser: driveChooser?.choose,
+    retell:
+      driveChooser === undefined
+        ? undefined
+        : { ask: driveChooser.retell, modelId: driveChooser.modelId },
     life: avaiaLife,
     onCue: cue,
     onWalkCompleted: findLoop.completedAvaiaWalk,
@@ -3753,6 +3772,7 @@ export function AuthenticatedMapHomeView({
                           <NotebookLandmarks
                             locale={locale}
                             landmarks={avaiaStudied}
+                            descriptions={avaiaWalk.notebook.descriptions}
                           />
                         )}
                         <p className="interface-settings__note">
@@ -3773,6 +3793,7 @@ export function AuthenticatedMapHomeView({
                           <NotebookLandmarks
                             locale={locale}
                             landmarks={avaiaSeen}
+                            descriptions={avaiaWalk.notebook.descriptions}
                           />
                         </section>
                       )}
