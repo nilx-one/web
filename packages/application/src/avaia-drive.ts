@@ -170,7 +170,11 @@ export type AvaiaDriveCommand =
       readonly result: LandmarkDescriptionResult;
     }
   /** Core alone forwards the same accepted result for local persistence. */
-  | { readonly do: "keep"; readonly at: string; readonly result: LandmarkDescriptionResult }
+  | {
+      readonly do: "keep";
+      readonly at: string;
+      readonly result: LandmarkDescriptionResult;
+    }
   | { readonly do: "pick_up"; readonly at: string }
   | { readonly do: "visited"; readonly at: string }
   | {
