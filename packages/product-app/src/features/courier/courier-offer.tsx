@@ -1,6 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useLocalization } from "../../shell/localization";
 import "./courier.css";
 export function CourierOffer({
@@ -19,7 +19,7 @@ export function CourierOffer({
 }) {
   const { t } = useLocalization();
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current,
       previous = document.activeElement;
     if (el?.showModal) el.showModal();

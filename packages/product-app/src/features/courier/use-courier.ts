@@ -146,39 +146,9 @@ export function useCourier(input: {
       }
     }
   }, [active, start, close, offer]);
-  // Each GPS fix is a new origin object: the shot reads it from the ref so a
-  // fix neither re-stages nor restores it, and the camera from before the
-  // offer is the one it hands back (as useSystemDroneScene does).
-  const hasOrigin = input.origin !== undefined;
+  // The offer is a decision, not a flight. Preserve the current world shot
+  // until an explicit Accept starts useFlyover, which owns camera restoration.
   const { renderer, suspended } = input;
-  useEffect(() => {
-    const origin = latest.current.origin;
-    if (!offer || suspended || !origin) return;
-    let restore: ReturnType<MapRenderer["getCamera"]>;
-    try {
-      restore = renderer.getCamera();
-      renderer.setCamera(
-        {
-          center: [origin.longitude, origin.latitude],
-          zoom: 20,
-          bearing: 0,
-          pitch: 55,
-        },
-        { motion: prefersReducedMotion() ? "immediate" : "eased" },
-      );
-    } catch {
-      return;
-    }
-    return () => {
-      try {
-        renderer.setCamera(restore, {
-          motion: prefersReducedMotion() ? "immediate" : "eased",
-        });
-      } catch {
-        /* context loss */
-      }
-    };
-  }, [offer, renderer, suspended, hasOrigin]);
   // Only the flying xPing takes taps, and only while it flies: a hint or
   // offer drone parked on the Bond must leave Bond and Avaia their taps.
   useEffect(() => {

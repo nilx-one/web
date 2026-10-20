@@ -28,10 +28,26 @@
 .activity-stack__row[data-exiting] {
   animation: activity-out 0.5s ease-in both;
 }
+/* A native modal is placed inside the changing Telegram visual viewport.
+   Fixed bottom offsets and post-mount reflow made the offer jump and clip. */
 .courier-offer {
+  --courier-safe-space: calc(
+    env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)
+  );
   position: fixed;
-  inset: auto 1rem calc(var(--shell-bottom-height, 70px) + 1rem);
-  max-width: 32rem;
+  top: env(safe-area-inset-top, 0px);
+  right: env(safe-area-inset-right, 0px);
+  bottom: env(safe-area-inset-bottom, 0px);
+  left: env(safe-area-inset-left, 0px);
+  box-sizing: border-box;
+  width: min(32rem, calc(100% - 2rem));
+  max-width: none;
+  height: fit-content;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - var(--courier-safe-space) - 2rem);
+  margin: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--map-night-border);
   border-radius: 20px;
   padding: 20px;
