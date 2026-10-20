@@ -29,6 +29,37 @@ Every accepted application focus gets a monotonically increasing generation. Ret
 
 A new map instance first frames geographic countries at zoom 3.3, backed by a genuine low-resolution global source. When the map becomes ready, the first observed position triggers a single 2.3-second MapLibre flight: accurate GPS (up to 50 m uncertainty) lands at the established local-cell zoom 18.5, coarser GPS observations progressively widen the view (one zoom step per uncertainty doubling, no farther out than neighborhood zoom 13), and manually declared positions land at zoom 20.25 to make the driver readable without claiming a device observation. Invalid sensor accuracy conservatively uses neighborhood zoom. Reduced motion skips the animation. A remembered on-device position can serve as the first flight target while current geolocation resolves; a nearby live fix must not restart the flight. This is camera presentation, not a Bond location mutation. A direct gesture claims camera ownership immediately, and a Telegram viewport resize refreshes the renderer without changing geography.
 
+### Initial world reveal
+
+Renderer `ready` only starts the position lifecycle; it is not a claim that the
+world is usable. The opening camera lands in the selected Isometric/Follow/Free
+composition, including the tracking offset, so tracking does not immediately
+replace a north-facing opening shot. The mode is currently initialized per
+identity, not persisted between sessions.
+
+MapLibre's optional `whenSceneReady` paint barrier waits for the camera to stop,
+the current style and tiles (including terrain) to load, and the monument and
+requested body models to finish loading or take their existing missing-asset
+fallback. A layer whose code cannot load at all (offline, or a hashed chunk a
+newer deploy no longer serves) counts as that same fallback: the world is
+revealed without it. Two stable paints include the final asset placement. It does not use
+`idle`, which continuously animated custom layers may never emit.
+
+The world stays mounted and measurable behind an opaque loading surface. Core's
+ready badge and automatic cutscenes wait for that initial reveal. After 20 seconds
+of scene preparation, a retryable message replaces the endless loading state;
+a timeout never counts as a successful frame. The 20 seconds belong to the
+attempt, not to the opening target: a live fix that retargets the wait does not
+restart them. Only visible time counts, since a hidden page paints no frames. Cancellation on retarget, retry or
+unmount prevents a stale completion from revealing the world. Permission denial
+or unavailable location still permits a map-only view with the existing location
+control. Later navigation does not restart the startup cover.
+
+This barrier is not collision detection and does not resolve geometry occlusion
+in #459. Real iPhone Safari/Telegram acceptance remains required: cold and warm
+loads, slow tiles/DEM/GLB in either order, reduced motion, and final driver
+framing without any server-position mutation.
+
 ## Follow and Free camera
 
 Three explicit camera modes are selected on the world overlay next to the

@@ -139,7 +139,6 @@ import {
   cameraFramesPosition,
   cameraMotion,
   closeUpCamera,
-  firstFixCamera,
   locationCameraPadding,
   recenterCamera,
 } from "./location-camera-policy";
@@ -197,6 +196,8 @@ import {
 } from "../courier/market-points";
 import { useAvaiaWalk } from "./use-avaia-walk";
 import { useFollowCamera } from "./use-follow-camera";
+import { openingCamera } from "./opening-camera";
+import { useWorldStartup } from "./use-world-startup";
 import { CameraModeControl } from "./camera-mode-control";
 import { FlyoverControls } from "../flyover/flyover-controls";
 import { useStarterSeeds, useXpingEngine } from "../xping/xping-engine";
@@ -1058,7 +1059,18 @@ export function AuthenticatedMapHomeView({
   // for a pan that leaves the scale untouched.
   const cameraZoom = camera.zoom;
   const contractVersion = runtimeContract(runtime);
-  const mapViewModel = createMapFoundationViewModel(mapStatus);
+  const startup = useWorldStartup(
+    renderer,
+    mapStatus,
+    observedPosition === undefined &&
+      ["idle", "checking-permission", "locating"].includes(location.state.kind),
+    `${wheel}:${observedPosition?.longitude}:${observedPosition?.latitude}`,
+  );
+  const visibleMapStatus: MapRendererStatus =
+    mapStatus.kind === "ready" && !startup.ready
+      ? { kind: "loading" }
+      : mapStatus;
+  const mapViewModel = createMapFoundationViewModel(visibleMapStatus);
   const activeDetail =
     detailState?.section === section ? detailState.detail : undefined;
   const dockScreen = activeDetail ?? (section === "world" ? "home" : section);
@@ -1122,7 +1134,7 @@ export function AuthenticatedMapHomeView({
   const wheelAddress = wheel === "bond" ? pubDress : avaiaAddress;
   const { t, resolved: locale } = useLocalization();
   const statusToast = mapStatusToast(
-    mapStatus,
+    visibleMapStatus,
     translateCopy(t, mapViewModel.label),
     translateCopy(t, mapViewModel.detail),
   );
@@ -1152,7 +1164,7 @@ export function AuthenticatedMapHomeView({
     section === "settings",
   );
   const readiness = createWorldReadiness({
-    map: mapStatus,
+    map: visibleMapStatus,
     location: location.state,
     model: localModelReadiness,
   });
@@ -1731,10 +1743,11 @@ export function AuthenticatedMapHomeView({
       guideActive ||
       achievementDialog !== undefined ||
       systemInformer.activeId !== undefined ||
-      mapStatus.kind !== "ready",
+      !startup.ready,
   });
   useSystemInformerBlock(
-    guideActive ||
+    !startup.ready ||
+      guideActive ||
       achievementDialog !== undefined ||
       courier.offer !== undefined,
   );
@@ -1830,7 +1843,7 @@ export function AuthenticatedMapHomeView({
   const guideFloorClear =
     section === "world" &&
     activeDetail === undefined &&
-    mapStatus.kind === "ready" &&
+    startup.ready &&
     (focusState === "focused" || focusState === "unavailable") &&
     !guideActive &&
     courier.offer === undefined &&
@@ -2079,7 +2092,7 @@ export function AuthenticatedMapHomeView({
     const context = { presentation, dimension, safeArea };
     followCameraRef.current.hold(FOLLOW_FLIGHT_HOLD_MS);
     renderer.setCamera(
-      firstFixCamera(
+      openingCamera(
         {
           longitude: point.longitude,
           latitude: point.latitude,
@@ -2090,6 +2103,8 @@ export function AuthenticatedMapHomeView({
           ...(rememberedAvaia !== undefined ? { declared: true as const } : {}),
         },
         context,
+        followCameraRef.current.follow,
+        rememberedAvaia?.bearingDeg,
       ),
       {
         motion: prefersReducedMotion() ? "immediate" : "flight",
@@ -2109,10 +2124,14 @@ export function AuthenticatedMapHomeView({
 
   // Only the first fix decides where the camera goes, so the wheel and the
   // walk are read as they stand at that instant rather than followed.
-  const wheelAvaiaPoint = (): MapPointSelection | undefined =>
-    wheel === "avaia"
-      ? avaiaWalk.stance(globalThis.performance.now())?.point
-      : undefined;
+  const wheelAvaiaPoint = ():
+    (MapPointSelection & { bearingDeg: number }) | undefined => {
+    if (wheel !== "avaia") return undefined;
+    const stance = avaiaWalk.stance(globalThis.performance.now());
+    return stance === undefined
+      ? undefined
+      : { ...stance.point, bearingDeg: stance.bearingDeg };
+  };
   const wheelAvaiaPointRef = useRef(wheelAvaiaPoint);
   useEffect(() => {
     wheelAvaiaPointRef.current = wheelAvaiaPoint;
@@ -2145,7 +2164,12 @@ export function AuthenticatedMapHomeView({
             accuracyMeters: 0,
           };
     const context = { presentation, dimension, safeArea };
-    const targetCamera = firstFixCamera(target, context);
+    const targetCamera = openingCamera(
+      target,
+      context,
+      followCameraRef.current.follow,
+      avaiaPoint?.bearingDeg,
+    );
     const resumedAt = openingTarget.current;
     // Keep an existing flight only when its target *and framing* are right.
     // A late, coarse device fix must widen even when coordinates barely move.
@@ -3039,6 +3063,7 @@ export function AuthenticatedMapHomeView({
       data-readiness={readiness.tone}
       data-readiness-shown={readinessShown}
       frame={<div className="authenticated-map-home__readiness" />}
+      data-world-ready={startup.ready}
       data-section={section}
       data-cutscene={guideActive}
       world={
@@ -3051,6 +3076,28 @@ export function AuthenticatedMapHomeView({
             />
           </div>
           <div className="authenticated-map-home__shade" aria-hidden="true" />
+          {!startup.ready && renderer.whenSceneReady ? (
+            <div
+              className="authenticated-map-home__startup"
+              role="status"
+              aria-live="polite"
+            >
+              <p>
+                {mapStatus.kind === "unavailable"
+                  ? translateCopy(t, mapViewModel.detail)
+                  : t(
+                      startup.failed
+                        ? "map.startup.failed"
+                        : "map.startup.loading",
+                    )}
+              </p>
+              {startup.failed ? (
+                <button type="button" onClick={startup.retry}>
+                  {t("map.startup.retry")}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </>
       }
       header={
@@ -3106,22 +3153,24 @@ export function AuthenticatedMapHomeView({
         />
       }
       statusRail={
-        <section
-          className={`core-chip core-chip--${runtime.tone}`}
-          aria-live="polite"
-        >
-          <i aria-hidden="true" />
-          <span>
-            <strong>
-              {translateFirst(t, runtime.label, RUNTIME_LABEL_KEYS)}
-            </strong>
-            {contractVersion === undefined ? null : (
-              <small>
-                {t("runtime.contract").replace("{version}", contractVersion)}
-              </small>
-            )}
-          </span>
-        </section>
+        startup.ready ? (
+          <section
+            className={`core-chip core-chip--${runtime.tone}`}
+            aria-live="polite"
+          >
+            <i aria-hidden="true" />
+            <span>
+              <strong>
+                {translateFirst(t, runtime.label, RUNTIME_LABEL_KEYS)}
+              </strong>
+              {contractVersion === undefined ? null : (
+                <small>
+                  {t("runtime.contract").replace("{version}", contractVersion)}
+                </small>
+              )}
+            </span>
+          </section>
+        ) : null
       }
       dock={
         <section
@@ -3815,7 +3864,7 @@ export function AuthenticatedMapHomeView({
       overlay={
         <>
           {section === "world" &&
-          mapStatus.kind === "ready" &&
+          startup.ready &&
           handover === undefined &&
           !guideActive &&
           !flyover.expanded &&

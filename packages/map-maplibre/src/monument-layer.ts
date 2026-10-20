@@ -60,6 +60,7 @@ function defaultLoadAsset(signal: AbortSignal): Promise<Object3D> {
 }
 
 export interface MonumentCustomLayer extends CustomLayerInterface {
+  isSettled(): boolean;
   setDimension(dimension: MapDimension): void;
   dispose(): void;
 }
@@ -106,6 +107,7 @@ export function createMonumentLayer(
   // swap — closes the door for good.
   let loadController: AbortController | undefined;
   let disposed = false;
+  let settled = false;
 
   function place(): void {
     if (root === undefined) return;
@@ -156,6 +158,11 @@ export function createMonumentLayer(
     } catch {
       // Fail closed: a missing monument asset renders nothing, same as a
       // missing study — it never blocks or breaks the map underneath it.
+    } finally {
+      if (!disposed && !signal.aborted) {
+        settled = true;
+        map?.triggerRepaint();
+      }
     }
   }
 
@@ -164,7 +171,10 @@ export function createMonumentLayer(
     type: "custom",
     renderingMode: "3d",
 
+    isSettled: () => settled,
+
     onAdd(mountedMap, gl) {
+      settled = false;
       map = mountedMap;
       renderer = new WebGLRenderer({
         canvas: mountedMap.getCanvas(),
@@ -198,6 +208,7 @@ export function createMonumentLayer(
     onRemove() {
       // Cancels this mount's in-flight load, if any, so a late resolution
       // never adds a root to a scene whose renderer just got disposed.
+      settled = false;
       loadController?.abort();
       loadController = undefined;
       root?.removeFromParent();
