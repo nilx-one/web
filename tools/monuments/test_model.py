@@ -19,7 +19,7 @@ import trimesh
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--input", default="deploy/web/monuments/0.4.0/motherland.glb"
+    "--input", default="deploy/web/monuments/0.5.0/motherland.glb"
 )
 args = parser.parse_args()
 
@@ -54,5 +54,13 @@ for part in ("glow_sword_halo_a", "glow_sword_halo_b", "glow_feet_pool", "glow_f
 for part in ("glow_sword_halo_a", "glow_feet_pool"):
     colours = scene.geometry[part].visual.vertex_colors
     assert colours[:, :3].max() > 200 and colours[:, :3].min() < 10, f"{part} should fade to black"
+
+# The figure's detail: the banded bodice, the mantle, the shoulders, the
+# face and hair, on a plinth whose step is wider than her hem.
+for part in ("robe", "bodice", "mantle", "bodice_band_low", "right_shoulder", "left_shoulder", "nose", "hair", "pedestal_step"):
+    assert part in names, f"missing {part}"
+hem = scene.geometry["robe"].bounds
+step = scene.geometry["pedestal_step"].bounds
+assert (hem[1] - hem[0])[0] < (step[1] - step[0])[0], "her hem should stand within the plinth's step"
 
 print(f"motherland.glb: {len(scene.geometry)} parts, {high[1]:.1f} m tall — ok")

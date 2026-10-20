@@ -42,7 +42,7 @@ PARTS = []
 PALETTE = {
     "chrome": ("#e6eef3", 0.16, 0.92, None),
     "chrome_dark": ("#a9bac5", 0.22, 0.88, None),
-    "pedestal": ("#aab5ba", 0.42, 0.40, None),
+    "pedestal": ("#355d78", 0.34, 0.70, None),
     "neon": ("#5be7ff", 0.10, 0.05, (0.35, 4.4, 5.4)),
     "neon_warm": ("#ffe9a8", 0.10, 0.05, (5.4, 4.2, 1.6)),
     # The coat of arms in its own colours: a deep blue field and a tryzub of
@@ -203,99 +203,138 @@ def ring(name, center, radius, z, mat, thickness=0.14, group="body"):
 
 # ---------------------------------------------------------------- pedestal
 # The real monument stands on the museum's drum, a 40 m pylon; here it is a
-# round chrome plinth banded with light, the way the reference render lights
-# it. Its footprint covers the drum and the buttresses the basemap carries
-# there, which the renderer cuts out of its own extrusion in favour of this.
+# steel-blue drum banded with light, the way the reference render lights it:
+# a broad footing, a lip under the figure's step, the step itself. Its
+# footing covers the drum and the buttresses the basemap carries there,
+# which the renderer cuts out of its own extrusion in favour of this.
 PEDESTAL_HEIGHT = 40.0
-PEDESTAL_SHOULDER = PEDESTAL_HEIGHT - 3.0
+PEDESTAL_FOOT = 3.0
+PEDESTAL_LIP = 37.0
+PEDESTAL_STEP_RADIUS = 11.2
 
 
-def pedestal_radius(z):
-    return 17.5 - 2.5 * (z - 3.0) / (PEDESTAL_SHOULDER - 3.0)
+def drum(name, z0, z1, r0, r1, mat="pedestal"):
+    # Two sections loft as a straight cone: no overshoot, no barrel.
+    loft(name, [(z0, r0, r0, 0, 0), (z1, r1, r1, 0, 0)], mat, rings=2, sides=96, group="pedestal")
 
 
-loft(
-    "pedestal",
-    [
-        (0.0, 20.0, 20.0, 0, 0),
-        (3.0, 20.0, 20.0, 0, 0),
-        (3.001, 17.5, 17.5, 0, 0),
-        (PEDESTAL_SHOULDER, 15.0, 15.0, 0, 0),
-        (PEDESTAL_SHOULDER + 0.001, 13.0, 13.0, 0, 0),
-        (PEDESTAL_HEIGHT, 13.0, 13.0, 0, 0),
-    ],
-    "pedestal",
-    rings=12,
-    sides=64,
-    group="pedestal",
-)
-ring("pedestal_foot_ring", (0, 0), 17.55, 3.1, "neon", group="pedestal")
-ring("pedestal_shoulder_ring", (0, 0), 15.05, PEDESTAL_SHOULDER, "neon", group="pedestal")
-ring("pedestal_crown_ring", (0, 0), 13.05, PEDESTAL_HEIGHT - 0.1, "neon", group="pedestal")
-# Vertical seams of light up the drum, as the reference's pylon is ribbed.
-for k in range(16):
-    a = 2 * np.pi * (k + 0.5) / 16
-    tube(
-        "pedestal_seam",
-        [
-            [(pedestal_radius(z) + 0.06) * np.sin(a), -(pedestal_radius(z) + 0.06) * np.cos(a), z]
-            for z in (4.0, 20.0, PEDESTAL_SHOULDER - 1.0)
-        ],
-        [0.09, 0.09],
-        "neon",
-        n=6,
-        sides=6,
-        group="pedestal",
-    )
+def disc(name, z, r_outer, r_inner=0.0, mat="pedestal"):
+    angles = np.linspace(0, 2 * np.pi, 97)[:-1]
+    verts = [[r * np.sin(a), -r * np.cos(a), z] for r in (r_inner, r_outer) for a in angles]
+    m = len(angles)
+    faces = []
+    for j in range(m):
+        a0, a1 = j, (j + 1) % m
+        faces.extend([[a0, a1, a1 + m], [a0, a1 + m, a0 + m]])
+    add(name, verts, faces, mat, "pedestal")
+
+
+drum("pedestal_footing", 0.0, PEDESTAL_FOOT, 20.0, 20.0)
+disc("pedestal_footing_top", PEDESTAL_FOOT, 20.0, 17.5)
+drum("pedestal", PEDESTAL_FOOT, PEDESTAL_LIP, 17.5, 15.0)
+drum("pedestal_lip", PEDESTAL_LIP, PEDESTAL_LIP + 0.6, 15.7, 15.7)
+disc("pedestal_lip_top", PEDESTAL_LIP + 0.6, 15.7, PEDESTAL_STEP_RADIUS)
+drum("pedestal_step", PEDESTAL_LIP + 0.6, PEDESTAL_HEIGHT, PEDESTAL_STEP_RADIUS, PEDESTAL_STEP_RADIUS)
+disc("pedestal_crown", PEDESTAL_HEIGHT, PEDESTAL_STEP_RADIUS)
+# The reference's bands of light: a broad one low on the drum, one under
+# the lip, and the step's own edge.
+ring("pedestal_foot_ring", (0, 0), 17.4, PEDESTAL_FOOT + 1.2, "neon", thickness=0.45, group="pedestal")
+ring("pedestal_lip_ring", (0, 0), 15.75, PEDESTAL_LIP + 0.3, "neon", thickness=0.2, group="pedestal")
+ring("pedestal_crown_ring", (0, 0), PEDESTAL_STEP_RADIUS + 0.05, PEDESTAL_HEIGHT - 0.1, "neon", thickness=0.14, group="pedestal")
 
 BASE = PEDESTAL_HEIGHT  # figure stands on top of the pedestal
 
 # ---------------------------------------------------------------- figure
 # Authored at true scale: the figure's feet at the 40 m pylon top, the sword
-# tip at the monument's documented 102 m, a 16 m sword and a shield about as
-# tall as the figure's torso. She faces +y, her right hand on +x: sword
-# raised straight up in the right hand, shield held high in the left.
+# tip at the monument's documented 102 m, a 16 m sword and a 13 m shield.
+# She faces +y, her right hand on +x: sword raised straight up in the right
+# hand, shield held high in the left. The reference's figure: a long skirt
+# that falls almost as a column in deep vertical pleats, a banded bodice, a
+# heavy mantle off her left shoulder, strong bare arms, short hair.
+SKIRT = [
+    (BASE + 0.0, 7.8, 6.6, 0, 0.0),
+    (BASE + 2.0, 7.6, 6.4, 0, 0.1),
+    (BASE + 10.0, 7.0, 5.9, 0, 0.2),
+    (BASE + 18.0, 6.3, 5.2, 0, 0.3),
+    (BASE + 23.0, 5.5, 4.4, 0, 0.3),
+    (BASE + 24.5, 5.2, 4.0, 0, 0.25),
+]
+BODICE = [
+    (BASE + 24.5, 5.2, 4.0, 0, 0.25),
+    (BASE + 26.0, 5.3, 4.1, 0, 0.35),
+    (BASE + 28.0, 5.6, 4.25, 0, 0.45),
+    (BASE + 30.0, 5.9, 3.9, 0, 0.2),
+    (BASE + 31.5, 4.7, 3.2, 0, -0.05),
+    (BASE + 33.2, 1.8, 1.8, 0, -0.2),
+]
+HEM_RX, HEM_RY = SKIRT[0][1], SKIRT[0][2]
+PLEATS = 22
 
 
-def robe_fold(z, a):
-    # Deep folds at the hem fading out by the bust, plus the broad sweep of
-    # drapery that gives the statue its stepped, fluted silhouette.
-    depth = 0.07 * float(np.clip((68.0 - z) / 26.0, 0.0, 1.0))
-    return depth * np.cos(14 * a) + 0.02 * depth / 0.07 * np.cos(5 * a + 0.6)
+def skirt_fold(z, a):
+    # Sharp ridges, deepest at the hem and still there at the waist: the
+    # reference's skirt is fluted like a column the whole way down.
+    depth = 0.11 * (0.55 + 0.45 * float(np.clip((BASE + 24.0 - z) / 24.0, 0.0, 1.0)))
+    return depth * (1.0 - 2.0 * abs(np.sin(PLEATS * a / 2.0)) ** 0.7)
 
 
-loft(
-    "robe",
-    [
-        (BASE + 0.0, 8.8, 7.4, 0, 0),
-        (BASE + 1.5, 8.5, 7.1, 0, 0.1),
-        (BASE + 7.0, 7.7, 6.3, 0, 0.2),
-        (BASE + 14.0, 6.7, 5.5, 0, 0.3),
-        (BASE + 20.0, 5.9, 4.8, 0, 0.3),
-        (BASE + 25.0, 5.1, 4.1, 0, 0.2),
-        (BASE + 28.0, 5.3, 4.0, 0, 0.3),
-        (BASE + 30.5, 5.5, 3.7, 0, 0.1),
-        (BASE + 32.0, 4.5, 3.1, 0, -0.1),
-        (BASE + 33.2, 1.8, 1.8, 0, -0.2),
-    ],
-    "chrome",
-    rings=56,
-    sides=96,
-    group="torso",
-    fold=robe_fold,
+loft("robe", SKIRT, "chrome", rings=64, sides=PLEATS * 10, group="torso", fold=skirt_fold)
+loft("bodice", BODICE, "chrome", rings=32, sides=96, group="torso")
+
+
+def band(name, z, rx, ry, cy, thickness, mat="chrome_dark"):
+    """A strap round the bodice, following its ellipse."""
+    angles = np.linspace(0, 2 * np.pi, 73)
+    tube(name, [[rx * np.sin(a), cy - ry * np.cos(a), z] for a in angles], [thickness], mat, n=96, sides=8, group="torso")
+
+
+# The bodice's straps under the bust, where the reference's armour is banded.
+band("bodice_band_low", BASE + 24.9, 5.27, 4.07, 0.27, 0.32)
+band("bodice_band_mid", BASE + 26.1, 5.36, 4.16, 0.35, 0.22)
+band("bodice_band_high", BASE + 27.0, 5.46, 4.2, 0.4, 0.18)
+
+# The mantle: off her left shoulder, round her back, down to the knee, its
+# hem dipping lower behind. A sheet standing a little off the robe, folded.
+mantle_angles = np.linspace(np.pi * 1.08, np.pi * 2.35, 64)
+mantle_z = np.linspace(0.0, 1.0, 40)
+robe_at = PchipInterpolator(
+    [z for z, *_ in SKIRT + BODICE[1:]], [[rx, ry, cy] for _, rx, ry, _, cy in SKIRT + BODICE[1:]], axis=0
 )
-# A sash of light where the robe gathers at the waist.
-ring("waist_band", (0, 0.2), 5.12, BASE + 25.4, "neon", thickness=0.12, group="torso")
+grid = []
+for t in mantle_z:
+    row = []
+    for a in mantle_angles:
+        # Hem: knee height at the front edge, lower behind her.
+        behind = 0.5 + 0.5 * np.cos(a)
+        bottom = BASE + 12.0 - 4.0 * behind
+        top = BASE + 31.0 - 1.5 * abs(np.sin(a))
+        z = bottom + (top - bottom) * t
+        rx, ry, cy = robe_at(z)
+        stand = 0.55 + 0.35 * (1 - t) + 0.25 * np.sin(9 * a) * (1 - t) ** 1.5
+        row.append([(rx + stand) * np.sin(a), cy - (ry + stand) * np.cos(a), z])
+    grid.append(row)
+grid_mesh("mantle", grid, "chrome_dark", group="torso")
+
 loft(
     "neck",
     [(BASE + 33.0, 1.5, 1.5, 0, -0.2), (BASE + 34.8, 1.4, 1.4, 0, -0.2)],
-    "chrome_dark",
+    "chrome",
     rings=4,
     sides=32,
     group="head",
 )
-ellipsoid("head", (0, -0.1, BASE + 36.7), (1.9, 2.1, 2.5), "chrome", "head")
-ellipsoid("hair", (0, -1.9, BASE + 37.3), (1.3, 1.1, 1.2), "chrome_dark", "head")
+# Head lifted a little, as the reference looks out over the city: a skull,
+# a brow, a nose and a chin, and short hair swept back over the crown.
+ellipsoid("head", (0, -0.05, BASE + 36.7), (1.85, 2.05, 2.45), "chrome", "head")
+ellipsoid("brow", (0, 1.25, BASE + 37.55), (1.35, 0.6, 0.35), "chrome", "head")
+ellipsoid("nose", (0, 1.95, BASE + 36.75), (0.28, 0.45, 0.65), "chrome", "head")
+ellipsoid("chin", (0, 1.55, BASE + 35.1), (0.75, 0.6, 0.5), "chrome", "head")
+ellipsoid("hair", (0, -0.45, BASE + 37.55), (2.0, 2.2, 1.75), "chrome_dark", "head")
+ellipsoid("hair_back", (0, -1.75, BASE + 36.6), (1.55, 0.9, 1.35), "chrome_dark", "head")
+
+# Shoulders under the drapery: the arms rise from them, not from the bodice.
+ellipsoid("right_shoulder", (4.9, 0.05, BASE + 30.5), (2.3, 2.1, 2.0), "chrome_dark", "arm")
+ellipsoid("left_shoulder", (-4.9, 0.05, BASE + 30.5), (2.3, 2.1, 2.0), "chrome_dark", "arm")
 
 # Right arm: raised straight overhead, the sword its silhouette is known for.
 SWORD_HAND = np.array([6.1, 0.8, BASE + 44.6])
@@ -307,11 +346,11 @@ tube(
         [5.9, 0.5, BASE + 40.0],
         SWORD_HAND - [0, 0, 0.6],
     ],
-    [1.45, 1.2, 1.0, 0.85],
+    [2.0, 1.6, 1.35, 1.1],
     "chrome",
     group="arm",
 )
-ellipsoid("right_fist", SWORD_HAND, (1.05, 1.05, 1.2), "chrome", "arm")
+ellipsoid("right_fist", SWORD_HAND, (1.3, 1.3, 1.45), "chrome", "arm")
 tube(
     "sword_grip",
     [SWORD_HAND - [0, 0, 1.6], SWORD_HAND + [0, 0, 2.0]],
@@ -376,11 +415,11 @@ tube(
         [-8.6, 0.9, BASE + 38.0],
         SHIELD_HAND - [0, 0, 0.5],
     ],
-    [1.45, 1.2, 1.0, 0.85],
+    [2.0, 1.6, 1.35, 1.1],
     "chrome",
     group="arm",
 )
-ellipsoid("left_fist", SHIELD_HAND, (1.05, 1.05, 1.2), "chrome", "arm")
+ellipsoid("left_fist", SHIELD_HAND, (1.3, 1.3, 1.45), "chrome", "arm")
 
 # The shield is the Lesser Coat of Arms of Ukraine itself, drawn from its
 # vector (tools/monuments/third_party/coat-of-arms): the shield's own outline,
@@ -462,13 +501,13 @@ tube(
 # Light under her feet: a pool on the plinth's crown, brightest at the hem
 # and gone by the crown's edge, and a low curtain rising from it round the
 # hem, as the reference lights the figure from below.
-pool_radii = np.linspace(7.0, 13.0, 9)
+pool_radii = np.linspace(HEM_RX - 1.0, PEDESTAL_STEP_RADIUS, 9)
 pool_angles = np.linspace(0, 2 * np.pi, 97)[:-1]
 verts, faces, level = [], [], []
 for r in pool_radii:
     for a in pool_angles:
         verts.append([r * np.sin(a), -r * np.cos(a), BASE + 0.06])
-        level.append(max(0.0, 1.0 - abs(r - 8.9) / 4.1) ** 1.6)
+        level.append(max(0.0, 1.0 - abs(r - (HEM_RX + 0.2)) / (PEDESTAL_STEP_RADIUS - HEM_RX)) ** 1.6)
 m = len(pool_angles)
 for i in range(len(pool_radii) - 1):
     for j in range(m):
@@ -480,8 +519,7 @@ curtain_heights = np.linspace(0.0, 5.0, 8)
 verts, faces, level = [], [], []
 for z in curtain_heights:
     for a in pool_angles:
-        r = 9.35 - 0.12 * z
-        verts.append([r * np.sin(a), -r * np.cos(a) + 0.1, BASE + z])
+        verts.append([(HEM_RX + 0.4 - 0.1 * z) * np.sin(a), -(HEM_RY + 0.4 - 0.1 * z) * np.cos(a), BASE + z])
         level.append((1.0 - z / curtain_heights[-1]) ** 2)
 for i in range(len(curtain_heights) - 1):
     for j in range(m):

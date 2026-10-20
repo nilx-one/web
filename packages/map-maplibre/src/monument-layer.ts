@@ -42,7 +42,7 @@ import { terrainElevationMeters } from "./terrain-elevation";
 export { MOTHERLAND_MONUMENT_LOCATION } from "./monument-site";
 
 export const MONUMENT_LAYER_ID = "nilx-one-motherland-monument";
-export const MONUMENT_ASSET_VERSION = "0.4.0";
+export const MONUMENT_ASSET_VERSION = "0.5.0";
 export const MONUMENT_ASSET_URL = `/monuments/${MONUMENT_ASSET_VERSION}/motherland.glb`;
 
 type AssetLoader = (signal: AbortSignal) => Promise<Object3D>;
