@@ -96,8 +96,6 @@ const GLTF_NODE_NAME = "gltfNodeName";
 type SceneHandle = Omit<AvatarHandle, "modelId"> & {
   readonly modelId: AvatarModelId | "system-ping";
   readonly reducedMotion?: boolean;
-  /** Metres above the drawn ground, for a prop that flies. */
-  readonly liftMeters?: number;
   /** A system drone's engine wear, 0 to 1. */
   readonly wear?: number;
   /** Actual flight speed for existing airflow effect. */
@@ -448,8 +446,11 @@ export function createAvatarLayer(
       (coordinate.z - origin.z) / origin.metres,
     );
     root.scale.setScalar((metres / origin.metres) * scale);
+    // A body up on a terrace or its steps stands level: the slope under it
+    // is the ground's, not the floor's it walks on.
     const terrainPitch =
       instance.handle.altitudeMeters === undefined &&
+      (instance.handle.liftMeters ?? 0) === 0 &&
       instance.handle.modelId !== "system-ping"
         ? terrainBodyPitchRadians(map, lngLat, bearingDeg)
         : 0;

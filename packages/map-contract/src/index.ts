@@ -401,6 +401,13 @@ export interface MapObstacle {
    * silent. Absent for water, and for a renderer that cannot say.
    */
   readonly heights?: readonly number[];
+  /**
+   * How high each building polygon's underside starts, in metres, in the same
+   * order as `polygons`: 0 for one standing on the ground, more for a part
+   * drawn overhead — a statue's arm, a walkway bridging two blocks. Absent
+   * where the renderer cannot say, which reads as on the ground.
+   */
+  readonly bases?: readonly number[];
 }
 
 /**
@@ -803,6 +810,11 @@ export interface AvatarHandle {
    * offset; omit it when the body should stand on the loaded terrain surface.
    */
   readonly altitudeMeters?: number;
+  /**
+   * Metres above the drawn ground the body stands: on a terrace it walks
+   * across, or partway up a flight of steps. Ignored with `altitudeMeters`.
+   */
+  readonly liftMeters?: number;
   /** The way the body faces: degrees clockwise from north, as a compass reads. */
   readonly bearingDeg: number;
   readonly clipId: AvatarClipId;

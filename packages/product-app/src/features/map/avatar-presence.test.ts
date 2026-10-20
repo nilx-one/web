@@ -68,6 +68,12 @@ function apparentPixels(zoom: number, scale: number): number {
 }
 
 describe("the body at the wheel", () => {
+  it("stands on the terrace under it, and on the ground otherwise", () => {
+    expect(wheelBodyHandle({ liftMeters: 7.5 })?.liftMeters).toBe(7.5);
+    expect(wheelBodyHandle({ liftMeters: 0 })).not.toHaveProperty("liftMeters");
+    expect(wheelBodyHandle()).not.toHaveProperty("liftMeters");
+  });
+
   it("stands the chosen body where the device observed itself", () => {
     expect(wheelBodyHandle()).toMatchObject({
       id: BODY_HANDLE_IDS.bond,

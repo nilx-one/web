@@ -133,6 +133,8 @@ export interface WheelBodyInput {
    * or is looking a landmark over. A handover still outranks its clip.
    */
   readonly stance?: BodyStance | undefined;
+  /** Metres above the drawn ground it stands, on a terrace or its steps. */
+  readonly liftMeters?: number | undefined;
 }
 
 /** A body's own place and motion, when it has one. */
@@ -163,6 +165,7 @@ export function createWheelBodyHandle({
   timeMs,
   reducedMotion,
   stance,
+  liftMeters,
 }: WheelBodyInput): AvatarHandle | null {
   const observed = deviceLocationPosition(location);
   if (observed === undefined) return null;
@@ -191,6 +194,7 @@ export function createWheelBodyHandle({
     // chosen body needs no translation table between them.
     modelId: study as AvatarModelId,
     lngLat: [position.longitude, position.latitude],
+    ...(liftMeters === undefined || liftMeters <= 0 ? {} : { liftMeters }),
     // Heading is not observed here, so a body at the device faces the world's
     // north rather than pretending to know which way anyone is turned. A body
     // that walked somewhere faces the way it walked.

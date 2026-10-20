@@ -1727,10 +1727,11 @@ describe("obstacles the basemap draws", () => {
         query.sourceLayer === "buildings"
           ? [
               { geometry: square(30.5234, 50.4501), properties: {} },
-              // A tower the data measures stands at its own height.
+              // A tower the data measures stands at its own height, and a
+              // walkway it carries starts overhead.
               {
                 geometry: square(30.5244, 50.4511),
-                properties: { height: 48 },
+                properties: { height: 48, min_height: 6 },
               },
               // Far outside the box: never an obstacle to this walk.
               { geometry: square(31.5, 51.5), properties: {} },
@@ -1784,6 +1785,7 @@ describe("obstacles the basemap draws", () => {
       BUILDING_DEFAULT_HEIGHT_METERS,
       48,
     ]);
+    expect(obstacles?.[0]?.bases).toEqual([0, 6]);
     expect(obstacles?.[1]?.polygons).toHaveLength(1);
     expect(obstacles?.[1]?.heights).toBeUndefined();
   });
