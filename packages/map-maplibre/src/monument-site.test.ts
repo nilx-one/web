@@ -9,6 +9,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   carriesMotherlandCutout,
+  carriesMotherlandTerraces,
+  MOTHERLAND_TERRACES,
+  onlyMotherlandTerraces,
+  withoutMotherlandTerraces,
   MOTHERLAND_MONUMENT_LOCATION,
   MOTHERLAND_PEDESTAL_RADIUS_METERS,
   motherlandPedestalRing,
@@ -132,5 +136,46 @@ describe("the Motherland plinth", () => {
         3,
       );
     }
+  });
+});
+
+describe("the Motherland's terraces", () => {
+  function terrace(feature: ReturnType<typeof part>): boolean {
+    return featureFilter(
+      onlyMotherlandTerraces(STYLE_FILTER),
+      "layers[0].filter",
+    ).filter({ zoom: ZOOM }, feature as never, canonical as never);
+  }
+
+  it("takes the museum's low tiers round the statue as ground", () => {
+    expect(terrace(part(0, 0, 60, { height: 13 }))).toBe(true);
+    expect(terrace(part(50, 0, 12, { height: 7.5 }))).toBe(true);
+    // The complex outline, which the data gives no height.
+    expect(terrace(part(0, 0, 140, {}))).toBe(true);
+  });
+
+  it("leaves the statue, a tall building and the city beyond as they are", () => {
+    expect(terrace(part(0, 0, 28, { height: 26.5 }))).toBe(false);
+    expect(terrace(part(45, 0, 20, { height: 40 }))).toBe(false);
+    expect(terrace(part(90, 0, 10, { height: 7 }))).toBe(false);
+  });
+
+  it("keeps both exclusions in one flat filter, each applied once", () => {
+    const both = withoutMotherland(withoutMotherlandTerraces(STYLE_FILTER));
+    expect(carriesMotherlandTerraces(both)).toBe(true);
+    expect(carriesMotherlandCutout(both)).toBe(true);
+    expect(withoutMotherlandTerraces(both)).toBe(both);
+    expect(withoutMotherland(both)).toBe(both);
+    expect(both).toHaveLength(4);
+  });
+
+  it("gives the terraces' layer the style's own filter, never ours", () => {
+    const both = withoutMotherland(withoutMotherlandTerraces(STYLE_FILTER));
+    expect(onlyMotherlandTerraces(both)).toEqual([
+      "all",
+      STYLE_FILTER,
+      MOTHERLAND_TERRACES,
+    ]);
+    expect(onlyMotherlandTerraces(undefined)).toBe(MOTHERLAND_TERRACES);
   });
 });

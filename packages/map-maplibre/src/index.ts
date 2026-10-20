@@ -104,9 +104,13 @@ import {
 import type { MonumentCustomLayer } from "./monument-layer";
 import {
   carriesMotherlandCutout,
+  carriesMotherlandTerraces,
   MOTHERLAND_PEDESTAL_HEIGHT_METERS,
+  MOTHERLAND_TERRACE_COLORS,
   motherlandPedestalRing,
+  onlyMotherlandTerraces,
   withoutMotherland,
+  withoutMotherlandTerraces,
 } from "./monument-site";
 import {
   FOG_MARKS_FILL_LAYER_ID,
@@ -210,6 +214,12 @@ export {
 
 /** The style layer the published styles raise for volumetric building depth. */
 export const BUILDING_EXTRUSION_LAYER_ID = "buildings";
+
+/**
+ * The museum's terraces round the Motherland, drawn as the monument's own
+ * ground beside the generic building extrusion that no longer carries them.
+ */
+export const MOTHERLAND_TERRACE_LAYER_ID = "nilx-one-motherland-terraces";
 
 /** The style layers whose paint means "a building stands here". */
 export const BUILDING_LAYER_IDS: readonly string[] = [
@@ -983,14 +993,78 @@ export function createMapLibreRenderer(
 
     // The footprints remain underneath the extrusion, so hiding depth never
     // removes buildings from the geographic map.
-    if (mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) === undefined) {
-      return;
-    }
-    mounted.setLayoutProperty(
+    for (const id of [
       BUILDING_EXTRUSION_LAYER_ID,
-      "visibility",
-      dimension === "flat" ? "none" : "visible",
-    );
+      MOTHERLAND_TERRACE_LAYER_ID,
+    ]) {
+      if (mounted.getLayer(id) === undefined) continue;
+      mounted.setLayoutProperty(
+        id,
+        "visibility",
+        dimension === "flat" ? "none" : "visible",
+      );
+    }
+  }
+
+  /**
+   * The museum's stepped terraces under the Motherland are the monument's
+   * ground, not a building: they leave the generic extrusion and stand in a
+   * layer of their own, just above it, in the colour of the land around.
+   * Their height, base and fade-in are the extrusion's own, as the
+   * published styles set them, so the walk reads them exactly as before.
+   */
+  function applyMotherlandTerraces(mounted: MapLibreMap): void {
+    const buildings = mounted.getLayer(BUILDING_EXTRUSION_LAYER_ID) as
+      | {
+          readonly source?: string;
+          readonly sourceLayer?: string;
+          readonly filter?: FilterSpecification | null;
+        }
+      | undefined;
+    if (buildings?.source === undefined) return;
+    if (mounted.getLayer(MOTHERLAND_TERRACE_LAYER_ID) === undefined) {
+      const order = mounted.getLayersOrder?.() ?? [];
+      const above = order[order.indexOf(BUILDING_EXTRUSION_LAYER_ID) + 1];
+      mounted.addLayer(
+        {
+          id: MOTHERLAND_TERRACE_LAYER_ID,
+          type: "fill-extrusion",
+          source: buildings.source,
+          ...(buildings.sourceLayer === undefined
+            ? {}
+            : { "source-layer": buildings.sourceLayer }),
+          minzoom: 14,
+          filter: onlyMotherlandTerraces(buildings.filter),
+          layout: { visibility: dimension === "flat" ? "none" : "visible" },
+          paint: {
+            "fill-extrusion-color": MOTHERLAND_TERRACE_COLORS[appearance],
+            "fill-extrusion-height": [
+              "coalesce",
+              ["get", "height"],
+              BUILDING_DEFAULT_HEIGHT_METERS,
+            ],
+            "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0],
+            "fill-extrusion-opacity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              15,
+              0,
+              16.5,
+              0.96,
+            ],
+            "fill-extrusion-vertical-gradient": true,
+          },
+        },
+        above,
+      );
+    }
+    if (!carriesMotherlandTerraces(buildings.filter)) {
+      mounted.setFilter(
+        BUILDING_EXTRUSION_LAYER_ID,
+        withoutMotherlandTerraces(buildings.filter),
+      );
+    }
   }
 
   /**
@@ -1648,6 +1722,7 @@ export function createMapLibreRenderer(
   function applyPresentation(mounted: MapLibreMap): void {
     applyBridgeStructures(mounted);
     applyDimension(mounted);
+    applyMotherlandTerraces(mounted);
     applyFogMarks(mounted);
     applyRoute(mounted);
     applyOrbs(mounted);
@@ -2381,6 +2456,18 @@ export function createMapLibreRenderer(
         }
       };
       collect("building", BUILDING_LAYER_IDS);
+      // The terraces left the generic extrusion for a layer of their own;
+      // they are just as solid, and just as walkable, as before.
+      if (mounted.getLayer(MOTHERLAND_TERRACE_LAYER_ID) !== undefined) {
+        const { polygons, heights, bases } = polygonsPainted(
+          mounted,
+          MOTHERLAND_TERRACE_LAYER_ID,
+          bounds,
+        );
+        if (polygons.length > 0) {
+          obstacles.push({ kind: "building", polygons, heights, bases });
+        }
+      }
       const monument = monumentObstacle(mounted, bounds);
       if (monument !== undefined) obstacles.push(monument);
       collect("water", WATER_LAYER_IDS);

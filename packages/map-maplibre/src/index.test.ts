@@ -12,11 +12,15 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MOTHERLAND_MONUMENT_LOCATION,
   MOTHERLAND_PEDESTAL_HEIGHT_METERS,
+  MOTHERLAND_TERRACE_COLORS,
+  MOTHERLAND_TERRACES,
   withoutMotherland,
+  withoutMotherlandTerraces,
 } from "./monument-site";
 import { tileBounds, type TileId } from "./road-tiles";
 
 import {
+  MOTHERLAND_TERRACE_LAYER_ID,
   BUILDING_DEFAULT_HEIGHT_METERS,
   BUILDING_EXTRUSION_LAYER_ID,
   FOG_MARKS_FILL_LAYER_ID,
@@ -64,6 +68,7 @@ interface FakeMap {
   readonly on: (event: string, listener: FakeListener) => FakeMap;
   readonly once: (event: string, listener: FakeListener) => FakeMap;
   readonly remove: ReturnType<typeof vi.fn>;
+  readonly setFilter: ReturnType<typeof vi.fn>;
   readonly jumpTo: ReturnType<typeof vi.fn>;
   readonly easeTo: ReturnType<typeof vi.fn>;
   readonly flyTo: ReturnType<typeof vi.fn>;
@@ -146,6 +151,10 @@ function makeFakeMap(): FakeMap {
     }),
     addLayer: vi.fn((layer: Record<string, unknown>) => {
       layers.set(String(layer.id), layer);
+    }),
+    setFilter: vi.fn((id: string, filter: unknown) => {
+      const layer = layers.get(id);
+      if (layer !== undefined) layers.set(id, { ...layer, filter });
     }),
     removeLayer: vi.fn((id: string) => {
       layers.delete(id);
@@ -1762,9 +1771,11 @@ describe("obstacles the basemap draws", () => {
 
     const obstacles = renderer.obstaclesWithin?.(bounds);
 
+    // The generic extrusion no longer carries the Motherland's terraces;
+    // their own layer does.
     expect(querySourceFeatures).toHaveBeenCalledWith("basemap", {
       sourceLayer: "buildings",
-      filter,
+      filter: withoutMotherlandTerraces(filter as FilterSpecification),
     });
     // The flat and the raised layers are the same footprints, asked once.
     expect(
@@ -1796,6 +1807,41 @@ describe("obstacles the basemap draws", () => {
         makeFakeMap() as unknown as MapLibreMap,
     });
     expect(renderer.obstaclesWithin?.(bounds)).toEqual([]);
+  });
+
+  it("draws the Motherland's terraces as its own ground, once", () => {
+    const fakeMap = makeFakeMap();
+    const styleFilter: FilterSpecification = [
+      "in",
+      ["get", "kind"],
+      ["literal", ["building", "building_part"]],
+    ];
+    fakeMap.layers.set("buildings", {
+      id: "buildings",
+      source: "basemap",
+      sourceLayer: "buildings",
+      filter: styleFilter,
+    });
+    readyRenderer(fakeMap);
+
+    const terraces = fakeMap.layers.get(MOTHERLAND_TERRACE_LAYER_ID);
+    expect(terraces).toMatchObject({
+      type: "fill-extrusion",
+      source: "basemap",
+      "source-layer": "buildings",
+      filter: ["all", styleFilter, MOTHERLAND_TERRACES],
+    });
+    expect(
+      (terraces?.["paint"] as Record<string, unknown>)["fill-extrusion-color"],
+    ).toBe(MOTHERLAND_TERRACE_COLORS.light);
+    expect(fakeMap.layers.get("buildings")?.["filter"]).toEqual(
+      withoutMotherlandTerraces(styleFilter),
+    );
+
+    // Presentation applied again — a style event — adds nothing twice.
+    const calls = fakeMap.setFilter.mock.calls.length;
+    fakeMap.emit("styledata");
+    expect(fakeMap.setFilter.mock.calls.length).toBe(calls);
   });
 
   it("stands the Motherland plinth in for the drum the cut-out takes away", () => {
