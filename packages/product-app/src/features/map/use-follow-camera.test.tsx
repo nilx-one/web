@@ -19,6 +19,7 @@ import {
   isometricCamera,
   FOLLOW_MIN_ZOOM,
   followCamera,
+  smoothFollowCamera,
   type FollowBody,
 } from "./follow-camera";
 import { useFollowCamera } from "./use-follow-camera";
@@ -135,6 +136,7 @@ describe("useFollowCamera", () => {
   });
 
   it("cycles three Follow distances and retains each through walking", () => {
+    vi.useFakeTimers();
     const fake = fakeRenderer();
     const { result } = follow(fake);
     for (const zoom of [21.5, 21, 20.5, 21.5]) {
@@ -146,11 +148,39 @@ describe("useFollowCamera", () => {
       });
       fake.settle();
       result.current.track(AHEAD);
+      // The camera comes round behind the turned body over a few frames.
+      act(() => vi.advanceTimersByTime(3_000));
       expect(fake.renderer.getCamera()).toMatchObject({
         zoom,
         bearing: AHEAD.bearingDeg,
       });
     }
+  });
+
+  it("comes round when the body turns instead of snapping behind it", () => {
+    vi.useFakeTimers();
+    const fake = fakeRenderer();
+    const { result } = follow(fake);
+    act(() => result.current.selectFollow());
+    fake.settle();
+    // Acquired facing north; then the walk turns a corner, east.
+    result.current.track(HOME);
+    result.current.track(AHEAD);
+    act(() => vi.advanceTimersByTime(100));
+    const turning = fake.renderer.getCamera().bearing;
+    expect(turning).toBeGreaterThan(0);
+    expect(turning).toBeLessThan(AHEAD.bearingDeg);
+    // The body stays framed while the world turns.
+    expect(fake.renderer.getCamera()).toEqual(
+      smoothFollowCamera(
+        { ...fake.renderer.getCamera(), bearing: turning },
+        AHEAD,
+        0,
+      ),
+    );
+    act(() => vi.advanceTimersByTime(3_000));
+    expect(fake.renderer.getCamera().bearing).toBe(AHEAD.bearingDeg);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("Free steps out three times then back three times around the current driver", () => {
@@ -572,7 +602,8 @@ describe("useFollowCamera", () => {
     fake.settle();
     fake.renderer.setCamera.mockClear();
     result.current.track(AHEAD);
-    expect(fake.renderer.setCamera).toHaveBeenCalledOnce();
+    act(() => vi.advanceTimersByTime(16));
+    expect(fake.renderer.setCamera).toHaveBeenCalled();
   });
 
   it("frames a stationary body when an opening flight settles", () => {

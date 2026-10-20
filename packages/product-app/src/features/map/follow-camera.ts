@@ -91,6 +91,15 @@ export const ISOMETRIC_PITCH = 50;
 export const ISOMETRIC_BEARING = 45;
 /** Exponential catch-up time; independent of the display's refresh rate. */
 export const ISOMETRIC_RESPONSE_MS = 180;
+/**
+ * How quickly Follow comes round when the body turns. A path's corner turns
+ * the body at once; the camera behind it swings round the way a game
+ * camera does, two-thirds of the way in this time, so the world turns
+ * rather than jumps.
+ */
+export const FOLLOW_TURN_RESPONSE_MS = 450;
+/** The last of a turn, too small to see, is taken in one step. */
+export const FOLLOW_TURN_SETTLE_DEG = 0.5;
 /** A relocation is a new shot, never a long chase through intervening geography. */
 export const ISOMETRIC_RELOCATION_METERS = 60;
 /**
@@ -181,6 +190,40 @@ function framedBodyCamera(
     bearing,
     pitch,
   };
+}
+
+/**
+ * Follow, coming round toward the way the body faces instead of snapping
+ * to it. The body stays framed exactly over the camera's current heading;
+ * only the heading eases, so nothing drifts and the body never slides off
+ * centre while the world turns.
+ */
+export function smoothFollowCamera(
+  current: MapCamera,
+  body: FollowBody,
+  elapsedMs: number,
+  dimension: MapDimension = "volumetric",
+  minimumZoom: number = FOLLOW_MIN_ZOOM,
+): MapCamera {
+  const target = ((body.bearingDeg % 360) + 360) % 360;
+  const turn = ((target - current.bearing + 540) % 360) - 180;
+  // After a long stall — a hidden tab, a held frame — there is no turn to
+  // show, only where the body now faces.
+  const alpha =
+    elapsedMs > 1_000
+      ? 1
+      : 1 - Math.exp(-Math.max(0, elapsedMs) / FOLLOW_TURN_RESPONSE_MS);
+  const bearing =
+    Math.abs(turn) < FOLLOW_TURN_SETTLE_DEG
+      ? target
+      : current.bearing + turn * alpha;
+  return framedBodyCamera(
+    current,
+    body,
+    minimumZoom,
+    ((bearing % 360) + 360) % 360,
+    dimension === "flat" ? 0 : FOLLOW_PITCH,
+  );
 }
 
 /** Smooth the ground target, retaining distance and the stable camera angle. */

@@ -21,6 +21,7 @@ import {
   isometricCamera,
   zoomPivotFor,
   sameFollowCamera,
+  smoothFollowCamera,
   smoothIsometricCamera,
   type FollowBody,
   type CameraFollow,
@@ -269,7 +270,7 @@ export function useFollowCamera({
       if (
         point === undefined ||
         !input.current.enabled ||
-        followRef.current !== "isometric" ||
+        followRef.current === "free" ||
         gesturing.current ||
         nowMs < heldUntil.current
       ) {
@@ -277,13 +278,23 @@ export function useFollowCamera({
         return;
       }
       const current = renderer.getCamera();
-      const target = isometricCamera(current, point, input.current.dimension);
+      const locked = followRef.current === "locked";
+      const target = locked
+        ? followCamera(current, point, input.current.dimension)
+        : isometricCamera(current, point, input.current.dimension);
       const previous = trackingTime.current;
       trackingTime.current = nowMs;
       const next =
         previous === undefined || input.current.reducedMotion()
           ? target
-          : smoothIsometricCamera(current, target, nowMs - previous);
+          : locked
+            ? smoothFollowCamera(
+                current,
+                point,
+                nowMs - previous,
+                input.current.dimension,
+              )
+            : smoothIsometricCamera(current, target, nowMs - previous);
       if (!sameFollowCamera(current, next)) {
         renderer.setCamera(next, { yieldToGesture: true });
       }
@@ -304,13 +315,6 @@ export function useFollowCamera({
       ) {
         return;
       }
-      if (followRef.current === "locked") {
-        const current = renderer.getCamera();
-        const target = followCamera(current, point, input.current.dimension);
-        if (!sameFollowCamera(current, target))
-          renderer.setCamera(target, { yieldToGesture: true });
-        return;
-      }
       const acquiring = trackedBody.current === undefined;
       trackedBody.current = point;
       if (trackingFrame.current !== undefined) return;
@@ -324,7 +328,7 @@ export function useFollowCamera({
       trackingTime.current = globalThis.performance.now();
       trackingFrame.current = globalThis.requestAnimationFrame(advanceTracking);
     },
-    [advanceTracking, renderer],
+    [advanceTracking],
   );
 
   // A locked camera closes in on the body; a free one zooms where the
