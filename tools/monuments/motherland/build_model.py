@@ -18,7 +18,11 @@ import argparse
 
 import numpy as np
 from scipy.interpolate import PchipInterpolator
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
+from svgelements import SVG, Path as SvgPath, Shape
 import trimesh
+from trimesh.visual import ColorVisuals
 from trimesh.visual.material import PBRMaterial
 from trimesh.visual.texture import TextureVisuals
 
@@ -41,6 +45,10 @@ PALETTE = {
     "pedestal": ("#aab5ba", 0.42, 0.40, None),
     "neon": ("#5be7ff", 0.10, 0.05, (0.35, 4.4, 5.4)),
     "neon_warm": ("#ffe9a8", 0.10, 0.05, (5.4, 4.2, 1.6)),
+    # The coat of arms in its own colours: a deep blue field and a tryzub of
+    # polished gold. In the dark theme the layer lights the gold up as neon.
+    "shield_field": ("#0d2f55", 0.35, 0.30, None),
+    "emblem": ("#ffd500", 0.30, 0.70, None),
 }
 
 
@@ -68,6 +76,24 @@ def add(name, verts, faces, mat, group="body"):
     mesh.fix_normals()
     mesh.visual = TextureVisuals(material=MATERIALS[mat])
     mesh.metadata = {"name": name, "group": group, "material": mat}
+    PARTS.append(mesh)
+    return mesh
+
+
+def glow(name, verts, faces, brightness):
+    """
+    A part made only of light, drawn by the layer additively and only in the
+    dark theme. Its brightness rides on its vertex colours, black for none,
+    so it fades out at its edges with no texture and no alpha.
+    """
+    mesh = trimesh.Trimesh(
+        vertices=np.asarray(verts), faces=np.asarray(faces), process=False
+    )
+    level = np.clip(np.asarray(brightness, dtype=float), 0.0, 1.0)
+    rgb = np.outer(level, [0.36, 0.91, 1.0]) * 255
+    rgba = np.column_stack([rgb, np.full(len(level), 255)]).astype(np.uint8)
+    mesh.visual = ColorVisuals(mesh=mesh, vertex_colors=rgba)
+    mesh.metadata = {"name": f"glow_{name}", "group": "glow", "material": "glow"}
     PARTS.append(mesh)
     return mesh
 
@@ -317,6 +343,28 @@ loft(
     sides=4,
     group="sword",
 )
+# Its halo: two crossed sheets through the blade, brightest along the edge
+# and fading to nothing 1.8 m out, so the sword glows from any side.
+HALO_HALF_WIDTH = 1.8
+for name, across in (("sword_halo_a", [1.0, 0.0, 0.0]), ("sword_halo_b", [0.0, 1.0, 0.0])):
+    across = np.asarray(across)
+    columns = np.linspace(-1.0, 1.0, 9)
+    heights = np.linspace(SWORD_HAND[2] + 2.2, SWORD_TIP, 14)
+    verts, faces, level = [], [], []
+    for row, z in enumerate(heights):
+        taper = 1.0 - 0.6 * (row / (len(heights) - 1))
+        for column in columns:
+            verts.append(
+                [SWORD_HAND[0], SWORD_HAND[1], z]
+                + across * column * HALO_HALF_WIDTH * taper
+            )
+            level.append((1.0 - abs(column)) ** 2.2)
+    width = len(columns)
+    for row in range(len(heights) - 1):
+        for column in range(width - 1):
+            a0 = row * width + column
+            faces.extend([[a0, a0 + 1, a0 + width + 1], [a0, a0 + width + 1, a0 + width]])
+    glow(name, verts, faces, level)
 
 # Left arm: lifted out and up, the shield held high beside the head.
 SHIELD_HAND = np.array([-9.4, 1.3, BASE + 41.0])
@@ -334,65 +382,112 @@ tube(
 )
 ellipsoid("left_fist", SHIELD_HAND, (1.05, 1.05, 1.2), "chrome", "arm")
 
-# The shield: a heater outline 8 m wide and 12 m tall, its face turned a
-# little outward from the figure's front, bowed so its centre stands proud.
+# The shield is the Lesser Coat of Arms of Ukraine itself, drawn from its
+# vector (tools/monuments/third_party/coat-of-arms): the shield's own outline,
+# 13 m tall as the monument's is, and the tryzub standing proud of its face.
+# Its face is turned a little outward from the figure's front.
 SHIELD_TURN = np.radians(25.0)
 SHIELD_U = np.array([np.cos(SHIELD_TURN), np.sin(SHIELD_TURN), 0.0])
 SHIELD_N = np.array([-np.sin(SHIELD_TURN), np.cos(SHIELD_TURN), 0.0])
 SHIELD_V = np.array([0.0, 0.0, 1.0])
-SHIELD_CENTER = SHIELD_HAND + 1.0 * SHIELD_N + [-1.0, 0, -0.5]
-SHIELD_OUTLINE = [
-    (-4.0, 5.4), (-2.0, 5.9), (0.0, 6.1), (2.0, 5.9), (4.0, 5.4),
-    (4.0, 1.4), (3.3, -2.1), (1.9, -4.5), (0.0, -5.9),
-    (-1.9, -4.5), (-3.3, -2.1), (-4.0, 1.4),
-]
+SHIELD_HEIGHT = 13.0
+SHIELD_CENTER = SHIELD_HAND + 1.2 * SHIELD_N + [-1.4, 0, 1.5]
+COAT_OF_ARMS = Path(__file__).resolve().parents[1] / "third_party" / "coat-of-arms" / "UA.svg"
 
 
-def shield_point(u, v, lift=0.0):
-    bow = 0.6 * (1.0 - (u / 4.0) ** 2) * (1.0 - (v / 6.1) ** 2)
-    return SHIELD_CENTER + u * SHIELD_U + v * SHIELD_V + (bow + lift) * SHIELD_N
+def svg_polygons(path_file):
+    """The coat of arms' fills as shapely polygons, by colour, in SVG units."""
+    fills = {}
+    for element in SVG.parse(str(path_file), reify=True).elements():
+        if not isinstance(element, Shape) or isinstance(element, SVG):
+            continue
+        shape = None
+        for sub in SvgPath(element).as_subpaths():
+            sub = SvgPath(sub)
+            n = max(12, int(sub.length(error=1e-4) / 0.6))
+            ring = Polygon([(p.x, p.y) for p in (sub.point(i / n) for i in range(n))]).buffer(0)
+            # Even-odd: a subpath inside another is a hole in it.
+            shape = ring if shape is None else shape.symmetric_difference(ring)
+        key = str(element.fill).lower()
+        fills[key] = shape if key not in fills else unary_union([fills[key], shape])
+    return fills
 
 
-rim = len(SHIELD_OUTLINE)
-front = [shield_point(0, 0)] + [shield_point(u, v) for u, v in SHIELD_OUTLINE]
-back = [p - 0.7 * SHIELD_N for p in front]
-shield_faces = []
-for i in range(rim):
-    a, b = i + 1, (i + 1) % rim + 1
-    shield_faces.extend(
-        [[0, a, b], [rim + 1, rim + 1 + b, rim + 1 + a], [a, rim + 1 + a, rim + 1 + b], [a, rim + 1 + b, b]]
-    )
-add("shield", np.vstack([front, back]), shield_faces, "chrome_dark", "shield")
-# A rim of light around the shield, as the reference's shield glows.
+FILLS = svg_polygons(COAT_OF_ARMS)
+FIELD = FILLS["#005bbb"]
+TRYZUB = FILLS["#ffd500"]
+min_x, min_y, max_x, max_y = FIELD.bounds
+SVG_SCALE = SHIELD_HEIGHT / (max_y - min_y)
+SVG_CENTRE = ((min_x + max_x) / 2, (min_y + max_y) / 2)
+
+
+def on_shield(u, v, lift):
+    return SHIELD_CENTER + u * SHIELD_U + v * SHIELD_V + lift * SHIELD_N
+
+
+def emboss(name, shape, depth, lift, mat):
+    """Extrudes an SVG fill `depth` thick, standing `lift` off the shield."""
+    for k, polygon in enumerate(getattr(shape, "geoms", [shape])):
+        flat = Polygon(
+            [((x - SVG_CENTRE[0]) * SVG_SCALE, -(y - SVG_CENTRE[1]) * SVG_SCALE) for x, y in polygon.exterior.coords],
+            [
+                [((x - SVG_CENTRE[0]) * SVG_SCALE, -(y - SVG_CENTRE[1]) * SVG_SCALE) for x, y in hole.coords]
+                for hole in polygon.interiors
+            ],
+        ).simplify(0.01)
+        solid = trimesh.creation.extrude_polygon(flat, depth)
+        verts = np.array([on_shield(u, v, lift + w) for u, v, w in solid.vertices])
+        add(name if k == 0 else f"{name}_{k}", verts, solid.faces, mat, "shield")
+
+
+emboss("shield", FIELD, 0.7, -0.7, "shield_field")
+emboss("tryzub", TRYZUB, 0.28, 0.0, "emblem")
+# The rim: gold like the tryzub, as the coat of arms draws it, and lit with
+# it in the dark theme.
+outline = list(FIELD.exterior.coords)
+step = max(1, len(outline) // 160)
 tube(
     "shield_rim",
-    [shield_point(u, v, 0.12) for u, v in SHIELD_OUTLINE + SHIELD_OUTLINE[:1]],
-    [0.16, 0.16],
-    "neon",
-    n=96,
+    [
+        on_shield((x - SVG_CENTRE[0]) * SVG_SCALE, -(y - SVG_CENTRE[1]) * SVG_SCALE, 0.12)
+        for x, y in outline[::step] + outline[:1]
+    ],
+    [0.22, 0.22],
+    "emblem",
+    n=200,
     sides=8,
     group="shield",
 )
-# The tryzub, the shield's crest since the monument's 2023 re-crest: a
-# central prong, two side prongs curving up from a shared base, and the
-# inner strokes that close the figure.
-for stroke in (
-    [(0.0, -3.2), (0.0, 0.5), (0.0, 3.6)],
-    [(-0.5, -3.0), (-2.3, -2.2), (-2.7, 0.6), (-2.3, 3.0)],
-    [(0.5, -3.0), (2.3, -2.2), (2.7, 0.6), (2.3, 3.0)],
-    [(-1.7, -3.4), (0.0, -3.6), (1.7, -3.4)],
-    [(0.0, -1.6), (-1.0, -0.8), (-1.3, 0.6)],
-    [(0.0, -1.6), (1.0, -0.8), (1.3, 0.6)],
-):
-    tube(
-        "tryzub",
-        [shield_point(u, v, 0.18) for u, v in stroke],
-        [0.2, 0.2],
-        "neon",
-        n=24,
-        sides=8,
-        group="shield",
-    )
+
+# Light under her feet: a pool on the plinth's crown, brightest at the hem
+# and gone by the crown's edge, and a low curtain rising from it round the
+# hem, as the reference lights the figure from below.
+pool_radii = np.linspace(7.0, 13.0, 9)
+pool_angles = np.linspace(0, 2 * np.pi, 97)[:-1]
+verts, faces, level = [], [], []
+for r in pool_radii:
+    for a in pool_angles:
+        verts.append([r * np.sin(a), -r * np.cos(a), BASE + 0.06])
+        level.append(max(0.0, 1.0 - abs(r - 8.9) / 4.1) ** 1.6)
+m = len(pool_angles)
+for i in range(len(pool_radii) - 1):
+    for j in range(m):
+        a0, a1 = i * m + j, i * m + (j + 1) % m
+        faces.extend([[a0, a1, a1 + m], [a0, a1 + m, a0 + m]])
+glow("feet_pool", verts, faces, level)
+
+curtain_heights = np.linspace(0.0, 5.0, 8)
+verts, faces, level = [], [], []
+for z in curtain_heights:
+    for a in pool_angles:
+        r = 9.35 - 0.12 * z
+        verts.append([r * np.sin(a), -r * np.cos(a) + 0.1, BASE + z])
+        level.append((1.0 - z / curtain_heights[-1]) ** 2)
+for i in range(len(curtain_heights) - 1):
+    for j in range(m):
+        a0, a1 = i * m + j, i * m + (j + 1) % m
+        faces.extend([[a0, a1, a1 + m], [a0, a1 + m, a0 + m]])
+glow("feet_curtain", verts, faces, level)
 
 # The figure is authored at true scale, so this is a guard, not a fit: if a
 # change above moved the sword tip off the documented 102 m, squeeze the

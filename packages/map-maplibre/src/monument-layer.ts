@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapDimension } from "@nilx-one/map-contract";
+import type { MapAppearance, MapDimension } from "@nilx-one/map-contract";
 import {
   MercatorCoordinate,
   type CustomLayerInterface,
@@ -9,8 +9,10 @@ import {
   type Map as MapLibreMap,
 } from "maplibre-gl";
 import {
+  AdditiveBlending,
   BackSide,
   Color,
+  DoubleSide,
   DirectionalLight,
   Float32BufferAttribute,
   HemisphereLight,
@@ -24,6 +26,8 @@ import {
   SphereGeometry,
   Vector3,
   WebGLRenderer,
+  type Material,
+  type MeshStandardMaterial,
   type Object3D,
   type WebGLRenderTarget,
 } from "three";
@@ -38,7 +42,7 @@ import { terrainElevationMeters } from "./terrain-elevation";
 export { MOTHERLAND_MONUMENT_LOCATION } from "./monument-site";
 
 export const MONUMENT_LAYER_ID = "nilx-one-motherland-monument";
-export const MONUMENT_ASSET_VERSION = "0.3.0";
+export const MONUMENT_ASSET_VERSION = "0.4.0";
 export const MONUMENT_ASSET_URL = `/monuments/${MONUMENT_ASSET_VERSION}/motherland.glb`;
 
 type AssetLoader = (signal: AbortSignal) => Promise<Object3D>;
@@ -86,6 +90,12 @@ export interface MonumentCustomLayer extends CustomLayerInterface {
   isSettled(): boolean;
   /** True while the model is loaded and standing in this mount. */
   hasModel(): boolean;
+  /**
+   * Light or dark map. Her light — the sword, the coat of arms, the glow
+   * under her feet, the plinth's neon — burns only in the dark; by day the
+   * neon is polished steel and the coat of arms its own blue and gold.
+   */
+  setAppearance(appearance: MapAppearance): void;
   setDimension(dimension: MapDimension): void;
   dispose(): void;
 }
@@ -133,6 +143,8 @@ export function createMonumentLayer(
   let renderer: WebGLRenderer | undefined;
   let root: Object3D | undefined;
   let dimension: MapDimension = "flat";
+  let appearance: MapAppearance = "light";
+  let lights: MonumentLights | undefined;
   // Scoped to one onAdd↔onRemove span, not the layer's whole life: a style
   // swap removes and re-adds every custom layer, and the monument has to
   // survive that the way the avatar layer's instances do. Only `dispose()`
@@ -182,6 +194,8 @@ export function createMonumentLayer(
       // renderer is already disposed a new root to retain.
       if (disposed || signal.aborted) return;
       root = asset;
+      lights = monumentLightsOf(root);
+      lights.show(appearance);
       scene.add(root);
       if (map !== undefined) anchorAt(map);
       options.onModel?.();
@@ -205,6 +219,12 @@ export function createMonumentLayer(
     isSettled: () => settled,
 
     hasModel: () => root !== undefined,
+
+    setAppearance(next) {
+      appearance = next;
+      lights?.show(next);
+      map?.triggerRepaint();
+    },
 
     onAdd(mountedMap, gl) {
       settled = false;
@@ -258,6 +278,7 @@ export function createMonumentLayer(
       loadController = undefined;
       root?.removeFromParent();
       root = undefined;
+      lights = undefined;
       releaseSky();
       renderer?.dispose();
       renderer = undefined;
@@ -277,6 +298,7 @@ export function createMonumentLayer(
       loadController = undefined;
       root?.removeFromParent();
       root = undefined;
+      lights = undefined;
       releaseSky();
       renderer?.dispose();
       renderer = undefined;
@@ -291,6 +313,83 @@ export function createMonumentLayer(
   }
 
   return layer;
+}
+
+/** A neon trim's day colour: polished steel, lit by nothing but the sky. */
+const STEEL = new Color("#c9d4da");
+/** The coat of arms lit up by night: the reference's white-cyan glow. */
+const EMBLEM_GLOW = {
+  color: new Color("#d6fbff"),
+  emissive: new Color(0.6, 3.2, 4),
+};
+
+export interface MonumentLights {
+  show(appearance: MapAppearance): void;
+}
+
+/**
+ * The parts of the model that carry her light, found by the names the
+ * asset gives them: `neon` and `emblem` materials, and the `glow_` meshes
+ * made only of light, which are drawn additively so their black edges add
+ * nothing and their bright cores bloom over what is behind them.
+ */
+export function monumentLightsOf(root: Object3D): MonumentLights {
+  const glows: Object3D[] = [];
+  const neon = new Set<MeshStandardMaterial>();
+  const emblem = new Set<MeshStandardMaterial>();
+  root.traverse((node) => {
+    const mesh = node as Mesh;
+    if (!mesh.isMesh) return;
+    if (mesh.name.startsWith("glow_")) {
+      (mesh.material as Material).dispose();
+      mesh.material = new MeshBasicMaterial({
+        vertexColors: true,
+        blending: AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+        side: DoubleSide,
+      });
+      mesh.renderOrder = 1;
+      glows.push(mesh);
+      return;
+    }
+    const material = mesh.material as MeshStandardMaterial;
+    if (material.name === "neon") neon.add(material);
+    if (material.name === "emblem") emblem.add(material);
+  });
+  const authored = new Map<
+    MeshStandardMaterial,
+    { color: Color; emissive: Color; metalness: number; roughness: number }
+  >();
+  for (const material of [...neon, ...emblem]) {
+    authored.set(material, {
+      color: material.color.clone(),
+      emissive: material.emissive.clone(),
+      metalness: material.metalness,
+      roughness: material.roughness,
+    });
+  }
+  return {
+    show(appearance) {
+      const dark = appearance === "dark";
+      for (const glow of glows) glow.visible = dark;
+      for (const material of neon) {
+        const own = authored.get(material)!;
+        material.color.copy(dark ? own.color : STEEL);
+        material.emissive.copy(dark ? own.emissive : new Color(0, 0, 0));
+        material.metalness = dark ? own.metalness : 0.9;
+        material.roughness = dark ? own.roughness : 0.18;
+      }
+      for (const material of emblem) {
+        const own = authored.get(material)!;
+        material.color.copy(dark ? EMBLEM_GLOW.color : own.color);
+        material.emissive.copy(dark ? EMBLEM_GLOW.emissive : own.emissive);
+        material.metalness = dark ? 0.1 : own.metalness;
+        material.roughness = dark ? 0.3 : own.roughness;
+      }
+    },
+  };
 }
 
 /**

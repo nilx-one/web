@@ -1,0 +1,30 @@
+UA.svg — Lesser Coat of Arms of Ukraine
+
+Source: the `coat-of-arms` npm package, version 6.4.0, file dist/coats/UA.svg
+(https://www.npmjs.com/package/coat-of-arms), unmodified.
+
+The Lesser Coat of Arms of Ukraine is a state symbol of Ukraine. Under the Law
+of Ukraine "On Copyright and Related Rights", official state symbols are not
+objects of copyright. The SVG drawing is distributed under the MIT License:
+
+MIT License
+
+Copyright (c) Islomjon Ergashev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

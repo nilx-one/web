@@ -674,6 +674,7 @@ export function createMapLibreRenderer(
         monumentLayer = layer;
         monumentLayerFailed = false;
         layer.setDimension(dimension);
+        layer.setAppearance(appearance);
         if (map !== undefined && firstPaintDone) ensureMonumentLayer(map);
         return layer;
       },
@@ -2464,6 +2465,7 @@ export function createMapLibreRenderer(
       }
 
       appearance = next;
+      monumentLayer?.setAppearance(next);
 
       if (map === undefined) {
         return;
