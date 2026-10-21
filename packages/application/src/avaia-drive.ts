@@ -5,10 +5,12 @@
  * The wire form of the Avaia's drive in 0x1 Core (`docs/avaia-drive.md` in
  * core): what the host tells it, and what it answers the host to carry out.
  *
- * Core decides what the Avaia does next; the host only resolves the ground
- * into opaque refs and whole metres, and carries out the commands. No place,
- * name or coordinate crosses this boundary: a ref is whatever the host's
- * world layer minted, and Core only ever hands one back.
+ * Core decides what the Avaia does next; the host resolves the ground into
+ * opaque refs, carries out commands and transports an AI task. Landmark
+ * descriptions are a narrow exception: Core receives the archive's whitelisted
+ * facts, assembles the AI request, then authorizes the actual result before the
+ * host is allowed to show or keep it. Coordinates and owner data never cross
+ * that description boundary.
  */
 
 export type AvaiaDrivePurpose =
@@ -65,6 +67,22 @@ export interface AvaiaDriveTarget {
   readonly revisit_ms?: string;
 }
 
+/** The closed archive-fact contract Core passes to the AI faculty. */
+export interface LandmarkDescriptionRequest {
+  readonly locale: "uk" | "en" | "ru";
+  readonly kind: string;
+  readonly kind_label: string;
+  readonly name?: string;
+  readonly facts?: Readonly<Record<string, string>>;
+}
+
+/** An actual AI result, transported through Core before it reaches any host. */
+export interface LandmarkDescriptionResult {
+  readonly text: string;
+  readonly produced_by: string;
+  readonly template_version: number;
+}
+
 /** What happened, as the host tells the drive. */
 export type AvaiaDriveInput =
   | { readonly type: "tap"; readonly to: string }
@@ -102,7 +120,17 @@ export type AvaiaDriveInput =
       readonly home?: string;
     }
   | { readonly type: "chosen"; readonly index: number | null }
-  | { readonly type: "described"; readonly at: string };
+  | {
+      readonly type: "description_facts";
+      readonly at: string;
+      readonly request: LandmarkDescriptionRequest;
+    }
+  | {
+      readonly type: "ai_described";
+      readonly at: string;
+      readonly request_id: number;
+      readonly result: LandmarkDescriptionResult;
+    };
 
 /** One option of a menu, as a model reads it. */
 export interface AvaiaDriveMenuOption {
@@ -124,17 +152,29 @@ export type AvaiaDriveCommand =
   | { readonly do: "look"; readonly ms: number }
   | { readonly do: "study"; readonly at: string }
   | { readonly do: "glance"; readonly at: string }
-  /** Ready a description of the landmark, then answer `described`. */
+  /** Resolve archive facts, without generating words in the host. */
   | { readonly do: "describe"; readonly at: string }
-  /** Show that description, in her own speech, for `ms`. */
+  /** Forward Core's typed request to the AI faculty. */
+  | {
+      readonly do: "ai_describe";
+      readonly at: string;
+      readonly request_id: number;
+      readonly request: LandmarkDescriptionRequest;
+    }
+  /** Core alone forwards the accepted result for speech. */
   | {
       readonly do: "show";
       readonly at: string;
       readonly how: "speech";
       readonly ms: number;
+      readonly result: LandmarkDescriptionResult;
     }
-  /** Keep that description in the notebook. */
-  | { readonly do: "keep"; readonly at: string }
+  /** Core alone forwards the same accepted result for local persistence. */
+  | {
+      readonly do: "keep";
+      readonly at: string;
+      readonly result: LandmarkDescriptionResult;
+    }
   | { readonly do: "pick_up"; readonly at: string }
   | { readonly do: "visited"; readonly at: string }
   | {

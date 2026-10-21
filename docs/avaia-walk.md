@@ -204,21 +204,24 @@ not cross is nilx-one/ai's MWL14.
 What she says about a landmark she stands in front of is a description. The
 loop is nilx-one/ai's `docs/landmark-description.md`:
 
-1. Every landmark a walk passes, and every curiosity option, tells Core's
-   drive whether the notebook already holds a description of it (`described`).
-2. Studying or glancing at one that has none, the drive asks for one
-   (`describe`).
-3. The host words it from the archive's facts (`landmark-description.ts`, the
-   port of nilx-one/ai's faculty, held to its fixture byte for byte). When the
-   Avaia's local model is on this device, the same model that chooses for her
-   is asked to retell it within 6 s. A retelling with a number, a capitalised
-   word or anything else the facts do not carry is refused, and the template
-   stands.
-4. The host answers `described`, and the drive answers `show` (in her speech,
-   for as long as it says) and `keep` together.
-5. The notebook keeps one description per landmark, with what produced it
-   (`template` or the model's id). The Avaia's screen shows it under the
-   landmark.
+1. Every landmark a walk passes, and every curiosity option, tells Core's drive
+   whether the notebook already holds a description of it (`described`).
+2. Core detects an unrecorded landmark and emits `describe{at}`. Web resolves
+   only allowed archive facts and returns `description_facts{at,request}` to Core.
+3. Core validates the closed fields, creates a correlated `ai_describe` task and
+   dispatches it through the host transport to the local `nilx-one/ai` faculty.
+   The existing on-device TS port is an execution adapter, fixture-checked
+   against the AI source—not a second owner of the description contract.
+4. AI generates the deterministic tier-0 description or safely admits a
+   local-model retelling. It returns `ai_described{at,request_id,result}` to Core.
+   Core rejects stale, mismatched and cancelled responses; Web cannot claim
+   success with a bare `described` acknowledgement.
+5. Core sends `show{result}` and `keep{result}` together; Web shows and stores
+   exactly that returned description, including provenance and template version.
+   The Avaia's screen shows it under the landmark.
+
+The associated Core runtime/Wasm binary must be updated with the new wire in
+the same rollout: a host decoder alone cannot activate the revised flow.
 
 Web, Telegram and Discord carry out the same commands, and a host with no
 model says the template.

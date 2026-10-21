@@ -403,19 +403,40 @@ describe("CoreWasmClient", () => {
       default: 1,
     });
 
-    // A description: asked for, then shown and kept.
-    answer =
-      '{"commands":[{"do":"describe","at":"l:1"},{"do":"show","at":"l:1","how":"speech","ms":"9000"},{"do":"keep","at":"l:1"}],"ok":true,"state":{"version":1}}';
+    // Core's description request, AI task, and returned text for the host.
+    const request = {
+      locale: "en",
+      kind: "monument",
+      kind_label: "monument",
+      name: "Rodina",
+      facts: { height: "62" },
+    } as const;
+    const result = {
+      text: "Rodina — monument. 62 m tall.",
+      produced_by: "template",
+      template_version: 1,
+    } as const;
+    answer = JSON.stringify({
+      commands: [
+        { do: "describe", at: "l:1" },
+        { do: "ai_describe", at: "l:1", request_id: 1, request },
+        { do: "show", at: "l:1", how: "speech", ms: "9000", result },
+        { do: "keep", at: "l:1", result },
+      ],
+      ok: true,
+      state: { version: 1 },
+    });
     const described = bindings.avaiaDriveStep?.(
       "{}",
-      { type: "described", at: "l:1" },
+      { type: "ai_described", at: "l:1", request_id: 1, result },
       2_003,
       13,
     );
     expect(described?.ok && described.commands).toEqual([
       { do: "describe", at: "l:1" },
-      { do: "show", at: "l:1", how: "speech", ms: 9_000 },
-      { do: "keep", at: "l:1" },
+      { do: "ai_describe", at: "l:1", request_id: 1, request },
+      { do: "show", at: "l:1", how: "speech", ms: 9_000, result },
+      { do: "keep", at: "l:1", result },
     ]);
 
     answer = '{"error":"invalid","ok":false}';

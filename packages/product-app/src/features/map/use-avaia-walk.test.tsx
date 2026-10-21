@@ -550,10 +550,26 @@ describe("an Avaia carrying out Core's drive", () => {
             { do: "describe", at: "lm:poi:9" },
           ];
         }
-        if (input.type === "described") {
+        if (input.type === "description_facts") {
           return [
-            { do: "show", at: input.at, how: "speech", ms: 9_000 },
-            { do: "keep", at: input.at },
+            {
+              do: "ai_describe",
+              at: input.at,
+              request_id: 1,
+              request: input.request,
+            },
+          ];
+        }
+        if (input.type === "ai_described") {
+          return [
+            {
+              do: "show",
+              at: input.at,
+              how: "speech",
+              ms: 9_000,
+              result: input.result,
+            },
+            { do: "keep", at: input.at, result: input.result },
           ];
         }
         return [];
@@ -568,7 +584,7 @@ describe("an Avaia carrying out Core's drive", () => {
       tap(at(500, 0));
       for (
         let s = 0;
-        s < 120 && !inputs.some((input) => input.type === "described");
+        s < 120 && !inputs.some((input) => input.type === "ai_described");
         s++
       ) {
         await advance(1_000);
@@ -582,7 +598,28 @@ describe("an Avaia carrying out Core's drive", () => {
       expect(inputs.find((input) => input.type === "passing")).toMatchObject({
         things: [{ ref: "lm:poi:9", described: false }],
       });
-      expect(inputs).toContainEqual({ type: "described", at: "lm:poi:9" });
+      expect(types(inputs)).toContain("description_facts");
+      expect(
+        inputs.find((input) => input.type === "description_facts"),
+      ).toMatchObject({
+        at: "lm:poi:9",
+        request: {
+          locale: "en",
+          kind: "statue",
+          name: "Rodina",
+          facts: { start_date: "1981", height: "62" },
+        },
+      });
+      expect(inputs).toContainEqual({
+        type: "ai_described",
+        at: "lm:poi:9",
+        request_id: 1,
+        result: {
+          text: "Rodina — a statue. Since 1981. 62 m tall.",
+          produced_by: "template",
+          template_version: 1,
+        },
+      });
       const template = "Rodina — a statue. Since 1981. 62 m tall.";
       expect(result.current.speech).toMatchObject({
         text: template,

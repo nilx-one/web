@@ -161,13 +161,6 @@ export interface AvaiaSpeech {
   readonly ms?: number;
 }
 
-/** A description readied for the drive's `show` and `keep`. */
-interface Readied {
-  readonly landmark: MapLandmark;
-  readonly text: string;
-  readonly producedBy: string;
-}
-
 interface Rest {
   readonly point: MapPointSelection;
   readonly bearingDeg: number;
@@ -493,9 +486,7 @@ export function useAvaiaWalk({
   const [clock, setClock] = useState(() => Date.now());
   const speechCount = useRef(0);
   const lastLine = useRef<string | undefined>(undefined);
-  // Descriptions readied for the drive, by ref, and the one on show: a line
-  // about the same landmark does not talk over it.
-  const readied = useRef(new Map<string, Readied>());
+  // A line about the landmark does not talk over a description Core shows.
   const showing = useRef<
     { readonly landmarkId: string; readonly untilMs: number } | undefined
   >(undefined);
@@ -1019,9 +1010,11 @@ export function useAvaiaWalk({
           return;
         }
         case "describe": {
+          // The world adapter supplies only archive facts. Core, not Web,
+          // owns the request sent to AI and its eventual acceptance.
           const landmark = refLandmark(refs.current.get(command.at));
           if (landmark === undefined) return;
-          const { locale: language, retell: model } = latest.current;
+          const language = latest.current.locale;
           const facts = readLandmarkFacts(
             describeInput(
               landmark,
@@ -1029,43 +1022,69 @@ export function useAvaiaWalk({
               landmarkKindLabel(language, landmark.kind),
             ),
           );
-          // Nothing the faculty can word: the drive's wait runs out unshown.
           if (facts === undefined) return;
+          step({
+            type: "description_facts",
+            at: command.at,
+            request: {
+              locale: facts.locale,
+              kind: landmark.kind,
+              kind_label: facts.kindLabel,
+              ...(facts.name === undefined ? {} : { name: facts.name }),
+              facts: Object.fromEntries(facts.facts),
+            },
+          });
+          return;
+        }
+        case "ai_describe": {
+          // This is only the local AI runtime adapter: Web cannot decide
+          // what to describe and cannot bypass Core when AI returns.
+          const facts = readLandmarkFacts(command.request);
+          if (facts === undefined) return;
+          const model = latest.current.retell;
           void wordDescription(facts, model).then(({ text, producedBy }) => {
-            if (readied.current.size >= READIED_KEPT) readied.current.clear();
-            readied.current.set(command.at, { landmark, text, producedBy });
-            step({ type: "described", at: command.at });
+            step({
+              type: "ai_described",
+              at: command.at,
+              request_id: command.request_id,
+              result: {
+                text,
+                produced_by: producedBy,
+                template_version: DESCRIPTION_TEMPLATE_VERSION,
+              },
+            });
           });
           return;
         }
         case "show": {
-          const entry = readied.current.get(command.at);
-          if (entry === undefined || latest.current.model === undefined) return;
+          const landmark = refLandmark(refs.current.get(command.at));
+          if (landmark === undefined || latest.current.model === undefined)
+            return;
           showing.current = {
-            landmarkId: entry.landmark.id,
+            landmarkId: landmark.id,
             untilMs: globalThis.performance.now() + command.ms,
           };
           speechCount.current += 1;
           setSpeech({
             id: speechCount.current,
-            text: entry.text,
+            text: command.result.text,
             about: {
-              longitude: entry.landmark.longitude,
-              latitude: entry.landmark.latitude,
+              longitude: landmark.longitude,
+              latitude: landmark.latitude,
             },
             ms: command.ms,
           });
           return;
         }
         case "keep": {
-          const entry = readied.current.get(command.at);
-          if (entry === undefined) return;
+          const landmark = refLandmark(refs.current.get(command.at));
+          if (landmark === undefined) return;
           updateNotebook(latest.current.owner, (current) =>
             keepDescription(current, {
-              landmarkId: entry.landmark.id,
-              text: entry.text,
-              producedBy: entry.producedBy,
-              templateVersion: DESCRIPTION_TEMPLATE_VERSION,
+              landmarkId: landmark.id,
+              text: command.result.text,
+              producedBy: command.result.produced_by,
+              templateVersion: command.result.template_version,
               describedAt: Date.now(),
             }),
           );
@@ -1659,9 +1678,6 @@ export function useAvaiaWalk({
     [fond, moving, notebook, stop, say, speech, stance, walkTo],
   );
 }
-
-/** Descriptions readied and not yet shown are let go past this many. */
-const READIED_KEPT = 32;
 
 /**
  * The description of a landmark: the template, or a local model's retelling
