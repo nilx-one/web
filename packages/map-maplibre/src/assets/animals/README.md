@@ -12,11 +12,15 @@ Quaternius, _Animal Pack Vol.2_ (2017): `Animal_Pack_Vol.2_by_Quaternius.zip`,
 `6d8f6789d65dbdb352ebad98a4209f26b41b384e87d81bc05e9ca76139db1248`. The same
 pack also carries a wolf, which is not used.
 
-Licence: CC0 1.0 (public domain dedication), as the pack is listed on
-OpenGameArt (<https://opengameart.org/content/animated-animales-low-poly>).
-The archive itself carries no licence file, so the dedication is the
-listing's, not the archive's. Nothing here needs attribution; Quaternius is
-credited because it is right to.
+Licence: CC0 1.0 (public domain dedication). The listing this archive is
+published under, <https://opengameart.org/content/animated-animales-low-poly>,
+reads `License(s): CC0`, author `quaternius`, uploaded 3 November 2017, with the
+file `Animal Pack Vol.2 by @Quaternius.zip` (2.1 Mb). Checked on 21 October
+2026. The archive carries no licence file of its own, so the dedication is the
+listing's. Quaternius's later Quaternius Asset License (QAL 1.0, last updated
+28 August 2026, <https://quaternius.com/license.html>) is not what this pack is
+published under; the 2017 listing says CC0. Nothing here needs attribution;
+Quaternius is credited because it is right to.
 
 ## Conversion
 
