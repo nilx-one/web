@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import {
   AMBIENT_ANIMAL_CLIPS,
   AMBIENT_ANIMAL_KINDS,
+  type AmbientAnimalClipId,
   type AmbientAnimalKind,
 } from "@nilx-one/map-contract";
 import { AnimationMixer, Box3, Vector3, type Mesh } from "three";
@@ -144,7 +145,7 @@ describe("the animals' assets", () => {
         gltf.scene.updateMatrixWorld(true);
         return new Box3().setFromObject(gltf.scene);
       };
-      const clips = AMBIENT_ANIMAL_CLIPS[kind];
+      const clips: readonly AmbientAnimalClipId[] = AMBIENT_ANIMAL_CLIPS[kind];
       const bounds = pose(clips[0] ?? "");
       const size = bounds.getSize(new Vector3());
       const [shortest, longest] = LENGTHS[kind];
