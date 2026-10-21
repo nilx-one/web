@@ -1142,6 +1142,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
         hostLabel={viewModel.hostLabel}
         pubDress={viewModel.identity.pubDress}
+        {...(viewModel.identity.pubDressUrl === undefined
+          ? {}
+          : { pubDressUrl: viewModel.identity.pubDressUrl })}
         renderer={dependencies.mapRenderer}
         geolocation={dependencies.host.geolocation}
         {...(dependencies.onManualBondMove === undefined
