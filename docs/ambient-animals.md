@@ -31,19 +31,25 @@ three in ten keep one. It circles a hub in its cell on a ring of 60–120 m, at
 
 ## A schedule, not a simulation
 
-An animal wanders around its spot through waypoints that are a hash of the
-animal and the slot's number. Each slot lasts 9 s: the animal moves from its
-waypoint to the next one at its own pace, then rests there for what is left.
+An animal wanders out from its spot and back, through waypoints that are a
+hash of the animal and the slot's number. In each slot it walks from its
+waypoint back by its spot and out to the next waypoint, at its own speed,
+then rests there for what is left. A slot is long enough for the farthest
+such walk, so an animal never moves faster than its speed.
 
-| Animal   | Moves         | Wanders | Rests                      |
-| -------- | ------------- | ------- | -------------------------- |
-| dog      | walk, 1.2 m/s | 10 m    | `idle`                     |
-| cat      | walk, 0.8 m/s | 7 m     | `idle`                     |
-| squirrel | run, 2.5 m/s  | 6 m     | `eat` or `idle`, half each |
-| piranha  | swim, 0.6 m/s | 5 m     | `swim` 70 %, `bite` 30 %   |
+| Animal   | Moves         | Wanders | Slot | Rests                      |
+| -------- | ------------- | ------- | ---- | -------------------------- |
+| dog      | walk, 1.2 m/s | 10 m    | 24 s | `idle`                     |
+| cat      | walk, 0.8 m/s | 7 m     | 24 s | `idle`                     |
+| squirrel | run, 2.5 m/s  | 6 m     | 9 s  | `eat` or `idle`, half each |
+| piranha  | swim, 0.6 m/s | 5 m     | 24 s | `swim` 70 %, `bite` 30 %   |
 
-A waypoint that falls off the animal's ground (a squirrel's onto the street,
-a fish's onto the bank) is its spot instead, so it never leaves its habitat.
+A waypoint is kept only when the straight line to it from the spot stays on
+the animal's ground: both ends on it, crossing no pond's or building's edge,
+and for the green no edge of its own outline or holes. Otherwise the
+waypoint is the spot itself. An animal only ever walks along such lines, so
+a squirrel never crosses a pond or leaves its park, even in a narrow or
+bent one, and a fish never crosses the bank.
 Slot `k` ends where slot `k + 1` starts, so the walk is continuous, and
 where an animal is at any moment is computed from that moment. Its clip
 phase follows the wall clock at the clip's own length.
@@ -52,6 +58,24 @@ Two devices with the same tiles loaded see the same animals in the same
 places. The ground comes from this device's loaded tiles only
 (`obstaclesWithin`, `greenAreasWithin`, `roadsWithin`), so ground the map has
 not loaded has no animals rather than guessed ones.
+
+## What an Avaia says about them
+
+An Avaia at the wheel notices the animals it passes
+(`features/map/avaia-animal-remarks.ts`). Every 1.5 s it looks around its
+body. A squirrel, a cat, a dog or a fish within 12 m, or an eagle passing
+within 70 m, gets a remark in its own voice (`avaia-animal-lines.ts`, three
+lines per animal for each study, in English, Ukrainian and Russian). A dog or
+an eagle startles it about a third of the time, and it says so:
+
+> Eek! It barked at me! — Dasha
+>
+> That bird came very close to my face. — Kai
+
+It does not chatter: at most one remark every 45 s, the same animal at most
+once in 10 minutes, and never over a line it is still saying. It is startled
+only in words; its walk goes on. The lines are text and are not recorded yet
+([Character voices](avaia-voice.md)).
 
 ## Only what is on screen costs anything
 
@@ -71,7 +95,8 @@ runs:
 - At most 24 animals are on the ground at once, the nearest within 220 m.
   Eagles whose ring passes within 450 m are drawn as well.
 - Ground still in fog keeps no animal: what this device has not revealed
-  stays unknown.
+  stays unknown. Fogged spots are left out before the 24 are chosen, so
+  they never take the place of an animal that could be drawn.
 
 Nothing about the animals is sent anywhere. No server knows of them, and no
 record is written.

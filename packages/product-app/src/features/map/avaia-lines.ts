@@ -9,6 +9,11 @@ import type {
 } from "@nilx-one/map-contract";
 
 import type { ProductLocale } from "../../shell/localization";
+import {
+  AVAIA_ANIMAL_LINES,
+  isAnimalLine,
+  type AvaiaAnimalLineKind,
+} from "./avaia-animal-lines";
 
 /**
  * What an Avaia says to itself while it walks.
@@ -35,9 +40,12 @@ export type AvaiaLineKind =
   | "landmark.longing"
   | "fog.reveal"
   | "fog.revealed"
-  | "fog.busy";
+  | "fog.busy"
+  | AvaiaAnimalLineKind;
 
-type Voice = Readonly<Record<AvaiaLineKind, readonly string[]>>;
+type Voice = Readonly<
+  Record<Exclude<AvaiaLineKind, AvaiaAnimalLineKind>, readonly string[]>
+>;
 
 const EN: Readonly<Record<AvatarModelId, Voice>> = {
   "sky-study": {
@@ -1009,7 +1017,9 @@ export function avaiaLines(
   model: AvatarModelId,
   kind: AvaiaLineKind,
 ): readonly string[] {
-  return VOICES[locale][model][kind];
+  return isAnimalLine(kind)
+    ? AVAIA_ANIMAL_LINES[locale][model][kind]
+    : VOICES[locale][model][kind];
 }
 
 /** The line kind a refused tap is answered with. */
@@ -1042,6 +1052,15 @@ export function lineCue(kind: AvaiaLineKind): SoundCue | undefined {
     case "landmark.studied":
     case "landmark.loved":
       return "study";
+    case "animal.squirrel":
+    case "animal.cat":
+    case "animal.dog":
+    case "animal.piranha":
+    case "animal.eagle":
+      return "spot";
+    case "animal.startled.dog":
+    case "animal.startled.eagle":
+      return "refuse";
     case "fog.revealed":
       return undefined;
   }

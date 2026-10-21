@@ -24,9 +24,9 @@ import { insidePolygon } from "../map/avaia-route";
  * spots, a hash of the cell alone. What lives at a spot follows from the
  * ground under it: squirrels where it is green, piranhas in water, dogs and
  * cats along footways and paths, and nothing inside a building. Every animal
- * wanders around its spot through waypoints that are a hash of the animal
- * and the slot's number, so like the drones it is never simulated: where it
- * is at a moment is computed from that moment.
+ * wanders out from its spot and back through waypoints that are a hash of
+ * the animal and the slot's number, so like the drones it is never
+ * simulated: where it is at a moment is computed from that moment.
  *
  * The ground comes from the tiles this device has loaded. Two devices with
  * the same tiles see the same animals in the same places.
@@ -35,8 +35,6 @@ import { insidePolygon } from "../map/avaia-route";
 /** Side of a grid cell. */
 export const ANIMAL_CELL_METERS = 40;
 const SPOTS_PER_CELL = 2;
-/** One slot: a move to the next waypoint, then a rest there. */
-export const ANIMAL_SLOT_MS = 9_000;
 /** Below this zoom an animal is a dot; none is drawn and nothing runs. */
 export const ANIMAL_MIN_ZOOM = 17;
 /** The most animals on the ground at once, nearest first. */
@@ -96,11 +94,17 @@ export const ANIMAL_FREQUENCY: Readonly<
   ],
 };
 
-interface Gait<K extends GroundAnimalKind> {
+export interface Gait<K extends GroundAnimalKind> {
   /** Ground speed while it moves, metres a second. */
   readonly speed: number;
   /** How far from its spot it wanders. */
   readonly wanderMeters: number;
+  /**
+   * One slot: back by its spot and out to the next waypoint, at its speed,
+   * then a rest there. Long enough for the farthest such walk, so the speed
+   * is the speed it moves at.
+   */
+  readonly slotMs: number;
   readonly move: AmbientAnimalClipOf<K>;
   /** What it does once it gets there, and how often each. */
   readonly rest: readonly [
@@ -110,12 +114,25 @@ interface Gait<K extends GroundAnimalKind> {
 }
 
 /** Each animal's way of moving about, in the clips its own kind carries. */
-const GAITS: { readonly [K in GroundAnimalKind]: Gait<K> } = {
-  dog: { speed: 1.2, wanderMeters: 10, move: "walk", rest: [["idle", 1]] },
-  cat: { speed: 0.8, wanderMeters: 7, move: "walk", rest: [["idle", 1]] },
+export const ANIMAL_GAITS: { readonly [K in GroundAnimalKind]: Gait<K> } = {
+  dog: {
+    speed: 1.2,
+    wanderMeters: 10,
+    slotMs: 24_000,
+    move: "walk",
+    rest: [["idle", 1]],
+  },
+  cat: {
+    speed: 0.8,
+    wanderMeters: 7,
+    slotMs: 24_000,
+    move: "walk",
+    rest: [["idle", 1]],
+  },
   squirrel: {
     speed: 2.5,
     wanderMeters: 6,
+    slotMs: 9_000,
     move: "run",
     rest: [
       ["eat", 0.5],
@@ -125,6 +142,7 @@ const GAITS: { readonly [K in GroundAnimalKind]: Gait<K> } = {
   piranha: {
     speed: 0.6,
     wanderMeters: 5,
+    slotMs: 24_000,
     move: "swim",
     rest: [
       ["swim", 0.7],
@@ -295,18 +313,23 @@ export function animalsOf(
       habitat,
       seed,
       home,
-      offsetMs: Math.floor(unitHash(seed, 4) * ANIMAL_SLOT_MS),
+      offsetMs: Math.floor(unitHash(seed, 4) * ANIMAL_GAITS[kind].slotMs),
     });
   }
   return animals;
 }
 
-/** The animals on the ground around a point, nearest first, capped. */
+/**
+ * The animals on the ground around a point, nearest first, capped. `accept`
+ * turns an animal down before the cap (one on ground still in fog), so one
+ * turned down never takes the place of one that would be drawn.
+ */
 export function animalsAround(
   centre: LonLat,
   reachMeters: number,
   ground: AnimalGround,
   max = ANIMAL_MAX_ON_GROUND,
+  accept: (animal: AnimalSpec) => boolean = () => true,
 ): readonly AnimalSpec[] {
   const found: { animal: AnimalSpec; distance: number }[] = [];
   for (const { cell, west, south } of cellsAround(
@@ -316,7 +339,8 @@ export function animalsAround(
   )) {
     for (const animal of animalsOf(cell, west, south, ground)) {
       const distance = metersBetween(centre, animal.home);
-      if (distance <= reachMeters) found.push({ animal, distance });
+      if (distance <= reachMeters && accept(animal))
+        found.push({ animal, distance });
     }
   }
   return found
@@ -328,23 +352,91 @@ export function animalsAround(
     .map(({ animal }) => animal);
 }
 
+/** How finely a walk along a footway is checked against its reach. */
+const STEP_METERS = 0.5;
+
+/** Whether segments `ab` and `cd` cross or touch. */
+function segmentsMeet(
+  a: readonly [number, number],
+  b: readonly [number, number],
+  c: readonly [number, number],
+  d: readonly [number, number],
+): boolean {
+  const side = (
+    p: readonly [number, number],
+    q: readonly [number, number],
+    r: readonly [number, number],
+  ) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const d1 = side(c, d, a);
+  const d2 = side(c, d, b);
+  const d3 = side(a, b, c);
+  const d4 = side(a, b, d);
+  return d1 * d2 <= 0 && d3 * d4 <= 0;
+}
+
+function crossesEdge(
+  from: LonLat,
+  to: LonLat,
+  polygons: readonly Polygon[],
+): boolean {
+  for (const rings of polygons)
+    for (const ring of rings)
+      for (let index = 1; index < ring.length; index++)
+        if (segmentsMeet(from, to, ring[index - 1]!, ring[index]!)) return true;
+  return false;
+}
+
 /**
- * An animal's `slot`th waypoint: somewhere around its spot, on the same
- * ground. A waypoint that falls off it (a squirrel's onto the street, a
- * fish's onto the bank) is the spot itself, so it never leaves its habitat.
+ * Whether the straight walk from `from` to `to` stays on one ground. Both
+ * ends must be on it, and the line may cross no edge that could take it off:
+ * a pond's or a building's, or for the green its own outline and holes. It
+ * errs towards staying put: an edge between two green areas that touch also
+ * turns the walk down.
+ */
+export function staysOn(
+  ground: AnimalGround,
+  habitat: AnimalHabitat,
+  from: LonLat,
+  to: LonLat,
+): boolean {
+  if (habitatAt(ground, from) !== habitat) return false;
+  if (habitatAt(ground, to) !== habitat) return false;
+  if (crossesEdge(from, to, ground.water)) return false;
+  if (habitat === "water") return true;
+  if (crossesEdge(from, to, ground.buildings)) return false;
+  if (habitat === "green") return !crossesEdge(from, to, ground.green);
+  // Along a footway: no hard edge, only how far from it, checked in steps.
+  const steps = Math.max(1, Math.ceil(metersBetween(from, to) / STEP_METERS));
+  for (let step = 1; step < steps; step++) {
+    const t = step / steps;
+    const at: LonLat = [
+      from[0] + (to[0] - from[0]) * t,
+      from[1] + (to[1] - from[1]) * t,
+    ];
+    if (habitatAt(ground, at) !== habitat) return false;
+  }
+  return true;
+}
+
+/**
+ * An animal's `slot`th waypoint: somewhere around its spot, reached from the
+ * spot in a straight line over the same ground. One whose line leaves it (a
+ * squirrel's across a pond, a fish's over the bank, either through a hole in
+ * its polygon) is the spot itself. An animal only ever walks between its
+ * spot and a waypoint, so it never leaves its habitat.
  */
 export function animalWaypoint(
   spec: AnimalSpec,
   slot: number,
   ground: AnimalGround,
 ): LonLat {
-  const gait = GAITS[spec.kind];
+  const gait = ANIMAL_GAITS[spec.kind];
   const point = offsetMeters(
     spec.home,
     Math.sqrt(unitHash(spec.seed, 10, slot)) * gait.wanderMeters,
     unitHash(spec.seed, 11, slot) * Math.PI * 2,
   );
-  return habitatAt(ground, point) === spec.habitat ? point : spec.home;
+  return staysOn(ground, spec.habitat, spec.home, point) ? point : spec.home;
 }
 
 /** Degrees clockwise from north, from `from` toward `to`. */
@@ -397,39 +489,46 @@ function sampleKind<K extends GroundAnimalKind>(
   timeMs: number,
   ground: AnimalGround,
 ): AmbientAnimalHandle {
-  const gait: Gait<K> = GAITS[kind];
+  const gait: Gait<K> = ANIMAL_GAITS[kind];
   const local = timeMs + spec.offsetMs;
-  const slot = Math.floor(local / ANIMAL_SLOT_MS);
-  const within = local - slot * ANIMAL_SLOT_MS;
+  const slot = Math.floor(local / gait.slotMs);
+  const within = local - slot * gait.slotMs;
+  // Back by its spot, then out to the next waypoint: both legs lie on lines
+  // checked from the spot, so the whole walk stays on its ground.
   const from = animalWaypoint(spec, slot, ground);
   const to = animalWaypoint(spec, slot + 1, ground);
-  const distance = metersBetween(from, to);
-  const moveMs = Math.min(
-    (distance / gait.speed) * 1_000,
-    ANIMAL_SLOT_MS * 0.7,
-  );
-  // Facing where it went, or at rest where its spot's hash points it.
-  const bearingDeg =
-    distance > 0.05 ? bearingOf(from, to) : unitHash(spec.seed, 12) * 360;
-  const moving = within < moveMs;
-  const t = moving ? within / moveMs : 1;
+  const back = metersBetween(from, spec.home);
+  const out = metersBetween(spec.home, to);
+  const walked = Math.min(back + out, (within / 1_000) * gait.speed);
+  const moving = walked < back + out;
+  let lngLat: LonLat;
+  let bearingDeg: number;
+  if (walked < back) {
+    lngLat = toward(from, spec.home, walked / back);
+    bearingDeg = bearingOf(from, spec.home);
+  } else {
+    lngLat = out > 0 ? toward(spec.home, to, (walked - back) / out) : to;
+    // Facing the way it last went, or where its spot's hash points it.
+    bearingDeg =
+      out > 0.05
+        ? bearingOf(spec.home, to)
+        : back > 0.05
+          ? bearingOf(from, spec.home)
+          : unitHash(spec.seed, 12) * 360;
+  }
   const clip = moving
     ? gait.move
     : (pick(gait.rest, unitHash(spec.seed, 13, slot)) ?? gait.rest[0][0]);
   return handleOf(
     kind,
     clip,
-    {
-      id: spec.id,
-      lngLat: [
-        from[0] + (to[0] - from[0]) * t,
-        from[1] + (to[1] - from[1]) * t,
-      ],
-      bearingDeg,
-      visible: true,
-    },
+    { id: spec.id, lngLat: [lngLat[0], lngLat[1]], bearingDeg, visible: true },
     timeMs,
   );
+}
+
+function toward(from: LonLat, to: LonLat, t: number): LonLat {
+  return [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
 }
 
 /** The eagle over a cell, if it keeps one: high up, circling its hub. */

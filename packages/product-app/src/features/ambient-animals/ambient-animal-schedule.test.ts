@@ -11,7 +11,7 @@ import {
 import {
   ANIMAL_CLIP_SECONDS,
   ANIMAL_MAX_ON_GROUND,
-  ANIMAL_SLOT_MS,
+  ANIMAL_GAITS,
   EMPTY_GROUND,
   animalWaypoint,
   animalsAround,
@@ -115,7 +115,7 @@ describe("an animal through its day", () => {
 
   it("moves on continuously from one slot into the next", () => {
     for (const animal of animals) {
-      const edge = 40 * ANIMAL_SLOT_MS - animal.offsetMs;
+      const edge = 40 * ANIMAL_GAITS[animal.kind].slotMs - animal.offsetMs;
       const before = sampleAnimal(animal, edge - 1, ground).lngLat;
       const after = sampleAnimal(animal, edge, ground).lngLat;
       expect(metersBetween(before, after)).toBeLessThan(0.05);
@@ -137,6 +137,87 @@ describe("an animal through its day", () => {
           ANIMAL_CLIP_SECONDS[kind as keyof typeof ANIMAL_CLIP_SECONDS],
         ).sort(),
       ).toEqual([...clips].sort());
+  });
+});
+
+describe("an animal's walk, on awkward ground", () => {
+  // An L-shaped park with a pond in its corner and a kiosk on its lawn: a
+  // straight line between two good waypoints can cross all three.
+  const corner = offsetMeters(KYIV, 0, 0);
+  const ground: AnimalGround = {
+    green: [
+      square(offsetMeters(corner, 40, 0), 80),
+      square(offsetMeters(corner, 40, Math.PI / 2), 80),
+    ],
+    water: [square(offsetMeters(corner, 14, Math.PI / 4), 10)],
+    buildings: [square(offsetMeters(corner, 50, 0), 6)],
+    paths: [],
+  };
+  const animals = animalsAround(corner, 90, ground, 200);
+
+  it("never stands off its ground, even between waypoints", () => {
+    expect(animals.filter((a) => a.kind === "squirrel").length).toBeGreaterThan(
+      3,
+    );
+    for (const animal of animals) {
+      const slotMs = ANIMAL_GAITS[animal.kind].slotMs;
+      for (let time = 0; time < 30 * slotMs; time += 97) {
+        const { lngLat } = sampleAnimal(animal, time, ground);
+        expect(habitatAt(ground, lngLat)).toBe(animal.habitat);
+      }
+    }
+  });
+
+  it("walks round a pond beside its spot, never across it", () => {
+    const pondside: AnimalGround = {
+      ...EMPTY_GROUND,
+      green: [square(KYIV, 40)],
+      water: [square(offsetMeters(KYIV, 3, 0), 2)],
+    };
+    const squirrel = {
+      id: "animal:test",
+      kind: "squirrel",
+      habitat: "green",
+      seed: 12_345,
+      home: KYIV,
+      offsetMs: 0,
+    } as const;
+    const { slotMs } = ANIMAL_GAITS.squirrel;
+    for (let time = 0; time < 300 * slotMs; time += 61) {
+      const { lngLat } = sampleAnimal(squirrel, time, pondside);
+      expect(habitatAt(pondside, lngLat)).toBe("green");
+    }
+  });
+
+  it("moves at its own speed, never faster", () => {
+    for (const animal of animals) {
+      const { speed, wanderMeters, slotMs } = ANIMAL_GAITS[animal.kind];
+      // The farthest walk in a slot, out and back, fits it at that speed.
+      expect(((2 * wanderMeters) / speed) * 1_000).toBeLessThan(slotMs * 0.8);
+      let before = sampleAnimal(animal, 0, ground).lngLat;
+      for (let time = 50; time < 20 * slotMs; time += 50) {
+        const now = sampleAnimal(animal, time, ground).lngLat;
+        expect(metersBetween(before, now) / 0.05).toBeLessThan(speed * 1.02);
+        before = now;
+      }
+    }
+  });
+});
+
+describe("animals on ground still in fog", () => {
+  it("are turned down before the cap, never taking a visible one's place", () => {
+    const all = animalsAround(KYIV, 180, park, 500);
+    const nearest = new Set(all.slice(0, 12).map((a) => a.id));
+    const shown = animalsAround(
+      KYIV,
+      180,
+      park,
+      12,
+      (animal) => !nearest.has(animal.id),
+    );
+    expect(all.length).toBeGreaterThan(24);
+    expect(shown).toHaveLength(12);
+    expect(shown.some((animal) => nearest.has(animal.id))).toBe(false);
   });
 });
 

@@ -208,6 +208,7 @@ import { FlyoverControls } from "../flyover/flyover-controls";
 import { useStarterSeeds, useXpingEngine } from "../xping/xping-engine";
 import { useAmbientDrones } from "../ambient-drones/use-ambient-drones";
 import { useAmbientAnimals } from "../ambient-animals/use-ambient-animals";
+import { useAvaiaAnimalRemarks } from "./avaia-animal-remarks";
 import { XpingSection } from "../xping/xping-section";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
@@ -1909,7 +1910,7 @@ export function AuthenticatedMapHomeView({
       systemInformer.activeId !== undefined,
   });
   // And its animals, on the ground the map paints; scenery too.
-  useAmbientAnimals({
+  const ambientAnimals = useAmbientAnimals({
     renderer,
     ready: mapStatus.kind === "ready",
     suspended:
@@ -1989,6 +1990,19 @@ export function AuthenticatedMapHomeView({
             latitude: drone.latitude,
           };
     };
+  });
+  // The Avaia at the wheel notices the animals it passes, and says so.
+  useAvaiaAnimalRemarks({
+    active:
+      wheel === "avaia" &&
+      handover === undefined &&
+      mapStatus.kind === "ready" &&
+      section === "world" &&
+      !guideActive,
+    body: followBody,
+    speaking: () => avaiaWalk.speech !== undefined,
+    sightings: ambientAnimals.sightings,
+    announce: avaiaWalk.announce,
   });
   // In a cutscene the characters who are not the person speak: xSasha says
   // her line when it opens. The person's own replies are never voiced.
