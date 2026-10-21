@@ -1,9 +1,9 @@
 # Ambient animals
 
-Low-poly dog, cat, eagle and piranha that the map draws as the city's own
-scenery (`AmbientAnimalHandle`). They are true to size, like the studies:
-about 0.9 m for the dog, 0.5 m for the cat, a 1.9 m wingspan for the eagle and
-0.3 m for the piranha.
+Low-poly dog, cat, eagle, piranha and squirrel that the map draws as the city's
+own scenery (`AmbientAnimalHandle`). They are true to size, like the studies:
+about 0.9 m for the dog, 0.5 m for the cat, a 1.9 m wingspan for the eagle,
+0.3 m for the piranha and 0.4 m, nose to curled tail, for the squirrel.
 
 ## Source
 
@@ -20,6 +20,8 @@ listing's. Quaternius's later Quaternius Asset License (QAL 1.0, last updated
 28 August 2026, <https://quaternius.com/license.html>) is not what this pack is
 published under; the 2017 listing says CC0. Nothing here needs attribution;
 Quaternius is credited because it is right to.
+
+The squirrel is not from the pack; see [The squirrel](#the-squirrel).
 
 ## Conversion
 
@@ -44,6 +46,24 @@ same pack gives the same bytes.
 | `cat.glb`     | 807       | 157 096 | `a1572f6948a4a4d420c108e024bc11feb0dc2bd2cc93b202cb4f535bf40e1515` |
 | `eagle.glb`   | 2 400     | 157 276 | `536d7b2d24da3612027a55c20ff55187989eb0a1c8af75795e46085441ba49ae` |
 | `piranha.glb` | 1 388     | 145 384 | `d346233f732143da1b2a63183acf3afd34ff9f89c56eb527e43a28cb256121c9` |
+
+## The squirrel
+
+No low-poly, rigged squirrel under a public-domain dedication was found, so
+`tools/animals/squirrel.py` builds one from scratch, with the same `bpy` 5.2.2,
+and it carries the repository's own licence. It is a red squirrel in the
+city's pale palette: fur `#c4622d`, belly and muzzle `#f0dcba`, eyes
+`#2a201c`.
+
+- Every part is bound wholly to one bone, so it moves as a few rigid pieces,
+  as the pack's animals do; the tail is three pieces curling over its back.
+- Metre-scale, Y-up, facing glTF +Z, standing on y = 0, like the others.
+- Clips: `idle`, `run` (bounding, in place) and `eat` (sitting up, nibbling).
+- Deterministic: a fixed seed gives the same bytes.
+
+| File           | Triangles | Bytes   | SHA-256                                                            |
+| -------------- | --------- | ------- | ------------------------------------------------------------------ |
+| `squirrel.glb` | 896       | 149 248 | `3b941e99a9f9c0d72f05983a1c0f21d9a596b2868f6f1beddc2c3cc5b9233260` |
 
 Vite bundles them as hashed same-origin assets in all three hosts, the way it
 does the backpack.

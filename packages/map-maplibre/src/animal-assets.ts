@@ -7,6 +7,7 @@ import catUrl from "./assets/animals/cat.glb?url";
 import dogUrl from "./assets/animals/dog.glb?url";
 import eagleUrl from "./assets/animals/eagle.glb?url";
 import piranhaUrl from "./assets/animals/piranha.glb?url";
+import squirrelUrl from "./assets/animals/squirrel.glb?url";
 
 /**
  * The animals' assets, bundled as hashed same-origin files the way the
@@ -18,4 +19,5 @@ export const ANIMAL_ASSET_URLS: Readonly<Record<AmbientAnimalKind, string>> = {
   cat: catUrl,
   eagle: eagleUrl,
   piranha: piranhaUrl,
+  squirrel: squirrelUrl,
 };

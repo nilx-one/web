@@ -900,15 +900,18 @@ export interface SystemDroneLayerContract {
 /**
  * Which animal an ambient animal is. Like the ambient drones they are the
  * city's own scenery, renderer-local and owned by nobody: a dog or a cat on
- * the pavement, an eagle overhead, a piranha in the water.
+ * the pavement, an eagle overhead, a piranha in the water, a squirrel in a
+ * park.
  */
-export type AmbientAnimalKind = "dog" | "cat" | "eagle" | "piranha";
+export type AmbientAnimalKind =
+  "dog" | "cat" | "eagle" | "piranha" | "squirrel";
 
 export const AMBIENT_ANIMAL_KINDS: readonly AmbientAnimalKind[] = [
   "dog",
   "cat",
   "eagle",
   "piranha",
+  "squirrel",
 ];
 
 /**
@@ -921,6 +924,7 @@ export const AMBIENT_ANIMAL_CLIPS = {
   cat: ["idle", "walk"],
   eagle: ["fly", "idle"],
   piranha: ["swim", "bite"],
+  squirrel: ["idle", "run", "eat"],
 } as const satisfies Record<AmbientAnimalKind, readonly string[]>;
 
 /** Every clip any animal carries. */
