@@ -31,19 +31,25 @@ three in ten keep one. It circles a hub in its cell on a ring of 60–120 m, at
 
 ## A schedule, not a simulation
 
-An animal wanders around its spot through waypoints that are a hash of the
-animal and the slot's number. Each slot lasts 9 s: the animal moves from its
-waypoint to the next one at its own pace, then rests there for what is left.
+An animal wanders out from its spot and back, through waypoints that are a
+hash of the animal and the slot's number. In each slot it walks from its
+waypoint back by its spot and out to the next waypoint, at its own speed,
+then rests there for what is left. A slot is long enough for the farthest
+such walk, so an animal never moves faster than its speed.
 
-| Animal   | Moves         | Wanders | Rests                      |
-| -------- | ------------- | ------- | -------------------------- |
-| dog      | walk, 1.2 m/s | 10 m    | `idle`                     |
-| cat      | walk, 0.8 m/s | 7 m     | `idle`                     |
-| squirrel | run, 2.5 m/s  | 6 m     | `eat` or `idle`, half each |
-| piranha  | swim, 0.6 m/s | 5 m     | `swim` 70 %, `bite` 30 %   |
+| Animal   | Moves         | Wanders | Slot | Rests                      |
+| -------- | ------------- | ------- | ---- | -------------------------- |
+| dog      | walk, 1.2 m/s | 10 m    | 24 s | `idle`                     |
+| cat      | walk, 0.8 m/s | 7 m     | 24 s | `idle`                     |
+| squirrel | run, 2.5 m/s  | 6 m     | 9 s  | `eat` or `idle`, half each |
+| piranha  | swim, 0.6 m/s | 5 m     | 24 s | `swim` 70 %, `bite` 30 %   |
 
-A waypoint that falls off the animal's ground (a squirrel's onto the street,
-a fish's onto the bank) is its spot instead, so it never leaves its habitat.
+A waypoint is kept only when the straight line to it from the spot stays on
+the animal's ground: both ends on it, crossing no pond's or building's edge,
+and for the green no edge of its own outline or holes. Otherwise the
+waypoint is the spot itself. An animal only ever walks along such lines, so
+a squirrel never crosses a pond or leaves its park, even in a narrow or
+bent one, and a fish never crosses the bank.
 Slot `k` ends where slot `k + 1` starts, so the walk is continuous, and
 where an animal is at any moment is computed from that moment. Its clip
 phase follows the wall clock at the clip's own length.
@@ -71,7 +77,8 @@ runs:
 - At most 24 animals are on the ground at once, the nearest within 220 m.
   Eagles whose ring passes within 450 m are drawn as well.
 - Ground still in fog keeps no animal: what this device has not revealed
-  stays unknown.
+  stays unknown. Fogged spots are left out before the 24 are chosen, so
+  they never take the place of an animal that could be drawn.
 
 Nothing about the animals is sent anywhere. No server knows of them, and no
 record is written.

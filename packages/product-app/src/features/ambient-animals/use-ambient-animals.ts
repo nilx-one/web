@@ -145,7 +145,11 @@ export function useAmbientAnimals({
         renderer,
         boundsAround(centre, GROUND_REACH_METERS + 20),
       );
-      animals = animalsAround(centre, GROUND_REACH_METERS, ground).filter(
+      animals = animalsAround(
+        centre,
+        GROUND_REACH_METERS,
+        ground,
+        undefined,
         (animal) => revealed(animal.home),
       );
       eagles = eaglesAround(centre, SKY_REACH_METERS);
