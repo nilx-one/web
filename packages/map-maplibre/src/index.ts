@@ -6,6 +6,8 @@ import { waitForScene } from "./scene-ready";
 import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
+  type AmbientAnimalHandle,
+  type AmbientAnimalLayerContract,
   type AvatarHandle,
   type SystemDroneHandle,
   type SystemDroneLayerContract,
@@ -102,6 +104,15 @@ import {
   type BridgeStructures,
 } from "./bridge-structures";
 import type { MonumentCustomLayer } from "./monument-layer";
+import type { VegetationCustomLayer } from "./vegetation-layer";
+import {
+  GREEN_CHARACTER,
+  VEGETATION_MIN_ZOOM,
+  plantVegetation,
+  type AreaPolygon,
+  type GreenArea,
+  type VegetationInstance,
+} from "./vegetation-placement";
 import {
   carriesMotherlandCutout,
   carriesMotherlandTerraces,
@@ -653,6 +664,7 @@ export function createMapLibreRenderer(
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
   const droneHandles = new Map<string, SystemDroneHandle>();
+  const animalHandles = new Map<string, AmbientAnimalHandle>();
   let flightLootHandles: readonly MapFlightLoot[] = [];
   let droneLayerFailed = false;
   let avatarCamera: MapCamera = camera;
@@ -665,6 +677,10 @@ export function createMapLibreRenderer(
   // never re-requests a chunk that is gone.
   let monumentLayerFailed = false;
   let avatarLayerFailed = false;
+  let vegetationLayer: VegetationCustomLayer | undefined;
+  let vegetationLayerPromise: Promise<VegetationCustomLayer> | undefined;
+  let vegetationPlanted: readonly VegetationInstance[] = [];
+  let vegetationKey = "";
 
   /**
    * A fixed landmark, not a handle the application drives: it is requested
@@ -697,6 +713,123 @@ export function createMapLibreRenderer(
     return monumentLayerPromise;
   }
 
+  /**
+   * Trees and bushes are requested the first time a view close enough to
+   * show them has green areas in it: a session that never zooms in to a
+   * park never downloads them.
+   */
+  function requestVegetationLayer(): Promise<VegetationCustomLayer> {
+    if (vegetationLayer !== undefined) return Promise.resolve(vegetationLayer);
+    if (vegetationLayerPromise !== undefined) return vegetationLayerPromise;
+    vegetationLayerPromise = import("./vegetation-layer").then(
+      ({ createVegetationLayer }) => {
+        const layer = createVegetationLayer();
+        vegetationLayer = layer;
+        layer.setDimension(dimension);
+        layer.setInstances(vegetationPlanted);
+        if (map !== undefined && firstPaintDone) ensureVegetationLayer(map);
+        return layer;
+      },
+    );
+    return vegetationLayerPromise;
+  }
+
+  function ensureVegetationLayer(mounted: MapLibreMap): void {
+    if (vegetationLayer === undefined) return;
+    if (mounted.getLayer(vegetationLayer.id) !== undefined) return;
+    mounted.addLayer(vegetationLayer);
+  }
+
+  /** The polygons a style layer paints in the view, outer ring first. */
+  function viewPolygons(
+    mounted: MapLibreMap,
+    layerId: string,
+    bounds: MapBounds,
+  ): AreaPolygon[] {
+    return polygonsPainted(mounted, layerId, bounds).polygons as AreaPolygon[];
+  }
+
+  /**
+   * Plants the green areas the view's tiles hold, once the view has settled.
+   * Closer than street scale only, and only in volumetric presentation: the
+   * same rule the monument keeps.
+   */
+  function updateVegetation(mounted: MapLibreMap): void {
+    const zoom = mounted.getZoom();
+    if (zoom < VEGETATION_MIN_ZOOM || dimension !== "volumetric") {
+      if (vegetationPlanted.length > 0) {
+        vegetationPlanted = [];
+        vegetationKey = "";
+        vegetationLayer?.setInstances([]);
+      }
+      return;
+    }
+    const view = mounted.getBounds();
+    const padX = (view.getEast() - view.getWest()) * 0.1;
+    const padY = (view.getNorth() - view.getSouth()) * 0.1;
+    const bounds: MapBounds = {
+      west: view.getWest() - padX,
+      south: view.getSouth() - padY,
+      east: view.getEast() + padX,
+      north: view.getNorth() + padY,
+    };
+    const areas: GreenArea[] = [];
+    for (const feature of viewFeatures(LANDUSE_SOURCE_LAYER)) {
+      const kind = feature.properties?.["kind"];
+      if (typeof kind !== "string" || GREEN_CHARACTER[kind] === undefined)
+        continue;
+      const geometry = feature.geometry as {
+        readonly type: string;
+        readonly coordinates: unknown;
+      };
+      const polygons =
+        geometry.type === "Polygon"
+          ? [geometry.coordinates as AreaPolygon]
+          : geometry.type === "MultiPolygon"
+            ? (geometry.coordinates as AreaPolygon[])
+            : [];
+      for (const polygon of polygons) areas.push({ kind, polygon });
+    }
+    const center = mounted.getCenter();
+    const key = [
+      areas.length,
+      bounds.west.toFixed(4),
+      bounds.south.toFixed(4),
+      bounds.east.toFixed(4),
+      bounds.north.toFixed(4),
+    ].join(":");
+    if (key === vegetationKey) return;
+    vegetationKey = key;
+    if (areas.length === 0) {
+      if (vegetationPlanted.length > 0) {
+        vegetationPlanted = [];
+        vegetationLayer?.setInstances([]);
+      }
+      return;
+    }
+    const obstacles = [
+      ...viewPolygons(mounted, BUILDING_EXTRUSION_LAYER_ID, bounds),
+      ...viewPolygons(mounted, "water", bounds),
+    ];
+    const { trees, bushes } = plantVegetation({
+      areas,
+      obstacles,
+      bounds,
+      center: [center.lng, center.lat],
+    });
+    // Ground this device has not revealed keeps its fog: nothing stands on it.
+    vegetationPlanted = [...trees, ...bushes].filter(
+      (plant) =>
+        isGroundRevealed?.({
+          longitude: plant.lngLat[0],
+          latitude: plant.lngLat[1],
+        }) !== false,
+    );
+    if (vegetationLayer !== undefined)
+      vegetationLayer.setInstances(vegetationPlanted);
+    else void requestVegetationLayer().catch(ignoreOptionalLayer);
+  }
+
   function requestAvatarLayer(): Promise<AvatarCustomLayer> {
     if (avatarLayer !== undefined) return Promise.resolve(avatarLayer);
     if (avatarLayerPromise !== undefined) return avatarLayerPromise;
@@ -712,6 +845,7 @@ export function createMapLibreRenderer(
         layer.setCamera(avatarCamera);
         for (const handle of avatarHandles.values()) layer.upsert(handle);
         for (const handle of droneHandles.values()) layer.upsertDrone(handle);
+        for (const handle of animalHandles.values()) layer.upsertAnimal(handle);
         layer.setFlightLoot(flightLootHandles);
         if (map !== undefined && firstPaintDone && layer.hasInstances()) {
           ensureAvatarLayer(map);
@@ -758,6 +892,18 @@ export function createMapLibreRenderer(
       droneHandles.delete(id);
       if (droneHandles.size === 0) droneLayerFailed = false;
       avatarLayer?.remove(id);
+    },
+  };
+  // Scenery, like the ambient drones: never hit tested, never a body.
+  const animals: AmbientAnimalLayerContract = {
+    upsert(handle) {
+      animalHandles.set(handle.id, handle);
+      if (avatarLayer !== undefined) avatarLayer.upsertAnimal(handle);
+      else void requestAvatarLayer().catch(ignoreOptionalLayer);
+    },
+    remove(id) {
+      animalHandles.delete(id);
+      avatarLayer?.removeAnimal(id);
     },
   };
   const avatars: AvatarLayerContract = {
@@ -965,6 +1111,7 @@ export function createMapLibreRenderer(
     // dimension whether or not the published style still carries an
     // extrusion layer to match.
     monumentLayer?.setDimension(dimension);
+    vegetationLayer?.setDimension(dimension);
 
     // Terrain and building mass are two views of the same geographic
     // presentation switch. Explicit flat mode disables both; volumetric mode
@@ -1732,6 +1879,7 @@ export function createMapLibreRenderer(
     if (firstPaintDone && avatarLayer?.hasInstances())
       ensureAvatarLayer(mounted);
     if (firstPaintDone) {
+      ensureVegetationLayer(mounted);
       ensureMonumentLayer(mounted);
       applyMonumentCutout(mounted);
       void requestMonumentLayer().catch(ignoreOptionalLayer);
@@ -1984,6 +2132,7 @@ export function createMapLibreRenderer(
   return {
     avatars,
     systemDrone,
+    animals,
 
     mount(container) {
       if (map !== undefined) {
@@ -2140,6 +2289,11 @@ export function createMapLibreRenderer(
           } catch {
             // Bridges are presentation over the map; they never break it.
           }
+          try {
+            updateVegetation(mountedMap);
+          } catch {
+            // Trees are presentation over the map; they never break it.
+          }
           for (const listener of [...landmarkListeners]) listener();
         });
         mountedMap.on("zoom", () => {
@@ -2248,6 +2402,9 @@ export function createMapLibreRenderer(
       releaseSelectionMarker();
       clearTapFeedback();
       releasePinnedLabels();
+      vegetationPlanted = [];
+      vegetationKey = "";
+      vegetationLayer?.setInstances([]);
       map?.remove();
       map = undefined;
       styleResolved = false;

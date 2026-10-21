@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -16,6 +16,7 @@ import {
   useDriveChooser,
 } from "./drive-chooser";
 import { CHOICE_SYSTEM_PROMPT, type DriveChoose } from "./drive-choice";
+import type { InferencePerformanceMode } from "./inference-performance";
 
 const onTheWay: DriveChoose = {
   do: "choose",
@@ -209,6 +210,37 @@ describe("the chooser in the world", () => {
       expect.any(AbortSignal),
     );
     expect(open).not.toHaveBeenCalled();
+  });
+
+  it("defers new inference under load and releases the GPU only when critical", async () => {
+    const { model } = engine("1");
+    const openCached = vi.fn(async () => model);
+    const local = dependency(openCached);
+    const readiness = {
+      kind: "present" as const,
+      modelId: "Qwen3-0.6B-q4f16_1-MLC",
+    };
+    const { result, rerender } = renderHook(
+      ({ performance }: { performance: InferencePerformanceMode }) =>
+        useDriveChooser(local, readiness, performance),
+      { initialProps: { performance: "normal" as InferencePerformanceMode } },
+    );
+
+    await expect(result.current?.choose(onTheWay)).resolves.toBe(1);
+    rerender({ performance: "degraded" });
+    expect(result.current).toBeUndefined();
+    expect(model.unload).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rerender({ performance: "critical" });
+      await Promise.resolve();
+    });
+    expect(result.current).toBeUndefined();
+    expect(model.unload).toHaveBeenCalledTimes(1);
+
+    rerender({ performance: "normal" });
+    await expect(result.current?.choose(onTheWay)).resolves.toBe(1);
+    expect(openCached).toHaveBeenCalledTimes(2);
   });
 
   it("does not create a chooser when the host cannot guarantee cached-only acquisition", () => {

@@ -139,6 +139,24 @@ omitted rather than invented. In particular, individual street trees are not
 placed: the archive carries no tree points, and drawing them at made-up
 coordinates would be the renderer manufacturing geography.
 
+Green cover is drawn, but only as what it is: cover. In volumetric presentation
+at zoom 15.5 and closer, the landuse polygons the `parks` layer paints (parks,
+gardens, woods and forests, grass, scrub, cemeteries and the like) are filled
+with low-poly trees and bushes from `assets/vegetation/`. No single tree claims
+to stand where a real one does; the planting says only "this polygon is green",
+which the archive does say.
+
+- Positions come from a world-fixed Mercator grid, jittered by a hash of the
+  cell, so the same park is planted the same way on every device and a tile
+  boundary never moves a tree.
+- Density and mix follow the kind: woods and forests are dense and part
+  conifer, parks, gardens and cemeteries are open with bushes and hedges,
+  grass and lawns are sparse, scrub is mostly bushes. Pitches and playgrounds stay
+  open.
+- Nothing is planted on a building footprint or on water, nothing under fog,
+  and at most 2 500 trees and 1 500 bushes are drawn, nearest the view's centre
+  first.
+
 ### Terrain
 
 Volumetric presentation uses a real raster DEM, not a visual displacement

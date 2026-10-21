@@ -1,6 +1,9 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { ReactNode } from "react";
+import type { ObservedGeolocation } from "@nilx-one/host-contract";
+
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useCourier } from "../courier/use-courier";
 import { CourierOffer } from "../courier/courier-offer";
@@ -237,6 +240,7 @@ import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
 import { useLocalModelReadiness } from "./use-local-model-readiness";
 import { useDriveChooser } from "./drive-chooser";
+import { useInferencePerformance } from "./inference-performance";
 import { useAvaiaLife, type LifeBody } from "./use-avaia-life";
 import { useAvaiaProximity } from "./use-avaia-proximity";
 import { useReadinessFrameVisible } from "./use-readiness-frame";
@@ -272,6 +276,7 @@ import { useGuideCutscene } from "../guide/use-guide-cutscene";
 export type ConnectedProvider = BondProviderType;
 
 export interface AuthenticatedMapHomeViewProps {
+  readonly contextualDock?: (observation?: ObservedGeolocation) => ReactNode;
   /** Shared operational inbox visible only after server admin authorization. */
   readonly adminRoleInbox?: {
     readonly requests: readonly { pubDress: string; requestedAt: number }[];
@@ -829,6 +834,7 @@ function NotebookDescription({ text }: { readonly text: string | undefined }) {
 }
 
 export function AuthenticatedMapHomeView({
+  contextualDock,
   adminRoleInbox,
   hostLabel,
   pubDress,
@@ -1466,7 +1472,17 @@ export function AuthenticatedMapHomeView({
   const fogRevealRef = useRef<FogRevealState | undefined>(undefined);
   // Where a choice is the Avaia's own, the model on this device makes it,
   // once the person has it here.
-  const driveChooser = useDriveChooser(localModel, localModelReadiness);
+  const inferencePerformance = useInferencePerformance(
+    wheel === "avaia" &&
+      handover === undefined &&
+      mapStatus.kind === "ready" &&
+      localModelReadiness.kind === "present",
+  );
+  const driveChooser = useDriveChooser(
+    localModel,
+    localModelReadiness,
+    inferencePerformance,
+  );
   // Its needs are Core's: this device reports where the body is and whether
   // it walks, and the drive hears what they ask. The walk hook is created
   // below, so the body is read through a ref it fills.
@@ -3961,6 +3977,15 @@ export function AuthenticatedMapHomeView({
           </DockWindow>
         </section>
       }
+      {...(contextualDock === undefined
+        ? {}
+        : {
+            dock: contextualDock(
+              "position" in location.state
+                ? location.state.position
+                : undefined,
+            ),
+          })}
       overlay={
         <>
           {section === "world" &&

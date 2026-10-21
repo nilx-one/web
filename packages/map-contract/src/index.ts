@@ -629,6 +629,8 @@ export interface MapRenderer {
   readonly avatars?: AvatarLayerContract;
   /** Local system prop. Never an identity, presence report or selectable avatar. */
   readonly systemDrone?: SystemDroneLayerContract;
+  /** The city's animals. Scenery: never an identity, presence or selectable. */
+  readonly animals?: AmbientAnimalLayerContract;
   /**
    * Notifies when a person activates a body this renderer drew. Absent on a
    * renderer that draws no bodies, or draws them where nothing can be pointed
@@ -892,6 +894,72 @@ export interface SystemDroneLayerContract {
   subscribeActivation?(id: string, listener: () => void): () => void;
   /** True only once the prop has a mounted, hydrated 3D layer. */
   upsert(handle: SystemDroneHandle): boolean;
+  remove(id: string): void;
+}
+
+/**
+ * Which animal an ambient animal is. Like the ambient drones they are the
+ * city's own scenery, renderer-local and owned by nobody: a dog or a cat on
+ * the pavement, an eagle overhead, a piranha in the water.
+ */
+export type AmbientAnimalKind = "dog" | "cat" | "eagle" | "piranha";
+
+export const AMBIENT_ANIMAL_KINDS: readonly AmbientAnimalKind[] = [
+  "dog",
+  "cat",
+  "eagle",
+  "piranha",
+];
+
+/**
+ * The clips each animal's asset carries, read off the asset itself. The kind
+ * decides the clips: `as const` keeps each list literal, so the handle below
+ * can admit only the clips its own kind has.
+ */
+export const AMBIENT_ANIMAL_CLIPS = {
+  dog: ["idle", "walk"],
+  cat: ["idle", "walk"],
+  eagle: ["fly", "idle"],
+  piranha: ["swim", "bite"],
+} as const satisfies Record<AmbientAnimalKind, readonly string[]>;
+
+/** Every clip any animal carries. */
+export type AmbientAnimalClipId =
+  (typeof AMBIENT_ANIMAL_CLIPS)[AmbientAnimalKind][number];
+
+/** The clips one kind of animal carries. */
+export type AmbientAnimalClipOf<K extends AmbientAnimalKind> =
+  (typeof AMBIENT_ANIMAL_CLIPS)[K][number];
+
+interface AmbientAnimalCommon {
+  readonly id: string;
+  readonly lngLat: readonly [number, number];
+  readonly bearingDeg: number;
+  /** Normalized [0, 1) phase, as an avatar's. */
+  readonly clipPhase: number;
+  /**
+   * Metres over the ground the map draws: a bird's flight height. Omitted,
+   * it stands, walks or swims on that ground, leaning with its slope.
+   */
+  readonly heightMeters?: number;
+  readonly visible: boolean;
+}
+
+/**
+ * One animal on the world. It is drawn at its true size, the way bodies are,
+ * so it is only readable from street zoom in. Local presentation only: it is
+ * never sent anywhere, and it is not evidence of anything. A handle is one
+ * kind with that kind's clips; a `dog` in `bite` does not type-check.
+ */
+export type AmbientAnimalHandle = {
+  readonly [K in AmbientAnimalKind]: AmbientAnimalCommon & {
+    readonly kind: K;
+    readonly clipId: AmbientAnimalClipOf<K>;
+  };
+}[AmbientAnimalKind];
+
+export interface AmbientAnimalLayerContract {
+  upsert(handle: AmbientAnimalHandle): void;
   remove(id: string): void;
 }
 

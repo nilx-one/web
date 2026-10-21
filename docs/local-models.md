@@ -68,6 +68,36 @@ it, never a place, a name or a distance. The decode is constrained to the offere
 menu outside the closed vocabulary is never put to the model, and an answer that is not one
 offered number, a late one, or none leaves the drive's own pick standing.
 
+## Adaptive inference when rendering slows
+
+The browser watches delivered animation frames only when the map is ready, Avaia
+has control, and the selected model is already cached. This is a browser
+presentation heuristic, **not a measurement of GPU utilization**, memory, or
+device temperature. The model's download status and WebGPU eligibility remain
+independent of this temporary performance gate.
+
+Each sample covers about one second. After three consecutive windows below
+36 FPS, `degraded` defers new Avaia model choices and retellings. Two
+consecutive windows below 20 FPS enter `critical`: no new inference is
+requested and the chooser releases its GPU model. Short dips leave the model
+alone. Recovery requires five consecutive windows at 36 FPS to return from
+`critical` to `degraded`, then five at 50 FPS to return to `normal`.
+The different thresholds prevent rapid unload/reload loops.
+
+A hidden tab pauses inference immediately; returning to the foreground resumes
+frame measurement and must pass the recovery windows. A main-thread stall longer
+than 2.5 seconds is treated as critical without inventing an FPS sample.
+An in-flight request may finish or fail; no interrupted answer is interpreted as
+Core state. Core's default choice and the deterministic description continue,
+and neither the walk nor BondChain acquires any performance-dependent facts.
+This does **not** download another model, silently switch model families, or
+send inference to a server.
+
+Implementation: `inference-performance.ts` (pure hysteresis + browser sampling)
+gates the existing `drive-chooser.ts`. In `degraded` a loaded model can remain
+resident until its usual idle timeout; in `critical` it unloads immediately.
+The map's renderer is not controlled or downscaled by this AI-only gate.
+
 ## Known gap in the foundation
 
 `@aiaiaiai/webllm@0.1.0` sends `enable_thinking: false` with every completion, and

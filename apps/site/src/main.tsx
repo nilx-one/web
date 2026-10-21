@@ -22,6 +22,7 @@ import {
 } from "@nilx-one/host-discord/handoff";
 import {
   createIdentityHttpAdapter,
+  createBusinessSurfaceHttp,
   readBondLocationControl,
   moveManualBondLocation,
 } from "@nilx-one/identity-http";
@@ -56,6 +57,8 @@ import {
   reportMapRendererStatus,
   reportWorldWipe,
 } from "./error-reporting";
+import { PublicBusinessPage } from "./public-business";
+import { createBusinessNavigation } from "./business-navigation";
 import { PublicBondPage, isPublicBondHostname } from "./public-bond";
 import { wipeLocalWorldOnce } from "./world-wipe";
 
@@ -128,19 +131,25 @@ if (container === null) {
 
 const root = createRoot(container);
 
-// The wipe is confirmed before any store reads the world it clears.
-const wipe = await wipeLocalWorldOnce();
-
 if (isPublicBondHostname(window.location.hostname)) {
   // A Bond subdomain is a public identity surface, not an authenticated world
   // host. It resolves only the stored label allocation and never starts the
-  // private session, geolocation, map, or Avaia runtime.
+  // private session or Avaia runtime. A Business Bond's page shows the public
+  // map, and reads geolocation only when the visitor opts in.
   root.render(
     <StrictMode>
-      <PublicBondPage />
+      <PublicBondPage
+        renderBusiness={(bond) => <PublicBusinessPage bond={bond} />}
+      />
     </StrictMode>,
   );
 } else {
+  // The wipe is confirmed before any store reads the world it clears.
+  const wipe = await wipeLocalWorldOnce();
+  const business = {
+    directory: createBusinessSurfaceHttp(),
+    navigation: createBusinessNavigation(),
+  };
   // Omitted rather than passed as undefined: the reporter's own default endpoint
   // is a different thing from an endpoint explicitly configured as nothing.
   const collectorEndpoint = import.meta.env.VITE_ERRORS_COLLECTOR_ENDPOINT;
@@ -214,6 +223,7 @@ if (isPublicBondHostname(window.location.hostname)) {
   root.render(
     <StrictMode>
       <ProductApp
+        business={business}
         core={core}
         host={host}
         identity={identity}

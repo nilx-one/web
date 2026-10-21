@@ -15,6 +15,7 @@ import {
   readChoice,
   type DriveChoose,
 } from "./drive-choice";
+import type { InferencePerformanceMode } from "./inference-performance";
 import type { LocalModelReadiness } from "./world-readiness";
 
 /** A loaded model nobody asked for this long is let go. */
@@ -37,6 +38,8 @@ export interface DriveChooser {
    * admits it or not; nothing here reads it. Never throws.
    */
   retell(system: string, user: string): Promise<string | null>;
+  /** Release GPU resources while the renderer is under critical load. */
+  suspend(): Promise<void>;
   /** Lets the model go. */
   dispose(): Promise<void>;
 }
@@ -150,6 +153,9 @@ export function createDriveChooser({
         return null;
       }
     },
+    async suspend() {
+      await release();
+    },
     async dispose() {
       disposed = true;
       await release();
@@ -173,6 +179,7 @@ export interface DriveModel {
 export function useDriveChooser(
   localModel: LocalModelDependency | undefined,
   readiness: LocalModelReadiness,
+  performance: InferencePerformanceMode = "normal",
 ): DriveModel | undefined {
   const modelId =
     readiness.kind === "present"
@@ -196,11 +203,14 @@ export function useDriveChooser(
     },
     [chooser],
   );
+  useEffect(() => {
+    if (performance === "critical") void chooser?.suspend();
+  }, [chooser, performance]);
   return useMemo(
     () =>
-      chooser === undefined || modelId === undefined
+      chooser === undefined || modelId === undefined || performance !== "normal"
         ? undefined
         : { choose: chooser.choose, retell: chooser.retell, modelId },
-    [chooser, modelId],
+    [chooser, modelId, performance],
   );
 }
