@@ -59,6 +59,24 @@ places. The ground comes from this device's loaded tiles only
 (`obstaclesWithin`, `greenAreasWithin`, `roadsWithin`), so ground the map has
 not loaded has no animals rather than guessed ones.
 
+## What an Avaia says about them
+
+An Avaia at the wheel notices the animals it passes
+(`features/map/avaia-animal-remarks.ts`). Every 1.5 s it looks around its
+body. A squirrel, a cat, a dog or a fish within 12 m, or an eagle passing
+within 70 m, gets a remark in its own voice (`avaia-animal-lines.ts`, three
+lines per animal for each study, in English, Ukrainian and Russian). A dog or
+an eagle startles it about a third of the time, and it says so:
+
+> Eek! It barked at me! — Dasha
+>
+> That bird came very close to my face. — Kai
+
+It does not chatter: at most one remark every 45 s, the same animal at most
+once in 10 minutes, and never over a line it is still saying. It is startled
+only in words; its walk goes on. The lines are text and are not recorded yet
+([Character voices](avaia-voice.md)).
+
 ## Only what is on screen costs anything
 
 `useAmbientAnimals` requests animation frames only while all of these hold:
