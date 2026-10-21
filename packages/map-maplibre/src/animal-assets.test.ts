@@ -33,6 +33,7 @@ const LENGTHS: Readonly<Record<AmbientAnimalKind, [number, number]>> = {
   cat: [0.4, 0.6],
   eagle: [0.5, 1.1],
   piranha: [0.25, 0.35],
+  squirrel: [0.3, 0.45],
 };
 
 /** The material that only the head wears; a dog has one material for all. */
@@ -40,6 +41,8 @@ const HEAD_MATERIAL: Partial<Record<AmbientAnimalKind, string>> = {
   cat: "Pink",
   eagle: "Beak",
   piranha: "White",
+  // Its eyes: the tail, not the head, is a squirrel's highest part.
+  squirrel: "dark",
 };
 
 function headPoint(gltf: GLTF, kind: AmbientAnimalKind, bounds: Box3): Vector3 {

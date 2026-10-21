@@ -29,6 +29,9 @@ describe("an ambient animal's handle", () => {
       handle({ ...common, kind: "eagle", clipId: "fly", heightMeters: 3.2 })
         .clipId,
     ).toBe("fly");
+    expect(handle({ ...common, kind: "squirrel", clipId: "eat" }).clipId).toBe(
+      "eat",
+    );
   });
 
   it("refuses a clip its kind does not carry", () => {
@@ -41,6 +44,9 @@ describe("an ambient animal's handle", () => {
     // prettier-ignore
     // @ts-expect-error a piranha does not fly
     handle({ ...common, kind: "piranha", clipId: "fly" });
+    // prettier-ignore
+    // @ts-expect-error a squirrel runs, it does not walk
+    handle({ ...common, kind: "squirrel", clipId: "walk" });
   });
 
   it("refuses a kind the city does not have", () => {
@@ -51,10 +57,10 @@ describe("an ambient animal's handle", () => {
 
   it("is a union over exactly the kinds and clips the catalogue lists", () => {
     expectTypeOf<AmbientAnimalKind>().toEqualTypeOf<
-      "dog" | "cat" | "eagle" | "piranha"
+      "dog" | "cat" | "eagle" | "piranha" | "squirrel"
     >();
     expectTypeOf<AmbientAnimalClipId>().toEqualTypeOf<
-      "idle" | "walk" | "fly" | "swim" | "bite"
+      "idle" | "walk" | "fly" | "swim" | "bite" | "run" | "eat"
     >();
     expectTypeOf<
       AmbientAnimalHandle["kind"]
