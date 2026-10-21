@@ -931,9 +931,9 @@ export function AuthenticatedMapHomeView({
   >(undefined);
   // Only a real activation can select a Bond. Its identity comes from the
   // projection that owns the rendered handle, not from the handle's spelling.
-  const [selectedBondBodyId, setSelectedBondBodyId] = useState<string | undefined>(
-    undefined,
-  );
+  const [selectedBondBodyId, setSelectedBondBodyId] = useState<
+    string | undefined
+  >(undefined);
   // The Dock's fixed subtitle names the screen from the first frame. Further
   // down it follows the body: the last section title carried past the header
   // takes over, and the screen name returns above the first section.
