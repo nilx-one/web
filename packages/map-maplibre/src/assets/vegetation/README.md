@@ -27,9 +27,8 @@ builds every model from a fixed seed, so the same script gives the same bytes.
 
 ## Where they may stand
 
-Nothing places them yet. The basemap archive carries no tree points, and
-`docs/map-data.md` decides that individual street trees are never drawn at
-made-up coordinates. Where these models may stand is decided with the layer
-that draws them, against that rule.
+`vegetation-layer.ts` draws them, instanced, inside the basemap's green
+landuse polygons only, on a world-fixed grid, never at a made-up tree point.
+`docs/map-data.md` states the rule.
 
 © 2026 aiaiaiai · aiaiaiai.org
