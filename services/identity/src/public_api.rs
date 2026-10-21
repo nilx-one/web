@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::{
         HeaderMap, HeaderValue, StatusCode,
         header::{CACHE_CONTROL, HOST, RETRY_AFTER},
@@ -35,6 +35,7 @@ pub fn router(repository: IdentityRepository) -> Router {
             post(resolve_pub_dress_label),
         )
         .route("/api/v1/identity/public", get(read_public_identity))
+        .route("/api/v1/identity/business", get(read_business_surface))
         .route("/api/v1/identity/stations", get(read_business_stations))
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(PublicApiState {
@@ -153,6 +154,14 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                 }
                 None => None,
             };
+            let bond_type = match state.repository.role_for(owner.as_str()).await {
+                Ok(crate::BondAccessRole::Business) => "business",
+                Ok(_) => "person",
+                Err(error) => {
+                    tracing::error!(%error, "public Bond classification lookup failed");
+                    return unavailable();
+                }
+            };
             let stations = match state.repository.business_stations_of(&owner).await {
                 Ok(value) => value.into_iter().map(PublicStation::from).collect(),
                 Err(error) => {
@@ -163,6 +172,7 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
             no_store_json(
                 StatusCode::OK,
                 PublicIdentityProjection {
+                    bond_type,
                     pub_dress_url: record.readable_url(PUBLIC_ZONE),
                     pub_dress: record.identity.pub_dress,
                     avaia,
@@ -183,6 +193,52 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
             unavailable()
         }
     }
+}
+
+/// A public view of a registered Business Bond, independent of the visitor's session.
+/// The canonical point publisher is not the legacy station-Avaia table. Until
+/// that publisher is wired, its absence is explicit rather than an empty listing.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BusinessSurfaceQuery {
+    label: String,
+}
+
+async fn read_business_surface(
+    State(state): State<PublicApiState>,
+    Query(query): Query<BusinessSurfaceQuery>,
+) -> Response {
+    let label = match PubDressLabel::from_str(&query.label) {
+        Ok(label) => label,
+        Err(_) => return not_found(),
+    };
+    let record = match state.repository.find_by_pub_dress_label(&label).await {
+        Ok(Some(record)) => record,
+        Ok(None) => return not_found(),
+        Err(error) => {
+            tracing::error!(%error, "business public label lookup failed");
+            return unavailable();
+        }
+    };
+    match state.repository.role_for(&record.identity.pub_dress).await {
+        Ok(crate::BondAccessRole::Business) => {}
+        Ok(_) => return not_found(),
+        Err(error) => {
+            tracing::error!(%error, "business classification lookup failed");
+            return unavailable();
+        }
+    }
+    no_store_json(
+        StatusCode::OK,
+        serde_json::json!({
+            "schemaVersion": 1,
+            "pubDress": record.identity.pub_dress,
+            "publicUrl": record.readable_url(PUBLIC_ZONE),
+            "displayName": record.identity.pub_dress,
+            "contacts": [],
+            "directory": { "kind": "unavailable" }
+        }),
+    )
 }
 
 /// Every stationed Avaia, for every Bond's map. A station stands at its shop
@@ -305,6 +361,7 @@ enum PubDressLabelResolutionKind {
 
 #[derive(Debug, Serialize)]
 struct PublicIdentityProjection {
+    bond_type: &'static str,
     pub_dress: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     avaia: Option<PublicAvaiaProjection>,
@@ -416,6 +473,62 @@ mod tests {
     async fn json(response: axum::response::Response) -> Value {
         let body = to_bytes(response.into_body(), 8192).await.expect("body");
         serde_json::from_slice(&body).expect("json")
+    }
+
+    #[tokio::test]
+    async fn business_surface_requires_registered_business_and_keeps_points_unavailable() {
+        let repository = IdentityRepository::connect("sqlite::memory:")
+            .await
+            .expect("repository");
+        let owner: PubDress = "0xda-market".parse().expect("address");
+        repository
+            .register_business(&owner, 100)
+            .await
+            .expect("register");
+        let app = router(repository);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v1/identity/business?label=0xda-market")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        let body = json(response).await;
+        assert_eq!(body["schemaVersion"], 1);
+        assert_eq!(body["pubDress"], "0xda-market");
+        assert_eq!(body["directory"]["kind"], "unavailable");
+        assert!(body.get("stations").is_none());
+        let response = app
+            .oneshot(
+                Request::get("/api/v1/identity/public")
+                    .header("host", "0xda-market.nilx.one")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(json(response).await["bond_type"], "business");
+    }
+
+    #[tokio::test]
+    async fn business_surface_does_not_promote_person_or_allocate_unknown_label() {
+        let app = app().await;
+        for label in ["xn--0x1-dddt1cj", "0xda-market", "invalid.example"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::get(format!("/api/v1/identity/business?label={label}"))
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        }
     }
 
     #[tokio::test]

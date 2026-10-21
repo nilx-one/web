@@ -1660,3 +1660,5 @@ export function createIdentityHttpAdapter(
   XpingEngineAccessPort {
   return new IdentityHttpAdapter(options);
 }
+
+export { createBusinessSurfaceHttp } from "./business-surface";

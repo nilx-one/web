@@ -3,7 +3,7 @@
 
 import { useLocalization } from "@nilx-one/product-app/localization";
 import { standingForPublishedExperience } from "@nilx-one/product-app/progression";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import "./public-bond.css";
 
@@ -37,6 +37,7 @@ export interface PublicExperience {
 }
 
 export interface PublicBondProjection {
+  bondType?: "person" | "business";
   pubDress: string;
   pubDressUrl: string;
   avaia?: PublicAvaiaProjection;
@@ -50,6 +51,7 @@ export type PublicBondState =
   | { kind: "unavailable" };
 
 interface PublicBondPageProps {
+  renderBusiness?: (bond: PublicBondProjection) => ReactNode;
   fetchImpl?: typeof globalThis.fetch;
 }
 
@@ -139,6 +141,9 @@ function parseProjection(value: unknown): PublicBondProjection | undefined {
   }
   const avaia = parseAvaiaProjection(value.avaia);
   return {
+    ...(value.bond_type === "business"
+      ? { bondType: "business" as const }
+      : {}),
     pubDress: value.pub_dress,
     pubDressUrl: value.pub_dress_url,
     ...(avaia === undefined ? {} : { avaia }),
@@ -295,7 +300,10 @@ function PublicBondMessage({ state }: { state: "not-found" | "unavailable" }) {
   );
 }
 
-export function PublicBondPage({ fetchImpl }: PublicBondPageProps) {
+export function PublicBondPage({
+  fetchImpl,
+  renderBusiness,
+}: PublicBondPageProps) {
   const { t } = useLocalization();
   const [state, setState] = useState<PublicBondState>({ kind: "loading" });
 
@@ -310,6 +318,8 @@ export function PublicBondPage({ fetchImpl }: PublicBondPageProps) {
   }, [fetchImpl]);
 
   if (state.kind === "ready") {
+    if (state.bond.bondType === "business" && renderBusiness !== undefined)
+      return renderBusiness(state.bond);
     return <PublicBondCard bond={state.bond} />;
   }
   if (state.kind === "not-found" || state.kind === "unavailable") {

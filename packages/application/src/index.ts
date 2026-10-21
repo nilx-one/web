@@ -299,3 +299,18 @@ export {
   type XpingEngineState,
   type XpingEngineView,
 } from "./xping-engine";
+
+export type {
+  BusinessCity,
+  BusinessContact,
+  BusinessOffer,
+  BusinessCatalog,
+  BusinessPointSurface,
+  BusinessSurface,
+  BusinessSurfaceResult,
+  BusinessSurfacePort,
+} from "./business-surface";
+export type {
+  BusinessNavigationState,
+  BusinessNavigationPort,
+} from "./business-surface";
