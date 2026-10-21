@@ -911,29 +911,30 @@ export const AMBIENT_ANIMAL_KINDS: readonly AmbientAnimalKind[] = [
   "piranha",
 ];
 
-/** The clips an animal's asset carries; not every animal carries every one. */
-export type AmbientAnimalClipId = "idle" | "walk" | "fly" | "swim" | "bite";
-
-export const AMBIENT_ANIMAL_CLIPS: Readonly<
-  Record<AmbientAnimalKind, readonly AmbientAnimalClipId[]>
-> = {
+/**
+ * The clips each animal's asset carries, read off the asset itself. The kind
+ * decides the clips: `as const` keeps each list literal, so the handle below
+ * can admit only the clips its own kind has.
+ */
+export const AMBIENT_ANIMAL_CLIPS = {
   dog: ["idle", "walk"],
   cat: ["idle", "walk"],
   eagle: ["fly", "idle"],
   piranha: ["swim", "bite"],
-};
+} as const satisfies Record<AmbientAnimalKind, readonly string[]>;
 
-/**
- * One animal on the world. It is drawn at its true size, the way bodies are,
- * so it is only readable from street zoom in. Local presentation only: it is
- * never sent anywhere, and it is not evidence of anything.
- */
-export interface AmbientAnimalHandle {
+/** Every clip any animal carries. */
+export type AmbientAnimalClipId =
+  (typeof AMBIENT_ANIMAL_CLIPS)[AmbientAnimalKind][number];
+
+/** The clips one kind of animal carries. */
+export type AmbientAnimalClipOf<K extends AmbientAnimalKind> =
+  (typeof AMBIENT_ANIMAL_CLIPS)[K][number];
+
+interface AmbientAnimalCommon {
   readonly id: string;
-  readonly kind: AmbientAnimalKind;
   readonly lngLat: readonly [number, number];
   readonly bearingDeg: number;
-  readonly clipId: AmbientAnimalClipId;
   /** Normalized [0, 1) phase, as an avatar's. */
   readonly clipPhase: number;
   /**
@@ -943,6 +944,19 @@ export interface AmbientAnimalHandle {
   readonly heightMeters?: number;
   readonly visible: boolean;
 }
+
+/**
+ * One animal on the world. It is drawn at its true size, the way bodies are,
+ * so it is only readable from street zoom in. Local presentation only: it is
+ * never sent anywhere, and it is not evidence of anything. A handle is one
+ * kind with that kind's clips; a `dog` in `bite` does not type-check.
+ */
+export type AmbientAnimalHandle = {
+  readonly [K in AmbientAnimalKind]: AmbientAnimalCommon & {
+    readonly kind: K;
+    readonly clipId: AmbientAnimalClipOf<K>;
+  };
+}[AmbientAnimalKind];
 
 export interface AmbientAnimalLayerContract {
   upsert(handle: AmbientAnimalHandle): void;
