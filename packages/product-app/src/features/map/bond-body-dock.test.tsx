@@ -35,7 +35,7 @@ function renderWorld({
       hostLabel="browser host"
       pubDress="0x0sky"
       pubDressUrl={pubDressUrl}
-      bondBodies={bondBodies}
+      {...(bondBodies === undefined ? {} : { bondBodies })}
       renderer={renderer}
       geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
       runtime={{
