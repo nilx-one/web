@@ -1,6 +1,9 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { ReactNode } from "react";
+import type { ObservedGeolocation } from "@nilx-one/host-contract";
+
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useCourier } from "../courier/use-courier";
 import { CourierOffer } from "../courier/courier-offer";
@@ -273,6 +276,7 @@ import { useGuideCutscene } from "../guide/use-guide-cutscene";
 export type ConnectedProvider = BondProviderType;
 
 export interface AuthenticatedMapHomeViewProps {
+  readonly contextualDock?: (observation?: ObservedGeolocation) => ReactNode;
   /** Shared operational inbox visible only after server admin authorization. */
   readonly adminRoleInbox?: {
     readonly requests: readonly { pubDress: string; requestedAt: number }[];
@@ -830,6 +834,7 @@ function NotebookDescription({ text }: { readonly text: string | undefined }) {
 }
 
 export function AuthenticatedMapHomeView({
+  contextualDock,
   adminRoleInbox,
   hostLabel,
   pubDress,
@@ -3972,6 +3977,15 @@ export function AuthenticatedMapHomeView({
           </DockWindow>
         </section>
       }
+      {...(contextualDock === undefined
+        ? {}
+        : {
+            dock: contextualDock(
+              "position" in location.state
+                ? location.state.position
+                : undefined,
+            ),
+          })}
       overlay={
         <>
           {section === "world" &&

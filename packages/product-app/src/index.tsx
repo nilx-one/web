@@ -1,7 +1,11 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { CourierDirectoryPort } from "@nilx-one/application";
+import type {
+  BusinessSurfacePort,
+  BusinessNavigationPort,
+  CourierDirectoryPort,
+} from "@nilx-one/application";
 import { DEFAULT_AUTH_SELECTION } from "@aiaiaiai/auth-view";
 
 import {
@@ -65,11 +69,14 @@ import {
   createRoute,
   createRouter,
   useMatchRoute,
+  useLocation,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import "./product.css";
+import { BusinessDock } from "./features/business/business-dock";
+import { BusinessWorld } from "./features/business/business-world";
 import "./features/identity/identity-field-feedback.css";
 import { SystemInformerProvider } from "./features/system-informer/system-informer";
 export {
@@ -134,7 +141,14 @@ export type {
 } from "./shell/local-model-host";
 export type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 
+const noBusinessSubscribe = () => () => undefined;
+const noBusinessSnapshot = () => null;
+
 export interface ProductAppDependencies {
+  business?: {
+    readonly directory: BusinessSurfacePort;
+    readonly navigation: BusinessNavigationPort;
+  };
   courierDirectory?: CourierDirectoryPort;
   core: CoreRuntimePort;
   host: HostPort;
@@ -297,6 +311,19 @@ interface FoundationSurfaceProps {
 
 function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const navigate = useNavigate();
+  const currentLocation = useLocation();
+  useEffect(() => {
+    dependencies.business?.navigation.sync();
+  }, [dependencies.business, currentLocation.href]);
+  const businessContext = useSyncExternalStore(
+    dependencies.business?.navigation.subscribe ?? noBusinessSubscribe,
+    dependencies.business?.navigation.getSnapshot ?? noBusinessSnapshot,
+    noBusinessSnapshot,
+  );
+  const business =
+    businessContext !== null && section === "world"
+      ? dependencies.business
+      : undefined;
   const queryClient = useQueryClient();
   const host = useHostSnapshot(dependencies.host);
   const credentialHandoff = dependencies.host.credentialHandoff;
@@ -1100,6 +1127,18 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
       <AuthenticatedMapHomeView
+        {...(business === undefined
+          ? {}
+          : {
+              contextualDock: (observation) => (
+                <BusinessDock
+                  directory={business.directory}
+                  navigation={business.navigation}
+                  geolocation={dependencies.host.geolocation}
+                  {...(observation === undefined ? {} : { observation })}
+                />
+              ),
+            })}
         {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
         hostLabel={viewModel.hostLabel}
         pubDress={viewModel.identity.pubDress}
@@ -1283,6 +1322,17 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       }
     : undefined;
 
+  if (business !== undefined) {
+    return (
+      <BusinessWorld
+        renderer={dependencies.mapRenderer}
+        directory={business.directory}
+        navigation={business.navigation}
+        geolocation={dependencies.host.geolocation}
+      />
+    );
+  }
+
   return (
     <IdentityFoundationView
       password={password}
@@ -1335,6 +1385,7 @@ export function ProductApp({
   onManualBondMove,
   localModel,
   courierDirectory,
+  business,
   routerBasepath = "/",
 }: ProductAppProps) {
   const [queryClient] = useState(
@@ -1354,6 +1405,7 @@ export function ProductApp({
       context: {
         dependencies: {
           core,
+          ...(business === undefined ? {} : { business }),
           host,
           identity,
           mapRenderer,
