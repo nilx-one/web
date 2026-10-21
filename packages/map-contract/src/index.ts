@@ -416,6 +416,15 @@ export interface MapObstacle {
  * each line is `[longitude, latitude]` pairs. A street crossing several tiles
  * arrives once per tile, clipped at each; whoever walks it joins the pieces.
  */
+/**
+ * A green area the basemap paints: a park, a garden, a wood, a lawn. `kind`
+ * is the archive's landuse kind; `polygon` is its outer ring and its holes.
+ */
+export interface MapGreenArea {
+  readonly kind: string;
+  readonly polygon: readonly (readonly (readonly [number, number])[])[];
+}
+
 export interface MapRoad {
   readonly kind: string;
   readonly kindDetail?: string;
@@ -697,6 +706,12 @@ export interface MapRenderer {
    * on a renderer that cannot answer at all.
    */
   obstaclesWithin?(bounds: MapBounds): readonly MapObstacle[];
+  /**
+   * The green areas the basemap paints that touch a box: what its parks
+   * layer draws, and nothing else. Tiles already loaded only, like
+   * `obstaclesWithin`.
+   */
+  greenAreasWithin?(bounds: MapBounds): readonly MapGreenArea[];
   /**
    * The roads and paths the basemap carries that touch a box, for walking
    * along. Tiles already loaded only, like `obstaclesWithin`: ground the map

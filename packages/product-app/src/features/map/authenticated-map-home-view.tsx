@@ -207,6 +207,7 @@ import { CameraModeControl } from "./camera-mode-control";
 import { FlyoverControls } from "../flyover/flyover-controls";
 import { useStarterSeeds, useXpingEngine } from "../xping/xping-engine";
 import { useAmbientDrones } from "../ambient-drones/use-ambient-drones";
+import { useAmbientAnimals } from "../ambient-animals/use-ambient-animals";
 import { XpingSection } from "../xping/xping-section";
 import {
   FOLLOW_FLIGHT_HOLD_MS,
@@ -1833,6 +1834,15 @@ export function AuthenticatedMapHomeView({
   useSystemDroneScene(renderer, observedPosition, mapStatus.kind === "ready");
   // The city's own drones, around wherever the camera looks; scenery only.
   const ambientDrones = useAmbientDrones({
+    renderer,
+    ready: mapStatus.kind === "ready",
+    suspended:
+      section !== "world" ||
+      guideActive ||
+      systemInformer.activeId !== undefined,
+  });
+  // And its animals, on the ground the map paints; scenery too.
+  useAmbientAnimals({
     renderer,
     ready: mapStatus.kind === "ready",
     suspended:

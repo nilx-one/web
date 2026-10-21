@@ -1809,6 +1809,34 @@ describe("obstacles the basemap draws", () => {
     expect(renderer.obstaclesWithin?.(bounds)).toEqual([]);
   });
 
+  it("answers the green areas the parks layer paints inside the box", () => {
+    const fakeMap = makeFakeMap();
+    fakeMap.sources.set("basemap", { setData: vi.fn() });
+    const querySourceFeatures = vi.fn(() => [
+      { geometry: square(30.5234, 50.4501), properties: { kind: "park" } },
+      {
+        geometry: {
+          type: "MultiPolygon",
+          coordinates: [
+            square(30.524, 50.451).coordinates,
+            square(31.5, 51.5).coordinates,
+          ],
+        },
+        properties: { kind: "forest" },
+      },
+      // Landuse the parks layer does not paint green is no green area.
+      { geometry: square(30.525, 50.45), properties: { kind: "industrial" } },
+    ]);
+    Object.assign(fakeMap, { querySourceFeatures });
+
+    const areas = readyRenderer(fakeMap).greenAreasWithin?.(bounds);
+
+    expect(areas).toEqual([
+      { kind: "park", polygon: square(30.5234, 50.4501).coordinates },
+      { kind: "forest", polygon: square(30.524, 50.451).coordinates },
+    ]);
+  });
+
   it("draws the Motherland's terraces as its own ground, once", () => {
     const fakeMap = makeFakeMap();
     const styleFilter: FilterSpecification = [
