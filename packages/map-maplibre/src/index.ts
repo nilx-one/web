@@ -6,6 +6,8 @@ import { waitForScene } from "./scene-ready";
 import {
   DEFAULT_MAP_APPEARANCE,
   DEFAULT_MAP_DIMENSION,
+  type AmbientAnimalHandle,
+  type AmbientAnimalLayerContract,
   type AvatarHandle,
   type SystemDroneHandle,
   type SystemDroneLayerContract,
@@ -653,6 +655,7 @@ export function createMapLibreRenderer(
   let avatarLayerPromise: Promise<AvatarCustomLayer> | undefined;
   const avatarHandles = new Map<string, AvatarHandle>();
   const droneHandles = new Map<string, SystemDroneHandle>();
+  const animalHandles = new Map<string, AmbientAnimalHandle>();
   let flightLootHandles: readonly MapFlightLoot[] = [];
   let droneLayerFailed = false;
   let avatarCamera: MapCamera = camera;
@@ -712,6 +715,7 @@ export function createMapLibreRenderer(
         layer.setCamera(avatarCamera);
         for (const handle of avatarHandles.values()) layer.upsert(handle);
         for (const handle of droneHandles.values()) layer.upsertDrone(handle);
+        for (const handle of animalHandles.values()) layer.upsertAnimal(handle);
         layer.setFlightLoot(flightLootHandles);
         if (map !== undefined && firstPaintDone && layer.hasInstances()) {
           ensureAvatarLayer(map);
@@ -758,6 +762,18 @@ export function createMapLibreRenderer(
       droneHandles.delete(id);
       if (droneHandles.size === 0) droneLayerFailed = false;
       avatarLayer?.remove(id);
+    },
+  };
+  // Scenery, like the ambient drones: never hit tested, never a body.
+  const animals: AmbientAnimalLayerContract = {
+    upsert(handle) {
+      animalHandles.set(handle.id, handle);
+      if (avatarLayer !== undefined) avatarLayer.upsertAnimal(handle);
+      else void requestAvatarLayer().catch(ignoreOptionalLayer);
+    },
+    remove(id) {
+      animalHandles.delete(id);
+      avatarLayer?.removeAnimal(id);
     },
   };
   const avatars: AvatarLayerContract = {
@@ -1984,6 +2000,7 @@ export function createMapLibreRenderer(
   return {
     avatars,
     systemDrone,
+    animals,
 
     mount(container) {
       if (map !== undefined) {

@@ -6,6 +6,9 @@ import {
   FLIGHT_LOOT_COLORS,
 } from "@nilx-one/map-contract";
 import type {
+  AmbientAnimalClipId,
+  AmbientAnimalHandle,
+  AmbientAnimalKind,
   AvatarClipId,
   AvatarHandle,
   AvatarLayerContract,
@@ -49,6 +52,7 @@ import {
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 
+import { ANIMAL_ASSET_URLS } from "./animal-assets";
 import { createPingModel } from "./ping-model";
 import { createFlightLootModel } from "./flight-loot-model";
 import {
@@ -77,8 +81,22 @@ export const AVATAR_ASSET_URLS: Readonly<Record<AvatarModelId, string>> = {
   "dasha-v2-study": `/avatars/${AVATAR_ASSET_VERSIONS["dasha-v2-study"]}/dasha-v2-study.glb`,
 };
 
+/** An ambient animal's asset, kept apart from the avatar catalogue. */
+type AnimalModelId = `animal-${AmbientAnimalKind}`;
+/** Everything the layer loads from a glTF asset. */
+type AssetModelId = AvatarModelId | AnimalModelId;
+
+/** Ambient animals share the layer with bodies under ids of their own. */
+const ANIMAL_ID_PREFIX = "animal:";
+
+export function assetUrl(modelId: AssetModelId): string {
+  return modelId.startsWith("animal-")
+    ? ANIMAL_ASSET_URLS[modelId.slice("animal-".length) as AmbientAnimalKind]
+    : AVATAR_ASSET_URLS[modelId as AvatarModelId];
+}
+
 type AssetLoader = (
-  modelId: AvatarModelId,
+  modelId: AssetModelId,
   signal: AbortSignal,
 ) => Promise<GLTF>;
 
@@ -93,8 +111,9 @@ type AssetLoader = (
 const APPLICATION_NODE_MARK = ":";
 const GLTF_NODE_NAME = "gltfNodeName";
 
-type SceneHandle = Omit<AvatarHandle, "modelId"> & {
-  readonly modelId: AvatarModelId | "system-ping";
+type SceneHandle = Omit<AvatarHandle, "modelId" | "clipId"> & {
+  readonly modelId: AssetModelId | "system-ping";
+  readonly clipId: AvatarClipId | AmbientAnimalClipId;
   readonly reducedMotion?: boolean;
   /** A system drone's engine wear, 0 to 1. */
   readonly wear?: number;
@@ -128,7 +147,7 @@ interface AvatarInstance {
   root?: Object3D;
   mixer?: AnimationMixer;
   clips?: ReadonlyMap<string, AnimationClip>;
-  actionClip?: AvatarClipId;
+  actionClip?: AvatarClipId | AmbientAnimalClipId;
   terrainAnchor?:
     | {
         readonly key: string;
@@ -170,9 +189,31 @@ export function bodyOrientation(
   );
 }
 
+/**
+ * An animal as the layer draws it: its own asset at its true size, metre-scale
+ * like a study, so its scale is 1. It is never hit tested and carries nothing.
+ */
+export function animalSceneHandle(handle: AmbientAnimalHandle): SceneHandle {
+  return {
+    id: `${ANIMAL_ID_PREFIX}${handle.id}`,
+    modelId: `animal-${handle.kind}`,
+    lngLat: handle.lngLat,
+    bearingDeg: handle.bearingDeg,
+    clipId: handle.clipId,
+    clipPhase: handle.clipPhase,
+    scale: 1,
+    visible: handle.visible,
+    ...(handle.heightMeters === undefined
+      ? {}
+      : { liftMeters: handle.heightMeters }),
+  };
+}
+
 export interface AvatarCustomLayer
   extends CustomLayerInterface, AvatarLayerContract {
   upsertDrone(handle: SystemDroneHandle): boolean;
+  upsertAnimal(handle: AmbientAnimalHandle): void;
+  removeAnimal(id: string): void;
   setFlightLoot(handles: readonly MapFlightLoot[]): void;
   hasInstances(): boolean;
   assetsSettled(): boolean;
@@ -186,7 +227,7 @@ export interface AvatarLayerOptions {
 }
 
 function defaultLoadAsset(
-  modelId: AvatarModelId,
+  modelId: AssetModelId,
   signal: AbortSignal,
 ): Promise<GLTF> {
   const loader = new GLTFLoader();
@@ -195,7 +236,7 @@ function defaultLoadAsset(
       reject(new DOMException("Avatar load aborted", "AbortError"));
     signal.addEventListener("abort", onAbort, { once: true });
     loader.load(
-      AVATAR_ASSET_URLS[modelId],
+      assetUrl(modelId),
       (gltf) => {
         signal.removeEventListener("abort", onAbort);
         resolve(gltf);
@@ -270,7 +311,7 @@ export function createAvatarLayer(
       model: ReturnType<typeof createFlightLootModel>;
     }
   >();
-  const assetCache = new Map<AvatarModelId, Promise<GLTF>>();
+  const assetCache = new Map<AssetModelId, Promise<GLTF>>();
   const backpackSource = createBackpackSource(
     () => new GLTFLoader().loadAsync(BACKPACK_ASSET_URL),
     now,
@@ -322,7 +363,7 @@ export function createAvatarLayer(
     return ambientKit.build(kind);
   }
 
-  function requestAsset(modelId: AvatarModelId): Promise<GLTF> {
+  function requestAsset(modelId: AssetModelId): Promise<GLTF> {
     const cached = assetCache.get(modelId);
     if (cached !== undefined) return cached;
     const pending = loadAsset(modelId, abortController.signal).catch(
@@ -699,6 +740,14 @@ export function createAvatarLayer(
     },
 
     upsert: upsertBody,
+
+    upsertAnimal(handle) {
+      upsertBody(animalSceneHandle(handle));
+    },
+
+    removeAnimal(id) {
+      layer.remove(`${ANIMAL_ID_PREFIX}${id}`);
+    },
 
     upsertDrone(handle) {
       upsertBody({

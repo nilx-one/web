@@ -629,6 +629,8 @@ export interface MapRenderer {
   readonly avatars?: AvatarLayerContract;
   /** Local system prop. Never an identity, presence report or selectable avatar. */
   readonly systemDrone?: SystemDroneLayerContract;
+  /** The city's animals. Scenery: never an identity, presence or selectable. */
+  readonly animals?: AmbientAnimalLayerContract;
   /**
    * Notifies when a person activates a body this renderer drew. Absent on a
    * renderer that draws no bodies, or draws them where nothing can be pointed
@@ -892,6 +894,58 @@ export interface SystemDroneLayerContract {
   subscribeActivation?(id: string, listener: () => void): () => void;
   /** True only once the prop has a mounted, hydrated 3D layer. */
   upsert(handle: SystemDroneHandle): boolean;
+  remove(id: string): void;
+}
+
+/**
+ * Which animal an ambient animal is. Like the ambient drones they are the
+ * city's own scenery, renderer-local and owned by nobody: a dog or a cat on
+ * the pavement, an eagle overhead, a piranha in the water.
+ */
+export type AmbientAnimalKind = "dog" | "cat" | "eagle" | "piranha";
+
+export const AMBIENT_ANIMAL_KINDS: readonly AmbientAnimalKind[] = [
+  "dog",
+  "cat",
+  "eagle",
+  "piranha",
+];
+
+/** The clips an animal's asset carries; not every animal carries every one. */
+export type AmbientAnimalClipId = "idle" | "walk" | "fly" | "swim" | "bite";
+
+export const AMBIENT_ANIMAL_CLIPS: Readonly<
+  Record<AmbientAnimalKind, readonly AmbientAnimalClipId[]>
+> = {
+  dog: ["idle", "walk"],
+  cat: ["idle", "walk"],
+  eagle: ["fly", "idle"],
+  piranha: ["swim", "bite"],
+};
+
+/**
+ * One animal on the world. It is drawn at its true size, the way bodies are,
+ * so it is only readable from street zoom in. Local presentation only: it is
+ * never sent anywhere, and it is not evidence of anything.
+ */
+export interface AmbientAnimalHandle {
+  readonly id: string;
+  readonly kind: AmbientAnimalKind;
+  readonly lngLat: readonly [number, number];
+  readonly bearingDeg: number;
+  readonly clipId: AmbientAnimalClipId;
+  /** Normalized [0, 1) phase, as an avatar's. */
+  readonly clipPhase: number;
+  /**
+   * Metres over the ground the map draws: a bird's flight height. Omitted,
+   * it stands, walks or swims on that ground, leaning with its slope.
+   */
+  readonly heightMeters?: number;
+  readonly visible: boolean;
+}
+
+export interface AmbientAnimalLayerContract {
+  upsert(handle: AmbientAnimalHandle): void;
   remove(id: string): void;
 }
 
