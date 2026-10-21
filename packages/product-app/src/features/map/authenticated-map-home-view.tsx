@@ -237,6 +237,7 @@ import { avaiaVoiceUrl, guideVoiceUrl } from "./avaia-voice";
 import { useWorldAmbience } from "./world-ambience";
 import { useLocalModelReadiness } from "./use-local-model-readiness";
 import { useDriveChooser } from "./drive-chooser";
+import { useInferencePerformance } from "./inference-performance";
 import { useAvaiaLife, type LifeBody } from "./use-avaia-life";
 import { useAvaiaProximity } from "./use-avaia-proximity";
 import { useReadinessFrameVisible } from "./use-readiness-frame";
@@ -1466,7 +1467,17 @@ export function AuthenticatedMapHomeView({
   const fogRevealRef = useRef<FogRevealState | undefined>(undefined);
   // Where a choice is the Avaia's own, the model on this device makes it,
   // once the person has it here.
-  const driveChooser = useDriveChooser(localModel, localModelReadiness);
+  const inferencePerformance = useInferencePerformance(
+    wheel === "avaia" &&
+      handover === undefined &&
+      mapStatus.kind === "ready" &&
+      localModelReadiness.kind === "present",
+  );
+  const driveChooser = useDriveChooser(
+    localModel,
+    localModelReadiness,
+    inferencePerformance,
+  );
   // Its needs are Core's: this device reports where the body is and whether
   // it walks, and the drive hears what they ask. The walk hook is created
   // below, so the body is read through a ref it fills.
