@@ -134,7 +134,8 @@ const root = createRoot(container);
 if (isPublicBondHostname(window.location.hostname)) {
   // A Bond subdomain is a public identity surface, not an authenticated world
   // host. It resolves only the stored label allocation and never starts the
-  // private session, geolocation, map, or Avaia runtime.
+  // private session or Avaia runtime. A Business Bond's page shows the public
+  // map, and reads geolocation only when the visitor opts in.
   root.render(
     <StrictMode>
       <PublicBondPage
@@ -143,6 +144,7 @@ if (isPublicBondHostname(window.location.hostname)) {
     </StrictMode>,
   );
 } else {
+  // The wipe is confirmed before any store reads the world it clears.
   const wipe = await wipeLocalWorldOnce();
   const business = {
     directory: createBusinessSurfaceHttp(),
