@@ -1,6 +1,10 @@
 # Landmark-directed Experience Orbs
 
-**Status:** draft implementation; depends on [Core orb spill v2](https://github.com/nilx-one/core/pull/64).
+**Status:** shipped with Core orb spill v2 ([core#64](https://github.com/nilx-one/core/pull/64),
+[core#65](https://github.com/nilx-one/core/pull/65)); the pinned and deployed runtime
+answers `orb_spill_version() = 2`. Real-device inspection (step 3 below) is not
+recorded. The per-find spill this document extends is being replaced by
+[Experience Orbs](exp-orbs.md) per Avaia-opened cell.
 
 When a fog cell is opened, the existing artifact roll and the existing
 first-wins spill service continue to decide which finds drop Experience Orbs.

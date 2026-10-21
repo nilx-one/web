@@ -1,0 +1,150 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+document:
+  id: exp-orbs-plan
+  version: 1.0.0
+  status: decided_not_implemented
+  language: en
+  created_at: 2026-10-21
+  project: 0x1
+  repository: nilx-one/web
+  purpose: >-
+    Record everything decided about Experience Orbs and the documented-but-
+    absent features found next to them, so the delivery chain across
+    nilx-one/core, services/identity and Web follows one written decision.
+  reference: docs/exp-orbs.md
+
+baseline:
+  web_master_sha: 510448ee85a5eb81cfd79a02c72aea0bc756e4f4
+  pinned_core_revision: e99abfdce62f240da1a869a7b48a7f89c7249967
+  deployed:
+    # Read from https://nilx.one/core/0.1.0/provenance.json on 2026-10-21.
+    core_revision: e99abfdce62f240da1a869a7b48a7f89c7249967
+    orb_spill_version: 2
+  live_behaviour:
+    spill_owner: find
+    trigger: any reveal (Avaia, Bond on foot, approach)
+    count: 5..30 per find, orb_count(artifact_id)
+    pays: 10 per orb, ORB_EXPERIENCE, to whoever picks it up
+    claim: first wins, identity service
+
+decisions:
+  - id: exp-orbs-per-avaia-cell
+    status: decided
+    decided_by: 0x0sky
+    decided_at: 2026-10-21
+    rule:
+      spills_from: every fog cell opened by the Avaia
+      count: 5 + 5 * landmarks_in_cell
+      pickers: [bond, avaia]
+      earner: whoever picks the orb up
+      orb_experience: unchanged (10)
+      claim: unchanged (first wins)
+    consequences:
+      - a cell without a find still spills 5 orbs
+      - a cell opened by the Bond on foot or by approach spills no Exp Orbs
+      - finds keep their own roll, sighting and pick-up rules; an orb never claims a find
+      - the spill identity moves from artifact_id to the cell
+
+open_questions:
+  - id: pamiatka-kinds
+    question: Which archived landmark kinds count as a Pamiatka?
+    proposal:
+      [monument, memorial, artwork, museum, historic, archaeological_site]
+  - id: count-cap
+    question: Is there a cap on landmarks counted per cell?
+    proposal: cap required; value open
+  - id: landmark-count-authority
+    question: Who vouches for the landmark count the service prices?
+    proposal: >-
+      The service reads the same published archive, or accepts a host count
+      within a bound. A bare client-asserted count is not enough.
+  - id: orb-placement
+    question: Where do a cell's orbs lie?
+    proposal: 5 around the cell centre, 5 around each counted landmark, all inside the cell
+  - id: spill-cadence
+    question: How often does an Avaia-opened cell spill?
+    proposal: once per epoch, shared by every Bond in it
+
+delivery:
+  # One pull request per step, in order. Each step waits for the previous
+  # one to merge; Web never ships a rule Core has not.
+  - step: 1
+    repository: nilx-one/web
+    kind: docs
+    scope: >-
+      docs/exp-orbs.md, this plan, and the landmark-directed-orbs status
+      corrected to shipped.
+    status: in_review
+  - step: 2
+    repository: nilx-one/core
+    kind: contract
+    scope: >-
+      Versioned per-cell spill in orb_world: 5 + 5 × landmarks, landmark kinds,
+      cap, orb ids and placement, exported through Wasm and UniFFI, with the
+      per-find v1/v2 wire still accepted. Fixtures through native, Wasm and
+      UniFFI.
+    blocked_by: open_questions
+    environment_blocker: >-
+      nilx-one/core and 0xda-market/core share /home/user/core in the current
+      cloud environment. Remove 0xda-market/core from the environment's
+      sources (or delete /home/user/core by hand) before Core work starts.
+    status: pending
+  - step: 3
+    repository: nilx-one/web
+    kind: service
+    scope: >-
+      services/identity accepts a cell spill, counts it through Core's rule,
+      keeps the same privacy (no who, no where) and pays orb_picked_up to
+      either earner first-wins. Bumps services/identity/deploy/contract.version.
+    depends_on: 2
+    status: pending
+  - step: 4
+    repository: nilx-one/web
+    kind: client
+    scope: >-
+      Pin the new Core runtime; spill only on an Avaia reveal; pass the
+      cell's archived landmarks to Core; drop the "orbs spill from every
+      opened cell" comment and update the guide's new-ground line to say
+      the Avaia's ground spills them.
+    depends_on: 3
+    acceptance:
+      - an Avaia-opened cell without a find shows 5 orbs
+      - a cell with n counted landmarks shows 5 + 5n (up to the cap)
+      - a Bond-opened cell shows none
+      - Bond and Avaia each earn their own pick-ups; a second picker gets taken
+      - real iPhone Safari and Telegram Mini App inspection
+    status: pending
+
+documented_but_absent:
+  # Found during the same audit. Each is its own chain; none is started by
+  # this plan.
+  - id: xping-flight-exp-orbs
+    source: nilx-one/0x1 documents/product-direction/xping-flight-loot.md
+    state: >-
+      Web renders, collides, aims and buzzes for flight loot, but no producer
+      exists: no Core drop table or rolls, no service issuance, nothing passes
+      loot to the flyover (docs/xping-flyover.md).
+    order: [nilx-one/core, services/identity, nilx-one/web]
+    status: proposed_next_awaiting_confirmation
+  - id: special-exclusive-subscriptions
+    source: nilx-one/0x1 documents/product-direction/special-exclusive-subscriptions.md
+    state: proposed; rarity v2, entitlements and XP multipliers absent
+    status: not_scheduled
+  - id: inventory-carrying-and-loss
+    source: nilx-one/0x1 documents/product-direction/inventory-carrying-and-loss.md
+    state: proposed; no inventory schema
+    status: not_scheduled
+  - id: avaia-outings-remainder
+    source: docs/avaia-outings.md
+    state: plan, partly built
+    status: not_scheduled
+  - id: atomic-multi-bond-settlement
+    source: nilx-one/0x1 documents/09-atomic-multi-bond-settlement.md
+    state: v1 draft
+    status: not_scheduled
+  - id: claim-auction
+    source: nilx-one/0x1 documents/14-claim-auction.md
+    state: v2 draft
+    status: not_scheduled
