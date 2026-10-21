@@ -1,8 +1,13 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapBounds, MapRenderer } from "@nilx-one/map-contract";
-import { useEffect } from "react";
+import type {
+  AmbientAnimalHandle,
+  AmbientAnimalKind,
+  MapBounds,
+  MapRenderer,
+} from "@nilx-one/map-contract";
+import { useEffect, useMemo, useRef } from "react";
 
 import { prefersReducedMotion } from "../../shell/motion";
 import { offsetMeters } from "../ambient-drones/ambient-drone-schedule";
@@ -69,6 +74,33 @@ export function groundWithin(
   return { green, water, buildings, paths };
 }
 
+/** An animal the city is showing where the world can see it, this instant. */
+export interface AmbientAnimalSighting {
+  readonly id: string;
+  readonly kind: AmbientAnimalKind;
+  readonly longitude: number;
+  readonly latitude: number;
+  /** Over the ground; absent for one on it. */
+  readonly heightMeters?: number;
+}
+
+export interface AmbientAnimals {
+  /** Every animal drawn right now; empty while none are. */
+  sightings(): readonly AmbientAnimalSighting[];
+}
+
+function sightingOf(handle: AmbientAnimalHandle): AmbientAnimalSighting {
+  return {
+    id: handle.id,
+    kind: handle.kind,
+    longitude: handle.lngLat[0],
+    latitude: handle.lngLat[1],
+    ...(handle.heightMeters === undefined
+      ? {}
+      : { heightMeters: handle.heightMeters }),
+  };
+}
+
 function pageVisible(): boolean {
   return globalThis.document?.visibilityState !== "hidden";
 }
@@ -90,8 +122,10 @@ export function useAmbientAnimals({
   ready,
   suspended = false,
   clock = Date.now,
-}: AmbientAnimalsOptions): void {
+}: AmbientAnimalsOptions): AmbientAnimals {
+  const sightings = useRef(new Map<string, AmbientAnimalSighting>());
   useEffect(() => {
+    const seen = sightings.current;
     const layer = renderer.animals;
     if (!ready || suspended || layer === undefined || prefersReducedMotion())
       return;
@@ -105,6 +139,7 @@ export function useAmbientAnimals({
 
     const take = (id: string) => {
       shown.delete(id);
+      seen.delete(id);
       try {
         layer.remove(id);
       } catch {
@@ -166,13 +201,13 @@ export function useAmbientAnimals({
       if (now - selectedAt >= RESELECT_MS) select(now);
       const time = clock();
       try {
-        for (const animal of animals) {
-          layer.upsert(sampleAnimal(animal, time, ground));
-          shown.add(animal.id);
-        }
-        for (const eagle of eagles) {
-          layer.upsert(sampleEagle(eagle, time));
-          shown.add(eagle.id);
+        for (const handle of [
+          ...animals.map((animal) => sampleAnimal(animal, time, ground)),
+          ...eagles.map((eagle) => sampleEagle(eagle, time)),
+        ]) {
+          layer.upsert(handle);
+          shown.add(handle.id);
+          seen.set(handle.id, sightingOf(handle));
         }
       } catch {
         // A renderer that cannot draw them takes them off; the world goes on.
@@ -215,4 +250,9 @@ export function useAmbientAnimals({
       clear();
     };
   }, [renderer, ready, suspended, clock]);
+
+  return useMemo(
+    () => ({ sightings: () => [...sightings.current.values()] }),
+    [],
+  );
 }
