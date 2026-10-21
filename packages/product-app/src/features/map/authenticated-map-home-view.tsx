@@ -288,7 +288,9 @@ export interface MapBondReference {
 }
 
 /** Keep public links on the allocated, single-label HTTPS Bond origin. */
-export function canonicalBondPublicUrl(value: string | undefined): string | undefined {
+export function canonicalBondPublicUrl(
+  value: string | undefined,
+): string | undefined {
   if (value === undefined) return undefined;
   try {
     const url = new URL(value);
@@ -307,7 +309,9 @@ export function canonicalBondPublicUrl(value: string | undefined): string | unde
       parts[0] === undefined ||
       parts[0].length > 63 ||
       !/^(?:0x|xn--)[a-z0-9-]+$/.test(parts[0])
-    ) return undefined;
+    ) {
+      return undefined;
+    }
     return url.href;
   } catch {
     return undefined;
@@ -2783,7 +2787,9 @@ export function AuthenticatedMapHomeView({
             body.bodyId !== BODY_HANDLE_IDS.avaia &&
             body.bodyId !== BODY_HANDLE_IDS.bond,
         )
-      ) return;
+      ) {
+        return;
+      }
       setDetailState(undefined);
       setSelectedBondBodyId(id);
       if (section !== "world") navigate(WORLD_ROUTE);
@@ -3180,7 +3186,9 @@ export function AuthenticatedMapHomeView({
 
   /** The Dock names itself by the screen it is presenting. */
   function dockTitle(): string {
-    return selectedBond?.pubDress ?? (section === "world" ? "Bond" : detailTitle());
+    return (
+      selectedBond?.pubDress ?? (section === "world" ? "Bond" : detailTitle())
+    );
   }
 
   /** The header's small title: the section being read, else the screen. */
@@ -3411,7 +3419,9 @@ export function AuthenticatedMapHomeView({
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {selectedBond.pubDressUrl?.replace(/^https:\/\//, "").replace(/\/?$/, "/")}
+                        {selectedBond.pubDressUrl
+                          ?.replace(/^https:\/\//, "")
+                          .replace(/\/?$/, "/")}
                         <span aria-hidden="true"> ↗</span>
                       </a>
                     )}
