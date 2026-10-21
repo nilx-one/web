@@ -3,7 +3,7 @@
 
 document:
   id: exp-orbs-plan
-  version: 1.1.0
+  version: 1.2.0
   status: decided_not_implemented
   language: en
   created_at: 2026-10-21
@@ -35,7 +35,8 @@ decisions:
     decided_by: 0x0sky
     decided_at: 2026-10-21
     rule:
-      spills_from: every fog cell the Avaia opens for its Bond
+      spills_from: every fog cell that opens for the Bond
+      openers: [avaia, bond_standing_in_it, bond_approaching_within_15m]
       when: once, as the cell opens for that Bond
       count: 5 + 5 * landmarks_in_cell
       cap: none
@@ -43,14 +44,16 @@ decisions:
         cell: 5 scattered around the cell centre
         landmark: 5 around each landmark
       pickers: [bond, avaia]
+      reach: within 15 m of the orb (ORB_PICKUP_METERS, inclusive)
+      pick_up_feel: drawn to the picker, with a sound and a light haptic tap where the host has one
       earner: whoever picks the orb up
       orb_experience: unchanged (10)
       visibility: the Bond's own; never seen by, shared with or claimed against another Bond
     consequences:
       - a cell without a find still spills 5 orbs
       - finds keep their own roll, sighting and pick-up rules; an orb never claims a find
-      - the spill identity moves from artifact_id to the cell, on the device only
-      - no shared spill on the service, no first-wins between Bonds, no taken
+      - the spill identity moves from artifact_id to the Bond and the cell
+      - no stored spill on the service, no first-wins between Bonds, no taken
       - between the Bond and its Avaia, whoever reaches an orb first picks it up
   - id: pamiatka-is-landmark
     status: decided
@@ -62,27 +65,39 @@ decisions:
       shops, cafes and buildings are not landmarks.
     current_kinds_source: packages/map-maplibre/src/landmark-kinds.json
     purpose: the landmark's orbs bring the Bond or its Avaia close enough to describe it
-  - id: cell-state-is-the-bonds-own
+  - id: service-counts-and-keeps-nothing
+    status: decided
+    decided_by: 0x0sky
+    decided_at: 2026-10-21
+    supersedes: cell-state-is-the-bonds-own
+    answers: landmark-count-authority
+    rule: >-
+      The device sends the opened cell to the identity service; the service
+      counts its landmarks through Core over the published archive and
+      answers the spill. It stores nothing about the request: not the cell,
+      its landmarks or its count. Another Bond never sees the spill.
+    orb_id: >-
+      A keyed digest of the Bond, the cell and the orb's index, recomputable
+      by the service, so a pick-up is checked without a stored spill and the
+      same cell always answers the same orbs.
+  - id: experience-has-no-weekly-cap
     status: decided
     decided_by: 0x0sky
     decided_at: 2026-10-21
     rule: >-
-      Whether and when a cell is open is information of that one Bond only.
-      No service learns the cell, its landmarks or its count.
+      Experience is not money. orb_picked_up has no weekly cap; an orb id
+      pays once, deduplicated by the Bond's own award chain.
+  - id: every-opening-spills
+    status: decided
+    decided_by: 0x0sky
+    decided_at: 2026-10-21
+    answers: bond-opened-cells
+    rule: >-
+      The ground opened for both of them, so every opening spills: the
+      Avaia's, the Bond standing in the cell, and the Bond approaching within
+      15 m of it. A cell still spills once.
 
-open_questions:
-  - id: landmark-count-authority
-    question: Who vouches for the landmark count?
-    status: undecided
-    recommendation: >-
-      Nobody beyond the device. Checking the count would require the service
-      to learn the cell, which cell-state-is-the-bonds-own forbids. Core
-      derives the count deterministically from the published archive; the
-      service bounds what orbs can earn by the weekly cap for orb_picked_up.
-  - id: bond-opened-cells
-    question: Does a cell the Bond opens on foot or by approach also spill?
-    status: undecided
-    default_until_decided: no
+open_questions: []
 
 delivery:
   # One pull request per step, in order. Each step waits for the previous
@@ -102,37 +117,38 @@ delivery:
       ids, placement around the centre and each landmark, pick-up between the
       Bond and its Avaia, exported through Wasm and UniFFI, with the per-find
       v1/v2 wire still accepted. Fixtures through native, Wasm and UniFFI.
-    blocked_by: [landmark-count-authority]
-    environment_blocker: >-
-      nilx-one/core and 0xda-market/core share /home/user/core in the current
-      cloud environment. Remove 0xda-market/core from the environment's
-      sources (or delete /home/user/core by hand) before Core work starts.
+    scope_added: >-
+      The landmark rules over the archive move into Core, so the service and
+      the device count alike; spill input is the Bond and the cell; orb ids
+      are keyed digests; reach is inclusive at 15 m.
     status: pending
   - step: 3
     repository: nilx-one/web
     kind: service
     scope: >-
-      services/identity prices orb_picked_up for either earner without an
-      artifact_id, an orb index or any place, under the week's cap; the
-      per-find spill endpoints stay for older hosts until step 4 ships, then
-      retire. Bumps services/identity/deploy/contract.version.
+      services/identity answers a cell's spill through Core over the
+      published archive without storing it, and prices orb_picked_up for
+      either earner by its orb id, once, without a weekly cap; the per-find
+      spill endpoints stay for older hosts until step 4 ships, then retire.
+      Bumps services/identity/deploy/contract.version.
     depends_on: 2
     status: pending
   - step: 4
     repository: nilx-one/web
     kind: client
     scope: >-
-      Pin the new Core runtime; spill on an Avaia reveal, on the device; pass
-      the cell's archived landmarks to Core; drop the "orbs spill from every
-      opened cell" comment and update the guide's new-ground line to say the
-      Avaia's ground spills them.
+      Pin the new Core runtime; on every reveal (avaia, approach, nearby) ask
+      the service for the cell's spill and draw it; pull an orb in reach to
+      its picker with a sound and a light haptic tap (Telegram haptic
+      feedback, Vibration API where present, sound only on iPhone Safari).
     depends_on: 3
     acceptance:
-      - an Avaia-opened cell without a find shows 5 orbs around its centre
+      - an opened cell without a find shows 5 orbs around its centre, whoever opened it
       - a cell with n landmarks shows 5 + 5n, 5 around each landmark
       - another Bond in the same cell sees none of them
       - Bond and Avaia each earn their own pick-ups; an orb one picked is gone for the other
-      - nothing about the cell, its landmarks or its count leaves the device
+      - the service stores nothing about the cell, its landmarks or its count
+      - an orb within 15 m is drawn in with a sound and, where the host has one, a haptic tap
       - real iPhone Safari and Telegram Mini App inspection
     status: pending
 
