@@ -750,6 +750,35 @@ export function createMapLibreRenderer(
   }
 
   /**
+   * The green landuse the view's tiles hold that touches a box: the kinds
+   * the `parks` layer paints, each polygon on its own.
+   */
+  function greenAreasIn(bounds: MapBounds): GreenArea[] {
+    const areas: GreenArea[] = [];
+    for (const feature of viewFeatures(LANDUSE_SOURCE_LAYER)) {
+      const kind = feature.properties?.["kind"];
+      if (typeof kind !== "string" || GREEN_CHARACTER[kind] === undefined)
+        continue;
+      const geometry = feature.geometry as {
+        readonly type: string;
+        readonly coordinates: unknown;
+      };
+      const polygons =
+        geometry.type === "Polygon"
+          ? [geometry.coordinates as AreaPolygon]
+          : geometry.type === "MultiPolygon"
+            ? (geometry.coordinates as AreaPolygon[])
+            : [];
+      for (const polygon of polygons) {
+        const outer = polygon[0];
+        if (outer === undefined || !ringTouches(outer, bounds)) continue;
+        areas.push({ kind, polygon });
+      }
+    }
+    return areas;
+  }
+
+  /**
    * Plants the green areas the view's tiles hold, once the view has settled.
    * Closer than street scale only, and only in volumetric presentation: the
    * same rule the monument keeps.
@@ -773,23 +802,7 @@ export function createMapLibreRenderer(
       east: view.getEast() + padX,
       north: view.getNorth() + padY,
     };
-    const areas: GreenArea[] = [];
-    for (const feature of viewFeatures(LANDUSE_SOURCE_LAYER)) {
-      const kind = feature.properties?.["kind"];
-      if (typeof kind !== "string" || GREEN_CHARACTER[kind] === undefined)
-        continue;
-      const geometry = feature.geometry as {
-        readonly type: string;
-        readonly coordinates: unknown;
-      };
-      const polygons =
-        geometry.type === "Polygon"
-          ? [geometry.coordinates as AreaPolygon]
-          : geometry.type === "MultiPolygon"
-            ? (geometry.coordinates as AreaPolygon[])
-            : [];
-      for (const polygon of polygons) areas.push({ kind, polygon });
-    }
+    const areas = greenAreasIn(bounds);
     const center = mounted.getCenter();
     const key = [
       areas.length,
@@ -2629,6 +2642,10 @@ export function createMapLibreRenderer(
       if (monument !== undefined) obstacles.push(monument);
       collect("water", WATER_LAYER_IDS);
       return obstacles;
+    },
+
+    greenAreasWithin(bounds) {
+      return greenAreasIn(bounds);
     },
 
     roadsWithin(bounds) {
