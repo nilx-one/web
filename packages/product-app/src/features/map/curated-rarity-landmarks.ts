@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { CoreLandmarkMapRequest, CoreRuntimePort } from "@nilx-one/application";
 import type {
   MapPinnedLandmark,
   MapPinnedLandmarkKind,
@@ -139,4 +140,81 @@ export function curatedLandmarkPins(
     });
   }
   return pins;
+}
+
+/** Core projection request limit, from MAX_RARITY_MAP_LANDMARKS.
+ * Never apply this as a total archive cap or a map pin display quota.
+ */
+export const MAX_LANDMARK_MAP_BATCH = 4096;
+
+export interface VerifiedLandmarkArchivePublication {
+  /** Used for the publisher's same-revision verification, not accepted as
+   * evidence by Core on its own. The caller must authenticate this release.
+   */
+  readonly archiveRevision: string;
+  readonly registry: number;
+  readonly labels: readonly ArchiveLandmarkLabel[];
+}
+
+/**
+ * Project an authenticated, completely enumerated archive publication through
+ * the actual Core Wasm export, splitting only the per-call Core bound. The
+ * caller owns archive authentication/completeness and must NOT pass just the
+ * locally loaded tiles or hand-seeded map pins as a global publication.
+ *
+ * If any Core batch is missing, mismatched or invalid, fail the publication
+ * atomically: never show a misleading partial roster as "all landmarks".
+ */
+export async function curatedLandmarkPinsFromPublication(
+  core: Pick<Required<CoreRuntimePort>, "landmarkMapView">,
+  publication: VerifiedLandmarkArchivePublication,
+): Promise<MapPinnedLandmark[]> {
+  if (
+    publication.archiveRevision.trim() === "" ||
+    !Number.isSafeInteger(publication.registry) ||
+    publication.registry < 1
+  ) {
+    throw new Error("invalid verified landmark publication");
+  }
+  const ids = new Set<string>();
+  for (const label of publication.labels) {
+    if (!ARCHIVE_ID.test(label.id) || ids.has(label.id)) {
+      throw new Error("duplicate or invalid published archive feature");
+    }
+    ids.add(label.id);
+    validE7(label.longitudeE7, 1_800_000_000);
+    validE7(label.latitudeE7, 900_000_000);
+    if (
+      label.title.trim() === "" ||
+      !["monument", "sacred", "civic", "nature"].includes(label.kind)
+    ) {
+      throw new Error("invalid published archive label");
+    }
+  }
+  const projected: MapPinnedLandmark[] = [];
+  for (let offset = 0; offset < publication.labels.length; offset += MAX_LANDMARK_MAP_BATCH) {
+    const labels = publication.labels.slice(offset, offset + MAX_LANDMARK_MAP_BATCH);
+    const request: CoreLandmarkMapRequest = {
+      registry: publication.registry,
+      landmarks: labels.map((label) => ({
+        id: label.id,
+        at: {
+          longitude_e7: label.longitudeE7,
+          latitude_e7: label.latitudeE7,
+        },
+      })),
+    };
+    const coreReply = await core.landmarkMapView(request);
+    const raw: unknown = JSON.parse(coreReply);
+    if (
+      typeof raw !== "object" ||
+      raw === null ||
+      Array.isArray(raw) ||
+      (raw as Record<string, unknown>).registry !== publication.registry
+    ) {
+      throw new Error("Core landmark registry mismatch");
+    }
+    projected.push(...curatedLandmarkPins(coreReply, labels));
+  }
+  return projected.sort((left, right) => left.id.localeCompare(right.id));
 }
