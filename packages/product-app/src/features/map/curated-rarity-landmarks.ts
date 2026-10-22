@@ -192,7 +192,13 @@ export async function curatedLandmarkPinsFromPublication(
     }
   }
   const projected: MapPinnedLandmark[] = [];
-  for (let offset = 0; offset < publication.labels.length; offset += MAX_LANDMARK_MAP_BATCH) {
+  // Even an empty publication must verify a real Core registry: absence of
+  // landmarks cannot masquerade as readiness when the runtime is missing.
+  for (
+    let offset = 0;
+    offset < Math.max(1, publication.labels.length);
+    offset += MAX_LANDMARK_MAP_BATCH
+  ) {
     const labels = publication.labels.slice(offset, offset + MAX_LANDMARK_MAP_BATCH);
     const request: CoreLandmarkMapRequest = {
       registry: publication.registry,
