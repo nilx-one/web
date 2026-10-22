@@ -241,6 +241,36 @@ describe("cell spills", () => {
     again.unmount();
   });
 
+  it("replays a cell opened before the asynchronous v4 capability handshake", async () => {
+    let confirmVersion: ((version: number) => void) | undefined;
+    const pendingCore = {
+      ...coreV4,
+      orbSpillVersion: vi.fn(
+        () => new Promise<number>((resolve) => { confirmVersion = resolve; }),
+      ),
+    };
+    const port = cellPort();
+    const { result } = renderHook(() =>
+      useOrbSpills({
+        owner: "0x0sky",
+        port,
+        core: pendingCore,
+        renderer: renderer(),
+        near: undefined,
+        bond: undefined,
+        avaiaPoint: () => undefined,
+      }),
+    );
+    act(() => result.current.spill({ id: CELL, center, boundary: [] }));
+    expect(port.spillCell).not.toHaveBeenCalled();
+    await act(async () => {
+      confirmVersion?.(4);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(port.spillCell).toHaveBeenCalledExactlyOnceWith(CELL);
+  });
+
   it("never asks a Core older than v4 for a cell spill", async () => {
     const port = cellPort();
     const coreV3 = { ...coreV4, orbSpillVersion: vi.fn(async () => 3) };
