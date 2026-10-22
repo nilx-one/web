@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapPinnedLandmark, MapPinnedLandmarkKind } from "@nilx-one/map-contract";
+import type {
+  MapPinnedLandmark,
+  MapPinnedLandmarkKind,
+} from "@nilx-one/map-contract";
 
 /** Verified archive labels for the very same published feature IDs Core rates.
  * These are not device-normalized ids, UNESCO component ids or seeded pin ids.
