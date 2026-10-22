@@ -43,11 +43,16 @@ describe("CoreWasmClient", () => {
     const request = {
       registry: 1,
       landmarks: [
-        { id: "n123", at: { longitude_e7: "305000000", latitude_e7: "504500000" } },
+        {
+          id: "n123",
+          at: { longitude_e7: "305000000", latitude_e7: "504500000" },
+        },
       ],
     };
     await expect(
-      createCoreWasmClient({ loadBindings: async () => empty }).landmarkMapView!(request),
+      createCoreWasmClient({ loadBindings: async () => empty }).landmarkMapView!(
+        request,
+      ),
     ).rejects.toThrow("landmark map binding is missing");
     const received: string[] = [];
     const bindings = await loadGeneratedCoreWasmBindings({
@@ -60,7 +65,9 @@ describe("CoreWasmClient", () => {
         }),
     });
     await expect(
-      createCoreWasmClient({ loadBindings: async () => bindings }).landmarkMapView!(request),
+      createCoreWasmClient({ loadBindings: async () => bindings }).landmarkMapView!(
+        request,
+      ),
     ).resolves.toBe('{"ok":true,"registry":1,"landmarks":[]}');
     expect(received).toEqual([JSON.stringify(request)]);
   });
