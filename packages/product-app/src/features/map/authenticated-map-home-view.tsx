@@ -3546,7 +3546,7 @@ export function AuthenticatedMapHomeView({
                     <span className="interface-settings__eyebrow">
                       {detailEyebrow()}
                     </span>
-                    <h2>
+                    <h2 aria-label={dockHeaderTitle()}>
                       {/* Keyed by what it says, so a new section's name
                         arrives rather than being swapped in place. */}
                       <span
