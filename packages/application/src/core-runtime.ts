@@ -155,6 +155,8 @@ export type CoreInventoryAnswer =
  * code must fail closed when they are absent rather than reimplement UTS-46.
  */
 export interface CoreRuntimePort {
+  /** Delegates to Core's immutable registry; caller must verify input archive. */
+  landmarkMapView?(request: CoreLandmarkMapRequest): Promise<string>;
   /** Core `courier_destination`: the nearest point of the projection. */
   courierDestination?(
     origin: CourierCoordinate,
