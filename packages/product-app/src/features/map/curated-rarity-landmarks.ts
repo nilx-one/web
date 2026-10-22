@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { CoreLandmarkMapRequest, CoreRuntimePort } from "@nilx-one/application";
+import type {
+  CoreLandmarkMapRequest,
+  CoreRuntimePort,
+} from "@nilx-one/application";
 import type {
   MapPinnedLandmark,
   MapPinnedLandmarkKind,
@@ -199,7 +202,10 @@ export async function curatedLandmarkPinsFromPublication(
     offset < Math.max(1, publication.labels.length);
     offset += MAX_LANDMARK_MAP_BATCH
   ) {
-    const labels = publication.labels.slice(offset, offset + MAX_LANDMARK_MAP_BATCH);
+    const labels = publication.labels.slice(
+      offset,
+      offset + MAX_LANDMARK_MAP_BATCH,
+    );
     const request: CoreLandmarkMapRequest = {
       registry: publication.registry,
       landmarks: labels.map((label) => ({
