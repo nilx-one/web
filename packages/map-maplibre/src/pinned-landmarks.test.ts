@@ -56,14 +56,12 @@ describe("pinned landmarks", () => {
     expect(data.features[0]?.geometry.coordinates).toEqual([30.5636, 50.4267]);
   });
 
-  it("draws Core Rare, Special and Exclusive distinctly without recolouring default pins", () => {
+  it("uses Core rarity colours without changing ordinary pins", () => {
     const rated = (rarity: "rare" | "special" | "exclusive") => ({
       ...MOTHERLAND,
       rarity,
     });
-    expect(pinnedLandmarkColor(rated("rare"))).toBe(
-      CURATED_RARITY_COLORS.rare,
-    );
+    expect(pinnedLandmarkColor(rated("rare"))).toBe(CURATED_RARITY_COLORS.rare);
     expect(pinnedLandmarkColor(rated("special"))).toBe(
       CURATED_RARITY_COLORS.special,
     );
