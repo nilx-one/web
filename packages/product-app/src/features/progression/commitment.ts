@@ -38,6 +38,31 @@ export type { AwardKind };
 /** What an orb pays, as Core's `ORB_EXPERIENCE` sets it. */
 export const XP_ORB_PICKED_UP = 10;
 
+/**
+ * What a cell orb pays by its rarity tier, Common (1) to Exclusive (5):
+ * Core's landmark rarity registry 1 (`orb_experience`). Shown, never sent:
+ * the service prices the orb by its id.
+ */
+export const XP_CELL_ORB: readonly number[] = [10, 20, 40, 80, 160];
+
+/** A cell orb's subject: Core's rated orb id and the cell it spilled from. */
+export function cellOrbSubject(orbId: string, cell: string): string {
+  return `${orbId}@${cell}`;
+}
+
+/** The orb id and cell a cell orb's subject names. */
+export function cellOrbParts(
+  subject: string,
+): { readonly orbId: string; readonly cell: string } | undefined {
+  const at = subject.lastIndexOf("@");
+  if (at <= 0) return undefined;
+  const orbId = subject.slice(0, at);
+  const cell = subject.slice(at + 1);
+  return orbId.startsWith("orb:cell:") && /^[0-9a-f]{15}$/.test(cell)
+    ? { orbId, cell }
+    : undefined;
+}
+
 /** One award, as this device's history records it. Never sent. */
 export interface AwardRecord {
   readonly kind: AwardKind;
@@ -75,7 +100,13 @@ export function awardAmount(
   record: Pick<AwardRecord, "kind" | "earner" | "tier">,
 ): number | null {
   const { kind, earner, tier } = record;
-  if (kind !== "find_picked_up" && tier !== undefined) return null;
+  if (
+    kind !== "find_picked_up" &&
+    kind !== "cell_orb_picked_up" &&
+    tier !== undefined
+  ) {
+    return null;
+  }
   switch (kind) {
     case "zone_revealed":
       return earner === "avaia" ? XP_ZONE_REVEALED_BY_AVAIA : null;
@@ -97,6 +128,9 @@ export function awardAmount(
     // `ORB_EXPERIENCE`, which the service prices it by; shown, never sent.
     case "orb_picked_up":
       return XP_ORB_PICKED_UP;
+    // A cell orb's rarity rides in `tier`, for showing what it pays.
+    case "cell_orb_picked_up":
+      return tier === undefined ? null : (XP_CELL_ORB[tier - 1] ?? null);
     // Priced by its recipe in Core, by the service: never estimated here,
     // and never published the legacy way.
     case "craft_finished":

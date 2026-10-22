@@ -3,6 +3,13 @@
 
 export { CourierCapabilityUnavailable } from "./courier";
 export {
+  decodeSubscriptionStatus,
+  type SubscriptionTier,
+  type SubscriptionSnapshot,
+  type SubscriptionStatus,
+  type SubscriptionStatusPort,
+} from "./subscription";
+export {
   AVATAR_BODY_REGIONS,
   AVATAR_CATALOG,
   AVATAR_CATALOG_MATCHES_IDENTITY,
@@ -87,12 +94,16 @@ export {
 } from "./nearby-speech";
 export type {
   OrbCoordinate,
+  OrbRarity,
+  OrbWorldCell,
+  OrbWorldCellLandmark,
   OrbWorldInput,
   OrbWorldOrb,
   OrbWorldSpill,
   OrbWorldView,
 } from "./orb-world";
 export {
+  hasCellSpillAccess,
   hasCommittedAwardAccess,
   hasOrbSpillAccess,
   hasPubInfoAccess,
@@ -100,6 +111,9 @@ export {
   type AwardKind,
   type AwardOutcome,
   type AwardResult,
+  type CellSpillAccessPort,
+  type CellSpillResult,
+  type CellSpillView,
   type ClaimedFindView,
   type ClaimsReadResult,
   type CommitAwardsResult,

@@ -1,6 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import {
+  SubscriptionIdentity,
+  useSubscriptionTier,
+} from "../subscription/subscription-status";
 import type { ReactNode } from "react";
 import type { ObservedGeolocation } from "@nilx-one/host-contract";
 
@@ -698,9 +702,13 @@ function AddressField({
         <div>
           <dt>{label}</dt>
           <dd>
-            {state?.address === undefined || state.address.length === 0
-              ? fallback
-              : state.address}
+            <SubscriptionIdentity
+              address={
+                state?.address === undefined || state.address.length === 0
+                  ? fallback
+                  : state.address
+              }
+            />
           </dd>
         </div>
       </dl>
@@ -828,7 +836,9 @@ function DockPlaceButton({
       <span className="bond-dock__glyph">
         {translateIf(t, "dock.ai", identity.glyph)}
       </span>
-      <strong>{identity.address}</strong>
+      <strong>
+        <SubscriptionIdentity address={identity.address} badge />
+      </strong>
       <small>
         {identity.seat === "bond" ? t("dock.you") : t("dock.ai")}
         <i
@@ -1676,7 +1686,8 @@ export function AuthenticatedMapHomeView({
     proximityObserver.current = avaiaProximity?.observeAvaiaPoint;
   }, [avaiaProximity]);
   const [fogAnnouncement, setFogAnnouncement] = useState("");
-  // Orbs spill from every opened cell. The driving Bond collects at its
+  // Orbs spill from every opened cell, whoever opened it: the cell's own
+  // (Core v4, `docs/exp-orbs.md`) and its finds'. The driving Bond collects at its
   // gameplay position (physical GPS or manual/virtual); the Avaia collects
   // where its own body walks. Manual position stays excluded from physical
   // presence checks, such as workshops and first-hand find discoveries.
@@ -1692,6 +1703,12 @@ export function AuthenticatedMapHomeView({
       wheel === "avaia" && handover === undefined
         ? avaiaWalk.stance(globalThis.performance.now())?.point
         : undefined,
+    // Orbs drawn in: a pick-up chime and, where the host has one, a light
+    // tap. iPhone Safari has no web vibration; there it is the chime alone.
+    onPickedUp: () => {
+      cue("loot-pickup");
+      feedback?.impact("light");
+    },
   });
   // Her word on new ground is owed from the first cell opened beyond the
   // starting one, and said once the Avaia it speaks of exists.
@@ -1837,6 +1854,7 @@ export function AuthenticatedMapHomeView({
       : undefined;
   const avaiaStudied = studiedBy(avaiaWalk.notebook, avaiaAddress);
   const avaiaSeen = seenBy(avaiaWalk.notebook, avaiaAddress);
+  const subscriptionTier = useSubscriptionTier(pubDress);
   const reducedMotion = prefersReducedMotion();
   const { model: carriedInventory } = useInventory(pubDress, findItems);
   const guide = useGuideCutscene({
@@ -2139,6 +2157,7 @@ export function AuthenticatedMapHomeView({
     const clip = drawnBodies.current[wheel]?.clipId;
     return {
       title: wheelAddress,
+      ...(subscriptionTier === undefined ? {} : { subscriptionTier }),
       bodyId: BODY_HANDLE_IDS[wheel],
       ...(clip === undefined ? {} : { activity: t(BODY_ACTIVITY_KEYS[clip]) }),
       detail:
@@ -2697,6 +2716,9 @@ export function AuthenticatedMapHomeView({
         body.seat === "avaia" && stance === undefined && declaredPosition
           ? null
           : createWheelBodyHandle({
+              ...(subscriptionTier === undefined
+                ? {}
+                : { subscriptionAura: subscriptionTier }),
               carry: carriedInventory[body.seat].carry,
               body,
               address: address(body.seat),
@@ -2764,6 +2786,7 @@ export function AuthenticatedMapHomeView({
       globalThis.clearInterval(ambient);
     };
   }, [
+    subscriptionTier,
     avaiaAddress,
     avaiaAvatar?.appearance,
     avaiaAvatar?.modelId,
@@ -3530,7 +3553,10 @@ export function AuthenticatedMapHomeView({
                         className="bond-dock__detail-header-title"
                         key={dockHeaderTitle()}
                       >
-                        {dockHeaderTitle()}
+                        <SubscriptionIdentity
+                          address={dockHeaderTitle()}
+                          badge
+                        />
                       </span>
                     </h2>
                   </div>
@@ -3541,6 +3567,7 @@ export function AuthenticatedMapHomeView({
                 >
                   {section === "identity" && activeDetail === undefined ? (
                     <div className="bond-profile">
+                      <SubscriptionIdentity address={pubDress} badge />
                       <AddressField
                         id="profile-slug"
                         label="pub_dress"
@@ -3811,9 +3838,14 @@ export function AuthenticatedMapHomeView({
                           className="interface-settings__eyebrow"
                           id="inventory-state-title"
                         >
-                          {detailState?.subject === "avaia"
-                            ? avaiaLabel
-                            : pubDress}
+                          <SubscriptionIdentity
+                            address={
+                              detailState?.subject === "avaia"
+                                ? avaiaLabel
+                                : pubDress
+                            }
+                            badge
+                          />
                         </span>
                         <p className="profile-edit__note">
                           {detailState?.subject !== "avaia"

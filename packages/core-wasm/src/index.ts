@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  decodeSubscriptionStatus,
+  type SubscriptionSnapshot,
+  type SubscriptionStatus,
   courierDestinationRequest,
   decodeCourierDestination,
   CourierCapabilityUnavailable,
@@ -711,6 +714,15 @@ function isOrbIdList(value: unknown): value is string[] {
   );
 }
 
+/** Rarity v2 codes a Core v4 cell orb may carry. */
+const ORB_RARITIES: ReadonlySet<string> = new Set([
+  "common",
+  "uncommon",
+  "rare",
+  "special",
+  "exclusive",
+]);
+
 /** Core's orb world answer, or a throw for anything that does not read as one. */
 export function decodeOrbWorld(wire: string): OrbWorldView {
   const parsed = JSON.parse(wire) as Record<string, unknown> | null;
@@ -727,13 +739,16 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
         kind,
         at,
         lands_at: landsAt,
+        rarity,
       } = orb as Record<string, unknown>;
       return (
         typeof id === "string" &&
         (kind === "orb" || kind === "goal") &&
         isOrbCoordinate(at) &&
         typeof landsAt === "string" &&
-        DECIMAL.test(landsAt)
+        DECIMAL.test(landsAt) &&
+        (rarity === undefined ||
+          (typeof rarity === "string" && ORB_RARITIES.has(rarity)))
       );
     }) ||
     !isOrbIdList(view.bond_reach) ||
@@ -755,6 +770,11 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
 
 export interface CoreWasmBindings {
   landmarkMapView?(request: CoreLandmarkMapRequest): string;
+  subscriptionStatus?(
+    snapshot: SubscriptionSnapshot | null,
+    owner: string,
+    nowMs: number,
+  ): SubscriptionStatus;
   courierDestination?(
     origin: CourierCoordinate,
     projection: BusinessPointProjection,
@@ -801,8 +821,9 @@ export interface CoreWasmBindings {
 }
 
 export interface GeneratedCoreWasmModule {
-  /** Absent from Core runtimes before the curated landmark map export. */
+  /** Absent from Core runtimes before curated map projection. */
   landmark_map_view?(request: string): string;
+  subscription_status?(snapshot: string, owner: string, now_ms: string): string;
   /** Absent from a runtime built before Core's courier destination. */
   courier_destination?(request: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
@@ -1001,6 +1022,25 @@ export async function loadGeneratedCoreWasmBindings(
                 distanceMeters,
                 artifacts,
                 previouslyBlocked,
+              ),
+            );
+          },
+        }),
+    ...(runtime.subscription_status === undefined
+      ? {}
+      : {
+          subscriptionStatus: (
+            snapshot: SubscriptionSnapshot | null,
+            owner: string,
+            nowMs: number,
+          ) => {
+            if (!Number.isSafeInteger(nowMs) || nowMs < 0)
+              throw new RangeError("Invalid subscription clock");
+            return decodeSubscriptionStatus(
+              runtime.subscription_status!(
+                JSON.stringify(snapshot),
+                owner,
+                String(nowMs),
               ),
             );
           },
@@ -1239,7 +1279,20 @@ class CoreWasmClient implements CoreRuntimePort {
     return bindings.courierDestination(origin, projection);
   }
 
-  /** No client fallback may assign landmark rarity when Core is unavailable. */
+  public async subscriptionStatus(
+    snapshot: SubscriptionSnapshot | null,
+    owner: string,
+    nowMs: number,
+  ): Promise<SubscriptionStatus> {
+    const bindings = await this.loadBindings();
+    return (
+      bindings.subscriptionStatus?.(snapshot, owner, nowMs) ?? {
+        kind: "unknown",
+      }
+    );
+  }
+
+  /** Missing Core map export must fail closed. */
   public async landmarkMapView(request: CoreLandmarkMapRequest): Promise<string> {
     const bindings = await this.loadBindings();
     if (bindings.landmarkMapView === undefined) {

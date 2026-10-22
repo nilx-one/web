@@ -391,7 +391,8 @@ function isFindAward(record: AwardRecord): boolean {
   return (
     record.kind === "find_seen" ||
     record.kind === "find_picked_up" ||
-    record.kind === "orb_picked_up"
+    record.kind === "orb_picked_up" ||
+    record.kind === "cell_orb_picked_up"
   );
 }
 

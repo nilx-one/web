@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapOrb } from "@nilx-one/map-contract";
+import { FLIGHT_LOOT_COLORS, type MapOrb } from "@nilx-one/map-contract";
 
 export const ORBS_SOURCE_ID = "orbs";
 export const ORBS_GLOW_LAYER_ID = "orbs-glow";
@@ -10,6 +10,9 @@ export const ORBS_GOAL_LAYER_ID = "orbs-goal";
 
 /** How long an orb takes to fall, ending at its `landsAt`. */
 export const ORB_FALL_MS = 650;
+
+/** How long a picked-up orb takes to reach whoever picked it up. */
+export const ORB_PULL_MS = 320;
 
 const CORE = "#f2fdff";
 const GLOW = "#7fe6ff";
@@ -30,9 +33,31 @@ export function orbFall(orb: Pick<MapOrb, "landsAt">, nowMs: number): number {
   return 1 + (back + 1) * u * u * u + back * u * u;
 }
 
-/** Whether any orb is still to land, so the drawing has to keep moving. */
+/**
+ * How far a picked-up orb has been drawn in at `nowMs`: 0 where it lay, 1
+ * at whoever picked it up. It speeds up as it goes, the way a magnet pulls.
+ */
+export function orbPull(orb: Pick<MapOrb, "pulledTo">, nowMs: number): number {
+  if (orb.pulledTo === undefined) return 0;
+  const t = (nowMs - orb.pulledTo.at) / ORB_PULL_MS;
+  if (!(t > 0)) return 0;
+  return t >= 1 ? 1 : t * t;
+}
+
+/** Whether any orb is still to land or still being drawn in. */
 export function orbsFalling(orbs: readonly MapOrb[], nowMs: number): boolean {
-  return orbs.some((orb) => orb.landsAt > nowMs);
+  return orbs.some(
+    (orb) =>
+      orb.landsAt > nowMs ||
+      (orb.pulledTo !== undefined && orbPull(orb, nowMs) < 1),
+  );
+}
+
+/** A rarity's colour as a CSS hex string, the flight loot's own. */
+function rarityColor(orb: Pick<MapOrb, "rarity">): string {
+  return orb.rarity === undefined
+    ? GLOW
+    : `#${FLIGHT_LOOT_COLORS[orb.rarity].toString(16).padStart(6, "0")}`;
 }
 
 /**
@@ -47,20 +72,32 @@ export function orbsData(
     type: "FeatureCollection",
     features: orbs.flatMap((orb) => {
       const fall = orbFall(orb, nowMs);
-      if (fall <= 0) return [];
+      const pull = orbPull(orb, nowMs);
+      if (fall <= 0 || pull >= 1) return [];
+      const to = orb.pulledTo;
+      const longitude =
+        to === undefined
+          ? orb.longitude
+          : orb.longitude + (to.longitude - orb.longitude) * pull;
+      const latitude =
+        to === undefined
+          ? orb.latitude
+          : orb.latitude + (to.latitude - orb.latitude) * pull;
       return [
         {
           type: "Feature",
           properties: {
             kind: orb.kind,
-            scale: Math.max(0, fall),
+            // Drawn in, it shrinks to nothing as it arrives.
+            scale: Math.max(0, fall) * (1 - pull),
             // The glow starts wide and closes in as the orb lands.
             spread: 1 + 2.5 * Math.max(0, 1 - fall),
             opacity: Math.min(1, fall * 1.4),
+            color: rarityColor(orb),
           },
           geometry: {
             type: "Point",
-            coordinates: [orb.longitude, orb.latitude],
+            coordinates: [longitude, latitude],
           },
         },
       ];
@@ -109,7 +146,7 @@ export function orbsLayers(): readonly Record<string, unknown>[] {
       source: ORBS_SOURCE_ID,
       filter: isOrb,
       paint: {
-        "circle-color": GLOW,
+        "circle-color": ["get", "color"],
         "circle-radius": byZoom(4, 9, 16, "spread"),
         "circle-blur": 0.9,
         "circle-opacity": ["*", 0.55, ["get", "opacity"]],
@@ -125,7 +162,7 @@ export function orbsLayers(): readonly Record<string, unknown>[] {
         "circle-color": CORE,
         "circle-radius": byZoom(1.6, 3.4, 6, "scale"),
         "circle-opacity": ["get", "opacity"],
-        "circle-stroke-color": GLOW,
+        "circle-stroke-color": ["get", "color"],
         "circle-stroke-width": 1,
         "circle-stroke-opacity": ["get", "opacity"],
         "circle-pitch-alignment": "map",

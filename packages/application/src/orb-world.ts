@@ -32,8 +32,29 @@ export interface OrbWorldSpill {
   readonly taken: readonly number[];
 }
 
+/** A landmark of a cell, by its archive id (Core orb spill v4). */
+export interface OrbWorldCellLandmark {
+  readonly id: string;
+  readonly at: OrbCoordinate;
+}
+
+/**
+ * A cell that opened for this Bond, as the identity service answered it
+ * (Core orb spill v4, `docs/exp-orbs.md`). It lies until its orbs are picked.
+ */
+export interface OrbWorldCell {
+  readonly key: string;
+  readonly center: OrbCoordinate;
+  readonly registry: number;
+  readonly rated_landmarks: readonly OrbWorldCellLandmark[];
+  /** When this device first drew the spill. */
+  readonly appeared_at: string;
+}
+
 export interface OrbWorldInput {
   readonly spills: readonly OrbWorldSpill[];
+  /** Only for Core orb spill v4+: older runtimes refuse the field. */
+  readonly cells?: readonly OrbWorldCell[];
   /** Orb ids this device already picked up. */
   readonly picked: readonly string[];
   /** The Bond's own observation, only while it may pick up. */
@@ -42,11 +63,17 @@ export interface OrbWorldInput {
   readonly avaia: OrbCoordinate | null;
 }
 
+/** Rarity v2 codes Core reports for a cell orb. */
+export type OrbRarity =
+  "common" | "uncommon" | "rare" | "special" | "exclusive";
+
 export interface OrbWorldOrb {
   readonly id: string;
   readonly kind: "orb" | "goal";
   readonly at: OrbCoordinate;
   readonly lands_at: string;
+  /** A rated cell orb's rarity; a find's orbs carry none. */
+  readonly rarity?: OrbRarity;
 }
 
 export interface OrbWorldView {

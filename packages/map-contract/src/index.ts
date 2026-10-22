@@ -254,6 +254,7 @@ export interface MapObservedPosition {
  * never a persisted or shared assertion of presence.
  */
 export interface MapObservedPositionLabel {
+  readonly subscriptionTier?: SubscriptionAuraTier;
   readonly title: string;
   readonly detail?: string;
   /**
@@ -556,6 +557,17 @@ export interface MapOrb {
    * falling; one whose time has passed is simply there.
    */
   readonly landsAt: number;
+  /** A cell orb's rarity, which tints it; a find's orbs have none. */
+  readonly rarity?: FlightLootRarity;
+  /**
+   * Set once it is picked up: it is drawn to whoever reached it, from `at`
+   * (wall-clock milliseconds), and is gone when it arrives. Presentation only.
+   */
+  readonly pulledTo?: {
+    readonly longitude: number;
+    readonly latitude: number;
+    readonly at: number;
+  };
 }
 
 /** Flight collectibles are transient renderer props, not durable claims. */
@@ -818,7 +830,16 @@ export type AvatarClipId =
  * proximity, consent, or Relationship state. Callers may only create handles
  * from authority they already possess.
  */
+export type SubscriptionAuraTier = "special" | "exclusive";
+
 export interface AvatarHandle {
+  /** Presentation only: caller must resolve a current, authority-backed tier.
+   * Omit to clear the effect; pickup preferences and loot rarity cannot set it. */
+  readonly subscriptionAura?: SubscriptionAuraTier;
+  /** Identity key for immediate clearing when a reused body changes owner. */
+  readonly subscriptionSubject?: string;
+  /** Freeze decorative aura motion without removing its tier colour. */
+  readonly reducedMotion?: boolean;
   /** Equipped carry supplied by the application, independent of wardrobe. */
   readonly backpack?: boolean;
   readonly id: string;

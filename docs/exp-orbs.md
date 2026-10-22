@@ -1,8 +1,10 @@
 # Experience Orbs
 
-**Status:** decided product rule, **not yet implemented**. The live client
-still runs the per-find spill described in Core's
-[orb spills](https://github.com/nilx-one/core/blob/master/docs/orb-spills.md)
+**Status:** implemented in Core (orb spill v4), the identity service
+(contract 16) and the Web client, **not yet deployed**. No landmark source is
+wired yet, so a cell spills its own five orbs only; the landmark orbs follow
+the archive landmark PR. Hosts on an older Core keep the per-find spill of
+Core's [orb spills](https://github.com/nilx-one/core/blob/master/docs/orb-spills.md)
 and [Landmark-directed orbs](landmark-directed-orbs.md). The delivery plan is
 [`project/exp-orbs-plan.yaml`](project/exp-orbs-plan.yaml).
 
@@ -25,7 +27,7 @@ nor the code silently drifts from the decision.
 | Who picks up      | Both the Bond and its Avaia, each where it actually is, within 15 m of the orb                           |
 | How it feels      | Within reach, the orb is drawn to the picker, with a sound and a light haptic tap where the host has one |
 | Who earns         | Whoever picks the orb up: the Bond's pick-up pays the Bond, the Avaia's pays the Avaia                   |
-| What one orb pays | Unchanged: Core's `ORB_EXPERIENCE` (10)                                                                  |
+| What one orb pays | By its rarity: 10, 20, 40, 80 or 160 (Core's `orb_experience`, registry 1)                               |
 | Whose orbs        | The Bond's own. Another Bond never sees them, and they are not shared or claimed against anybody         |
 
 A cell with no landmark spills 5 orbs; a cell with two spills 15. Most cells
@@ -89,7 +91,10 @@ Bond**:
   a find;
 - the spill is private to the Bond: no stored spill on the service, no
   first-wins between Bonds, no `taken`;
-- `orb_picked_up` has no weekly cap; an orb id pays once;
+- a cell orb pays as a `cell_orb_picked_up` award by its orb id, once, with
+  no weekly cap; a find's `orb_picked_up` keeps its own rules;
+- a cell orb has a rarity, capped by its landmark's; it pays 10 times its
+  multiplier ([Experience Orb rarity](https://github.com/nilx-one/0x1/blob/master/documents/product-direction/rarity-coefficient.md));
 - finds stay what they are: rolled, seen and picked up under their own
   rules. An orb is not a find and does not claim one.
 
@@ -104,8 +109,8 @@ reports where its Bond and Avaia are.
   versioned change to `orb_world`, exported through Wasm and UniFFI, with the
   per-find v1/v2 wire kept readable for older hosts.
 - **Identity service** (`services/identity`): answers a cell's spill through
-  Core over the published archive, without storing it; prices an
-  `orb_picked_up` award for either earner by its orb id, once, without a
+  Core over the published archive, without storing it; prices a
+  `cell_orb_picked_up` award for either earner by its orb id, once, without a
   weekly cap.
 - **Web**: sends the opened cell, draws the answered spill, reports reach,
   and plays the pick-up's pull, sound and haptic tap. It never computes a
