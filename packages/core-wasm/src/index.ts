@@ -32,6 +32,7 @@ import type {
   CorePubDressLabelResult,
   CoreRuntimePort,
   CoreRuntimeStatus,
+  CoreLandmarkMapRequest,
   OrbCoordinate,
   OrbWorldInput,
   OrbWorldOrb,
