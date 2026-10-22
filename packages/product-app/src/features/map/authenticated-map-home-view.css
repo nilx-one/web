@@ -460,6 +460,24 @@
 
 /* The two places sit side by side and claim nothing about each other. A dash
    between two names reads as a minus or a typo; a hairline only separates. */
+.bond-dock__public-url {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--map-ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.bond-dock__public-url:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
 .bond-dock__link {
   justify-self: center;
   width: 1px;
