@@ -36,24 +36,19 @@ function generatedRuntime(
 }
 
 describe("CoreWasmClient", () => {
-  it("exposes Core's landmark map export only when verified Wasm contains it", async () => {
+  it("binds optional Core landmark map exports", async () => {
     const empty = await loadGeneratedCoreWasmBindings({
       importRuntime: async () => generatedRuntime(),
     });
     const request = {
       registry: 1,
-      landmarks: [
-        {
-          id: "n123",
-          at: { longitude_e7: "305000000", latitude_e7: "504500000" },
-        },
-      ],
+      landmarks: [{ id: "n123", at: { longitude_e7: "0", latitude_e7: "0" } }],
     };
-    await expect(
-      createCoreWasmClient({ loadBindings: async () => empty }).landmarkMapView!(
-        request,
-      ),
-    ).rejects.toThrow("landmark map binding is missing");
+    const missing = createCoreWasmClient({ loadBindings: async () => empty });
+    await expect(missing.landmarkMapView!(request)).rejects.toThrow(
+      "landmark map binding is missing",
+    );
+
     const received: string[] = [];
     const bindings = await loadGeneratedCoreWasmBindings({
       importRuntime: async () =>
@@ -64,11 +59,12 @@ describe("CoreWasmClient", () => {
           },
         }),
     });
-    await expect(
-      createCoreWasmClient({ loadBindings: async () => bindings }).landmarkMapView!(
-        request,
-      ),
-    ).resolves.toBe('{"ok":true,"registry":1,"landmarks":[]}');
+    const present = createCoreWasmClient({
+      loadBindings: async () => bindings,
+    });
+    await expect(present.landmarkMapView!(request)).resolves.toBe(
+      '{"ok":true,"registry":1,"landmarks":[]}',
+    );
     expect(received).toEqual([JSON.stringify(request)]);
   });
 
