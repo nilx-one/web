@@ -51,7 +51,7 @@ const view = JSON.stringify({
 });
 
 describe("Core curated landmark map projection", () => {
-  it("renders ALL Rare/Special/Exclusive mapped subjects in stable identities", () => {
+  it("keeps every verified Rare+ archive landmark", () => {
     const pins = curatedLandmarkPins(view, labels);
     expect(pins.map(({ id, rarity }) => [id, rarity])).toEqual([
       ["a", "rare"],
@@ -62,7 +62,7 @@ describe("Core curated landmark map projection", () => {
     expect(pins[2]?.weight).toBe(1);
   });
 
-  it("does not accept a missing, displaced, duplicated or fake archive ID", () => {
+  it("rejects missing, displaced and duplicated archive IDs", () => {
     expect(() => curatedLandmarkPins(view, labels.slice(0, 2))).toThrow();
     expect(() =>
       curatedLandmarkPins(
@@ -76,7 +76,7 @@ describe("Core curated landmark map projection", () => {
     ).toThrow();
   });
 
-  it("refuses unsupported/errored views rather than inventing rare pins", () => {
+  it("fails closed for errors and unsupported rarity", () => {
     expect(() =>
       curatedLandmarkPins('{"ok":false,"error":"invalid"}', labels),
     ).toThrow();
