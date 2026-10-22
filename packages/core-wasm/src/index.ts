@@ -1293,7 +1293,9 @@ class CoreWasmClient implements CoreRuntimePort {
   }
 
   /** Missing Core map export must fail closed. */
-  public async landmarkMapView(request: CoreLandmarkMapRequest): Promise<string> {
+  public async landmarkMapView(
+    request: CoreLandmarkMapRequest,
+  ): Promise<string> {
     const bindings = await this.loadBindings();
     if (bindings.landmarkMapView === undefined) {
       throw new Error("0x1 Core Wasm landmark map binding is missing");
