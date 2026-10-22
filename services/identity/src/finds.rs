@@ -187,6 +187,9 @@ pub enum AwardKind {
     CraftFinished,
     /// One orb of a spill, picked up by whoever reached it first.
     OrbPickedUp,
+    /// One orb of a cell that opened for the Bond (`docs/exp-orbs.md`),
+    /// priced by its orb id: `crate::cell_orbs::price`.
+    CellOrbPickedUp,
 }
 
 impl AwardKind {
@@ -200,6 +203,7 @@ impl AwardKind {
             "find_picked_up" => Self::FindPickedUp,
             "craft_finished" => Self::CraftFinished,
             "orb_picked_up" => Self::OrbPickedUp,
+            "cell_orb_picked_up" => Self::CellOrbPickedUp,
             _ => return None,
         })
     }
@@ -214,6 +218,7 @@ impl AwardKind {
             Self::FindPickedUp => "find_picked_up",
             Self::CraftFinished => "craft_finished",
             Self::OrbPickedUp => "orb_picked_up",
+            Self::CellOrbPickedUp => "cell_orb_picked_up",
         }
     }
 }
@@ -240,8 +245,8 @@ pub fn award_amount(kind: AwardKind, earner: Earner, tier: Option<u8>) -> Option
         (AwardKind::LandmarkNoticed, Earner::Bond) => Some(EXPERIENCE_UNIT * 2),
         (AwardKind::FindSeen, _) => Some(FIND_SEEN_EXPERIENCE),
         (AwardKind::OrbPickedUp, _) => Some(ORB_EXPERIENCE),
-        // Priced by its recipe: `craft_award`.
-        (AwardKind::CraftFinished, _) => None,
+        // Priced by its recipe: `craft_award`; by its orb id: `cell_orbs`.
+        (AwardKind::CraftFinished | AwardKind::CellOrbPickedUp, _) => None,
         (AwardKind::FindPickedUp, earner) => {
             let tier = tier?;
             if earner == Earner::Avaia && tier > AVAIA_PICKUP_MAX_TIER {
@@ -324,6 +329,8 @@ pub fn weekly_cap(kind: AwardKind, tier: Option<u8>) -> u32 {
         (AwardKind::CraftFinished, _) => 300,
         // Thirty at most per find, and a find spills once a week.
         (AwardKind::OrbPickedUp, _) => 1_500,
+        // Experience, not money: no weekly cap. Each orb id pays once.
+        (AwardKind::CellOrbPickedUp, _) => u32::MAX,
     }
 }
 

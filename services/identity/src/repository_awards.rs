@@ -25,6 +25,8 @@ pub struct CommittedAward {
     pub claim: Option<FindClaim>,
     /// Set for an orb pick-up: which orb of which spill.
     pub orb: Option<OrbClaim>,
+    /// Set for a cell orb pick-up: a digest of the orb's id, nothing else.
+    pub cell_orb: Option<String>,
 }
 
 /// One orb a pick-up claims: its find's public sha and its number.
@@ -387,6 +389,23 @@ async fn commit_award(
         }
     }
 
+    if let Some(orb_sha) = &award.cell_orb {
+        // A cell's orbs are this Bond's own: one already paid, to it or its
+        // Avaia, was picked up on another device or by the other of them.
+        let claimed = sqlx::query(
+            "INSERT INTO cell_orb_claims (owner_pub_dress, orb_sha) VALUES (?, ?) \
+             ON CONFLICT(owner_pub_dress, orb_sha) DO NOTHING",
+        )
+        .bind(owner.as_str())
+        .bind(orb_sha)
+        .execute(&mut **transaction)
+        .await?
+        .rows_affected();
+        if claimed == 0 {
+            return Ok(AwardOutcome::AlreadyYours);
+        }
+    }
+
     apply_event(
         transaction,
         owner,
@@ -460,6 +479,7 @@ mod award_tests {
             weekly_cap: 2,
             claim: None,
             orb: None,
+            cell_orb: None,
         }
     }
 
@@ -479,6 +499,7 @@ mod award_tests {
                 tier: 5,
             }),
             orb: None,
+            cell_orb: None,
         }
     }
 
@@ -785,6 +806,7 @@ mod award_tests {
                 artifact_sha: sha,
                 orb: 3,
             }),
+            cell_orb: None,
         };
         let (_, outcomes) = repository
             .commit_awards(&sky, &[orb], EPOCH, u64::try_from(gone / 1000).expect("seconds"))
