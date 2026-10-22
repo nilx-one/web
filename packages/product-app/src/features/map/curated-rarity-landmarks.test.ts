@@ -152,6 +152,23 @@ describe("complete archive batches through Core Wasm", () => {
     expect(calls).toBe(0);
   });
 
+  it("validates registry and runtime even when the archive has no labels", async () => {
+    let calls = 0;
+    await expect(
+      curatedLandmarkPinsFromPublication(
+        {
+          landmarkMapView: async (request: CoreLandmarkMapRequest) => {
+            calls += 1;
+            expect(request.landmarks).toEqual([]);
+            return '{"ok":false,"error":"invalid"}';
+          },
+        },
+        { ...publication, labels: [] },
+      ),
+    ).rejects.toThrow("registry mismatch");
+    expect(calls).toBe(1);
+  });
+
   it("rejects a registry mismatch or failed page atomically", async () => {
     await expect(
       curatedLandmarkPinsFromPublication(
