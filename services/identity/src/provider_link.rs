@@ -101,6 +101,20 @@ impl ProviderLinkRepository {
         })
     }
 
+    /// The Bond `account` is bound to, if any.
+    pub async fn owner(&self, account: &ProviderAccount) -> Result<Option<PubDress>, sqlx::Error> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT pub_dress FROM identity_providers WHERE provider = ? AND provider_subject = ?",
+        )
+        .bind(account.provider.as_str())
+        .bind(account.subject.as_str())
+        .fetch_optional(&self.pool)
+        .await?
+        .as_deref()
+        .map(stored_pub_dress)
+        .transpose()
+    }
+
     pub async fn list(&self, pub_dress: &PubDress) -> Result<Vec<String>, sqlx::Error> {
         sqlx::query_scalar::<_, String>(
             "SELECT provider FROM identity_providers WHERE pub_dress = ? ORDER BY CASE provider WHEN 'telegram' THEN 0 WHEN 'discord' THEN 1 WHEN 'github' THEN 2 ELSE 99 END",
