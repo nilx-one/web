@@ -8,6 +8,11 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 
+use nilxone_contracts::{
+    DisconnectDecision, DisconnectSnapshot, LinkDecision, LinkSnapshot, ProviderAccount,
+    ProviderSubject, ProviderType, decide_link, decide_self_disconnect,
+};
+
 use crate::{IdentityProvider, ProviderIdentity, PubDress};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,79 +62,21 @@ impl ProviderLinkRepository {
         Ok(Self { pool })
     }
 
+    /// Connects `provider` to `pub_dress`. The binding rules are Core's
+    /// (`nilxone_contracts::decide_link`); this reads the snapshot Core decides
+    /// on and stores what Core says, in one transaction.
     pub async fn link(
         &self,
         pub_dress: &PubDress,
         provider: &ProviderIdentity,
     ) -> Result<ProviderLinkOutcome, sqlx::Error> {
+        let account = core_account(provider)?;
         let mut transaction = self.pool.begin().await?;
-        let human_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM identities WHERE pub_dress = ? AND identity_kind = 'human')",
-        )
-        .bind(pub_dress.as_str())
-        .fetch_one(&mut *transaction)
-        .await?;
-        if !human_exists {
-            transaction.rollback().await?;
-            return Ok(ProviderLinkOutcome::IdentityMissing);
-        }
-
-        let evidence_table_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'github_evidence_connections')",
-        )
-        .fetch_one(&mut *transaction)
-        .await?;
-        if provider.provider == IdentityProvider::Github && evidence_table_exists {
-            if let Some(existing_pub_dress) = sqlx::query_scalar::<_, String>(
-                "SELECT pub_dress FROM github_evidence_connections WHERE github_user_id = ?",
-            )
-            .bind(&provider.subject)
-            .fetch_optional(&mut *transaction)
-            .await?
-                && existing_pub_dress != pub_dress.as_str()
-            {
-                transaction.commit().await?;
-                return Ok(ProviderLinkOutcome::ProviderAlreadyLinked);
-            }
-            if let Some(existing_subject) = sqlx::query_scalar::<_, String>(
-                "SELECT github_user_id FROM github_evidence_connections WHERE pub_dress = ?",
-            )
-            .bind(pub_dress.as_str())
-            .fetch_optional(&mut *transaction)
-            .await?
-                && existing_subject != provider.subject
-            {
-                transaction.commit().await?;
-                return Ok(ProviderLinkOutcome::ProviderTypeAlreadyLinked);
-            }
-        }
-
-        if let Some(existing_pub_dress) = sqlx::query_scalar::<_, String>(
-            "SELECT pub_dress FROM identity_providers WHERE provider = ? AND provider_subject = ?",
-        )
-        .bind(provider.provider.as_str())
-        .bind(&provider.subject)
-        .fetch_optional(&mut *transaction)
-        .await?
-        {
+        let snapshot = link_snapshot(&mut transaction, pub_dress, provider).await?;
+        let decision = decide_link(pub_dress, &account, &snapshot);
+        if decision != LinkDecision::Insert {
             transaction.commit().await?;
-            return Ok(if existing_pub_dress == pub_dress.as_str() {
-                ProviderLinkOutcome::AlreadyLinked
-            } else {
-                ProviderLinkOutcome::ProviderAlreadyLinked
-            });
-        }
-
-        let same_provider_subject = sqlx::query_scalar::<_, String>(
-            "SELECT provider_subject FROM identity_providers WHERE pub_dress = ? AND provider = ? LIMIT 1",
-        )
-        .bind(pub_dress.as_str())
-        .bind(provider.provider.as_str())
-        .fetch_optional(&mut *transaction)
-        .await?;
-        if same_provider_subject.is_some() {
-            transaction.commit().await?;
-            return Ok(ProviderLinkOutcome::ProviderTypeAlreadyLinked);
+            return Ok(link_outcome(decision));
         }
 
         let insert = sqlx::query(
@@ -145,35 +92,27 @@ impl ProviderLinkRepository {
             return Ok(ProviderLinkOutcome::Linked);
         }
 
-        let existing_pub_dress = sqlx::query_scalar::<_, String>(
+        // A concurrent link won the insert: decide again on what it stored.
+        let snapshot = link_snapshot(&mut transaction, pub_dress, provider).await?;
+        transaction.commit().await?;
+        Ok(match decide_link(pub_dress, &account, &snapshot) {
+            LinkDecision::Insert => ProviderLinkOutcome::IdentityMissing,
+            decision => link_outcome(decision),
+        })
+    }
+
+    /// The Bond `account` is bound to, if any.
+    pub async fn owner(&self, account: &ProviderAccount) -> Result<Option<PubDress>, sqlx::Error> {
+        sqlx::query_scalar::<_, String>(
             "SELECT pub_dress FROM identity_providers WHERE provider = ? AND provider_subject = ?",
         )
-        .bind(provider.provider.as_str())
-        .bind(&provider.subject)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        if let Some(existing_pub_dress) = existing_pub_dress {
-            transaction.commit().await?;
-            return Ok(if existing_pub_dress == pub_dress.as_str() {
-                ProviderLinkOutcome::AlreadyLinked
-            } else {
-                ProviderLinkOutcome::ProviderAlreadyLinked
-            });
-        }
-
-        let same_provider_subject = sqlx::query_scalar::<_, String>(
-            "SELECT provider_subject FROM identity_providers WHERE pub_dress = ? AND provider = ? LIMIT 1",
-        )
-        .bind(pub_dress.as_str())
-        .bind(provider.provider.as_str())
-        .fetch_optional(&mut *transaction)
-        .await?;
-        transaction.commit().await?;
-        Ok(if same_provider_subject.is_some() {
-            ProviderLinkOutcome::ProviderTypeAlreadyLinked
-        } else {
-            ProviderLinkOutcome::IdentityMissing
-        })
+        .bind(account.provider.as_str())
+        .bind(account.subject.as_str())
+        .fetch_optional(&self.pool)
+        .await?
+        .as_deref()
+        .map(stored_pub_dress)
+        .transpose()
     }
 
     pub async fn list(&self, pub_dress: &PubDress) -> Result<Vec<String>, sqlx::Error> {
@@ -217,11 +156,6 @@ impl ProviderLinkRepository {
         .bind(provider.as_str())
         .fetch_one(&mut *transaction)
         .await?;
-        if !linked {
-            transaction.rollback().await?;
-            return Ok(SelfDisconnectOutcome::NotLinked);
-        }
-
         let other_providers = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM identity_providers WHERE pub_dress = ? AND provider <> ?",
         )
@@ -235,18 +169,144 @@ impl ProviderLinkRepository {
         .bind(pub_dress.as_str())
         .fetch_one(&mut *transaction)
         .await?;
-        if other_providers == 0 && !password_active {
-            transaction.rollback().await?;
-            return Ok(SelfDisconnectOutcome::SoleAccessPath);
-        }
 
-        sqlx::query("DELETE FROM identity_providers WHERE pub_dress = ? AND provider = ?")
-            .bind(pub_dress.as_str())
-            .bind(provider.as_str())
-            .execute(&mut *transaction)
+        let decision = decide_self_disconnect(DisconnectSnapshot {
+            linked,
+            other_providers: u32::try_from(other_providers).unwrap_or(u32::MAX),
+            password_active,
+        });
+        match decision {
+            DisconnectDecision::Delete => {
+                sqlx::query("DELETE FROM identity_providers WHERE pub_dress = ? AND provider = ?")
+                    .bind(pub_dress.as_str())
+                    .bind(provider.as_str())
+                    .execute(&mut *transaction)
+                    .await?;
+                transaction.commit().await?;
+                Ok(SelfDisconnectOutcome::Disconnected)
+            }
+            DisconnectDecision::NotLinked => {
+                transaction.rollback().await?;
+                Ok(SelfDisconnectOutcome::NotLinked)
+            }
+            DisconnectDecision::SoleAccessPath => {
+                transaction.rollback().await?;
+                Ok(SelfDisconnectOutcome::SoleAccessPath)
+            }
+        }
+    }
+}
+
+/// Reads what Core decides a link on. The GitHub evidence table, where it
+/// exists, is consulted first, exactly as before the rules moved to Core: its
+/// owner and its subject for this Bond take precedence over the provider map.
+async fn link_snapshot(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    pub_dress: &PubDress,
+    provider: &ProviderIdentity,
+) -> Result<LinkSnapshot, sqlx::Error> {
+    let bond_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM identities WHERE pub_dress = ? AND identity_kind = 'human')",
+    )
+    .bind(pub_dress.as_str())
+    .fetch_one(&mut **transaction)
+    .await?;
+    if !bond_exists {
+        return Ok(LinkSnapshot {
+            bond_exists,
+            account_owner: None,
+            bond_subject: None,
+        });
+    }
+
+    if provider.provider == IdentityProvider::Github {
+        let evidence_table_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'github_evidence_connections')",
+        )
+        .fetch_one(&mut **transaction)
+        .await?;
+        if evidence_table_exists {
+            let evidence_owner = sqlx::query_scalar::<_, String>(
+                "SELECT pub_dress FROM github_evidence_connections WHERE github_user_id = ?",
+            )
+            .bind(&provider.subject)
+            .fetch_optional(&mut **transaction)
             .await?;
-        transaction.commit().await?;
-        Ok(SelfDisconnectOutcome::Disconnected)
+            if let Some(owner) = evidence_owner.filter(|owner| owner != pub_dress.as_str()) {
+                return Ok(LinkSnapshot {
+                    bond_exists,
+                    account_owner: Some(stored_pub_dress(&owner)?),
+                    bond_subject: None,
+                });
+            }
+            let evidence_subject = sqlx::query_scalar::<_, String>(
+                "SELECT github_user_id FROM github_evidence_connections WHERE pub_dress = ?",
+            )
+            .bind(pub_dress.as_str())
+            .fetch_optional(&mut **transaction)
+            .await?;
+            if let Some(subject) = evidence_subject.filter(|subject| *subject != provider.subject) {
+                return Ok(LinkSnapshot {
+                    bond_exists,
+                    account_owner: None,
+                    bond_subject: Some(stored_subject(&subject)?),
+                });
+            }
+        }
+    }
+
+    let account_owner = sqlx::query_scalar::<_, String>(
+        "SELECT pub_dress FROM identity_providers WHERE provider = ? AND provider_subject = ?",
+    )
+    .bind(provider.provider.as_str())
+    .bind(&provider.subject)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    let bond_subject = sqlx::query_scalar::<_, String>(
+        "SELECT provider_subject FROM identity_providers WHERE pub_dress = ? AND provider = ? LIMIT 1",
+    )
+    .bind(pub_dress.as_str())
+    .bind(provider.provider.as_str())
+    .fetch_optional(&mut **transaction)
+    .await?;
+    Ok(LinkSnapshot {
+        bond_exists,
+        account_owner: account_owner.as_deref().map(stored_pub_dress).transpose()?,
+        bond_subject: bond_subject.as_deref().map(stored_subject).transpose()?,
+    })
+}
+
+fn core_account(provider: &ProviderIdentity) -> Result<ProviderAccount, sqlx::Error> {
+    let provider_type = match provider.provider {
+        IdentityProvider::Telegram => ProviderType::Telegram,
+        IdentityProvider::Discord => ProviderType::Discord,
+        IdentityProvider::Github => ProviderType::Github,
+    };
+    Ok(ProviderAccount {
+        provider: provider_type,
+        subject: stored_subject(&provider.subject)?,
+    })
+}
+
+fn stored_subject(value: &str) -> Result<ProviderSubject, sqlx::Error> {
+    value
+        .parse()
+        .map_err(|error| sqlx::Error::Decode(Box::new(error)))
+}
+
+fn stored_pub_dress(value: &str) -> Result<PubDress, sqlx::Error> {
+    value
+        .parse()
+        .map_err(|error| sqlx::Error::Decode(Box::new(error)))
+}
+
+const fn link_outcome(decision: LinkDecision) -> ProviderLinkOutcome {
+    match decision {
+        LinkDecision::Insert => ProviderLinkOutcome::Linked,
+        LinkDecision::AlreadyLinked => ProviderLinkOutcome::AlreadyLinked,
+        LinkDecision::ProviderAlreadyLinked => ProviderLinkOutcome::ProviderAlreadyLinked,
+        LinkDecision::ProviderTypeAlreadyLinked => ProviderLinkOutcome::ProviderTypeAlreadyLinked,
+        LinkDecision::IdentityMissing => ProviderLinkOutcome::IdentityMissing,
     }
 }
 

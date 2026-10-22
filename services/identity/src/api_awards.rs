@@ -53,7 +53,8 @@ async fn commit_awards_response(
     let Some(now_ms) = now.checked_mul(1000).and_then(|ms| i64::try_from(ms).ok()) else {
         return unavailable();
     };
-    let Some(awards) = validate_awards(request, now_ms) else {
+    let Some(awards) = validate_awards(request, now_ms, &state.secret_digester, owner.as_str())
+    else {
         return no_store_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_awards",
@@ -100,6 +101,8 @@ async fn commit_awards_response(
 fn validate_awards(
     request: &CommitAwardsRequest,
     now_ms: i64,
+    digester: &crate::SecretDigester,
+    owner: &str,
 ) -> Option<Vec<crate::repository::CommittedAward>> {
     use crate::finds::{self, AwardKind};
 
@@ -120,6 +123,40 @@ fn validate_awards(
             crate::repository::ExperienceEarner::Bond => finds::Earner::Bond,
             crate::repository::ExperienceEarner::Avaia => finds::Earner::Avaia,
         };
+        // A cell orb names its orb id and its cell, and nothing else. The
+        // service remakes the cell's key for this Bond and prices the orb by
+        // its id; the cell is not kept, only a digest of the orb id.
+        if kind == AwardKind::CellOrbPickedUp {
+            let (Some(orb_id), Some(cell)) = (body.orb_id.as_deref(), body.cell.as_deref()) else {
+                return None;
+            };
+            if body.tier.is_some()
+                || body.recipe.is_some()
+                || body.artifact_id.is_some()
+                || body.orb.is_some()
+            {
+                return None;
+            }
+            let cell = crate::cell_orbs::parse_cell(cell)?;
+            let amount = crate::cell_orbs::price(digester, owner, cell, orb_id)?;
+            awards.push(crate::repository::CommittedAward {
+                id: body.id.clone(),
+                parent: body.parent.clone(),
+                chain: body.chain.clone(),
+                kind: kind.as_str(),
+                tier: 0,
+                earner,
+                amount,
+                weekly_cap: finds::weekly_cap(kind, None),
+                claim: None,
+                orb: None,
+                cell_orb: Some(crate::cell_orbs::orb_digest(orb_id)),
+            });
+            continue;
+        }
+        if body.orb_id.is_some() || body.cell.is_some() {
+            return None;
+        }
         // An orb names its find and which of its orbs, and nothing else. Either
         // earner may pick it up; whether it still lies is the claim's to say.
         if kind == AwardKind::OrbPickedUp {
@@ -149,6 +186,7 @@ fn validate_awards(
                     artifact_sha: finds::artifact_sha(artifact_id),
                     orb,
                 }),
+                cell_orb: None,
             });
             continue;
         }
@@ -177,6 +215,7 @@ fn validate_awards(
                 weekly_cap: finds::weekly_cap(kind, Some(bucket)),
                 claim: None,
                 orb: None,
+                cell_orb: None,
             });
             continue;
         }
@@ -221,6 +260,7 @@ fn validate_awards(
             weekly_cap: finds::weekly_cap(kind, body.tier),
             claim,
             orb: None,
+            cell_orb: None,
         });
     }
     Some(awards)
@@ -315,6 +355,72 @@ async fn read_claims_response(
             unavailable()
         }
     }
+}
+
+/// Answers the spill of a cell that opened for this Bond (`docs/exp-orbs.md`):
+/// its key, centre, registry and landmarks. Nothing about the request is
+/// kept or logged.
+async fn spill_cell(
+    State(state): State<ApiState>,
+    headers: HeaderMap,
+    Json(request): Json<CellSpillRequest>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) {
+        return response;
+    }
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let (identity, _active, _token_hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
+    let mut response = spill_cell_response(&state, &identity, &request, now);
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
+
+fn spill_cell_response(
+    state: &ApiState,
+    identity: &IdentityRecord,
+    request: &CellSpillRequest,
+    now: u64,
+) -> Response {
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        tracing::error!("stored human pub_dress is invalid");
+        return unavailable();
+    };
+    let Some(cell) = crate::cell_orbs::parse_cell(&request.cell) else {
+        return no_store_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_cell",
+            "A cell is one H3 index of the fog's resolution, in lowercase hex.",
+        );
+    };
+    if let Err(retry_after) = state
+        .limiter
+        .consume(format!("cell-spills:{}", owner.as_str()), now, 600, 3600)
+        .and_then(|_| state.limiter.consume("cell-spills:global", now, 50_000, 3600))
+    {
+        return rate_limited(retry_after);
+    }
+    let spill = crate::cell_orbs::spill(&state.secret_digester, owner.as_str(), cell);
+    no_store_json(
+        StatusCode::OK,
+        CellSpillResponse {
+            key: spill.key,
+            center: CenterBody {
+                longitude_e7: spill.center.0.to_string(),
+                latitude_e7: spill.center.1.to_string(),
+            },
+            registry: spill.registry,
+            rated_landmarks: Vec::new(),
+        },
+    )
 }
 
 async fn spill_orbs(
@@ -499,6 +605,13 @@ struct AwardBody {
     /// For `orb_picked_up` only: which orb of the named find's spill.
     #[serde(default)]
     orb: Option<u8>,
+    /// For `cell_orb_picked_up` only: Core's rated orb id.
+    #[serde(default)]
+    orb_id: Option<String>,
+    /// For `cell_orb_picked_up` only: the cell the orb spilled from. Never
+    /// kept.
+    #[serde(default)]
+    cell: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -531,6 +644,34 @@ struct ClaimsResponse {
 struct ClaimBody {
     sha: String,
     yours: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CellSpillRequest {
+    cell: String,
+}
+
+/// A cell's spill in Core's `orb_world` `cells` shape, less `appeared_at`,
+/// which is the device's own.
+#[derive(Debug, Serialize)]
+struct CellSpillResponse {
+    key: String,
+    center: CenterBody,
+    registry: u32,
+    rated_landmarks: Vec<CellLandmarkBody>,
+}
+
+#[derive(Debug, Serialize)]
+struct CenterBody {
+    longitude_e7: String,
+    latitude_e7: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CellLandmarkBody {
+    id: String,
+    at: CenterBody,
 }
 
 #[derive(Debug, Deserialize)]

@@ -133,6 +133,8 @@ A Bond has exactly one location, whichever host it is set from. `GET /api/v1/loc
 - `GET /api/v1/identity/xping/engine` answers the Bond's xPing engine (`docs/xping-engine.md` in nilx-one/core): `{ "state": …, "engine": { "energy_permille", "smoke_permille", "broken", "empty_margin_ms", "full_at_ms", "repair_seeds" }, "now_ms", "authority": "client" }`. A Bond without a stored engine has a full one.
 - `POST /api/v1/identity/xping/engine` (active Bond, CSRF header required) takes `{ "op": "force", "forced_ms": n }` (1 ms to two full engines per report) or `{ "op": "repaired", "paid_seeds": n, "expected": <state> }`, applies Core's rules at the service's clock and answers as the read does. Core counts forcing past empty and breaks the engine itself, recorded at the service's time. A repair is applied only to the exact `expected` state it was priced from (`409 stale_engine` otherwise, so a replay or a second device repairs once) and only when `paid_seeds` covers Core's price (`409 underpaid`). The Seeds are device-side, so the payment is `authority: "client"`; the device stores its inventory only after this answers 200.
 - An `orb_picked_up` award names its find (`artifact_id`) and which orb (`orb`), from either earner, and pays 10. Like a rare pick-up it is a claim: the first Bond to reach the orb keeps it, a later one gets `taken`, as does an orb whose spill is gone or never fell.
+- `POST /api/v1/identity/orbs/cell-spill` accepts `{ "cell": "<H3 index>" }` (resolution 9, lowercase hex) from a signed-in Bond (CSRF header required) when a fog cell opens for it ([Experience Orbs](../../docs/exp-orbs.md), contract 16). It answers the cell's spill in Core's `orb_world` `cells` shape, less the device's own `appeared_at`: `{ "key": "<64 hex>", "center": { "longitude_e7": "…", "latitude_e7": "…" }, "registry": 1, "rated_landmarks": [] }`. The key is the service's keyed digest of the Bond and the cell, so the same cell always answers the same spill. Nothing about the request is stored or logged. No landmark source is wired yet: a spill holds the cell's own five Common orbs.
+- A `cell_orb_picked_up` award names Core's rated orb id (`orb_id`) and its `cell`, from either earner, and nothing else. The service remakes the cell's key for this Bond, refuses an id of another key, an unpublished registry or a landmark it cannot place in the cell, and prices the orb by Core's `rated_orb_award` (10 for a Common orb). It has no weekly cap; the same orb pays once, to the Bond or its Avaia, and a second pick-up is `already_yours`. Only a SHA-256 of the orb id is kept, never the cell.
 - `GET /api/v1/identity/public` nests the same totals under `pub_info.experience`, with the same `authority: "client"`, and nests the owned Avaia's `configuration_state`, so a public reader can derive the same levels the owner sees from the shared report. The per-device model-download achievement is not part of this projection. The public card says the standing is reported by this Bond.
 
 ## Spoken lines
@@ -157,10 +159,30 @@ Optional runtime settings: `SPEECH_INGEST_TOKEN` (at least 32 bytes; without it
 the routes are not mounted) and `SPEECH_EARSHOT_METERS` (default `500`, at most
 `5000`).
 
+## Partner provider lookup
+
+A partner, such as a business in the 0x1 world, can ask which Bond a provider
+account belongs to. The decision is Core's (`provider_lookup_view`, see
+`nilx-one/core` `docs/provider-bindings.md`). This service only reads the
+binding.
+
+- `POST /api/v1/partner/provider-lookup` with `Authorization: Bearer <PARTNER_LOOKUP_TOKEN>`
+  and body `{"provider": "telegram", "subject": "123456789"}`.
+- `200 {"state": "linked", "pub_dress": "…"}`: only the public handle, never an
+  internal identifier.
+- `200 {"state": "sign_in_required", "provider": "telegram"}`: the account is not
+  bound, so the partner asks the person to sign in with 0x1 and connect it.
+- `401 unauthorized`, `422` (`unknown_provider`, `malformed_request`, or a
+  subject error), `503 unavailable` when the store cannot answer. A `503` is
+  never a `sign_in_required`.
+
+Optional runtime setting: `PARTNER_LOOKUP_TOKEN` (at least 32 bytes; without it
+the route is not mounted).
+
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`,
-`DISCORD_CLIENT_SECRET`, and `SPEECH_INGEST_TOKEN` are server-only runtime secrets. The native authentication
+`DISCORD_CLIENT_SECRET`, `SPEECH_INGEST_TOKEN`, and `PARTNER_LOOKUP_TOKEN` are server-only runtime secrets. The native authentication
 secret and password pepper must be independent values of at least 32 bytes. None
 may be exposed through Vite, browser configuration, repository files, build
 output, Telegram Mini App JavaScript, or Discord Activity JavaScript.

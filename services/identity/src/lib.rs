@@ -12,11 +12,13 @@ pub mod api {
 }
 pub mod browser_web_auth;
 pub mod business_command;
+pub mod cell_orbs;
 pub mod credentials;
 pub mod discord_oauth;
 pub mod finds;
 pub mod github_evidence;
 pub mod location_control;
+pub mod partner_lookup;
 pub mod provider_link;
 pub mod provider_secret;
 pub mod provider_self_service;
@@ -53,6 +55,7 @@ pub use nilxone_contracts::{
     GeoCoordinateError, PubDress, PubDressError, PubDressLabel, PubDressLabelError, StationCaption,
     StationPubDress, StationPubDressError,
 };
+pub use partner_lookup::{PartnerLookupConfig, PartnerLookupConfigError, partner_lookup_router};
 pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository, SelfDisconnectOutcome};
 pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
 pub use provider_self_service::provider_self_service_router;

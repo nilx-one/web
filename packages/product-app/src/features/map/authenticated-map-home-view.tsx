@@ -278,6 +278,48 @@ import { useGuideCutscene } from "../guide/use-guide-cutscene";
 /** The provider types this client can present. The domain owns the list. */
 export type ConnectedProvider = BondProviderType;
 
+/**
+ * A body id bound to a Bond by the application projection that drew it.
+ * Renderer hit tests only report ids; never infer identity from a map id.
+ */
+export interface MapBondReference {
+  readonly bodyId: string;
+  readonly pubDress: string;
+  /** Stored identity-service allocation, not a derived hostname. */
+  readonly pubDressUrl?: string;
+}
+
+/** Keep public links on the allocated, single-label HTTPS Bond origin. */
+export function canonicalBondPublicUrl(
+  value: string | undefined,
+): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const url = new URL(value);
+    const parts = url.hostname.split(".");
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.port !== "" ||
+      url.pathname !== "/" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      parts.length !== 3 ||
+      parts[1] !== "nilx" ||
+      parts[2] !== "one" ||
+      parts[0] === undefined ||
+      parts[0].length > 63 ||
+      !/^(?:0x|xn--)[a-z0-9-]+$/.test(parts[0])
+    ) {
+      return undefined;
+    }
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface AuthenticatedMapHomeViewProps {
   readonly contextualDock?: (observation?: ObservedGeolocation) => ReactNode;
   /** Shared operational inbox visible only after server admin authorization. */
@@ -289,7 +331,11 @@ export interface AuthenticatedMapHomeViewProps {
   };
   readonly hostLabel: string;
   readonly pubDress: string;
+  /** Canonical, server-allocated public address for this authenticated Bond. */
+  readonly pubDressUrl?: string;
   readonly avaiaPubDress?: string;
+  /** Other *rendered* Bond handles, supplied by their authoritative projection. */
+  readonly bondBodies?: readonly MapBondReference[];
   readonly renderer: MapRenderer;
   /** Host-verified Core Rare/Special/Exclusive projection, keyed by canonical
    * archive id. Absent until Identity/map archive integration is deployed. */
@@ -844,7 +890,9 @@ export function AuthenticatedMapHomeView({
   adminRoleInbox,
   hostLabel,
   pubDress,
+  pubDressUrl,
   avaiaPubDress,
+  bondBodies,
   renderer,
   curatedRarityPins = [],
   geolocation,
@@ -886,6 +934,11 @@ export function AuthenticatedMapHomeView({
   const location = useDeviceLocation(geolocation);
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
+  >(undefined);
+  // Only a real activation can select a Bond. Its identity comes from the
+  // projection that owns the rendered handle, not from the handle's spelling.
+  const [selectedBondBodyId, setSelectedBondBodyId] = useState<
+    string | undefined
   >(undefined);
   // The Dock's fixed subtitle names the screen from the first frame. Further
   // down it follows the body: the last section title carried past the header
@@ -957,7 +1010,7 @@ export function AuthenticatedMapHomeView({
   // The camera the renderer actually holds, and whether a person put it there.
   const [camera, setCamera] = useState(() => renderer.getCamera());
   const cameraMovedByPerson = useRef(false);
-  const reachForBody = useRef<() => void>(() => undefined);
+  const reachForBody = useRef<(id: string) => void>(() => undefined);
   const firstFixApplied = useRef(false);
   const presentation = useShellPresentation();
   const observedPosition = deviceLocationPosition(location.state);
@@ -1141,10 +1194,24 @@ export function AuthenticatedMapHomeView({
   const mapViewModel = createMapFoundationViewModel(visibleMapStatus);
   const activeDetail =
     detailState?.section === section ? detailState.detail : undefined;
-  const dockScreen = activeDetail ?? (section === "world" ? "home" : section);
-  // The Dock's navigation stack: the world, a Bond surface, a screen it opens.
+  const selectedBond =
+    section !== "world" || selectedBondBodyId === undefined
+      ? undefined
+      : selectedBondBodyId === BODY_HANDLE_IDS.bond
+        ? { pubDress, pubDressUrl }
+        : selectedBondBodyId === BODY_HANDLE_IDS.avaia
+          ? undefined
+          : bondBodies?.find((body) => body.bodyId === selectedBondBodyId);
+  const selectedBondUrl = canonicalBondPublicUrl(selectedBond?.pubDressUrl);
+  const dockScreen =
+    selectedBond === undefined
+      ? (activeDetail ?? (section === "world" ? "home" : section))
+      : `bond:${selectedBondBodyId}`;
+  // Opening a Bond's identity is one push from the persistent world.
   const dockDepth =
-    (section === "world" ? 0 : 1) + (activeDetail === undefined ? 0 : 1);
+    selectedBond === undefined
+      ? (section === "world" ? 0 : 1) + (activeDetail === undefined ? 0 : 1)
+      : 1;
   const providers =
     connectedProviders === undefined
       ? undefined
@@ -2718,24 +2785,38 @@ export function AuthenticatedMapHomeView({
   ]);
 
   /**
-   * A body on the world answers for itself.
-   *
-   * Reaching for it means the same thing as reaching for the card of whoever is
-   * driving — bring the world to them — and it also puts the Dock back on the
-   * pair, because that is the screen a body belongs to. A renderer that draws
-   * no bodies, or draws them where nothing can be pointed at, publishes no
-   * activation and this simply never runs: the Dock offers both outcomes to a
-   * keyboard regardless.
+   * Hit testing reports only a rendered body id. Open a Bond's own Dock from
+   * its application-owned identity mapping; do not treat arbitrary ids as
+   * pub_dress, infer reciprocal state, or claim a new BondChain event. Avaia
+   * retains the previous wheel-focus behavior.
    */
   useEffect(() => {
     // What the camera would move to depends on where this device is and on the
     // shell it is drawn in, and both change under a subscription that should
     // not be torn down and rebuilt for either. The renderer keeps one listener;
     // this keeps it pointed at the current answer.
-    reachForBody.current = () => {
+    reachForBody.current = (id) => {
+      if (id === BODY_HANDLE_IDS.avaia) {
+        setSelectedBondBodyId(undefined);
+        setDetailState(undefined);
+        if (section !== "world") navigate(WORLD_ROUTE);
+        focusWorldOnWheel();
+        return;
+      }
+      if (
+        id !== BODY_HANDLE_IDS.bond &&
+        !bondBodies?.some(
+          (body) =>
+            body.bodyId === id &&
+            body.bodyId !== BODY_HANDLE_IDS.avaia &&
+            body.bodyId !== BODY_HANDLE_IDS.bond,
+        )
+      ) {
+        return;
+      }
       setDetailState(undefined);
+      setSelectedBondBodyId(id);
       if (section !== "world") navigate(WORLD_ROUTE);
-      focusWorldOnWheel();
     };
   });
 
@@ -2771,7 +2852,9 @@ export function AuthenticatedMapHomeView({
     const subscribe = renderer.subscribeBodyActivation;
     if (subscribe === undefined) return;
 
-    return subscribe.call(renderer, () => reachForBody.current());
+    return subscribe.call(renderer, (activation) =>
+      reachForBody.current(activation.id),
+    );
   }, [renderer]);
 
   // A handover ends on its own: the wheel is already where it is going, and
@@ -3127,7 +3210,9 @@ export function AuthenticatedMapHomeView({
 
   /** The Dock names itself by the screen it is presenting. */
   function dockTitle(): string {
-    return section === "world" ? "Bond" : detailTitle();
+    return (
+      selectedBond?.pubDress ?? (section === "world" ? "Bond" : detailTitle())
+    );
   }
 
   /** The header's small title: the section being read, else the screen. */
@@ -3333,7 +3418,41 @@ export function AuthenticatedMapHomeView({
           ref={dockRef}
         >
           <DockWindow screen={dockScreen} depth={dockDepth}>
-            {section === "world" && activeDetail === undefined ? (
+            {selectedBond !== undefined ? (
+              <div className="bond-dock__detail">
+                <div className="bond-dock__detail-header">
+                  <button
+                    className="interface-settings__back"
+                    type="button"
+                    aria-label={t("settings.back")}
+                    onClick={() => setSelectedBondBodyId(undefined)}
+                  >
+                    <span aria-hidden="true">←</span>
+                  </button>
+                  <div>
+                    <span className="interface-settings__eyebrow">Bond</span>
+                    <h2>{selectedBond.pubDress}</h2>
+                  </div>
+                </div>
+                <div className="bond-dock__scroll">
+                  <div className="bond-profile">
+                    {selectedBondUrl === undefined ? null : (
+                      <a
+                        className="bond-dock__public-url"
+                        href={selectedBondUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {selectedBond.pubDressUrl
+                          ?.replace(/^https:\/\//, "")
+                          .replace(/\/?$/, "/")}
+                        <span aria-hidden="true"> ↗</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : section === "world" && activeDetail === undefined ? (
               <>
                 <div className="bond-dock__header">
                   <span className="bond-dock__kicker">Bond</span>
