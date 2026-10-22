@@ -181,6 +181,7 @@ export {
   type CoreFoundItem,
   type CoreHolder,
   type CoreInventoryAnswer,
+  type CoreLandmarkMapRequest,
   type CoreXpingRepairAnswer,
   type CoreInventoryCommand,
   type CoreRecipe,
