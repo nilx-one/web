@@ -12,6 +12,7 @@ pub mod api {
 }
 pub mod browser_web_auth;
 pub mod business_command;
+pub mod cell_orbs;
 pub mod credentials;
 pub mod discord_oauth;
 pub mod finds;

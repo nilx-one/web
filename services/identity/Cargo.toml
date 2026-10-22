@@ -15,9 +15,10 @@ axum = { version = "0.8", features = ["json"] }
 base64 = "0.22"
 chacha20poly1305 = "0.10"
 getrandom = "0.3"
+h3o = "0.11"
 hmac = "0.12"
 jsonwebtoken = "9"
-nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "2256acf7e9ae41341d36b5fbf8ae7df28ba04f7f" }
+nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "2185f8cc8ec3147e16af94926975ad8a2e549e34" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

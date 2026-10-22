@@ -62,6 +62,7 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/finds/spills",
             get(read_spills).post(spill_orbs),
         )
+        .route("/api/v1/identity/orbs/cell-spill", post(spill_cell))
         .route(
             "/api/v1/identity/xping/engine",
             get(read_xping_engine).post(command_xping_engine),
@@ -999,6 +1000,111 @@ mod pub_info_api_tests {
         )
         .await;
         assert_eq!(tiered.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    fn kyiv_cell() -> String {
+        h3o::LatLng::new(50.4501, 30.5234)
+            .expect("Kyiv")
+            .to_cell(crate::cell_orbs::CELL_RESOLUTION)
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn a_cell_spills_its_own_orbs_and_each_pays_once_uncapped() {
+        let (app, sky, other) = two_bonds().await;
+        let cell = kyiv_cell();
+
+        // Sign in by posting nothing yet: an empty award list.
+        let mut sky_session = None;
+        let empty = serde_json::json!({ "awards": [] });
+        post_awards(&app, &sky, &mut sky_session, &empty).await;
+        let sky_cookie = sky_session.clone().expect("session");
+
+        let spilled = spill_request(
+            &app,
+            &sky_cookie,
+            "POST",
+            "/api/v1/identity/orbs/cell-spill",
+            Some(serde_json::json!({ "cell": cell })),
+        )
+        .await;
+        assert_eq!(spilled.status(), StatusCode::OK);
+        let spilled = json(spilled).await;
+        let key = spilled["key"].as_str().expect("key").to_owned();
+        assert_eq!(key.len(), 64);
+        assert_eq!(spilled["registry"], 1);
+        assert_eq!(spilled["rated_landmarks"], serde_json::json!([]));
+        let longitude: i64 = spilled["center"]["longitude_e7"]
+            .as_str()
+            .expect("longitude")
+            .parse()
+            .expect("decimal");
+        assert!((304_000_000..306_000_000).contains(&longitude), "{longitude}");
+
+        // The same cell answers the same spill: nothing new to farm.
+        let again = spill_request(
+            &app,
+            &sky_cookie,
+            "POST",
+            "/api/v1/identity/orbs/cell-spill",
+            Some(serde_json::json!({ "cell": cell })),
+        )
+        .await;
+        assert_eq!(json(again).await["key"], key);
+        let bad = spill_request(
+            &app,
+            &sky_cookie,
+            "POST",
+            "/api/v1/identity/orbs/cell-spill",
+            Some(serde_json::json!({ "cell": "nope" })),
+        )
+        .await;
+        assert_eq!(bad.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let orb = |seed: &str, earner: &str, orb_id: &str| {
+            serde_json::json!({ "awards": [
+                { "id": commitment(seed), "chain": format!("ch:{seed}-phone"),
+                  "kind": "cell_orb_picked_up", "earner": earner,
+                  "orb_id": orb_id, "cell": cell },
+            ]})
+        };
+        let first = format!("orb:cell:{key}:1:~:0");
+        let picked = post_awards(&app, &sky, &mut sky_session, &orb("avaia-0", "avaia", &first)).await;
+        let picked = json(picked).await;
+        assert_eq!(picked["results"][0]["outcome"], "accepted");
+        assert_eq!(picked["experience"]["avaia_xp"], 10);
+
+        // The Bond reaching the same orb later, or another device, gets
+        // nothing more for it.
+        let twice = post_awards(&app, &sky, &mut sky_session, &orb("bond-0", "bond", &first)).await;
+        let twice = json(twice).await;
+        assert_eq!(twice["results"][0]["outcome"], "already_yours");
+        assert_eq!(twice["experience"]["bond_xp"], 0);
+        let second = format!("orb:cell:{key}:1:~:1");
+        let bond = post_awards(&app, &sky, &mut sky_session, &orb("bond-1", "bond", &second)).await;
+        assert_eq!(json(bond).await["experience"]["bond_xp"], 10);
+
+        // Another Bond cannot spend this Bond's key, a sixth own orb is no
+        // orb, and a landmark cannot be placed in the cell yet.
+        let mut other_session = None;
+        let stolen = post_awards(&app, &other, &mut other_session, &orb("stolen", "bond", &second)).await;
+        assert_eq!(stolen.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        for invented in [
+            format!("orb:cell:{key}:1:~:5"),
+            format!("orb:cell:{key}:1:n1:0"),
+            format!("orb:cell:{key}:2:~:0"),
+        ] {
+            let refused =
+                post_awards(&app, &sky, &mut sky_session, &orb("invented", "bond", &invented)).await;
+            assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY, "{invented}");
+        }
+        // A cell orb names nothing a find orb does, and the other way round.
+        let mixed = serde_json::json!({ "awards": [
+            { "id": commitment("mixed"), "chain": "ch:mixed-phone", "kind": "cell_orb_picked_up",
+              "earner": "bond", "orb_id": second, "cell": kyiv_cell(), "orb": 1 },
+        ]});
+        let mixed = post_awards(&app, &sky, &mut sky_session, &mixed).await;
+        assert_eq!(mixed.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
