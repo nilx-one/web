@@ -199,6 +199,11 @@ export function applyObservedPositionLabel(
   appearance: MapAppearance,
 ): void {
   const palette = PALETTE[appearance];
+  const changedSubject =
+    element.dataset.subject !== undefined &&
+    element.dataset.subject !== label.title;
+  element.dataset.subject = label.title;
+  const instant = changedSubject || prefersReducedMotion(element.ownerDocument);
   const card = element.querySelector<HTMLElement>('[data-part="card"]');
   const title = element.querySelector<HTMLElement>('[data-part="title"]');
   const detail = element.querySelector<HTMLElement>('[data-part="detail"]');
@@ -215,9 +220,7 @@ export function applyObservedPositionLabel(
     card.style.boxShadow = palette.shadow;
   }
   if (title !== null) {
-    title.style.transition = prefersReducedMotion(element.ownerDocument)
-      ? "none"
-      : "color 700ms ease";
+    title.style.transition = instant ? "none" : "color 700ms ease";
     setText(title, label.title);
     title.style.color =
       label.subscriptionTier === "exclusive"
@@ -243,7 +246,7 @@ export function applyObservedPositionLabel(
   if (subscription !== null) {
     const tier = label.subscriptionTier;
     const active = tier === "exclusive" || tier === "special";
-    const reduced = prefersReducedMotion(element.ownerDocument);
+    const reduced = instant;
     subscription.style.transition = reduced ? "none" : "max-height 700ms ease";
     subscription.style.maxHeight = active ? "20px" : "0px";
     subscription.setAttribute("aria-hidden", String(!active));

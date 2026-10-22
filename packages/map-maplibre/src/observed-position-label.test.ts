@@ -153,4 +153,5 @@ it("shows subscription status without a visible body and clears reused labels", 
   expect(title.hasAttribute("title")).toBe(false);
   expect(badge.style.maxHeight).toBe("0px");
   expect(badge.getAttribute("aria-hidden")).toBe("true");
+  expect(badge.style.transition).toBe("none");
 });
