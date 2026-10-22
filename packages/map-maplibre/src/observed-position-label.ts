@@ -225,8 +225,8 @@ export function applyObservedPositionLabel(
     title.style.color =
       label.subscriptionTier === "exclusive"
         ? appearance === "dark"
-          ? "#e0caff"
-          : "#602a9b"
+          ? "#ffe09b"
+          : "#805100"
         : palette.title;
     if (
       label.subscriptionTier === "exclusive" ||
@@ -265,8 +265,8 @@ export function applyObservedPositionLabel(
             ? "#d2b5ff"
             : "#6c39aa"
           : appearance === "dark"
-            ? "#e0caff"
-            : "#602a9b";
+            ? "#ffe09b"
+            : "#805100";
     }
   }
   if (detail !== null) {

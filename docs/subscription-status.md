@@ -15,7 +15,8 @@ late responses cannot restore a previous identity's state.
 
 ## Transitions
 
-Special and Exclusive use violet light; Exclusive is brighter. The body uses one
+Special uses violet light; Exclusive uses brighter gold with white highlights.
+Badges and identity labels use the same tier-specific color families. The body uses one
 procedural, depth-tested additive mesh with a halo, rays, ribbons and sparkles.
 There are no imported artwork assets or screen-space overlays.
 

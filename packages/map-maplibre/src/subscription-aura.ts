@@ -39,7 +39,7 @@ function auraGeometry(): BufferGeometry {
 }
 
 export const SUBSCRIPTION_AURA_PALETTE = {
-  exclusive: { color: 0xb68aff, core: 0xf2e8ff, intensity: 1 },
+  exclusive: { color: 0xffd574, core: 0xfff9e4, intensity: 1 },
   special: { color: 0xa777ff, core: 0xe1ccff, intensity: 0.46 },
 } as const;
 

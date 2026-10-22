@@ -5,7 +5,7 @@
   transition: color 700ms ease;
 }
 .subscription-identity[data-tier="exclusive"] {
-  color: light-dark(#602a9b, #e0caff);
+  color: light-dark(#805100, #ffe09b);
 }
 .subscription-badges {
   display: inline-grid;
@@ -39,7 +39,7 @@
   color: light-dark(#6c39aa, #d2b5ff);
 }
 .subscription-badge[data-level="exclusive"] {
-  color: light-dark(#602a9b, #e0caff);
+  color: light-dark(#805100, #ffe09b);
 }
 .subscription-identity[data-tier="special"] [data-level="special"],
 .subscription-identity[data-tier="exclusive"] [data-level="exclusive"] {

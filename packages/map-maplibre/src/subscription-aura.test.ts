@@ -13,6 +13,8 @@ describe("subscription hero aura", () => {
     expect(material.depthTest).toBe(true);
     expect(material.depthWrite).toBe(false);
     aura.sample(0, true);
+    expect(material.uniforms.uTint!.value.getHex()).toBe(0xffd574);
+    expect(material.uniforms.uCore!.value.getHex()).toBe(0xfff9e4);
     const intensity = material.uniforms.uIntensity!.value as number;
     aura.setTier("special", 1, true);
     expect(material.uniforms.uIntensity!.value).toBeLessThan(intensity / 2);
@@ -33,14 +35,22 @@ describe("subscription hero aura", () => {
     expect(intensity()).toBe(0.46);
     aura.sample(1.35, false);
     expect(intensity()).toBeCloseTo(0.73);
+    const midColor = aura.root.material.uniforms.uTint!.value.clone();
+    expect(midColor.getHex()).not.toBe(0xa777ff);
+    expect(midColor.getHex()).not.toBe(0xffd574);
     const interrupted = intensity();
     aura.setTier("special", 1.35, false);
     expect(intensity()).toBe(interrupted);
+    expect(aura.root.material.uniforms.uTint!.value.equals(midColor)).toBe(
+      true,
+    );
     aura.sample(2.1, false);
     expect(intensity()).toBe(0.46);
+    expect(aura.root.material.uniforms.uTint!.value.getHex()).toBe(0xa777ff);
     aura.setTier("exclusive", 3, false);
     aura.sample(4, false);
     expect(intensity()).toBe(1);
+    expect(aura.root.material.uniforms.uTint!.value.getHex()).toBe(0xffd574);
     aura.setTier(undefined, 4, false);
     expect(aura.fadedOut()).toBe(false);
     aura.sample(4.35, false);
