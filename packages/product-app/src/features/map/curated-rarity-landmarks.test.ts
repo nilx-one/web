@@ -90,15 +90,17 @@ describe("Core curated landmark map projection", () => {
   });
 });
 
-
 describe("complete archive batches through Core Wasm", () => {
-  const labels = Array.from({ length: MAX_LANDMARK_MAP_BATCH + 1 }, (_, index) => ({
-    id: `archive_${index.toString().padStart(5, "0")}`,
-    longitudeE7: String(305000000 + index),
-    latitudeE7: "504500000",
-    title: `Archive subject ${index}`,
-    kind: "monument" as const,
-  }));
+  const labels = Array.from(
+    { length: MAX_LANDMARK_MAP_BATCH + 1 },
+    (_, index) => ({
+      id: `archive_${index.toString().padStart(5, "0")}`,
+      longitudeE7: String(305000000 + index),
+      latitudeE7: "504500000",
+      title: `Archive subject ${index}`,
+      kind: "monument" as const,
+    }),
+  );
   const publication = {
     archiveRevision: "verified-publisher-revision-7",
     registry: 2,
@@ -113,8 +115,10 @@ describe("complete archive batches through Core Wasm", () => {
           ok: true,
           registry: request.registry,
           landmarks: request.landmarks
-            .filter((subject) =>
-              subject.id === labels[0]?.id || subject.id === labels[MAX_LANDMARK_MAP_BATCH]?.id,
+            .filter(
+              (subject) =>
+                subject.id === labels[0]?.id ||
+                subject.id === labels[MAX_LANDMARK_MAP_BATCH]?.id,
             )
             .map((subject) => ({
               id: subject.id,
@@ -172,7 +176,10 @@ describe("complete archive batches through Core Wasm", () => {
   it("rejects a registry mismatch or failed page atomically", async () => {
     await expect(
       curatedLandmarkPinsFromPublication(
-        { landmarkMapView: async () => '{"ok":true,"registry":1,"landmarks":[]}' },
+        {
+          landmarkMapView: async () =>
+            '{"ok":true,"registry":1,"landmarks":[]}',
+        },
         { ...publication, labels: labels.slice(0, 1) },
       ),
     ).rejects.toThrow("registry mismatch");
