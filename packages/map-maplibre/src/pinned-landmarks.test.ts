@@ -61,10 +61,18 @@ describe("pinned landmarks", () => {
       ...MOTHERLAND,
       rarity,
     });
-    expect(pinnedLandmarkColor(rated("rare"))).toBe(CURATED_RARITY_COLORS.rare);
-    expect(pinnedLandmarkColor(rated("special"))).toBe(CURATED_RARITY_COLORS.special);
-    expect(pinnedLandmarkColor(rated("exclusive"))).toBe(CURATED_RARITY_COLORS.exclusive);
-    expect(pinnedLandmarkColor(MOTHERLAND)).not.toBe(CURATED_RARITY_COLORS.rare);
+    expect(pinnedLandmarkColor(rated("rare"))).toBe(
+      CURATED_RARITY_COLORS.rare,
+    );
+    expect(pinnedLandmarkColor(rated("special"))).toBe(
+      CURATED_RARITY_COLORS.special,
+    );
+    expect(pinnedLandmarkColor(rated("exclusive"))).toBe(
+      CURATED_RARITY_COLORS.exclusive,
+    );
+    expect(pinnedLandmarkColor(MOTHERLAND)).not.toBe(
+      CURATED_RARITY_COLORS.rare,
+    );
     const data = pinnedLandmarksData([rated("special")]) as {
       features: { properties: Record<string, unknown> }[];
     };
