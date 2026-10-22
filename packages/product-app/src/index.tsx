@@ -1141,6 +1141,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             })}
         {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
         hostLabel={viewModel.hostLabel}
+        key={viewModel.identity.pubDress}
         pubDress={viewModel.identity.pubDress}
         renderer={dependencies.mapRenderer}
         geolocation={dependencies.host.geolocation}
