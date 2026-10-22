@@ -27,6 +27,20 @@ export const PINNED_LANDMARK_COLORS: Readonly<
   nature: "#4ccf8a",
 };
 
+/** Rarity is supplied only by a Core-reviewed archive projection; never
+ * inferred from a colour, business pin, name, attraction or location. */
+export const CURATED_RARITY_COLORS = {
+  rare: "#487dff",
+  special: "#a15bf0",
+  exclusive: "#e3be62",
+} as const;
+
+export function pinnedLandmarkColor(landmark: MapPinnedLandmark): string {
+  return landmark.rarity === undefined
+    ? PINNED_LANDMARK_COLORS[landmark.kind]
+    : CURATED_RARITY_COLORS[landmark.rarity];
+}
+
 /** The zoom a weight-1 landmark is named from, and a weight-0 one. */
 const LABEL_ZOOM_HEAVIEST = 11;
 const LABEL_ZOOM_LIGHTEST = 15;
@@ -138,6 +152,7 @@ export function pinnedLandmarksData(
         id: landmark.id,
         kind: landmark.kind,
         weight: clampWeight(landmark.weight),
+        ...(landmark.rarity === undefined ? {} : { rarity: landmark.rarity }),
       },
       geometry: {
         type: "Point",
@@ -156,12 +171,22 @@ export function pinnedLandmarksSource(
 function colorByKind(): unknown {
   return [
     "match",
-    ["get", "kind"],
-    "sacred",
-    PINNED_LANDMARK_COLORS.sacred,
-    "nature",
-    PINNED_LANDMARK_COLORS.nature,
-    PINNED_LANDMARK_COLORS.monument,
+    ["get", "rarity"],
+    "rare",
+    CURATED_RARITY_COLORS.rare,
+    "special",
+    CURATED_RARITY_COLORS.special,
+    "exclusive",
+    CURATED_RARITY_COLORS.exclusive,
+    [
+      "match",
+      ["get", "kind"],
+      "sacred",
+      PINNED_LANDMARK_COLORS.sacred,
+      "nature",
+      PINNED_LANDMARK_COLORS.nature,
+      PINNED_LANDMARK_COLORS.monument,
+    ],
   ];
 }
 
@@ -288,6 +313,8 @@ export function applyPinnedLandmarkLabel(
   const palette = PALETTE[appearance];
   element.dataset.landmarkId = landmark.id;
   element.dataset.kind = landmark.kind;
+  if (landmark.rarity === undefined) delete element.dataset.rarity;
+  else element.dataset.rarity = landmark.rarity;
   const card = element.querySelector<HTMLElement>('[data-part="card"]');
   const title = element.querySelector<HTMLElement>('[data-part="title"]');
   const detail = element.querySelector<HTMLElement>('[data-part="detail"]');
@@ -309,6 +336,6 @@ export function applyPinnedLandmarkLabel(
     detail.style.color = palette.detail;
   }
   if (connector !== null) {
-    connector.style.background = PINNED_LANDMARK_COLORS[landmark.kind];
+    connector.style.background = pinnedLandmarkColor(landmark);
   }
 }
