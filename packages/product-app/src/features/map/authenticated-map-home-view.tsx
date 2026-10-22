@@ -39,6 +39,7 @@ import {
   type AvatarModelId,
   type MapDimension,
   type MapLandmark,
+  type MapPinnedLandmark,
   type MapObservedPositionLabel,
   type MapPointSelection,
   type MapRenderer,
@@ -290,6 +291,9 @@ export interface AuthenticatedMapHomeViewProps {
   readonly pubDress: string;
   readonly avaiaPubDress?: string;
   readonly renderer: MapRenderer;
+  /** Host-verified Core Rare/Special/Exclusive projection, keyed by canonical
+   * archive id. Absent until Identity/map archive integration is deployed. */
+  readonly curatedRarityPins?: readonly MapPinnedLandmark[];
   /**
    * The host capability. This surface never reaches for a platform geolocation
    * API of its own, and the renderer never asks for a position at all.
@@ -842,6 +846,7 @@ export function AuthenticatedMapHomeView({
   pubDress,
   avaiaPubDress,
   renderer,
+  curatedRarityPins = [],
   geolocation,
   onManualBondMove,
   feedback,
@@ -2111,17 +2116,22 @@ export function AuthenticatedMapHomeView({
     return () => renderer.unmount();
   }, [renderer]);
 
-  // Pinned landmarks are fixed geography with localized names: they follow the
-  // locale, nothing else, and clear with the world that drew them.
+  // Core's curated archive markers are presentation projections, not seeds.
+  // They override only an EXACT matching canonical pin id, never a fuzzy name.
+  // Registry v1 is empty, so a missing host projection adds no fake rarity.
   useEffect(() => {
-    renderer.setPinnedLandmarks?.([
-      ...pinnedLandmarks((key) => translate(locale, key)),
-      ...marketMapPoints(
-        locale,
-        translate(locale, "landmark.pinnedKind.business"),
-      ),
-    ]);
-  }, [renderer, locale]);
+    const byId = new Map(
+      [
+        ...pinnedLandmarks((key) => translate(locale, key)),
+        ...marketMapPoints(
+          locale,
+          translate(locale, "landmark.pinnedKind.business"),
+        ),
+      ].map((pin) => [pin.id, pin] as const),
+    );
+    for (const pin of curatedRarityPins) byId.set(pin.id, pin);
+    renderer.setPinnedLandmarks?.([...byId.values()]);
+  }, [renderer, locale, curatedRarityPins]);
   useEffect(() => () => renderer.setPinnedLandmarks?.([]), [renderer]);
 
   useEffect(() => {
