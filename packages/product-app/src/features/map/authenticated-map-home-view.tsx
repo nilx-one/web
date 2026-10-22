@@ -1604,7 +1604,8 @@ export function AuthenticatedMapHomeView({
     proximityObserver.current = avaiaProximity?.observeAvaiaPoint;
   }, [avaiaProximity]);
   const [fogAnnouncement, setFogAnnouncement] = useState("");
-  // Orbs spill from every opened cell. The driving Bond collects at its
+  // Orbs spill from every opened cell, whoever opened it: the cell's own
+  // (Core v4, `docs/exp-orbs.md`) and its finds'. The driving Bond collects at its
   // gameplay position (physical GPS or manual/virtual); the Avaia collects
   // where its own body walks. Manual position stays excluded from physical
   // presence checks, such as workshops and first-hand find discoveries.
@@ -1620,6 +1621,12 @@ export function AuthenticatedMapHomeView({
       wheel === "avaia" && handover === undefined
         ? avaiaWalk.stance(globalThis.performance.now())?.point
         : undefined,
+    // Orbs drawn in: a pick-up chime and, where the host has one, a light
+    // tap. iPhone Safari has no web vibration; there it is the chime alone.
+    onPickedUp: () => {
+      cue("loot-pickup");
+      feedback?.impact("light");
+    },
   });
   // Her word on new ground is owed from the first cell opened beyond the
   // starting one, and said once the Avaia it speaks of exists.

@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  hasCellSpillAccess,
   hasOrbSpillAccess,
   MAX_CLAIM_BUCKETS,
+  type CellSpillAccessPort,
   type CoreRuntimePort,
   type OrbSpillAccessPort,
   type OrbSpillView,
+  type OrbWorldOrb,
 } from "@nilx-one/application";
 import {
   artifactSha,
@@ -17,21 +20,32 @@ import {
 } from "@nilx-one/artifact-contract";
 import type {
   MapFogCell,
+  MapOrb,
   MapPointSelection,
   MapRenderer,
 } from "@nilx-one/map-contract";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { queueWorldAwards } from "../progression/committed-sync";
+import { cellOrbSubject } from "../progression/commitment";
 import {
+  queueWorldAwards,
+  type QueueWorldAward,
+} from "../progression/committed-sync";
+import {
+  cellOfOrb,
   findsWithin,
+  keepCells,
+  knownCell,
   knownSpill,
   landmarkWaypoint,
   mapOrbs,
   orbWorldInput,
   refreshSpill,
+  rarityTier,
+  readKeptCells,
   SPILL_READ_RADIUS_METERS,
   squareAround,
+  type KnownCell,
   type KnownSpill,
 } from "./orb-spills";
 
@@ -43,6 +57,9 @@ export const ORB_REACH_CHECK_MS = 1_000;
 
 /** A fix vaguer than this does not say a Bond stood at an orb. */
 export const ORB_OBSERVATION_ACCURACY_METERS = 30;
+
+/** How long a picked-up orb is drawn flying to whoever picked it up. */
+export const ORB_PULL_DRAW_MS = 400;
 
 export interface OrbSpillsInput {
   readonly owner: string;
@@ -66,10 +83,18 @@ export interface OrbSpillsInput {
     | undefined;
   /** Where the Avaia's body is right now, while it walks the world. */
   avaiaPoint(): MapPointSelection | undefined;
+  /**
+   * Orbs were just picked up: the host's sound and a light haptic tap, once
+   * for however many came in together.
+   */
+  onPickedUp?(): void;
 }
 
 export interface OrbSpillsState {
-  /** A cell opened: each find in it spills, and the Bond tells the service. */
+  /**
+   * A cell opened: it spills its own orbs (Core v4, `docs/exp-orbs.md`), each
+   * find in it spills too, and the Bond tells the service.
+   */
   spill(cell: MapFogCell): void;
 }
 
@@ -88,8 +113,12 @@ export function useOrbSpills({
   near,
   bond,
   avaiaPoint,
+  onPickedUp,
 }: OrbSpillsInput): OrbSpillsState {
   const spillPort: OrbSpillAccessPort | undefined = hasOrbSpillAccess(port)
+    ? port
+    : undefined;
+  const cellPort: CellSpillAccessPort | undefined = hasCellSpillAccess(port)
     ? port
     : undefined;
   const orbWorld = useMemo(() => core?.orbWorld?.bind(core), [core]);
@@ -104,7 +133,7 @@ export function useOrbSpills({
     void core
       ?.orbSpillVersion?.()
       .then((version) => {
-        if (live && Number.isInteger(version) && version >= 2) {
+        if (live && Number.isInteger(version) && version >= 1) {
           setCapability({ runtime: core, version });
         }
       })
@@ -115,10 +144,23 @@ export function useOrbSpills({
   }, [core]);
   const waypointsEnabled =
     capability.runtime === core && capability.version >= 2;
+  // A cell spills its own orbs only into a runtime that lays them (v4+).
+  const cellsEnabled = capability.runtime === core && capability.version >= 4;
   const [spills, setSpills] = useState<ReadonlyMap<string, KnownSpill>>(
     () => new Map(),
   );
-  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  // What this device kept of its opened cells: they lie until picked up.
+  const [kept] = useState(() => readKeptCells(owner));
+  const [cells, setCells] = useState<ReadonlyMap<string, KnownCell>>(
+    () => kept.cells,
+  );
+  const [picked, setPicked] = useState<ReadonlySet<string>>(
+    () => new Set(kept.picked),
+  );
+  const cellsEnabledRef = useRef(cellsEnabled);
+  useEffect(() => {
+    cellsEnabledRef.current = cellsEnabled;
+  });
   const shas = useRef(new Map<ArtifactId, string>());
 
   const shaOf = useCallback(async (id: ArtifactId): Promise<string> => {
@@ -174,6 +216,22 @@ export function useOrbSpills({
 
   const spill = useCallback(
     (cell: MapFogCell) => {
+      // The cell's own orbs: the service answers its spill, and keeps
+      // nothing. A cell spills once; one already kept is not asked again.
+      if (cellPort !== undefined && cellsEnabledRef.current) {
+        void cellPort
+          .spillCell(cell.id)
+          .then((result) => {
+            if (result.kind !== "spilled") return;
+            setCells((current) => {
+              if (current.has(cell.id)) return current;
+              const next = new Map(current);
+              next.set(cell.id, knownCell(cell.id, result.spill, Date.now()));
+              return next;
+            });
+          })
+          .catch(() => undefined);
+      }
       if (spillPort === undefined) return;
       void (async () => {
         // Read the real POIs in this opened cell before choosing waypoints.
@@ -208,7 +266,7 @@ export function useOrbSpills({
         adopt(entries);
       })().catch(() => undefined);
     },
-    [adopt, renderer, spillPort],
+    [adopt, cellPort, renderer, spillPort],
   );
 
   // The spills of the finds around the Bond, read by sha bucket on a slow
@@ -258,17 +316,66 @@ export function useOrbSpills({
     // The read moves with the Bond's segment, not with every fix inside it.
   }, [adopt, nearSegment, shaOf, spillPort]);
 
+  // Picked-up orbs, drawn flying to whoever picked them up for a moment.
+  const pulls = useRef(new Map<string, MapOrb>());
+  // What was picked up, at once: two answers of Core in flight together
+  // must not pick up the same orb twice.
+  const pickedNow = useRef(new Set(kept.picked));
   const pickUp = useCallback(
-    (ids: readonly string[], earner: "bond" | "avaia") => {
-      if (ids.length === 0) return;
-      setPicked((current) => new Set([...current, ...ids]));
+    (
+      ids: readonly string[],
+      earner: "bond" | "avaia",
+      orbs: ReadonlyMap<string, OrbWorldOrb>,
+      to: MapPointSelection | undefined,
+      known: ReadonlyMap<string, KnownCell>,
+    ): number => {
+      const fresh = ids.filter((id) => !pickedNow.current.has(id));
+      if (fresh.length === 0) return 0;
       const at = Date.now();
-      void queueWorldAwards(
-        owner,
-        ids.map((id) => ({
-          record: { kind: "orb_picked_up", earner, subject: id, at },
-        })),
-      ).catch(() => undefined);
+      const records: QueueWorldAward[] = [];
+      for (const id of fresh) {
+        if (!id.startsWith("orb:cell:")) {
+          records.push({
+            record: { kind: "orb_picked_up", earner, subject: id, at },
+          });
+          continue;
+        }
+        const cell = cellOfOrb(known.values(), id);
+        if (cell === undefined) continue;
+        records.push({
+          record: {
+            kind: "cell_orb_picked_up",
+            earner,
+            subject: cellOrbSubject(id, cell.cell),
+            // Its rarity, for showing what it pays; the service prices it.
+            tier: rarityTier(orbs.get(id)?.rarity),
+            at,
+          },
+        });
+      }
+      if (records.length === 0) return 0;
+      for (const id of fresh) pickedNow.current.add(id);
+      setPicked((current) => new Set([...current, ...fresh]));
+      if (to !== undefined) {
+        for (const id of fresh) {
+          const orb = orbs.get(id);
+          if (orb === undefined) continue;
+          const [drawn] = mapOrbs({
+            orbs: [orb],
+            bond_reach: [],
+            avaia_reach: [],
+            next_expiry: null,
+          });
+          if (drawn === undefined) continue;
+          pulls.current.set(id, {
+            ...drawn,
+            landsAt: Math.min(drawn.landsAt, at),
+            pulledTo: { longitude: to.longitude, latitude: to.latitude, at },
+          });
+        }
+      }
+      void queueWorldAwards(owner, records).catch(() => undefined);
+      return records.length;
     },
     [owner],
   );
@@ -276,10 +383,18 @@ export function useOrbSpills({
   // Core is asked whenever what it knows changes, and on a short beat while
   // orbs lie, so an Avaia walking into reach is noticed. Its answer is drawn
   // as it is, and what it says is in reach is picked up.
-  const latest = useRef({ spills, picked, bond, avaiaPoint });
-  useEffect(() => {
-    latest.current = { spills, picked, bond, avaiaPoint };
+  const latest = useRef({
+    spills,
+    cells,
+    picked,
+    bond,
+    avaiaPoint,
+    onPickedUp,
   });
+  useEffect(() => {
+    latest.current = { spills, cells, picked, bond, avaiaPoint, onPickedUp };
+  });
+  const lyingCellOrbs = useRef<ReadonlySet<string>>(new Set());
   const [lying, setLying] = useState(false);
   const [nextExpiry, setNextExpiry] = useState<number | undefined>(undefined);
   const ask = useCallback(() => {
@@ -294,27 +409,44 @@ export function useOrbSpills({
         state.bond.accuracyMeters <= ORB_OBSERVATION_ACCURACY_METERS)
         ? state.bond
         : undefined;
+    const avaiaPoint = state.avaiaPoint();
     void orbWorld(
       orbWorldInput(
         [...state.spills.values()],
         state.picked,
         bondPoint,
-        state.avaiaPoint(),
+        avaiaPoint,
         waypointsEnabled,
+        cellsEnabled ? [...state.cells.values()] : [],
       ),
       now,
     )
       .then((view) => {
-        renderer.setOrbs?.(mapOrbs(view));
-        setLying(view.orbs.length > 0);
+        const orbs = new Map(view.orbs.map((orb) => [orb.id, orb]));
+        const picked =
+          pickUp(view.bond_reach, "bond", orbs, bondPoint, state.cells) +
+          pickUp(view.avaia_reach, "avaia", orbs, avaiaPoint, state.cells);
+        if (picked > 0) state.onPickedUp?.();
+        const drawnAt = Date.now();
+        for (const [id, orb] of pulls.current) {
+          if ((orb.pulledTo?.at ?? 0) + ORB_PULL_DRAW_MS < drawnAt) {
+            pulls.current.delete(id);
+          }
+        }
+        const lying = mapOrbs(view).filter((orb) => !pulls.current.has(orb.id));
+        renderer.setOrbs?.([...lying, ...pulls.current.values()]);
+        lyingCellOrbs.current = new Set(
+          view.orbs
+            .filter((orb) => orb.id.startsWith("orb:cell:"))
+            .map((orb) => orb.id),
+        );
+        setLying(view.orbs.length > 0 || pulls.current.size > 0);
         setNextExpiry(
           view.next_expiry === null ? undefined : Number(view.next_expiry),
         );
-        pickUp(view.bond_reach, "bond");
-        pickUp(view.avaia_reach, "avaia");
       })
       .catch(() => undefined);
-  }, [orbWorld, pickUp, renderer, waypointsEnabled]);
+  }, [cellsEnabled, orbWorld, pickUp, renderer, waypointsEnabled]);
 
   const bondLongitude = bond?.longitude;
   const bondLatitude = bond?.latitude;
@@ -322,7 +454,16 @@ export function useOrbSpills({
     // Asked after this render, not during it: an answer may pick up orbs.
     const asked = globalThis.setTimeout(ask, 0);
     return () => globalThis.clearTimeout(asked);
-  }, [ask, bondLatitude, bondLongitude, picked, spills]);
+  }, [ask, bondLatitude, bondLongitude, cells, picked, spills]);
+
+  // What still lies of the opened cells stays on this device across reloads.
+  useEffect(() => {
+    const timer = globalThis.setTimeout(
+      () => keepCells(owner, cells, picked, lyingCellOrbs.current),
+      ORB_PULL_DRAW_MS,
+    );
+    return () => globalThis.clearTimeout(timer);
+  }, [cells, owner, picked]);
 
   useEffect(() => {
     if (!lying) return;

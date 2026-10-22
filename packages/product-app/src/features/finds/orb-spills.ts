@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type {
+  CellSpillView,
   OrbCoordinate,
   OrbSpillView,
+  OrbWorldCell,
   OrbWorldInput,
   OrbWorldView,
 } from "@nilx-one/application";
@@ -49,6 +51,136 @@ export interface KnownSpill {
   readonly to: LonLat;
   /** When this device first drew it, so its orbs fall once, then lie. */
   readonly appearedAt: number;
+}
+
+/**
+ * A cell that opened for this Bond, as the service answered its spill
+ * (`docs/exp-orbs.md`). It is the Bond's own and stays on this device: it
+ * lies until its orbs are picked up.
+ */
+export interface KnownCell {
+  /** The fog cell, as the fog names it. */
+  readonly cell: string;
+  readonly key: string;
+  readonly center: OrbCoordinate;
+  readonly registry: number;
+  readonly ratedLandmarks: CellSpillView["ratedLandmarks"];
+  /** When this device first drew it, so its orbs fall once, then lie. */
+  readonly appearedAt: number;
+}
+
+/** How many opened cells with orbs still lying this device keeps. */
+export const MAX_KNOWN_CELLS = 2_000;
+
+/** A cell's spill as this device keeps it, first drawn at `appearedAt`. */
+export function knownCell(
+  cell: string,
+  view: CellSpillView,
+  appearedAt: number,
+): KnownCell {
+  return {
+    cell,
+    key: view.key,
+    center: view.center,
+    registry: view.registry,
+    ratedLandmarks: view.ratedLandmarks,
+    appearedAt,
+  };
+}
+
+/** The cell a cell orb id was laid in, by the key it names. */
+export function cellOfOrb(
+  cells: Iterable<KnownCell>,
+  orbId: string,
+): KnownCell | undefined {
+  for (const cell of cells) {
+    if (orbId.startsWith(`orb:cell:${cell.key}:`)) return cell;
+  }
+  return undefined;
+}
+
+const CELLS_STORAGE = "nilx-one.orbs.cells.v1.";
+const PICKED_STORAGE = "nilx-one.orbs.picked.v1.";
+
+function readStorage(key: string): unknown {
+  try {
+    const raw = globalThis.localStorage?.getItem(key);
+    return raw === null || raw === undefined ? undefined : JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+function isKnownCell(value: unknown): value is KnownCell {
+  if (typeof value !== "object" || value === null) return false;
+  const cell = value as Partial<KnownCell>;
+  return (
+    typeof cell.cell === "string" &&
+    typeof cell.key === "string" &&
+    /^[0-9a-f]{64}$/.test(cell.key) &&
+    typeof cell.center?.longitude_e7 === "string" &&
+    typeof cell.center.latitude_e7 === "string" &&
+    typeof cell.registry === "number" &&
+    Array.isArray(cell.ratedLandmarks) &&
+    typeof cell.appearedAt === "number"
+  );
+}
+
+/** The cells and cell orbs this device kept for `owner`, and nothing else. */
+export function readKeptCells(owner: string): {
+  readonly cells: ReadonlyMap<string, KnownCell>;
+  readonly picked: ReadonlySet<string>;
+} {
+  const cells = readStorage(CELLS_STORAGE + owner);
+  const picked = readStorage(PICKED_STORAGE + owner);
+  return {
+    cells: new Map(
+      (Array.isArray(cells) ? cells.filter(isKnownCell) : []).map((cell) => [
+        cell.cell,
+        cell,
+      ]),
+    ),
+    picked: new Set(
+      Array.isArray(picked)
+        ? picked.filter(
+            (id): id is string =>
+              typeof id === "string" && id.startsWith("orb:cell:"),
+          )
+        : [],
+    ),
+  };
+}
+
+/**
+ * Keeps what still lies: the newest cells, and the picked cell orbs of the
+ * cells kept. A cell whose orbs are all picked up is dropped with them.
+ */
+export function keepCells(
+  owner: string,
+  cells: ReadonlyMap<string, KnownCell>,
+  picked: ReadonlySet<string>,
+  lying: ReadonlySet<string>,
+): void {
+  const live = [...cells.values()]
+    .filter((cell) =>
+      [...lying].some((id) => id.startsWith(`orb:cell:${cell.key}:`)),
+    )
+    .sort((a, b) => b.appearedAt - a.appearedAt)
+    .slice(0, MAX_KNOWN_CELLS);
+  try {
+    globalThis.localStorage?.setItem(
+      CELLS_STORAGE + owner,
+      JSON.stringify(live),
+    );
+    globalThis.localStorage?.setItem(
+      PICKED_STORAGE + owner,
+      JSON.stringify(
+        [...picked].filter((id) => cellOfOrb(live, id) !== undefined),
+      ),
+    );
+  } catch {
+    // A full or blocked storage loses only what is still lying.
+  }
 }
 
 /** How far around a Bond the spills of its finds are read. */
@@ -189,6 +321,17 @@ export function refreshSpill(
   };
 }
 
+/** A kept cell in Core's orb world `cells` shape. */
+export function orbWorldCell(cell: KnownCell): OrbWorldCell {
+  return {
+    key: cell.key,
+    center: cell.center,
+    registry: cell.registry,
+    rated_landmarks: [...cell.ratedLandmarks],
+    appeared_at: String(Math.max(0, Math.trunc(cell.appearedAt))),
+  };
+}
+
 /** What Core is asked: the spills, this device's pick-ups, and who stands where. */
 export function orbWorldInput(
   spills: readonly KnownSpill[],
@@ -196,6 +339,7 @@ export function orbWorldInput(
   bond: MapPointSelection | undefined,
   avaia: MapPointSelection | undefined,
   waypointsEnabled = false,
+  cells: readonly KnownCell[] = [],
 ): OrbWorldInput {
   const at = (point: MapPointSelection | undefined) =>
     point === undefined
@@ -214,6 +358,8 @@ export function orbWorldInput(
       count: spill.count,
       taken: [...spill.taken],
     })),
+    // Only a v4 runtime is handed cells: an older one refuses the field.
+    ...(cells.length === 0 ? {} : { cells: cells.map(orbWorldCell) }),
     picked: [...picked],
     bond: at(bond),
     avaia: at(avaia),
@@ -230,6 +376,23 @@ export function mapOrbs(view: OrbWorldView): MapOrb[] {
       latitude,
       kind: orb.kind,
       landsAt: Number(orb.lands_at),
+      ...(orb.rarity === undefined ? {} : { rarity: orb.rarity }),
     };
   });
+}
+
+/** A rarity's tier, Common 1 to Exclusive 5, as a cell orb award keeps it. */
+export function rarityTier(rarity: MapOrb["rarity"]): 1 | 2 | 3 | 4 | 5 {
+  switch (rarity) {
+    case "uncommon":
+      return 2;
+    case "rare":
+      return 3;
+    case "special":
+      return 4;
+    case "exclusive":
+      return 5;
+    default:
+      return 1;
+  }
 }

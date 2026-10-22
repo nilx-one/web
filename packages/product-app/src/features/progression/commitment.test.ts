@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import {
   awardAmount,
   canonicalAward,
+  cellOrbParts,
+  cellOrbSubject,
   commitAward,
   importHistoryKey,
   isCommitment,
@@ -124,5 +126,25 @@ describe("awardAmount", () => {
     expect(
       awardAmount({ kind: "zone_walked", earner: "bond", tier: 2 }),
     ).toBeNull();
+  });
+});
+
+describe("cell orbs", () => {
+  it("pays by rarity tier and keeps the orb id and the cell apart", () => {
+    const orbId = `orb:cell:${"a".repeat(64)}:1:~:0`;
+    const subject = cellOrbSubject(orbId, "891f9a40023ffff");
+    expect(cellOrbParts(subject)).toEqual({ orbId, cell: "891f9a40023ffff" });
+    expect(cellOrbParts(orbId)).toBeUndefined();
+    expect(
+      cellOrbParts(`orb:art:seg:1:2:e3:1:0:0@891f9a40023ffff`),
+    ).toBeUndefined();
+    const paid = [1, 2, 3, 4, 5].map((tier) =>
+      awardAmount({
+        kind: "cell_orb_picked_up",
+        earner: "avaia",
+        tier: tier as 1 | 2 | 3 | 4 | 5,
+      }),
+    );
+    expect(paid).toEqual([10, 20, 40, 80, 160]);
   });
 });

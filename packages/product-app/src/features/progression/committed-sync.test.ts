@@ -353,6 +353,41 @@ describe("flushCommittedAwards", () => {
     ]);
   });
 
+  it("names a cell orb by its orb id and cell, and shows what its rarity pays", async () => {
+    const orb = `orb:cell:${"a".repeat(64)}:1:n1:2` as const;
+    const pickup = award(id("c"), {
+      kind: "cell_orb_picked_up",
+      earner: "bond",
+      subject: `${orb}@891f9a40023ffff`,
+      tier: 5,
+      at: 4000,
+    });
+    pending = [pickup];
+    const sent: CommittedAward[] = [];
+    const port = access(async (awards) => {
+      sent.push(...awards);
+      return accepted(awards);
+    });
+    const events: CommittedWorldEvent[] = [];
+
+    await flushCommittedAwards("0x0sky", port, (event) => events.push(event));
+
+    expect(sent).toEqual([
+      {
+        id: pickup.id,
+        parent: null,
+        chain: "ch:phone123",
+        kind: "cell_orb_picked_up",
+        earner: "bond",
+        orbId: orb,
+        cell: "891f9a40023ffff",
+      },
+    ]);
+    expect(events).toEqual([
+      { kind: "orb-kept", orb, earner: "bond", experience: 160 },
+    ]);
+  });
+
   it("says crap when someone picked the orb up first, and closes no lead", async () => {
     const orb = `orb:${commonFind.artifactId}:0` as const;
     const pickup = award(id("p"), {

@@ -114,7 +114,13 @@ These are not carried:
   travel; the timer that opens it is this device's. Beside it,
   `nilx-one.fog.authorized.v1.<owner>` holds the last instant Core allowed a
   reveal to run, which is all a reopened page can go on: time since is never
-  worked.
+  worked;
+- **orbs still lying in opened cells** — each cell's spill as the identity
+  service answered it (`nilx-one.orbs.cells.v1.<owner>`) and the cell orbs
+  picked up while it lies (`nilx-one.orbs.picked.v1.<owner>`;
+  [Experience Orbs](exp-orbs.md)). A cell whose orbs are all picked up is
+  dropped with them. Which cell opened is this Bond's alone, so it stays
+  here; the service keeps only a digest of each paid orb's id.
 
 ## What may travel
 

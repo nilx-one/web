@@ -1,7 +1,10 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { OrbSpillAccessPort } from "@nilx-one/application";
+import type {
+  CellSpillAccessPort,
+  OrbSpillAccessPort,
+} from "@nilx-one/application";
 import type { OrbWorldInput, OrbWorldView } from "@nilx-one/application";
 import { artifactSha, type ArtifactId } from "@nilx-one/artifact-contract";
 import type {
@@ -20,6 +23,7 @@ vi.mock("../progression/committed-sync", () => ({
 import { queueWorldAwards } from "../progression/committed-sync";
 import { findsWithin, squareAround } from "./orb-spills";
 import {
+  ORB_PULL_DRAW_MS,
   ORB_REACH_CHECK_MS,
   useOrbSpills,
   type OrbSpillsInput,
@@ -86,13 +90,180 @@ const core = {
 };
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "setInterval"] });
+  vi.useFakeTimers({
+    toFake: [
+      "Date",
+      "setTimeout",
+      "setInterval",
+      "clearTimeout",
+      "clearInterval",
+    ],
+  });
   vi.setSystemTime(NOW);
 });
 
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+});
+
+const CELL = "891f9a40023ffff";
+const KEY = "a".repeat(64);
+
+/**
+ * A stand-in for a v4 Core: a cell lays its own five orbs at its centre,
+ * Common, and whoever stands there reaches them.
+ */
+const coreV4 = {
+  orbSpillVersion: vi.fn(async () => 4),
+  orbWorld: vi.fn(async (world: OrbWorldInput): Promise<OrbWorldView> => {
+    const orbs = (world.cells ?? []).flatMap((cell) =>
+      Array.from({ length: 5 }, (_, n) => ({
+        id: `orb:cell:${cell.key}:${cell.registry}:~:${n}`,
+        kind: "orb" as const,
+        at: cell.center,
+        lands_at: cell.appeared_at,
+        rarity: "common" as const,
+      })).filter((orb) => !world.picked.includes(orb.id)),
+    );
+    const reach = (at: OrbWorldInput["avaia"]) =>
+      at === null
+        ? []
+        : orbs
+            .filter(
+              (orb) =>
+                orb.at.longitude_e7 === at.longitude_e7 &&
+                orb.at.latitude_e7 === at.latitude_e7,
+            )
+            .map((orb) => orb.id);
+    return {
+      orbs,
+      bond_reach: reach(world.bond),
+      avaia_reach: reach(world.avaia),
+      next_expiry: null,
+    };
+  }),
+};
+
+function cellPort(): OrbSpillAccessPort & CellSpillAccessPort {
+  return {
+    spillOrbs: vi.fn(async () => ({ kind: "service-unavailable" as const })),
+    readOrbSpills: vi.fn(async () => ({ kind: "read" as const, spills: [] })),
+    spillCell: vi.fn(async () => ({
+      kind: "spilled" as const,
+      spill: {
+        key: KEY,
+        center: { longitude_e7: "304469000", latitude_e7: "504655000" },
+        registry: 1,
+        ratedLandmarks: [],
+      },
+    })),
+  };
+}
+
+describe("cell spills", () => {
+  beforeEach(() => globalThis.localStorage.clear());
+
+  it("asks a v4 Core to lay an opened cell's own orbs, pulls them in with feedback, and keeps them", async () => {
+    const port = cellPort();
+    const world = renderer();
+    const avaia: {
+      point?: { readonly longitude: number; readonly latitude: number };
+    } = {};
+    const onPickedUp = vi.fn();
+    const input = (): OrbSpillsInput => ({
+      owner: "0x0sky",
+      port,
+      core: coreV4,
+      renderer: world,
+      near: undefined,
+      bond: undefined,
+      avaiaPoint: () => avaia.point,
+      onPickedUp,
+    });
+    const first = renderHook(() => useOrbSpills(input()));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      first.result.current.spill({ id: CELL, center, boundary: [] });
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(port.spillCell).toHaveBeenCalledWith(CELL);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    const drawn = world.orbs.filter((orb) => orb.id.startsWith("orb:cell:"));
+    expect(drawn).toHaveLength(5);
+    expect(drawn[0]!.rarity).toBe("common");
+
+    // Kept on this device: a reload draws the same cell without asking.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ORB_PULL_DRAW_MS);
+    });
+    first.unmount();
+    const again = renderHook(() => useOrbSpills(input()));
+    for (let tick = 0; tick < 4; tick += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+    }
+    expect(
+      world.orbs.filter((orb) => orb.id.startsWith("orb:cell:")),
+    ).toHaveLength(5);
+
+    avaia.point = { longitude: 30.4469, latitude: 50.4655 };
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ORB_REACH_CHECK_MS);
+    });
+    expect(queueWorldAwards).toHaveBeenCalledWith(
+      "0x0sky",
+      expect.arrayContaining([
+        {
+          record: {
+            kind: "cell_orb_picked_up",
+            earner: "avaia",
+            subject: `orb:cell:${KEY}:1:~:0@${CELL}`,
+            tier: 1,
+            at: expect.any(Number),
+          },
+        },
+      ]),
+    );
+    // Five came in together: one chime, one tap.
+    expect(onPickedUp).toHaveBeenCalledTimes(1);
+    expect(world.orbs.filter((orb) => orb.pulledTo !== undefined)).toHaveLength(
+      5,
+    );
+    again.unmount();
+  });
+
+  it("never asks a Core older than v4 for a cell spill", async () => {
+    const port = cellPort();
+    const coreV3 = { ...coreV4, orbSpillVersion: vi.fn(async () => 3) };
+    const { result } = renderHook(() =>
+      useOrbSpills({
+        owner: "0x0sky",
+        port,
+        core: coreV3,
+        renderer: renderer(),
+        near: undefined,
+        bond: undefined,
+        avaiaPoint: () => undefined,
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      result.current.spill({ id: CELL, center, boundary: [] });
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(port.spillCell).not.toHaveBeenCalled();
+  });
 });
 
 describe("useOrbSpills", () => {
@@ -163,9 +334,15 @@ describe("useOrbSpills", () => {
         },
       ]),
     );
-    // Picked up, it is no longer Core's to draw.
+    // Picked up, it is drawn flying to the Avaia, then is gone.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(
+      world.orbs.find((orb) => orb.id === drawn[0]!.id)?.pulledTo,
+    ).toMatchObject({ longitude: avaia.point.longitude });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ORB_PULL_DRAW_MS + ORB_REACH_CHECK_MS);
     });
     expect(world.orbs.map((orb) => orb.id)).not.toContain(drawn[0]!.id);
   });
@@ -317,6 +494,12 @@ describe("useOrbSpills", () => {
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(
+      world.orbs.find((item) => item.id === orb!.id)?.pulledTo,
+    ).toBeDefined();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ORB_PULL_DRAW_MS + ORB_REACH_CHECK_MS);
     });
     expect(world.orbs.map((item) => item.id)).not.toContain(orb!.id);
   });

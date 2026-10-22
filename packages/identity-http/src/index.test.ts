@@ -747,6 +747,43 @@ describe("committed awards and claims transport", () => {
   const rare = `xp:${"b".repeat(43)}`;
   const sha = `ab${"0".repeat(62)}`;
 
+  it("names a cell orb by its orb id and cell, and nothing else", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      response(200, {
+        experience: { authority: "client", bond_xp: 0, avaia_xp: 10 },
+        results: [{ id: mine, outcome: "accepted" }],
+      }),
+    );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    const orbId = `orb:cell:${"a".repeat(64)}:1:~:0`;
+    await adapter.commitAwards([
+      {
+        id: mine,
+        parent: null,
+        chain: "ch:phone123",
+        kind: "cell_orb_picked_up",
+        earner: "avaia",
+        orbId,
+        cell: "891f9a40023ffff",
+      },
+    ]);
+    const body = JSON.parse(String(fetch.mock.calls[0]![1]!.body)) as {
+      awards: Record<string, unknown>[];
+    };
+    expect(body.awards[0]).toEqual({
+      id: mine,
+      parent: null,
+      chain: "ch:phone123",
+      kind: "cell_orb_picked_up",
+      earner: "avaia",
+      orb_id: orbId,
+      cell: "891f9a40023ffff",
+    });
+  });
+
   it("commits awards without an amount and reads each outcome", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       response(200, {
@@ -956,6 +993,60 @@ describe("committed awards and claims transport", () => {
       });
     }
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("asks for a cell's spill and refuses a malformed answer", async () => {
+    const answer = {
+      key: "a".repeat(64),
+      center: { longitude_e7: "304469000", latitude_e7: "504655000" },
+      registry: 1,
+      rated_landmarks: [
+        {
+          id: "n1",
+          at: { longitude_e7: "304470000", latitude_e7: "504665000" },
+        },
+      ],
+    };
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(response(200, answer))
+      .mockResolvedValueOnce(response(200, { ...answer, key: "nope" }))
+      .mockResolvedValueOnce(
+        response(200, {
+          ...answer,
+          rated_landmarks: [{ id: "a:b", at: answer.center }],
+        }),
+      );
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    await expect(adapter.spillCell("891f9a40023ffff")).resolves.toEqual({
+      kind: "spilled",
+      spill: {
+        key: answer.key,
+        center: answer.center,
+        registry: 1,
+        ratedLandmarks: answer.rated_landmarks,
+      },
+    });
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/identity/orbs/cell-spill",
+      {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json", "x-0x1-csrf": "1" },
+        body: JSON.stringify({ cell: "891f9a40023ffff" }),
+      },
+    );
+    await expect(adapter.spillCell("891f9a40023ffff")).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+    await expect(adapter.spillCell("891f9a40023ffff")).resolves.toEqual({
+      kind: "service-unavailable",
+    });
   });
 
   it("spills a find's orbs and reads the live spills by bucket", async () => {

@@ -710,6 +710,15 @@ function isOrbIdList(value: unknown): value is string[] {
   );
 }
 
+/** Rarity v2 codes a Core v4 cell orb may carry. */
+const ORB_RARITIES: ReadonlySet<string> = new Set([
+  "common",
+  "uncommon",
+  "rare",
+  "special",
+  "exclusive",
+]);
+
 /** Core's orb world answer, or a throw for anything that does not read as one. */
 export function decodeOrbWorld(wire: string): OrbWorldView {
   const parsed = JSON.parse(wire) as Record<string, unknown> | null;
@@ -726,13 +735,16 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
         kind,
         at,
         lands_at: landsAt,
+        rarity,
       } = orb as Record<string, unknown>;
       return (
         typeof id === "string" &&
         (kind === "orb" || kind === "goal") &&
         isOrbCoordinate(at) &&
         typeof landsAt === "string" &&
-        DECIMAL.test(landsAt)
+        DECIMAL.test(landsAt) &&
+        (rarity === undefined ||
+          (typeof rarity === "string" && ORB_RARITIES.has(rarity)))
       );
     }) ||
     !isOrbIdList(view.bond_reach) ||
