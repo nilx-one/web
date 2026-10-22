@@ -167,9 +167,11 @@ export function useOrbSpills({
         !cellsEnabled ||
         cellPort === undefined ||
         inFlightCellSpills.current.has(cellId)
-      ) return;
+      )
+        return;
       inFlightCellSpills.current.add(cellId);
-      void cellPort.spillCell(cellId)
+      void cellPort
+        .spillCell(cellId)
         .then((result) => {
           if (result.kind !== "spilled") return;
           pendingCellSpills.current.delete(cellId);

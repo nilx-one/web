@@ -246,7 +246,10 @@ describe("cell spills", () => {
     const pendingCore = {
       ...coreV4,
       orbSpillVersion: vi.fn(
-        () => new Promise<number>((resolve) => { confirmVersion = resolve; }),
+        () =>
+          new Promise<number>((resolve) => {
+            confirmVersion = resolve;
+          }),
       ),
     };
     const port = cellPort();
