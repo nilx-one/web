@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPinnedLandmarkLabel,
+  pinnedLandmarkColor,
+  CURATED_RARITY_COLORS,
   clampWeight,
   createPinnedLandmarkLabelElement,
   pinnedLandmarkLabelZoom,
@@ -52,6 +54,27 @@ describe("pinned landmarks", () => {
       weight: 1,
     });
     expect(data.features[0]?.geometry.coordinates).toEqual([30.5636, 50.4267]);
+  });
+
+  it("uses Core rarity colours without changing ordinary pins", () => {
+    const rated = (rarity: "rare" | "special" | "exclusive") => ({
+      ...MOTHERLAND,
+      rarity,
+    });
+    expect(pinnedLandmarkColor(rated("rare"))).toBe(CURATED_RARITY_COLORS.rare);
+    expect(pinnedLandmarkColor(rated("special"))).toBe(
+      CURATED_RARITY_COLORS.special,
+    );
+    expect(pinnedLandmarkColor(rated("exclusive"))).toBe(
+      CURATED_RARITY_COLORS.exclusive,
+    );
+    expect(pinnedLandmarkColor(MOTHERLAND)).not.toBe(
+      CURATED_RARITY_COLORS.rare,
+    );
+    const data = pinnedLandmarksData([rated("special")]) as {
+      features: { properties: Record<string, unknown> }[];
+    };
+    expect(data.features[0]?.properties.rarity).toBe("special");
   });
 
   it("renders the application's text and hides an absent detail", () => {

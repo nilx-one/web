@@ -382,6 +382,8 @@ export interface MapPinnedLandmark {
   /** Display text, already localized by the application. */
   readonly title: string;
   readonly detail?: string;
+  /** Core-derived published rarity, visual only; never client-computed. */
+  readonly rarity?: "rare" | "special" | "exclusive";
 }
 
 /**
