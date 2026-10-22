@@ -64,10 +64,7 @@ describe("Core curated landmark map projection", () => {
 
   it("rejects missing, displaced and duplicated archive IDs", () => {
     expect(() => curatedLandmarkPins(view, labels.slice(0, 2))).toThrow();
-    const displaced = [
-      { ...labels[0], longitudeE7: "0" },
-      ...labels.slice(1),
-    ];
+    const displaced = [{ ...labels[0], longitudeE7: "0" }, ...labels.slice(1)];
     expect(() => curatedLandmarkPins(view, displaced)).toThrow();
     expect(() => curatedLandmarkPins(view, [...labels, labels[0]])).toThrow();
     expect(() =>
