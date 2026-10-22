@@ -55,6 +55,7 @@ import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { ANIMAL_ASSET_URLS } from "./animal-assets";
 import { createPingModel } from "./ping-model";
 import { createFlightLootModel } from "./flight-loot-model";
+import { createSubscriptionAura } from "./subscription-aura";
 import {
   createAmbientDroneKit,
   type AmbientDroneKit,
@@ -140,6 +141,7 @@ interface DroneModel {
 }
 
 interface AvatarInstance {
+  aura?: ReturnType<typeof createSubscriptionAura>;
   backpack?: Object3D;
   backpackLoading?: boolean;
   handle: SceneHandle;
@@ -396,6 +398,32 @@ export function createAvatarLayer(
     if (instance.root === undefined) return;
     applyAvatarNodeVisibility(instance.root, instance.handle.visibleNodes);
     syncBackpack(instance);
+    syncAura(instance);
+  }
+
+  function syncAura(instance: AvatarInstance): void {
+    const tier = instance.handle.subscriptionAura;
+    const seconds = now() / 1000;
+    const reduced = instance.handle.reducedMotion === true;
+    // Status is already cleared. Only a short decorative afterimage fades;
+    // it cannot grant capability or survive an identity change.
+    if (tier !== "special" && tier !== "exclusive") {
+      instance.aura?.setTier(undefined, seconds, reduced);
+      if (!instance.handle.visible || instance.aura?.fadedOut())
+        releaseAura(instance);
+      return;
+    }
+    if (instance.root === undefined) return;
+    if (instance.aura === undefined) {
+      instance.aura = createSubscriptionAura(tier);
+      instance.root.add(instance.aura.root);
+    }
+    instance.aura.setTier(tier, seconds, reduced);
+  }
+
+  function releaseAura(instance: AvatarInstance): void {
+    instance.aura?.dispose();
+    delete instance.aura;
   }
 
   function syncBackpack(instance: AvatarInstance): void {
@@ -619,6 +647,7 @@ export function createAvatarLayer(
       const mixer = new AnimationMixer(root);
       instance.root?.removeFromParent();
       releaseBackpack(instance);
+      releaseAura(instance);
       instance.root = root;
       instance.mixer = mixer;
       instance.clips = new Map(
@@ -647,6 +676,8 @@ export function createAvatarLayer(
       existing.handle.modelId === handle.modelId &&
       existing.handle.droneKind === handle.droneKind
     ) {
+      if (existing.handle.subscriptionSubject !== handle.subscriptionSubject)
+        releaseAura(existing);
       existing.handle = handle;
       existing.drone?.sample(
         handle.clipPhase,
@@ -665,6 +696,7 @@ export function createAvatarLayer(
     if (existing !== undefined) {
       existing.loadGeneration = ++generation;
       releaseBackpack(existing);
+      releaseAura(existing);
     }
     existing?.root?.removeFromParent();
     existing?.mixer?.stopAllAction();
@@ -711,7 +743,14 @@ export function createAvatarLayer(
       );
       lastFrame = current;
       for (const instance of instances.values()) {
-        if (instance.handle.visible) instance.mixer?.update(deltaSeconds);
+        if (instance.handle.visible) {
+          instance.mixer?.update(deltaSeconds);
+          instance.aura?.sample(
+            current / 1000,
+            instance.handle.reducedMotion === true,
+          );
+          if (instance.aura?.fadedOut()) releaseAura(instance);
+        }
       }
       if (map !== undefined) anchorAt(map);
       originMatrix
@@ -814,6 +853,7 @@ export function createAvatarLayer(
       instance.mixer?.stopAllAction();
       instance.drone?.dispose();
       releaseBackpack(instance);
+      releaseAura(instance);
       instance.root?.removeFromParent();
       instances.delete(id);
       map?.triggerRepaint();
@@ -843,6 +883,7 @@ export function createAvatarLayer(
         instance.mixer?.stopAllAction();
         instance.drone?.dispose();
         releaseBackpack(instance);
+        releaseAura(instance);
         instance.root?.removeFromParent();
       }
       instances.clear();

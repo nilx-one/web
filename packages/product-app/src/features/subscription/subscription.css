@@ -1,0 +1,61 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.subscription-identity {
+  transition: color 700ms ease;
+}
+.subscription-identity[data-tier="exclusive"] {
+  color: light-dark(#602a9b, #e0caff);
+}
+.subscription-badges {
+  display: inline-grid;
+  max-width: 0;
+  overflow: hidden;
+  vertical-align: middle;
+  transition: max-width 700ms ease;
+}
+.subscription-identity[data-tier] .subscription-badges {
+  max-width: 8em;
+}
+.subscription-badge {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: translateY(0.3em);
+  transition:
+    opacity 700ms ease,
+    transform 700ms ease,
+    color 700ms ease;
+  display: inline-block;
+  margin-inline-start: 0.45em;
+  border: 1px solid currentColor;
+  border-radius: 0.4em;
+  padding: 0.12em 0.4em;
+  font-size: 0.65em;
+  font-weight: 600;
+  line-height: 1.3;
+  vertical-align: middle;
+}
+.subscription-badge[data-level="special"] {
+  color: light-dark(#6c39aa, #d2b5ff);
+}
+.subscription-badge[data-level="exclusive"] {
+  color: light-dark(#602a9b, #e0caff);
+}
+.subscription-identity[data-tier="special"] [data-level="special"],
+.subscription-identity[data-tier="exclusive"] [data-level="exclusive"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .subscription-identity,
+  .subscription-badges,
+  .subscription-badge {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .subscription-identity[data-tier="exclusive"],
+  .subscription-badge[data-level] {
+    color: CanvasText;
+  }
+}

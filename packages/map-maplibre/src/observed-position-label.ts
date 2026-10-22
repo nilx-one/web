@@ -137,6 +137,22 @@ export function createObservedPositionLabelElement(
   title.style.display = "block";
   title.style.fontWeight = "600";
 
+  const subscription = document.createElement("span");
+  subscription.dataset.part = "subscription";
+  subscription.style.fontSize = "10px";
+  subscription.style.display = "grid";
+  subscription.style.maxHeight = "0px";
+  subscription.style.overflow = "hidden";
+  for (const tier of ["special", "exclusive"] as const) {
+    const badge = document.createElement("span");
+    badge.dataset.tier = tier;
+    badge.textContent = tier === "special" ? "Special" : "Exclusive";
+    badge.style.gridArea = "1 / 1";
+    badge.style.opacity = "0";
+    badge.setAttribute("aria-hidden", "true");
+    subscription.append(badge);
+  }
+
   const activity = document.createElement("span");
   activity.dataset.part = "activity";
   activity.style.display = "block";
@@ -171,7 +187,7 @@ export function createObservedPositionLabelElement(
   connector.style.width = "1px";
   connector.style.height = "22px";
 
-  text.append(title, activity, detail, speech);
+  text.append(title, subscription, activity, detail, speech);
   card.append(text, model, study);
   element.append(card, connector);
   return element;
@@ -199,8 +215,56 @@ export function applyObservedPositionLabel(
     card.style.boxShadow = palette.shadow;
   }
   if (title !== null) {
+    title.style.transition = prefersReducedMotion(element.ownerDocument)
+      ? "none"
+      : "color 700ms ease";
     setText(title, label.title);
-    title.style.color = palette.title;
+    title.style.color =
+      label.subscriptionTier === "exclusive"
+        ? appearance === "dark"
+          ? "#e0caff"
+          : "#602a9b"
+        : palette.title;
+    if (
+      label.subscriptionTier === "exclusive" ||
+      label.subscriptionTier === "special"
+    ) {
+      title.dataset.subscription = label.subscriptionTier;
+      title.title =
+        label.subscriptionTier === "exclusive" ? "Exclusive" : "Special";
+    } else {
+      delete title.dataset.subscription;
+      title.removeAttribute("title");
+    }
+  }
+  const subscription = element.querySelector<HTMLElement>(
+    '[data-part="subscription"]',
+  );
+  if (subscription !== null) {
+    const tier = label.subscriptionTier;
+    const active = tier === "exclusive" || tier === "special";
+    const reduced = prefersReducedMotion(element.ownerDocument);
+    subscription.style.transition = reduced ? "none" : "max-height 700ms ease";
+    subscription.style.maxHeight = active ? "20px" : "0px";
+    subscription.setAttribute("aria-hidden", String(!active));
+    for (const badge of subscription.querySelectorAll<HTMLElement>(
+      "[data-tier]",
+    )) {
+      const selected = badge.dataset.tier === tier;
+      badge.style.transition = reduced
+        ? "none"
+        : "opacity 700ms ease, color 700ms ease";
+      badge.style.opacity = selected ? "1" : "0";
+      badge.setAttribute("aria-hidden", String(!selected));
+      badge.style.color =
+        badge.dataset.tier === "special"
+          ? appearance === "dark"
+            ? "#d2b5ff"
+            : "#6c39aa"
+          : appearance === "dark"
+            ? "#e0caff"
+            : "#602a9b";
+    }
   }
   if (detail !== null) {
     setText(detail, label.detail ?? "");

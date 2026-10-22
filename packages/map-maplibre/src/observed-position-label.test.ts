@@ -122,3 +122,35 @@ describe("the observed position card", () => {
     expect(part("card")?.style.background).not.toBe(dark);
   });
 });
+
+it("shows subscription status without a visible body and clears reused labels", () => {
+  const element = createObservedPositionLabelElement(document);
+  applyObservedPositionLabel(
+    element,
+    { title: "0x0sky", subscriptionTier: "exclusive" },
+    "dark",
+  );
+  const title = element.querySelector<HTMLElement>('[data-part="title"]')!;
+  const badge = element.querySelector<HTMLElement>(
+    '[data-part="subscription"]',
+  )!;
+  expect(title.dataset.subscription).toBe("exclusive");
+  expect(badge.querySelector('[aria-hidden="false"]')?.textContent).toBe(
+    "Exclusive",
+  );
+  const exclusiveColor = title.style.color;
+  applyObservedPositionLabel(
+    element,
+    { title: "0x0sky", subscriptionTier: "special" },
+    "dark",
+  );
+  expect(title.style.color).not.toBe(exclusiveColor);
+  expect(badge.querySelector('[aria-hidden="false"]')?.textContent).toBe(
+    "Special",
+  );
+  applyObservedPositionLabel(element, { title: "0x1other" }, "light");
+  expect(title.dataset.subscription).toBeUndefined();
+  expect(title.hasAttribute("title")).toBe(false);
+  expect(badge.style.maxHeight).toBe("0px");
+  expect(badge.getAttribute("aria-hidden")).toBe("true");
+});
