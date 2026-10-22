@@ -157,10 +157,38 @@ export function useOrbSpills({
   const [picked, setPicked] = useState<ReadonlySet<string>>(
     () => new Set(kept.picked),
   );
-  const cellsEnabledRef = useRef(cellsEnabled);
+  // A reveal can arrive before the async Core v4 handshake completes.
+  // Keep those cell IDs until the compatible runtime becomes available.
+  const pendingCellSpills = useRef(new Set<string>());
+  const inFlightCellSpills = useRef(new Set<string>());
+  const requestCellSpill = useCallback(
+    (cellId: string) => {
+      if (
+        !cellsEnabled ||
+        cellPort === undefined ||
+        inFlightCellSpills.current.has(cellId)
+      ) return;
+      inFlightCellSpills.current.add(cellId);
+      void cellPort.spillCell(cellId)
+        .then((result) => {
+          if (result.kind !== "spilled") return;
+          pendingCellSpills.current.delete(cellId);
+          setCells((current) => {
+            if (current.has(cellId)) return current;
+            const next = new Map(current);
+            next.set(cellId, knownCell(cellId, result.spill, Date.now()));
+            return next;
+          });
+        })
+        .catch(() => undefined)
+        .finally(() => inFlightCellSpills.current.delete(cellId));
+    },
+    [cellPort, cellsEnabled],
+  );
   useEffect(() => {
-    cellsEnabledRef.current = cellsEnabled;
-  });
+    if (!cellsEnabled) return;
+    for (const id of pendingCellSpills.current) requestCellSpill(id);
+  }, [cellsEnabled, requestCellSpill]);
   const shas = useRef(new Map<ArtifactId, string>());
 
   const shaOf = useCallback(async (id: ArtifactId): Promise<string> => {
@@ -218,19 +246,9 @@ export function useOrbSpills({
     (cell: MapFogCell) => {
       // The cell's own orbs: the service answers its spill, and keeps
       // nothing. A cell spills once; one already kept is not asked again.
-      if (cellPort !== undefined && cellsEnabledRef.current) {
-        void cellPort
-          .spillCell(cell.id)
-          .then((result) => {
-            if (result.kind !== "spilled") return;
-            setCells((current) => {
-              if (current.has(cell.id)) return current;
-              const next = new Map(current);
-              next.set(cell.id, knownCell(cell.id, result.spill, Date.now()));
-              return next;
-            });
-          })
-          .catch(() => undefined);
+      if (cellPort !== undefined) {
+        pendingCellSpills.current.add(cell.id);
+        requestCellSpill(cell.id);
       }
       if (spillPort === undefined) return;
       void (async () => {
@@ -266,7 +284,7 @@ export function useOrbSpills({
         adopt(entries);
       })().catch(() => undefined);
     },
-    [adopt, cellPort, renderer, spillPort],
+    [adopt, cellPort, renderer, requestCellSpill, spillPort],
   );
 
   // The spills of the finds around the Bond, read by sha bucket on a slow
