@@ -18,10 +18,11 @@ use identity_bot::{
     AdminRoleDecision, AvaiaTravelOutcome, BondAccessRole, BondLocation, BondLocationMode,
     BondLocationRepository, BrowserOAuthConfig, DecimalU64, DiscordOAuthClient, GeoCoordinate,
     GithubEvidenceConfig, GithubEvidenceRepository, IdentityProvider, IdentityRecord,
-    IdentityRepository, NativeAuthConfig, OAuthClientCredentials, PendingLocationIntent,
-    ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome, TelegramInitDataVerifier,
-    TelegramLocationIntents, api, browser_web_auth, business_command, github_evidence,
-    location_control_router, provider_self_service_router, public_api,
+    IdentityRepository, NativeAuthConfig, OAuthClientCredentials, PartnerLookupConfig,
+    PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
+    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, business_command,
+    github_evidence, location_control_router, partner_lookup_router, provider_self_service_router,
+    public_api,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
@@ -279,6 +280,13 @@ async fn main() {
                 "SPEECH_INGEST_TOKEN and SPEECH_EARSHOT_METERS must satisfy the speech contract",
             )
         });
+    let partner_lookup_config = env::var("PARTNER_LOOKUP_TOKEN")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .map(|token| {
+            PartnerLookupConfig::new(&token)
+                .expect("PARTNER_LOOKUP_TOKEN must satisfy the partner lookup contract")
+        });
     let telegram_browser_oauth = oauth_credentials_from_environment(
         "TELEGRAM_OIDC_CLIENT_ID",
         "TELEGRAM_OIDC_CLIENT_SECRET",
@@ -435,6 +443,10 @@ async fn main() {
     .merge(public_api);
     let api = match speech_api {
         Some(speech_api) => api.merge(speech_api),
+        None => api,
+    };
+    let api = match partner_lookup_config {
+        Some(config) => api.merge(partner_lookup_router(config, provider_links.clone())),
         None => api,
     };
     let listener = tokio::net::TcpListener::bind(http_bind)

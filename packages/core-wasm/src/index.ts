@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  decodeSubscriptionStatus,
+  type SubscriptionSnapshot,
+  type SubscriptionStatus,
   courierDestinationRequest,
   decodeCourierDestination,
   CourierCapabilityUnavailable,
@@ -765,6 +768,11 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
 }
 
 export interface CoreWasmBindings {
+  subscriptionStatus?(
+    snapshot: SubscriptionSnapshot | null,
+    owner: string,
+    nowMs: number,
+  ): SubscriptionStatus;
   courierDestination?(
     origin: CourierCoordinate,
     projection: BusinessPointProjection,
@@ -811,6 +819,7 @@ export interface CoreWasmBindings {
 }
 
 export interface GeneratedCoreWasmModule {
+  subscription_status?(snapshot: string, owner: string, now_ms: string): string;
   /** Absent from a runtime built before Core's courier destination. */
   courier_destination?(request: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
@@ -1009,6 +1018,25 @@ export async function loadGeneratedCoreWasmBindings(
                 distanceMeters,
                 artifacts,
                 previouslyBlocked,
+              ),
+            );
+          },
+        }),
+    ...(runtime.subscription_status === undefined
+      ? {}
+      : {
+          subscriptionStatus: (
+            snapshot: SubscriptionSnapshot | null,
+            owner: string,
+            nowMs: number,
+          ) => {
+            if (!Number.isSafeInteger(nowMs) || nowMs < 0)
+              throw new RangeError("Invalid subscription clock");
+            return decodeSubscriptionStatus(
+              runtime.subscription_status!(
+                JSON.stringify(snapshot),
+                owner,
+                String(nowMs),
               ),
             );
           },
@@ -1239,6 +1267,19 @@ class CoreWasmClient implements CoreRuntimePort {
     if (bindings.courierDestination === undefined)
       throw new CourierCapabilityUnavailable();
     return bindings.courierDestination(origin, projection);
+  }
+
+  public async subscriptionStatus(
+    snapshot: SubscriptionSnapshot | null,
+    owner: string,
+    nowMs: number,
+  ): Promise<SubscriptionStatus> {
+    const bindings = await this.loadBindings();
+    return (
+      bindings.subscriptionStatus?.(snapshot, owner, nowMs) ?? {
+        kind: "unknown",
+      }
+    );
   }
 
   /** Older verified 0.1.0 runtimes have no optional-waypoint export. */

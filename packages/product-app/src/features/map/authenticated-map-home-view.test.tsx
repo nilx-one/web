@@ -631,9 +631,9 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
   });
 
-  it("brings the world to a body a person reached for", async () => {
+  it("opens the Bond's Dock without forcing the camera to refocus", async () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
-    renderView({
+    const { container } = renderView({
       mapRenderer,
       geolocation: createGeolocationDouble({ position: observation() }),
     });
@@ -643,13 +643,15 @@ describe("AuthenticatedMapHomeView", () => {
 
     act(() => mapRenderer.activateBody("bond"));
 
-    expect(setCamera.mock.calls.length).toBeGreaterThan(firstFix);
-    const [camera] = setCamera.mock.calls.at(-1) ?? [];
-    expect(camera?.zoom).toBeGreaterThan(MAP_SCALE_ZOOM.street);
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "bond:bond",
+    );
+    expect(setCamera.mock.calls.length).toBe(firstFix);
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
   });
 
-  it("puts the Dock back on the pair when a body is reached for", () => {
+  it("navigates to the world when a Bond is reached from another section", () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
     const onNavigate = vi.fn();
     renderView({ mapRenderer, onNavigate, section: "settings" });

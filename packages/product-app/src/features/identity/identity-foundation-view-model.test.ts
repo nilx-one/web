@@ -78,6 +78,39 @@ describe("identity foundation view state", () => {
     });
   });
 
+  it("carries the allocated public URL without deriving it from a case-sensitive pub_dress", () => {
+    const publicUrl = "https://xn--0x0-hddg4b.nilx.one/";
+    expect(
+      createNativeIdentityViewState(
+        {
+          kind: "authenticated",
+          identity: { pubDress: "0x0Тест", pubDressUrl: publicUrl },
+        },
+        { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+        undefined,
+        undefined,
+        false,
+      ),
+    ).toMatchObject({
+      kind: "authenticated",
+      pubDress: "0x0Тест",
+      pubDressUrl: publicUrl,
+    });
+
+    expect(
+      createNativeIdentityViewState(
+        {
+          kind: "authenticated",
+          identity: { pubDress: "0x0sky" },
+        },
+        { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+        undefined,
+        undefined,
+        false,
+      ),
+    ).not.toHaveProperty("pubDressUrl");
+  });
+
   it("reuses the shared address form for an authenticated provider", () => {
     expect(
       createProviderIdentityViewState(

@@ -791,6 +791,28 @@ describe("CoreWasmClient", () => {
   });
 });
 
+it("delegates subscription policy to Core and leaves older runtimes unknown", async () => {
+  const wire = vi.fn(
+    () =>
+      '{"kind":"active","bond_pub_dress":"0x0sky","tier":"exclusive","valid_until_ms":"300"}',
+  );
+  const bindings = await loadGeneratedCoreWasmBindings({
+    importRuntime: async () => generatedRuntime({ subscription_status: wire }),
+  });
+  expect(bindings.subscriptionStatus?.(null, "0x0sky", 200)).toMatchObject({
+    kind: "active",
+    tier: "exclusive",
+  });
+  expect(wire).toHaveBeenCalledWith("null", "0x0sky", "200");
+  expect(() => bindings.subscriptionStatus?.(null, "0x0sky", NaN)).toThrow();
+  const client = createCoreWasmClient({
+    loadBindings: async () => ({ contractVersion: () => "0.1.0" }),
+  });
+  await expect(
+    client.subscriptionStatus!(null, "0x0sky", 200),
+  ).resolves.toEqual({ kind: "unknown" });
+});
+
 describe("decodeOrbWorld rarity", () => {
   const wire = (rarity: unknown) =>
     JSON.stringify({

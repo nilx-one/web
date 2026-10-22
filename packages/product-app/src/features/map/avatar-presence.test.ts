@@ -188,3 +188,18 @@ describe("apparent size of a body", () => {
     expect(wheelBodyHandle({ zoom: MAP_SCALE_ZOOM.city })?.visible).toBe(false);
   });
 });
+
+it("shares the supplied tier for either body and clears it when omitted", () => {
+  for (const seat of ["bond", "avaia"] as const) {
+    expect(
+      wheelBodyHandle({
+        body: { seat },
+        subscriptionAura: "exclusive",
+        reducedMotion: true,
+      }),
+    ).toMatchObject({ subscriptionAura: "exclusive", reducedMotion: true });
+    expect(wheelBodyHandle({ body: { seat } })).not.toHaveProperty(
+      "subscriptionAura",
+    );
+  }
+});
