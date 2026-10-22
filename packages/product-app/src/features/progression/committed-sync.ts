@@ -27,7 +27,12 @@ import {
   subscribeProgression,
   updateProgression,
 } from "./progression";
-import { awardAmount, craftRecipeOf, type AwardRecord } from "./commitment";
+import {
+  awardAmount,
+  cellOrbParts,
+  craftRecipeOf,
+  type AwardRecord,
+} from "./commitment";
 
 /** An orb's id, as Core names it: `orb:`, its find, and which of its orbs. */
 export type OrbId = `orb:${string}`;
@@ -42,6 +47,15 @@ export function orbParts(
   return match === null
     ? undefined
     : { artifactId: match[1]!, orb: Number(match[2]) };
+}
+
+/** The orb an orb award names: a find's orb, or a cell orb without its cell. */
+function orbIdOf(record: AwardRecord): OrbId {
+  const cell =
+    record.kind === "cell_orb_picked_up"
+      ? cellOrbParts(record.subject)
+      : undefined;
+  return (cell?.orbId ?? record.subject) as OrbId;
 }
 
 export type CommittedWorldEvent =
@@ -79,6 +93,10 @@ function toWire(award: PendingCommittedAward): CommittedAward {
   // An orb names its find and which of its orbs; its subject is the orb id.
   const orb =
     record.kind === "orb_picked_up" ? orbParts(record.subject) : undefined;
+  const cellOrb =
+    record.kind === "cell_orb_picked_up"
+      ? cellOrbParts(record.subject)
+      : undefined;
   const tier = record.kind === "find_picked_up" ? record.tier : undefined;
   return {
     id: award.id,
@@ -94,6 +112,9 @@ function toWire(award: PendingCommittedAward): CommittedAward {
       ? { recipe: craftRecipeOf(record.subject) }
       : {}),
     ...(orb === undefined ? {} : { artifactId: orb.artifactId, orb: orb.orb }),
+    ...(cellOrb === undefined
+      ? {}
+      : { orbId: cellOrb.orbId, cell: cellOrb.cell }),
   };
 }
 
@@ -101,10 +122,10 @@ function keptEvent(
   award: PendingCommittedAward,
 ): CommittedWorldEvent | undefined {
   const { record, find } = award;
-  if (record.kind === "orb_picked_up") {
+  if (record.kind === "orb_picked_up" || record.kind === "cell_orb_picked_up") {
     return {
       kind: "orb-kept",
-      orb: record.subject as OrbId,
+      orb: orbIdOf(record),
       earner: record.earner,
       experience: awardAmount(record) ?? 0,
     };
@@ -191,7 +212,10 @@ export function flushCommittedAwards(
 
       // An orb is claimed like a rare find: whoever got there first keeps
       // it, and everyone after gets "crap!". Nothing else changes for it.
-      if (award.record.kind === "orb_picked_up") {
+      if (
+        award.record.kind === "orb_picked_up" ||
+        award.record.kind === "cell_orb_picked_up"
+      ) {
         switch (resolvePickUp(result, award.id)) {
           case "keep": {
             const kept = await keepCommittedAward(owner, award.id);
@@ -204,7 +228,7 @@ export function flushCommittedAwards(
           case "oh-crap":
             onEvent?.({
               kind: "orb-taken",
-              orb: award.record.subject as OrbId,
+              orb: orbIdOf(award.record),
               earner: award.record.earner,
             });
             await dropCommittedAward(owner, award.id, "taken");

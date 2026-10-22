@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { OrbCoordinate, OrbWorldCellLandmark } from "./orb-world";
+
 /**
  * The public, synced slice of a Bond's `.bnd`.
  *
@@ -72,7 +74,8 @@ export type AwardKind =
   | "find_seen"
   | "find_picked_up"
   | "craft_finished"
-  | "orb_picked_up";
+  | "orb_picked_up"
+  | "cell_orb_picked_up";
 
 /**
  * One award as the service gets it: its commitment, where it sits on this
@@ -97,6 +100,10 @@ export interface CommittedAward {
   readonly recipe?: string;
   /** For `orb_picked_up` only, with its find's `artifactId`: which orb. */
   readonly orb?: number;
+  /** For `cell_orb_picked_up` only: Core's rated orb id. */
+  readonly orbId?: string;
+  /** For `cell_orb_picked_up` only: the cell it spilled from. Never kept. */
+  readonly cell?: string;
 }
 
 /**
@@ -212,5 +219,40 @@ export function hasOrbSpillAccess(value: unknown): value is OrbSpillAccessPort {
   return (
     typeof candidate.spillOrbs === "function" &&
     typeof candidate.readOrbSpills === "function"
+  );
+}
+
+/**
+ * A cell's spill as the service answers it (`docs/exp-orbs.md`): the key only
+ * it can make for this Bond and cell, the centre, the landmark rarity
+ * registry and the landmarks, in Core's orb world `cells` shape.
+ */
+export interface CellSpillView {
+  readonly key: string;
+  readonly center: OrbCoordinate;
+  readonly registry: number;
+  readonly ratedLandmarks: readonly OrbWorldCellLandmark[];
+}
+
+export type CellSpillResult =
+  | { kind: "spilled"; spill: CellSpillView }
+  | { kind: "rejected"; reason: PubInfoRejection }
+  | { kind: "service-unavailable" };
+
+/**
+ * Asks the service for the spill of a cell that opened for this Bond. Apart
+ * from `OrbSpillAccessPort` so a service without cell spills stays a valid
+ * host: its Bonds see the per-find orbs only.
+ */
+export interface CellSpillAccessPort {
+  spillCell(cell: string): Promise<CellSpillResult>;
+}
+
+export function hasCellSpillAccess(
+  value: unknown,
+): value is CellSpillAccessPort {
+  if (typeof value !== "object" || value === null) return false;
+  return (
+    typeof (value as Partial<CellSpillAccessPort>).spillCell === "function"
   );
 }

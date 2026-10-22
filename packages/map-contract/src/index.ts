@@ -555,6 +555,17 @@ export interface MapOrb {
    * falling; one whose time has passed is simply there.
    */
   readonly landsAt: number;
+  /** A cell orb's rarity, which tints it; a find's orbs have none. */
+  readonly rarity?: FlightLootRarity;
+  /**
+   * Set once it is picked up: it is drawn to whoever reached it, from `at`
+   * (wall-clock milliseconds), and is gone when it arrives. Presentation only.
+   */
+  readonly pulledTo?: {
+    readonly longitude: number;
+    readonly latitude: number;
+    readonly at: number;
+  };
 }
 
 /** Flight collectibles are transient renderer props, not durable claims. */

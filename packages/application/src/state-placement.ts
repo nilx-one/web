@@ -346,6 +346,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     what: "The cells a Bond or its Avaia opened.",
   },
   {
+    id: "orbs.cells",
+    placement: "device",
+    mobility: "resident",
+    medium: "local-storage",
+    key: "nilx-one.orbs.cells.v1",
+    perOwner: true,
+    what: "Opened cells' orbs: spills still lying, orbs picked, cells done and spills still owed.",
+  },
+  {
     id: "avaia.landmarks",
     placement: "synchronizable",
     mobility: "transport",

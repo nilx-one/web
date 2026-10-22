@@ -53,6 +53,9 @@ import {
   type CommittedAwardAccessPort,
   MAX_CLAIM_BUCKETS,
   type OrbSpillAccessPort,
+  type CellSpillAccessPort,
+  type CellSpillResult,
+  type CellSpillView,
   type OrbSpillResult,
   type OrbSpillsReadResult,
   type OrbSpillView,
@@ -1286,6 +1289,8 @@ class IdentityHttpAdapter
               : { artifact_id: award.artifactId }),
             ...(award.recipe === undefined ? {} : { recipe: award.recipe }),
             ...(award.orb === undefined ? {} : { orb: award.orb }),
+            ...(award.orbId === undefined ? {} : { orb_id: award.orbId }),
+            ...(award.cell === undefined ? {} : { cell: award.cell }),
           })),
         }),
       });
@@ -1409,6 +1414,35 @@ class IdentityHttpAdapter
       default:
         return pubInfoRefusal(body);
     }
+  }
+
+  /** Asks for the spill of a cell that opened for this Bond (contract 16). */
+  public async spillCell(cell: string): Promise<CellSpillResult> {
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch("/api/v1/identity/orbs/cell-spill", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ cell }),
+      });
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const spill = parseCellSpill(body);
+      return spill === undefined
+        ? { kind: "service-unavailable" }
+        : { kind: "spilled", spill };
+    }
+    return pubInfoRefusal(body);
   }
 
   public async spillOrbs(artifactId: string): Promise<OrbSpillResult> {
@@ -1564,6 +1598,52 @@ function parseAwardOutcome(
 }
 
 /** One spill, or `undefined` for anything that does not read as one. */
+const CELL_KEY = /^[0-9a-f]{64}$/;
+const E7_DECIMAL = /^-?(0|[1-9][0-9]{0,9})$/;
+const LANDMARK_ID = /^[A-Za-z0-9._-]{1,64}$/;
+
+function parseE7(value: unknown): CellSpillView["center"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const { longitude_e7: longitude, latitude_e7: latitude } = value;
+  return typeof longitude === "string" &&
+    E7_DECIMAL.test(longitude) &&
+    typeof latitude === "string" &&
+    E7_DECIMAL.test(latitude)
+    ? { longitude_e7: longitude, latitude_e7: latitude }
+    : undefined;
+}
+
+function parseCellSpill(value: unknown): CellSpillView | undefined {
+  if (!isRecord(value)) return undefined;
+  const { key, center, registry, rated_landmarks: landmarks } = value;
+  const at = parseE7(center);
+  if (
+    typeof key !== "string" ||
+    !CELL_KEY.test(key) ||
+    at === undefined ||
+    typeof registry !== "number" ||
+    !Number.isInteger(registry) ||
+    registry < 1 ||
+    !Array.isArray(landmarks)
+  ) {
+    return undefined;
+  }
+  const ratedLandmarks: CellSpillView["ratedLandmarks"][number][] = [];
+  for (const landmark of landmarks) {
+    if (!isRecord(landmark)) return undefined;
+    const position = parseE7(landmark.at);
+    if (
+      typeof landmark.id !== "string" ||
+      !LANDMARK_ID.test(landmark.id) ||
+      position === undefined
+    ) {
+      return undefined;
+    }
+    ratedLandmarks.push({ id: landmark.id, at: position });
+  }
+  return { key, center: at, registry, ratedLandmarks };
+}
+
 function parseOrbSpill(value: unknown): OrbSpillView | undefined {
   if (!isRecord(value)) return undefined;
   const { sha, count, expires_at_ms: expiresAt, taken } = value;
@@ -1655,6 +1735,7 @@ export function createIdentityHttpAdapter(
   PubInfoAccessPort &
   CommittedAwardAccessPort &
   OrbSpillAccessPort &
+  CellSpillAccessPort &
   NearbySpeechAccessPort &
   BusinessStationAccessPort &
   XpingEngineAccessPort {

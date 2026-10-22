@@ -94,12 +94,16 @@ export {
 } from "./nearby-speech";
 export type {
   OrbCoordinate,
+  OrbRarity,
+  OrbWorldCell,
+  OrbWorldCellLandmark,
   OrbWorldInput,
   OrbWorldOrb,
   OrbWorldSpill,
   OrbWorldView,
 } from "./orb-world";
 export {
+  hasCellSpillAccess,
   hasCommittedAwardAccess,
   hasOrbSpillAccess,
   hasPubInfoAccess,
@@ -107,6 +111,9 @@ export {
   type AwardKind,
   type AwardOutcome,
   type AwardResult,
+  type CellSpillAccessPort,
+  type CellSpillResult,
+  type CellSpillView,
   type ClaimedFindView,
   type ClaimsReadResult,
   type CommitAwardsResult,

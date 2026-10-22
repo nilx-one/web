@@ -8,6 +8,7 @@ import {
   CORE_FIXTURE_CORPUS_DIGEST,
   CORE_FIXTURE_CORPUS_VERSION,
   createCoreWasmClient,
+  decodeOrbWorld,
   loadGeneratedCoreWasmBindings,
   type GeneratedCoreWasmModule,
 } from "./index";
@@ -810,4 +811,31 @@ it("delegates subscription policy to Core and leaves older runtimes unknown", as
   await expect(
     client.subscriptionStatus!(null, "0x0sky", 200),
   ).resolves.toEqual({ kind: "unknown" });
+});
+
+describe("decodeOrbWorld rarity", () => {
+  const wire = (rarity: unknown) =>
+    JSON.stringify({
+      ok: true,
+      view: {
+        orbs: [
+          {
+            id: "orb:cell:x:1:~:0",
+            kind: "orb",
+            at: { longitude_e7: "1", latitude_e7: "2" },
+            lands_at: "70",
+            ...(rarity === undefined ? {} : { rarity }),
+          },
+        ],
+        bond_reach: [],
+        avaia_reach: [],
+        next_expiry: null,
+      },
+    });
+
+  it("reads a cell orb's rarity, or none, and refuses an unknown one", () => {
+    expect(decodeOrbWorld(wire("exclusive")).orbs[0]?.rarity).toBe("exclusive");
+    expect(decodeOrbWorld(wire(undefined)).orbs[0]?.rarity).toBeUndefined();
+    expect(() => decodeOrbWorld(wire("legendary"))).toThrow();
+  });
 });
