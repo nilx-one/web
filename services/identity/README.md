@@ -159,10 +159,30 @@ Optional runtime settings: `SPEECH_INGEST_TOKEN` (at least 32 bytes; without it
 the routes are not mounted) and `SPEECH_EARSHOT_METERS` (default `500`, at most
 `5000`).
 
+## Partner provider lookup
+
+A partner, such as a business in the 0x1 world, can ask which Bond a provider
+account belongs to. The decision is Core's (`provider_lookup_view`, see
+`nilx-one/core` `docs/provider-bindings.md`). This service only reads the
+binding.
+
+- `POST /api/v1/partner/provider-lookup` with `Authorization: Bearer <PARTNER_LOOKUP_TOKEN>`
+  and body `{"provider": "telegram", "subject": "123456789"}`.
+- `200 {"state": "linked", "pub_dress": "…"}`: only the public handle, never an
+  internal identifier.
+- `200 {"state": "sign_in_required", "provider": "telegram"}`: the account is not
+  bound, so the partner asks the person to sign in with 0x1 and connect it.
+- `401 unauthorized`, `422` (`unknown_provider`, `malformed_request`, or a
+  subject error), `503 unavailable` when the store cannot answer. A `503` is
+  never a `sign_in_required`.
+
+Optional runtime setting: `PARTNER_LOOKUP_TOKEN` (at least 32 bytes; without it
+the route is not mounted).
+
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`,
-`DISCORD_CLIENT_SECRET`, and `SPEECH_INGEST_TOKEN` are server-only runtime secrets. The native authentication
+`DISCORD_CLIENT_SECRET`, `SPEECH_INGEST_TOKEN`, and `PARTNER_LOOKUP_TOKEN` are server-only runtime secrets. The native authentication
 secret and password pepper must be independent values of at least 32 bytes. None
 may be exposed through Vite, browser configuration, repository files, build
 output, Telegram Mini App JavaScript, or Discord Activity JavaScript.
