@@ -36,6 +36,35 @@ function generatedRuntime(
 }
 
 describe("CoreWasmClient", () => {
+  it("exposes Core's landmark map export only when verified Wasm contains it", async () => {
+    const empty = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime(),
+    });
+    const request = {
+      registry: 1,
+      landmarks: [
+        { id: "n123", at: { longitude_e7: "305000000", latitude_e7: "504500000" } },
+      ],
+    };
+    await expect(
+      createCoreWasmClient({ loadBindings: async () => empty }).landmarkMapView!(request),
+    ).rejects.toThrow("landmark map binding is missing");
+    const received: string[] = [];
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          landmark_map_view: (payload: string) => {
+            received.push(payload);
+            return '{"ok":true,"registry":1,"landmarks":[]}';
+          },
+        }),
+    });
+    await expect(
+      createCoreWasmClient({ loadBindings: async () => bindings }).landmarkMapView!(request),
+    ).resolves.toBe('{"ok":true,"registry":1,"landmarks":[]}');
+    expect(received).toEqual([JSON.stringify(request)]);
+  });
+
   it("reports the absent generated artifact", async () => {
     await expect(createCoreWasmClient().probe()).resolves.toEqual({
       kind: "unavailable",
