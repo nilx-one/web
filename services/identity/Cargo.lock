@@ -1385,7 +1385,7 @@ dependencies = [
 [[package]]
 name = "nilxone-contracts"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=2185f8cc8ec3147e16af94926975ad8a2e549e34#2185f8cc8ec3147e16af94926975ad8a2e549e34"
+source = "git+https://github.com/nilx-one/core?rev=38218754dcd7654f47bd3f7cb8a495e6dd7b6ef4#38218754dcd7654f47bd3f7cb8a495e6dd7b6ef4"
 dependencies = [
  "idna",
  "idna_adapter",

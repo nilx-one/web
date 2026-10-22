@@ -12,6 +12,7 @@ import type {
   PubDressResolutionResult,
   PubDressSelection,
   StoredAvatarModel,
+  IdentityProjection,
   RuntimeReadiness,
 } from "@nilx-one/application";
 import {
@@ -89,6 +90,8 @@ export type IdentityViewState =
       avaiaPubDress?: string;
       /** The body this Bond chose, absent while it has chosen none. */
       avatarModel?: StoredAvatarModel;
+      /** The allocated public URL from identity storage, never a guessed slug. */
+      pubDressUrl?: string;
       native: boolean;
     }
   | { kind: "unavailable"; detail: string }
@@ -115,6 +118,13 @@ function projectedAvatar(avatarModel: StoredAvatarModel | undefined): {
   avatarModel?: StoredAvatarModel;
 } {
   return avatarModel === undefined ? {} : { avatarModel };
+}
+
+/** Public DNS allocation belongs to the identity service, not the UI. */
+function projectedPublicUrl(url: IdentityProjection["pubDressUrl"]): {
+  pubDressUrl?: string;
+} {
+  return url === undefined ? {} : { pubDressUrl: url };
 }
 
 /**
@@ -190,6 +200,7 @@ export function createNativeIdentityViewState(
       pubDress: authentication.identity.pubDress,
       ...projectedAvaia(authentication.identity.avaiaPubDress),
       ...projectedAvatar(authentication.identity.avatarModel),
+      ...projectedPublicUrl(authentication.identity.pubDressUrl),
       native: true,
     };
   }
@@ -199,6 +210,7 @@ export function createNativeIdentityViewState(
       pubDress: registration.identity.pubDress,
       ...projectedAvaia(registration.identity.avaiaPubDress),
       ...projectedAvatar(registration.identity.avatarModel),
+      ...projectedPublicUrl(registration.identity.pubDressUrl),
       native: true,
     };
   }
@@ -217,6 +229,7 @@ export function createNativeIdentityViewState(
       pubDress: context.identity.pubDress,
       ...projectedAvaia(context.identity.avaiaPubDress),
       ...projectedAvatar(context.identity.avatarModel),
+      ...projectedPublicUrl(context.identity.pubDressUrl),
       native: true,
     };
   }
@@ -289,6 +302,7 @@ export function createProviderIdentityViewState(
         pubDress: passwordSetup.identity.pubDress,
         ...projectedAvaia(passwordSetup.identity.avaiaPubDress),
         ...projectedAvatar(passwordSetup.identity.avatarModel),
+        ...projectedPublicUrl(passwordSetup.identity.pubDressUrl),
         native: false,
       };
     }
@@ -307,6 +321,7 @@ export function createProviderIdentityViewState(
       pubDress: registration.identity.pubDress,
       ...projectedAvaia(registration.identity.avaiaPubDress),
       ...projectedAvatar(registration.identity.avatarModel),
+      ...projectedPublicUrl(registration.identity.pubDressUrl),
       native: false,
     };
   }
@@ -316,6 +331,7 @@ export function createProviderIdentityViewState(
       pubDress: identity.identity.pubDress,
       ...projectedAvaia(identity.identity.avaiaPubDress),
       ...projectedAvatar(identity.identity.avatarModel),
+      ...projectedPublicUrl(identity.identity.pubDressUrl),
       native: false,
     };
   }
