@@ -3,6 +3,13 @@
 
 export { CourierCapabilityUnavailable } from "./courier";
 export {
+  decodeSubscriptionStatus,
+  type SubscriptionTier,
+  type SubscriptionSnapshot,
+  type SubscriptionStatus,
+  type SubscriptionStatusPort,
+} from "./subscription";
+export {
   AVATAR_BODY_REGIONS,
   AVATAR_CATALOG,
   AVATAR_CATALOG_MATCHES_IDENTITY,

@@ -13,6 +13,7 @@ import {
   type AvatarClipId,
   type AvatarHandle,
   type AvatarModelId,
+  type SubscriptionAuraTier,
 } from "@nilx-one/map-contract";
 
 import type { TranslationKey } from "../../shell/localization";
@@ -111,6 +112,8 @@ export const AVATAR_PRESENTATION_SCALE = 1;
 
 /** Everything the client needs to stand a body on the world. */
 export interface WheelBodyInput {
+  /** Resolved by an authority adapter, never the local pickup preference. */
+  readonly subscriptionAura?: SubscriptionAuraTier;
   readonly carry?: "pocket" | "backpack" | "bag";
   /** The identity this body belongs to, which is the one at the wheel. */
   readonly body: WheelBody;
@@ -155,6 +158,7 @@ export interface BodyStance {
  * does, the world can only draw it at the client's own anchor.
  */
 export function createWheelBodyHandle({
+  subscriptionAura,
   carry,
   body,
   address,
@@ -188,6 +192,9 @@ export function createWheelBodyHandle({
   const scene = resolveAvatarScene(study, appearance);
 
   return {
+    ...(subscriptionAura === undefined ? {} : { subscriptionAura }),
+    subscriptionSubject: address,
+    reducedMotion,
     backpack: carry === "backpack",
     id: BODY_HANDLE_IDS[body.seat],
     // The application and the map contract publish the same study names, so a

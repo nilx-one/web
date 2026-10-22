@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { SubscriptionSnapshot, SubscriptionStatus } from "./subscription";
 import type { OrbWorldInput, OrbWorldView } from "./orb-world";
 import type {
   BusinessPoint,
@@ -143,6 +144,11 @@ export type CoreInventoryAnswer =
  * code must fail closed when they are absent rather than reimplement UTS-46.
  */
 export interface CoreRuntimePort {
+  subscriptionStatus?(
+    snapshot: SubscriptionSnapshot | null,
+    owner: string,
+    nowMs: number,
+  ): Promise<SubscriptionStatus>;
   /** Core `courier_destination`: the nearest point of the projection. */
   courierDestination?(
     origin: CourierCoordinate,

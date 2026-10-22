@@ -74,7 +74,9 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import type { SubscriptionStatusPort } from "@nilx-one/application";
 import "./product.css";
+import { SubscriptionStatusProvider } from "./features/subscription/subscription-status";
 import { BusinessDock } from "./features/business/business-dock";
 import { BusinessWorld } from "./features/business/business-world";
 import "./features/identity/identity-field-feedback.css";
@@ -145,6 +147,7 @@ const noBusinessSubscribe = () => () => undefined;
 const noBusinessSnapshot = () => null;
 
 export interface ProductAppDependencies {
+  subscriptions?: SubscriptionStatusPort;
   business?: {
     readonly directory: BusinessSurfacePort;
     readonly navigation: BusinessNavigationPort;
@@ -1126,181 +1129,190 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     });
     const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
-      <AuthenticatedMapHomeView
-        {...(business === undefined
-          ? {}
-          : {
-              contextualDock: (observation) => (
-                <BusinessDock
-                  directory={business.directory}
-                  navigation={business.navigation}
-                  geolocation={dependencies.host.geolocation}
-                  {...(observation === undefined ? {} : { observation })}
-                />
-              ),
-            })}
-        {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
-        hostLabel={viewModel.hostLabel}
-        pubDress={viewModel.identity.pubDress}
-        {...(viewModel.identity.pubDressUrl === undefined
-          ? {}
-          : { pubDressUrl: viewModel.identity.pubDressUrl })}
-        renderer={dependencies.mapRenderer}
-        geolocation={dependencies.host.geolocation}
-        {...(dependencies.onManualBondMove === undefined
-          ? {}
-          : { onManualBondMove: dependencies.onManualBondMove })}
-        feedback={dependencies.host}
-        sound={dependencies.host.sound}
-        runtime={viewModel.runtime}
-        safeArea={viewModel.safeArea}
-        section={section}
-        {...(dependencies.localModel === undefined
-          ? {}
-          : { localModel: dependencies.localModel })}
-        {...(hasPubInfoAccess(dependencies.identity)
-          ? { pubInfo: dependencies.identity }
-          : {})}
-        {...(hasCommittedAwardAccess(dependencies.identity)
-          ? { committedAwards: dependencies.identity }
-          : {})}
-        {...(hasXpingEngineAccess(dependencies.identity)
-          ? { xpingEngine: dependencies.identity }
-          : {})}
-        findItems={dependencies.core}
-        {...(dependencies.courierDirectory === undefined
-          ? {}
-          : { courierDirectory: dependencies.courierDirectory })}
-        {...(hasNearbySpeechAccess(dependencies.identity)
-          ? { nearbySpeech: dependencies.identity }
-          : {})}
-        {...(hasBusinessStationAccess(dependencies.identity)
-          ? { businessStations: dependencies.identity }
-          : {})}
-        {...(providerConnections === undefined
-          ? {}
-          : { connectedProviders: providerConnections })}
-        {...(providerConnections === undefined
-          ? {}
-          : browserHost
-            ? {
-                onDisconnectProvider: (provider: BondProviderType) => {
-                  if (!browserProviderDisconnect.isPending) {
-                    browserProviderDisconnect.mutate(provider);
-                  }
-                },
-              }
-            : host.kind === "telegram"
+      <SubscriptionStatusProvider
+        owner={viewModel.identity.pubDress}
+        avaia={ownedAvaiaPubDress}
+        core={dependencies.core}
+        source={dependencies.subscriptions}
+      >
+        <AuthenticatedMapHomeView
+          {...(business === undefined
+            ? {}
+            : {
+                contextualDock: (observation) => (
+                  <BusinessDock
+                    directory={business.directory}
+                    navigation={business.navigation}
+                    geolocation={dependencies.host.geolocation}
+                    {...(observation === undefined ? {} : { observation })}
+                  />
+                ),
+              })}
+          {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
+          hostLabel={viewModel.hostLabel}
+          pubDress={viewModel.identity.pubDress}
+          {...(viewModel.identity.pubDressUrl === undefined
+            ? {}
+            : { pubDressUrl: viewModel.identity.pubDressUrl })}
+          renderer={dependencies.mapRenderer}
+          geolocation={dependencies.host.geolocation}
+          {...(dependencies.onManualBondMove === undefined
+            ? {}
+            : { onManualBondMove: dependencies.onManualBondMove })}
+          feedback={dependencies.host}
+          sound={dependencies.host.sound}
+          runtime={viewModel.runtime}
+          safeArea={viewModel.safeArea}
+          section={section}
+          {...(dependencies.localModel === undefined
+            ? {}
+            : { localModel: dependencies.localModel })}
+          {...(hasPubInfoAccess(dependencies.identity)
+            ? { pubInfo: dependencies.identity }
+            : {})}
+          {...(hasCommittedAwardAccess(dependencies.identity)
+            ? { committedAwards: dependencies.identity }
+            : {})}
+          {...(hasXpingEngineAccess(dependencies.identity)
+            ? { xpingEngine: dependencies.identity }
+            : {})}
+          findItems={dependencies.core}
+          {...(dependencies.courierDirectory === undefined
+            ? {}
+            : { courierDirectory: dependencies.courierDirectory })}
+          {...(hasNearbySpeechAccess(dependencies.identity)
+            ? { nearbySpeech: dependencies.identity }
+            : {})}
+          {...(hasBusinessStationAccess(dependencies.identity)
+            ? { businessStations: dependencies.identity }
+            : {})}
+          {...(providerConnections === undefined
+            ? {}
+            : { connectedProviders: providerConnections })}
+          {...(providerConnections === undefined
+            ? {}
+            : browserHost
               ? {
-                  // This host's own proof authenticated it as "telegram", so
-                  // there is exactly one row to disconnect and no `provider`
-                  // to forward — the service resolves it from that same proof.
-                  onDisconnectProvider: () => {
-                    if (!selfProviderDisconnect.isPending) {
-                      selfProviderDisconnect.mutate();
+                  onDisconnectProvider: (provider: BondProviderType) => {
+                    if (!browserProviderDisconnect.isPending) {
+                      browserProviderDisconnect.mutate(provider);
                     }
                   },
                 }
-              : {})}
-        // A host that is itself Telegram or Discord can follow that provider's
-        // URL scheme. Browser GitHub bindings intentionally have no deep link.
-        providerDeepLinks={providerDeepLinks}
-        onNavigate={(route: ShellRoute) => {
-          void navigate({ to: route });
-        }}
-        avaiaAvailability={deviceAvaiaAvailability}
-        slugEdit={createProfileSlugViewState(
-          viewModel.identity.pubDress,
-          slugDraft,
-          renameSlug.isPending,
-          renameSlug.data,
-        )}
-        {...(avaiaProfileAccess === undefined
-          ? {}
-          : {
-              avaiaSetup: createAvaiaSetupViewState({
-                load: avaiaProfileQuery.data ?? { kind: "loading" },
-                fallbackAddress: viewModel.identity.avaiaPubDress,
-                draftSlugStem: avaiaProfileSlugStemDraft,
-                pending: saveAvaiaProfile.isPending,
-                result: saveAvaiaProfile.data,
-              }),
-              ...(avaiaProfileAccess.travelAvaiaToBond === undefined
-                ? {}
-                : {
-                    onBringAvaia: async (position: {
-                      longitude: number;
-                      latitude: number;
-                    }): Promise<AvaiaTravelResult> => {
-                      try {
-                        const result =
-                          await avaiaProfileAccess.travelAvaiaToBond!(position);
-                        if (result.kind === "arrived") {
-                          queryClient.setQueryData(["avaia-profile"], {
-                            kind: "available",
-                            profile: result.profile,
-                          });
-                        }
-                        return result;
-                      } catch {
-                        return { kind: "service-unavailable" };
+              : host.kind === "telegram"
+                ? {
+                    // This host's own proof authenticated it as "telegram", so
+                    // there is exactly one row to disconnect and no `provider`
+                    // to forward — the service resolves it from that same proof.
+                    onDisconnectProvider: () => {
+                      if (!selfProviderDisconnect.isPending) {
+                        selfProviderDisconnect.mutate();
                       }
                     },
-                  }),
-              onAvaiaSetupChange: (slugStem: string) => {
-                saveAvaiaProfile.reset();
-                setAvaiaProfileSlugStemDraft(slugStem);
-              },
-              // The surface waits for the service before it closes, so the
-              // answer it acts on is the one that was actually stored.
-              onAvaiaSetupSubmit: async () => {
-                const currentAvaiaAddress =
-                  avaiaProfileQuery.data?.kind === "available"
-                    ? avaiaProfileQuery.data.profile.pubDress
-                    : ownedAvaiaPubDress;
-                if (
-                  currentAvaiaAddress === undefined ||
-                  saveAvaiaProfile.isPending
-                ) {
-                  return undefined;
-                }
-                // With no draft, the person accepted the address the Avaia
-                // already holds — saving it is what configures the Avaia.
-                const pubDress =
-                  avaiaProfileSlugStemDraft === undefined
-                    ? currentAvaiaAddress
-                    : composeAvaiaPubDress(
-                        currentAvaiaAddress,
-                        avaiaProfileSlugStemDraft,
-                      );
-                if (pubDress === undefined) return undefined;
-                return saveAvaiaProfile
-                  .mutateAsync(pubDress)
-                  .catch(() => undefined);
-              },
-            })}
-        onSlugChange={(next: string) => {
-          renameSlug.reset();
-          setSlugDraft(next);
-        }}
-        onSlugSubmit={() => {
-          if (slugDraft !== undefined && !renameSlug.isPending) {
-            renameSlug.mutate(slugDraft);
+                  }
+                : {})}
+          // A host that is itself Telegram or Discord can follow that provider's
+          // URL scheme. Browser GitHub bindings intentionally have no deep link.
+          providerDeepLinks={providerDeepLinks}
+          onNavigate={(route: ShellRoute) => {
+            void navigate({ to: route });
+          }}
+          avaiaAvailability={deviceAvaiaAvailability}
+          slugEdit={createProfileSlugViewState(
+            viewModel.identity.pubDress,
+            slugDraft,
+            renameSlug.isPending,
+            renameSlug.data,
+          )}
+          {...(avaiaProfileAccess === undefined
+            ? {}
+            : {
+                avaiaSetup: createAvaiaSetupViewState({
+                  load: avaiaProfileQuery.data ?? { kind: "loading" },
+                  fallbackAddress: viewModel.identity.avaiaPubDress,
+                  draftSlugStem: avaiaProfileSlugStemDraft,
+                  pending: saveAvaiaProfile.isPending,
+                  result: saveAvaiaProfile.data,
+                }),
+                ...(avaiaProfileAccess.travelAvaiaToBond === undefined
+                  ? {}
+                  : {
+                      onBringAvaia: async (position: {
+                        longitude: number;
+                        latitude: number;
+                      }): Promise<AvaiaTravelResult> => {
+                        try {
+                          const result =
+                            await avaiaProfileAccess.travelAvaiaToBond!(
+                              position,
+                            );
+                          if (result.kind === "arrived") {
+                            queryClient.setQueryData(["avaia-profile"], {
+                              kind: "available",
+                              profile: result.profile,
+                            });
+                          }
+                          return result;
+                        } catch {
+                          return { kind: "service-unavailable" };
+                        }
+                      },
+                    }),
+                onAvaiaSetupChange: (slugStem: string) => {
+                  saveAvaiaProfile.reset();
+                  setAvaiaProfileSlugStemDraft(slugStem);
+                },
+                // The surface waits for the service before it closes, so the
+                // answer it acts on is the one that was actually stored.
+                onAvaiaSetupSubmit: async () => {
+                  const currentAvaiaAddress =
+                    avaiaProfileQuery.data?.kind === "available"
+                      ? avaiaProfileQuery.data.profile.pubDress
+                      : ownedAvaiaPubDress;
+                  if (
+                    currentAvaiaAddress === undefined ||
+                    saveAvaiaProfile.isPending
+                  ) {
+                    return undefined;
+                  }
+                  // With no draft, the person accepted the address the Avaia
+                  // already holds — saving it is what configures the Avaia.
+                  const pubDress =
+                    avaiaProfileSlugStemDraft === undefined
+                      ? currentAvaiaAddress
+                      : composeAvaiaPubDress(
+                          currentAvaiaAddress,
+                          avaiaProfileSlugStemDraft,
+                        );
+                  if (pubDress === undefined) return undefined;
+                  return saveAvaiaProfile
+                    .mutateAsync(pubDress)
+                    .catch(() => undefined);
+                },
+              })}
+          onSlugChange={(next: string) => {
+            renameSlug.reset();
+            setSlugDraft(next);
+          }}
+          onSlugSubmit={() => {
+            if (slugDraft !== undefined && !renameSlug.isPending) {
+              renameSlug.mutate(slugDraft);
+            }
+          }}
+          avatarChoice={avatarChoice}
+          onAvatarChoice={async (model) =>
+            chooseAvatar.isPending
+              ? undefined
+              : chooseAvatar.mutateAsync(model).catch(() => undefined)
           }
-        }}
-        avatarChoice={avatarChoice}
-        onAvatarChoice={async (model) =>
-          chooseAvatar.isPending
-            ? undefined
-            : chooseAvatar.mutateAsync(model).catch(() => undefined)
-        }
-        {...(viewModel.identity.avaiaPubDress === undefined
-          ? {}
-          : { avaiaPubDress: viewModel.identity.avaiaPubDress })}
-        {...(viewModel.identity.native
-          ? { onLogout: () => logout.mutate() }
-          : {})}
-      />
+          {...(viewModel.identity.avaiaPubDress === undefined
+            ? {}
+            : { avaiaPubDress: viewModel.identity.avaiaPubDress })}
+          {...(viewModel.identity.native
+            ? { onLogout: () => logout.mutate() }
+            : {})}
+        />
+      </SubscriptionStatusProvider>
     );
   }
 
@@ -1381,6 +1393,7 @@ const foundationRouteTree = foundationRoute.addChildren([
 const routeTree = rootRoute.addChildren([foundationRouteTree, mapRoute]);
 
 export function ProductApp({
+  subscriptions,
   core,
   host,
   identity,
@@ -1407,6 +1420,7 @@ export function ProductApp({
       basepath: routerBasepath,
       context: {
         dependencies: {
+          ...(subscriptions === undefined ? {} : { subscriptions }),
           core,
           ...(business === undefined ? {} : { business }),
           host,
