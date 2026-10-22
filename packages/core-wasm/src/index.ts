@@ -754,6 +754,7 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
 }
 
 export interface CoreWasmBindings {
+  landmarkMapView?(request: CoreLandmarkMapRequest): string;
   courierDestination?(
     origin: CourierCoordinate,
     projection: BusinessPointProjection,
@@ -800,6 +801,8 @@ export interface CoreWasmBindings {
 }
 
 export interface GeneratedCoreWasmModule {
+  /** Absent from Core runtimes before the curated landmark map export. */
+  landmark_map_view?(request: string): string;
   /** Absent from a runtime built before Core's courier destination. */
   courier_destination?(request: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
@@ -1016,6 +1019,12 @@ export async function loadGeneratedCoreWasmBindings(
               projection,
             ),
         }),
+    ...(runtime.landmark_map_view === undefined
+      ? {}
+      : {
+          landmarkMapView: (request: CoreLandmarkMapRequest) =>
+            runtime.landmark_map_view!(JSON.stringify(request)),
+        }),
     ...(runtime.orb_spill_version === undefined
       ? {}
       : { orbSpillVersion: () => runtime.orb_spill_version!() }),
@@ -1228,6 +1237,15 @@ class CoreWasmClient implements CoreRuntimePort {
     if (bindings.courierDestination === undefined)
       throw new CourierCapabilityUnavailable();
     return bindings.courierDestination(origin, projection);
+  }
+
+  /** No client fallback may assign landmark rarity when Core is unavailable. */
+  public async landmarkMapView(request: CoreLandmarkMapRequest): Promise<string> {
+    const bindings = await this.loadBindings();
+    if (bindings.landmarkMapView === undefined) {
+      throw new Error("0x1 Core Wasm landmark map binding is missing");
+    }
+    return bindings.landmarkMapView(request);
   }
 
   /** Older verified 0.1.0 runtimes have no optional-waypoint export. */
