@@ -5,18 +5,48 @@ import { describe, expect, it } from "vitest";
 import { curatedLandmarkPins } from "./curated-rarity-landmarks";
 
 const labels = [
-  { id: "a", longitudeE7: "305000000", latitudeE7: "504500000", title: "Alpha", kind: "monument" },
-  { id: "b", longitudeE7: "305100000", latitudeE7: "504510000", title: "Beta", kind: "sacred" },
-  { id: "c", longitudeE7: "305200000", latitudeE7: "504520000", title: "Gamma", kind: "civic" },
+  {
+    id: "a",
+    longitudeE7: "305000000",
+    latitudeE7: "504500000",
+    title: "Alpha",
+    kind: "monument",
+  },
+  {
+    id: "b",
+    longitudeE7: "305100000",
+    latitudeE7: "504510000",
+    title: "Beta",
+    kind: "sacred",
+  },
+  {
+    id: "c",
+    longitudeE7: "305200000",
+    latitudeE7: "504520000",
+    title: "Gamma",
+    kind: "civic",
+  },
 ] as const;
 
 const view = JSON.stringify({
   ok: true,
   registry: 2,
   landmarks: [
-    { id: "a", at: { longitude_e7: "305000000", latitude_e7: "504500000" }, rarity: "rare" },
-    { id: "b", at: { longitude_e7: "305100000", latitude_e7: "504510000" }, rarity: "special" },
-    { id: "c", at: { longitude_e7: "305200000", latitude_e7: "504520000" }, rarity: "exclusive" },
+    {
+      id: "a",
+      at: { longitude_e7: "305000000", latitude_e7: "504500000" },
+      rarity: "rare",
+    },
+    {
+      id: "b",
+      at: { longitude_e7: "305100000", latitude_e7: "504510000" },
+      rarity: "special",
+    },
+    {
+      id: "c",
+      at: { longitude_e7: "305200000", latitude_e7: "504520000" },
+      rarity: "exclusive",
+    },
   ],
 });
 
@@ -35,7 +65,10 @@ describe("Core curated landmark map projection", () => {
   it("does not accept a missing, displaced, duplicated or fake archive ID", () => {
     expect(() => curatedLandmarkPins(view, labels.slice(0, 2))).toThrow();
     expect(() =>
-      curatedLandmarkPins(view, [{ ...labels[0], longitudeE7: "0" }, ...labels.slice(1)]),
+      curatedLandmarkPins(
+        view,
+        [{ ...labels[0], longitudeE7: "0" }, ...labels.slice(1)],
+      ),
     ).toThrow();
     expect(() => curatedLandmarkPins(view, [...labels, labels[0]])).toThrow();
     expect(() =>
@@ -47,9 +80,11 @@ describe("Core curated landmark map projection", () => {
     expect(() =>
       curatedLandmarkPins('{"ok":false,"error":"invalid"}', labels),
     ).toThrow();
-    expect(curatedLandmarkPins('{"ok":true,"registry":1,"landmarks":[]}', labels))
-      .toEqual([]);
-    expect(() => curatedLandmarkPins(view.replace('"rare"', '"common"'), labels))
-      .toThrow();
+    expect(
+      curatedLandmarkPins('{"ok":true,"registry":1,"landmarks":[]}', labels),
+    ).toEqual([]);
+    expect(() =>
+      curatedLandmarkPins(view.replace('"rare"', '"common"'), labels),
+    ).toThrow();
   });
 });
