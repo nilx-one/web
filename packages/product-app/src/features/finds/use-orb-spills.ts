@@ -415,11 +415,16 @@ export function useOrbSpills({
     latest.current = { spills, cells, picked, bond, avaiaPoint, onPickedUp };
   });
   const lyingCellOrbs = useRef<ReadonlySet<string>>(new Set());
+  // A just-opened cell must survive reloads while its first Core projection
+  // is still pending; only a completed projection may prove it empty.
+  const projectedCellKeys = useRef(new Set<string>());
+  const worldRequest = useRef(0);
   const [lying, setLying] = useState(false);
   const [nextExpiry, setNextExpiry] = useState<number | undefined>(undefined);
   const ask = useCallback(() => {
     if (orbWorld === undefined) return;
     const state = latest.current;
+    const request = ++worldRequest.current;
     const now = Date.now();
     // A declared point is a virtual game position, not an inaccurate GPS fix.
     // Only actual observations must meet the accuracy threshold.
@@ -442,6 +447,7 @@ export function useOrbSpills({
       now,
     )
       .then((view) => {
+        if (request !== worldRequest.current) return;
         const orbs = new Map(view.orbs.map((orb) => [orb.id, orb]));
         const picked =
           pickUp(view.bond_reach, "bond", orbs, bondPoint, state.cells) +
@@ -455,18 +461,27 @@ export function useOrbSpills({
         }
         const lying = mapOrbs(view).filter((orb) => !pulls.current.has(orb.id));
         renderer.setOrbs?.([...lying, ...pulls.current.values()]);
+        for (const cell of state.cells.values()) {
+          projectedCellKeys.current.add(cell.key);
+        }
         lyingCellOrbs.current = new Set(
           view.orbs
-            .filter((orb) => orb.id.startsWith("orb:cell:"))
+            .filter(
+              (orb) =>
+                orb.id.startsWith("orb:cell:") &&
+                !pickedNow.current.has(orb.id),
+            )
             .map((orb) => orb.id),
         );
+        // Persist completion immediately, including the last orb pickup.
+        keepCells(owner, state.cells, pickedNow.current, lyingCellOrbs.current);
         setLying(view.orbs.length > 0 || pulls.current.size > 0);
         setNextExpiry(
           view.next_expiry === null ? undefined : Number(view.next_expiry),
         );
       })
       .catch(() => undefined);
-  }, [cellsEnabled, orbWorld, pickUp, renderer, waypointsEnabled]);
+  }, [cellsEnabled, orbWorld, owner, pickUp, renderer, waypointsEnabled]);
 
   const bondLongitude = bond?.longitude;
   const bondLatitude = bond?.latitude;
@@ -479,7 +494,15 @@ export function useOrbSpills({
   // What still lies of the opened cells stays on this device across reloads.
   useEffect(() => {
     const timer = globalThis.setTimeout(
-      () => keepCells(owner, cells, picked, lyingCellOrbs.current),
+      () => {
+        const retained = new Set(lyingCellOrbs.current);
+        for (const cell of cells.values()) {
+          if (!projectedCellKeys.current.has(cell.key)) {
+            retained.add(`orb:cell:${cell.key}:unresolved`);
+          }
+        }
+        keepCells(owner, cells, picked, retained);
+      },
       ORB_PULL_DRAW_MS,
     );
     return () => globalThis.clearTimeout(timer);
