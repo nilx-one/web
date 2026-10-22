@@ -32,19 +32,24 @@ import {
   type QueueWorldAward,
 } from "../progression/committed-sync";
 import {
+  answerCell,
   cellOfOrb,
   findsWithin,
-  keepCells,
   knownCell,
   knownSpill,
   landmarkWaypoint,
   mapOrbs,
   orbWorldInput,
   refreshSpill,
+  openCell,
+  pickCellOrbs,
   rarityTier,
-  readKeptCells,
+  readCellOrbStore,
+  settleCells,
   SPILL_READ_RADIUS_METERS,
   squareAround,
+  writeCellOrbStore,
+  type CellOrbStore,
   type KnownCell,
   type KnownSpill,
 } from "./orb-spills";
@@ -60,6 +65,12 @@ export const ORB_OBSERVATION_ACCURACY_METERS = 30;
 
 /** How long a picked-up orb is drawn flying to whoever picked it up. */
 export const ORB_PULL_DRAW_MS = 400;
+
+/** How often a cell whose spill is still owed is asked for again. */
+export const CELL_SPILL_RETRY_MS = 60_000;
+
+/** At most this many owed cell spills are asked for at once. */
+export const CELL_SPILL_RETRY_BATCH = 20;
 
 export interface OrbSpillsInput {
   readonly owner: string;
@@ -149,48 +160,63 @@ export function useOrbSpills({
   const [spills, setSpills] = useState<ReadonlyMap<string, KnownSpill>>(
     () => new Map(),
   );
-  // What this device kept of its opened cells: they lie until picked up.
-  const [kept] = useState(() => readKeptCells(owner));
-  const [cells, setCells] = useState<ReadonlyMap<string, KnownCell>>(
-    () => kept.cells,
+  // What this device kept of its opened cells (`CellOrbStore`): a cell's
+  // orbs lie until picked up, and a spill still owed is asked for again.
+  const [store, setStore] = useState<CellOrbStore>(() =>
+    readCellOrbStore(owner),
   );
+  const storeRef = useRef(store);
+  useEffect(() => {
+    storeRef.current = store;
+    // A refused write keeps everything in memory; the next change retries.
+    writeCellOrbStore(owner, store);
+  }, [owner, store]);
   const [picked, setPicked] = useState<ReadonlySet<string>>(
-    () => new Set(kept.picked),
+    () => new Set(store.picked),
   );
-  // A reveal can arrive before the async Core v4 handshake completes.
-  // Keep those cell IDs until the compatible runtime becomes available.
-  const pendingCellSpills = useRef(new Set<string>());
   const inFlightCellSpills = useRef(new Set<string>());
   const requestCellSpill = useCallback(
     (cellId: string) => {
       if (
         !cellsEnabled ||
         cellPort === undefined ||
-        inFlightCellSpills.current.has(cellId)
-      )
+        inFlightCellSpills.current.has(cellId) ||
+        storeRef.current.cells.has(cellId) ||
+        storeRef.current.done.has(cellId)
+      ) {
         return;
+      }
       inFlightCellSpills.current.add(cellId);
       void cellPort
         .spillCell(cellId)
         .then((result) => {
+          // Unanswered, it stays owed and is asked for again.
           if (result.kind !== "spilled") return;
-          pendingCellSpills.current.delete(cellId);
-          setCells((current) => {
-            if (current.has(cellId)) return current;
-            const next = new Map(current);
-            next.set(cellId, knownCell(cellId, result.spill, Date.now()));
-            return next;
-          });
+          setStore((current) =>
+            answerCell(current, knownCell(cellId, result.spill, Date.now())),
+          );
         })
         .catch(() => undefined)
         .finally(() => inFlightCellSpills.current.delete(cellId));
     },
     [cellPort, cellsEnabled],
   );
+  // Owed spills: asked for as soon as a v4 runtime is known (a reveal can
+  // come before the handshake, or before a reload), then on a slow beat.
   useEffect(() => {
-    if (!cellsEnabled) return;
-    for (const id of pendingCellSpills.current) requestCellSpill(id);
-  }, [cellsEnabled, requestCellSpill]);
+    if (!cellsEnabled || cellPort === undefined) return;
+    const retry = (): void => {
+      for (const id of [...storeRef.current.pending].slice(
+        0,
+        CELL_SPILL_RETRY_BATCH,
+      )) {
+        requestCellSpill(id);
+      }
+    };
+    retry();
+    const beat = globalThis.setInterval(retry, CELL_SPILL_RETRY_MS);
+    return () => globalThis.clearInterval(beat);
+  }, [cellPort, cellsEnabled, requestCellSpill]);
   const shas = useRef(new Map<ArtifactId, string>());
 
   const shaOf = useCallback(async (id: ArtifactId): Promise<string> => {
@@ -249,7 +275,11 @@ export function useOrbSpills({
       // The cell's own orbs: the service answers its spill, and keeps
       // nothing. A cell spills once; one already kept is not asked again.
       if (cellPort !== undefined) {
-        pendingCellSpills.current.add(cell.id);
+        const owed = openCell(storeRef.current, cell.id);
+        if (owed !== storeRef.current) {
+          storeRef.current = owed;
+          setStore(owed);
+        }
         requestCellSpill(cell.id);
       }
       if (spillPort === undefined) return;
@@ -340,7 +370,7 @@ export function useOrbSpills({
   const pulls = useRef(new Map<string, MapOrb>());
   // What was picked up, at once: two answers of Core in flight together
   // must not pick up the same orb twice.
-  const pickedNow = useRef(new Set(kept.picked));
+  const pickedNow = useRef(new Set(store.picked));
   const pickUp = useCallback(
     (
       ids: readonly string[],
@@ -376,6 +406,7 @@ export function useOrbSpills({
       if (records.length === 0) return 0;
       for (const id of fresh) pickedNow.current.add(id);
       setPicked((current) => new Set([...current, ...fresh]));
+      setStore((current) => pickCellOrbs(current, fresh));
       if (to !== undefined) {
         for (const id of fresh) {
           const orb = orbs.get(id);
@@ -403,6 +434,7 @@ export function useOrbSpills({
   // Core is asked whenever what it knows changes, and on a short beat while
   // orbs lie, so an Avaia walking into reach is noticed. Its answer is drawn
   // as it is, and what it says is in reach is picked up.
+  const cells = store.cells;
   const latest = useRef({
     spills,
     cells,
@@ -414,10 +446,6 @@ export function useOrbSpills({
   useEffect(() => {
     latest.current = { spills, cells, picked, bond, avaiaPoint, onPickedUp };
   });
-  const lyingCellOrbs = useRef<ReadonlySet<string>>(new Set());
-  // A just-opened cell must survive reloads while its first Core projection
-  // is still pending; only a completed projection may prove it empty.
-  const projectedCellKeys = useRef(new Set<string>());
   const worldRequest = useRef(0);
   const [lying, setLying] = useState(false);
   const [nextExpiry, setNextExpiry] = useState<number | undefined>(undefined);
@@ -435,6 +463,8 @@ export function useOrbSpills({
         ? state.bond
         : undefined;
     const avaiaPoint = state.avaiaPoint();
+    // Only the cells this answer is asked about may be judged by it.
+    const asked = cellsEnabled ? [...state.cells.values()] : [];
     void orbWorld(
       orbWorldInput(
         [...state.spills.values()],
@@ -442,7 +472,7 @@ export function useOrbSpills({
         bondPoint,
         avaiaPoint,
         waypointsEnabled,
-        cellsEnabled ? [...state.cells.values()] : [],
+        asked,
       ),
       now,
     )
@@ -461,27 +491,33 @@ export function useOrbSpills({
         }
         const lying = mapOrbs(view).filter((orb) => !pulls.current.has(orb.id));
         renderer.setOrbs?.([...lying, ...pulls.current.values()]);
-        for (const cell of state.cells.values()) {
-          projectedCellKeys.current.add(cell.key);
+        // A cell with nothing left lying, its last orbs just picked up
+        // included, is done: it is never asked for or drawn again.
+        if (asked.length > 0) {
+          const lyingCells = new Set(
+            view.orbs
+              .filter(
+                (orb) =>
+                  orb.id.startsWith("orb:cell:") &&
+                  !pickedNow.current.has(orb.id),
+              )
+              .map((orb) => orb.id),
+          );
+          setStore((current) =>
+            settleCells(
+              current,
+              asked.map((cell) => cell.cell),
+              lyingCells,
+            ),
+          );
         }
-        lyingCellOrbs.current = new Set(
-          view.orbs
-            .filter(
-              (orb) =>
-                orb.id.startsWith("orb:cell:") &&
-                !pickedNow.current.has(orb.id),
-            )
-            .map((orb) => orb.id),
-        );
-        // Persist completion immediately, including the last orb pickup.
-        keepCells(owner, state.cells, pickedNow.current, lyingCellOrbs.current);
         setLying(view.orbs.length > 0 || pulls.current.size > 0);
         setNextExpiry(
           view.next_expiry === null ? undefined : Number(view.next_expiry),
         );
       })
       .catch(() => undefined);
-  }, [cellsEnabled, orbWorld, owner, pickUp, renderer, waypointsEnabled]);
+  }, [cellsEnabled, orbWorld, pickUp, renderer, waypointsEnabled]);
 
   const bondLongitude = bond?.longitude;
   const bondLatitude = bond?.latitude;
@@ -490,23 +526,6 @@ export function useOrbSpills({
     const asked = globalThis.setTimeout(ask, 0);
     return () => globalThis.clearTimeout(asked);
   }, [ask, bondLatitude, bondLongitude, cells, picked, spills]);
-
-  // What still lies of the opened cells stays on this device across reloads.
-  useEffect(() => {
-    const timer = globalThis.setTimeout(
-      () => {
-        const retained = new Set(lyingCellOrbs.current);
-        for (const cell of cells.values()) {
-          if (!projectedCellKeys.current.has(cell.key)) {
-            retained.add(`orb:cell:${cell.key}:unresolved`);
-          }
-        }
-        keepCells(owner, cells, picked, retained);
-      },
-      ORB_PULL_DRAW_MS,
-    );
-    return () => globalThis.clearTimeout(timer);
-  }, [cells, owner, picked]);
 
   useEffect(() => {
     if (!lying) return;

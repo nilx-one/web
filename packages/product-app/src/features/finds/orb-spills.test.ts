@@ -7,10 +7,18 @@ import {
   type LonLat,
 } from "@nilx-one/artifact-contract";
 import type { MapFogField, MapLandmark } from "@nilx-one/map-contract";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  answerCell,
+  EMPTY_CELL_ORB_STORE,
   fromCoordinate,
+  knownCell,
+  openCell,
+  pickCellOrbs,
+  readCellOrbStore,
+  settleCells,
+  writeCellOrbStore,
   knownSpill,
   landmarkWaypoint,
   mapOrbs,
@@ -154,5 +162,85 @@ describe("orbs between the map and Core", () => {
         landsAt: 1070,
       },
     ]);
+  });
+});
+
+describe("the cell orb store", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.localStorage.clear();
+  });
+
+  const cellId = (n: number) => `89${n.toString(16).padStart(13, "0")}`;
+  const keyOf = (n: number) => n.toString(16).padStart(64, "0");
+  const answered = (n: number) =>
+    knownCell(
+      cellId(n),
+      {
+        key: keyOf(n),
+        center: { longitude_e7: "304469000", latitude_e7: "504655000" },
+        registry: 1,
+        ratedLandmarks: [],
+      },
+      n,
+    );
+
+  it("keeps every uncollected cell, however many, across a reload", () => {
+    let store = EMPTY_CELL_ORB_STORE;
+    for (let n = 0; n < 2_500; n += 1) store = answerCell(store, answered(n));
+    expect(writeCellOrbStore("0x0sky", store)).toBe(true);
+    const read = readCellOrbStore("0x0sky");
+    expect(read.cells.size).toBe(2_500);
+    expect(read.cells.get(cellId(0))).toEqual(answered(0));
+    // Another Bond's record is its own.
+    expect(readCellOrbStore("0x1sky").cells.size).toBe(0);
+  });
+
+  it("keeps a spill owed until it is answered, across a reload", () => {
+    const owed = openCell(EMPTY_CELL_ORB_STORE, cellId(1));
+    expect([...owed.pending]).toEqual([cellId(1)]);
+    writeCellOrbStore("0x0sky", owed);
+    const read = readCellOrbStore("0x0sky");
+    expect([...read.pending]).toEqual([cellId(1)]);
+    const lying = answerCell(read, answered(1));
+    expect(lying.pending.size).toBe(0);
+    expect(lying.cells.has(cellId(1))).toBe(true);
+    // Opening it again owes nothing new.
+    expect(openCell(lying, cellId(1))).toBe(lying);
+  });
+
+  it("marks a fully collected cell done, forever, and lets its picks go", () => {
+    const orbs = [0, 1, 2, 3, 4].map((n) => `orb:cell:${keyOf(7)}:1:~:${n}`);
+    let store = answerCell(EMPTY_CELL_ORB_STORE, answered(7));
+    store = pickCellOrbs(store, orbs.slice(0, 3));
+    // Two still lie: not done.
+    expect(settleCells(store, [cellId(7)], new Set(orbs.slice(3)))).toBe(store);
+    // A cell the answer was not asked about is not judged.
+    expect(settleCells(store, [], new Set())).toBe(store);
+    store = settleCells(
+      pickCellOrbs(store, orbs.slice(3)),
+      [cellId(7)],
+      new Set(),
+    );
+    expect(store.cells.has(cellId(7))).toBe(false);
+    expect(store.picked.size).toBe(0);
+    expect([...store.done]).toEqual([cellId(7)]);
+    // Revisited, it owes nothing and is never laid again.
+    expect(openCell(store, cellId(7))).toBe(store);
+    expect(answerCell(store, answered(7)).cells.has(cellId(7))).toBe(false);
+    writeCellOrbStore("0x0sky", store);
+    expect([...readCellOrbStore("0x0sky").done]).toEqual([cellId(7)]);
+  });
+
+  it("drops nothing when the browser refuses the write", () => {
+    const store = answerCell(EMPTY_CELL_ORB_STORE, answered(3));
+    writeCellOrbStore("0x0sky", store);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    const bigger = answerCell(store, answered(4));
+    expect(writeCellOrbStore("0x0sky", bigger)).toBe(false);
+    // The last written record still holds; the caller keeps `bigger`.
+    expect(readCellOrbStore("0x0sky").cells.size).toBe(1);
   });
 });

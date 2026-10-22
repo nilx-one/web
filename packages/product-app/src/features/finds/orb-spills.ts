@@ -69,9 +69,6 @@ export interface KnownCell {
   readonly appearedAt: number;
 }
 
-/** How many opened cells with orbs still lying this device keeps. */
-export const MAX_KNOWN_CELLS = 2_000;
-
 /** A cell's spill as this device keeps it, first drawn at `appearedAt`. */
 export function knownCell(
   cell: string,
@@ -99,17 +96,33 @@ export function cellOfOrb(
   return undefined;
 }
 
-const CELLS_STORAGE = "nilx-one.orbs.cells.v1.";
-const PICKED_STORAGE = "nilx-one.orbs.picked.v1.";
-
-function readStorage(key: string): unknown {
-  try {
-    const raw = globalThis.localStorage?.getItem(key);
-    return raw === null || raw === undefined ? undefined : JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
+/**
+ * What this device keeps of its opened cells' orbs, for one Bond. Nothing in
+ * it is ever evicted to make room: a cell's orbs lie until they are picked
+ * up, and only then does the cell leave `cells` for `done`.
+ *
+ * - `cells`: spills the service answered, whose orbs may still lie;
+ * - `picked`: cell orbs picked up while their cell still lies;
+ * - `done`: cells whose every orb was picked up. A done cell is never asked
+ *   for or drawn again, so its deterministic orbs cannot come back;
+ * - `pending`: cells that opened whose spill is not answered yet, retried
+ *   until it is, across reloads.
+ */
+export interface CellOrbStore {
+  readonly cells: ReadonlyMap<string, KnownCell>;
+  readonly picked: ReadonlySet<string>;
+  readonly done: ReadonlySet<string>;
+  readonly pending: ReadonlySet<string>;
 }
+
+export const EMPTY_CELL_ORB_STORE: CellOrbStore = {
+  cells: new Map(),
+  picked: new Set(),
+  done: new Set(),
+  pending: new Set(),
+};
+
+const CELLS_STORAGE = "nilx-one.orbs.cells.v1.";
 
 function isKnownCell(value: unknown): value is KnownCell {
   if (typeof value !== "object" || value === null) return false;
@@ -126,61 +139,133 @@ function isKnownCell(value: unknown): value is KnownCell {
   );
 }
 
-/** The cells and cell orbs this device kept for `owner`, and nothing else. */
-export function readKeptCells(owner: string): {
-  readonly cells: ReadonlyMap<string, KnownCell>;
-  readonly picked: ReadonlySet<string>;
-} {
-  const cells = readStorage(CELLS_STORAGE + owner);
-  const picked = readStorage(PICKED_STORAGE + owner);
+function strings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+/** What this device kept for `owner`; an unreadable store reads as empty. */
+export function readCellOrbStore(owner: string): CellOrbStore {
+  let stored: unknown;
+  try {
+    const raw = globalThis.localStorage?.getItem(CELLS_STORAGE + owner);
+    stored = raw === null || raw === undefined ? undefined : JSON.parse(raw);
+  } catch {
+    stored = undefined;
+  }
+  if (typeof stored !== "object" || stored === null) {
+    return EMPTY_CELL_ORB_STORE;
+  }
+  const { cells, picked, done, pending } = stored as Record<string, unknown>;
+  const kept = Array.isArray(cells) ? cells.filter(isKnownCell) : [];
+  const finished = new Set(strings(done));
   return {
     cells: new Map(
-      (Array.isArray(cells) ? cells.filter(isKnownCell) : []).map((cell) => [
-        cell.cell,
-        cell,
-      ]),
+      kept
+        .filter((cell) => !finished.has(cell.cell))
+        .map((cell) => [cell.cell, cell]),
     ),
-    picked: new Set(
-      Array.isArray(picked)
-        ? picked.filter(
-            (id): id is string =>
-              typeof id === "string" && id.startsWith("orb:cell:"),
-          )
-        : [],
-    ),
+    picked: new Set(strings(picked).filter((id) => id.startsWith("orb:cell:"))),
+    done: finished,
+    pending: new Set(strings(pending).filter((id) => !finished.has(id))),
   };
 }
 
 /**
- * Keeps what still lies: the newest cells, and the picked cell orbs of the
- * cells kept. A cell whose orbs are all picked up is dropped with them.
+ * Writes the whole store for `owner`. `false` when the browser refused it
+ * (full or blocked storage): nothing is dropped, the caller keeps the store
+ * in memory and writes it again on its next change.
  */
-export function keepCells(
-  owner: string,
-  cells: ReadonlyMap<string, KnownCell>,
-  picked: ReadonlySet<string>,
-  lying: ReadonlySet<string>,
-): void {
-  const live = [...cells.values()]
-    .filter((cell) =>
-      [...lying].some((id) => id.startsWith(`orb:cell:${cell.key}:`)),
-    )
-    .sort((a, b) => b.appearedAt - a.appearedAt)
-    .slice(0, MAX_KNOWN_CELLS);
+export function writeCellOrbStore(owner: string, store: CellOrbStore): boolean {
   try {
     globalThis.localStorage?.setItem(
       CELLS_STORAGE + owner,
-      JSON.stringify(live),
+      JSON.stringify({
+        cells: [...store.cells.values()],
+        picked: [...store.picked],
+        done: [...store.done],
+        pending: [...store.pending],
+      }),
     );
-    globalThis.localStorage?.setItem(
-      PICKED_STORAGE + owner,
-      JSON.stringify(
-        [...picked].filter((id) => cellOfOrb(live, id) !== undefined),
-      ),
-    );
+    return true;
   } catch {
-    // A full or blocked storage loses only what is still lying.
+    return false;
   }
+}
+
+/** A cell opened: its spill is owed, unless it is answered or done. */
+export function openCell(store: CellOrbStore, cell: string): CellOrbStore {
+  if (
+    store.cells.has(cell) ||
+    store.done.has(cell) ||
+    store.pending.has(cell)
+  ) {
+    return store;
+  }
+  return { ...store, pending: new Set([...store.pending, cell]) };
+}
+
+/** The service answered a cell's spill: it lies, unless it is done. */
+export function answerCell(store: CellOrbStore, cell: KnownCell): CellOrbStore {
+  const pending = new Set(store.pending);
+  pending.delete(cell.cell);
+  if (store.done.has(cell.cell) || store.cells.has(cell.cell)) {
+    return { ...store, pending };
+  }
+  return {
+    ...store,
+    pending,
+    cells: new Map([...store.cells, [cell.cell, cell]]),
+  };
+}
+
+/** Cell orbs picked up: kept so a reload does not draw them again. */
+export function pickCellOrbs(
+  store: CellOrbStore,
+  ids: readonly string[],
+): CellOrbStore {
+  const fresh = ids.filter(
+    (id) => id.startsWith("orb:cell:") && !store.picked.has(id),
+  );
+  return fresh.length === 0
+    ? store
+    : { ...store, picked: new Set([...store.picked, ...fresh]) };
+}
+
+/**
+ * Settles what Core just laid: every cell in `projected` (the cells that
+ * answer was asked about) with no orb left in `lying` is done, and its
+ * picked orbs are let go with it. A cell Core was not asked about is not
+ * judged.
+ */
+export function settleCells(
+  store: CellOrbStore,
+  projected: Iterable<string>,
+  lying: ReadonlySet<string>,
+): CellOrbStore {
+  const finished: KnownCell[] = [];
+  for (const id of projected) {
+    const cell = store.cells.get(id);
+    if (cell === undefined) continue;
+    const prefix = `orb:cell:${cell.key}:`;
+    if (![...lying].some((orb) => orb.startsWith(prefix))) finished.push(cell);
+  }
+  if (finished.length === 0) return store;
+  const cells = new Map(store.cells);
+  for (const cell of finished) cells.delete(cell.cell);
+  const picked = new Set(
+    [...store.picked].filter(
+      (orb) =>
+        !finished.some((cell) => orb.startsWith(`orb:cell:${cell.key}:`)),
+    ),
+  );
+  return {
+    ...store,
+    cells,
+    picked,
+    done: new Set([...store.done, ...finished.map((cell) => cell.cell)]),
+  };
 }
 
 /** How far around a Bond the spills of its finds are read. */

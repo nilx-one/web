@@ -352,16 +352,7 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     medium: "local-storage",
     key: "nilx-one.orbs.cells.v1",
     perOwner: true,
-    what: "Opened cells whose orbs still lie, as the service answered their spill.",
-  },
-  {
-    id: "orbs.picked",
-    placement: "device",
-    mobility: "resident",
-    medium: "local-storage",
-    key: "nilx-one.orbs.picked.v1",
-    perOwner: true,
-    what: "Cell orbs this device picked up while their cell still lies.",
+    what: "Opened cells' orbs: spills still lying, orbs picked, cells done and spills still owed.",
   },
   {
     id: "avaia.landmarks",

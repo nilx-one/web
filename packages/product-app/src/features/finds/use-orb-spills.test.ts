@@ -274,6 +274,99 @@ describe("cell spills", () => {
     expect(port.spillCell).toHaveBeenCalledExactlyOnceWith(CELL);
   });
 
+  it("keeps an unanswered cell spill owed and asks for it again after a reload", async () => {
+    const down = cellPort();
+    vi.mocked(down.spillCell).mockResolvedValue({
+      kind: "service-unavailable",
+    });
+    const world = renderer();
+    const input = (port: ReturnType<typeof cellPort>): OrbSpillsInput => ({
+      owner: "0x0sky",
+      port,
+      core: coreV4,
+      renderer: world,
+      near: undefined,
+      bond: undefined,
+      avaiaPoint: () => undefined,
+    });
+    const first = renderHook(() => useOrbSpills(input(down)));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      first.result.current.spill({ id: CELL, center, boundary: [] });
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(down.spillCell).toHaveBeenCalledWith(CELL);
+    expect(world.orbs).toHaveLength(0);
+    first.unmount();
+
+    const up = cellPort();
+    renderHook(() => useOrbSpills(input(up)));
+    for (let tick = 0; tick < 4; tick += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+    }
+    expect(up.spillCell).toHaveBeenCalledWith(CELL);
+    expect(
+      world.orbs.filter((orb) => orb.id.startsWith("orb:cell:")),
+    ).toHaveLength(5);
+  });
+
+  it("never lays a fully collected cell again, even when it is revealed again", async () => {
+    const port = cellPort();
+    const world = renderer();
+    const avaia: {
+      point?: { readonly longitude: number; readonly latitude: number };
+    } = {};
+    const { result } = renderHook(() =>
+      useOrbSpills({
+        owner: "0x0sky",
+        port,
+        core: coreV4,
+        renderer: world,
+        near: undefined,
+        bond: undefined,
+        avaiaPoint: () => avaia.point,
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    await act(async () => {
+      result.current.spill({ id: CELL, center, boundary: [] });
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    avaia.point = { longitude: 30.4469, latitude: 50.4655 };
+    for (let tick = 0; tick < 4; tick += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ORB_REACH_CHECK_MS);
+      });
+    }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ORB_PULL_DRAW_MS + ORB_REACH_CHECK_MS);
+    });
+    expect(
+      world.orbs.filter((orb) => orb.id.startsWith("orb:cell:")),
+    ).toHaveLength(0);
+    const stored = JSON.parse(
+      globalThis.localStorage.getItem("nilx-one.orbs.cells.v1.0x0sky") ?? "{}",
+    ) as { done?: string[]; cells?: unknown[] };
+    expect(stored.done).toEqual([CELL]);
+    expect(stored.cells).toEqual([]);
+
+    vi.mocked(port.spillCell).mockClear();
+    await act(async () => {
+      result.current.spill({ id: CELL, center, boundary: [] });
+      await vi.advanceTimersByTimeAsync(ORB_REACH_CHECK_MS);
+    });
+    expect(port.spillCell).not.toHaveBeenCalled();
+    expect(
+      world.orbs.filter((orb) => orb.id.startsWith("orb:cell:")),
+    ).toHaveLength(0);
+  });
+
   it("never asks a Core older than v4 for a cell spill", async () => {
     const port = cellPort();
     const coreV3 = { ...coreV4, orbSpillVersion: vi.fn(async () => 3) };
