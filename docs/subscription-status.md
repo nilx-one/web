@@ -35,10 +35,10 @@ production entitlement fulfillment. Hosts still need a real authority adapter
 and rebuilt Core bindings before paid statuses appear in production. There is
 no development fallback that fabricates an active subscription.
 
-Exclusive's precedence and the treatment of remaining Special time during an
-upgrade must be decided in the entitlement authority. This PR does not pause,
-consume, convert or extend subscription periods. The user's overlap instruction
-was incomplete; do not encode a billing policy in animation code.
+Exclusive takes precedence and pauses the remaining Special duration. When
+Exclusive ends, Special resumes with that unconsumed duration. The shared Core
+clock owns this policy; the entitlement authority must persist its state and
+publish the effective period. Web never consumes or extends either duration.
 
 ## Verification
 

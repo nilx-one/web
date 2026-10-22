@@ -132,6 +132,8 @@ export function SubscriptionIdentity({
   badge?: boolean;
 }) {
   const tier = useSubscriptionTier(address);
+  const { owner, avaia } = useContext(Context);
+  const isSubject = address === owner || address === avaia;
   const name =
     tier === "exclusive"
       ? "Exclusive"
@@ -141,7 +143,7 @@ export function SubscriptionIdentity({
   return (
     <span className="subscription-identity" data-tier={tier} title={name}>
       {address}
-      {badge ? (
+      {badge && isSubject ? (
         <span className="subscription-badges" aria-hidden={tier === undefined}>
           <span
             className="subscription-badge"
