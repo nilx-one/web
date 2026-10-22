@@ -15,6 +15,18 @@ import type {
   AvaiaProximityPolicy,
 } from "./avaia-drive";
 
+/** Archive subjects only; the publisher, not Web or Core Wasm, authenticates them. */
+export interface CoreLandmarkMapRequest {
+  readonly registry: number;
+  readonly landmarks: readonly {
+    readonly id: string;
+    readonly at: {
+      readonly longitude_e7: string;
+      readonly latitude_e7: string;
+    };
+  }[];
+}
+
 export type CoreUnavailableReason =
   "artifact-missing" | "binding-invalid" | "load-failed";
 
