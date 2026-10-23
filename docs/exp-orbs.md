@@ -73,6 +73,22 @@ Safari has no web vibration, so there the pick-up is sound only. Between the
 Bond and its Avaia, whichever reaches an orb first picks it up, and it is
 gone for the other.
 
+The pick-up is animated: the orb hops and swells where it lay, flies to the
+picker along a soft arc with a short fading tail, speeding up as a magnet
+pulls, and ends in a ring of its colour where the picker stands. Orbs picked
+up together leave one after another, 60 ms apart. With reduced motion the
+orb only fades where it lay.
+
+### How an orb shines
+
+An orb is lit in its rarity's colour, the flight loot's own: Common grey,
+Uncommon cyan, Rare blue, Special violet, Exclusive gold. Its bead is that
+colour lit nearly white, and its halo breathes at its rarity's pace. The
+rarer the orb, the wider, brighter and quicker the halo, and from Rare up a
+wide faint aura surrounds it. A find's orbs, which have no rarity, keep the
+cyan glow. The renderer only draws the rarity Core answers; it never rolls
+or upgrades one.
+
 ## What changes against today
 
 Today, a spill belongs to a **find**: any cell the Bond or Avaia opens spills

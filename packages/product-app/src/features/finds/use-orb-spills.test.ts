@@ -24,6 +24,7 @@ import { queueWorldAwards } from "../progression/committed-sync";
 import { findsWithin, squareAround } from "./orb-spills";
 import {
   ORB_PULL_DRAW_MS,
+  ORB_PULL_STAGGER_MS,
   ORB_REACH_CHECK_MS,
   useOrbSpills,
   type OrbSpillsInput,
@@ -235,8 +236,14 @@ describe("cell spills", () => {
     );
     // Five came in together: one chime, one tap.
     expect(onPickedUp).toHaveBeenCalledTimes(1);
-    expect(world.orbs.filter((orb) => orb.pulledTo !== undefined)).toHaveLength(
-      5,
+    const leaving = world.orbs
+      .map((orb) => orb.pulledTo?.at)
+      .filter((at) => at !== undefined);
+    expect(leaving).toHaveLength(5);
+    // They leave one after another, not as one.
+    expect(new Set(leaving).size).toBe(5);
+    expect(Math.max(...leaving) - Math.min(...leaving)).toBe(
+      4 * ORB_PULL_STAGGER_MS,
     );
     again.unmount();
   });

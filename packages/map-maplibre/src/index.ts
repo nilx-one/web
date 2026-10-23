@@ -133,12 +133,17 @@ import {
   fogPulseLevel,
 } from "./fog-marks";
 import {
+  ORB_GLOW_FRAME_MS,
+  ORBS_AURA_LAYER_ID,
+  ORBS_BURST_LAYER_ID,
   ORBS_CORE_LAYER_ID,
   ORBS_GLOW_LAYER_ID,
   ORBS_GOAL_LAYER_ID,
   ORBS_SOURCE_ID,
+  type OrbDrawOptions,
   orbsData,
   orbsFalling,
+  orbsGlowing,
   orbsLayers,
   orbsSource,
 } from "./orb-layer";
@@ -201,6 +206,8 @@ export {
   FOG_MARKS_SOURCE_ID,
 } from "./fog-marks";
 export {
+  ORBS_AURA_LAYER_ID,
+  ORBS_BURST_LAYER_ID,
   ORBS_CORE_LAYER_ID,
   ORBS_GLOW_LAYER_ID,
   ORBS_GOAL_LAYER_ID,
@@ -979,6 +986,7 @@ export function createMapLibreRenderer(
   let orbs: readonly MapOrb[] = [];
   let route: MapRoute | null = null;
   let orbFallFrame: number | undefined;
+  let orbGlowTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   const pinnedLabels = new Map<
     string,
     { readonly element: HTMLElement; readonly marker: MapLabelMarker }
@@ -1630,32 +1638,56 @@ export function createMapLibreRenderer(
   }
 
   function stopOrbFall(): void {
-    if (orbFallFrame === undefined) return;
-    globalThis.cancelAnimationFrame(orbFallFrame);
-    orbFallFrame = undefined;
+    if (orbFallFrame !== undefined) {
+      globalThis.cancelAnimationFrame(orbFallFrame);
+      orbFallFrame = undefined;
+    }
+    if (orbGlowTimer !== undefined) {
+      globalThis.clearTimeout(orbGlowTimer);
+      orbGlowTimer = undefined;
+    }
   }
 
-  // Orbs move only while some are still falling; once every one lies still
-  // the frame loop ends, and nothing redraws them until the list changes.
+  function orbDrawOptions(): OrbDrawOptions {
+    return { reducedMotion: prefersReducedMotion(globalThis.document) };
+  }
+
+  // Orbs move on every frame while some are falling or being picked up.
+  // While they only lie and breathe their rarity's glow, a few frames a
+  // second do; with reduced motion, or once none lies, nothing redraws them
+  // until the list changes.
+  function scheduleOrbs(now: number, options: OrbDrawOptions): void {
+    if (orbFallFrame !== undefined || orbGlowTimer !== undefined) return;
+    if (orbsFalling(orbs, now, options)) {
+      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+    } else if (orbsGlowing(orbs, options)) {
+      orbGlowTimer = globalThis.setTimeout(() => {
+        orbGlowTimer = undefined;
+        orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+      }, ORB_GLOW_FRAME_MS);
+    }
+  }
+
   function tickOrbFall(): void {
     orbFallFrame = undefined;
     if (map === undefined) return;
     const now = Date.now();
+    const options = orbDrawOptions();
     const source = map.getSource(ORBS_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(
-      orbsData(orbs, now) as Parameters<GeoJSONSource["setData"]>[0],
+      orbsData(orbs, now, options) as Parameters<GeoJSONSource["setData"]>[0],
     );
-    if (orbsFalling(orbs, now)) {
-      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
-    }
+    scheduleOrbs(now, options);
   }
 
   function applyOrbs(mounted: MapLibreMap): void {
     if (orbs.length === 0) {
       stopOrbFall();
       for (const layerId of [
+        ORBS_AURA_LAYER_ID,
         ORBS_GLOW_LAYER_ID,
         ORBS_CORE_LAYER_ID,
+        ORBS_BURST_LAYER_ID,
         ORBS_GOAL_LAYER_ID,
       ]) {
         if (mounted.getLayer(layerId) !== undefined)
@@ -1667,16 +1699,17 @@ export function createMapLibreRenderer(
       return;
     }
     const now = Date.now();
+    const options = orbDrawOptions();
     const source = mounted.getSource(ORBS_SOURCE_ID) as
       GeoJSONSource | undefined;
     if (source === undefined) {
       mounted.addSource(
         ORBS_SOURCE_ID,
-        orbsSource(orbs, now) as unknown as SourceSpecification,
+        orbsSource(orbs, now, options) as unknown as SourceSpecification,
       );
     } else {
       source.setData(
-        orbsData(orbs, now) as Parameters<GeoJSONSource["setData"]>[0],
+        orbsData(orbs, now, options) as Parameters<GeoJSONSource["setData"]>[0],
       );
     }
     // Beneath the observation and the pins, like the fog marks: an orb lies
@@ -1691,9 +1724,12 @@ export function createMapLibreRenderer(
         mounted.addLayer(layer as unknown as LayerSpecification, before);
       }
     }
-    if (orbFallFrame === undefined && orbsFalling(orbs, now)) {
-      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+    // A picked-up orb must start moving now, not after a glow frame.
+    if (orbGlowTimer !== undefined && orbsFalling(orbs, now, options)) {
+      globalThis.clearTimeout(orbGlowTimer);
+      orbGlowTimer = undefined;
     }
+    scheduleOrbs(now, options);
   }
 
   function applyRoute(mounted: MapLibreMap): void {
@@ -1722,7 +1758,7 @@ export function createMapLibreRenderer(
     // Over the ground and the roofs it crosses, beneath the pins and the
     // Bond's own marker.
     const before = [
-      ORBS_GLOW_LAYER_ID,
+      ORBS_AURA_LAYER_ID,
       PINNED_LANDMARKS_GLOW_LAYER_ID,
       OBSERVED_POSITION_CELL_LAYER_ID,
       OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,

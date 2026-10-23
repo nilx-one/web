@@ -63,8 +63,18 @@ export const ORB_REACH_CHECK_MS = 1_000;
 /** A fix vaguer than this does not say a Bond stood at an orb. */
 export const ORB_OBSERVATION_ACCURACY_METERS = 30;
 
-/** How long a picked-up orb is drawn flying to whoever picked it up. */
-export const ORB_PULL_DRAW_MS = 400;
+/**
+ * How long a picked-up orb stays in the list the renderer draws: its hop,
+ * its flight to whoever picked it up and the flash where it arrives, plus
+ * the latest start of a staggered pick-up.
+ */
+export const ORB_PULL_DRAW_MS = 1_400;
+
+/** Orbs picked up together leave one after another, this far apart. */
+export const ORB_PULL_STAGGER_MS = 60;
+
+/** The stagger stops growing after this many orbs, so none waits long. */
+const ORB_PULL_STAGGER_MAX = 6;
 
 /** How often a cell whose spill is still owed is asked for again. */
 export const CELL_SPILL_RETRY_MS = 60_000;
@@ -408,9 +418,13 @@ export function useOrbSpills({
       setPicked((current) => new Set([...current, ...fresh]));
       setStore((current) => pickCellOrbs(current, fresh));
       if (to !== undefined) {
+        let order = 0;
         for (const id of fresh) {
           const orb = orbs.get(id);
           if (orb === undefined) continue;
+          const leaves =
+            at + Math.min(order, ORB_PULL_STAGGER_MAX) * ORB_PULL_STAGGER_MS;
+          order += 1;
           const [drawn] = mapOrbs({
             orbs: [orb],
             bond_reach: [],
@@ -421,7 +435,11 @@ export function useOrbSpills({
           pulls.current.set(id, {
             ...drawn,
             landsAt: Math.min(drawn.landsAt, at),
-            pulledTo: { longitude: to.longitude, latitude: to.latitude, at },
+            pulledTo: {
+              longitude: to.longitude,
+              latitude: to.latitude,
+              at: leaves,
+            },
           });
         }
       }
