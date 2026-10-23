@@ -1130,6 +1130,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
       <SubscriptionStatusProvider
+        previewCycle={viewModel.identity.pubDress === "0x0sky"}
         owner={viewModel.identity.pubDress}
         avaia={ownedAvaiaPubDress}
         core={dependencies.core}

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import type {
@@ -14,12 +15,20 @@ import type {
   SubscriptionStatusPort,
 } from "@nilx-one/application";
 import "./subscription.css";
+import {
+  createSubscriptionPreview,
+  type SubscriptionPreviewPhase,
+} from "./subscription-preview";
+
+const noPreviewSubscribe = () => () => {};
+const noPreviewSnapshot = () => undefined;
 
 const UNKNOWN: SubscriptionStatus = { kind: "unknown" };
 interface StatusContext {
   owner: string;
   avaia: string | undefined;
   status: SubscriptionStatus;
+  preview?: SubscriptionPreviewPhase | undefined;
 }
 const Context = createContext<StatusContext>({
   owner: "",
@@ -33,14 +42,24 @@ export function SubscriptionStatusProvider({
   avaia,
   core,
   source,
+  previewCycle = false,
   children,
 }: {
   owner: string;
   avaia?: string | undefined;
   core: CoreRuntimePort;
   source?: SubscriptionStatusPort | undefined;
+  /** Explicit visual test for 0x0sky; never an entitlement grant. */
+  previewCycle?: boolean;
   children: ReactNode;
 }) {
+  const [previewClock] = useState(createSubscriptionPreview);
+  const previewEnabled = previewCycle && owner === "0x0sky";
+  const preview = useSyncExternalStore(
+    previewEnabled ? previewClock.subscribe : noPreviewSubscribe,
+    previewEnabled ? previewClock.getSnapshot : noPreviewSnapshot,
+    noPreviewSnapshot,
+  );
   const [result, setResult] = useState<{
     owner: string;
     source: SubscriptionStatusPort;
@@ -106,14 +125,16 @@ export function SubscriptionStatusProvider({
       ? result.status
       : UNKNOWN;
   return (
-    <Context.Provider value={{ owner, avaia, status }}>
+    <Context.Provider value={{ owner, avaia, status, preview }}>
       {children}
     </Context.Provider>
   );
 }
 
 export function useSubscriptionTier(address: string) {
-  const { owner, avaia, status } = useContext(Context);
+  const { owner, avaia, status, preview } = useContext(Context);
+  if (address !== owner && address !== avaia) return undefined;
+  if (preview !== undefined) return preview === "none" ? undefined : preview;
   if (
     status.kind !== "active" ||
     status.bond_pub_dress !== owner ||

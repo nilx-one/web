@@ -33,8 +33,22 @@ hidden bodies and disposal retain the existing renderer lifecycle.
 
 This change supplies a shared status interface and presentation, not billing or
 production entitlement fulfillment. Hosts still need a real authority adapter
-and rebuilt Core bindings before paid statuses appear in production. There is
-no development fallback that fabricates an active subscription.
+and rebuilt Core bindings before paid statuses appear in production.
+
+### Requested visual cycle for 0x0sky
+
+For the authenticated owner `0x0sky`, ProductApp explicitly enables a presentation
+preview: Special for 60 seconds, Exclusive for 60 seconds, None for 60 seconds,
+then repeat while the app is open. Each newly mounted session starts at Special.
+The Bond and its current Avaia share the same phase on all existing status
+surfaces. Returning from the background catches up to elapsed time; logout or
+owner replacement stops the timer and clears the preview. Other owners are
+unaffected. The provider defaults to preview disabled for other consumers.
+
+This is a UI override requested for visual inspection. It works without the
+authority adapter or a new Wasm export and does not create an entitlement,
+modify Core's remaining-time policy, or grant server capabilities. Remove the
+explicit `previewCycle` prop in ProductApp to end this temporary testing mode.
 
 Exclusive takes precedence and pauses the remaining Special duration. When
 Exclusive ends, Special resumes with that unconsumed duration. The shared Core

@@ -35,6 +35,7 @@ import type {
   CorePubDressLabelResult,
   CoreRuntimePort,
   CoreRuntimeStatus,
+  CoreLandmarkMapRequest,
   OrbCoordinate,
   OrbWorldInput,
   OrbWorldOrb,
@@ -768,6 +769,7 @@ export function decodeOrbWorld(wire: string): OrbWorldView {
 }
 
 export interface CoreWasmBindings {
+  landmarkMapView?(request: CoreLandmarkMapRequest): string;
   subscriptionStatus?(
     snapshot: SubscriptionSnapshot | null,
     owner: string,
@@ -819,6 +821,8 @@ export interface CoreWasmBindings {
 }
 
 export interface GeneratedCoreWasmModule {
+  /** Absent from Core runtimes before curated map projection. */
+  landmark_map_view?(request: string): string;
   subscription_status?(snapshot: string, owner: string, now_ms: string): string;
   /** Absent from a runtime built before Core's courier destination. */
   courier_destination?(request: string): string;
@@ -1055,6 +1059,12 @@ export async function loadGeneratedCoreWasmBindings(
               projection,
             ),
         }),
+    ...(runtime.landmark_map_view === undefined
+      ? {}
+      : {
+          landmarkMapView: (request: CoreLandmarkMapRequest) =>
+            runtime.landmark_map_view!(JSON.stringify(request)),
+        }),
     ...(runtime.orb_spill_version === undefined
       ? {}
       : { orbSpillVersion: () => runtime.orb_spill_version!() }),
@@ -1280,6 +1290,17 @@ class CoreWasmClient implements CoreRuntimePort {
         kind: "unknown",
       }
     );
+  }
+
+  /** Missing Core map export must fail closed. */
+  public async landmarkMapView(
+    request: CoreLandmarkMapRequest,
+  ): Promise<string> {
+    const bindings = await this.loadBindings();
+    if (bindings.landmarkMapView === undefined) {
+      throw new Error("0x1 Core Wasm landmark map binding is missing");
+    }
+    return bindings.landmarkMapView(request);
   }
 
   /** Older verified 0.1.0 runtimes have no optional-waypoint export. */
