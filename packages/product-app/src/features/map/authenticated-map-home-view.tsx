@@ -1,8 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { MarketDock } from "../courier/market-dock";
-
 import {
   SubscriptionIdentity,
   useSubscriptionTier,
@@ -13,6 +11,7 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useCourier } from "../courier/use-courier";
 import { CourierOffer } from "../courier/courier-offer";
+import { MarketDock } from "../courier/market-dock";
 import {
   ActivityStack,
   type RevealCompletion,

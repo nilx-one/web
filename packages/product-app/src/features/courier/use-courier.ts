@@ -138,13 +138,13 @@ export function useCourier(input: {
       start({
         from: origin,
         to: courierPoint(next.destination.coordinate),
+        // useFlyover only docks a flight that was neither left nor unmounted;
+        // an offer closed mid-flight must not strand the parked xPing.
         ...(latest.current.dockOnArrival
           ? {
               onDock: () => {
-                if (ticket === generation.current) {
-                  flightForcing?.close();
-                  setArrival(next);
-                }
+                flightForcing?.close();
+                setArrival(next);
               },
             }
           : {}),

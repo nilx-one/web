@@ -88,7 +88,9 @@ The shared WebApp reads the complete public catalog through the GET-only
 `/market-api/bootstrap` proxy. The proxy fixes the upstream path and strips
 session headers. A failed or timed-out bootstrap shows a retry action. Iframe
 unmount disposes the shared app's document listeners. No location, point ID,
-identity session, or device balance is passed to Market.
+identity session, or device balance is passed to Market. The iframe is
+same-origin and unsandboxed, so the pinned WebApp is trusted code with the
+site's origin privileges: review every pin bump as such.
 
 Seeded points remain explicitly unverified. Browsing neither verifies a visit
 nor grants an entitlement. This host disables every checkout transport method;

@@ -547,3 +547,28 @@ it("hands the arrived plan to Dock and clears it on close", async () => {
   expect(result.current.arrival).toBeUndefined();
   expect(result.current.flyover.active).toBe(false);
 });
+
+it("still opens Dock when an offer is opened and declined mid-flight", async () => {
+  const map = renderer();
+  const core = { courierDestination: vi.fn(async () => destination) };
+  const { result } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core,
+      directory,
+      suspended: false,
+      dockOnArrival: true,
+    }),
+  );
+  act(() => result.current.open("special"));
+  await act(async () => {
+    await result.current.accept();
+  });
+  act(() => result.current.open("special"));
+  act(() => result.current.close());
+  act(() => vi.advanceTimersByTime(120_000));
+  expect(result.current.arrival?.destination).toEqual(destination);
+  act(() => result.current.closeMarket());
+  expect(result.current.flyover.active).toBe(false);
+});
