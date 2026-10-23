@@ -9,6 +9,8 @@ import {
   CURATED_RARITY_COLORS,
   clampWeight,
   createPinnedLandmarkLabelElement,
+  layoutPinnedLabels,
+  pinnedCardOffset,
   pinnedLandmarkLabelZoom,
   pinnedLandmarksData,
   setPinnedLandmarkLabelShown,
@@ -105,6 +107,16 @@ describe("pinned landmarks", () => {
     expect(visiblePinnedLabels(apart, 14).size).toBe(2);
     // Below the zoom its weight earns, a card stays hidden even with room.
     expect([...visiblePinnedLabels(apart, 11.2)]).toEqual(["heavy"]);
+  });
+
+  it("keeps mobile label cards inside the viewport", () => {
+    const pin = { id: "lavra", weight: 1, title: "Lavra", x: 8, y: 130 };
+    const viewport = { width: 390, height: 800, topInset: 80 };
+    const layout = layoutPinnedLabels([pin], 16, viewport);
+    expect(layout.has("lavra")).toBe(true);
+    expect(layout.get("lavra")).toBeGreaterThan(0);
+    expect(pinnedCardOffset(8, 240, 390)).toBe(124);
+    expect(pinnedCardOffset(380, 240, 390)).toBe(-122);
   });
 
   it("hides a card for real despite its inline layout", () => {
