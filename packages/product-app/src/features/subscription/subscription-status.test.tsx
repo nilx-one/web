@@ -120,19 +120,14 @@ describe("one subscription status across surfaces", () => {
     const s = setup();
     const { container } = render(s.view());
     await waitFor(() => expect(activeBadges("Exclusive")).toHaveLength(2));
-    const own = container.querySelector<HTMLElement>(
-      '.subscription-identity[data-tier="exclusive"]',
-    );
+    const own = container.querySelector<HTMLElement>('[data-tier="exclusive"]');
     if (own === null) throw new Error("Missing subscribed identity");
-    expect(own.querySelector(".subscription-identity__address")).toHaveTextContent(
-      "0x0sky",
-    );
-    expect(own.querySelector(".subscription-badges")).toContainElement(
-      own.querySelector('[data-level="exclusive"]'),
-    );
-    expect(
-      own.querySelector(".subscription-identity__address"),
-    ).not.toContainElement(own.querySelector(".subscription-badges"));
+    const address = own.querySelector(".subscription-identity__address");
+    const badges = own.querySelector(".subscription-badges");
+    const exclusive = own.querySelector('[data-level="exclusive"]');
+    expect(address).toHaveTextContent("0x0sky");
+    expect(badges).toContainElement(exclusive);
+    expect(address).not.toContainElement(badges);
   });
 
   it("does not fabricate a subscription without an authority adapter", () => {
