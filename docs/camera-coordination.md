@@ -86,6 +86,11 @@ the camera returns to Follow.
   back behind the head even if the body is stationary. Free retains arbitrary
   viewing angles. Zoom pivots around the viewport centre while Follow is active.
 - **Isometric (Bond/Avaia default)** is a separate tracking mode inspired by the gameplay reference.
+  Explicitly entering Isometric after a close Follow shot caps the entry
+  zoom at 19, providing a readable world around the body rather than taking
+  the 21.5 close-up into the tilted scene. Normal tracking and later user
+  gestures still preserve the person's chosen zoom; this is not a global map
+  zoom limit or a geometry-occlusion fix (see #459).
   It holds bearing 45° and pitch 50° from overhead, so a body turn does not
   rotate the world. Its ground target lies about 1.91 m along the camera axis.
   Exponential damping (180 ms response) glides after movement and finishes a
