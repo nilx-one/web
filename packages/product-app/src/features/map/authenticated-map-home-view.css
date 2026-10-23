@@ -468,8 +468,6 @@
 }
 
 .bond-dock__bond strong .subscription-badges {
-  display: inline-grid;
-  max-width: 0;
   flex: 0 0 auto;
   white-space: nowrap;
 }

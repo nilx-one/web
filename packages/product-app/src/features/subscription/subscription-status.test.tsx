@@ -18,6 +18,8 @@ const activeBadges = (name: string) =>
   screen
     .queryAllByText(name)
     .filter((element) => element.getAttribute("aria-hidden") === "false");
+const identity = (address: string) =>
+  screen.getByText(address).closest(".subscription-identity");
 const active = (
   tier: "exclusive" | "special" = "exclusive",
 ): SubscriptionStatus => ({
@@ -60,7 +62,7 @@ describe("one subscription status across surfaces", () => {
     const s = setup();
     render(s.view());
     await waitFor(() => expect(activeBadges("Exclusive")).toHaveLength(2));
-    expect(screen.getByText("0x1other")).not.toHaveAttribute("data-tier");
+    expect(identity("0x1other")).not.toHaveAttribute("data-tier");
     s.resolve.mockResolvedValue(active("special"));
     act(s.invalidate);
     await waitFor(() => expect(activeBadges("Special")).toHaveLength(2));
@@ -100,7 +102,7 @@ describe("one subscription status across surfaces", () => {
     await waitFor(() => expect(activeBadges("Exclusive")).toHaveLength(2));
     r.rerender(s.view("0x0sky", "avaia-two"));
     expect(activeBadges("Exclusive")).toHaveLength(1);
-    expect(screen.getByText("avaia-one")).not.toHaveAttribute("data-tier");
+    expect(identity("avaia-one")).not.toHaveAttribute("data-tier");
   });
   it("removes styling at the deadline while the next authority read is pending", async () => {
     vi.useFakeTimers();
@@ -116,6 +118,7 @@ describe("one subscription status across surfaces", () => {
     });
     expect(activeBadges("Exclusive")).toHaveLength(0);
   });
+
   it("keeps the address and its badge in separate layout nodes", async () => {
     const s = setup();
     const { container } = render(s.view());
@@ -123,8 +126,10 @@ describe("one subscription status across surfaces", () => {
     const own = container.querySelector<HTMLElement>('[data-tier="exclusive"]');
     if (own === null) throw new Error("Missing subscribed identity");
     const address = own.querySelector(".subscription-identity__address");
-    const badges = own.querySelector(".subscription-badges");
-    const exclusive = own.querySelector('[data-level="exclusive"]');
+    const badges = own.querySelector<HTMLElement>(".subscription-badges");
+    const exclusive = own.querySelector<HTMLElement>(
+      '[data-level="exclusive"]',
+    );
     expect(address).toHaveTextContent("0x0sky");
     expect(badges).toContainElement(exclusive);
     expect(address).not.toContainElement(badges);
@@ -136,6 +141,6 @@ describe("one subscription status across surfaces", () => {
         <SubscriptionIdentity address="0x0sky" badge />
       </SubscriptionStatusProvider>,
     );
-    expect(screen.getByText("0x0sky")).not.toHaveAttribute("data-tier");
+    expect(identity("0x0sky")).not.toHaveAttribute("data-tier");
   });
 });

@@ -14,6 +14,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 const core = {} as CoreRuntimePort;
+const identity = (address: string) =>
+  screen.getByText(address).closest(".subscription-identity");
 const view = (owner = "0x0sky", avaia = "xSky") => (
   <SubscriptionStatusProvider
     owner={owner}
@@ -30,8 +32,8 @@ const view = (owner = "0x0sky", avaia = "xSky") => (
 it("repeats three minute-long phases for only the owner and associated Avaia", () => {
   vi.useFakeTimers();
   render(view());
-  const bond = screen.getByText("0x0sky");
-  const avaia = screen.getByText("xSky");
+  const bond = identity("0x0sky");
+  const avaia = identity("xSky");
   for (let cycle = 0; cycle < 3; cycle++) {
     expect(bond).toHaveAttribute("data-tier", "special");
     expect(avaia).toHaveAttribute("data-tier", "special");
@@ -45,7 +47,7 @@ it("repeats three minute-long phases for only the owner and associated Avaia", (
     expect(avaia).not.toHaveAttribute("data-tier");
     act(() => vi.advanceTimersByTime(60_000));
   }
-  expect(screen.getByText("0x1other")).not.toHaveAttribute("data-tier");
+  expect(identity("0x1other")).not.toHaveAttribute("data-tier");
 });
 
 it("catches up on foreground and stops on owner replacement or unmount", () => {
@@ -54,14 +56,14 @@ it("catches up on foreground and stops on owner replacement or unmount", () => {
   const result = render(view());
   vi.setSystemTime(240_000);
   act(() => window.dispatchEvent(new Event("focus")));
-  expect(screen.getByText("0x0sky")).toHaveAttribute("data-tier", "exclusive");
+  expect(identity("0x0sky")).toHaveAttribute("data-tier", "exclusive");
   result.rerender(view("0x1other"));
-  expect(screen.getByText("0x0sky")).not.toHaveAttribute("data-tier");
-  expect(screen.getByText("xSky")).not.toHaveAttribute("data-tier");
-  expect(screen.getByText("0x1other")).not.toHaveAttribute("data-tier");
+  expect(identity("0x0sky")).not.toHaveAttribute("data-tier");
+  expect(identity("xSky")).not.toHaveAttribute("data-tier");
+  expect(identity("0x1other")).not.toHaveAttribute("data-tier");
   expect(vi.getTimerCount()).toBe(0);
   result.rerender(view());
-  expect(screen.getByText("0x0sky")).toHaveAttribute("data-tier", "special");
+  expect(identity("0x0sky")).toHaveAttribute("data-tier", "special");
   result.unmount();
   expect(vi.getTimerCount()).toBe(0);
 });
