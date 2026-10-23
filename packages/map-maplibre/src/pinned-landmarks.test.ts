@@ -110,7 +110,7 @@ describe("pinned landmarks", () => {
     expect([...visiblePinnedLabels(apart, 11.2)]).toEqual(["heavy"]);
   });
 
-  it("moves the title inward while the connector remains at its real map point", () => {
+  it("keeps landmark cards inside the canvas", () => {
     const element = createPinnedLandmarkLabelElement(document);
     expect(pinnedCardOffset(8, 240, 390)).toBe(124);
     expect(pinnedCardOffset(380, 240, 390)).toBe(-122);
@@ -124,7 +124,7 @@ describe("pinned landmarks", () => {
     ).toBe("");
   });
 
-  it("keeps labels out of browser chrome and prevents shifted collisions", () => {
+  it("avoids chrome and shifted label collisions", () => {
     const first = {
       id: "left",
       weight: 1,
