@@ -159,8 +159,9 @@ import {
   pinnedLandmarksData,
   pinnedLandmarksLayers,
   pinnedLandmarksSource,
+  layoutPinnedLabels,
+  setPinnedLandmarkCardOffset,
   setPinnedLandmarkLabelShown,
-  visiblePinnedLabels,
 } from "./pinned-landmarks";
 
 import {
@@ -1533,7 +1534,14 @@ export function createMapLibreRenderer(
 
   function updatePinnedLabelVisibility(mounted: MapLibreMap): void {
     if (pinnedLabels.size === 0) return;
-    const shown = visiblePinnedLabels(
+    const canvas = mounted.getCanvas();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const viewport =
+      width > 0 && height > 0
+        ? { width, height, topInset: 76, bottomInset: 160 }
+        : undefined;
+    const shown = layoutPinnedLabels(
       pinnedLandmarks.map((landmark) => {
         const { x, y } = mounted.project([
           landmark.longitude,
@@ -1549,9 +1557,11 @@ export function createMapLibreRenderer(
         };
       }),
       mounted.getZoom(),
+      viewport,
     );
     for (const [id, { element }] of pinnedLabels) {
       setPinnedLandmarkLabelShown(element, shown.has(id));
+      setPinnedLandmarkCardOffset(element, shown.get(id) ?? 0, width);
     }
   }
 
