@@ -116,12 +116,10 @@ describe("pinned landmarks", () => {
     expect(pinnedCardOffset(380, 240, 390)).toBe(-122);
     expect(pinnedCardOffset(200, 240, 390)).toBe(0);
     setPinnedLandmarkCardOffset(element, 124, 390);
-    expect(
-      element.querySelector<HTMLElement>('[data-part="card"]')?.style.transform,
-    ).toBe("translateX(124px)");
-    expect(
-      element.querySelector<HTMLElement>('[data-part="connector"]')?.style.transform,
-    ).toBe("");
+    const card = element.querySelector<HTMLElement>('[data-part="card"]');
+    const pin = element.querySelector<HTMLElement>('[data-part="connector"]');
+    expect(card?.style.transform).toBe("translateX(124px)");
+    expect(pin?.style.transform).toBe("");
   });
 
   it("avoids chrome and shifted label collisions", () => {
