@@ -223,6 +223,7 @@ if (isPublicBondHostname(window.location.hostname)) {
   root.render(
     <StrictMode>
       <ProductApp
+        marketCatalogUrl="/market.html"
         business={business}
         core={core}
         host={host}

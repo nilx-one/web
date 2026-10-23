@@ -1,6 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { MarketDock } from "../courier/market-dock";
+
 import {
   SubscriptionIdentity,
   useSubscriptionTier,
@@ -388,6 +390,7 @@ export interface AuthenticatedMapHomeViewProps {
    * older, finds are still paid; the toast then names the tier, not the item.
    */
   readonly courierDirectory?: CourierDirectoryPort;
+  readonly marketCatalogUrl?: string;
   readonly findItems?: Pick<
     CoreRuntimePort,
     | "findItem"
@@ -918,6 +921,7 @@ export function AuthenticatedMapHomeView({
   xpingEngine,
   findItems,
   courierDirectory,
+  marketCatalogUrl,
   nearbySpeech,
   businessStations,
   connectedProviders,
@@ -1905,6 +1909,7 @@ export function AuthenticatedMapHomeView({
     origin: observedPosition,
     core: findItems,
     directory: courierDirectory ?? seededMarketDirectory,
+    dockOnArrival: marketCatalogUrl !== undefined,
     engine: xpingEngine,
     cue,
     feedback,
@@ -4171,6 +4176,17 @@ export function AuthenticatedMapHomeView({
                 : undefined,
             ),
           })}
+      {...(courier.arrival && marketCatalogUrl
+        ? {
+            dock: (
+              <MarketDock
+                plan={courier.arrival}
+                url={marketCatalogUrl}
+                onClose={courier.closeMarket}
+              />
+            ),
+          }
+        : {})}
       overlay={
         <>
           {section === "world" &&

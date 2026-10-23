@@ -521,3 +521,29 @@ it("tells the way back, and a breakdown, in the flight row", () => {
   act(() => vi.advanceTimersByTime(5000));
   expect(screen.queryByRole("status")).toBeNull();
 });
+
+it("hands the arrived plan to Dock and clears it on close", async () => {
+  const map = renderer();
+  const core = { courierDestination: vi.fn(async () => destination) };
+  const { result } = renderHook(() =>
+    useCourier({
+      renderer: map,
+      origin: { longitude: 30.5, latitude: 50.4 },
+      core,
+      directory,
+      suspended: false,
+      dockOnArrival: true,
+    }),
+  );
+  expect(result.current.arrival).toBeUndefined();
+  act(() => result.current.open("special"));
+  await act(async () => {
+    await result.current.accept();
+  });
+  act(() => vi.advanceTimersByTime(120_000));
+  expect(result.current.arrival?.destination).toEqual(destination);
+  expect(result.current.flyover.expanded).toBe(false);
+  act(() => result.current.closeMarket());
+  expect(result.current.arrival).toBeUndefined();
+  expect(result.current.flyover.active).toBe(false);
+});

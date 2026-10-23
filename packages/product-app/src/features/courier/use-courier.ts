@@ -22,6 +22,7 @@ export function useCourier(input: {
   core: Pick<CoreRuntimePort, "courierDestination"> | undefined;
   directory: CourierDirectoryPort | undefined;
   suspended: boolean;
+  dockOnArrival?: boolean;
   cue?: ((moment: SoundCue) => void) | undefined;
   feedback?: Pick<HostPort, "impact"> | undefined;
   /** xPing's engine; absent, a flight cannot be forced. */
@@ -29,6 +30,7 @@ export function useCourier(input: {
 }) {
   const [offer, setOffer] = useState<"exclusive" | "special">();
   const [plan, setPlan] = useState<CourierPlan>();
+  const [arrival, setArrival] = useState<CourierPlan>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   /** Why the offer cannot be taken: the engine is broken. */
@@ -128,6 +130,7 @@ export function useCourier(input: {
               leaveRef.current();
             })
           : undefined;
+      setArrival(undefined);
       setPlan(next);
       setOffer(undefined);
       setBrokenAt(undefined);
@@ -135,6 +138,16 @@ export function useCourier(input: {
       start({
         from: origin,
         to: courierPoint(next.destination.coordinate),
+        ...(latest.current.dockOnArrival
+          ? {
+              onDock: () => {
+                if (ticket === generation.current) {
+                  flightForcing?.close();
+                  setArrival(next);
+                }
+              },
+            }
+          : {}),
         ...(flightForcing === undefined ? {} : { forcing: flightForcing }),
       });
     } catch {
@@ -190,7 +203,13 @@ export function useCourier(input: {
       }
     };
   }, [renderer, suspended, offer, flyover.active]);
+  const closeMarket = useCallback(() => {
+    setArrival(undefined);
+    leave();
+  }, [leave]);
   return {
+    arrival: active ? arrival : undefined,
+    closeMarket,
     offer,
     plan,
     busy,

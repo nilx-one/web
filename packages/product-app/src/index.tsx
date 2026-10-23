@@ -153,6 +153,7 @@ export interface ProductAppDependencies {
     readonly navigation: BusinessNavigationPort;
   };
   courierDirectory?: CourierDirectoryPort;
+  marketCatalogUrl?: string;
   core: CoreRuntimePort;
   host: HostPort;
   identity: IdentityAccessPort;
@@ -1179,6 +1180,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             ? { xpingEngine: dependencies.identity }
             : {})}
           findItems={dependencies.core}
+          {...(dependencies.marketCatalogUrl === undefined
+            ? {}
+            : { marketCatalogUrl: dependencies.marketCatalogUrl })}
           {...(dependencies.courierDirectory === undefined
             ? {}
             : { courierDirectory: dependencies.courierDirectory })}
@@ -1403,6 +1407,7 @@ export function ProductApp({
   onManualBondMove,
   localModel,
   courierDirectory,
+  marketCatalogUrl,
   business,
   routerBasepath = "/",
 }: ProductAppProps) {
@@ -1431,6 +1436,7 @@ export function ProductApp({
           ...(onManualBondMove === undefined ? {} : { onManualBondMove }),
           ...(localModel === undefined ? {} : { localModel }),
           ...(courierDirectory === undefined ? {} : { courierDirectory }),
+          ...(marketCatalogUrl === undefined ? {} : { marketCatalogUrl }),
         },
       },
     }),

@@ -76,4 +76,23 @@ The flyover from #454 owns road routing, height, banking and actual progress.
 Its arrival event controls ✅. A seeded preview carries no authoritative ETA;
 agreement and arrival grant no entitlement and call no commerce endpoint.
 
+## Browser Market Dock
+
+The browser site supplies `/market.html`, a separate document mounting the
+pinned `@0xda-market/webapp-core` package. After xPing actually reaches the
+selected point (immediately with reduced motion), it parks and the Dock opens
+that document. Closing the Dock ends the flight and restores the world camera.
+Hosts without this capability retain the existing return flight.
+
+The shared WebApp reads the complete public catalog through the GET-only
+`/market-api/bootstrap` proxy. The proxy fixes the upstream path and strips
+session headers. A failed or timed-out bootstrap shows a retry action. Iframe
+unmount disposes the shared app's document listeners. No location, point ID,
+identity session, or device balance is passed to Market.
+
+Seeded points remain explicitly unverified. Browsing neither verifies a visit
+nor grants an entitlement. This host disables every checkout transport method;
+Special purchases require a separate authoritative seeds debit and subscription
+grant integration before checkout can be enabled.
+
 <!-- © 2026 aiaiaiai · aiaiaiai.org -->

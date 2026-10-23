@@ -1,0 +1,36 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.market-dock {
+  width: 100%;
+  min-width: 0;
+}
+.market-dock__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.market-dock__header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-dock__header button {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+.market-dock__notice {
+  margin: 0;
+  padding: 0 16px 8px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.market-dock__frame {
+  display: block;
+  width: 100%;
+  height: min(58dvh, 560px);
+  border: 0;
+  border-radius: 0 0 20px 20px;
+  background: #12151b;
+}
