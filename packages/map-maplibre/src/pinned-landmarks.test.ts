@@ -125,7 +125,13 @@ describe("pinned landmarks", () => {
   });
 
   it("keeps labels out of browser chrome and prevents shifted collisions", () => {
-    const first = { id: "left", weight: 1, title: "Kyiv landmark long name", x: 4, y: 130 };
+    const first = {
+      id: "left",
+      weight: 1,
+      title: "Kyiv landmark long name",
+      x: 4,
+      y: 130,
+    };
     const second = { ...first, id: "beside", x: 45, weight: 0.9 };
     const tooHigh = { ...first, id: "top", x: 160, y: 25 };
     const layout = layoutPinnedLabels([first, second, tooHigh], 16, {
