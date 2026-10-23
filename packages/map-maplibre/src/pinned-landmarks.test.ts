@@ -9,9 +9,12 @@ import {
   CURATED_RARITY_COLORS,
   clampWeight,
   createPinnedLandmarkLabelElement,
+  layoutPinnedLabels,
+  pinnedCardOffset,
   pinnedLandmarkLabelZoom,
   pinnedLandmarksData,
   setPinnedLandmarkLabelShown,
+  setPinnedLandmarkCardOffset,
   visiblePinnedLabels,
 } from "./pinned-landmarks";
 
@@ -105,6 +108,36 @@ describe("pinned landmarks", () => {
     expect(visiblePinnedLabels(apart, 14).size).toBe(2);
     // Below the zoom its weight earns, a card stays hidden even with room.
     expect([...visiblePinnedLabels(apart, 11.2)]).toEqual(["heavy"]);
+  });
+
+  it("moves the title inward while the connector remains at its real map point", () => {
+    const element = createPinnedLandmarkLabelElement(document);
+    expect(pinnedCardOffset(8, 240, 390)).toBe(124);
+    expect(pinnedCardOffset(380, 240, 390)).toBe(-122);
+    expect(pinnedCardOffset(200, 240, 390)).toBe(0);
+    setPinnedLandmarkCardOffset(element, 124, 390);
+    expect(
+      element.querySelector<HTMLElement>('[data-part="card"]')?.style.transform,
+    ).toBe("translateX(124px)");
+    expect(
+      element.querySelector<HTMLElement>('[data-part="connector"]')?.style.transform,
+    ).toBe("");
+  });
+
+  it("keeps labels out of browser chrome and prevents shifted collisions", () => {
+    const first = { id: "left", weight: 1, title: "Kyiv landmark long name", x: 4, y: 130 };
+    const second = { ...first, id: "beside", x: 45, weight: 0.9 };
+    const tooHigh = { ...first, id: "top", x: 160, y: 25 };
+    const layout = layoutPinnedLabels([first, second, tooHigh], 16, {
+      width: 390,
+      height: 800,
+      topInset: 80,
+      bottomInset: 180,
+    });
+    expect(layout.has("left")).toBe(true);
+    expect(layout.has("beside")).toBe(false);
+    expect(layout.has("top")).toBe(false);
+    expect((layout.get("left") ?? 0)).toBeGreaterThan(0);
   });
 
   it("hides a card for real despite its inline layout", () => {
