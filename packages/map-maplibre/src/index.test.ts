@@ -122,7 +122,7 @@ function makeFakeMap(): FakeMap {
   };
   const canvas = document.createElement("canvas");
   Object.defineProperties(canvas, {
-    clientWidth: { value: 390 },
+    clientWidth: { value: 1_024 },
     clientHeight: { value: 800 },
   });
   const remember = (event: string, listener: FakeListener) => {
