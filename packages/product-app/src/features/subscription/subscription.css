@@ -4,6 +4,9 @@
 .subscription-identity {
   transition: color 700ms ease;
 }
+.subscription-identity__address {
+  min-width: 0;
+}
 .subscription-identity[data-tier="special"] {
   color: light-dark(#6c39aa, #d2b5ff);
 }

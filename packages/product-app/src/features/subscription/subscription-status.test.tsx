@@ -116,6 +116,24 @@ describe("one subscription status across surfaces", () => {
     });
     expect(activeBadges("Exclusive")).toHaveLength(0);
   });
+  it("keeps the address and its badge in separate layout nodes", async () => {
+    const s = setup();
+    const { container } = render(s.view());
+    await waitFor(() => expect(activeBadges("Exclusive")).toHaveLength(2));
+    const own = container.querySelector<HTMLElement>(
+      '.subscription-identity[data-tier="exclusive"]',
+    );
+    expect(own?.querySelector(".subscription-identity__address")).toHaveTextContent(
+      "0x0sky",
+    );
+    expect(own?.querySelector(".subscription-badges")).toContainElement(
+      own.querySelector('[data-level="exclusive"]'),
+    );
+    expect(own?.querySelector(".subscription-identity__address")).not.toContainElement(
+      own.querySelector(".subscription-badges"),
+    );
+  });
+
   it("does not fabricate a subscription without an authority adapter", () => {
     render(
       <SubscriptionStatusProvider owner="0x0sky" core={{} as CoreRuntimePort}>
