@@ -123,14 +123,15 @@ describe("one subscription status across surfaces", () => {
     const own = container.querySelector<HTMLElement>(
       '.subscription-identity[data-tier="exclusive"]',
     );
-    expect(
-      own?.querySelector(".subscription-identity__address"),
-    ).toHaveTextContent("0x0sky");
-    expect(own?.querySelector(".subscription-badges")).toContainElement(
+    if (own === null) throw new Error("Missing subscribed identity");
+    expect(own.querySelector(".subscription-identity__address")).toHaveTextContent(
+      "0x0sky",
+    );
+    expect(own.querySelector(".subscription-badges")).toContainElement(
       own.querySelector('[data-level="exclusive"]'),
     );
     expect(
-      own?.querySelector(".subscription-identity__address"),
+      own.querySelector(".subscription-identity__address"),
     ).not.toContainElement(own.querySelector(".subscription-badges"));
   });
 
