@@ -6,20 +6,16 @@ import type { MapOrb } from "@nilx-one/map-contract";
 import { describe, expect, it } from "vitest";
 
 import {
-  ORB_BURST_MS,
-  ORB_COLLECT_MS,
   ORB_FADE_MS,
   ORB_FALL_MS,
-  ORB_LIFT_MS,
-  ORB_PULL_MS,
   ORBS_SOURCE_ID,
   orbFall,
-  orbPull,
   orbsData,
   orbsFalling,
   orbsGlowing,
   orbsLayers,
 } from "./orb-layer";
+import { ORB_COLLECT_MS } from "./orb-flight";
 
 const orb = (id: string, landsAt: number, kind: MapOrb["kind"] = "orb") =>
   ({ id, longitude: 30.52, latitude: 50.45, kind, landsAt }) as const;
@@ -120,44 +116,20 @@ describe("orbsData", () => {
     expect(orbsGlowing(lying, { reducedMotion: true })).toBe(false);
   });
 
-  it("collects a picked-up orb: a hop, an arc with a tail, then a flash", () => {
+  it("hands a picked-up orb to the flight once it leaves the ground", () => {
     const pulled: MapOrb = {
       ...orb("a", 0),
       rarity: "special",
       pulledTo: { longitude: 30.53, latitude: 50.45, at: 1_000 },
     };
-    type Drawn = {
-      features: {
-        geometry: { coordinates: [number, number] };
-        properties: { kind: string; scale: number; ring?: number };
-      }[];
-    };
-    const at = (now: number) => orbsData([pulled], now) as Drawn;
-
-    // The hop: it swells where it lay.
-    const hop = at(1_000 + ORB_LIFT_MS).features;
-    expect(hop).toHaveLength(1);
-    expect(hop[0]!.geometry.coordinates).toEqual([30.52, 50.45]);
-    expect(hop[0]!.properties.scale).toBeGreaterThan(1.4);
-
-    // The flight: off the straight line, with fading beads behind it.
-    const flying = at(1_000 + ORB_LIFT_MS + ORB_PULL_MS * 0.6).features;
-    expect(flying.length).toBeGreaterThan(1);
-    const [longitude, latitude] = flying[0]!.geometry.coordinates;
-    expect(longitude).toBeGreaterThan(30.52);
-    expect(longitude).toBeLessThan(30.53);
-    expect(latitude).not.toBeCloseTo(50.45, 6);
-    expect(orbPull(pulled, 1_000 + ORB_LIFT_MS + ORB_PULL_MS)).toBe(1);
-
-    // The flash: a ring opening where the picker is.
-    const flash = at(1_000 + ORB_LIFT_MS + ORB_PULL_MS + 1).features;
-    expect(flash.map((feature) => feature.properties.kind)).toEqual(["burst"]);
-    expect(flash[0]!.geometry.coordinates).toEqual([30.53, 50.45]);
-    const later = at(1_000 + ORB_LIFT_MS + ORB_PULL_MS + ORB_BURST_MS / 2)
-      .features[0]!;
-    expect(later.properties.ring).toBeGreaterThan(flash[0]!.properties.ring!);
-
-    expect(at(1_000 + ORB_COLLECT_MS).features).toEqual([]);
+    // Still lying while it waits its turn in a staggered pick-up.
+    expect(
+      (orbsData([pulled], 999) as { features: unknown[] }).features,
+    ).toHaveLength(1);
+    expect(
+      (orbsData([pulled], 1_000) as { features: unknown[] }).features,
+    ).toEqual([]);
+    // The frames go on for the whole flight the overlay draws.
     expect(orbsFalling([pulled], 1_000 + ORB_COLLECT_MS - 1)).toBe(true);
     expect(orbsFalling([pulled], 1_000 + ORB_COLLECT_MS)).toBe(false);
     expect(orbsGlowing([pulled])).toBe(false);

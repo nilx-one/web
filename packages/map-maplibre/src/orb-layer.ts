@@ -7,27 +7,16 @@ import {
   type MapOrb,
 } from "@nilx-one/map-contract";
 
+import { ORB_COLLECT_MS } from "./orb-flight";
+
 export const ORBS_SOURCE_ID = "orbs";
 export const ORBS_AURA_LAYER_ID = "orbs-aura";
 export const ORBS_GLOW_LAYER_ID = "orbs-glow";
 export const ORBS_CORE_LAYER_ID = "orbs-core";
-export const ORBS_BURST_LAYER_ID = "orbs-burst";
 export const ORBS_GOAL_LAYER_ID = "orbs-goal";
 
 /** How long an orb takes to fall, ending at its `landsAt`. */
 export const ORB_FALL_MS = 650;
-
-/** How long a picked-up orb hops up before it is drawn in. */
-export const ORB_LIFT_MS = 160;
-
-/** How long a picked-up orb then takes to reach whoever picked it up. */
-export const ORB_PULL_MS = 520;
-
-/** How long the flash lasts where it arrives. */
-export const ORB_BURST_MS = 320;
-
-/** A whole pick-up, from `pulledTo.at` until nothing of it is left. */
-export const ORB_COLLECT_MS = ORB_LIFT_MS + ORB_PULL_MS + ORB_BURST_MS;
 
 /** How long a picked-up orb fades where it lay, when motion is reduced. */
 export const ORB_FADE_MS = 200;
@@ -82,36 +71,6 @@ export function orbFall(orb: Pick<MapOrb, "landsAt">, nowMs: number): number {
   return 1 + (back + 1) * u * u * u + back * u * u;
 }
 
-/**
- * How far a picked-up orb has been drawn in at `nowMs`: 0 where it lay,
- * through its hop, 1 at whoever picked it up. It draws back a hair first and
- * then speeds up as it goes, the way a magnet pulls.
- */
-export function orbPull(orb: Pick<MapOrb, "pulledTo">, nowMs: number): number {
-  if (orb.pulledTo === undefined) return 0;
-  const t = (nowMs - orb.pulledTo.at - ORB_LIFT_MS) / ORB_PULL_MS;
-  if (!(t > 0)) return 0;
-  if (t >= 1) return 1;
-  return t * t * (1.6 * t - 0.6);
-}
-
-/** How far a picked-up orb's hop has gone: 0 to 1, then 1. */
-function orbLift(orb: Pick<MapOrb, "pulledTo">, nowMs: number): number {
-  if (orb.pulledTo === undefined) return 0;
-  const t = (nowMs - orb.pulledTo.at) / ORB_LIFT_MS;
-  if (!(t > 0)) return 0;
-  return t >= 1 ? 1 : 1 - (1 - t) * (1 - t);
-}
-
-/** How far the arrival flash has gone: 0 until the orb arrives, then to 1. */
-function orbBurst(orb: Pick<MapOrb, "pulledTo">, nowMs: number): number {
-  if (orb.pulledTo === undefined) return 0;
-  const t =
-    (nowMs - orb.pulledTo.at - ORB_LIFT_MS - ORB_PULL_MS) / ORB_BURST_MS;
-  if (!(t > 0)) return 0;
-  return Math.min(1, t);
-}
-
 /** Whether any orb is still to land or still being picked up. */
 export function orbsFalling(
   orbs: readonly MapOrb[],
@@ -137,17 +96,22 @@ export function orbsGlowing(
   );
 }
 
+/** How large an orb shines against a Common one. */
+export function orbShineSize(orb: Pick<MapOrb, "rarity">): number {
+  return SHINE[orb.rarity ?? "common"].size;
+}
+
 function hex(rgb: number): string {
   return `#${rgb.toString(16).padStart(6, "0")}`;
 }
 
 /** A rarity's colour as a CSS hex string, the flight loot's own. */
-function rarityColor(orb: Pick<MapOrb, "rarity">): string {
+export function orbColor(orb: Pick<MapOrb, "rarity">): string {
   return orb.rarity === undefined ? GLOW : hex(FLIGHT_LOOT_COLORS[orb.rarity]);
 }
 
 /** The bead's own fill: its rarity's colour, lit nearly white. */
-function coreColor(orb: Pick<MapOrb, "rarity">): string {
+export function orbCoreColor(orb: Pick<MapOrb, "rarity">): string {
   if (orb.rarity === undefined) return CORE;
   const rgb = FLIGHT_LOOT_COLORS[orb.rarity];
   const lit = (shift: number) => {
@@ -158,32 +122,12 @@ function coreColor(orb: Pick<MapOrb, "rarity">): string {
 }
 
 /** A stable number in [0, 1) for an orb, so neighbours do not move as one. */
-function seed(id: string): number {
+export function orbSeed(id: string): number {
   let hash = 2166136261;
   for (let index = 0; index < id.length; index += 1) {
     hash = Math.imul(hash ^ id.charCodeAt(index), 16777619);
   }
   return (hash >>> 0) / 2 ** 32;
-}
-
-/** Where a picked-up orb is at pull `s`: along a soft arc to its picker. */
-function pulledPoint(
-  orb: MapOrb,
-  to: NonNullable<MapOrb["pulledTo"]>,
-  s: number,
-  arc: boolean,
-): [number, number] {
-  const longitude = orb.longitude + (to.longitude - orb.longitude) * s;
-  const latitude = orb.latitude + (to.latitude - orb.latitude) * s;
-  if (!arc) return [longitude, latitude];
-  // Sideways from the straight line, in ground-true proportions, bulging
-  // most halfway and to the side this orb's id picks.
-  const cos = Math.max(0.01, Math.cos((orb.latitude * Math.PI) / 180));
-  const dx = (to.longitude - orb.longitude) * cos;
-  const dy = to.latitude - orb.latitude;
-  const bulge =
-    (seed(orb.id) < 0.5 ? -1 : 1) * 0.35 * Math.sin(Math.PI * Math.max(0, s));
-  return [longitude + (-dy * bulge) / cos, latitude + dx * bulge];
 }
 
 type Feature = Record<string, unknown>;
@@ -199,7 +143,11 @@ function point(
   };
 }
 
-/** The features of one picked-up orb: its hop, its pull and its flash. */
+/**
+ * A picked-up orb on the ground: it lies until it leaves, then the flight
+ * overlay carries it (`orb-flight.ts`). With reduced motion there is no
+ * flight; it only fades where it lay.
+ */
 function collected(
   orb: MapOrb,
   to: NonNullable<MapOrb["pulledTo"]>,
@@ -207,80 +155,26 @@ function collected(
   nowMs: number,
   reducedMotion: boolean,
 ): Feature[] {
-  const color = rarityColor(orb);
-  const core = coreColor(orb);
-  if (reducedMotion) {
-    const fade = 1 - (nowMs - to.at) / ORB_FADE_MS;
-    if (!(fade > 0)) return [];
-    return [
-      point([orb.longitude, orb.latitude], {
-        kind: "orb",
-        scale: 1,
-        spread: shine.size,
-        glow: shine.glow,
-        aura: 0,
-        opacity: Math.min(1, fade),
-        color,
-        core,
-      }),
-    ];
-  }
-  const burst = orbBurst(orb, nowMs);
-  if (burst >= 1) return [];
-  if (burst > 0) {
-    // Arrived: a ring of its colour opens and fades where the picker is.
-    return [
-      point([to.longitude, to.latitude], {
-        kind: "burst",
-        ring: (0.6 + 1.8 * (1 - (1 - burst) * (1 - burst))) * shine.size,
-        opacity: 0.9 * (1 - burst),
-        color,
-      }),
-    ];
-  }
-  const lift = orbLift(orb, nowMs);
-  const pull = orbPull(orb, nowMs);
-  // It swells as it hops, then shrinks on the way in.
-  const scale = (1 + 0.45 * lift) * (1 - 0.55 * Math.max(0, pull));
-  const spread = shine.size * (1 + 0.8 * lift - 0.6 * Math.max(0, pull));
-  const features = [
-    point(pulledPoint(orb, to, pull, true), {
+  const fade = reducedMotion ? 1 - (nowMs - to.at) / ORB_FADE_MS : 1;
+  if (!(fade > 0) || (!reducedMotion && nowMs >= to.at)) return [];
+  return [
+    point([orb.longitude, orb.latitude], {
       kind: "orb",
-      scale,
-      spread,
-      glow: Math.min(1, shine.glow + 0.25 * lift),
-      aura: shine.aura * (1 - Math.max(0, pull)),
-      opacity: 1,
-      color,
-      core,
+      scale: 1,
+      spread: shine.size,
+      glow: shine.glow,
+      aura: reducedMotion ? 0 : shine.aura,
+      opacity: Math.min(1, fade),
+      color: orbColor(orb),
+      core: orbCoreColor(orb),
     }),
   ];
-  // A short tail of fading beads behind it while it flies.
-  if (pull > 0) {
-    for (let step = 1; step <= 3; step += 1) {
-      const behind = orbPull(orb, nowMs - (step * ORB_PULL_MS) / 14);
-      if (behind <= 0) break;
-      features.push(
-        point(pulledPoint(orb, to, behind, true), {
-          kind: "orb",
-          scale: scale * (1 - step * 0.22),
-          spread: spread * (1 - step * 0.2),
-          glow: shine.glow,
-          aura: 0,
-          opacity: 0.55 - step * 0.15,
-          color,
-          core,
-        }),
-      );
-    }
-  }
-  return features;
 }
 
 /**
- * One point per orb, plus its trail and flash while it is picked up. Its
- * properties are presentation only: what it is, how far it has fallen, how
- * it shines. An orb that has not started falling is not drawn.
+ * One point per orb on the ground. Its properties are presentation only:
+ * what it is, how far it has fallen, how it shines. An orb that has not
+ * started falling, or has left for its picker, is not drawn.
  */
 export function orbsData(
   orbs: readonly MapOrb[],
@@ -303,7 +197,8 @@ export function orbsData(
         ? 0
         : shine.breath *
           Math.sin(
-            (2 * Math.PI * nowMs) / shine.period + 2 * Math.PI * seed(orb.id),
+            (2 * Math.PI * nowMs) / shine.period +
+              2 * Math.PI * orbSeed(orb.id),
           );
       return [
         point([orb.longitude, orb.latitude], {
@@ -315,8 +210,8 @@ export function orbsData(
           glow: shine.glow,
           aura: shine.aura * (1 - breath),
           opacity: Math.min(1, fall * 1.4),
-          color: rarityColor(orb),
-          core: coreColor(orb),
+          color: orbColor(orb),
+          core: orbCoreColor(orb),
         }),
       ];
     }),
@@ -355,8 +250,7 @@ function byZoom(
  * Orbs are bright beads lit in their rarity's colour, with a halo that
  * breathes at its pace and, from Rare up, a wide faint aura; they lie flat
  * on the ground so a tilted world foreshortens them like everything else on
- * it. A picked-up orb ends in a ring of its colour; the find at the end of a
- * trail is a ring in the spatial accent.
+ * it. The find at the end of a trail is a ring in the spatial accent.
  */
 export function orbsLayers(): readonly Record<string, unknown>[] {
   const isOrb = ["==", ["get", "kind"], "orb"];
@@ -398,21 +292,6 @@ export function orbsLayers(): readonly Record<string, unknown>[] {
         "circle-opacity": ["get", "opacity"],
         "circle-stroke-color": ["get", "color"],
         "circle-stroke-width": 1.2,
-        "circle-stroke-opacity": ["get", "opacity"],
-        "circle-pitch-alignment": "map",
-      },
-    },
-    {
-      id: ORBS_BURST_LAYER_ID,
-      type: "circle",
-      source: ORBS_SOURCE_ID,
-      filter: ["==", ["get", "kind"], "burst"],
-      paint: {
-        "circle-color": ["get", "color"],
-        "circle-opacity": ["*", 0.25, ["get", "opacity"]],
-        "circle-radius": byZoom(4, 9, 16, "ring"),
-        "circle-stroke-color": ["get", "color"],
-        "circle-stroke-width": 2,
         "circle-stroke-opacity": ["get", "opacity"],
         "circle-pitch-alignment": "map",
       },

@@ -73,11 +73,13 @@ Safari has no web vibration, so there the pick-up is sound only. Between the
 Bond and its Avaia, whichever reaches an orb first picks it up, and it is
 gone for the other.
 
-The pick-up is animated: the orb hops and swells where it lay, flies to the
-picker along a soft arc with a short fading tail, speeding up as a magnet
-pulls, and ends in a ring of its colour where the picker stands. Orbs picked
-up together leave one after another, 60 ms apart. With reduced motion the
-orb only fades where it lay.
+The pick-up is animated over the map, in screen space: 15 m is only a few
+dozen pixels and ends beneath the picker's body, so a pick-up drawn on the
+ground would be lost under it. The orb hops up off the ground, swelling,
+flies a high arc into the picker's chest with a short fading tail, speeding
+up as a magnet pulls, and flashes a ring of its colour there. Orbs picked up
+together leave one after another, 60 ms apart. With reduced motion the orb
+only fades where it lay.
 
 ### How an orb shines
 
