@@ -1,21 +1,28 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-/** Narrow adapter contract for the pinned, JavaScript-only shared WebApp. */
+/** Public projection from the pinned, JavaScript-only Market engine. */
 declare module "@0xda-market/webapp-core" {
-  export function mountMarketApp(options: {
-    document: Document;
-    host: {
-      locale(): string;
-      viewport(): { width: number; height: number };
-      onViewportChanged(callback: () => void): void;
-      selectionFeedback(): void;
+  interface MarketProduct {
+    readonly id: string;
+    readonly category: { readonly id: string };
+    readonly attributes: {
+      readonly name: string;
+      readonly button_label?: string;
+      readonly price?: { readonly amount: string; readonly currency: string } | null;
     };
-    transport: {
-      bootstrap(input: { locale: string }): Promise<unknown>;
-      quote(): Promise<never>;
-      acceptQuote(): Promise<never>;
-      refreshOrder(): Promise<never>;
-    };
-  }): Promise<unknown>;
+  }
+
+  interface CatalogSnapshot {
+    readonly count: number;
+    readonly products: readonly MarketProduct[];
+  }
+
+  export function createCatalogSnapshot(bootstrap: unknown): CatalogSnapshot;
+  export class CatalogStore {
+    constructor(snapshot: CatalogSnapshot, options?: { pageSize?: number });
+    setCategory(category: string | null): unknown;
+    view(): { readonly products: readonly MarketProduct[] };
+  }
+  export function formatPrice(product: MarketProduct): string | null;
 }
