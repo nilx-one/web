@@ -9,7 +9,9 @@ declare module "@0xda-market/webapp-core" {
     readonly attributes: {
       readonly name: string;
       readonly button_label?: string;
-      readonly price?: { readonly amount: string; readonly currency: string } | null;
+      readonly price?:
+        | { readonly amount: string; readonly currency: string }
+        | null;
     };
   }
 
