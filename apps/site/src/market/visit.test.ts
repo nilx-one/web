@@ -37,7 +37,9 @@ it("continues the one-time handoff if sessionStorage is restricted", async () =>
   });
   const request = vi.fn().mockResolvedValue(response());
   vi.stubGlobal("fetch", request);
-  const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  const submit = vi
+    .spyOn(HTMLFormElement.prototype, "submit")
+    .mockImplementation(() => {});
   await expect(beginMarketVisit(visit)).resolves.toBeUndefined();
   expect(request).toHaveBeenCalledTimes(1);
   expect(submit).toHaveBeenCalledTimes(1);
@@ -49,10 +51,15 @@ it("continues the one-time handoff if sessionStorage is restricted", async () =>
 it("must not submit a stale handoff after the selected arrival is cancelled", async () => {
   let finish!: (response: Response) => void;
   const request = vi.fn().mockImplementation(
-    () => new Promise<Response>((resolve) => { finish = resolve; }),
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
   );
   vi.stubGlobal("fetch", request);
-  const submit = vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  const submit = vi
+    .spyOn(HTMLFormElement.prototype, "submit")
+    .mockImplementation(() => {});
   const controller = new AbortController();
   const pending = beginMarketVisit({ ...visit, signal: controller.signal });
   controller.abort();
