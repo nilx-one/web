@@ -50,14 +50,14 @@ export function MarketLanding() {
   >([]);
   const [cityQuery, setCityQuery] = useState("Київ");
   const [pointQuery, setPointQuery] = useState("");
-  const [path, setPath] = useState(() => location.pathname);
+  const [path, setPath] = useState(() =>
+    location.pathname === "/zoloti-vorota" ? "/золоті" : location.pathname,
+  );
 
-  // Market Core can still redirect the seeded Golden Gate identifier using its
-  // stable ASCII slug. Keep the promised readable URL without another request.
+  // Canonicalize the visible URL without triggering a state update in an effect.
   useEffect(() => {
     if (location.pathname === "/zoloti-vorota") {
       history.replaceState(history.state, "", "/золоті");
-      setPath("/золоті");
     }
   }, []);
 
