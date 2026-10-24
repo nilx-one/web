@@ -52,6 +52,15 @@ export function MarketLanding() {
   const [pointQuery, setPointQuery] = useState("");
   const [path, setPath] = useState(() => location.pathname);
 
+  // Market Core can still redirect the seeded Golden Gate identifier using its
+  // stable ASCII slug. Keep the promised readable URL without another request.
+  useEffect(() => {
+    if (location.pathname === "/zoloti-vorota") {
+      history.replaceState(history.state, "", "/золоті");
+      setPath("/золоті");
+    }
+  }, []);
+
   useEffect(() => {
     let live = true;
     // Guest browsing must work even without a successful 0x1 handoff.
