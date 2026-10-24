@@ -129,7 +129,7 @@ it("pins only the selected client visit and never asserts verified arrival", asy
   );
   render(<MarketLanding />);
   await waitFor(() =>
-    expect(screen.getByText("Selected visit point")).toBeInTheDocument(),
+    expect(screen.getByText(/Selected visit point/)).toBeInTheDocument(),
   );
   expect(screen.getByText(/not server-verified/)).toBeInTheDocument();
   expect(screen.queryByText("You are here")).toBeNull();
