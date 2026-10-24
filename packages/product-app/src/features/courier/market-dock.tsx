@@ -22,6 +22,8 @@ export interface EmbeddedMarketCatalogPort {
     seeds: string;
     avaia: { longitude: number; latitude: number };
     plan: CourierPlan;
+    /** Abort a stale handoff if the selected arrival changes. */
+    signal?: AbortSignal;
   }): Promise<void>;
 }
 
