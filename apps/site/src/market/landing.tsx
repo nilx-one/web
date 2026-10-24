@@ -172,6 +172,8 @@ export function MarketLanding() {
         )
       : [];
 
+  const pinnedLabel = uk ? "Точка переходу" : "Selected visit point";
+
   const content = (
     <section className="market-dock">
       {directoryFailed ? (
@@ -264,10 +266,7 @@ export function MarketLanding() {
                         {marketPointTitle(point, resolved)}
                       </button>
                       {visitedPoint?.id.number === point.id.number && (
-                        <span>
-                          {" "}
-                          · {uk ? "Точка переходу" : "Selected visit point"}
-                        </span>
+                        <span> · {pinnedLabel}</span>
                       )}
                     </li>
                   ))}
