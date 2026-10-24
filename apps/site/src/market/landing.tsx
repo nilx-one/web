@@ -214,7 +214,13 @@ export function MarketLanding() {
                     <li key={point.id.number}>
                       <button
                         type="button"
-                        onClick={() => navigate(point.pub_dress.slice("0xda-market-".length))}
+                        onClick={() =>
+                          navigate(
+                            point.pub_dress === "0xda-market-zoloti-vorota"
+                              ? "золоті"
+                              : point.pub_dress.slice("0xda-market-".length),
+                          )
+                        }
                       >
                         {marketPointTitle(point, resolved)}
                       </button>
