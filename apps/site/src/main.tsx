@@ -47,6 +47,7 @@ import {
   type LocalModelHost,
 } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
+import { createNilxOneMarketCatalog } from "./market/catalog";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -223,7 +224,7 @@ if (isPublicBondHostname(window.location.hostname)) {
   root.render(
     <StrictMode>
       <ProductApp
-        marketCatalogUrl="/market.html"
+        marketCatalog={createNilxOneMarketCatalog()}
         business={business}
         core={core}
         host={host}
