@@ -160,6 +160,12 @@ pub struct IdentityRepository {
 }
 
 impl IdentityRepository {
+    /// Service-internal input to a partner-specific digest, never a public view.
+    pub(crate) async fn market_pairwise_subject(&self, owner: &str) -> Result<String, sqlx::Error> {
+        let bytes: Vec<u8> = sqlx::query_scalar("SELECT subject FROM identity_subjects WHERE pub_dress = ?")
+            .bind(owner.to_string()).fetch_one(&self.pool).await?;
+        Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+    }
     pub async fn connect(database_url: &str) -> Result<Self, RepositoryError> {
         let max_connections = if database_url.contains(":memory:") {
             1

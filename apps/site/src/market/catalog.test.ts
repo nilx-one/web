@@ -47,6 +47,31 @@ const catalog = {
 };
 
 describe("0x1 embedded catalog", () => {
+  it("shows the eight subscription terms Exclusive first and reuses the same locale snapshot", async () => {
+    const ids = ["exclusive", "special"].flatMap((tier) =>
+      [1, 3, 6, 12].map((month) => `0x1_${tier}_${month}m`),
+    );
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...catalog,
+          data: [...ids].reverse().map((id) => ({
+            type: "product",
+            id,
+            attributes: {
+              name: id,
+              metadata: { family: "0x1_subscription" },
+              price: null,
+            },
+          })),
+        }),
+      ),
+    );
+    const port = createNilxOneMarketCatalog(request);
+    expect((await port.load("uk-UA")).map((p) => p.id)).toEqual(ids);
+    await port.load("uk_UA");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
   it("reuses the shared engine and excludes every other market category", async () => {
     const request = vi
       .fn<typeof fetch>()

@@ -1,5 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
+import { MarketDeparture } from "../courier/market-departure";
 
 import {
   SubscriptionIdentity,
@@ -4180,7 +4181,17 @@ export function AuthenticatedMapHomeView({
           })}
       {...(courier.arrival && marketCatalog
         ? {
-            dock: (
+            dock: marketCatalog.beginVisit ? (
+              <MarketDeparture
+                catalog={marketCatalog}
+                plan={courier.arrival}
+                seeds={carriedInventory.seeds}
+                avaia={
+                  avaiaWalk.stance(globalThis.performance.now())?.point ??
+                  readWorldMemory(pubDress).avaia
+                }
+              />
+            ) : (
               <MarketDock
                 plan={courier.arrival}
                 catalog={marketCatalog}
