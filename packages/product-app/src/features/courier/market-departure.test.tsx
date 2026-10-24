@@ -30,7 +30,12 @@ it("waits for Avaia coordinates instead of caching a rejected handoff", async ()
   const beginVisit = vi.fn().mockResolvedValue(undefined);
   const catalog = { load: vi.fn().mockResolvedValue([]), beginVisit };
   const view = render(
-    <MarketDeparture catalog={catalog} plan={plan} seeds={10} avaia={undefined} />,
+    <MarketDeparture
+      catalog={catalog}
+      plan={plan}
+      seeds={10}
+      avaia={undefined}
+    />,
   );
   expect(screen.getByText("Waiting for Avaia position…")).toBeInTheDocument();
   expect(beginVisit).not.toHaveBeenCalled();
@@ -57,14 +62,24 @@ it("cancels the old point and starts the new visit, without duplicate StrictMode
   };
   const view = render(
     <StrictMode>
-      <MarketDeparture catalog={catalog} plan={plan} seeds={10} avaia={avaia} />
+      <MarketDeparture
+        catalog={catalog}
+        plan={plan}
+        seeds={10}
+        avaia={avaia}
+      />
     </StrictMode>,
   );
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(1));
   const oldSignal = beginVisit.mock.calls[0]![0].signal as AbortSignal;
   view.rerender(
     <StrictMode>
-      <MarketDeparture catalog={catalog} plan={next} seeds={10} avaia={avaia} />
+      <MarketDeparture
+        catalog={catalog}
+        plan={next}
+        seeds={10}
+        avaia={avaia}
+      />
     </StrictMode>,
   );
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(2));
@@ -81,7 +96,9 @@ it("retries a real handoff failure explicitly", async () => {
   render(
     <MarketDeparture catalog={catalog} plan={plan} seeds={10} avaia={avaia} />,
   );
-  await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(2));
 });
