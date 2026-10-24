@@ -6,6 +6,12 @@ import type { MapPointSelection } from "@nilx-one/map-contract";
 import type { EmbeddedMarketCatalogPort } from "./market-dock";
 import { useLocalization } from "../../shell/localization";
 
+interface PendingVisit {
+  key: string;
+  controller: AbortController;
+  promise: Promise<void>;
+}
+
 export function MarketDeparture({
   catalog,
   plan,
@@ -21,11 +27,7 @@ export function MarketDeparture({
   const uk = resolved === "uk-UA";
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const pending = useRef<{
-    key: string;
-    controller: AbortController;
-    promise: Promise<void>;
-  } | undefined>(undefined);
+  const pending = useRef<PendingVisit | undefined>(undefined);
 
   // A new arrival must never reuse an earlier point's one-time handoff.
   const visitKey = [
