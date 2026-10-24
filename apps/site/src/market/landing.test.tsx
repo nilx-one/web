@@ -42,11 +42,9 @@ vi.mock("./catalog", () => ({
 }));
 vi.mock("@nilx-one/product-app/business", () => ({
   BusinessWorld: ({ content }: { content: ReactNode }) => <div>{content}</div>,
-  MarketDock: ({
-    plan,
-  }: {
-    plan: { destination: { pub_dress: string } };
-  }) => <div>Market point: {plan.destination.pub_dress}</div>,
+  MarketDock: ({ plan }: { plan: { destination: { pub_dress: string } } }) => (
+    <div>Market point: {plan.destination.pub_dress}</div>
+  ),
   seededMarketDirectory: {
     points: async () => ({
       points: [
