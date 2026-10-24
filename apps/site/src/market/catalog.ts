@@ -17,7 +17,9 @@ export function createNilxOneMarketCatalog(request: typeof fetch = fetch) {
   const transport = catalogTransport(request);
   return {
     async load(locale: string) {
-      const bootstrap = await transport.bootstrap({ locale: normalizeLocale(locale) });
+      const bootstrap = await transport.bootstrap({
+        locale: normalizeLocale(locale),
+      });
       const snapshot = createCatalogSnapshot(bootstrap);
       const store = new CatalogStore(snapshot, {
         pageSize: Math.max(1, snapshot.count),

@@ -48,9 +48,9 @@ const catalog = {
 
 describe("0x1 embedded catalog", () => {
   it("reuses the shared engine and excludes every other market category", async () => {
-    const request = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify(catalog)),
-    );
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify(catalog)));
     const products = await createNilxOneMarketCatalog(request).load("en_US");
     expect(products).toEqual([
       { id: "special", name: "Special", price: "50 USDT" },
@@ -64,9 +64,11 @@ describe("0x1 embedded catalog", () => {
   });
 
   it("renders no unrelated products when 0x1 is missing", async () => {
-    const request = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify({ ...catalog, data: [catalog.data[1]] })),
-    );
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ...catalog, data: [catalog.data[1]] })),
+      );
     await expect(
       createNilxOneMarketCatalog(request).load("uk-UA"),
     ).resolves.toEqual([]);
@@ -77,9 +79,9 @@ describe("0x1 embedded catalog", () => {
   });
 
   it("does not silently fabricate products on transport failure", async () => {
-    const request = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response("upstream unavailable", { status: 503 }),
-    );
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("upstream unavailable", { status: 503 }));
     await expect(
       createNilxOneMarketCatalog(request).load("en"),
     ).rejects.toThrow("Catalog unavailable");
