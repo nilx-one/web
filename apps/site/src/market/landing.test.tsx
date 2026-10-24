@@ -93,7 +93,8 @@ it("opens Market root publicly without a prior session or disclosure of client s
   expect(screen.queryByText(/device display only/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "0xda-market Golden Gate" }));
   expect(window.location.pathname).toBe("/%D0%B7%D0%BE%D0%BB%D0%BE%D1%82%D1%96");
-  fireEvent.click(screen.getByRole("button", { name: "0xda-market" }));
+  window.history.pushState(null, "", "/");
+  fireEvent(window, new PopStateEvent("popstate"));
   fireEvent.change(screen.getByLabelText("Browse points in city"), {
     target: { value: "Odesa" },
   });
