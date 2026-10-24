@@ -48,7 +48,7 @@ it("waits for Avaia coordinates instead of caching a rejected handoff", async ()
   );
 });
 
-it("cancels the old point and starts the new visit, without duplicate StrictMode requests", async () => {
+it("changes point without duplicate StrictMode handoff", async () => {
   const beginVisit = vi.fn().mockResolvedValue(undefined);
   const catalog = { load: vi.fn().mockResolvedValue([]), beginVisit };
   const next: CourierPlan = {
