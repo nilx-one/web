@@ -78,7 +78,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-it("opens Market root publicly without a prior session or disclosure of client seeds", async () => {
+it("browses Market root without a session", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue(new Response("", { status: 401 })),
@@ -107,7 +107,7 @@ it("opens Market root publicly without a prior session or disclosure of client s
   ).toBeInTheDocument();
 });
 
-it("opens a point URL directly for a guest without a Market session", async () => {
+it("opens a guest point URL", async () => {
   window.history.replaceState(null, "", "/золоті");
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
   render(<MarketLanding />);
@@ -129,7 +129,7 @@ it("keeps the readable Golden Gate URL after the Core handoff", async () => {
   expect(decodeURIComponent(window.location.pathname)).toBe("/золоті");
 });
 
-it("pins only the selected client visit and never asserts verified arrival", async () => {
+it("pins the selected visit without claiming arrival", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue(
