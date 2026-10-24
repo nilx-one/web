@@ -208,7 +208,6 @@
   }
 }
 
-
 /* Header: floating spatial chrome, not a bar. AppHeader keeps route and menu
    semantics; this surface only supplies the map-native material. */
 .authenticated-map-home.authenticated-map-home .app-header {
