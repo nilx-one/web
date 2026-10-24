@@ -60,10 +60,6 @@ export function MarketDeparture({
       live = false;
     };
   }, [catalog, plan, seeds, avaia, visitKey]);
-  return () => {
-      live = false;
-    };
-  }, [catalog, plan, seeds, avaia, attempt]);
   return (
     <section className="market-dock">
       <p role="status">
