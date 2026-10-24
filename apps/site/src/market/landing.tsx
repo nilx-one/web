@@ -78,8 +78,7 @@ export function MarketLanding() {
           !context.avaia ||
           !Number.isFinite(context.avaia.longitude) ||
           !Number.isFinite(context.avaia.latitude)
-        )
-          return;
+        ) return;
         if (live) setVisit(context as Visit);
       })
       .catch(() => {
@@ -213,10 +212,7 @@ export function MarketLanding() {
               />
               <datalist id="market-cities">
                 {cities.map((option) => (
-                  <option
-                    key={option.id}
-                    value={uk ? option.uk : option.en}
-                  />
+                  <option key={option.id} value={uk ? option.uk : option.en} />
                 ))}
               </datalist>
               <label htmlFor="market-point-search">
@@ -258,10 +254,7 @@ export function MarketLanding() {
                         {marketPointTitle(point, resolved)}
                       </button>
                       {visitedPoint?.id.number === point.id.number && (
-                        <span>
-                          {" "}
-                          · {uk ? "Точка переходу" : "Selected visit point"}
-                        </span>
+                        <span> · {uk ? "Точка переходу" : "Selected visit point"}</span>
                       )}
                     </li>
                   ))}
