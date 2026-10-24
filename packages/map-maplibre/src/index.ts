@@ -132,13 +132,22 @@ import {
   fogMarksSource,
   fogPulseLevel,
 } from "./fog-marks";
+import { ORB_COLLECT_MS, orbFlightFrame, type FlightBead } from "./orb-flight";
 import {
+  ORB_GLOW_FRAME_MS,
+  ORBS_AURA_LAYER_ID,
   ORBS_CORE_LAYER_ID,
   ORBS_GLOW_LAYER_ID,
   ORBS_GOAL_LAYER_ID,
   ORBS_SOURCE_ID,
+  type OrbDrawOptions,
+  orbColor,
+  orbCoreColor,
+  orbSeed,
+  orbShineSize,
   orbsData,
   orbsFalling,
+  orbsGlowing,
   orbsLayers,
   orbsSource,
 } from "./orb-layer";
@@ -202,6 +211,7 @@ export {
   FOG_MARKS_SOURCE_ID,
 } from "./fog-marks";
 export {
+  ORBS_AURA_LAYER_ID,
   ORBS_CORE_LAYER_ID,
   ORBS_GLOW_LAYER_ID,
   ORBS_GOAL_LAYER_ID,
@@ -980,6 +990,17 @@ export function createMapLibreRenderer(
   let orbs: readonly MapOrb[] = [];
   let route: MapRoute | null = null;
   let orbFallFrame: number | undefined;
+  let orbGlowTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let orbFlightRoot: HTMLElement | undefined;
+  const orbFlights = new Map<
+    string,
+    {
+      readonly element: HTMLElement;
+      readonly bead: HTMLElement;
+      readonly trail: readonly HTMLElement[];
+      readonly ring: HTMLElement;
+    }
+  >();
   const pinnedLabels = new Map<
     string,
     { readonly element: HTMLElement; readonly marker: MapLabelMarker }
@@ -1640,30 +1661,186 @@ export function createMapLibreRenderer(
   }
 
   function stopOrbFall(): void {
-    if (orbFallFrame === undefined) return;
-    globalThis.cancelAnimationFrame(orbFallFrame);
-    orbFallFrame = undefined;
+    clearOrbFlights();
+    if (orbFallFrame !== undefined) {
+      globalThis.cancelAnimationFrame(orbFallFrame);
+      orbFallFrame = undefined;
+    }
+    if (orbGlowTimer !== undefined) {
+      globalThis.clearTimeout(orbGlowTimer);
+      orbGlowTimer = undefined;
+    }
   }
 
-  // Orbs move only while some are still falling; once every one lies still
-  // the frame loop ends, and nothing redraws them until the list changes.
+  function orbDrawOptions(): OrbDrawOptions {
+    return { reducedMotion: prefersReducedMotion(globalThis.document) };
+  }
+
+  // Orbs move on every frame while some are falling or being picked up.
+  // While they only lie and breathe their rarity's glow, a few frames a
+  // second do; with reduced motion, or once none lies, nothing redraws them
+  // until the list changes.
+  function scheduleOrbs(now: number, options: OrbDrawOptions): void {
+    if (orbFallFrame !== undefined || orbGlowTimer !== undefined) return;
+    if (orbsFalling(orbs, now, options)) {
+      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+    } else if (orbsGlowing(orbs, options)) {
+      orbGlowTimer = globalThis.setTimeout(() => {
+        orbGlowTimer = undefined;
+        orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+      }, ORB_GLOW_FRAME_MS);
+    }
+  }
+
+  function clearOrbFlights(): void {
+    orbFlightRoot?.remove();
+    orbFlightRoot = undefined;
+    orbFlights.clear();
+  }
+
+  function orbFlightBead(color: string, core: string, size: number) {
+    const bead = globalThis.document.createElement("span");
+    const px = Math.round(12 * size);
+    bead.style.position = "absolute";
+    bead.style.left = "0";
+    bead.style.top = "0";
+    bead.style.width = `${px}px`;
+    bead.style.height = `${px}px`;
+    bead.style.marginLeft = `${-px / 2}px`;
+    bead.style.marginTop = `${-px / 2}px`;
+    bead.style.boxSizing = "border-box";
+    bead.style.borderRadius = "50%";
+    bead.style.border = `1px solid ${color}`;
+    bead.style.backgroundImage = `radial-gradient(circle at 35% 30%, #ffffff 0%, ${core} 45%, ${color} 100%)`;
+    bead.style.boxShadow = `0 0 6px 2px ${color}, 0 0 18px 6px ${color}80`;
+    bead.style.willChange = "transform, opacity";
+    return bead;
+  }
+
+  function placeOrbFlightPart(element: HTMLElement, part?: FlightBead): void {
+    if (part === undefined || part.opacity <= 0) {
+      element.style.display = "none";
+      return;
+    }
+    element.style.display = "block";
+    element.style.opacity = String(Math.min(1, part.opacity));
+    element.style.transform = `translate(${part.x}px, ${part.y}px) scale(${part.scale})`;
+  }
+
+  /**
+   * Picked-up orbs fly over everything on the map, in screen pixels, from
+   * where they lay into the picker's chest (`orb-flight.ts`).
+   */
+  function drawOrbFlights(
+    mounted: MapLibreMap,
+    now: number,
+    options: OrbDrawOptions,
+  ): void {
+    const flying =
+      options.reducedMotion === true
+        ? []
+        : orbs.filter(
+            (orb) =>
+              orb.kind === "orb" &&
+              orb.pulledTo !== undefined &&
+              now >= orb.pulledTo.at &&
+              now < orb.pulledTo.at + ORB_COLLECT_MS,
+          );
+    for (const [id, flight] of orbFlights) {
+      if (!flying.some((orb) => orb.id === id)) {
+        flight.element.remove();
+        orbFlights.delete(id);
+      }
+    }
+    if (flying.length === 0) {
+      clearOrbFlights();
+      return;
+    }
+    if (orbFlightRoot === undefined) {
+      orbFlightRoot = globalThis.document.createElement("div");
+      orbFlightRoot.className = "map-orb-flights";
+      orbFlightRoot.setAttribute("aria-hidden", "true");
+      orbFlightRoot.style.position = "absolute";
+      orbFlightRoot.style.inset = "0";
+      orbFlightRoot.style.overflow = "hidden";
+      orbFlightRoot.style.pointerEvents = "none";
+      orbFlightRoot.style.zIndex = "5";
+      mounted.getContainer().append(orbFlightRoot);
+    }
+    const zoom = mounted.getZoom();
+    for (const orb of flying) {
+      const to = orb.pulledTo!;
+      let flight = orbFlights.get(orb.id);
+      if (flight === undefined) {
+        const color = orbColor(orb);
+        const core = orbCoreColor(orb);
+        const size = orbShineSize(orb);
+        const element = globalThis.document.createElement("div");
+        const bead = orbFlightBead(color, core, size);
+        const trail = [0.8, 0.6, 0.4].map(() =>
+          orbFlightBead(color, core, size),
+        );
+        const ring = globalThis.document.createElement("span");
+        const ringPx = Math.round(30 * size);
+        ring.style.position = "absolute";
+        ring.style.left = "0";
+        ring.style.top = "0";
+        ring.style.width = `${ringPx}px`;
+        ring.style.height = `${ringPx}px`;
+        ring.style.marginLeft = `${-ringPx / 2}px`;
+        ring.style.marginTop = `${-ringPx / 2}px`;
+        ring.style.borderRadius = "50%";
+        ring.style.border = `2px solid ${color}`;
+        ring.style.backgroundColor = `${color}40`;
+        ring.style.boxShadow = `0 0 14px 4px ${color}`;
+        element.append(...trail, bead, ring);
+        orbFlightRoot.append(element);
+        flight = { element, bead, trail, ring };
+        orbFlights.set(orb.id, flight);
+      }
+      const from = mounted.project([orb.longitude, orb.latitude]);
+      const feet = mounted.project([to.longitude, to.latitude]);
+      // Into the chest of a body standing there, however near the camera.
+      const chest = Math.min(
+        90,
+        Math.max(
+          16,
+          (0.55 * MAP_BODY_HEIGHT_METERS) /
+            mapMetersPerPixel(to.latitude, zoom),
+        ),
+      );
+      const frame = orbFlightFrame(
+        now - to.at,
+        { x: from.x, y: from.y },
+        { x: feet.x, y: feet.y - chest },
+        orbSeed(orb.id) < 0.5 ? -1 : 1,
+      );
+      placeOrbFlightPart(flight.bead, frame?.bead);
+      flight.trail.forEach((element, step) =>
+        placeOrbFlightPart(element, frame?.trail[step]),
+      );
+      placeOrbFlightPart(flight.ring, frame?.ring);
+    }
+  }
+
   function tickOrbFall(): void {
     orbFallFrame = undefined;
     if (map === undefined) return;
     const now = Date.now();
+    const options = orbDrawOptions();
     const source = map.getSource(ORBS_SOURCE_ID) as GeoJSONSource | undefined;
     source?.setData(
-      orbsData(orbs, now) as Parameters<GeoJSONSource["setData"]>[0],
+      orbsData(orbs, now, options) as Parameters<GeoJSONSource["setData"]>[0],
     );
-    if (orbsFalling(orbs, now)) {
-      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
-    }
+    drawOrbFlights(map, now, options);
+    scheduleOrbs(now, options);
   }
 
   function applyOrbs(mounted: MapLibreMap): void {
     if (orbs.length === 0) {
       stopOrbFall();
       for (const layerId of [
+        ORBS_AURA_LAYER_ID,
         ORBS_GLOW_LAYER_ID,
         ORBS_CORE_LAYER_ID,
         ORBS_GOAL_LAYER_ID,
@@ -1677,16 +1854,17 @@ export function createMapLibreRenderer(
       return;
     }
     const now = Date.now();
+    const options = orbDrawOptions();
     const source = mounted.getSource(ORBS_SOURCE_ID) as
       GeoJSONSource | undefined;
     if (source === undefined) {
       mounted.addSource(
         ORBS_SOURCE_ID,
-        orbsSource(orbs, now) as unknown as SourceSpecification,
+        orbsSource(orbs, now, options) as unknown as SourceSpecification,
       );
     } else {
       source.setData(
-        orbsData(orbs, now) as Parameters<GeoJSONSource["setData"]>[0],
+        orbsData(orbs, now, options) as Parameters<GeoJSONSource["setData"]>[0],
       );
     }
     // Beneath the observation and the pins, like the fog marks: an orb lies
@@ -1701,9 +1879,13 @@ export function createMapLibreRenderer(
         mounted.addLayer(layer as unknown as LayerSpecification, before);
       }
     }
-    if (orbFallFrame === undefined && orbsFalling(orbs, now)) {
-      orbFallFrame = globalThis.requestAnimationFrame(tickOrbFall);
+    drawOrbFlights(mounted, now, options);
+    // A picked-up orb must start moving now, not after a glow frame.
+    if (orbGlowTimer !== undefined && orbsFalling(orbs, now, options)) {
+      globalThis.clearTimeout(orbGlowTimer);
+      orbGlowTimer = undefined;
     }
+    scheduleOrbs(now, options);
   }
 
   function applyRoute(mounted: MapLibreMap): void {
@@ -1732,7 +1914,7 @@ export function createMapLibreRenderer(
     // Over the ground and the roofs it crosses, beneath the pins and the
     // Bond's own marker.
     const before = [
-      ORBS_GLOW_LAYER_ID,
+      ORBS_AURA_LAYER_ID,
       PINNED_LANDMARKS_GLOW_LAYER_ID,
       OBSERVED_POSITION_CELL_LAYER_ID,
       OBSERVED_POSITION_CELL_OUTLINE_LAYER_ID,
