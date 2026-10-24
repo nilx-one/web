@@ -116,6 +116,16 @@ it("opens a point URL directly for a guest without a Market session", async () =
   ).toBeInTheDocument();
 });
 
+it("keeps the readable Golden Gate URL after the Core handoff", async () => {
+  window.history.replaceState(null, "", "/zoloti-vorota");
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  render(<MarketLanding />);
+  expect(
+    await screen.findByText("Market point: 0xda-market-zoloti-vorota"),
+  ).toBeInTheDocument();
+  expect(decodeURIComponent(window.location.pathname)).toBe("/золоті");
+});
+
 it("pins only the selected client visit and never asserts verified arrival", async () => {
   vi.stubGlobal(
     "fetch",
