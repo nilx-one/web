@@ -103,6 +103,10 @@ jobs:
         run: python tools/monuments/test_model.py
       - name: Verify repository policy
         run: pnpm policy
+      - name: Diagnose remaining Market formatting
+        run: |
+          pnpm exec prettier apps/site/src/market/landing.test.tsx > /tmp/market-landing-formatted.tsx
+          diff -u apps/site/src/market/landing.test.tsx /tmp/market-landing-formatted.tsx || true
       - name: Verify formatting
         run: pnpm format
       - name: Lint
