@@ -91,33 +91,44 @@ export function MarketDock({
     };
   }, [catalog, locale, retry]);
 
-  const selected = state.kind === "ready"
-    ? state.products.find((product) => product.id === selectedId)
-    : undefined;
+  const selected =
+    state.kind === "ready"
+      ? state.products.find((product) => product.id === selectedId)
+      : undefined;
 
   return (
     <section className="market-dock" aria-label="0xda-market 0x1">
       <DockWindow screen="market" depth={1}>
         <header className="market-dock__header">
-          <button type="button" onClick={onClose}>{copy.back}</button>
+          <button type="button" onClick={onClose}>
+            {copy.back}
+          </button>
           <strong>{marketPointTitle(plan.destination, locale)}</strong>
         </header>
-        {!plan.destination.isVerified && <p className="market-dock__notice">{copy.preview}</p>}
+        {!plan.destination.isVerified && (
+          <p className="market-dock__notice">{copy.preview}</p>
+        )}
         <div className="market-dock__body">
           <h2 className="market-dock__category">0x1</h2>
           {state.kind === "loading" && <p role="status">{copy.loading}</p>}
           {state.kind === "failed" && (
             <div role="alert">
               <p>{copy.failed}</p>
-              <button type="button" onClick={() => {
-                setState({ kind: "loading" });
-                setSelectedId(undefined);
-                setRetry((value) => value + 1);
-              }}>{copy.retry}</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setState({ kind: "loading" });
+                  setSelectedId(undefined);
+                  setRetry((value) => value + 1);
+                }}
+              >
+                {copy.retry}
+              </button>
             </div>
           )}
-          {state.kind === "ready" && state.products.length === 0 &&
-            <p role="status">{copy.empty}</p>}
+          {state.kind === "ready" && state.products.length === 0 && (
+            <p role="status">{copy.empty}</p>
+          )}
           {state.kind === "ready" && state.products.length > 0 && (
             <div className="market-dock__products">
               {state.products.map((product) => (
@@ -126,7 +137,11 @@ export function MarketDock({
                   className="market-dock__product"
                   key={product.id}
                   aria-pressed={selectedId === product.id}
-                  onClick={() => setSelectedId((id) => id === product.id ? undefined : product.id)}
+                  onClick={() =>
+                    setSelectedId((id) =>
+                      id === product.id ? undefined : product.id,
+                    )
+                  }
                 >
                   <strong>{product.name}</strong>
                   <span>{product.price ?? copy.unavailable}</span>
@@ -141,8 +156,14 @@ export function MarketDock({
               <p>{copy.browseOnly}</p>
             </section>
           )}
-          <a className="market-dock__license" href="/market-license.txt"
-            target="_blank" rel="noopener noreferrer">{copy.license}</a>
+          <a
+            className="market-dock__license"
+            href="/market-license.txt"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {copy.license}
+          </a>
         </div>
       </DockWindow>
     </section>
