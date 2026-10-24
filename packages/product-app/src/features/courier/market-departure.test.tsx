@@ -62,24 +62,14 @@ it("changes point without duplicate StrictMode handoff", async () => {
   };
   const view = render(
     <StrictMode>
-      <MarketDeparture
-        catalog={catalog}
-        plan={plan}
-        seeds={10}
-        avaia={avaia}
-      />
+      <MarketDeparture catalog={catalog} plan={plan} seeds={10} avaia={avaia} />
     </StrictMode>,
   );
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(1));
   const oldSignal = beginVisit.mock.calls[0]![0].signal as AbortSignal;
   view.rerender(
     <StrictMode>
-      <MarketDeparture
-        catalog={catalog}
-        plan={next}
-        seeds={10}
-        avaia={avaia}
-      />
+      <MarketDeparture catalog={catalog} plan={next} seeds={10} avaia={avaia} />
     </StrictMode>,
   );
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(2));
