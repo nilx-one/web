@@ -103,6 +103,7 @@ import {
   createAvaiaSetupViewState,
 } from "./features/avaia/avaia-setup-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
+import type { EmbeddedMarketCatalogPort } from "./features/courier/market-dock";
 import type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
 import { MapFoundationView } from "./features/map/map-foundation-view";
@@ -153,6 +154,7 @@ export interface ProductAppDependencies {
     readonly navigation: BusinessNavigationPort;
   };
   courierDirectory?: CourierDirectoryPort;
+  marketCatalog?: EmbeddedMarketCatalogPort;
   core: CoreRuntimePort;
   host: HostPort;
   identity: IdentityAccessPort;
@@ -1179,6 +1181,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             ? { xpingEngine: dependencies.identity }
             : {})}
           findItems={dependencies.core}
+          {...(dependencies.marketCatalog === undefined
+            ? {}
+            : { marketCatalog: dependencies.marketCatalog })}
           {...(dependencies.courierDirectory === undefined
             ? {}
             : { courierDirectory: dependencies.courierDirectory })}
@@ -1403,6 +1408,7 @@ export function ProductApp({
   onManualBondMove,
   localModel,
   courierDirectory,
+  marketCatalog,
   business,
   routerBasepath = "/",
 }: ProductAppProps) {
@@ -1431,6 +1437,7 @@ export function ProductApp({
           ...(onManualBondMove === undefined ? {} : { onManualBondMove }),
           ...(localModel === undefined ? {} : { localModel }),
           ...(courierDirectory === undefined ? {} : { courierDirectory }),
+          ...(marketCatalog === undefined ? {} : { marketCatalog }),
         },
       },
     }),

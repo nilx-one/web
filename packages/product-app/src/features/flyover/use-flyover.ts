@@ -150,6 +150,8 @@ export interface FlyoverRequest {
   readonly loot?: readonly FlightLootSpawn[];
   /** Reports a local 3D collision, never grants a reward or entitlement. */
   readonly onLootCollected?: (item: FlightLootSpawn) => void;
+  /** Park at the destination and hand presentation to the Dock until leave(). */
+  readonly onDock?: () => void;
 }
 
 export interface Flyover {
@@ -203,6 +205,8 @@ export function useFlyover(
   feedback?: FlyoverFeedback,
 ): Flyover {
   const [request, setRequest] = useState<FlyoverRequest | undefined>();
+  const [parked, setParked] = useState(false);
+  const parkedRef = useRef(false);
   const [progress, setProgress] = useState<FlyoverProgress>();
   const [lootNotice, setLootNotice] = useState<Flyover["lootNotice"]>();
   const feedbackRef = useRef(feedback);
@@ -225,12 +229,14 @@ export function useFlyover(
   }, [open]);
   const forcing = useRef(false);
   const force = useCallback((holding: boolean) => {
-    forcing.current = holding;
+    forcing.current = holding && !parkedRef.current;
   }, []);
 
   const start = useCallback(
     (next: FlyoverRequest) => {
       if (!ready || request !== undefined) return;
+      parkedRef.current = false;
+      setParked(false);
       setProgress(undefined);
       setLootNotice(undefined);
       followingRef.current = true;
@@ -256,6 +262,7 @@ export function useFlyover(
     restoreCamera.current?.putBack();
   }, []);
   const expand = useCallback(() => {
+    if (parkedRef.current) return;
     if (!openRef.current) {
       restoreCamera.current?.capture();
       openRef.current = true;
@@ -266,7 +273,7 @@ export function useFlyover(
   }, []);
   const steer = useCallback((direction: -1 | 1) => {
     const current = flight.current;
-    if (current === undefined || !openRef.current) return;
+    if (current === undefined || !openRef.current || parkedRef.current) return;
     current.state = steerFlight(
       current.state,
       direction,
@@ -319,6 +326,23 @@ export function useFlyover(
     const from: LonLat = [request.from.longitude, request.from.latitude];
     const to: LonLat = [request.to.longitude, request.to.latitude];
 
+    const dock = () => {
+      if (!request.onDock || parkedRef.current || cancelled) return;
+      parkedRef.current = true;
+      forcing.current = false;
+      setParked(true);
+      // A collapsed flight must reclaim the destination view before opening Dock.
+      if (!openRef.current) {
+        restoreCamera.current?.capture();
+        openRef.current = true;
+        followingRef.current = true;
+        setOpen(true);
+        setFollowing(true);
+        renderer.setCamera(routeOverview([to]), { motion: "immediate" });
+      }
+      request.onDock();
+    };
+
     const fly = (route: readonly LonLat[]) => {
       renderer.setRoute?.({ points: route });
       if (reduced) {
@@ -332,6 +356,12 @@ export function useFlyover(
           reducedMotion: true,
           scale: FLYOVER_DRONE_SCALE,
         });
+        setProgress({
+          point: request.to,
+          remainingMs: 0,
+          arrivedAt: Date.now(),
+        });
+        dock();
         return;
       }
       const plane = localFrame(from);
@@ -628,6 +658,10 @@ export function useFlyover(
         }
         if (state.arrived && !hovering) {
           hovering = true;
+          if (leg === "out" && request.onDock) {
+            dock();
+            return;
+          }
           arrivalTimer =
             leg === "out"
               ? setTimeout(flyBack, FLYOVER_ARRIVAL_MS)
@@ -654,7 +688,7 @@ export function useFlyover(
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (!openRef.current) return;
+      if (!openRef.current || parkedRef.current) return;
       if (event.code === "Escape") {
         event.preventDefault();
         collapse();
@@ -697,7 +731,7 @@ export function useFlyover(
   }, [ready, renderer, request, steer, collapse]);
 
   const active = request !== undefined;
-  const expanded = active && open;
+  const expanded = active && open && !parked;
   return useMemo(
     () => ({
       active,

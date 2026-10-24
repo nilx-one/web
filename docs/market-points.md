@@ -76,4 +76,32 @@ The flyover from #454 owns road routing, height, banking and actual progress.
 Its arrival event controls ✅. A seeded preview carries no authoritative ETA;
 agreement and arrival grant no entitlement and call no commerce endpoint.
 
+## Native 0x1 Market Dock
+
+After xPing physically arrives at the selected BusinessPoint (or immediately
+under reduced motion), the browser parks it and opens one native React Dock
+screen. Closing the Dock returns xPing and restores the previous world camera.
+The dispatch, flight and arrival contracts remain unchanged.
+
+The browser integrates the pinned `@0xda-market/webapp-core` catalog engine
+directly. It fetches the complete public catalog through the fixed GET-only
+`/market-api/bootstrap` proxy, then uses `CatalogStore.setCategory("0x1")`
+to show only authoritative products whose metadata category is exactly `0x1`.
+There is no iframe, another document, tab navigation, category selector or
+second marketplace implementation. The host owns the visual cards and detail
+selection; the shared Market engine owns catalog validation, normalization,
+category policy and price formatting.
+
+This version is browse-only. Product details show the backend-reported price,
+or say that pricing is unavailable; no button can quote, charge seeds or grant
+a subscription. Special and Exclusive appear only if Market's catalog
+actually publishes them with category `0x1`. No invented prices, SKUs, orders
+or entitlements are seeded by Web. Purchases will require a separate, trusted
+seeds-debit-and-entitlement contract.
+
+The shared WebApp package is bundled as reviewed first-party code on the 0x1
+origin; its version is pinned and must be reviewed before each update.
+The host passes no location, point ID, identity session or seeds balance
+to the public catalog transport. Seeded BusinessPoints remain unverified.
+
 <!-- © 2026 aiaiaiai · aiaiaiai.org -->
