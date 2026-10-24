@@ -17,7 +17,7 @@
 			path /market-api/bootstrap
 		}
 		handle @market_catalog {
-			rewrite * /v1/webapp/bootstrap?locale={query.locale}
+			rewrite * /v1/webapp/bootstrap?locale={query.locale}&preview_0x1=true
 			reverse_proxy https://0xda-market.nilx.one {
 				header_up Host 0xda-market.nilx.one
 				header_up -Cookie

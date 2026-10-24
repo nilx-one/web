@@ -8,6 +8,7 @@ pub mod api {
     include!("api_pub_info.rs");
     include!("api_awards.rs");
     include!("api_xping.rs");
+    include!("api_market.rs");
     include!("session_activation.rs");
 }
 pub mod browser_web_auth;

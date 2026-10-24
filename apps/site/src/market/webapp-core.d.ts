@@ -8,7 +8,17 @@ declare module "@0xda-market/webapp-core" {
     readonly category: { readonly id: string };
     readonly attributes: {
       readonly name: string;
+      readonly metadata?: {
+        readonly family?: string;
+        readonly tier?: string;
+        readonly duration_months?: number;
+      };
       readonly button_label?: string;
+      readonly preview?: boolean;
+      readonly preview_price?: {
+        readonly amount: string;
+        readonly currency: string;
+      } | null;
       readonly price?: {
         readonly amount: string;
         readonly currency: string;

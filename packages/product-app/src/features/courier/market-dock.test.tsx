@@ -44,7 +44,7 @@ it("embeds a 0x1-only product list in Dock, with no iframe, tabs or category pic
   expect(
     screen.queryByRole("button", { name: /buy|purchase|checkout/i }),
   ).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Back to map" }));
+  fireEvent.click(screen.getByRole("button", { name: "Back to market" }));
   expect(onClose).toHaveBeenCalledOnce();
   expect(load).toHaveBeenCalledWith("en");
 });

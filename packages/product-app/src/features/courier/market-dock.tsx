@@ -17,11 +17,17 @@ export interface EmbeddedMarketProduct {
 /** The host supplies only the 0x1 catalog projection. It owns the transport. */
 export interface EmbeddedMarketCatalogPort {
   load(locale: string): Promise<readonly EmbeddedMarketProduct[]>;
+  beginVisit?(input: {
+    point: string;
+    seeds: string;
+    avaia: { longitude: number; latitude: number };
+    plan: CourierPlan;
+  }): Promise<void>;
 }
 
 const messages = {
   "uk-UA": {
-    back: "До мапи",
+    back: "До маркету",
     preview: "Розташування точки ще не підтверджено",
     loading: "Завантаження товарів…",
     failed: "Не вдалося завантажити товари.",
@@ -32,7 +38,7 @@ const messages = {
     license: "0xda-market · ліцензія MIT",
   },
   "ru-RU": {
-    back: "К карте",
+    back: "К маркету",
     preview: "Расположение точки ещё не подтверждено",
     loading: "Загрузка товаров…",
     failed: "Не удалось загрузить товары.",
@@ -43,7 +49,7 @@ const messages = {
     license: "0xda-market · лицензия MIT",
   },
   en: {
-    back: "Back to map",
+    back: "Back to market",
     preview: "Point location is not verified yet",
     loading: "Loading products…",
     failed: "Unable to load products.",

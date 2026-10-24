@@ -48,6 +48,7 @@ import {
 } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
 import { createNilxOneMarketCatalog } from "./market/catalog";
+import { MarketLanding } from "./market/landing";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -132,7 +133,13 @@ if (container === null) {
 
 const root = createRoot(container);
 
-if (isPublicBondHostname(window.location.hostname)) {
+if (window.location.hostname === "0xda-market.nilx.one") {
+  root.render(
+    <StrictMode>
+      <MarketLanding />
+    </StrictMode>,
+  );
+} else if (isPublicBondHostname(window.location.hostname)) {
   // A Bond subdomain is a public identity surface, not an authenticated world
   // host. It resolves only the stored label allocation and never starts the
   // private session or Avaia runtime. A Business Bond's page shows the public

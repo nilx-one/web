@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { MapRenderer } from "@nilx-one/map-contract";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AppShell } from "../../shell/app-shell";
 import { useLocalization } from "../../shell/localization";
 import { useShellPresentation } from "../../shell/shell-presentation";
@@ -39,8 +39,12 @@ function BusinessMap({ renderer }: { renderer: MapRenderer }) {
 /** Public browsing does not construct a visitor Bond, an Avaia or an authenticated world. */
 export function BusinessWorld({
   renderer,
+  content,
   ...dock
-}: BusinessDockProps & { readonly renderer: MapRenderer }) {
+}: BusinessDockProps & {
+  readonly renderer: MapRenderer;
+  readonly content?: ReactNode;
+}) {
   const presentation = useShellPresentation();
   return (
     <AppShell
@@ -48,7 +52,7 @@ export function BusinessWorld({
       safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
       world={<BusinessMap renderer={renderer} />}
       header={null}
-      dock={<BusinessDock {...dock} />}
+      dock={content ?? <BusinessDock {...dock} />}
     />
   );
 }

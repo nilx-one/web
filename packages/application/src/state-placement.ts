@@ -51,6 +51,7 @@ export type StateMobility = "resident" | "transport" | "sealed-transport";
 export type StateMedium =
   | "identity-service"
   | "local-storage"
+  | "session-storage"
   | "indexed-db"
   | "model-cache"
   | "bnd-file"
@@ -83,6 +84,15 @@ export interface PlacedState {
 }
 
 export const STATE_PLACEMENT: readonly PlacedState[] = [
+  {
+    id: "market.returnTrip",
+    placement: "device",
+    mobility: "resident",
+    medium: "session-storage",
+    key: "nilx-one.market.trip",
+    perOwner: false,
+    what: "This tab's pending xPing route for a return from Market. No authentication token, seeds balance, or purchase authority is stored here.",
+  },
   // ─── server: identity-service tables ───────────────────────────────────
   {
     id: "identity.pubDress",
