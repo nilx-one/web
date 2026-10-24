@@ -25,4 +25,5 @@ declare module "@0xda-market/webapp-core" {
     view(): { readonly products: readonly MarketProduct[] };
   }
   export function formatPrice(product: MarketProduct): string | null;
+  export function normalizeLocale(locale: string): string;
 }
