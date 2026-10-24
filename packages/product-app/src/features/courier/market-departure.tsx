@@ -26,21 +26,29 @@ export function MarketDeparture({
     controller: AbortController;
     promise: Promise<void>;
   } | undefined>(undefined);
+
   // A new arrival must never reuse an earlier point's one-time handoff.
-  const visitKey = `${plan.destination.id.owner_pub_dress}:${plan.destination.id.number}:${plan.started_at_ms}:${attempt}`;
+  const visitKey = [
+    plan.destination.id.owner_pub_dress,
+    plan.destination.id.number,
+    plan.started_at_ms,
+    attempt,
+  ].join(":");
+
   useEffect(() => {
     let live = true;
     if (pending.current && pending.current.key !== visitKey) {
       pending.current.controller.abort();
       pending.current = undefined;
     }
-    // Coordinates may arrive after the dock renders. Do not cache a rejection
-    // that would prevent the valid handoff from starting on a later render.
-    if (avaia && catalog.beginVisit) {
+
+    // Wait for late Avaia coordinates, never caching a rejected handoff.
+    const beginVisit = catalog.beginVisit;
+    if (avaia && beginVisit) {
       if (!pending.current) {
         const controller = new AbortController();
         const promise = Promise.resolve().then(() =>
-          catalog.beginVisit!({
+          beginVisit({
             point: plan.destination.pub_dress.replace(/^0xda-market-/, ""),
             seeds: String(seeds),
             avaia,
@@ -51,6 +59,7 @@ export function MarketDeparture({
         pending.current = { key: visitKey, controller, promise };
         setFailed(false);
       }
+
       const current = pending.current;
       void current.promise.catch(() => {
         if (live && !current.controller.signal.aborted) setFailed(true);
@@ -60,6 +69,7 @@ export function MarketDeparture({
       live = false;
     };
   }, [catalog, plan, seeds, avaia, visitKey]);
+
   return (
     <section className="market-dock">
       <p role="status">
@@ -82,7 +92,7 @@ export function MarketDeparture({
             pending.current?.controller.abort();
             pending.current = undefined;
             setFailed(false);
-            setAttempt((v) => v + 1);
+            setAttempt((value) => value + 1);
           }}
         >
           {uk ? "Повторити" : "Retry"}
