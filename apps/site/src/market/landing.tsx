@@ -254,7 +254,10 @@ export function MarketLanding() {
                         {marketPointTitle(point, resolved)}
                       </button>
                       {visitedPoint?.id.number === point.id.number && (
-                        <span> · {uk ? "Точка переходу" : "Selected visit point"}</span>
+                        <span>
+                          {" "}
+                          · {uk ? "Точка переходу" : "Selected visit point"}
+                        </span>
                       )}
                     </li>
                   ))}
