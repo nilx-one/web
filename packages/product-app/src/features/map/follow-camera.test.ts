@@ -20,7 +20,9 @@ import {
   FOLLOW_MIN_ZOOM,
   FOLLOW_PITCH,
   ISOMETRIC_BEARING,
+  ISOMETRIC_ENTRY_MAX_ZOOM,
   ISOMETRIC_PITCH,
+  isometricEntryCamera,
   ISOMETRIC_RESPONSE_MS,
   isometricCamera,
   smoothIsometricCamera,
@@ -95,6 +97,19 @@ describe("follow camera", () => {
       pitch: 0,
       bearing: 90,
     });
+  });
+
+  it("does not inherit a Follow close-up when explicitly switching to Isometric", () => {
+    const followClose = camera({ zoom: 21.5 });
+    expect(isometricEntryCamera(followClose, BODY)).toMatchObject({
+      zoom: ISOMETRIC_ENTRY_MAX_ZOOM,
+      bearing: ISOMETRIC_BEARING,
+      pitch: ISOMETRIC_PITCH,
+    });
+    expect(isometricCamera(camera({ zoom: 20.5 }), BODY).zoom).toBe(20.5);
+    expect(isometricEntryCamera(camera({ zoom: 17.5 }), BODY).zoom).toBe(
+      FOLLOW_MIN_ZOOM,
+    );
   });
 
   it("settles without a feedback loop across wrapped headings", () => {

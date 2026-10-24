@@ -85,6 +85,7 @@ interface FakeMap {
   readonly getLayer: (id: string) => unknown;
   readonly getCenter: () => { lng: number; lat: number };
   readonly getZoom: () => number;
+  readonly getCanvas: () => HTMLCanvasElement;
   /** A projection that is linear in degrees: enough to place a body on screen. */
   readonly project: (lngLat: [number, number]) => { x: number; y: number };
   readonly getBearing: () => number;
@@ -119,6 +120,11 @@ function makeFakeMap(): FakeMap {
     bearing: 0,
     pitch: 32,
   };
+  const canvas = document.createElement("canvas");
+  Object.defineProperties(canvas, {
+    clientWidth: { value: 1_024 },
+    clientHeight: { value: 800 },
+  });
   const remember = (event: string, listener: FakeListener) => {
     listeners.set(event, [...(listeners.get(event) ?? []), listener]);
   };
@@ -170,6 +176,7 @@ function makeFakeMap(): FakeMap {
     getLayer: (id) => layers.get(id),
     getCenter: () => ({ lng: camera.center[0], lat: camera.center[1] }),
     getZoom: () => camera.zoom,
+    getCanvas: () => canvas,
     project: ([longitude, latitude]) => ({
       x: 200 + (longitude - camera.center[0]) * 1_000,
       y: 300 - (latitude - camera.center[1]) * 1_000,

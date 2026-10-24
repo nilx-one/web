@@ -73,6 +73,52 @@ export interface PinnedLabelCandidate {
 
 const CONNECTOR_PX = 14;
 const LABEL_GAP_PX = 4;
+const VIEWPORT_MARGIN_PX = 12;
+
+export interface PinnedLabelViewport {
+  readonly width: number;
+  readonly height: number;
+  /** Reserve room for the floating product header and Dock, in CSS pixels. */
+  readonly topInset?: number;
+  readonly bottomInset?: number;
+}
+
+/** Keep only the card inside the canvas. The connector still marks the point. */
+export function pinnedCardOffset(
+  x: number,
+  estimatedWidth: number,
+  viewportWidth: number,
+): number {
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(estimatedWidth) ||
+    !Number.isFinite(viewportWidth) ||
+    viewportWidth <= VIEWPORT_MARGIN_PX * 2
+  ) {
+    return 0;
+  }
+  const width = Math.min(
+    Math.max(0, estimatedWidth),
+    viewportWidth - VIEWPORT_MARGIN_PX * 2,
+  );
+  const min = VIEWPORT_MARGIN_PX + width / 2;
+  const max = viewportWidth - VIEWPORT_MARGIN_PX - width / 2;
+  return Math.max(min, Math.min(x, max)) - x;
+}
+
+/** Translate only the label card, never the map marker's coordinate. */
+export function setPinnedLandmarkCardOffset(
+  element: HTMLElement,
+  x: number,
+  viewportWidth: number,
+): void {
+  const card = element.querySelector<HTMLElement>('[data-part="card"]');
+  if (card === null) return;
+  card.style.transform = `translateX(${x}px)`;
+  if (Number.isFinite(viewportWidth) && viewportWidth > 0) {
+    card.style.maxWidth = `${Math.max(1, viewportWidth - VIEWPORT_MARGIN_PX * 2)}px`;
+  }
+}
 
 /**
  * An estimate, not a measurement: reading real layout for every card on every
@@ -83,8 +129,8 @@ function estimatedCardSize(candidate: PinnedLabelCandidate): {
   width: number;
   height: number;
 } {
-  const titleWidth = candidate.title.length * 7;
-  const detailWidth = (candidate.detail?.length ?? 0) * 5.8;
+  const titleWidth = candidate.title.length * 8;
+  const detailWidth = (candidate.detail?.length ?? 0) * 6;
   return {
     width: Math.max(titleWidth, detailWidth) + 20,
     height: candidate.detail === undefined ? 24 : 36,
@@ -97,11 +143,12 @@ function estimatedCardSize(candidate: PinnedLabelCandidate): {
  * would overlap one already shown steps back until the map zooms in far
  * enough to part them.
  */
-export function visiblePinnedLabels(
+export function layoutPinnedLabels(
   candidates: readonly PinnedLabelCandidate[],
   zoom: number,
-): ReadonlySet<string> {
-  const shown = new Set<string>();
+  viewport?: PinnedLabelViewport,
+): ReadonlyMap<string, number> {
+  const shown = new Map<string, number>();
   const taken: { l: number; t: number; r: number; b: number }[] = [];
   const ordered = [...candidates].sort(
     (a, b) => clampWeight(b.weight) - clampWeight(a.weight),
@@ -109,9 +156,29 @@ export function visiblePinnedLabels(
   for (const candidate of ordered) {
     if (zoom < pinnedLandmarkLabelZoom(candidate.weight)) continue;
     const { width, height } = estimatedCardSize(candidate);
+    if (
+      viewport !== undefined &&
+      (candidate.x < 0 ||
+        candidate.x > viewport.width ||
+        candidate.y > viewport.height ||
+        candidate.y - CONNECTOR_PX - height <
+          (viewport.topInset ?? VIEWPORT_MARGIN_PX) ||
+        candidate.y - CONNECTOR_PX >
+          viewport.height - (viewport.bottomInset ?? VIEWPORT_MARGIN_PX))
+    ) {
+      continue;
+    }
+    const cardWidth =
+      viewport === undefined
+        ? width
+        : Math.min(width, viewport.width - VIEWPORT_MARGIN_PX * 2);
+    const shift =
+      viewport === undefined
+        ? 0
+        : pinnedCardOffset(candidate.x, width, viewport.width);
     const box = {
-      l: candidate.x - width / 2 - LABEL_GAP_PX,
-      r: candidate.x + width / 2 + LABEL_GAP_PX,
+      l: candidate.x + shift - cardWidth / 2 - LABEL_GAP_PX,
+      r: candidate.x + shift + cardWidth / 2 + LABEL_GAP_PX,
       t: candidate.y - CONNECTOR_PX - height - LABEL_GAP_PX,
       b: candidate.y - CONNECTOR_PX + LABEL_GAP_PX,
     };
@@ -124,9 +191,17 @@ export function visiblePinnedLabels(
     );
     if (overlaps) continue;
     taken.push(box);
-    shown.add(candidate.id);
+    shown.set(candidate.id, shift);
   }
   return shown;
+}
+
+/** Compatibility for callers that only need visibility, not viewport placement. */
+export function visiblePinnedLabels(
+  candidates: readonly PinnedLabelCandidate[],
+  zoom: number,
+): ReadonlySet<string> {
+  return new Set(layoutPinnedLabels(candidates, zoom).keys());
 }
 
 /**
@@ -278,7 +353,9 @@ export function createPinnedLandmarkLabelElement(
   card.style.borderRadius = "10px";
   card.style.padding = "4px 10px";
   card.style.lineHeight = "1.2";
-  card.style.whiteSpace = "nowrap";
+  card.style.whiteSpace = "normal";
+  card.style.overflowWrap = "anywhere";
+  card.style.textAlign = "center";
 
   const title = document.createElement("strong");
   title.dataset.part = "title";

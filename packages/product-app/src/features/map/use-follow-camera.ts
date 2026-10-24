@@ -19,6 +19,7 @@ import {
   followAfterPinch,
   followCamera,
   isometricCamera,
+  isometricEntryCamera,
   zoomPivotFor,
   sameFollowCamera,
   closeToCamera,
@@ -224,7 +225,7 @@ export function useFollowCamera({
     const current = renderer.getCamera();
     hold(FOLLOW_HOLD_MS);
     aim(
-      isometricCamera(
+      isometricEntryCamera(
         { ...current, zoom: targetZoom.current ?? current.zoom },
         point,
         input.current.dimension,

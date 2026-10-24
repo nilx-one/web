@@ -15,6 +15,7 @@ import {
   FOLLOW_PITCH,
   cameraModesFor,
   ISOMETRIC_BEARING,
+  ISOMETRIC_ENTRY_MAX_ZOOM,
   ISOMETRIC_PITCH,
   isometricCamera,
   FOLLOW_MIN_ZOOM,
@@ -688,7 +689,7 @@ function isometricFollow(
 }
 
 describe("isometric tracking", () => {
-  it("keeps a pending Follow distance when selecting Isometric", () => {
+  it("uses the pending Follow target but caps a close-up on Isometric entry", () => {
     const fake = fakeRenderer();
     const { result } = follow(fake);
     fake.renderer.setCamera.mockImplementation(() => undefined);
@@ -696,7 +697,7 @@ describe("isometric tracking", () => {
     act(() => result.current.selectIsometric());
     expect(fake.renderer.setCamera).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        zoom: 21.5,
+        zoom: ISOMETRIC_ENTRY_MAX_ZOOM,
         bearing: ISOMETRIC_BEARING,
         pitch: ISOMETRIC_PITCH,
       }),

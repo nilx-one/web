@@ -168,7 +168,7 @@ export function SubscriptionIdentity({
       data-tier={tier}
       title={name}
     >
-      {address}
+      <span className="subscription-identity__address">{address}</span>
       {badge && isSubject ? (
         <span className="subscription-badges" aria-hidden={tier === undefined}>
           <span

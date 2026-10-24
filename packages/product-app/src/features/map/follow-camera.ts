@@ -89,6 +89,8 @@ export const FOLLOW_PITCH = 60;
 /** Isometric orientation belongs to the camera, not body facing. */
 export const ISOMETRIC_PITCH = 50;
 export const ISOMETRIC_BEARING = 45;
+/** Limit only an explicit switch into Isometric from a very close shot. */
+export const ISOMETRIC_ENTRY_MAX_ZOOM = 19;
 /** Exponential catch-up time; independent of the display's refresh rate. */
 export const ISOMETRIC_RESPONSE_MS = 180;
 /**
@@ -155,6 +157,23 @@ export function isometricCamera(
     minimumZoom,
     ISOMETRIC_BEARING,
     dimension === "flat" ? 0 : ISOMETRIC_PITCH,
+  );
+}
+
+/**
+ * An explicit Isometric selection starts at a readable neighborhood/body
+ * composition, rather than inheriting a Follow close-up (21.5). Subsequent
+ * tracking uses isometricCamera and preserves the person's pinch zoom.
+ */
+export function isometricEntryCamera(
+  current: MapCamera,
+  body: FollowBody,
+  dimension: MapDimension = "volumetric",
+): MapCamera {
+  return isometricCamera(
+    { ...current, zoom: Math.min(current.zoom, ISOMETRIC_ENTRY_MAX_ZOOM) },
+    body,
+    dimension,
   );
 }
 
