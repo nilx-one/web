@@ -169,6 +169,37 @@ describe("shell layout contract", () => {
     );
   });
 
+  it("marks reduced motion with a persistent yellow viewport ring", () => {
+    const worldCss = stylesheet(
+      "packages/product-app/src/features/map/authenticated-map-home-view.css",
+    );
+    const media = "@media (prefers-reduced-motion: reduce) {";
+    const [unconditional, reduced] = worldCss.split(media);
+
+    expect(reduced).toBeDefined();
+    expect(unconditional).not.toContain(".app-shell__frame::after");
+
+    const ring = reduced?.match(
+      /\.authenticated-map-home \.app-shell__frame::after\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(ring).toContain('content: ""');
+    expect(ring).toContain("position: absolute");
+    expect(ring).toContain("inset: 0");
+    expect(ring).toContain("box-shadow: inset 0 0 0 3px #facc15");
+    expect(ring).toContain("pointer-events: none");
+
+    // The readiness indicator may fade, but the independent yellow rim does not.
+    const readiness = reduced?.match(
+      /\.authenticated-map-home__readiness\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(readiness).toContain("inset: 3px");
+    expect(readiness).toContain("transition: none");
+    expect(ring).not.toContain("data-readiness-shown");
+    expect(rule(shellCss, ".app-shell__frame")).toContain(
+      "pointer-events: none",
+    );
+  });
+
   it("leaves no authenticated success hero on the world surface", () => {
     expect(worldView).not.toContain("You’re in.");
     expect(worldView).not.toContain("Authenticated as");
