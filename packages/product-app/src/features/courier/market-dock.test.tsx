@@ -28,14 +28,22 @@ it("embeds a 0x1-only product list in Dock, with no iframe, tabs or category pic
     { id: "exclusive", name: "Exclusive", price: null },
   ]);
   const onClose = vi.fn();
-  const { container } = render(<MarketDock plan={plan} catalog={{ load }} onClose={onClose} />);
+  const { container } = render(
+    <MarketDock plan={plan} catalog={{ load }} onClose={onClose} />,
+  );
   expect(container.querySelector("iframe")).toBeNull();
   expect(container.querySelector("select")).toBeNull();
   expect(screen.getByRole("heading", { name: "0x1" })).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByRole("button", { name: /Special/ })).toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /Special/ })).toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByRole("button", { name: /Special/ }));
-  expect(screen.getByText("Purchases with seeds are not connected yet.")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /buy|purchase|checkout/i })).toBeNull();
+  expect(
+    screen.getByText("Purchases with seeds are not connected yet."),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /buy|purchase|checkout/i }),
+  ).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Back to map" }));
   expect(onClose).toHaveBeenCalledOnce();
   expect(load).toHaveBeenCalledWith("en");
@@ -43,12 +51,17 @@ it("embeds a 0x1-only product list in Dock, with no iframe, tabs or category pic
 
 it("offers a retry after a catalog outage", async () => {
   chooseLocale("en");
-  const load = vi.fn()
+  const load = vi
+    .fn()
     .mockRejectedValueOnce(new Error("503"))
     .mockResolvedValueOnce([]);
   render(<MarketDock plan={plan} catalog={{ load }} onClose={() => {}} />);
   await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-  await waitFor(() => expect(screen.getByText("No 0x1 products are available yet.")).toBeInTheDocument());
+  await waitFor(() =>
+    expect(
+      screen.getByText("No 0x1 products are available yet."),
+    ).toBeInTheDocument(),
+  );
   expect(load).toHaveBeenCalledTimes(2);
 });
