@@ -87,7 +87,9 @@ export function MarketLanding() {
           !context.avaia ||
           !Number.isFinite(context.avaia.longitude) ||
           !Number.isFinite(context.avaia.latitude)
-        ) return;
+        ) {
+          return;
+        }
         if (live) setVisit(context as Visit);
       })
       .catch(() => {
@@ -155,12 +157,11 @@ export function MarketLanding() {
       });
     return distance(a) - distance(b) || a.id.number - b.id.number;
   });
+  const cityNeedle = cityQuery.trim().toLocaleLowerCase();
   const city = cities.find(
     (candidate) =>
-      candidate.uk.toLocaleLowerCase() ===
-        cityQuery.trim().toLocaleLowerCase() ||
-      candidate.en.toLocaleLowerCase() ===
-        cityQuery.trim().toLocaleLowerCase(),
+      candidate.uk.toLocaleLowerCase() === cityNeedle ||
+      candidate.en.toLocaleLowerCase() === cityNeedle,
   );
   const shownPoints =
     city?.id === "kyiv"
