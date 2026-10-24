@@ -11,7 +11,10 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useCourier } from "../courier/use-courier";
 import { CourierOffer } from "../courier/courier-offer";
-import { MarketDock, type EmbeddedMarketCatalogPort } from "../courier/market-dock";
+import {
+  MarketDock,
+  type EmbeddedMarketCatalogPort,
+} from "../courier/market-dock";
 import {
   ActivityStack,
   type RevealCompletion,
