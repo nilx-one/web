@@ -25,7 +25,7 @@ export function MarketDeparture({
     key: string;
     controller: AbortController;
     promise: Promise<void>;
-  }>();
+  } | undefined>(undefined);
   // A new arrival must never reuse an earlier point's one-time handoff.
   const visitKey = `${plan.destination.id.owner_pub_dress}:${plan.destination.id.number}:${plan.started_at_ms}:${attempt}`;
   useEffect(() => {
