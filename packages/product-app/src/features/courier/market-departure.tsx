@@ -21,24 +21,46 @@ export function MarketDeparture({
   const uk = resolved === "uk-UA";
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const pending = useRef<Promise<void> | undefined>(undefined);
+  const pending = useRef<{
+    key: string;
+    controller: AbortController;
+    promise: Promise<void>;
+  }>();
+  // A new arrival must never reuse an earlier point's one-time handoff.
+  const visitKey = `${plan.destination.id.owner_pub_dress}:${plan.destination.id.number}:${plan.started_at_ms}:${attempt}`;
   useEffect(() => {
     let live = true;
-    if (!pending.current) {
-      pending.current =
-        !avaia || !catalog.beginVisit
-          ? Promise.reject(new Error("Visit context unavailable"))
-          : catalog.beginVisit({
-              point: plan.destination.pub_dress.replace(/^0xda-market-/, ""),
-              seeds: String(seeds),
-              avaia,
-              plan,
-            });
+    if (pending.current && pending.current.key !== visitKey) {
+      pending.current.controller.abort();
+      pending.current = undefined;
     }
-    void pending.current.catch(() => {
-      if (live) setFailed(true);
-    });
+    // Coordinates may arrive after the dock renders. Do not cache a rejection
+    // that would prevent the valid handoff from starting on a later render.
+    if (avaia && catalog.beginVisit) {
+      if (!pending.current) {
+        const controller = new AbortController();
+        const promise = Promise.resolve().then(() =>
+          catalog.beginVisit!({
+            point: plan.destination.pub_dress.replace(/^0xda-market-/, ""),
+            seeds: String(seeds),
+            avaia,
+            plan,
+            signal: controller.signal,
+          }),
+        );
+        pending.current = { key: visitKey, controller, promise };
+        setFailed(false);
+      }
+      const current = pending.current;
+      void current.promise.catch(() => {
+        if (live && !current.controller.signal.aborted) setFailed(true);
+      });
+    }
     return () => {
+      live = false;
+    };
+  }, [catalog, plan, seeds, avaia, visitKey]);
+  return () => {
       live = false;
     };
   }, [catalog, plan, seeds, avaia, attempt]);
@@ -49,14 +71,19 @@ export function MarketDeparture({
           ? uk
             ? "Не вдалося відкрити маркет. Спробуйте ще раз."
             : "Unable to open Market. Please retry."
-          : uk
-            ? "Відкриваємо маркет…"
-            : "Opening Market…"}
+          : !avaia
+            ? uk
+              ? "Очікуємо координати Avaia…"
+              : "Waiting for Avaia position…"
+            : uk
+              ? "Відкриваємо маркет…"
+              : "Opening Market…"}
       </p>
       {failed && (
         <button
           type="button"
           onClick={() => {
+            pending.current?.controller.abort();
             pending.current = undefined;
             setFailed(false);
             setAttempt((v) => v + 1);
