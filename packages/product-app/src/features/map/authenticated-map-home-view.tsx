@@ -11,7 +11,7 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useCourier } from "../courier/use-courier";
 import { CourierOffer } from "../courier/courier-offer";
-import { MarketDock } from "../courier/market-dock";
+import { MarketDock, type EmbeddedMarketCatalogPort } from "../courier/market-dock";
 import {
   ActivityStack,
   type RevealCompletion,
@@ -389,7 +389,7 @@ export interface AuthenticatedMapHomeViewProps {
    * older, finds are still paid; the toast then names the tier, not the item.
    */
   readonly courierDirectory?: CourierDirectoryPort;
-  readonly marketCatalogUrl?: string;
+  readonly marketCatalog?: EmbeddedMarketCatalogPort;
   readonly findItems?: Pick<
     CoreRuntimePort,
     | "findItem"
@@ -920,7 +920,7 @@ export function AuthenticatedMapHomeView({
   xpingEngine,
   findItems,
   courierDirectory,
-  marketCatalogUrl,
+  marketCatalog,
   nearbySpeech,
   businessStations,
   connectedProviders,
@@ -1908,7 +1908,7 @@ export function AuthenticatedMapHomeView({
     origin: observedPosition,
     core: findItems,
     directory: courierDirectory ?? seededMarketDirectory,
-    dockOnArrival: marketCatalogUrl !== undefined,
+    dockOnArrival: marketCatalog !== undefined,
     engine: xpingEngine,
     cue,
     feedback,
@@ -4175,12 +4175,12 @@ export function AuthenticatedMapHomeView({
                 : undefined,
             ),
           })}
-      {...(courier.arrival && marketCatalogUrl
+      {...(courier.arrival && marketCatalog
         ? {
             dock: (
               <MarketDock
                 plan={courier.arrival}
-                url={marketCatalogUrl}
+                catalog={marketCatalog}
                 onClose={courier.closeMarket}
               />
             ),
