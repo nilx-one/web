@@ -76,25 +76,32 @@ The flyover from #454 owns road routing, height, banking and actual progress.
 Its arrival event controls ✅. A seeded preview carries no authoritative ETA;
 agreement and arrival grant no entitlement and call no commerce endpoint.
 
-## Browser Market Dock
+## Native 0x1 Market Dock
 
-The browser site supplies `/market.html`, a separate document mounting the
-pinned `@0xda-market/webapp-core` package. After xPing actually reaches the
-selected point (immediately with reduced motion), it parks and the Dock opens
-that document. Closing the Dock ends the flight and restores the world camera.
-Hosts without this capability retain the existing return flight.
+After xPing physically arrives at the selected BusinessPoint (or immediately
+under reduced motion), the browser parks it and opens one native React Dock
+screen. Closing the Dock returns xPing and restores the previous world camera.
+The dispatch, flight and arrival contracts remain unchanged.
 
-The shared WebApp reads the complete public catalog through the GET-only
-`/market-api/bootstrap` proxy. The proxy fixes the upstream path and strips
-session headers. A failed or timed-out bootstrap shows a retry action. Iframe
-unmount disposes the shared app's document listeners. No location, point ID,
-identity session, or device balance is passed to Market. The iframe is
-same-origin and unsandboxed, so the pinned WebApp is trusted code with the
-site's origin privileges: review every pin bump as such.
+The browser integrates the pinned `@0xda-market/webapp-core` catalog engine
+directly. It fetches the complete public catalog through the fixed GET-only
+`/market-api/bootstrap` proxy, then uses `CatalogStore.setCategory("0x1")`
+to show only authoritative products whose metadata category is exactly `0x1`.
+There is no iframe, another document, tab navigation, category selector or
+second marketplace implementation. The host owns the visual cards and detail
+selection; the shared Market engine owns catalog validation, normalization,
+category policy and price formatting.
 
-Seeded points remain explicitly unverified. Browsing neither verifies a visit
-nor grants an entitlement. This host disables every checkout transport method;
-Special purchases require a separate authoritative seeds debit and subscription
-grant integration before checkout can be enabled.
+This version is browse-only. Product details show the backend-reported price,
+or say that pricing is unavailable; no button can quote, charge seeds or grant
+a subscription. Special and Exclusive appear only if Market's catalog
+actually publishes them with category `0x1`. No invented prices, SKUs, orders
+or entitlements are seeded by Web. Purchases will require a separate, trusted
+seeds-debit-and-entitlement contract.
+
+The shared WebApp package is bundled as reviewed first-party code on the 0x1
+origin; its version is pinned and must be reviewed before each update.
+The host passes no location, point ID, identity session or seeds balance
+to the public catalog transport. Seeded BusinessPoints remain unverified.
 
 <!-- © 2026 aiaiaiai · aiaiaiai.org -->
