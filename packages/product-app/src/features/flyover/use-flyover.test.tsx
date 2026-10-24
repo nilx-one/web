@@ -103,6 +103,51 @@ afterEach(() => {
 });
 
 describe("useFlyover", () => {
+  it.each([false, true])(
+    "parks once for Dock and restores the camera on close (reduced=%s)",
+    async (reduced) => {
+      reduceMotion(reduced);
+      const { renderer, drone, hook } = setup();
+      const onDock = vi.fn();
+      await act(async () => {
+        hook.result.current.start({ from: FROM, to: TO, onDock });
+      });
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(onDock).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.active).toBe(true);
+      expect(hook.result.current.expanded).toBe(false);
+      expect(hook.result.current.progress?.arrivedAt).toBeDefined();
+      expect(lastDrone(drone)?.lngLat[0]).toBeCloseTo(TO.longitude, 4);
+      act(() => hook.result.current.expand());
+      expect(hook.result.current.expanded).toBe(false);
+      act(() => hook.result.current.leave());
+      expect(hook.result.current.active).toBe(false);
+      expect(renderer.getCamera()).toEqual(BASE);
+      expect(drone.remove).toHaveBeenCalledWith(FLYOVER_DRONE_ID);
+    },
+  );
+
+  it("does not open Dock when a pending flight is cancelled", async () => {
+    let roadsReady!: () => void;
+    const { hook } = setup(
+      () =>
+        new Promise<void>((resolve) => {
+          roadsReady = resolve;
+        }),
+    );
+    const onDock = vi.fn();
+    await act(async () => {
+      hook.result.current.start({ from: FROM, to: TO, onDock });
+    });
+    act(() => hook.result.current.leave());
+    await act(async () => {
+      roadsReady();
+    });
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(onDock).not.toHaveBeenCalled();
+    expect(hook.result.current.active).toBe(false);
+  });
+
   it("renders an early collectible, blooms at 30 m, and collects once with an aura", async () => {
     const { renderer, drone, hook } = setup();
     const collected = vi.fn();

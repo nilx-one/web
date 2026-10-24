@@ -134,6 +134,9 @@ importers:
 
   apps/site:
     dependencies:
+      '@0xda-market/webapp-core':
+        specifier: github:0xda-market/webapp-core#8e5ea0e1083323b33e30156a5b8a8334e4d78ce8
+        version: https://codeload.github.com/0xda-market/webapp-core/tar.gz/8e5ea0e1083323b33e30156a5b8a8334e4d78ce8
       '@aiaiaiai/4x-errors-browser':
         specifier: 0.2.0
         version: 0.2.0
@@ -405,6 +408,11 @@ importers:
   packages/walk-graph: {}
 
 packages:
+
+  '@0xda-market/webapp-core@https://codeload.github.com/0xda-market/webapp-core/tar.gz/8e5ea0e1083323b33e30156a5b8a8334e4d78ce8':
+    resolution: {gitHosted: true, integrity: sha512-pzX1buTWaHTGf3CEdMD42DaiY3Ix9YB/isEGzYH7V7V7Nl147jL9K811dlvG/zYy9uD44A74DrQXczYdYPGdHA==, tarball: https://codeload.github.com/0xda-market/webapp-core/tar.gz/8e5ea0e1083323b33e30156a5b8a8334e4d78ce8}
+    version: 0.9.0
+    engines: {node: '>=22'}
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
@@ -1886,6 +1894,8 @@ packages:
     resolution: {integrity: sha512-XkYXCol10+ba/6F/cueWV+TezUeOqXW0hdeJt5CdXjTYeAgAQg5N03RQdJ80mhfFE72+pblvYMW4wy2Qp4Qbrg==}
 
 snapshots:
+
+  '@0xda-market/webapp-core@https://codeload.github.com/0xda-market/webapp-core/tar.gz/8e5ea0e1083323b33e30156a5b8a8334e4d78ce8': {}
 
   '@adobe/css-tools@4.5.0': {}
 
