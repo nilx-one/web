@@ -35,7 +35,7 @@ export const beginMarketVisit: NonNullable<
     });
     if (!response.ok) throw new Error("Market handoff unavailable");
     const body = (await response.json()) as { code?: unknown };
-    if (typeof body.code !== "string" || !/^[\\w-]{43}$/.test(body.code))
+    if (typeof body.code !== "string" || !/^[\w-]{43}$/.test(body.code))
       throw new Error("Invalid handoff");
     // Do not navigate after a changed selection cancels the old request.
     if (controller.signal.aborted) throw new Error("Market visit cancelled");
