@@ -67,8 +67,9 @@ describe("0x1 embedded catalog", () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ ...catalog, data: [catalog.data[1]] })),
     );
-    await expect(createNilxOneMarketCatalog(request).load("uk-UA"))
-      .resolves.toEqual([]);
+    await expect(
+      createNilxOneMarketCatalog(request).load("uk-UA"),
+    ).resolves.toEqual([]);
     expect(request).toHaveBeenCalledWith(
       "/market-api/bootstrap?locale=uk_UA",
       expect.any(Object),
@@ -79,7 +80,8 @@ describe("0x1 embedded catalog", () => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(
       new Response("upstream unavailable", { status: 503 }),
     );
-    await expect(createNilxOneMarketCatalog(request).load("en"))
-      .rejects.toThrow("Catalog unavailable");
+    await expect(
+      createNilxOneMarketCatalog(request).load("en"),
+    ).rejects.toThrow("Catalog unavailable");
   });
 });
