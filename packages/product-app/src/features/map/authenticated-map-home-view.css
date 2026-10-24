@@ -189,6 +189,26 @@
   }
 }
 
+/* Accessibility status lives at the game viewport edge, independently of the
+   readiness frame and its settle timer. The system media preference owns this
+   indicator; no duplicate React or protocol state is needed. */
+@media (prefers-reduced-motion: reduce) {
+  .authenticated-map-home .app-shell__frame::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 3px #facc15;
+    pointer-events: none;
+  }
+
+  /* The readiness status still has its own visible lane inside the yellow rim. */
+  .authenticated-map-home__readiness {
+    inset: 3px;
+    transition: none;
+  }
+}
+
+
 /* Header: floating spatial chrome, not a bar. AppHeader keeps route and menu
    semantics; this surface only supplies the map-native material. */
 .authenticated-map-home.authenticated-map-home .app-header {
