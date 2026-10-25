@@ -207,7 +207,12 @@ async function start() {
     // Do not trust the first compositor screenshot or a compiled shader alone.
     // A full-intensity probe ensures TSL changes actual pixels on the GPU.
     aura.sample(0, true);
-    const pixels = await verifyWebGPUAura(gpuRenderer, scene, camera, aura.root);
+    const pixels = await verifyWebGPUAura(
+      gpuRenderer,
+      scene,
+      camera,
+      aura.root,
+    );
     if (failed) return;
     status.textContent = `WebGPU / TSL · aura verified in ${pixels} pixels · isolated scene`;
   } else {
