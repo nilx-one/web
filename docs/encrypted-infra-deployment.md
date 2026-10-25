@@ -42,6 +42,7 @@ delete old infra credentials until the first encrypted activation and
 rollback have passed. No production deployment is automatic.
 
 <!-- © 2026 aiaiaiai · aiaiaiai.org -->
+
 # Market browser handoff credential
 
 Store `NILX_BROWSER_HANDOFF_TOKEN` in this repository's Actions secrets (or
