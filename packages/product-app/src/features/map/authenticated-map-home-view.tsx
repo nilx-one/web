@@ -901,6 +901,28 @@ function NotebookDescription({ text }: { readonly text: string | undefined }) {
   );
 }
 
+/** A status change also invalidates off-wheel cached presentation handles. */
+export function syncCachedSubscriptionAuras(
+  avatars: Pick<NonNullable<MapRenderer["avatars"]>, "upsert"> | undefined,
+  drawn: Partial<Record<DockSeat, AvatarHandle>>,
+  tier: AvatarHandle["subscriptionAura"],
+): void {
+  if (avatars === undefined) return;
+  for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) {
+    const previous = drawn[seat];
+    if (previous === undefined || previous.subscriptionAura === tier) {
+      continue;
+    }
+    const { subscriptionAura: _oldTier, ...body } = previous;
+    const next: AvatarHandle = {
+      ...body,
+      ...(tier === undefined ? {} : { subscriptionAura: tier }),
+    };
+    drawn[seat] = next;
+    avatars.upsert(next);
+  }
+}
+
 export function AuthenticatedMapHomeView({
   contextualDock,
   adminRoleInbox,
@@ -2652,30 +2674,13 @@ export function AuthenticatedMapHomeView({
   // Keep the latest local marker sample separate from the authoritative
   // declared position; the normal observation effect publishes the final fix.
   const lastMovingBondMarkerFrame = useRef(Number.NEGATIVE_INFINITY);
-  // Subscription changes are state updates, not avatar animation ticks. Keep
-  // both cached bodies in sync immediately, including the one off the wheel:
-  // returning to a hidden model must never resurrect an old tier.
+  // This is driven by subscription authority, not camera or animation ticks.
   useEffect(() => {
-    const avatars = renderer.avatars;
-    if (avatars === undefined) return;
-    for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) {
-      const previous = drawnBodies.current[seat];
-      if (
-        previous === undefined ||
-        previous.subscriptionAura === subscriptionTier
-      ) {
-        continue;
-      }
-      const { subscriptionAura: _oldTier, ...body } = previous;
-      const next: AvatarHandle = {
-        ...body,
-        ...(subscriptionTier === undefined
-          ? {}
-          : { subscriptionAura: subscriptionTier }),
-      };
-      drawnBodies.current[seat] = next;
-      avatars.upsert(next);
-    }
+    syncCachedSubscriptionAuras(
+      renderer.avatars,
+      drawnBodies.current,
+      subscriptionTier,
+    );
   }, [renderer, subscriptionTier]);
 
   useEffect(() => {
