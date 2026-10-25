@@ -22,7 +22,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("updates visible and cached bodies on every tier change without zooming or reloading the world", async () => {
+it("syncs subscription tiers for cached bodies without zooming", async () => {
   const renderer = createMapRendererDouble({ kind: "ready" });
   const geolocation = createGeolocationDouble({ position: observation() });
   let tier: "exclusive" | "special" | undefined = "exclusive";
