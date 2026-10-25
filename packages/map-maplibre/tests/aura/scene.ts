@@ -23,6 +23,7 @@ import {
   createSubscriptionAuraWithMaterial,
 } from "../../src/subscription-aura";
 import type { SubscriptionAuraTier } from "@nilx-one/map-contract";
+import type { WebGPURenderer } from "three/webgpu";
 
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const canvas = document.querySelector("canvas")!;
@@ -33,7 +34,7 @@ const params = new URLSearchParams(location.search);
 // to WebGPU's 256-byte copy pitch). This is a one-shot study check, not a
 // production rendering path.
 async function verifyWebGPUAura(
-  renderer: import("three/webgpu").WebGPURenderer,
+  renderer: WebGPURenderer,
   scene: Scene,
   camera: PerspectiveCamera,
   aura: Mesh,
