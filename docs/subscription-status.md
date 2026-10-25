@@ -81,10 +81,22 @@ pnpm exec vite --host 127.0.0.1
 Open `/packages/map-maplibre/tests/aura/index.html?backend=webgl` or
 `?backend=webgpu`. Controls compare tiers, front/side/isometric cameras, motion
 and an opaque occluder. Add `&still` for deterministic reduced-motion inspection.
-The WebGPU experiment reports unavailable adapters and rejects WebGL fallback;
-backend initialization alone does not establish successful rendering or parity.
-Mobile performance and WebGPU visual parity remain unverified. Production
-migration requires a depth-complete rendering plan and device-loss handling.
+The WebGPU experiment refuses WebGL fallback and verifies that its TSL aura
+changes actual GPU render-target pixels versus a scene without aura. Only after
+successful readback and the first presentation does it set `data-ready="webgpu"`;
+shader compilation or calling `render()` alone cannot report readiness.
+Device loss and uncaptured backend errors are reported as `data-error` and
+stop the loop rather than silently treating a blank canvas as success.
+The 128×128 RGBA readback is a one-shot diagnostic performed only in the
+standalone WebGPU study. It does not run in production.
+
+If the GPU readback passes but an automated canvas screenshot is still blank,
+investigate the browser compositor or capture timing separately. If readback
+fails, inspect TSL compilation, shader output and adapter/device errors.
+A passing readback proves that the GPU produced distinct aura pixels, not
+pixel-perfect WebGL/WebGPU parity. Visual parity and mobile performance still
+require screenshot/device acceptance on a supported GPU. Production migration
+requires a depth-complete rendering plan and recovery from device loss.
 
 ## Verification
 
