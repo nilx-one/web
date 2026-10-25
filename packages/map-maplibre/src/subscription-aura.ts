@@ -9,6 +9,7 @@ import {
   DoubleSide,
   Float32BufferAttribute,
   Mesh,
+  type Material,
   ShaderMaterial,
 } from "three";
 
@@ -28,8 +29,12 @@ function auraGeometry(): BufferGeometry {
       [1, 1],
       [0, 1],
     ]) {
-      const x = (u! - 0.5) * 3.6;
-      positions.push(x * Math.cos(angle), v! * 3.4 - 0.15, x * Math.sin(angle));
+      const x = (u! - 0.5) * 3.0;
+      positions.push(
+        x * Math.cos(angle),
+        v! * 2.55 - 0.12,
+        x * Math.sin(angle),
+      );
       uvs.push(u!, v!);
     }
   }
@@ -45,14 +50,19 @@ export const SUBSCRIPTION_AURA_PALETTE = {
 
 export const SUBSCRIPTION_AURA_TRANSITION_SECONDS = 0.7;
 
+export type SubscriptionAuraUniforms = {
+  uTime: { value: number };
+  uTint: { value: Color };
+  uCore: { value: Color };
+  uIntensity: { value: number };
+};
+
 export function createSubscriptionAura(tier: SubscriptionAuraTier) {
-  const uniforms = {
-    uTime: { value: 0 },
-    uTint: { value: new Color() },
-    uCore: { value: new Color() },
-    uIntensity: { value: 1 },
-  };
-  const material = new ShaderMaterial({
+  return createSubscriptionAuraWithMaterial(tier, createAuraMaterial);
+}
+
+function createAuraMaterial(uniforms: SubscriptionAuraUniforms) {
+  return new ShaderMaterial({
     uniforms,
     transparent: true,
     blending: AdditiveBlending,
@@ -84,41 +94,63 @@ export function createSubscriptionAura(tier: SubscriptionAuraTier) {
       }
 
       void main() {
-        vec2 p = (vUv - vec2(0.5, 0.38)) * vec2(1.06, 1.0);
+        // Metre-space field: a compact mantle centred on the torso, not a
+        // point light at the navel. Keep the face above the hottest core.
+        vec2 p = vec2((vUv.x - 0.5) * 3.0, vUv.y * 2.55 - 0.12 - 1.05);
         float r = length(p);
         float angle = atan(p.y, p.x);
-        // Slow breathing, never a flash. Reduced motion freezes uTime at 0.
-        float breath = 0.94 + 0.06 * sin(uTime * 1.4);
-        float halo = exp(-dot(p * vec2(3.5, 2.25), p * vec2(3.5, 2.25)) * 4.0);
-        float rays = pow(abs(cos(angle * 9.0 + 0.09 * sin(uTime * 0.6))), 38.0)
-                   * exp(-r * 8.0) * smoothstep(0.035, 0.12, r);
-        // Fine rising ribbons and an interrupted elliptical hero halo.
+        float breath = 0.96 + 0.04 * sin(uTime * 1.4);
+        vec2 mantle = p / vec2(0.58, 0.88);
+        float halo = exp(-dot(mantle, mantle) * 2.2);
+        vec2 column = vec2(p.x / 0.27, max(abs(p.y) - 0.32, 0.0) / 0.32);
+        float core = exp(-dot(column, column) * 2.0);
+        // Broad light around the hands/hips bridges the bright core into the
+        // halo. Dense, uneven short rays avoid the old wheel-of-spokes look.
+        vec2 hands = vec2((abs(p.x) - 0.27) / 0.27, (p.y + 0.06) / 0.40);
+        float flare = exp(-dot(hands, hands) * 2.0);
+        float fan = pow(abs(sin(angle * 43.0 + sin(angle * 7.0) * 2.0 + uTime * 0.06)), 12.0);
+        float rays = fan * exp(-r * 5.8) * smoothstep(0.18, 0.42, r);
         float ribbon = 0.0;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 2; i++) {
           float f = float(i);
-          float curve = (0.11 + f * 0.045) * sin(vUv.y * 6.0 - uTime * 0.35 + f * 2.1);
-          ribbon += exp(-abs(p.x - curve) * 160.0);
+          float curve = (0.29 + f * 0.09) * sin(p.y * 3.0 - uTime * 0.3 + f * 3.14);
+          ribbon += exp(-abs(p.x - curve) * 95.0);
         }
-        ribbon *= smoothstep(0.08, 0.25, vUv.y) * (1.0 - smoothstep(0.68, 0.94, vUv.y));
-        vec2 oval = (vUv - vec2(0.5, 0.48)) / vec2(0.24, 0.43);
-        float arc = exp(-abs(length(oval) - 1.0) * 120.0)
-                  * pow(0.5 + 0.5 * sin(atan(oval.y, oval.x) * 3.0 + uTime * 0.3), 3.0);
+        ribbon *= exp(-p.y * p.y * 2.4);
+        vec2 oval = (p - vec2(0.0, 0.10)) / vec2(0.72, 1.03);
+        float arc = exp(-abs(length(oval) - 1.0) * 95.0)
+                  * pow(0.5 + 0.5 * sin(atan(oval.y, oval.x) * 2.0 - uTime * 0.45), 6.0);
         float sparks = 0.0;
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 9; i++) {
           float f = float(i);
           float y = fract(f * 0.137 + uTime * 0.035);
-          vec2 point = vec2(0.5 + sin(f * 7.13) * (0.16 + 0.06 * sin(f)), 0.08 + y * 0.83);
+          vec2 point = vec2(0.5 + sin(f * 7.13) * (0.13 + 0.035 * sin(f)), 0.12 + y * 0.72);
           float life = sin(y * 3.14159265);
           sparks += star(vUv - point) * life * life;
         }
         float edge = smoothstep(0.0, 0.08, vUv.x) * (1.0 - smoothstep(0.92, 1.0, vUv.x))
                    * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.92, 1.0, vUv.y));
-        vec3 light = uTint * (halo * 0.18 + rays * 0.8 + ribbon * 0.08 + arc * 0.12)
-                   + uCore * sparks * 0.42;
+        vec3 light = uTint * (halo * 0.65 + rays * 1.1 + ribbon * 0.10 + arc * 0.24)
+                   + uCore * (core * 0.72 + flare * 0.48 + sparks * 0.34);
         gl_FragColor = vec4(light * breath * uIntensity * edge, 1.0);
       }
     `,
   });
+}
+
+// The experimental WebGPU scene supplies a node material, but shares geometry,
+// tier transitions and disposal with the production MapLibre WebGL2 path.
+export function createSubscriptionAuraWithMaterial<T extends Material>(
+  tier: SubscriptionAuraTier,
+  createMaterial: (uniforms: SubscriptionAuraUniforms) => T,
+) {
+  const uniforms: SubscriptionAuraUniforms = {
+    uTime: { value: 0 },
+    uTint: { value: new Color() },
+    uCore: { value: new Color() },
+    uIntensity: { value: 1 },
+  };
+  const material = createMaterial(uniforms);
   const root = new Mesh(auraGeometry(), material);
   root.name = "subscription-aura";
   root.renderOrder = 1;

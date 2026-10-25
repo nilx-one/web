@@ -17,7 +17,9 @@ late responses cannot restore a previous identity's state.
 
 Special uses violet light; Exclusive uses brighter gold with white highlights.
 Badges and identity labels use the same tier-specific color families. The body uses one
-procedural, depth-tested additive mesh with a halo, rays, ribbons and sparkles.
+procedural, depth-tested additive mesh with a compact torso mantle, bright
+hand/hip highlights, short irregular rays, moving arcs and sparkles. The mantle
+is 2.55 m tall rather than the previous 3.4 m radial flare.
 There are no imported artwork assets or screen-space overlays.
 
 Acquisition fades in over 700 ms. Removal fades out and releases GPU resources.
@@ -54,6 +56,35 @@ Exclusive takes precedence and pauses the remaining Special duration. When
 Exclusive ends, Special resumes with that unconsumed duration. The shared Core
 clock owns this policy; the entitlement authority must persist its state and
 publish the effective period. Web never consumes or extends either duration.
+
+## WebGPU comparison scene
+
+The production aura remains in MapLibre's shared WebGL2 context and depth
+buffer. A separate WebGPU canvas cannot inherit that depth buffer; putting it
+over the map would make the aura show through buildings and other geometry.
+
+An isolated TSL experiment lives in `packages/map-maplibre/tests/aura/`.
+It shares geometry, palette, transitions and disposal with the production aura.
+The GLSL and TSL field implementations are intentionally separate during this
+experiment; visual parity must be checked after changes to either field.
+No WebGPU code is imported by the production entry point.
+
+Run:
+
+```sh
+pnpm install --frozen-lockfile
+python -m pip install -r tools/avatars/requirements.txt
+python tools/avatars/sky/build_model.py --output deploy/web/avatars/0.1.0
+pnpm exec vite --host 127.0.0.1
+```
+
+Open `/packages/map-maplibre/tests/aura/index.html?backend=webgl` or
+`?backend=webgpu`. Controls compare tiers, front/side/isometric cameras, motion
+and an opaque occluder. Add `&still` for deterministic reduced-motion inspection.
+The WebGPU experiment reports unavailable adapters and rejects WebGL fallback;
+backend initialization alone does not establish successful rendering or parity.
+Mobile performance and WebGPU visual parity remain unverified. Production
+migration requires a depth-complete rendering plan and device-loss handling.
 
 ## Verification
 

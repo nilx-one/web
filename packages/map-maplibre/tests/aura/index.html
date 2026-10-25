@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- © 2026 aiaiaiai · aiaiaiai.org -->
+<!-- SPDX-License-Identifier: MPL-2.0 -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Subscription aura · renderer study</title>
+    <style>
+      body {
+        margin: 0;
+        color: #eee;
+        background: #0b1517;
+        font: 14px system-ui;
+      }
+      header {
+        padding: 16px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      a {
+        color: #9ce8ed;
+      }
+      button,
+      select {
+        font: inherit;
+        padding: 8px;
+        background: #223336;
+        color: white;
+        border: 1px solid #667;
+        border-radius: 6px;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: calc(100vh - 100px);
+      }
+      #status {
+        padding: 0 16px 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Aura study</strong><a href="?backend=webgl">WebGL2</a
+      ><a href="?backend=webgpu">WebGPU</a>
+      <select id="tier" aria-label="Subscription tier">
+        <option value="exclusive">Exclusive</option>
+        <option value="special">Special</option>
+        <option value="none">None</option>
+      </select>
+      <select id="view" aria-label="Camera">
+        <option value="front">Front</option>
+        <option value="side">Side</option>
+        <option value="isometric">Isometric</option>
+      </select>
+      <button id="motion">Pause motion</button
+      ><button id="wall">Show occluder</button>
+    </header>
+    <div id="status">Starting…</div>
+    <canvas></canvas>
+    <script type="module" src="./scene.ts"></script>
+  </body>
+</html>
