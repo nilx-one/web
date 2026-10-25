@@ -13,7 +13,7 @@
     "dev:site": "pnpm --filter @nilx-one/site dev",
     "dev:telegram": "pnpm --filter @nilx-one/telegram-mini-app dev",
     "dev:discord": "pnpm --filter @nilx-one/discord-activity dev",
-    "format": "prettier --write packages/product-app/src/features/map/subscription-aura-live.test.tsx && git --no-pager diff -- packages/product-app/src/features/map/subscription-aura-live.test.tsx && exit 1",
+    "format": "prettier --check .",
     "format:write": "prettier --write .",
     "lint": "eslint . --max-warnings=0",
     "policy": "python scripts/check_repository_policy.py MPL-2.0",
