@@ -2660,8 +2660,12 @@ export function AuthenticatedMapHomeView({
     if (avatars === undefined) return;
     for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) {
       const previous = drawnBodies.current[seat];
-      if (previous === undefined || previous.subscriptionAura === subscriptionTier)
+      if (
+        previous === undefined ||
+        previous.subscriptionAura === subscriptionTier
+      ) {
         continue;
+      }
       const { subscriptionAura: _oldTier, ...body } = previous;
       const next: AvatarHandle = {
         ...body,
