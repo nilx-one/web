@@ -152,10 +152,9 @@ export interface BodyStance {
 /**
  * The body of the identity at the wheel.
  *
- * Where it stands is the one thing this client actually observed: its own
- * device position. An Avaia is not there in any sense the protocol asserts —
- * where an Avaia is will come from an integration that knows, and until one
- * does, the world can only draw it at the client's own anchor.
+ * An independent stance survives loss of the device observation. Without a
+ * stance the device is the only available anchor; neither source asserts
+ * protocol presence.
  */
 export function createWheelBodyHandle({
   subscriptionAura,
@@ -171,9 +170,8 @@ export function createWheelBodyHandle({
   stance,
   liftMeters,
 }: WheelBodyInput): AvatarHandle | null {
-  const observed = deviceLocationPosition(location);
-  if (observed === undefined) return null;
-  const position = stance?.point ?? observed;
+  const position = stance?.point ?? deviceLocationPosition(location);
+  if (position === undefined) return null;
   const ambient = sampleAmbientAvatar(
     avatarSeed(address),
     timeMs,

@@ -2336,3 +2336,20 @@ describe("bridge structures", () => {
     expect(source?.setData).not.toHaveBeenCalled();
   });
 });
+
+it("anchors an independent Avaia label without a device observation", () => {
+  const fakeMap = makeFakeMap();
+  const { markers, createLabelMarker } = labelMarkers();
+  const renderer = readyRenderer(fakeMap, createLabelMarker);
+  renderer.setObservedPositionLabel({
+    title: "x0skai",
+    bodyId: "avaia",
+    at: [30.52, 50.45],
+  });
+  expect(markers).toHaveLength(1);
+  expect(markers[0]?.center).toEqual([30.52, 50.45]);
+  renderer.setObservedPosition(null);
+  expect(markers[0]?.removed).toBe(false);
+  renderer.setObservedPositionLabel(null);
+  expect(markers[0]?.removed).toBe(true);
+});

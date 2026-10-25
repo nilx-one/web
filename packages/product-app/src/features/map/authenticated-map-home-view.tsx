@@ -2190,17 +2190,23 @@ export function AuthenticatedMapHomeView({
       ...(subscriptionTier === undefined ? {} : { subscriptionTier }),
       bodyId: BODY_HANDLE_IDS[wheel],
       ...(clip === undefined ? {} : { activity: t(BODY_ACTIVITY_KEYS[clip]) }),
-      detail:
-        away > AT_DEVICE_METERS
-          ? t(
-              declaredPosition
-                ? "map.card.fromDeclared"
-                : "map.card.fromThisDevice",
-            ).replace("{distance}", formatDistance(locale, away))
-          : t(declaredPosition ? "map.card.declared" : "map.card.thisDevice"),
-      ...(at === undefined || away <= AT_DEVICE_METERS
+      ...(observedPosition === undefined
         ? {}
-        : { at: [at.longitude, at.latitude] as const }),
+        : {
+            detail:
+              away > AT_DEVICE_METERS
+                ? t(
+                    declaredPosition
+                      ? "map.card.fromDeclared"
+                      : "map.card.fromThisDevice",
+                  ).replace("{distance}", formatDistance(locale, away))
+                : t(
+                    declaredPosition
+                      ? "map.card.declared"
+                      : "map.card.thisDevice",
+                  ),
+          }),
+      ...(at === undefined ? {} : { at: [at.longitude, at.latitude] as const }),
       ...(avaiaSpeech === undefined ? {} : { speech: avaiaSpeech }),
       // Too far out for the world to draw the body, so the card stands it live;
       // the still answers only while that cannot draw.
@@ -2706,7 +2712,7 @@ export function AuthenticatedMapHomeView({
       drawn[seat] = hidden;
       avatarLayer.upsert(hidden);
     }
-    if (bondStudy === undefined || observedPosition === undefined) {
+    if (bondStudy === undefined) {
       for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) hide(seat);
       return;
     }
