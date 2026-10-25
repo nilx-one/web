@@ -18,7 +18,7 @@ import {
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AvaiaWalk } from "./avaia-walk";
+import { startWalk, type AvaiaWalk } from "./avaia-walk";
 import {
   FOND_AT,
   FONDNESS_HALF_LIFE_MS,
@@ -200,7 +200,9 @@ describe("an Avaia with no drive in Core", () => {
 
     tap(b);
     await settle();
-    await advance(1);
+    await advance(
+      startWalk({ from: ORIGIN, to: b, nowMs: 0, zoom: 17 }).durationMs + 1,
+    );
     await settle();
     const standing = result.current.stance(performance.now());
     expect(standing?.clipId).toBe("turn_in_place");
@@ -233,7 +235,10 @@ describe("an Avaia carrying out Core's drive", () => {
     tap(at(300, 0));
     await settle();
     expect(inputs[1]).toEqual({ type: "tap", to: "b:1" });
-    await advance(1);
+    await advance(
+      startWalk({ from: ORIGIN, to: at(300, 0), nowMs: 0, zoom: 17 })
+        .durationMs + 1,
+    );
     expect(types(inputs)).toEqual(["stopped", "tap", "arrived"]);
     const standing = result.current.stance(performance.now());
     expect(standing?.clipId).toBe("turn_in_place");
@@ -938,4 +943,151 @@ describe("stopping for a wheel handover", () => {
       point,
     );
   });
+});
+
+describe("route continuity across accessibility and lifecycle", () => {
+  it.each([false, true])(
+    "keeps route speed with reduced motion %s",
+    async (reducedMotion) => {
+      const { renderer, tap } = walkRenderer();
+      const completed = vi.fn();
+      const hook = render(renderer, {
+        reducedMotion,
+        onWalkCompleted: completed,
+      });
+      tap(at(100, 0));
+      await advance(1_000);
+      expect(
+        mapDistanceMeters(
+          ORIGIN,
+          hook.result.current.stance(performance.now())!.point,
+        ),
+      ).toBeCloseTo(1.4, 1);
+      expect(completed).not.toHaveBeenCalled();
+      expect(
+        mapDistanceMeters(readWorldMemory("0x0sky").avaia!, at(100, 0)),
+      ).toBeGreaterThan(90);
+      hook.unmount();
+    },
+  );
+
+  it.each([0.1, 0.5, 0.99])(
+    "reloads from reached progress at %s of a route",
+    async (progress) => {
+      const { renderer, tap } = walkRenderer();
+      const completed = vi.fn();
+      const hook = render(renderer, { onWalkCompleted: completed });
+      const to = at(100, 0);
+      const duration = startWalk({
+        from: ORIGIN,
+        to,
+        nowMs: 0,
+        zoom: 17,
+      }).durationMs;
+      tap(to);
+      await advance(duration * progress);
+      const reached = hook.result.current.stance(performance.now())!.point;
+      hook.unmount();
+      expect(readWorldMemory("0x0sky").avaia).toMatchObject(reached);
+      await advance(duration * 2);
+      const reopened = render(renderer);
+      expect(reopened.result.current.stance(performance.now())?.point).toEqual(
+        reached,
+      );
+      expect(completed).not.toHaveBeenCalled();
+      reopened.unmount();
+    },
+  );
+
+  it("stops on background and does not arrive after a long resume", async () => {
+    const { renderer, tap } = walkRenderer();
+    const { core, inputs } = scriptedCore((input) =>
+      input.type === "tap"
+        ? [{ do: "walk", to: input.to, purpose: "tap", grass: true }]
+        : [],
+    );
+    const completed = vi.fn();
+    const hook = render(renderer, { core, onWalkCompleted: completed });
+    await settle();
+    tap(at(100, 0));
+    await advance(10_000);
+    const reached = hook.result.current.stance(performance.now())!.point;
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(readWorldMemory("0x0sky").avaia).toMatchObject(reached);
+    await advance(120_000);
+    hidden.mockReturnValue(false);
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await settle();
+    expect(hook.result.current.stance(performance.now())?.point).toEqual(
+      reached,
+    );
+    expect(types(inputs)).not.toContain("arrived");
+    expect(completed).toHaveBeenCalledTimes(1);
+    expect(completed.mock.calls[0]![0].to).toEqual(reached);
+    hook.unmount();
+    hidden.mockRestore();
+  });
+});
+
+it("invalidates a pending drive answer when the page is hidden", async () => {
+  const { renderer, tap } = walkRenderer();
+  let resolve: ((answer: AvaiaDriveAnswer) => void) | undefined;
+  const avaiaDriveStep = vi.fn(
+    async (
+      _state: string,
+      input: AvaiaDriveInput,
+    ): Promise<AvaiaDriveAnswer> => {
+      if (input.type !== "tap") return { ok: true, state: "{}", commands: [] };
+      return new Promise((done) => {
+        resolve = done;
+      });
+    },
+  );
+  const hook = render(renderer, { core: { avaiaDriveStep } });
+  await settle();
+  tap(at(100, 0));
+  await settle();
+  act(() => window.dispatchEvent(new Event("pagehide")));
+  await act(async () =>
+    resolve?.({
+      ok: true,
+      state: "{}",
+      commands: [{ do: "walk", to: "b:1", purpose: "tap", grass: true }],
+    }),
+  );
+  await advance(120_000);
+  expect(hook.result.current.stance(performance.now())?.point).toEqual(ORIGIN);
+  expect(hook.result.current.moving).toBe(false);
+  hook.unmount();
+});
+
+it("applies an admin relocation once and cancels the old walk arrival", async () => {
+  const { renderer, tap } = walkRenderer();
+  const completed = vi.fn();
+  const hook = render(renderer, { onWalkCompleted: completed });
+  tap(at(100, 0));
+  await advance(1_000);
+  const travelArrival = { coordinate: at(500, 0), revision: "1" };
+  hook.rerender(props(renderer, { travelArrival, onWalkCompleted: completed }));
+  await settle();
+  expect(hook.result.current.stance(performance.now())?.point).toEqual(
+    travelArrival.coordinate,
+  );
+  tap(at(550, 0));
+  await advance(1_000);
+  const reached = hook.result.current.stance(performance.now())?.point;
+  hook.rerender(
+    props(renderer, {
+      travelArrival: { ...travelArrival },
+      onWalkCompleted: completed,
+    }),
+  );
+  await settle();
+  expect(hook.result.current.stance(performance.now())?.point).toEqual(reached);
+  act(() => hook.result.current.stop());
+  await advance(120_000);
+  expect(completed).toHaveBeenCalledTimes(1);
+  expect(completed.mock.calls[0]![0].from).toEqual(travelArrival.coordinate);
+  hook.unmount();
 });
