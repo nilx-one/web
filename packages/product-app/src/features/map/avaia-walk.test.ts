@@ -27,6 +27,7 @@ import {
   STUDY_MS,
   walkArrived,
   walkBearing,
+  WALK_TURN_HALF_MS,
   walkPosition,
   walkSpeedMetersPerSecond,
   walkStance,
@@ -291,5 +292,80 @@ describe("Avaia walking", () => {
     });
     expect(studyFinished(study, STUDY_MS - 1)).toBe(false);
     expect(studyFinished(study, STUDY_MS)).toBe(true);
+  });
+});
+
+describe("route corner presentation", () => {
+  const delta = (from: number, to: number) => ((to - from + 540) % 360) - 180;
+  it.each([30, 60])(
+    "turns continuously at %s fps without moving off the path",
+    (fps) => {
+      const to = { longitude: east.longitude, latitude: north.latitude };
+      const walk = startWalk({
+        from: here,
+        to,
+        path: [here, east, to],
+        nowMs: 1_000,
+        zoom: 17,
+      });
+      const corner =
+        walk.startedMs + (walk.durationMs * walk.along[1]!) / walk.along[2]!;
+      let before = walkBearing(walk, corner - WALK_TURN_HALF_MS);
+      for (
+        let elapsed = -WALK_TURN_HALF_MS;
+        elapsed <= WALK_TURN_HALF_MS;
+        elapsed += 1_000 / fps
+      ) {
+        const heading = walkBearing(walk, corner + elapsed);
+        expect(Math.abs(delta(before, heading))).toBeLessThan(12);
+        before = heading;
+        const position = walkPosition(walk, corner + elapsed);
+        if (elapsed < 0)
+          expect(position.latitude).toBeCloseTo(here.latitude, 10);
+        else expect(position.longitude).toBeCloseTo(east.longitude, 10);
+      }
+      expect(walkBearing(walk, corner)).toBeCloseTo(45, 1);
+      expect(walkPosition(walk, corner)).toEqual(east);
+      expect(walkBearing(walk, walk.startedMs + walk.durationMs)).toBe(
+        walk.arrivalBearingDeg,
+      );
+    },
+  );
+
+  it("takes the short turn across north and keeps endpoints exact", () => {
+    const corner = {
+      longitude: here.longitude - 0.00001,
+      latitude: here.latitude + 0.001,
+    };
+    const to = { longitude: here.longitude, latitude: here.latitude + 0.002 };
+    const walk = startWalk({
+      from: here,
+      to,
+      path: [here, corner, to],
+      nowMs: 0,
+      zoom: 17,
+    });
+    const at = (walk.durationMs * walk.along[1]!) / walk.along[2]!;
+    expect(Math.abs(delta(0, walkBearing(walk, at)))).toBeLessThan(0.1);
+    expect(walkBearing(walk, 0)).toBe(walk.bearingDeg);
+    expect(walkPosition(walk, walk.durationMs)).toEqual(to);
+  });
+
+  it("keeps adjacent short-leg turn windows continuous", () => {
+    const a = { longitude: here.longitude + 0.000001, latitude: here.latitude };
+    const b = { longitude: a.longitude, latitude: a.latitude + 0.000001 };
+    const to = { longitude: east.longitude, latitude: b.latitude };
+    const walk = startWalk({
+      from: here,
+      to,
+      path: [here, a, b, to],
+      nowMs: 0,
+      zoom: 17,
+    });
+    for (let ms = 1; ms < 300; ms++) {
+      expect(
+        Math.abs(delta(walkBearing(walk, ms - 1), walkBearing(walk, ms))),
+      ).toBeLessThan(5);
+    }
   });
 });

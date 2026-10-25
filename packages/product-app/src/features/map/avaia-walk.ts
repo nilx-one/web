@@ -387,11 +387,39 @@ function walkProgress(walk: AvaiaWalk, nowMs: number): number {
   return Math.min(1, Math.max(0, (nowMs - walk.startedMs) / walk.durationMs));
 }
 
-/** Where the body faces at an instant: along whichever leg it is on. */
+/** Half of a corner's turn window, in milliseconds of route progress. */
+export const WALK_TURN_HALF_MS = 200;
+
+/**
+ * Presentation heading rounds a waypoint without cutting its geographic
+ * corner. Sampling is stateless and deterministic at any frame rate. Windows
+ * occupy at most half of each adjacent leg so short zigzags cannot overlap.
+ */
 export function walkBearing(walk: AvaiaWalk, nowMs: number): number {
   const t = walkProgress(walk, nowMs);
   if (t >= 1) return walk.arrivalBearingDeg;
-  return legBearing(walk.path, legAt(walk, t).leg);
+  const { leg } = legAt(walk, t);
+  const total = walk.along.at(-1) ?? 0;
+  if (total <= 0) return walk.bearingDeg;
+  const msPerMeter = walk.durationMs / total;
+  const elapsed = t * walk.durationMs;
+  for (const corner of [leg, leg + 1]) {
+    if (corner <= 0 || corner >= walk.path.length - 1) continue;
+    const at = walk.along[corner]! * msPerMeter;
+    const half = Math.min(
+      WALK_TURN_HALF_MS,
+      ((walk.along[corner]! - walk.along[corner - 1]!) * msPerMeter) / 2,
+      ((walk.along[corner + 1]! - walk.along[corner]!) * msPerMeter) / 2,
+    );
+    if (half <= 0 || elapsed < at - half || elapsed > at + half) continue;
+    const from = legBearing(walk.path, corner - 1);
+    const to = legBearing(walk.path, corner);
+    const turn = ((to - from + 540) % 360) - 180;
+    const share = (elapsed - (at - half)) / (2 * half);
+    const eased = share * share * (3 - 2 * share);
+    return (from + turn * eased + 360) % 360;
+  }
+  return legBearing(walk.path, leg);
 }
 
 export function walkArrived(walk: AvaiaWalk, nowMs: number): boolean {
