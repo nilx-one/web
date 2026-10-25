@@ -31,8 +31,12 @@ import type { SubscriptionAuraUniforms } from "../../src/subscription-aura";
 export function createAuraNodeMaterial(state: SubscriptionAuraUniforms) {
   const time = uniform(0).onRenderUpdate(() => state.uTime.value);
   const intensity = uniform(0).onRenderUpdate(() => state.uIntensity.value);
-  const tint = uniform(state.uTint.value);
-  const coreColor = uniform(state.uCore.value);
+  // Explicitly upload interpolated colors each frame, not just time/intensity.
+  // WebGPU uniform buffers must track tier changes as well as initial values.
+  const tint = uniform(state.uTint.value).onRenderUpdate(() => state.uTint.value);
+  const coreColor = uniform(state.uCore.value).onRenderUpdate(
+    () => state.uCore.value,
+  );
   const material = new MeshBasicNodeMaterial({
     transparent: true,
     blending: AdditiveBlending,
