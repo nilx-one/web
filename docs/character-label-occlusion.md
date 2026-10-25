@@ -6,7 +6,7 @@
 
 On 25 October 2026, in the iPhone Telegram Mini App at building scale, `x0skai`'s identity/activity/status callout covered most of the visible 3D body. As the Avaia walked, the label moved across the body instead of making room for it. The tier, walking state, distance and line of speech were legible; the character and its subscription aura were not.
 
-This document defines **a character versus its own label**. It complements the shared avatar/landmark/destination collision issue [web#498](https://github.com/nilx-one/web/issues/498), which owns **callout versus callout** priority and viewport clipping. Do not build parallel global placement engines: the character avoidance region and preferred compact presentation must feed the same eventual collision policy. The existing body/card handover in [map-visual-language.md](map-visual-language.md#marker-and-card) remains normative; this proposal names a new *compact nameplate*, not a second full observed-position card.
+This document defines **a character versus its own label**. It complements the shared avatar/landmark/destination collision issue [web#498](https://github.com/nilx-one/web/issues/498), which owns **callout versus callout** priority and viewport clipping. Do not build parallel global placement engines: the character avoidance region and preferred compact presentation must feed the same eventual collision policy. The existing body/card handover in [map-visual-language.md](map-visual-language.md#marker-and-card) remains normative; this proposal names a new _compact nameplate_, not a second full observed-position card.
 
 Web presentation only: no Core schema, entitlement, geolocation, identity, scene-truth, subscription-clock or deployment changes.
 
@@ -16,7 +16,7 @@ Web presentation only: no Core schema, entitlement, geolocation, identity, scene
 - **Far / body hidden:** No world body, as required by `MAP_BODY_HANDOVER_ZOOM`. Use the existing full position card with one live/still body preview. Show identity, activity, distance, and current speech according to the existing card contract.
 - **Focused details:** Do not cover the world body. Use a separately positioned expanded information surface (Dock/popover with safe-space placement). Show full identity, effective tier, state, distance, speech and appropriate actions.
 
-A nameplate is *not* a full avatar preview and never creates a second body or image. The world body's visibility threshold continues to be the single source of truth shared by map and application. No intermediate zoom band may render both the full card and the world body, or neither. When the host cannot render a body, preserve the existing documented still-image fallback; do not leave an empty preview.
+A nameplate is _not_ a full avatar preview and never creates a second body or image. The world body's visibility threshold continues to be the single source of truth shared by map and application. No intermediate zoom band may render both the full card and the world body, or neither. When the host cannot render a body, preserve the existing documented still-image fallback; do not leave an empty preview.
 
 The near nameplate is a **maximum of two compact lines**:
 
