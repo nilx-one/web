@@ -41,4 +41,19 @@ workflow, then use an explicitly manual production deployment. Do not
 delete old infra credentials until the first encrypted activation and
 rollback have passed. No production deployment is automatic.
 
+## Market browser handoff credential
+
+Store `NILX_BROWSER_HANDOFF_TOKEN` in this repository's GitHub
+`production` Environment (or repository Actions secrets). While Market runs
+only in development, configure **the same random value, at least 32 bytes**
+in `0xda-market/core`'s `development` Environment. The live `nilx.one`
+Identity currently issues handoffs into that isolated development API; this
+does not activate Market production. Rotate both values together.
+
+Identity includes the token only in its age-encrypted runtime envelope,
+never in client build variables. Merge the Infra allowlist change first.
+To apply the token without an image change, run `Deploy Production` on
+`master` with `target=identity`; this forces only the Identity runtime
+redeployment, not the Web/Telegram/Discord clients.
+
 <!-- © 2026 aiaiaiai · aiaiaiai.org -->
