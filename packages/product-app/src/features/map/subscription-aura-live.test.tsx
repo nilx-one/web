@@ -6,13 +6,7 @@ import type {
   SubscriptionStatusPort,
 } from "@nilx-one/application";
 import type { AvatarHandle } from "@nilx-one/map-contract";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   createGeolocationDouble,
@@ -21,8 +15,10 @@ import {
 } from "../../../../../tests/support/doubles";
 import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import { SubscriptionStatusProvider } from "../subscription/subscription-status";
-import { AuthenticatedMapHomeView } from "./authenticated-map-home-view";
-import { HANDOVER_CLIP_MS } from "./wheel-handover";
+import {
+  AuthenticatedMapHomeView,
+  syncCachedSubscriptionAuras,
+} from "./authenticated-map-home-view";
 
 afterEach(() => {
   cleanup();
@@ -106,19 +102,7 @@ it("syncs subscription tiers for cached bodies without zooming", async () => {
     expect(lastBody("avaia")?.subscriptionAura).toBe("exclusive"),
   );
 
-  // Both studies may stay cached while the wheel changes. Neither should
-  // retain the previous paid tier when it is not currently visible.
-  const beforeHandover = performance.now();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
-  );
-  // A handover deliberately keeps the departing Avaia on stage for 1.5s.
-  // Advance the presentation clock, then let the next status update redraw
-  // the arriving Bond. No map zoom or runtime timer is changed.
-  vi.spyOn(performance, "now").mockReturnValue(
-    beforeHandover + HANDOVER_CLIP_MS + 100,
-  );
-
+  // Authority updates must reach the visible world without touch or zoom.
   async function switchTier(next: typeof tier): Promise<void> {
     await act(async () => {
       tier = next;
@@ -126,7 +110,6 @@ it("syncs subscription tiers for cached bodies without zooming", async () => {
       invalidate!();
     });
     await vi.waitFor(() => {
-      expect(lastBody("bond")?.subscriptionAura).toBe(next);
       expect(lastBody("avaia")?.subscriptionAura).toBe(next);
     });
   }
@@ -139,4 +122,34 @@ it("syncs subscription tiers for cached bodies without zooming", async () => {
   // No camera zoom-out or model remount is needed for a valid tier update.
   expect(renderer.mount).toHaveBeenCalledTimes(1);
   expect(renderer.unmount).not.toHaveBeenCalled();
+});
+
+it("updates cached visible and hidden bodies without retaining an old aura", () => {
+  const drawn: Partial<Record<"bond" | "avaia", AvatarHandle>> = {
+    bond: {
+      id: "bond",
+      visible: false,
+      subscriptionAura: "exclusive",
+    } as AvatarHandle,
+    avaia: {
+      id: "avaia",
+      visible: true,
+      subscriptionAura: "exclusive",
+    } as AvatarHandle,
+  };
+  const upsert = vi.fn();
+
+  syncCachedSubscriptionAuras({ upsert }, drawn, "special");
+  expect(drawn.bond?.subscriptionAura).toBe("special");
+  expect(drawn.avaia?.subscriptionAura).toBe("special");
+  expect(drawn.bond?.visible).toBe(false);
+  expect(upsert).toHaveBeenCalledTimes(2);
+
+  syncCachedSubscriptionAuras({ upsert }, drawn, "special");
+  expect(upsert).toHaveBeenCalledTimes(2);
+
+  syncCachedSubscriptionAuras({ upsert }, drawn, undefined);
+  expect(drawn.bond?.subscriptionAura).toBeUndefined();
+  expect(drawn.avaia?.subscriptionAura).toBeUndefined();
+  expect(upsert).toHaveBeenCalledTimes(4);
 });
