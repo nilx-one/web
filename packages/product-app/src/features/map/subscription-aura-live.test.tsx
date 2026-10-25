@@ -6,7 +6,13 @@ import type {
   SubscriptionStatusPort,
 } from "@nilx-one/application";
 import type { AvatarHandle } from "@nilx-one/map-contract";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   createGeolocationDouble,
