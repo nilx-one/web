@@ -901,6 +901,28 @@ function NotebookDescription({ text }: { readonly text: string | undefined }) {
   );
 }
 
+/** A status change also invalidates off-wheel cached presentation handles. */
+export function syncCachedSubscriptionAuras(
+  avatars: Pick<NonNullable<MapRenderer["avatars"]>, "upsert"> | undefined,
+  drawn: Partial<Record<DockSeat, AvatarHandle>>,
+  tier: AvatarHandle["subscriptionAura"],
+): void {
+  if (avatars === undefined) return;
+  for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) {
+    const previous = drawn[seat];
+    if (previous === undefined || previous.subscriptionAura === tier) {
+      continue;
+    }
+    const { subscriptionAura: _oldTier, ...body } = previous;
+    const next: AvatarHandle = {
+      ...body,
+      ...(tier === undefined ? {} : { subscriptionAura: tier }),
+    };
+    drawn[seat] = next;
+    avatars.upsert(next);
+  }
+}
+
 export function AuthenticatedMapHomeView({
   contextualDock,
   adminRoleInbox,
@@ -2652,6 +2674,15 @@ export function AuthenticatedMapHomeView({
   // Keep the latest local marker sample separate from the authoritative
   // declared position; the normal observation effect publishes the final fix.
   const lastMovingBondMarkerFrame = useRef(Number.NEGATIVE_INFINITY);
+  // This is driven by subscription authority, not camera or animation ticks.
+  useEffect(() => {
+    syncCachedSubscriptionAuras(
+      renderer.avatars,
+      drawnBodies.current,
+      subscriptionTier,
+    );
+  }, [renderer, subscriptionTier]);
+
   useEffect(() => {
     const avatars = renderer.avatars;
     if (avatars === undefined) return;
@@ -2695,6 +2726,7 @@ export function AuthenticatedMapHomeView({
       seat === "bond" ? bondAvatar?.appearance : avaiaAvatar?.appearance;
 
     let frame: number | undefined;
+    let active = true;
 
     // Where a body is drawn standing: where it walked to, else this device.
     function liftAt(
@@ -2707,6 +2739,9 @@ export function AuthenticatedMapHomeView({
     }
 
     function draw(nowMs: number): void {
+      // An old effect must not keep writing stale subscription uniforms after
+      // React has committed a new tier. Guard even already-dispatched frames.
+      if (!active) return;
       const body = wheelBody(wheel, handover, nowMs);
       const stance =
         body.seat === "avaia"
@@ -2774,13 +2809,21 @@ export function AuthenticatedMapHomeView({
         if (seat !== body.seat) hide(seat);
       }
 
-      // A handover and a walk are the only things here that need frames, and
-      // both end.
-      frame =
+      // Ambient sampling can overlap a moving body's animation frame. Keep
+      // exactly one pending frame, or the old closure can outlive effect
+      // cleanup and overwrite a later subscription phase indefinitely.
+      const animating =
         (handover !== undefined && !handoverComplete(handover, nowMs)) ||
-        (handover === undefined && (avaiaWalk.moving || manualBondMoving))
-          ? globalThis.requestAnimationFrame(draw)
-          : undefined;
+        (handover === undefined && (avaiaWalk.moving || manualBondMoving));
+      if (animating && frame === undefined) {
+        frame = globalThis.requestAnimationFrame((time) => {
+          frame = undefined;
+          draw(time);
+        });
+      } else if (!animating && frame !== undefined) {
+        globalThis.cancelAnimationFrame(frame);
+        frame = undefined;
+      }
     }
 
     draw(globalThis.performance.now());
@@ -2790,6 +2833,7 @@ export function AuthenticatedMapHomeView({
     );
 
     return () => {
+      active = false;
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       globalThis.clearInterval(ambient);
     };
