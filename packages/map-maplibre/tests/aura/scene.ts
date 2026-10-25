@@ -105,8 +105,17 @@ async function start() {
     renderer.setAnimationLoop(null);
   };
   if (gpuRenderer) {
-    gpuRenderer.onDeviceLost = (error) => fail(`WebGPU device lost: ${String(error)}`);
-    gpuRenderer.onError = (error) => fail(`WebGPU backend error: ${String(error)}`);
+    const defaultDeviceLost = gpuRenderer.onDeviceLost.bind(gpuRenderer);
+    const describe = (error: unknown) =>
+      error && typeof error === "object" && "message" in error
+        ? String(error.message)
+        : String(error);
+    gpuRenderer.onDeviceLost = (error) => {
+      defaultDeviceLost(error);
+      fail(`WebGPU device lost: ${describe(error)}`);
+    };
+    gpuRenderer.onError = (error) =>
+      fail(`WebGPU backend error: ${describe(error)}`);
     await gpuRenderer.init();
     if (
       !(gpuRenderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend
