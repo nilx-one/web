@@ -183,8 +183,8 @@ export function createWheelBodyHandle({
   // so it is not left to the ambient sampler. Reduced motion still gets the
   // clip: it is what makes the change legible, and it plays once.
   const handing = body.clipId !== undefined;
-  // Reduced motion gets no stride and no turn: the application already sends
-  // such a body straight to where it was going, and here it simply stands.
+  // Reduced motion gets no stride and no turn. Route progress still advances
+  // at its normal speed; only the decorative animation is suppressed.
   const moving =
     stance?.clipId !== undefined && !reducedMotion ? stance : undefined;
   // The same resolver the settings preview and the editor draw from, so a

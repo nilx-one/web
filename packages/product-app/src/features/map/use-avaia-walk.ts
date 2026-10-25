@@ -455,7 +455,7 @@ export function useAvaiaWalk({
   const [study, setStudyState] = useState<AvaiaStudy | undefined>(undefined);
   const [pause, setPauseState] = useState<Pause | undefined>(undefined);
   // A world opened again finds its Avaia where it was left, not back at its
-  // owner's feet: where it stood, or where it was headed when the page went.
+  // owner's feet: only the point actually reached before the page went.
   const [rest, setRestState] = useState<Rest | undefined>(() => {
     const remembered = readWorldMemory(owner).avaia;
     return remembered === undefined
@@ -725,8 +725,8 @@ export function useAvaiaWalk({
       setStudy(undefined);
       setPause(undefined);
       lastPassing.current = "";
-      // Reduced motion still goes where it was sent; it just arrives.
-      setWalk(latest.current.reducedMotion ? { ...next, durationMs: 0 } : next);
+      // Accessibility changes the clip, never route speed or completion.
+      setWalk(next);
       return "walking";
     },
     [currentPoint, openAround, renderer, setPause, setStudy, setWalk],
@@ -1191,6 +1191,7 @@ export function useAvaiaWalk({
 
   const step = useCallback(
     (input: AvaiaDriveInput) => {
+      if (document.hidden) return;
       const from = era.current;
       // With no drive to ask there is nothing to wait for: a tap is carried
       // out as it lands, as it always was.
@@ -1329,6 +1330,7 @@ export function useAvaiaWalk({
       walk.startedMs + walk.durationMs - globalThis.performance.now(),
     );
     const arrived = globalThis.setTimeout(() => {
+      if (document.hidden || latest.current.walk !== walk) return;
       latest.current.onWalkCompleted?.(walk);
       setWalk(undefined);
       setRest({ point: walk.to, bearingDeg: walk.arrivalBearingDeg });
@@ -1400,10 +1402,9 @@ export function useAvaiaWalk({
   }, [pause, setPause]);
 
   // A walking body is heard walking, each footfall when a foot is seen to
-  // land. A walk with no duration — reduced motion, which arrives without
-  // walking — makes no footfall at all.
+  // land. Reduced motion hides the stride and therefore has no footfalls.
   useEffect(() => {
-    if (walk === undefined || walk.durationMs <= 0) return;
+    if (reducedMotion || walk === undefined || walk.durationMs <= 0) return;
     const arrives = walk.startedMs + walk.durationMs;
     let landing: ReturnType<typeof globalThis.setTimeout> | undefined;
     const nextStep = () => {
@@ -1417,7 +1418,7 @@ export function useAvaiaWalk({
     };
     nextStep();
     return () => globalThis.clearTimeout(landing);
-  }, [walk]);
+  }, [reducedMotion, walk]);
 
   // Looking a landmark over takes a moment; then it goes in the notebook and
   // the Avaia says what it learned.
@@ -1428,6 +1429,7 @@ export function useAvaiaWalk({
       study.startedMs + STUDY_MS - globalThis.performance.now(),
     );
     const done = globalThis.setTimeout(() => {
+      if (document.hidden || latest.current.study !== study) return;
       const { owner: book, avaiaAddress: by } = latest.current;
       // Going back to a place already studied is a visit, not a lesson: it
       // pays nothing and says nothing, unless that is when it is loved.
@@ -1455,31 +1457,24 @@ export function useAvaiaWalk({
     return () => globalThis.clearTimeout(done);
   }, [feel, say, setRest, setStudy, study]);
 
-  // Where the body will be once what it is doing ends is what this device
-  // keeps, so a page dropped mid-walk comes back with the Avaia arrived.
-  const settledPoint =
-    walk !== undefined
-      ? { point: walk.to, bearingDeg: walk.arrivalBearingDeg }
-      : study !== undefined
-        ? { point: study.at, bearingDeg: study.bearingDeg }
-        : rest;
-  const settledLongitude = settledPoint?.point.longitude;
-  const settledLatitude = settledPoint?.point.latitude;
-  const settledBearing = settledPoint?.bearingDeg;
-  useEffect(() => {
+  // Checkpoint reached progress, never an unvisited destination. The short
+  // interval bounds loss if the host kills the page without a lifecycle event.
+  const persistPosition = useCallback(() => {
+    const nowMs = globalThis.performance.now();
+    const point = currentPoint(nowMs);
+    if (point === undefined) return;
     rememberWorld(owner, {
-      avaia:
-        settledLongitude === undefined ||
-        settledLatitude === undefined ||
-        settledBearing === undefined
-          ? undefined
-          : {
-              longitude: settledLongitude,
-              latitude: settledLatitude,
-              bearingDeg: settledBearing,
-            },
+      avaia: { ...point, bearingDeg: currentBearing(nowMs) },
     });
-  }, [owner, settledBearing, settledLatitude, settledLongitude]);
+  }, [currentBearing, currentPoint, owner]);
+  useEffect(() => {
+    persistPosition();
+    if (walk === undefined) return;
+    const timer = globalThis.setInterval(() => {
+      if (!document.hidden) persistPosition();
+    }, 1_000);
+    return () => globalThis.clearInterval(timer);
+  }, [persistPosition, walk, study, pause, rest]);
 
   // A travel revision is an explicit one-off admin teleport. It overrides
   // this device's older local walk once; future movement remains Avaia's own.
@@ -1636,6 +1631,37 @@ export function useAvaiaWalk({
     lastLine.current = undefined;
     return point;
   }, [currentBearing, currentPoint, setPause, setRest, setStudy, setWalk]);
+
+  // A hidden Mini App cannot simulate a journey offline. Settle at the
+  // reached point, invalidate outstanding Core answers, and discard timers.
+  // Returning starts a fresh drive decision, never a delayed arrival.
+  useEffect(() => {
+    let suspended = document.hidden;
+    const suspend = () => {
+      if (suspended) return;
+      suspended = true;
+      stop();
+      persistPosition();
+    };
+    const resume = () => {
+      if (document.hidden || !suspended) return;
+      suspended = false;
+      if (active) step({ type: "stopped" });
+    };
+    const visibility = () => {
+      if (document.hidden) suspend();
+      else resume();
+    };
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("pagehide", suspend);
+    window.addEventListener("pageshow", resume);
+    return () => {
+      document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("pagehide", suspend);
+      window.removeEventListener("pageshow", resume);
+      persistPosition();
+    };
+  }, [active, persistPosition, step, stop]);
 
   const walkTo = useCallback(
     (point: MapPointSelection): boolean => {
