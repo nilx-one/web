@@ -26,11 +26,18 @@ identity, scene-truth, subscription-clock or deployment changes.
 
 ## Three presentation states
 
-| State                   | World body                                             | Overlay                                                                                     | Allowed content                                                                         |
-| ----------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| **Near / body visible** | Draw the real 3D body and depth-tested aura            | **Compact nameplate**, offset outside the body's projected silhouette                       | Identity (pub_dress), effective tier if known, and short activity/distance when it fits |
-| **Far / body hidden**   | No world body, as required by `MAP_BODY_HANDOVER_ZOOM` | Existing full position card with one live/still body preview                                | Identity, activity, distance, current speech according to existing card contract        |
-| **Focused details**     | Do not cover the world body                            | Separately positioned expanded information surface (Dock/popover with safe-space placement) | Full identity, effective tier, state, distance, speech and appropriate actions          |
+- **Near / body visible:** Draw the real 3D body and depth-tested aura.
+  Use a **compact nameplate** offset outside the body's projected
+  silhouette. Show identity (pub_dress), effective tier if known,
+  and short activity/distance when space allows.
+- **Far / body hidden:** No world body, as required by
+  `MAP_BODY_HANDOVER_ZOOM`. Use the existing full position card with
+  one live/still body preview. Show identity, activity, distance,
+  and current speech according to the existing card contract.
+- **Focused details:** Do not cover the world body. Use a separately
+  positioned expanded information surface (Dock/popover with safe-space
+  placement). Show full identity, effective tier, state, distance,
+  speech and appropriate actions.
 
 A nameplate is *not* a full avatar preview and never creates a second body
 or image. The world body's visibility threshold continues to be the
