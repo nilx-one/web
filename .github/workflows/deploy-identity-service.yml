@@ -160,7 +160,9 @@ jobs:
             test -n "${!name:-}" || { echo "Required production credential/recipient $name missing." >&2; exit 1; }
             [[ "${!name}" != *$'\n'* && "${!name}" != *$'\r'* ]] || exit 1
           done
-          [[ ${#NILX_BROWSER_HANDOFF_TOKEN} -ge 32 ]] || { echo "NILX_BROWSER_HANDOFF_TOKEN must contain at least 32 characters." >&2; exit 1; }
+          # Match the server-side handoff contract in bytes independent of runner locale.
+          token_bytes="$(printf %s "$NILX_BROWSER_HANDOFF_TOKEN" | wc -c)"
+          (( token_bytes >= 32 )) || { echo "NILX_BROWSER_HANDOFF_TOKEN must contain at least 32 bytes." >&2; exit 1; }
           sudo apt-get update -qq
           sudo apt-get install -y -qq age
           {
