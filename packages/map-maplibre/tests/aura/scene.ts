@@ -12,6 +12,7 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
+  RenderTarget,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -26,31 +27,95 @@ import type { SubscriptionAuraTier } from "@nilx-one/map-contract";
 const status = document.querySelector<HTMLDivElement>("#status")!;
 const canvas = document.querySelector("canvas")!;
 const params = new URLSearchParams(location.search);
+
+// A submitted WebGPU frame is not evidence that the aura shader actually drew.
+// Compare GPU readbacks with the aura hidden and visible (128px aligns RGBA rows
+// to WebGPU's 256-byte copy pitch). This is a one-shot study check, not a
+// production rendering path.
+async function verifyWebGPUAura(
+  renderer: import("three/webgpu").WebGPURenderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  aura: Mesh,
+): Promise<number> {
+  const size = 128;
+  const target = new RenderTarget(size, size, { depthBuffer: true });
+  const wasVisible = aura.visible;
+  try {
+    const capture = async (visible: boolean) => {
+      aura.visible = visible;
+      renderer.setRenderTarget(target);
+      try {
+        renderer.render(scene, camera);
+      } finally {
+        renderer.setRenderTarget(null);
+      }
+      return renderer.readRenderTargetPixelsAsync(target, 0, 0, size, size);
+    };
+    const withoutAura = await capture(false);
+    const withAura = await capture(true);
+    let changed = 0;
+    // The readback target defaults to 8-bit RGBA, so compare RGB only.
+    for (let i = 0; i + 3 < withoutAura.length; i += 4) {
+      const difference =
+        Math.abs(Number(withAura[i]) - Number(withoutAura[i])) +
+        Math.abs(Number(withAura[i + 1]) - Number(withoutAura[i + 1])) +
+        Math.abs(Number(withAura[i + 2]) - Number(withoutAura[i + 2]));
+      if (difference > 4) changed += 1;
+    }
+    if (changed < 8) {
+      throw new Error(
+        "WebGPU submitted a frame, but the aura did not change rendered pixels.",
+      );
+    }
+    return changed;
+  } finally {
+    renderer.setRenderTarget(null);
+    aura.visible = wasVisible;
+    target.dispose();
+  }
+}
+
 async function start() {
   const gpu = params.get("backend") === "webgpu";
-  // No silent WebGL fallback: this is an explicit WebGPU experiment.
-  if (gpu && (!navigator.gpu || !(await navigator.gpu.requestAdapter()))) {
-    throw new Error("WebGPU adapter unavailable; use the WebGL2 link.");
+  if (gpu && !navigator.gpu) {
+    throw new Error("WebGPU unavailable; use the WebGL2 link.");
   }
-  const renderer = gpu
+  const gpuRenderer = gpu
     ? new (await import("three/webgpu")).WebGPURenderer({
         canvas,
         antialias: true,
       })
-    : new WebGLRenderer({
-        canvas,
-        antialias: true,
-        preserveDrawingBuffer: true,
-      });
-  if ("init" in renderer) await renderer.init();
-  if (
-    "backend" in renderer &&
-    !(renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend
-  ) {
-    renderer.dispose();
-    throw new Error(
-      "WebGPU initialization fell back to WebGL2; not a WebGPU result.",
-    );
+    : undefined;
+  const renderer =
+    gpuRenderer ??
+    new WebGLRenderer({
+      canvas,
+      antialias: true,
+      preserveDrawingBuffer: true,
+    });
+  let failed = false;
+  let tearingDown = false;
+  const fail = (error: unknown) => {
+    if (tearingDown || failed) return;
+    failed = true;
+    status.textContent = String(error);
+    document.documentElement.dataset.error = String(error);
+    delete document.documentElement.dataset.ready;
+    renderer.setAnimationLoop(null);
+  };
+  if (gpuRenderer) {
+    gpuRenderer.onDeviceLost = (error) => fail(`WebGPU device lost: ${String(error)}`);
+    gpuRenderer.onError = (error) => fail(`WebGPU backend error: ${String(error)}`);
+    await gpuRenderer.init();
+    if (
+      !(gpuRenderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend
+    ) {
+      gpuRenderer.dispose();
+      throw new Error(
+        "WebGPU initialization fell back to WebGL2; not a WebGPU result.",
+      );
+    }
   }
   renderer.setPixelRatio(1);
   const scene = new Scene();
@@ -128,19 +193,44 @@ async function start() {
   };
   resize();
   window.addEventListener("resize", resize);
-  status.textContent = `${gpu ? "WebGPU / TSL" : "WebGL2 / GLSL"} · shared geometry and transitions · isolated scene`;
-  if ("compileAsync" in renderer) await renderer.compileAsync(scene, camera);
+  status.textContent = `${gpu ? "WebGPU / TSL" : "WebGL2 / GLSL"} · initializing comparison`;
+  if (gpuRenderer) {
+    // Do not trust the first compositor screenshot or a compiled shader alone.
+    // A full-intensity probe ensures TSL changes actual pixels on the GPU.
+    aura.sample(0, true);
+    const pixels = await verifyWebGPUAura(gpuRenderer, scene, camera, aura.root);
+    if (failed) return;
+    status.textContent = `WebGPU / TSL · aura verified in ${pixels} pixels · isolated scene`;
+  } else {
+    await renderer.compileAsync(scene, camera);
+    status.textContent = "WebGL2 / GLSL · isolated scene";
+  }
+  let firstFrame = true;
   renderer.setAnimationLoop(() => {
-    const now = performance.now();
-    if (!frozen) seconds += Math.min((now - last) / 1000, 0.1);
-    last = now;
-    aura.sample(seconds, frozen);
-    renderer.render(scene, camera);
-    document.documentElement.dataset.ready = gpu ? "webgpu" : "webgl";
+    if (failed) return;
+    try {
+      const now = performance.now();
+      if (!frozen) seconds += Math.min((now - last) / 1000, 0.1);
+      last = now;
+      aura.sample(seconds, frozen);
+      renderer.render(scene, camera);
+      if (firstFrame) {
+        firstFrame = false;
+        // Allow the canvas to be presented before screenshot automation starts.
+        requestAnimationFrame(() => {
+          if (!failed && !tearingDown) {
+            document.documentElement.dataset.ready = gpu ? "webgpu" : "webgl";
+          }
+        });
+      }
+    } catch (error) {
+      fail(error);
+    }
   });
   window.addEventListener(
     "pagehide",
     () => {
+      tearingDown = true;
       renderer.setAnimationLoop(null);
       window.removeEventListener("resize", resize);
       aura.dispose();
