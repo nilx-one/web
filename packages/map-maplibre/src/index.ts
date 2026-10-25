@@ -1357,7 +1357,10 @@ export function createMapLibreRenderer(
   }
 
   function applyLabel(mounted: MapLibreMap): void {
-    if (observedPosition === null || observedLabel === null) {
+    if (
+      observedLabel === null ||
+      (observedPosition === null && observedLabel.at === undefined)
+    ) {
       // The marker goes; the card and the body standing in it are kept,
       // hidden, so the next card is the same one rather than a fresh load.
       labelMarker?.remove();
@@ -1366,7 +1369,8 @@ export function createMapLibreRenderer(
       return;
     }
 
-    const anchor = observedLabel.at ?? observedPosition.center;
+    const anchor = observedLabel.at ?? observedPosition?.center;
+    if (anchor === undefined) return;
     const center: [number, number] = [anchor[0], anchor[1]];
 
     if (labelElement === undefined) {

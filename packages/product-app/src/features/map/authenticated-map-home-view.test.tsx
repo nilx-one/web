@@ -2918,8 +2918,10 @@ describe("AuthenticatedMapHomeView", () => {
         ]),
       );
       expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
-      expect(lastLabel(mapRenderer)?.detail).toContain(
-        "from the manual position",
+      await vi.waitFor(() =>
+        expect(lastLabel(mapRenderer)?.detail).toContain(
+          "from the manual position",
+        ),
       );
     });
 
@@ -2955,8 +2957,10 @@ describe("AuthenticatedMapHomeView", () => {
       const distance = asked.mock.calls[0]?.[0] ?? 0;
       expect(distance).toBeGreaterThan(5_000);
       expect(distance).toBeLessThan(8_000);
-      expect(lastLabel(mapRenderer)?.detail).toContain(
-        "from the manual position",
+      await vi.waitFor(() =>
+        expect(lastLabel(mapRenderer)?.detail).toContain(
+          "from the manual position",
+        ),
       );
       expect(readWorldMemory("0x0sky").avaia).toMatchObject(avaia);
       expect(device.readPermission).not.toHaveBeenCalled();
@@ -3411,4 +3415,32 @@ describe("world readiness frame", () => {
       ),
     ).toBeInTheDocument();
   });
+});
+
+it("draws the remembered independent Avaia without inventing a device observation", async () => {
+  const point = { longitude: 30.52, latitude: 50.45, bearingDeg: 90 };
+  rememberWorld("0x0sky", { avaia: point });
+  const mapRenderer = createMapRendererDouble({ kind: "ready" });
+  renderView({
+    mapRenderer,
+    avatarChoice: createAvatarChoiceViewState("dasha-study", undefined),
+    avaiaAvailability: "ready",
+  });
+  await vi.waitFor(() =>
+    expect(mapRenderer.avatars!.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "avaia",
+        lngLat: [point.longitude, point.latitude],
+      }),
+    ),
+  );
+  expect(
+    vi
+      .mocked(mapRenderer.setObservedPosition)
+      .mock.calls.every(([position]) => position === null),
+  ).toBe(true);
+  const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
+    .lastCall?.[0];
+  expect(label?.at).toEqual([point.longitude, point.latitude]);
+  expect(label?.detail).toBeUndefined();
 });

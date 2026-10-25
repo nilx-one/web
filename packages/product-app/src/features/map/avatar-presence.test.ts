@@ -203,3 +203,21 @@ it("shares the supplied tier for either body and clears it when omitted", () => 
     );
   }
 });
+
+it("keeps an independent Avaia stance when device location is unavailable", () => {
+  const stance = {
+    point: { longitude: 30.52, latitude: 50.45 },
+    bearingDeg: 90,
+  };
+  for (const location of [
+    { kind: "idle" },
+    { kind: "denied" },
+    { kind: "unsupported" },
+  ] as DeviceLocationState[]) {
+    expect(
+      wheelBodyHandle({ body: { seat: "avaia" }, stance, location }),
+    ).toMatchObject({ id: "avaia", lngLat: [30.52, 50.45], bearingDeg: 90 });
+    expect(wheelBodyHandle({ body: { seat: "avaia" }, location })).toBeNull();
+    expect(wheelBodyHandle({ body: { seat: "bond" }, location })).toBeNull();
+  }
+});
