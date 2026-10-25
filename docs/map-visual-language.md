@@ -63,6 +63,21 @@ The card's body is the world's body, not a second one. The label names the avata
 
 One number decides which of the two is on the world, and the map contract publishes it. The renderer hides the card by it and the application draws the body by it, so the turn is a single fact rather than two that could drift into a width showing both or neither.
 
+## Non-occluding nameplate when the body is visible
+
+At near zoom the **full observed-position card** still hands over to the
+visible world body; it must never obscure that body's model or subscription
+aura. A separate compact nameplate may identify the visible body, but it
+lives **outside its projected silhouette** and gives way to the body,
+usable viewport, shell chrome and callout priority. Speech and long
+details do not permanently enlarge the nameplate.
+
+The exact near/remote/focused states, placement, fallback and
+device-level acceptance contract live in
+[non-occluding character labels](character-label-occlusion.md).
+That design complements the shared world callout collisions in
+[web#498](https://github.com/nilx-one/web/issues/498).
+
 ## Ground-tap acknowledgement
 
 A tap on the world, where neither an editor nor a body owns the gesture, adds
