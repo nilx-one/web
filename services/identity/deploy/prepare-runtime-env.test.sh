@@ -44,6 +44,7 @@ evidence_key_first="$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")"
   printf '%s\n' 'TELEGRAM_OIDC_CLIENT_SECRET=telegram-secret'
   printf '%s\n' 'DISCORD_CLIENT_ID=1234'
   printf '%s\n' 'DISCORD_CLIENT_SECRET=discord-secret'
+  printf '%s\n' 'NILX_BROWSER_HANDOFF_TOKEN=handoff-test-token-01234567890123456789'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=github-auth-client'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'
   printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=github-evidence-client'
@@ -59,6 +60,7 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
 [ "$(value_of DISCORD_CLIENT_ID "$runtime")" = 1234 ]
 [ "$(value_of DISCORD_CLIENT_SECRET "$runtime")" = discord-secret ]
+[ "$(value_of NILX_BROWSER_HANDOFF_TOKEN "$runtime")" = handoff-test-token-01234567890123456789 ]
 [ "$(value_of GITHUB_AUTH_CLIENT_ID "$runtime")" = github-auth-client ]
 [ "$(value_of GITHUB_AUTH_CLIENT_SECRET "$runtime")" = github-auth-secret ]
 [ "$(value_of GITHUB_EVIDENCE_CLIENT_ID "$runtime")" = github-evidence-client ]
