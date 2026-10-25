@@ -22,6 +22,7 @@ import {
 import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import { SubscriptionStatusProvider } from "../subscription/subscription-status";
 import { AuthenticatedMapHomeView } from "./authenticated-map-home-view";
+import { HANDOVER_CLIP_MS } from "./wheel-handover";
 
 afterEach(() => {
   cleanup();
@@ -107,10 +108,16 @@ it("syncs subscription tiers for cached bodies without zooming", async () => {
 
   // Both studies may stay cached while the wheel changes. Neither should
   // retain the previous paid tier when it is not currently visible.
+  const beforeHandover = performance.now();
   fireEvent.click(
     screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
   );
-  await vi.waitFor(() => expect(lastBody("bond")).toBeDefined());
+  // A handover deliberately keeps the departing Avaia on stage for 1.5s.
+  // Advance the presentation clock, then let the next status update redraw
+  // the arriving Bond. No map zoom or runtime timer is changed.
+  vi.spyOn(performance, "now").mockReturnValue(
+    beforeHandover + HANDOVER_CLIP_MS + 100,
+  );
 
   async function switchTier(next: typeof tier): Promise<void> {
     await act(async () => {
