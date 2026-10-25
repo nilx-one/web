@@ -42,3 +42,11 @@ delete old infra credentials until the first encrypted activation and
 rollback have passed. No production deployment is automatic.
 
 <!-- © 2026 aiaiaiai · aiaiaiai.org -->
+# Market browser handoff credential
+
+Store `NILX_BROWSER_HANDOFF_TOKEN` in this repository's Actions secrets (or
+production Environment). Use the same random value, at least 32 characters,
+in `0xda-market/core`. Identity includes it only in the age-encrypted runtime
+envelope; it is never a client build variable. Deploy the companion infra
+allowlist change before activating Identity. To apply a new or rotated token
+without an image change, use the production workflow's force-identity option.
