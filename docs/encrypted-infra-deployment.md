@@ -40,6 +40,7 @@ configure the `INFRA_AGE_RECIPIENT` public Variable, validate the deploy
 workflow, then use an explicitly manual production deployment. Do not
 delete old infra credentials until the first encrypted activation and
 rollback have passed. No production deployment is automatic.
+
 ## Market browser handoff credential
 
 Store `NILX_BROWSER_HANDOFF_TOKEN` in this repository's GitHub
