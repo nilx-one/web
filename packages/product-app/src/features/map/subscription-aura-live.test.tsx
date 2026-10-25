@@ -28,7 +28,22 @@ it("updates visible and cached bodies on every tier change without zooming or re
   let tier: "exclusive" | "special" | undefined = "exclusive";
   let invalidate: (() => void) | undefined;
   const source: SubscriptionStatusPort = {
-    read: async () => null,
+    read: async () => {
+      const now = Date.now();
+      return {
+        bond_pub_dress: "0x0sky",
+        checked_at_ms: String(now),
+        refresh_after_ms: String(now + 3_600_000),
+        entitlement:
+          tier === undefined
+            ? null
+            : {
+                tier,
+                starts_at_ms: String(now - 1_000),
+                expires_at_ms: String(now + 3_600_000),
+              },
+      };
+    },
     subscribe: (_owner, listener) => {
       invalidate = listener;
       return () => {
