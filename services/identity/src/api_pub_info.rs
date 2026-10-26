@@ -569,8 +569,8 @@ mod pub_info_api_tests {
                 .expect("registration");
         }
         // Server-owned fixture funding, unrelated to Web's local inventory.
-        sqlx::query("INSERT INTO bond_seeds(owner_pub_dress, balance) VALUES ('0x1sky', 100)")
-            .execute(&repository.pool).await.expect("fixture wallet");
+        repository.fund_xping_test_seeds("0x1sky", 100)
+            .await.expect("fixture wallet");
         let provider_links = crate::ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider links");
