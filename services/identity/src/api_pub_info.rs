@@ -56,6 +56,7 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/pub-info",
             get(read_pub_info).post(publish_pub_info),
         )
+        .route("/api/v1/identity/seeds", get(read_seeds_balance))
         .route("/api/v1/identity/pub-info/awards", post(commit_awards))
         .route("/api/v1/identity/finds/claims", get(read_claims))
         .route(
@@ -75,6 +76,37 @@ const PUB_INFO_MAX_BYTES: usize = 16 * 1024;
 const MAX_EVENTS: usize = 64;
 const MAX_EVENT_AMOUNT: u64 = 10_000;
 const MAX_CARRY_XP: u64 = 1_000_000_000;
+
+/// No client-supplied balance, carry or mutation endpoint. A seeds balance is
+/// a wallet fact, not Core inventory provenance or a confirmed checkout.
+async fn read_seeds_balance(State(state): State<ApiState>, headers: HeaderMap) -> Response {
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let (identity, _active, _hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        return unavailable();
+    };
+    let mut response = match state.repository.read_seeds_balance(&owner).await {
+        Ok(balance) => no_store_json(StatusCode::OK, serde_json::json!({
+            "balance": balance.to_string(), "denomination": "seeds",
+            "symbol": "₴€£", "authority": "identity"
+        })),
+        Err(error) => {
+            tracing::error!(%error, "authoritative seeds read failed");
+            unavailable()
+        }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
 
 async fn read_pub_info(State(state): State<ApiState>, headers: HeaderMap) -> Response {
     let now = match now(&state) {
