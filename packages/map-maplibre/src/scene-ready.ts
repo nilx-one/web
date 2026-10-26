@@ -32,13 +32,21 @@ export function waitForScene(
     // Pause when backgrounded and stop immediately after the paint barrier.
     const pump = () => {
       frame = undefined;
-      if (finished || signal.aborted || document.visibilityState === "hidden")
+      if (
+        finished ||
+        signal.aborted ||
+        document.visibilityState === "hidden"
+      )
         return;
       map.triggerRepaint();
       if (!finished) frame = globalThis.requestAnimationFrame(pump);
     };
     const onVisibility = () => {
-      if (document.visibilityState !== "hidden" && frame === undefined && !finished)
+      if (
+        document.visibilityState !== "hidden" &&
+        frame === undefined &&
+        !finished
+      )
         frame = globalThis.requestAnimationFrame(pump);
     };
     const aborted = () =>
