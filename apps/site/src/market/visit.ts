@@ -29,7 +29,8 @@ export const beginMarketVisit: NonNullable<
       signal: controller.signal,
       body: JSON.stringify({
         point: input.point,
-        seeds: input.seeds,
+        // No currency originates in the browser. Identity reads its wallet
+        // before issuing the Market handoff.
         avaia: input.avaia,
       }),
     });
