@@ -93,7 +93,7 @@ impl IdentityRepository {
     /// browser `inventory.state` snapshots must never be credited from
     /// a client assertion. Live activation requires a reviewed legacy
     /// reconciliation policy for Bonds who previously played on-device.
-    pub(crate) async fn grant_starter_seeds_once(
+    pub async fn grant_starter_seeds_once(
         &self,
         owner: &PubDress,
         now_ms: u64,
