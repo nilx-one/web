@@ -663,7 +663,10 @@ export function createAvatarLayer(
       // The map may still render without an optional study, but the missing
       // model must be diagnosable instead of silently disappearing.
       if (!disposed && localGeneration === instance.loadGeneration) {
-        console.error(`Unable to render 0x1 model: ${instance.handle.modelId}`, error);
+        console.error(
+          `Unable to render 0x1 model: ${instance.handle.modelId}`,
+          error,
+        );
       }
     } finally {
       if (!disposed && localGeneration === instance.loadGeneration) {
