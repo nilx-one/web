@@ -435,6 +435,41 @@ mod pub_info_api_tests {
     }
 
     #[tokio::test]
+    async fn seeds_balance_is_private_read_only_and_authoritative() {
+        let (app, auth) = app(8810, "0x1sky").await;
+        let anonymous = app.clone().oneshot(
+            Request::get("/api/v1/identity/seeds")
+                .body(Body::empty()).expect("request")
+        ).await.expect("response");
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+        let result = app.clone().oneshot(
+            Request::get("/api/v1/identity/seeds")
+                .header(AUTHORIZATION, format!("tma {auth}"))
+                .body(Body::empty()).expect("request")
+        ).await.expect("response");
+        assert_eq!(result.status(), StatusCode::OK);
+        assert_eq!(result.headers()["cache-control"], "no-store");
+        let cookie = session_cookie(&result);
+        let body = json(result).await;
+        assert_eq!(body["balance"], "0");
+        assert_eq!(body["symbol"], "₴€£");
+        assert_eq!(body["denomination"], "seeds");
+        assert_eq!(body["authority"], "identity");
+
+        // No public mutation or "carry" path exists for seeds.
+        let forbidden = app.oneshot(
+            Request::post("/api/v1/identity/seeds")
+                .header(COOKIE, cookie)
+                .header("x-0x1-csrf", "1")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"balance":"100000000"}"#))
+                .expect("request")
+        ).await.expect("response");
+        assert_eq!(forbidden.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
     async fn publishing_requires_the_owner_and_csrf_and_is_idempotent() {
         let (app, auth) = app(8810, "0x1sky").await;
         let anonymous = app
