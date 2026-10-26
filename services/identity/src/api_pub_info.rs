@@ -568,6 +568,9 @@ mod pub_info_api_tests {
                 .await
                 .expect("registration");
         }
+        // Server-owned fixture funding, unrelated to Web's local inventory.
+        sqlx::query("INSERT INTO bond_seeds(owner_pub_dress, balance) VALUES ('0x1sky', 100)")
+            .execute(&repository.pool).await.expect("fixture wallet");
         let provider_links = crate::ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider links");
@@ -939,19 +942,17 @@ mod pub_info_api_tests {
         let repair = |paid: u64, expected: &Value| {
             Some(serde_json::json!({ "op": "repaired", "paid_seeds": paid, "expected": expected }))
         };
-        let underpaid =
-            engine_request(&app, &sky, &mut sky_session, repair(49, &broken["state"])).await;
-        assert_eq!(underpaid.status(), StatusCode::CONFLICT);
-        assert_eq!(json(underpaid).await["error"]["code"], "underpaid");
-        let stale = engine_request(&app, &sky, &mut sky_session, repair(50, &half["state"])).await;
+        // An outdated browser's paid_seeds hint is not debit authority.
+        // Only the Core price and the authoritative server wallet matter.
+        let stale = engine_request(&app, &sky, &mut sky_session, repair(0, &half["state"])).await;
         assert_eq!(json(stale).await["error"]["code"], "stale_engine");
         let repaired = json(
-            engine_request(&app, &sky, &mut sky_session, repair(50, &broken["state"])).await,
+            engine_request(&app, &sky, &mut sky_session, repair(0, &broken["state"])).await,
         )
         .await;
         assert_eq!(repaired["engine"]["energy_permille"], 1000);
         assert_eq!(repaired["engine"]["broken"], false);
-        assert_eq!(repaired["authority"], "client");
+        assert_eq!(repaired["authority"], "identity");
         // The same payment again repairs nothing twice.
         let replay = engine_request(&app, &sky, &mut sky_session, repair(50, &broken["state"])).await;
         assert_eq!(json(replay).await["error"]["code"], "stale_engine");
