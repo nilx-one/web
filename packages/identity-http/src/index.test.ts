@@ -1321,13 +1321,12 @@ describe("Telegram self-disconnect transport", () => {
       headers: { "content-type": "application/json", "x-0x1-csrf": "1" },
       body: JSON.stringify({ op: "force", forced_ms: 1500 }),
     });
-    await expect(adapter.repairXpingEngine(25, engine.state)).resolves.toEqual({
+    await expect(adapter.repairXpingEngine(engine.state)).resolves.toEqual({
       kind: "rejected",
       reason: "stale",
     });
     expect(JSON.parse(String(fetch.mock.calls[2]![1]!.body))).toEqual({
       op: "repaired",
-      paid_seeds: 25,
       expected: engine.state,
     });
     await expect(adapter.readXpingEngine()).resolves.toEqual({

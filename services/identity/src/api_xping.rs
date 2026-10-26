@@ -3,11 +3,11 @@
 
 // xPing's engine (nilx-one/core docs/xping-engine.md). Core owns the rules,
 // including the breakdown after two seconds of forcing on empty and the
-// repair's price; the service stores the engine and is its clock. A paid
-// repair is paid in Seeds from the device-side inventory, which the service
-// never sees, so the answer carries `authority: "client"` the way experience
-// totals do. The service checks the price against the engine and applies a
-// repair only to the exact engine state it was priced from.
+// repair's price; the service stores the engine and is its clock. Repairs
+// debit the authoritative seeds wallet and update the engine in the SAME
+// session-guarded transaction. The local inventory never pays.
+
+use crate::repository::XpingSeedsRepairRefusal;
 
 /// The most forcing one report may spend: two full engines.
 const MAX_FORCED_MS: u64 = 2 * nilxone_contracts::XPING_FORCE_FULL_MS;
@@ -19,8 +19,11 @@ enum XpingEngineCommand {
         forced_ms: u64,
     },
     Repaired {
-        paid_seeds: u64,
-        /// The engine state the payment was priced from.
+        // Ignore the legacy device payment hint; only Core's server-side
+        // engine price and the persisted Identity balance are authoritative.
+        #[serde(default, rename = "paid_seeds")]
+        _legacy_paid_seeds: Option<u64>,
+        /// The engine state the purchase was priced from.
         expected: nilxone_contracts::XpingEngine,
     },
 }
@@ -29,7 +32,6 @@ enum XpingEngineCommand {
 #[derive(Debug)]
 enum XpingEngineRefusal {
     Engine(nilxone_contracts::XpingEngineError),
-    Stale,
 }
 
 #[derive(Serialize)]
@@ -47,7 +49,7 @@ fn xping_engine_body(engine: &nilxone_contracts::XpingEngine, now_ms: u64) -> Xp
         state: *engine,
         engine: nilxone_contracts::xping_engine_view(engine, now_ms),
         now_ms,
-        authority: "client",
+        authority: "identity",
     }
 }
 
@@ -101,7 +103,7 @@ async fn command_xping_engine(
         Ok(value) => value,
         Err(_) => return unavailable(),
     };
-    let (identity, active, _token_hash, cookie) =
+    let (identity, active, token_hash, cookie) =
         match authenticated_bond(&state, &headers, now).await {
             Ok(value) => value,
             Err(error) => return error.into_response(),
@@ -109,7 +111,7 @@ async fn command_xping_engine(
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
-    let mut response = command_xping_engine_response(&state, &identity, command, now).await;
+    let mut response = command_xping_engine_response(&state, &identity, &token_hash, command, now).await;
     if let Some(cookie) = cookie {
         append_cookie(&mut response, cookie);
     }
@@ -119,6 +121,7 @@ async fn command_xping_engine(
 async fn command_xping_engine_response(
     state: &ApiState,
     identity: &IdentityRecord,
+    active_session_hash: &[u8],
     command: XpingEngineCommand,
     now: u64,
 ) -> Response {
@@ -144,32 +147,42 @@ async fn command_xping_engine_response(
     {
         return rate_limited(retry_after);
     }
+    if let XpingEngineCommand::Repaired { expected, .. } = &command {
+        let changed = state.repository.repair_xping_with_seeds(
+            &owner, active_session_hash, *expected, now_ms
+        ).await;
+        return match changed {
+            Ok(Ok(engine)) => no_store_json(StatusCode::OK, xping_engine_body(&engine, now_ms)),
+            Ok(Err(XpingSeedsRepairRefusal::SessionChanged)) => session_inactive(),
+            Ok(Err(XpingSeedsRepairRefusal::StaleEngine)) => no_store_error(
+                StatusCode::CONFLICT, "stale_engine",
+                "The engine changed since this repair was priced; price it again.",
+            ),
+            Ok(Err(XpingSeedsRepairRefusal::InsufficientSeeds)) => no_store_error(
+                StatusCode::CONFLICT, "not_enough_seeds",
+                "The authoritative seeds balance does not cover this repair.",
+            ),
+            Ok(Err(XpingSeedsRepairRefusal::Engine(refused))) => no_store_error(
+                StatusCode::CONFLICT, refused.code(), "Core refused this repair.",
+            ),
+            Err(error) => {
+                tracing::error!(%error, "atomic xPing repair failed");
+                unavailable()
+            }
+        };
+    }
     let changed = state
         .repository
         .change_xping_engine(&owner, now_ms, |engine| match command {
             XpingEngineCommand::Force { forced_ms } => engine
                 .force(forced_ms, now_ms)
                 .map_err(XpingEngineRefusal::Engine),
-            XpingEngineCommand::Repaired {
-                paid_seeds,
-                expected,
-            } => {
-                if engine != expected {
-                    return Err(XpingEngineRefusal::Stale);
-                }
-                engine
-                    .repaired(paid_seeds, now_ms)
-                    .map_err(XpingEngineRefusal::Engine)
-            }
+            XpingEngineCommand::Repaired { .. } => unreachable!("repair handled atomically"),
         })
         .await;
     match changed {
         Ok(Ok(engine)) => no_store_json(StatusCode::OK, xping_engine_body(&engine, now_ms)),
-        Ok(Err(XpingEngineRefusal::Stale)) => no_store_error(
-            StatusCode::CONFLICT,
-            "stale_engine",
-            "The engine changed since this repair was priced; price it again.",
-        ),
+
         Ok(Err(XpingEngineRefusal::Engine(refused))) => no_store_error(
             StatusCode::CONFLICT,
             refused.code(),
