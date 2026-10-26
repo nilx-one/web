@@ -163,6 +163,23 @@ tracked in [#95](https://github.com/nilx-one/web/issues/95).
 Delivery: [asset pipeline #93](https://github.com/nilx-one/web/issues/93),
 [local render integration #94](https://github.com/nilx-one/web/issues/94).
 
+## Preparing bodies before revealing the world
+
+When a Bond's and Avaia's studies are known, the Web host preloads both
+versioned GLBs while the world is being prepared. The MapLibre avatar layer
+shares in-flight fetch/decode promises with later body hydration. The GPU
+context and the first map custom-layer paint remain renderer-owned; the
+scene's startup barrier waits for active hydrated bodies and stable painted
+frames before removing the startup cover. A Telegram WebView that stops
+painting during startup receives explicit repaint requests while visible,
+without pretending that a camera gesture or Core readiness means the world
+was drawn.
+
+Prefetch does not create an avatar handle, a position observation, or a
+BondChain event. Only the wheel and available position decide which body is
+shown. GLB failures may leave the map usable, but are logged for diagnosis
+rather than silently interpreted as valid scene geometry.
+
 ## Drawing one avatar
 
 After a Bond chooses a study this client can render, the client draws at most one
