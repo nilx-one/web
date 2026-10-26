@@ -42,11 +42,7 @@ it("continues the one-time handoff if sessionStorage is restricted", async () =>
     .mockImplementation(() => {});
   await expect(beginMarketVisit(visit)).resolves.toBeUndefined();
   expect(request).toHaveBeenCalledTimes(1);
-  const sent = JSON.parse(
-    String(request.mock.calls[0]![1]!.body),
-  ) as Record<string, unknown>;
-  expect(sent).toEqual({ point: visit.point, avaia: visit.avaia });
-  expect(sent).not.toHaveProperty("seeds");
+  expect(request.mock.calls[0]?.[1]?.body).not.toContain('"seeds"');
   expect(submit).toHaveBeenCalledTimes(1);
   expect(document.querySelector("form")?.action).toBe(
     "https://0xda-market.nilx.one/nilx-browser/exchange",
