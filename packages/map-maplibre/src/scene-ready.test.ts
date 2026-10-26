@@ -38,6 +38,39 @@ function scene() {
 }
 
 describe("initial scene paint barrier", () => {
+  it("requests fresh WebView paints without waiting for a camera gesture", async () => {
+    const s = scene();
+    Object.assign(s.state, { tiles: true, assets: true });
+    const queued: FrameRequestCallback[] = [];
+    const request = vi
+      .spyOn(globalThis, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        queued.push(callback);
+        return queued.length;
+      });
+    const cancel = vi
+      .spyOn(globalThis, "cancelAnimationFrame")
+      .mockImplementation(() => undefined);
+    try {
+      const waiting = waitForScene(
+        s.map,
+        () => true,
+        new AbortController().signal,
+      );
+      expect(s.map.triggerRepaint).toHaveBeenCalledTimes(1);
+      expect(queued).toHaveLength(1);
+      queued.shift()?.(0);
+      expect(s.map.triggerRepaint).toHaveBeenCalledTimes(2);
+      s.emit();
+      s.emit();
+      await waiting;
+      expect(cancel).toHaveBeenCalled();
+    } finally {
+      request.mockRestore();
+      cancel.mockRestore();
+    }
+  });
+
   it("allows subpixel tracking of an autonomous moving driver", async () => {
     const s = scene();
     Object.assign(s.state, { tiles: true, assets: true });
