@@ -1359,16 +1359,10 @@ class IdentityHttpAdapter
   }
 
   public async repairXpingEngine(
-    paidSeeds: number,
     expected: XpingEngineState,
   ): Promise<XpingEngineResult> {
-    if (!Number.isSafeInteger(paidSeeds) || paidSeeds <= 0)
-      return { kind: "rejected", reason: "invalid" };
-    return this.xpingEngine("POST", {
-      op: "repaired",
-      paid_seeds: paidSeeds,
-      expected,
-    });
+    // Device has no debit authority and never submits a payment amount.
+    return this.xpingEngine("POST", { op: "repaired", expected });
   }
 
   private async xpingEngine(
