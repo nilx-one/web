@@ -2168,6 +2168,8 @@ pub enum RepositoryError {
     CorruptPubInfo,
     #[error("stored Special/Exclusive subscription clock is invalid")]
     CorruptSubscriptionClock,
+    #[error("stored seeds balance is invalid")]
+    CorruptSeedsBalance,
 }
 
 #[cfg(test)]
